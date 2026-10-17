@@ -17,6 +17,9 @@
  * parte e só para acompanhar: o andamento, os votos e a mensagem, sem
  * repassar, desativar, editar, relançar nem excluir — isso continua de quem
  * lançou (o banco confere). Ver 20261016210000.
+ *
+ * Mora na sub-aba «Minhas campanhas» (16/10/2026); antes eram cartões na
+ * lateral da nova campanha, com o histórico completo num diálogo.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -89,34 +92,28 @@ function SeloSituacao({ s }: { s: SituacaoLote }) {
   );
 }
 
-// ── O cartão da lateral ──────────────────────────────────────────────────────
+// ── A aba «Minhas campanhas» ─────────────────────────────────────────────────
 
-export function HistoricoCampanhas({ envios }: { envios: Envios }) {
+type Visao = 'minhas' | 'setor';
+
+/**
+ * Sub-aba própria desde 16/10/2026: na lateral da nova campanha, a lista de
+ * abertas crescia sem fim e empurrava os descontos para baixo. Aqui ficam as
+ * abertas de um lado e o histórico do mês escolhido do outro, cada lista com
+ * rolagem própria. As do setor (dos outros líderes) ficam num seletor à parte,
+ * só para acompanhar.
+ */
+export function MinhasCampanhas({ envios }: { envios: Envios }) {
   const { historico, autorId } = envios;
   // As minhas e as dos outros líderes do setor, sempre separadas.
   const minhas = useMemo(() => historico.filter((l) => l.criado_por === autorId), [historico, autorId]);
   const doSetor = useMemo(() => historico.filter((l) => l.criado_por !== autorId), [historico, autorId]);
+  const [visaoEscolhida, setVisao] = useState<Visao>('minhas');
+  const visao: Visao = doSetor.length === 0 ? 'minhas' : visaoEscolhida;
+  const somenteLeitura = visao === 'setor';
+  const lista = somenteLeitura ? doSetor : minhas;
 
-  if (envios.carregandoHistorico && historico.length === 0) return null;
-  if (historico.length === 0) return null;
-
-  return (
-    <>
-      {minhas.length > 0 && <CartaoCampanhas lista={minhas} envios={envios} />}
-      {doSetor.length > 0 && <CartaoCampanhas lista={doSetor} envios={envios} somenteLeitura />}
-    </>
-  );
-}
-
-/**
- * Um cartão do histórico: o das minhas (com as ações) ou o do setor (só
- * acompanhar, com quem lançou em cada linha).
- */
-function CartaoCampanhas({ lista: historico, envios, somenteLeitura = false }: {
-  lista: LoteCampanha[]; envios: Envios; somenteLeitura?: boolean;
-}) {
   const [aberto, setAberto] = useState<LoteCampanha | null>(null);
-  const [verTudo, setVerTudo] = useState(false);
   const [atualizando, setAtualizando] = useState(false);
 
   // A notificação da observação (20261016120000) traz `?campanha=<id>`: abre
@@ -127,13 +124,11 @@ function CartaoCampanhas({ lista: historico, envios, somenteLeitura = false }: {
     if (!pedida) return;
     const l = historico.find((x) => x.id === pedida);
     if (!l) return;
+    if (l.criado_por !== autorId) setVisao('setor');
     setAberto(l);
     setParams((p) => { const x = new URLSearchParams(p); x.delete('campanha'); return x; }, { replace: true });
-  }, [pedida, historico, setParams]);
+  }, [pedida, historico, autorId, setParams]);
 
-  const mesAtual = chaveMes({ lancada_em: new Date().toISOString() } as LoteCampanha);
-  const doMes = historico.filter((l) => chaveMes(l) === mesAtual);
-  const abertas = historico.filter((l) => !l.encerrada_em);
   // A campanha aberta no diálogo acompanha o histórico recarregado.
   const loteAberto = aberto ? (historico.find((l) => l.id === aberto.id) ?? null) : null;
 
@@ -142,64 +137,70 @@ function CartaoCampanhas({ lista: historico, envios, somenteLeitura = false }: {
     try { await envios.recarregarHistorico(); } finally { setAtualizando(false); }
   }
 
+  if (historico.length === 0) {
+    return (
+      <Card className="flex min-h-[40vh] items-center justify-center">
+        <CardContent className="max-w-md py-12 text-center">
+          {envios.carregandoHistorico ? (
+            <p className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Carregando as campanhas…
+            </p>
+          ) : (
+            <>
+              <Send className="mx-auto mb-3 h-8 w-8 text-primary opacity-60" />
+              <p className="text-sm font-semibold">Nenhuma campanha lançada ainda</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                As campanhas que você liberar para os operadores aparecem aqui, com o andamento de cada uma.
+              </p>
+            </>
+          )}
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
-    <Card className={cn(somenteLeitura && 'border-dashed bg-muted/20')}>
-      <CardContent className="space-y-3 p-4">
-        <div className="flex items-center gap-2">
-          {somenteLeitura
-            ? <Users className="h-4 w-4 text-muted-foreground" />
-            : <Send className="h-4 w-4 text-primary" />}
-          <div className="min-w-0">
-            <span className="text-sm font-semibold">
-              {somenteLeitura ? 'Campanhas do setor' : 'Minhas campanhas'}
-            </span>
-            {somenteLeitura && (
-              <p className="text-[11px] text-muted-foreground">Dos outros líderes · só acompanhar</p>
-            )}
-          </div>
-          <Button
-            variant="ghost" size="icon" className="ml-auto h-7 w-7" onClick={() => void atualizar()}
-            title="Atualizar" aria-label="Atualizar campanhas" disabled={atualizando}
-          >
-            <RefreshCw className={cn('h-3.5 w-3.5', atualizando && 'animate-spin')} />
-          </Button>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2">
-          <div className="rounded-lg border border-border bg-muted/30 px-3 py-2">
-            <p className="text-lg font-bold tabular-nums leading-tight">{n(doMes.length)}</p>
-            <p className="text-[11px] text-muted-foreground">{doMes.length === 1 ? 'campanha' : 'campanhas'} este mês</p>
-          </div>
-          <div className="rounded-lg border border-border bg-muted/30 px-3 py-2">
-            <p className="text-lg font-bold tabular-nums leading-tight">{n(doMes.reduce((s, l) => s + l.total, 0))}</p>
-            <p className="text-[11px] text-muted-foreground">mensagens este mês</p>
-          </div>
-        </div>
-
-        {abertas.length > 0 ? (
-          <ul className="space-y-1.5">
-            {abertas.map((l) => (
-              <li key={l.id}>
-                <LinhaLote l={l} mostrarAutor={somenteLeitura} onClick={() => setAberto(l)} />
-              </li>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        {doSetor.length > 0 && (
+          <div className="inline-flex rounded-lg border border-border bg-muted/40 p-0.5" role="group" aria-label="De quem são as campanhas">
+            {([['minhas', 'Minhas', minhas.length], ['setor', 'Dos outros líderes do setor', doSetor.length]] as const).map(([v, rotulo, qtd]) => (
+              <button
+                key={v} type="button" onClick={() => setVisao(v)} aria-pressed={visao === v}
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
+                  visao === v ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {v === 'setor' ? <Users className="h-3.5 w-3.5" /> : <Send className="h-3.5 w-3.5" />}
+                {rotulo}
+                <span className="tabular-nums text-muted-foreground">{n(qtd)}</span>
+              </button>
             ))}
-          </ul>
-        ) : (
-          <p className="text-xs text-muted-foreground">Nenhuma campanha aberta agora.</p>
+          </div>
         )}
-
-        <Button variant="outline" size="sm" className="h-8 w-full gap-1.5 text-xs" onClick={() => setVerTudo(true)}>
-          <History className="h-3.5 w-3.5" /> Histórico completo ({n(historico.length)})
+        <Button
+          variant="outline" size="sm" className="ml-auto h-8 gap-1.5 text-xs"
+          onClick={() => void atualizar()} disabled={atualizando}
+        >
+          <RefreshCw className={cn('h-3.5 w-3.5', atualizando && 'animate-spin')} /> Atualizar
         </Button>
-      </CardContent>
+      </div>
 
-      {verTudo && (
-        <DialogoHistorico
-          historico={historico}
-          somenteLeitura={somenteLeitura}
-          onFechar={() => setVerTudo(false)}
-          onAbrir={(l) => setAberto(l)}
-        />
+      {somenteLeitura && (
+        <p className="text-xs text-muted-foreground">
+          Campanhas que os outros líderes do setor lançaram. Clique numa para acompanhar — as ações ficam com quem lançou.
+        </p>
+      )}
+
+      {lista.length === 0 ? (
+        <Card>
+          <CardContent className="py-10 text-center text-sm text-muted-foreground">
+            Você ainda não lançou nenhuma campanha.
+          </CardContent>
+        </Card>
+      ) : (
+        <PainelCampanhas key={visao} lista={lista} somenteLeitura={somenteLeitura} onAbrir={setAberto} />
       )}
 
       {loteAberto && (
@@ -207,11 +208,94 @@ function CartaoCampanhas({ lista: historico, envios, somenteLeitura = false }: {
           key={loteAberto.id}
           lote={loteAberto}
           envios={envios}
-          somenteLeitura={somenteLeitura}
+          somenteLeitura={loteAberto.criado_por !== autorId}
           onFechar={() => setAberto(null)}
         />
       )}
-    </Card>
+    </div>
+  );
+}
+
+/** Os números do mês, as abertas e o histórico por mês de uma lista de campanhas. */
+function PainelCampanhas({ lista: historico, somenteLeitura, onAbrir }: {
+  lista: LoteCampanha[]; somenteLeitura: boolean; onAbrir: (l: LoteCampanha) => void;
+}) {
+  const [mesEscolhido, setMesEscolhido] = useState('');
+
+  const mesAtual = chaveMes({ lancada_em: new Date().toISOString() } as LoteCampanha);
+  const doMes = historico.filter((l) => chaveMes(l) === mesAtual);
+  const abertas = historico.filter((l) => !l.encerrada_em);
+
+  const meses = useMemo(() => {
+    const m = new Map<string, LoteCampanha[]>();
+    for (const l of historico) {
+      const k = chaveMes(l);
+      m.set(k, [...(m.get(k) ?? []), l]);
+    }
+    return [...m.entries()].sort((a, b) => b[0].localeCompare(a[0]));
+  }, [historico]);
+  // Sem escolha válida (ou o histórico mudou), o mês mais recente.
+  const mes = meses.some(([k]) => k === mesEscolhido) ? mesEscolhido : (meses[0]?.[0] ?? '');
+  const doMesEscolhido = meses.find(([k]) => k === mes)?.[1] ?? [];
+  const totalMsgs = doMesEscolhido.reduce((s, l) => s + l.total, 0);
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-3 gap-2 sm:max-w-xl">
+        <Numero rotulo={doMes.length === 1 ? 'campanha este mês' : 'campanhas este mês'} valor={doMes.length} />
+        <Numero rotulo="mensagens este mês" valor={doMes.reduce((s, l) => s + l.total, 0)} />
+        <Numero rotulo={abertas.length === 1 ? 'aberta agora' : 'abertas agora'} valor={abertas.length} />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card className={cn(somenteLeitura && 'border-dashed bg-muted/20')}>
+          <CardContent className="space-y-3 p-4">
+            <div className="flex items-center gap-2">
+              <Send className="h-4 w-4 text-primary" />
+              <h2 className="text-sm font-semibold">Abertas agora</h2>
+              <span className="text-xs text-muted-foreground">{n(abertas.length)}</span>
+            </div>
+            {abertas.length > 0 ? (
+              <ul className="max-h-[60vh] space-y-1.5 overflow-y-auto pr-1">
+                {abertas.map((l) => (
+                  <li key={l.id}><LinhaLote l={l} mostrarAutor={somenteLeitura} onClick={() => onAbrir(l)} /></li>
+                ))}
+              </ul>
+            ) : (
+              <p className="py-4 text-sm text-muted-foreground">Nenhuma campanha aberta agora.</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className={cn(somenteLeitura && 'border-dashed bg-muted/20')}>
+          <CardContent className="space-y-3 p-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <History className="h-4 w-4 text-primary" />
+              <h2 className="text-sm font-semibold">Histórico</h2>
+              <Select value={mes} onValueChange={setMesEscolhido}>
+                <SelectTrigger className="ml-auto h-8 w-52 text-xs">
+                  <CalendarDays className="mr-2 h-3.5 w-3.5 opacity-60" /><SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {meses.map(([k, ls]) => (
+                    <SelectItem key={k} value={k}>{nomeMes(k)} ({ls.length})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              <strong className="text-foreground">{n(doMesEscolhido.length)}</strong> {doMesEscolhido.length === 1 ? 'campanha' : 'campanhas'} ·{' '}
+              <strong className="text-foreground">{n(totalMsgs)}</strong> mensagens. Clique numa para ver a mensagem e quem encaminhou.
+            </p>
+            <ul className="max-h-[60vh] space-y-1.5 overflow-y-auto pr-1">
+              {doMesEscolhido.map((l) => (
+                <li key={l.id}><LinhaLote l={l} mostrarAutor={somenteLeitura} onClick={() => onAbrir(l)} /></li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
   );
 }
 
@@ -300,60 +384,6 @@ function RetornoDaOperacao({ lote, operadores }: { lote: LoteCampanha; operadore
         </div>
       )}
     </section>
-  );
-}
-
-// ── Histórico por mês ────────────────────────────────────────────────────────
-
-function DialogoHistorico({ historico, somenteLeitura, onFechar, onAbrir }: {
-  historico: LoteCampanha[]; somenteLeitura: boolean; onFechar: () => void; onAbrir: (l: LoteCampanha) => void;
-}) {
-  const meses = useMemo(() => {
-    const m = new Map<string, LoteCampanha[]>();
-    for (const l of historico) {
-      const k = chaveMes(l);
-      m.set(k, [...(m.get(k) ?? []), l]);
-    }
-    return [...m.entries()].sort((a, b) => b[0].localeCompare(a[0]));
-  }, [historico]);
-  const [mes, setMes] = useState(() => meses[0]?.[0] ?? '');
-  const lista = meses.find(([k]) => k === mes)?.[1] ?? [];
-  const totalMsgs = lista.reduce((s, l) => s + l.total, 0);
-
-  return (
-    <Dialog open onOpenChange={(v) => { if (!v) onFechar(); }}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>{somenteLeitura ? 'Campanhas do setor' : 'Histórico de campanhas'}</DialogTitle>
-          <DialogDescription>
-            {somenteLeitura
-              ? 'As campanhas que os outros líderes do setor lançaram. Clique numa para acompanhar — as ações ficam com quem lançou.'
-              : 'As campanhas que você lançou. Clique numa para ver a mensagem e quem encaminhou.'}
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <Select value={mes} onValueChange={setMes}>
-            <SelectTrigger className="h-9 w-56"><CalendarDays className="mr-2 h-4 w-4 opacity-60" /><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {meses.map(([k, ls]) => (
-                <SelectItem key={k} value={k}>{nomeMes(k)} ({ls.length})</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <p className="text-sm text-muted-foreground">
-            <strong className="text-foreground">{n(lista.length)}</strong> {lista.length === 1 ? 'campanha' : 'campanhas'} ·{' '}
-            <strong className="text-foreground">{n(totalMsgs)}</strong> mensagens
-          </p>
-        </div>
-
-        <ul className="max-h-[55vh] space-y-1.5 overflow-y-auto pr-1">
-          {lista.map((l) => (
-            <li key={l.id}><LinhaLote l={l} mostrarAutor={somenteLeitura} onClick={() => onAbrir(l)} /></li>
-          ))}
-        </ul>
-      </DialogContent>
-    </Dialog>
   );
 }
 

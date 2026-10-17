@@ -37,8 +37,11 @@ export function CampoPercentual({ valor, aoMudar, rotulo }: Props) {
     setTexto(textoDoPercentual(n));
   }
 
+  // O «%» fica dentro do campo, que ocupa a largura toda: na coluna estreita
+  // da lateral, campo + «%» ao lado do rótulo não cabiam e o «%» vazava da
+  // borda (16/10/2026).
   return (
-    <span className="flex items-center gap-1">
+    <span className="relative flex w-full items-center">
       <Input
         type="text"
         inputMode="decimal"
@@ -67,9 +70,9 @@ export function CampoPercentual({ valor, aoMudar, rotulo }: Props) {
           const base = lerPercentual(texto) ?? 0;
           confirmar(Math.min(PERCENTUAL_MAX, Math.max(0, Math.round((base + passo) * 100) / 100)));
         }}
-        className="h-8 w-20 px-2 text-right text-sm font-semibold tabular-nums"
+        className="h-8 w-full pl-2 pr-6 text-right text-sm font-semibold tabular-nums"
       />
-      <span className="text-muted-foreground">%</span>
+      <span className="pointer-events-none absolute right-2 text-xs text-muted-foreground">%</span>
     </span>
   );
 }

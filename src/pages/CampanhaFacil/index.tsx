@@ -12,6 +12,7 @@
  * campanha (20261016210000): o do líder, ou o que a gerência escolhe no topo.
  */
 import { useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Upload, FileText, Trash2, Plus, Pencil, Copy, Download, Search,
   ChevronLeft, ChevronRight, MessageSquare, Percent,
@@ -38,11 +39,12 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { CampaignCore, type CampaignItem } from './lib/campaign-core';
 import { temPendenciaGrave, useCampanhaFacil, type StatusFilter, type WorkspaceState } from './useCampanhaFacil';
 import { SeletorOperadores } from './SeletorOperadores';
-import { HistoricoCampanhas } from './HistoricoCampanhas';
+import { MinhasCampanhas } from './HistoricoCampanhas';
 import { VariableChips, insertVariable } from './VariaveisMensagem';
 import { CampoPercentual } from './CampoPercentual';
 import { textoDoPercentual } from './percentual';
@@ -56,6 +58,20 @@ export default function CampanhaFacil() {
   const { empresa } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
   const cf = useCampanhaFacil();
+
+  // Sub-abas (16/10/2026): «Minhas campanhas» saiu da lateral, onde a lista
+  // crescia sem fim. A aba fica na URL para sobreviver ao F5, e o link da
+  // notificação (`?campanha=<id>`) já cai nela.
+  const [params, setParams] = useSearchParams();
+  const aba = params.get('aba') === 'campanhas' || params.has('campanha') ? 'campanhas' : 'nova';
+  function trocarAba(nova: string) {
+    setParams((atual) => {
+      const p = new URLSearchParams(atual);
+      if (nova === 'campanhas') p.set('aba', 'campanhas'); else p.delete('aba');
+      return p;
+    }, { replace: true });
+  }
+  const minhasAbertas = cf.envios.historico.filter((l) => l.criado_por === cf.envios.autorId && !l.encerrada_em).length;
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editRef = useRef<HTMLTextAreaElement>(null);
@@ -152,557 +168,573 @@ export default function CampanhaFacil() {
 
   return (
     <div className="mx-auto w-full max-w-[1400px] p-4 md:p-6">
-      <div className="grid gap-4 lg:grid-cols-[380px_minmax(0,1fr)] lg:gap-6">
-        {/* ══ Painel de controle ══════════════════════════════════════════════ */}
-        <aside className="space-y-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-primary">Nova campanha</p>
-            <h1 className="mt-1 text-xl font-bold leading-tight">Configure uma vez.<br />Gere tudo pronto.</h1>
-            <p className="mt-1 text-sm text-muted-foreground">Importe o arquivo do sistema, escolha a mensagem e revise o resultado.</p>
-          </div>
+      <Tabs value={aba} onValueChange={trocarAba} className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="nova" className="gap-1.5"><Plus className="h-3.5 w-3.5" /> Nova campanha</TabsTrigger>
+          <TabsTrigger value="campanhas" className="gap-1.5">
+            <Send className="h-3.5 w-3.5" /> Minhas campanhas
+            {minhasAbertas > 0 && (
+              <span className="rounded-full bg-primary/15 px-1.5 text-[10px] font-semibold tabular-nums text-primary">{minhasAbertas}</span>
+            )}
+          </TabsTrigger>
+        </TabsList>
 
-          <SetorDaCampanha envios={cf.envios} />
+        <TabsContent value="campanhas" className="mt-0">
+          <MinhasCampanhas envios={cf.envios} />
+        </TabsContent>
 
-          {/* Passo 1 — Importar */}
-          <Card>
-            <CardContent className="space-y-3 p-4">
-              <StepTitle n={1} title="Importar mailing" subtitle="Mailing CSV/TXT ou relatórios 245 e 247 em Excel" />
-
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".csv,.txt,.xls,.xlsx"
-                className="hidden"
-                onChange={(e) => { cf.processFile(e.target.files?.[0]); e.target.value = ''; }}
-              />
-
-              {!cf.parsed && (
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  onDragEnter={(e) => { e.preventDefault(); setDragging(true); }}
-                  onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-                  onDragLeave={(e) => { e.preventDefault(); setDragging(false); }}
-                  onDrop={(e) => { e.preventDefault(); setDragging(false); cf.processFile(e.dataTransfer.files?.[0]); }}
-                  disabled={cf.isProcessing}
-                  className={cn(
-                    'flex w-full flex-col items-center gap-2 rounded-xl border-2 border-dashed p-6 text-center transition-colors',
-                    dragging ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50 hover:bg-accent/40',
-                    cf.isProcessing && 'pointer-events-none opacity-60',
-                  )}
-                >
-                  <Upload className="h-6 w-6 text-primary" />
-                  <span className="text-sm font-semibold">Arraste o arquivo aqui</span>
-                  <span className="text-xs text-muted-foreground">ou clique para selecionar</span>
-                  <span className="mt-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">CSV · TXT · XLS · XLSX</span>
-                </button>
-              )}
-
-              {cf.importProgress && (
-                <div className="space-y-1.5 rounded-lg border border-border bg-muted/30 p-3">
-                  <div className="flex items-center justify-between text-xs font-medium">
-                    <span>{cf.importProgress.label}</span>
-                    <span>{Math.round(cf.importProgress.value)}%</span>
-                  </div>
-                  <Progress value={cf.importProgress.value} className="h-1.5" />
-                  <p className="text-[11px] text-muted-foreground">{cf.importProgress.detail}</p>
-                </div>
-              )}
-
-              {cf.parsed && !cf.importProgress && (
-                <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/30 p-3">
-                  <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md bg-primary/10 text-[10px] font-bold text-primary">
-                    {/* 245 = .xls de ligações, preventivo; 247 = .csv com valores. */}
-                    {cf.relatorioSemValores ? '245' : cf.parsed.sourceType === 'report-247' ? '247' : 'CSV'}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold">{cf.fileName || 'mailing'}</p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {cf.relatorioSemValores
-                        ? `${cf.parsed.records.length.toLocaleString('pt-BR')} clientes · preventivo · ${(cf.parsed.filterStats?.removed ?? 0).toLocaleString('pt-BR')} removidos`
-                        : cf.parsed.sourceType === 'report-247'
-                          ? `${cf.parsed.records.length.toLocaleString('pt-BR')} cobranças · com valores · ${cf.parsed.encoding}`
-                          : `${cf.parsed.records.length.toLocaleString('pt-BR')} contatos · ${cf.parsed.encoding} · ${cf.parsed.headers.length} colunas`}
-                    </p>
-                  </div>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0" title="Remover mailing" onClick={cf.removeMailing}>
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              )}
-
-              {/* Vale para os DOIS relatórios: os filtros passaram a ser os
-                  mesmos, e o cadastral também precisa dizer o que tirou. */}
-              {cf.parsed?.filterStats && (
-                <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs">
-                  <p className="font-semibold text-amber-600 dark:text-amber-400">Relatório filtrado automaticamente</p>
-                  <p className="mt-0.5 text-muted-foreground">
-                    {cf.parsed.filterStats.removed.toLocaleString('pt-BR')} registros removidos (manutenção, COFEN, jornada, pagos e inválidos). Telefones de DDD 1 + Telefone 1.
-                  </p>
-                  {!!excludedCount && (
-                    <Button variant="link" className="mt-1 h-auto p-0 text-xs" onClick={cf.downloadExcluded}>
-                      Baixar registros excluídos
-                    </Button>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Passo 2 — Mensagem */}
-          <Card>
-            <CardContent className="space-y-3 p-4">
-              <StepTitle n={2} title="Escolher mensagem" subtitle={`Mensagens ${doSetor}`} />
-              {/* Relatório cadastral não tem valores: as mensagens que citam
-                  parcela, quitação ou cartão sairiam com buracos no lugar dos
-                  números, então ficam travadas na lista. */}
-              {cf.relatorioSemValores && cf.templatesBloqueados.size > 0 && (
-                <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs">
-                  <p className="font-semibold text-amber-600 dark:text-amber-400">
-                    Relatório sem valores
-                  </p>
-                  <p className="mt-0.5 text-muted-foreground">
-                    {cf.templatesBloqueados.size === 1
-                      ? '1 mensagem que usa valores está indisponível.'
-                      : `${cf.templatesBloqueados.size} mensagens que usam valores estão indisponíveis.`}
-                    {' '}Este arquivo não traz parcela, quitação nem plano anual.
-                  </p>
-                </div>
-              )}
-              {/* Favoritas: de cada líder, fixadas no topo (09/10/2026). */}
-              {cf.templatesFavoritos.length > 0 && (
-                <div className="rounded-lg border border-amber-400/40 bg-amber-400/5 p-2">
-                  <p className="mb-1.5 flex items-center gap-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
-                    <Star className="h-3 w-3 fill-current" /> Minhas favoritas
-                  </p>
-                  <ul className="space-y-0.5">
-                    {cf.templatesFavoritos.map((t) => {
-                      const bloqueada = cf.templatesBloqueados.has(t.id);
-                      const escolhida = t.id === cf.selectedTemplate.id;
-                      return (
-                        <li key={t.id} className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            disabled={bloqueada}
-                            onClick={() => cf.setTemplateId(t.id)}
-                            title={bloqueada ? 'Usa valores que este relatório não tem' : `Usar “${t.name}”`}
-                            className={cn(
-                              'min-w-0 flex-1 truncate rounded-md px-2 py-1.5 text-left text-sm transition-colors',
-                              escolhida ? 'bg-primary/10 font-medium text-primary' : 'hover:bg-accent',
-                              bloqueada && 'cursor-not-allowed opacity-50 hover:bg-transparent',
-                            )}
-                          >
-                            {t.name}
-                            <span className="ml-1.5 text-[11px] font-normal text-muted-foreground">{t.category}</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void cf.alternarFavorita(t.id)}
-                            aria-label={`Tirar “${t.name}” das favoritas`}
-                            title="Tirar das favoritas"
-                            className="rounded-md p-1.5 text-amber-500 hover:bg-amber-500/10"
-                          >
-                            <Star className="h-3.5 w-3.5 fill-current" />
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              )}
-              <div className="flex items-center gap-1.5">
-                <Select value={cf.templateId} onValueChange={cf.setTemplateId}>
-                  <SelectTrigger className="flex-1"><SelectValue placeholder="Selecione uma mensagem" /></SelectTrigger>
-                  <SelectContent>
-                    {categorias.map((cat) => (
-                      <SelectGroup key={cat}>
-                        <SelectLabel>{cat}</SelectLabel>
-                        {cf.templates.filter((t) => t.category === cat).map((t) => {
-                          const bloqueada = cf.templatesBloqueados.has(t.id);
-                          return (
-                            <SelectItem key={t.id} value={t.id} disabled={bloqueada}>
-                              {cf.favoritas.includes(t.id) && <Star className="mr-1 inline h-3 w-3 fill-amber-400 text-amber-400" />}
-                              {t.name}
-                              {bloqueada && (
-                                <span className="ml-2 text-[10px] text-muted-foreground">
-                                  usa valores
-                                </span>
-                              )}
-                            </SelectItem>
-                          );
-                        })}
-                      </SelectGroup>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {(() => {
-                  const fav = cf.favoritas.includes(cf.selectedTemplate.id);
-                  return (
-                    <Button
-                      type="button" variant="outline" size="icon"
-                      className={cn('h-10 w-10 shrink-0', fav && 'border-amber-400/60 bg-amber-400/10')}
-                      onClick={() => void cf.alternarFavorita(cf.selectedTemplate.id)}
-                      aria-pressed={fav}
-                      aria-label={fav ? 'Tirar das favoritas' : 'Fixar nas favoritas'}
-                      title={fav ? 'Tirar das favoritas' : 'Fixar nas favoritas'}
-                    >
-                      <Star className={cn('h-4 w-4', fav ? 'fill-amber-400 text-amber-500' : 'text-muted-foreground')} />
-                    </Button>
-                  );
-                })()}
+        <TabsContent value="nova" className="mt-0">
+          <div className="grid gap-4 lg:grid-cols-[380px_minmax(0,1fr)] lg:gap-6">
+            {/* ══ Painel de controle ══════════════════════════════════════════════ */}
+            <aside className="space-y-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-primary">Nova campanha</p>
+                <h1 className="mt-1 text-xl font-bold leading-tight">Configure uma vez.<br />Gere tudo pronto.</h1>
+                <p className="mt-1 text-sm text-muted-foreground">Importe o arquivo do sistema, escolha a mensagem e revise o resultado.</p>
               </div>
-              {cf.mensagemBloqueada && (
-                <p className="text-xs text-destructive">
-                  A mensagem selecionada usa valores que este relatório não tem.
-                  Escolha uma mensagem sem valores para poder exportar.
-                </p>
-              )}
-              <div className="flex items-center gap-2">
-                <Badge variant="secondary">{cf.selectedTemplate.category}</Badge>
-                <p className="text-xs text-muted-foreground">{cf.selectedTemplate.description}</p>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                <Button variant="outline" size="sm" className="gap-1.5" onClick={openEdit}>
-                  <Pencil className="h-3.5 w-3.5" /> Editar
-                </Button>
-                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => { setAddTitulo(''); setAddCategoria('Personalizadas'); setAddCorpo(''); setAddOpen(true); }}>
-                  <Plus className="h-3.5 w-3.5" /> Adicionar
-                </Button>
-                <Button
-                  variant="outline" size="sm"
-                  className="gap-1.5 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                  disabled={cf.templates.length <= 1}
-                  onClick={() => setDeleteMsgOpen(true)}
-                >
-                  <Trash2 className="h-3.5 w-3.5" /> Excluir
-                </Button>
-              </div>
-              {cf.hiddenCount > 0 && (
-                <Button variant="link" className="h-auto p-0 text-xs" onClick={cf.restoreDefaults}>
-                  Restaurar mensagens padrão excluídas ({cf.hiddenCount})
-                </Button>
-              )}
-            </CardContent>
-          </Card>
 
-          {/* Passo 3 — Responsáveis: operadores do setor, marcados */}
-          <Card id="cf-senders">
-            <CardContent className="space-y-2 p-4">
-              <StepTitle n={3} title="Quem encaminhará" subtitle="Marque os operadores do setor — e líderes, se quiser" />
-              <SeletorOperadores envios={cf.envios} destacarVazio={!!cf.parsed} />
-            </CardContent>
-          </Card>
+              <SetorDaCampanha envios={cf.envios} />
 
-          <HistoricoCampanhas envios={cf.envios} />
+              {/* Passo 1 — Importar */}
+              <Card>
+                <CardContent className="space-y-3 p-4">
+                  <StepTitle n={1} title="Importar mailing" subtitle="Mailing CSV/TXT ou relatórios 245 e 247 em Excel" />
 
-          {/* Descontos (ocultos no relatório 245) */}
-          {!cf.relatorioSemValores && (
-            <Card>
-              <CardContent className="space-y-3 p-4">
-                <div className="flex items-center gap-2 text-sm font-semibold">
-                  <Percent className="h-4 w-4 text-primary" /> Descontos e cálculos
-                  <span className="ml-auto truncate text-[11px] font-normal text-muted-foreground">Configurações {doSetor}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Select value={cf.selectedDiscountPresetId} onValueChange={cf.applyDiscountPreset}>
-                    <SelectTrigger className="flex-1"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="custom">Valores atuais — não salvos</SelectItem>
-                      <SelectItem value="macro-default">Padrão do macro</SelectItem>
-                      {cf.discountPresets.length > 0 && (
-                        <SelectGroup>
-                          <SelectLabel>Minhas configurações</SelectLabel>
-                          {cf.discountPresets.map((p) => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
-                        </SelectGroup>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".csv,.txt,.xls,.xlsx"
+                    className="hidden"
+                    onChange={(e) => { cf.processFile(e.target.files?.[0]); e.target.value = ''; }}
+                  />
+
+                  {!cf.parsed && (
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      onDragEnter={(e) => { e.preventDefault(); setDragging(true); }}
+                      onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+                      onDragLeave={(e) => { e.preventDefault(); setDragging(false); }}
+                      onDrop={(e) => { e.preventDefault(); setDragging(false); cf.processFile(e.dataTransfer.files?.[0]); }}
+                      disabled={cf.isProcessing}
+                      className={cn(
+                        'flex w-full flex-col items-center gap-2 rounded-xl border-2 border-dashed p-6 text-center transition-colors',
+                        dragging ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50 hover:bg-accent/40',
+                        cf.isProcessing && 'pointer-events-none opacity-60',
                       )}
-                    </SelectContent>
-                  </Select>
-                  {presetReal && (
-                    <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive" title="Excluir configuração" onClick={() => setDeleteDiscountOpen(true)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  {DISCOUNT_FIELDS.map(([key, label]) => (
-                    <label key={key} className="flex items-center justify-between gap-2 rounded-md border border-border px-2.5 py-1.5 text-xs">
-                      <span className="text-muted-foreground">{label}</span>
-                      <CampoPercentual rotulo={label} valor={cf.discountsInput[key]} aoMudar={(n) => cf.setDiscount(key, n)} />
-                    </label>
-                  ))}
-                </div>
-                <Button variant="outline" size="sm" className="w-full gap-1.5" onClick={() => { setDiscountName(presetSelecionado?.nome ?? ''); setSaveDiscountOpen(true); }}>
-                  <Save className="h-3.5 w-3.5" /> Salvar configuração
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-        </aside>
-
-        {/* ══ Área de conteúdo ════════════════════════════════════════════════ */}
-        <section className="min-w-0">
-          {!cf.parsed ? (
-            <Card className="flex min-h-[60vh] items-center justify-center">
-              <CardContent className="max-w-md py-12 text-center">
-                <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10">
-                  <FileText className="h-8 w-8 text-primary" />
-                </div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-primary">Comece por aqui</p>
-                <h2 className="mt-1 text-lg font-bold">Importe o mailing para criar a campanha</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Os dados e mensagens são organizados automaticamente e divididos entre os operadores marcados. Cada um recebe a parte dele na aba Campanhas de WhatsApp.
-                </p>
-                <Button className="mt-4 gap-2" onClick={() => fileInputRef.current?.click()}>
-                  <Upload className="h-4 w-4" /> Selecionar mailing
-                </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="space-y-4">
-              {/* Cabeçalho do workspace */}
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-lg font-bold">
-                      {cf.workspaceState === 'critical' ? 'Pendências graves na campanha'
-                        : cf.workspaceState === 'review' ? 'Revisão recomendada'
-                        : 'Pronta para exportar'}
-                    </h2>
-                    <StateBadge state={cf.workspaceState} />
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    {cf.stats.total.toLocaleString('pt-BR')} mensagens com o modelo “{cf.selectedTemplate.name}”.
-                  </p>
-                </div>
-                {/* Sem `disabled` por pendência: a exportação segue liberada e as
-                    linhas problemáticas saem marcadas na planilha. */}
-                <div className="flex flex-wrap gap-2">
-                  <Button variant="outline" className="gap-2" onClick={openExport}>
-                    <Download className="h-4 w-4" /> Exportar Excel
-                  </Button>
-                  <Button className="gap-2" onClick={openLiberar} disabled={cf.envios.liberando}>
-                    <Send className="h-4 w-4" /> {cf.envios.liberando ? 'Liberando…' : 'Liberar para os operadores'}
-                  </Button>
-                </div>
-              </div>
-
-              {/* Pendência grave: o card leva até os registros e deixa tirá-los
-                  da campanha (09/10/2026). */}
-              {cf.stats.critical > 0 && (
-                <div className="flex flex-wrap items-start gap-x-3 gap-y-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
-                  <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-700 dark:text-amber-500" />
-                  <button
-                    type="button"
-                    onClick={verPendenciasGraves}
-                    className="min-w-0 flex-1 text-left"
-                    title="Mostrar só esses registros na tabela"
-                  >
-                    <strong>
-                      {cf.stats.critical.toLocaleString('pt-BR')} {cf.stats.critical === 1 ? 'registro com pendência grave' : 'registros com pendência grave'}.
-                    </strong>{' '}
-                    <span className="text-muted-foreground">
-                      Clique para ver quais são e o motivo. Se continuarem, saem marcados como “Revisar”.
-                    </span>
-                  </button>
-                  <div className="flex gap-2">
-                    <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={verPendenciasGraves}>
-                      <Filter className="h-3.5 w-3.5" /> Ver {cf.stats.critical === 1 ? 'o registro' : 'os registros'}
-                    </Button>
-                    <Button
-                      size="sm" variant="outline"
-                      className="h-8 gap-1.5 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                      onClick={cf.removerPendenciasGraves}
                     >
-                      <UserX className="h-3.5 w-3.5" /> Tirar da campanha
-                    </Button>
-                  </div>
-                </div>
-              )}
-              {cf.removidos > 0 && (
-                <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm">
-                  <UserX className="h-4 w-4 text-muted-foreground" />
-                  <span>
-                    <strong>{cf.removidos.toLocaleString('pt-BR')}</strong>{' '}
-                    {cf.removidos === 1 ? 'cliente tirado' : 'clientes tirados'} da campanha. Não vão para nenhum operador nem para o Excel.
-                  </span>
-                  <Button variant="link" className="ml-auto h-auto p-0 text-xs" onClick={cf.devolverRemovidos}>
-                    <Undo2 className="mr-1 h-3.5 w-3.5" /> Devolver à campanha
-                  </Button>
-                </div>
-              )}
+                      <Upload className="h-6 w-6 text-primary" />
+                      <span className="text-sm font-semibold">Arraste o arquivo aqui</span>
+                      <span className="text-xs text-muted-foreground">ou clique para selecionar</span>
+                      <span className="mt-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">CSV · TXT · XLS · XLSX</span>
+                    </button>
+                  )}
 
-              {/* Banner de validação */}
-              {cf.stats.critical === 0 && (cf.sendersList.length === 0 || (cf.parsed.missingHeaders?.length ?? 0) > 0) && (
-                <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
-                  <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-700 dark:text-amber-500" />
-                  <div>
-                    {cf.sendersList.length === 0 ? (
-                      <><strong>Marque quem encaminhará a campanha.</strong>{' '}
-                        <span className="text-muted-foreground">Escolha os operadores do setor no passo 3.</span></>
-                    ) : (
-                      <><strong>Alguns campos esperados não foram encontrados.</strong>{' '}
-                        <span className="text-muted-foreground">Colunas: {cf.parsed.missingHeaders.join(', ')}.</span></>
-                    )}
-                  </div>
-                </div>
-              )}
+                  {cf.importProgress && (
+                    <div className="space-y-1.5 rounded-lg border border-border bg-muted/30 p-3">
+                      <div className="flex items-center justify-between text-xs font-medium">
+                        <span>{cf.importProgress.label}</span>
+                        <span>{Math.round(cf.importProgress.value)}%</span>
+                      </div>
+                      <Progress value={cf.importProgress.value} className="h-1.5" />
+                      <p className="text-[11px] text-muted-foreground">{cf.importProgress.detail}</p>
+                    </div>
+                  )}
 
-              {/* Estatísticas */}
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                <StatCard icon={<Users className="h-4 w-4" />} value={cf.stats.total} label={cf.relatorioSemValores ? 'registros importados' : 'contatos importados'} tone="blue" />
-                {cf.stats.review > 0 && (
-                  <StatCard icon={<AlertTriangle className="h-4 w-4" />} value={cf.stats.review} label="precisam de revisão" tone="amber" />
-                )}
-                <StatCard icon={<Send className="h-4 w-4" />} value={cf.stats.senderCount} label={cf.stats.senderCount === 1 ? 'responsável informado' : 'responsáveis informados'} tone="violet" />
-              </div>
-
-              <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-                {/* Tabela */}
-                <Card id="cf-tabela" className={cn(cf.statusFilter === 'critico' && 'border-amber-500/50')}>
-                  <CardContent className="p-4">
-                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <h3 className="text-sm font-semibold">
-                          {cf.statusFilter === 'critico'
-                            ? 'Registros com pendência grave'
-                            : cf.relatorioSemValores ? 'Registros da campanha' : 'Contatos da campanha'}
-                        </h3>
-                        <p className="text-xs text-muted-foreground">
-                          {cf.filtered.length.toLocaleString('pt-BR')} {cf.filtered.length === 1 ? 'registro' : 'registros'}
-                          {cf.statusFilter === 'critico' && (
-                            <>
-                              {' · '}
-                              <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={() => cf.setStatusFilter('all')}>
-                                ver todos
-                              </button>
-                            </>
-                          )}
+                  {cf.parsed && !cf.importProgress && (
+                    <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/30 p-3">
+                      <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md bg-primary/10 text-[10px] font-bold text-primary">
+                        {/* 245 = .xls de ligações, preventivo; 247 = .csv com valores. */}
+                        {cf.relatorioSemValores ? '245' : cf.parsed.sourceType === 'report-247' ? '247' : 'CSV'}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold">{cf.fileName || 'mailing'}</p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {cf.relatorioSemValores
+                            ? `${cf.parsed.records.length.toLocaleString('pt-BR')} clientes · preventivo · ${(cf.parsed.filterStats?.removed ?? 0).toLocaleString('pt-BR')} removidos`
+                            : cf.parsed.sourceType === 'report-247'
+                              ? `${cf.parsed.records.length.toLocaleString('pt-BR')} cobranças · com valores · ${cf.parsed.encoding}`
+                              : `${cf.parsed.records.length.toLocaleString('pt-BR')} contatos · ${cf.parsed.encoding} · ${cf.parsed.headers.length} colunas`}
                         </p>
                       </div>
-                      {cf.statusFilter === 'critico' && cf.filtered.length > 0 && (
+                      <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0" title="Remover mailing" onClick={cf.removeMailing}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* Vale para os DOIS relatórios: os filtros passaram a ser os
+                      mesmos, e o cadastral também precisa dizer o que tirou. */}
+                  {cf.parsed?.filterStats && (
+                    <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs">
+                      <p className="font-semibold text-amber-600 dark:text-amber-400">Relatório filtrado automaticamente</p>
+                      <p className="mt-0.5 text-muted-foreground">
+                        {cf.parsed.filterStats.removed.toLocaleString('pt-BR')} registros removidos (manutenção, COFEN, jornada, pagos e inválidos). Telefones de DDD 1 + Telefone 1.
+                      </p>
+                      {!!excludedCount && (
+                        <Button variant="link" className="mt-1 h-auto p-0 text-xs" onClick={cf.downloadExcluded}>
+                          Baixar registros excluídos
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Passo 2 — Mensagem */}
+              <Card>
+                <CardContent className="space-y-3 p-4">
+                  <StepTitle n={2} title="Escolher mensagem" subtitle={`Mensagens ${doSetor}`} />
+                  {/* Relatório cadastral não tem valores: as mensagens que citam
+                      parcela, quitação ou cartão sairiam com buracos no lugar dos
+                      números, então ficam travadas na lista. */}
+                  {cf.relatorioSemValores && cf.templatesBloqueados.size > 0 && (
+                    <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs">
+                      <p className="font-semibold text-amber-600 dark:text-amber-400">
+                        Relatório sem valores
+                      </p>
+                      <p className="mt-0.5 text-muted-foreground">
+                        {cf.templatesBloqueados.size === 1
+                          ? '1 mensagem que usa valores está indisponível.'
+                          : `${cf.templatesBloqueados.size} mensagens que usam valores estão indisponíveis.`}
+                        {' '}Este arquivo não traz parcela, quitação nem plano anual.
+                      </p>
+                    </div>
+                  )}
+                  {/* Favoritas: de cada líder, fixadas no topo (09/10/2026). */}
+                  {cf.templatesFavoritos.length > 0 && (
+                    <div className="rounded-lg border border-amber-400/40 bg-amber-400/5 p-2">
+                      <p className="mb-1.5 flex items-center gap-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
+                        <Star className="h-3 w-3 fill-current" /> Minhas favoritas
+                      </p>
+                      <ul className="space-y-0.5">
+                        {cf.templatesFavoritos.map((t) => {
+                          const bloqueada = cf.templatesBloqueados.has(t.id);
+                          const escolhida = t.id === cf.selectedTemplate.id;
+                          return (
+                            <li key={t.id} className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                disabled={bloqueada}
+                                onClick={() => cf.setTemplateId(t.id)}
+                                title={bloqueada ? 'Usa valores que este relatório não tem' : `Usar “${t.name}”`}
+                                className={cn(
+                                  'min-w-0 flex-1 truncate rounded-md px-2 py-1.5 text-left text-sm transition-colors',
+                                  escolhida ? 'bg-primary/10 font-medium text-primary' : 'hover:bg-accent',
+                                  bloqueada && 'cursor-not-allowed opacity-50 hover:bg-transparent',
+                                )}
+                              >
+                                {t.name}
+                                <span className="ml-1.5 text-[11px] font-normal text-muted-foreground">{t.category}</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void cf.alternarFavorita(t.id)}
+                                aria-label={`Tirar “${t.name}” das favoritas`}
+                                title="Tirar das favoritas"
+                                className="rounded-md p-1.5 text-amber-500 hover:bg-amber-500/10"
+                              >
+                                <Star className="h-3.5 w-3.5 fill-current" />
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-1.5">
+                    <Select value={cf.templateId} onValueChange={cf.setTemplateId}>
+                      <SelectTrigger className="flex-1"><SelectValue placeholder="Selecione uma mensagem" /></SelectTrigger>
+                      <SelectContent>
+                        {categorias.map((cat) => (
+                          <SelectGroup key={cat}>
+                            <SelectLabel>{cat}</SelectLabel>
+                            {cf.templates.filter((t) => t.category === cat).map((t) => {
+                              const bloqueada = cf.templatesBloqueados.has(t.id);
+                              return (
+                                <SelectItem key={t.id} value={t.id} disabled={bloqueada}>
+                                  {cf.favoritas.includes(t.id) && <Star className="mr-1 inline h-3 w-3 fill-amber-400 text-amber-400" />}
+                                  {t.name}
+                                  {bloqueada && (
+                                    <span className="ml-2 text-[10px] text-muted-foreground">
+                                      usa valores
+                                    </span>
+                                  )}
+                                </SelectItem>
+                              );
+                            })}
+                          </SelectGroup>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {(() => {
+                      const fav = cf.favoritas.includes(cf.selectedTemplate.id);
+                      return (
+                        <Button
+                          type="button" variant="outline" size="icon"
+                          className={cn('h-10 w-10 shrink-0', fav && 'border-amber-400/60 bg-amber-400/10')}
+                          onClick={() => void cf.alternarFavorita(cf.selectedTemplate.id)}
+                          aria-pressed={fav}
+                          aria-label={fav ? 'Tirar das favoritas' : 'Fixar nas favoritas'}
+                          title={fav ? 'Tirar das favoritas' : 'Fixar nas favoritas'}
+                        >
+                          <Star className={cn('h-4 w-4', fav ? 'fill-amber-400 text-amber-500' : 'text-muted-foreground')} />
+                        </Button>
+                      );
+                    })()}
+                  </div>
+                  {cf.mensagemBloqueada && (
+                    <p className="text-xs text-destructive">
+                      A mensagem selecionada usa valores que este relatório não tem.
+                      Escolha uma mensagem sem valores para poder exportar.
+                    </p>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary">{cf.selectedTemplate.category}</Badge>
+                    <p className="text-xs text-muted-foreground">{cf.selectedTemplate.description}</p>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <Button variant="outline" size="sm" className="gap-1.5" onClick={openEdit}>
+                      <Pencil className="h-3.5 w-3.5" /> Editar
+                    </Button>
+                    <Button variant="outline" size="sm" className="gap-1.5" onClick={() => { setAddTitulo(''); setAddCategoria('Personalizadas'); setAddCorpo(''); setAddOpen(true); }}>
+                      <Plus className="h-3.5 w-3.5" /> Adicionar
+                    </Button>
+                    <Button
+                      variant="outline" size="sm"
+                      className="gap-1.5 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      disabled={cf.templates.length <= 1}
+                      onClick={() => setDeleteMsgOpen(true)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" /> Excluir
+                    </Button>
+                  </div>
+                  {cf.hiddenCount > 0 && (
+                    <Button variant="link" className="h-auto p-0 text-xs" onClick={cf.restoreDefaults}>
+                      Restaurar mensagens padrão excluídas ({cf.hiddenCount})
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Passo 3 — Responsáveis: operadores do setor, marcados */}
+              <Card id="cf-senders">
+                <CardContent className="space-y-2 p-4">
+                  <StepTitle n={3} title="Quem encaminhará" subtitle="Marque os operadores do setor — e líderes, se quiser" />
+                  <SeletorOperadores envios={cf.envios} destacarVazio={!!cf.parsed} />
+                </CardContent>
+              </Card>
+
+              {/* Descontos (ocultos no relatório 245) */}
+              {!cf.relatorioSemValores && (
+                <Card>
+                  <CardContent className="space-y-3 p-4">
+                    <div className="flex items-center gap-2 text-sm font-semibold">
+                      <Percent className="h-4 w-4 text-primary" /> Descontos e cálculos
+                      <span className="ml-auto truncate text-[11px] font-normal text-muted-foreground">Configurações {doSetor}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Select value={cf.selectedDiscountPresetId} onValueChange={cf.applyDiscountPreset}>
+                        <SelectTrigger className="flex-1"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="custom">Valores atuais — não salvos</SelectItem>
+                          <SelectItem value="macro-default">Padrão do macro</SelectItem>
+                          {cf.discountPresets.length > 0 && (
+                            <SelectGroup>
+                              <SelectLabel>Minhas configurações</SelectLabel>
+                              {cf.discountPresets.map((p) => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
+                            </SelectGroup>
+                          )}
+                        </SelectContent>
+                      </Select>
+                      {presetReal && (
+                        <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive" title="Excluir configuração" onClick={() => setDeleteDiscountOpen(true)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {DISCOUNT_FIELDS.map(([key, label]) => (
+                        <label key={key} className="flex min-w-0 flex-col gap-1 rounded-md border border-border px-2.5 py-2 text-xs">
+                          <span className="truncate text-muted-foreground" title={label}>{label}</span>
+                          <CampoPercentual rotulo={label} valor={cf.discountsInput[key]} aoMudar={(n) => cf.setDiscount(key, n)} />
+                        </label>
+                      ))}
+                    </div>
+                    <Button variant="outline" size="sm" className="w-full gap-1.5" onClick={() => { setDiscountName(presetSelecionado?.nome ?? ''); setSaveDiscountOpen(true); }}>
+                      <Save className="h-3.5 w-3.5" /> Salvar configuração
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
+            </aside>
+
+            {/* ══ Área de conteúdo ════════════════════════════════════════════════ */}
+            <section className="min-w-0">
+              {!cf.parsed ? (
+                <Card className="flex min-h-[60vh] items-center justify-center">
+                  <CardContent className="max-w-md py-12 text-center">
+                    <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10">
+                      <FileText className="h-8 w-8 text-primary" />
+                    </div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-primary">Comece por aqui</p>
+                    <h2 className="mt-1 text-lg font-bold">Importe o mailing para criar a campanha</h2>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Os dados e mensagens são organizados automaticamente e divididos entre os operadores marcados. Cada um recebe a parte dele na aba Campanhas de WhatsApp.
+                    </p>
+                    <Button className="mt-4 gap-2" onClick={() => fileInputRef.current?.click()}>
+                      <Upload className="h-4 w-4" /> Selecionar mailing
+                    </Button>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="space-y-4">
+                  {/* Cabeçalho do workspace */}
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-lg font-bold">
+                          {cf.workspaceState === 'critical' ? 'Pendências graves na campanha'
+                            : cf.workspaceState === 'review' ? 'Revisão recomendada'
+                            : 'Pronta para exportar'}
+                        </h2>
+                        <StateBadge state={cf.workspaceState} />
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        {cf.stats.total.toLocaleString('pt-BR')} mensagens com o modelo “{cf.selectedTemplate.name}”.
+                      </p>
+                    </div>
+                    {/* Sem `disabled` por pendência: a exportação segue liberada e as
+                        linhas problemáticas saem marcadas na planilha. */}
+                    <div className="flex flex-wrap gap-2">
+                      <Button variant="outline" className="gap-2" onClick={openExport}>
+                        <Download className="h-4 w-4" /> Exportar Excel
+                      </Button>
+                      <Button className="gap-2" onClick={openLiberar} disabled={cf.envios.liberando}>
+                        <Send className="h-4 w-4" /> {cf.envios.liberando ? 'Liberando…' : 'Liberar para os operadores'}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Pendência grave: o card leva até os registros e deixa tirá-los
+                      da campanha (09/10/2026). */}
+                  {cf.stats.critical > 0 && (
+                    <div className="flex flex-wrap items-start gap-x-3 gap-y-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+                      <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-700 dark:text-amber-500" />
+                      <button
+                        type="button"
+                        onClick={verPendenciasGraves}
+                        className="min-w-0 flex-1 text-left"
+                        title="Mostrar só esses registros na tabela"
+                      >
+                        <strong>
+                          {cf.stats.critical.toLocaleString('pt-BR')} {cf.stats.critical === 1 ? 'registro com pendência grave' : 'registros com pendência grave'}.
+                        </strong>{' '}
+                        <span className="text-muted-foreground">
+                          Clique para ver quais são e o motivo. Se continuarem, saem marcados como “Revisar”.
+                        </span>
+                      </button>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={verPendenciasGraves}>
+                          <Filter className="h-3.5 w-3.5" /> Ver {cf.stats.critical === 1 ? 'o registro' : 'os registros'}
+                        </Button>
                         <Button
                           size="sm" variant="outline"
                           className="h-8 gap-1.5 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
                           onClick={cf.removerPendenciasGraves}
                         >
-                          <UserX className="h-3.5 w-3.5" /> Tirar {cf.filtered.length === 1 ? 'este' : `estes ${cf.filtered.length.toLocaleString('pt-BR')}`} da campanha
+                          <UserX className="h-3.5 w-3.5" /> Tirar da campanha
                         </Button>
-                      )}
-                      <div className="flex items-center gap-2">
-                        <div className="relative">
-                          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                          <Input
-                            value={cf.search}
-                            onChange={(e) => cf.setSearch(e.target.value)}
-                            placeholder={cf.relatorioSemValores ? 'Buscar nome, documento…' : 'Buscar nome, CPF, telefone…'}
-                            className="h-8 w-44 pl-8 text-xs"
-                          />
-                        </div>
-                        {cf.stats.review > 0 && (
-                          <Select value={cf.statusFilter} onValueChange={(v) => cf.setStatusFilter(v as StatusFilter)}>
-                            <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="all">Todos</SelectItem>
-                              <SelectItem value="Revisar">Precisam revisão</SelectItem>
-                              {cf.stats.critical > 0 && <SelectItem value="critico">Pendência grave</SelectItem>}
-                            </SelectContent>
-                          </Select>
+                      </div>
+                    </div>
+                  )}
+                  {cf.removidos > 0 && (
+                    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm">
+                      <UserX className="h-4 w-4 text-muted-foreground" />
+                      <span>
+                        <strong>{cf.removidos.toLocaleString('pt-BR')}</strong>{' '}
+                        {cf.removidos === 1 ? 'cliente tirado' : 'clientes tirados'} da campanha. Não vão para nenhum operador nem para o Excel.
+                      </span>
+                      <Button variant="link" className="ml-auto h-auto p-0 text-xs" onClick={cf.devolverRemovidos}>
+                        <Undo2 className="mr-1 h-3.5 w-3.5" /> Devolver à campanha
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* Banner de validação */}
+                  {cf.stats.critical === 0 && (cf.sendersList.length === 0 || (cf.parsed.missingHeaders?.length ?? 0) > 0) && (
+                    <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+                      <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-700 dark:text-amber-500" />
+                      <div>
+                        {cf.sendersList.length === 0 ? (
+                          <><strong>Marque quem encaminhará a campanha.</strong>{' '}
+                            <span className="text-muted-foreground">Escolha os operadores do setor no passo 3.</span></>
+                        ) : (
+                          <><strong>Alguns campos esperados não foram encontrados.</strong>{' '}
+                            <span className="text-muted-foreground">Colunas: {cf.parsed.missingHeaders.join(', ')}.</span></>
                         )}
                       </div>
                     </div>
+                  )}
 
-                    <div className="overflow-x-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Cliente</TableHead>
-                            {cf.relatorioSemValores ? <TableHead>Nr. documento</TableHead> : <TableHead>WhatsApp</TableHead>}
-                            {cf.relatorioSemValores ? <TableHead>Empresa</TableHead> : <TableHead>Quitação</TableHead>}
-                            <TableHead>Encaminhada por</TableHead>
-                            {cf.stats.review > 0 && <TableHead>Revisão</TableHead>}
-                            <TableHead className="w-9" />
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {cf.pageItems.map(({ item, index }) => (
-                            <TableRow
-                              key={item.rowNumber}
-                              onClick={() => cf.setSelectedRowNumber(item.rowNumber)}
-                              className={cn('cursor-pointer', index === cf.selectedIndex && 'bg-accent')}
-                            >
-                              <TableCell>
-                                <div className="font-medium">{item.name || 'Nome não informado'}</div>
-                                {!cf.relatorioSemValores && <div className="text-xs text-muted-foreground">Contrato {item.contract || '—'}</div>}
-                              </TableCell>
-                              {cf.relatorioSemValores ? (
-                                <TableCell className="font-medium">{item.contract || 'Não informado'}</TableCell>
-                              ) : (
-                                <TableCell>
-                                  <div className="font-medium">{item.phone || 'Sem contato'}</div>
-                                  <div className="text-xs text-muted-foreground">{item.company}</div>
-                                </TableCell>
-                              )}
-                              {cf.relatorioSemValores ? (
-                                <TableCell>{item.company || 'Não informada'}</TableCell>
-                              ) : (
-                                <TableCell className="text-right font-medium tabular-nums">{CampaignCore.formatCurrency(item.settlement)}</TableCell>
-                              )}
-                              <TableCell>
-                                <Badge variant="secondary" className="font-normal">{item.sender || 'Não informado'}</Badge>
-                              </TableCell>
-                              {cf.stats.review > 0 && (
-                                <TableCell>
-                                  {temPendenciaGrave(item) ? (
-                                    <span title={item.issues.join(', ')} className="text-xs font-medium text-destructive">
-                                      {item.blockingIssues.join(' · ') || item.issues[0] || 'Pendência grave'}
-                                    </span>
-                                  ) : item.status !== 'Pronto' && (
-                                    <span title={item.issues.join(', ')} className="text-xs font-medium text-amber-600 dark:text-amber-400">
-                                      {item.issues[0] || 'Revisar'}
-                                    </span>
-                                  )}
-                                </TableCell>
-                              )}
-                              <TableCell>
-                                <Eye className="h-4 w-4 text-muted-foreground" />
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                          {cf.pageItems.length === 0 && (
-                            <TableRow>
-                              <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">Nenhum contato encontrado.</TableCell>
-                            </TableRow>
-                          )}
-                        </TableBody>
-                      </Table>
-                    </div>
-
-                    {cf.pageCount > 1 && (
-                      <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-                        <span>
-                          Mostrando {cf.filtered.length ? cf.pageStart + 1 : 0}–{Math.min(cf.pageStart + cf.pageItems.length, cf.filtered.length)} de {cf.filtered.length.toLocaleString('pt-BR')}
-                        </span>
-                        <div className="flex items-center gap-2">
-                          <Button variant="outline" size="icon" className="h-7 w-7" disabled={cf.page <= 1} onClick={() => cf.setPage(cf.page - 1)}>
-                            <ChevronLeft className="h-4 w-4" />
-                          </Button>
-                          <span>{cf.page} / {cf.pageCount}</span>
-                          <Button variant="outline" size="icon" className="h-7 w-7" disabled={cf.page >= cf.pageCount} onClick={() => cf.setPage(cf.page + 1)}>
-                            <ChevronRight className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
+                  {/* Estatísticas */}
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                    <StatCard icon={<Users className="h-4 w-4" />} value={cf.stats.total} label={cf.relatorioSemValores ? 'registros importados' : 'contatos importados'} tone="blue" />
+                    {cf.stats.review > 0 && (
+                      <StatCard icon={<AlertTriangle className="h-4 w-4" />} value={cf.stats.review} label="precisam de revisão" tone="amber" />
                     )}
-                  </CardContent>
-                </Card>
+                    <StatCard icon={<Send className="h-4 w-4" />} value={cf.stats.senderCount} label={cf.stats.senderCount === 1 ? 'responsável informado' : 'responsáveis informados'} tone="violet" />
+                  </div>
 
-                {/* Prévia */}
-                <MessagePreview item={cf.selectedItem} relatorioSemValores={cf.relatorioSemValores} onCopy={() => cf.copyMessage(cf.selectedItem)} />
-              </div>
-            </div>
-          )}
-        </section>
-      </div>
+                  <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+                    {/* Tabela */}
+                    <Card id="cf-tabela" className={cn(cf.statusFilter === 'critico' && 'border-amber-500/50')}>
+                      <CardContent className="p-4">
+                        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <h3 className="text-sm font-semibold">
+                              {cf.statusFilter === 'critico'
+                                ? 'Registros com pendência grave'
+                                : cf.relatorioSemValores ? 'Registros da campanha' : 'Contatos da campanha'}
+                            </h3>
+                            <p className="text-xs text-muted-foreground">
+                              {cf.filtered.length.toLocaleString('pt-BR')} {cf.filtered.length === 1 ? 'registro' : 'registros'}
+                              {cf.statusFilter === 'critico' && (
+                                <>
+                                  {' · '}
+                                  <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={() => cf.setStatusFilter('all')}>
+                                    ver todos
+                                  </button>
+                                </>
+                              )}
+                            </p>
+                          </div>
+                          {cf.statusFilter === 'critico' && cf.filtered.length > 0 && (
+                            <Button
+                              size="sm" variant="outline"
+                              className="h-8 gap-1.5 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                              onClick={cf.removerPendenciasGraves}
+                            >
+                              <UserX className="h-3.5 w-3.5" /> Tirar {cf.filtered.length === 1 ? 'este' : `estes ${cf.filtered.length.toLocaleString('pt-BR')}`} da campanha
+                            </Button>
+                          )}
+                          <div className="flex items-center gap-2">
+                            <div className="relative">
+                              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                              <Input
+                                value={cf.search}
+                                onChange={(e) => cf.setSearch(e.target.value)}
+                                placeholder={cf.relatorioSemValores ? 'Buscar nome, documento…' : 'Buscar nome, CPF, telefone…'}
+                                className="h-8 w-44 pl-8 text-xs"
+                              />
+                            </div>
+                            {cf.stats.review > 0 && (
+                              <Select value={cf.statusFilter} onValueChange={(v) => cf.setStatusFilter(v as StatusFilter)}>
+                                <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="all">Todos</SelectItem>
+                                  <SelectItem value="Revisar">Precisam revisão</SelectItem>
+                                  {cf.stats.critical > 0 && <SelectItem value="critico">Pendência grave</SelectItem>}
+                                </SelectContent>
+                              </Select>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="overflow-x-auto">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Cliente</TableHead>
+                                {cf.relatorioSemValores ? <TableHead>Nr. documento</TableHead> : <TableHead>WhatsApp</TableHead>}
+                                {cf.relatorioSemValores ? <TableHead>Empresa</TableHead> : <TableHead>Quitação</TableHead>}
+                                <TableHead>Encaminhada por</TableHead>
+                                {cf.stats.review > 0 && <TableHead>Revisão</TableHead>}
+                                <TableHead className="w-9" />
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {cf.pageItems.map(({ item, index }) => (
+                                <TableRow
+                                  key={item.rowNumber}
+                                  onClick={() => cf.setSelectedRowNumber(item.rowNumber)}
+                                  className={cn('cursor-pointer', index === cf.selectedIndex && 'bg-accent')}
+                                >
+                                  <TableCell>
+                                    <div className="font-medium">{item.name || 'Nome não informado'}</div>
+                                    {!cf.relatorioSemValores && <div className="text-xs text-muted-foreground">Contrato {item.contract || '—'}</div>}
+                                  </TableCell>
+                                  {cf.relatorioSemValores ? (
+                                    <TableCell className="font-medium">{item.contract || 'Não informado'}</TableCell>
+                                  ) : (
+                                    <TableCell>
+                                      <div className="font-medium">{item.phone || 'Sem contato'}</div>
+                                      <div className="text-xs text-muted-foreground">{item.company}</div>
+                                    </TableCell>
+                                  )}
+                                  {cf.relatorioSemValores ? (
+                                    <TableCell>{item.company || 'Não informada'}</TableCell>
+                                  ) : (
+                                    <TableCell className="text-right font-medium tabular-nums">{CampaignCore.formatCurrency(item.settlement)}</TableCell>
+                                  )}
+                                  <TableCell>
+                                    <Badge variant="secondary" className="font-normal">{item.sender || 'Não informado'}</Badge>
+                                  </TableCell>
+                                  {cf.stats.review > 0 && (
+                                    <TableCell>
+                                      {temPendenciaGrave(item) ? (
+                                        <span title={item.issues.join(', ')} className="text-xs font-medium text-destructive">
+                                          {item.blockingIssues.join(' · ') || item.issues[0] || 'Pendência grave'}
+                                        </span>
+                                      ) : item.status !== 'Pronto' && (
+                                        <span title={item.issues.join(', ')} className="text-xs font-medium text-amber-600 dark:text-amber-400">
+                                          {item.issues[0] || 'Revisar'}
+                                        </span>
+                                      )}
+                                    </TableCell>
+                                  )}
+                                  <TableCell>
+                                    <Eye className="h-4 w-4 text-muted-foreground" />
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                              {cf.pageItems.length === 0 && (
+                                <TableRow>
+                                  <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">Nenhum contato encontrado.</TableCell>
+                                </TableRow>
+                              )}
+                            </TableBody>
+                          </Table>
+                        </div>
+
+                        {cf.pageCount > 1 && (
+                          <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                            <span>
+                              Mostrando {cf.filtered.length ? cf.pageStart + 1 : 0}–{Math.min(cf.pageStart + cf.pageItems.length, cf.filtered.length)} de {cf.filtered.length.toLocaleString('pt-BR')}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <Button variant="outline" size="icon" className="h-7 w-7" disabled={cf.page <= 1} onClick={() => cf.setPage(cf.page - 1)}>
+                                <ChevronLeft className="h-4 w-4" />
+                              </Button>
+                              <span>{cf.page} / {cf.pageCount}</span>
+                              <Button variant="outline" size="icon" className="h-7 w-7" disabled={cf.page >= cf.pageCount} onClick={() => cf.setPage(cf.page + 1)}>
+                                <ChevronRight className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    {/* Prévia */}
+                    <MessagePreview item={cf.selectedItem} relatorioSemValores={cf.relatorioSemValores} onCopy={() => cf.copyMessage(cf.selectedItem)} />
+                  </div>
+                </div>
+              )}
+            </section>
+          </div>
+        </TabsContent>
+      </Tabs>
 
       {/* ══ Dialog: editar mensagem ═════════════════════════════════════════ */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>

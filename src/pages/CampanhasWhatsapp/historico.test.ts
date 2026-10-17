@@ -84,8 +84,11 @@ describe('filtro de equipe do passo 3', () => {
     // Marcou a Lia e desmarcou o Caio; agora entra e2: Bia chega marcada, o resto fica.
     const ajustado = new Set(['1', '5']);
     expect([...marcacaoAoTrocarEquipes(comLideres, ajustado, ['e1'], ['e1', 'e2'])].sort()).toEqual(['1', '2', '5']);
-    // Volta para «todas»: Davi chega marcado, Rui (líder) não.
-    expect([...marcacaoAoTrocarEquipes(comLideres, ajustado, ['e1'], [])].sort()).toEqual(['1', '2', '4', '5']);
+    // «Todas» alterna: com alguém marcado, desmarca todo mundo…
+    expect([...marcacaoAoTrocarEquipes(comLideres, ajustado, ['e1'], [])]).toEqual([]);
+    expect([...marcacaoAoTrocarEquipes(comLideres, todosOps, [], [])]).toEqual([]);
+    // …e clicando de novo, sem ninguém marcado, marca todos os operadores (líderes não).
+    expect([...marcacaoAoTrocarEquipes(comLideres, new Set(), [], [])].sort()).toEqual(['1', '2', '3', '4']);
   });
   it('não repete «Equipe» no nome', () => {
     expect(rotuloEquipe('Luciano')).toBe('Equipe Luciano');
