@@ -9,7 +9,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   classificar, classificarTodas, fraseParaOperador, fraseParaLideranca,
-  minhasMudancas, resumir, saldoDoOperador, momento,
+  minhasMudancas, resumir, saldoDoOperador, momento, grupoDaMudanca, fraseCurta, efeitoNoTotal,
   type MudancaCrua,
 } from './mudancasImportacao';
 
@@ -242,5 +242,44 @@ describe('saldoDoOperador', () => {
 describe('momento', () => {
   it('data inválida não vira "Invalid Date" na tela', () => {
     expect(momento('nao é data')).toBe('—');
+  });
+});
+
+describe('grupo de cada mudança', () => {
+  const saiu     = classificarTodas([crua({ codigo: '1', operador_depois_id: BIA, operador_depois_nome: 'Bia' })])[0];
+  const chegou   = classificarTodas([crua({ codigo: '2', operador_antes_id: BIA, operador_depois_id: ANA, valor_depois: 300 })])[0];
+  const sumiu    = classificarTodas([crua({ codigo: '3', valor_depois: null, valor_antes: 200 })])[0];
+
+  it('para o operador: saiu, chegou ou foi removido', () => {
+    expect(grupoDaMudanca(saiu, 'operador', ANA)).toBe('saiu');
+    expect(grupoDaMudanca(chegou, 'operador', ANA)).toBe('chegou');
+    expect(grupoDaMudanca(sumiu, 'operador', ANA)).toBe('removido');
+  });
+
+  it('para a liderança, a troca de dono é uma só coisa', () => {
+    expect(grupoDaMudanca(saiu, 'lideranca', ANA)).toBe('trocou');
+    expect(grupoDaMudanca(chegou, 'lideranca', ANA)).toBe('trocou');
+  });
+
+});
+
+describe('a conta do mês', () => {
+  const saiu   = classificarTodas([crua({ codigo: '1', operador_depois_id: BIA, operador_depois_nome: 'Bia Lima' })])[0];
+  const chegou = classificarTodas([crua({ codigo: '2', operador_antes_id: BIA, operador_antes_nome: 'Bia Lima', operador_depois_id: ANA, valor_depois: 300 })])[0];
+  const sumiu  = classificarTodas([crua({ codigo: '3', valor_depois: null, valor_antes: 200 })])[0];
+
+  it('frases curtas, sem «você» — a conta já é de quem lê', () => {
+    expect(fraseCurta(saiu, 'saiu')).toBe('NR 1 passou para Bia Lima');
+    expect(fraseCurta(chegou, 'chegou')).toBe('NR 2 veio de Bia Lima');
+    expect(fraseCurta(sumiu, 'removido')).toBe('NR 3 saiu do relatório');
+    expect(fraseCurta(saiu, 'trocou')).toBe('NR 1 passou de Ana Souza para Bia Lima');
+  });
+
+  it('o operador soma o que saiu, sumiu e chegou', () => {
+    expect(efeitoNoTotal([saiu, chegou, sumiu], 'operador', ANA)).toBe(-900);
+  });
+
+  it('na liderança a troca de dono não mexe no total', () => {
+    expect(efeitoNoTotal([saiu, sumiu], 'lideranca', ANA)).toBe(-200);
   });
 });

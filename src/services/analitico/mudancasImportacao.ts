@@ -222,3 +222,66 @@ export const ROTULO_TIPO: Record<TipoMudanca, string> = {
   removido:    'Removido',
   transferido: 'Transferido',
 };
+
+// ── A conta do mês ─────────────────────────────────────────────────────────
+
+/**
+ * Em que grupo a mudança entra na conta do mês.
+ *
+ * O texto corrido («O NR tal, de tal dia, saiu dos seus recebimentos na
+ * importação de...») fazia a pessoa ler a frase inteira para descobrir o
+ * essencial: perdi ou ganhei? A conta separa por isso, e cada linha mostra só
+ * o sinal, o valor e o que aconteceu.
+ *
+ *   'saiu'     ... estava comigo e foi para outra pessoa;
+ *   'chegou'   ... era de outra pessoa e veio para mim;
+ *   'removido' ... sumiu do relatório (de mim ou, na liderança, de qualquer um);
+ *   'trocou'   ... liderança: passou de uma pessoa para outra.
+ */
+export type GrupoMudanca = 'saiu' | 'chegou' | 'removido' | 'trocou';
+
+export function grupoDaMudanca(m: Mudanca, modo: 'operador' | 'lideranca', euSouId: string): GrupoMudanca {
+  if (m.tipo === 'removido') return 'removido';
+  if (modo === 'lideranca') return 'trocou';
+  return m.operador_depois_id === euSouId ? 'chegou' : 'saiu';
+}
+
+/**
+ * O valor de uma mudança do ponto de vista de quem olha.
+ *
+ * Para o operador, sair ou sumir é negativo e chegar é positivo. Para a
+ * liderança, a troca de dono não muda o total do escopo: vale o valor que
+ * passou, sem sinal; o removido é negativo.
+ */
+export function valorParaQuemOlha(m: Mudanca, grupo: GrupoMudanca): number {
+  if (grupo === 'chegou') return m.valor_depois ?? 0;
+  if (grupo === 'trocou') return m.valor_antes;
+  return -m.valor_antes;
+}
+
+/**
+ * A frase CURTA de uma linha da conta — o que aconteceu, sem data nem valor
+ * (os dois têm coluna própria na tela).
+ *
+ * Para o operador, quem é ele some da frase: a conta é dele, então «passou
+ * para Bia» já diz que saiu de você.
+ */
+export function fraseCurta(m: Mudanca, grupo: GrupoMudanca): string {
+  const nr = `NR ${m.codigo}`;
+  switch (grupo) {
+    case 'saiu':     return `${nr} passou para ${nome(m.operador_depois_nome)}`;
+    case 'chegou':   return `${nr} veio de ${nome(m.operador_antes_nome)}`;
+    case 'trocou':   return `${nr} passou de ${nome(m.operador_antes_nome)} para ${nome(m.operador_depois_nome)}`;
+    case 'removido': return `${nr} saiu do relatório`;
+  }
+}
+
+/** A conta inteira: o efeito no total de quem olha. A troca de dono, na liderança, não entra. */
+export function efeitoNoTotal(ms: readonly Mudanca[], modo: 'operador' | 'lideranca', euSouId: string): number {
+  let total = 0;
+  for (const m of ms) {
+    const g = grupoDaMudanca(m, modo, euSouId);
+    if (g !== 'trocou') total += valorParaQuemOlha(m, g);
+  }
+  return Math.round(total * 100) / 100;
+}

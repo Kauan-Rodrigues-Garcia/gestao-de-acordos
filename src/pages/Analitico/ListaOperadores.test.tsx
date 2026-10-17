@@ -29,13 +29,14 @@ describe('ListaOperadores', () => {
     expect(screen.getByText('Bruno Lima')).toBeInTheDocument();
   });
 
-  it('a barra mede a fatia dentro da equipe, não da empresa', () => {
+  it('mostra a posição dentro da equipe, com a fatia no passar do mouse', () => {
     render(
       <ListaOperadores grupos={grupos} mostrarHO fotos={{}}
         expandidos={new Set()} onToggle={vi.fn()} renderExpandido={() => null} />,
     );
-    expect(screen.getByTestId('barra-a')).toHaveStyle({ width: '75%' });
-    expect(screen.getByTestId('barra-b')).toHaveStyle({ width: '25%' });
+    expect(screen.getByTestId('posicao-a')).toHaveTextContent('1º');
+    expect(screen.getByTestId('posicao-a')).toHaveAttribute('title', '1º de 2 na equipe · 75% do que a equipe recebeu');
+    expect(screen.getByTestId('posicao-b')).toHaveTextContent('2º');
   });
 
   it('a contagem de novos só aparece quando existe', () => {

@@ -24,23 +24,24 @@
 
 import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { useState, useMemo, useEffect, useCallback, lazy, Suspense } from 'react';
-import { CalendarDays, X, ListChecks, Trophy, TrendingUp, CreditCard, Wallet } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { CalendarDays, X, ListChecks, Trophy, Wallet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { KpiTile } from '@/components/KpiTile';
+import { ValorAnimado } from '@/components/ValorAnimado';
 import { AbasSegmentadas, type AbaSegmentada } from '@/components/AbasSegmentadas';
 import { DatePickerField } from '@/components/DatePickerField';
 import { toast } from 'sonner';
 import { formatBRL } from '@/lib/money';
-import { cn } from '@/lib/utils';
+import { getTodayISO } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import type { AnaliticoRecebimento } from '@/lib/supabase';
 import { TabulacaoCell } from './TabulacaoCell';
-import { MudancasImportacao } from './MudancasImportacao';
 import { RankingView } from './RankingView';
 import { CampoBuscaAnalitico } from './CampoBuscaAnalitico';
 import { recebimentoCasaBusca } from './buscaAnalitico';
 import type { VinculosOperador } from './agregacaoLider';
+import { ExtratoRecebimentos } from '@/pages/Analitico/Extrato/ExtratoRecebimentos';
+import { FitaDoMes } from '@/pages/Analitico/Extrato/FitaDoMes';
+import { resumirVinculos, totaisPorDiaDoMes } from '@/pages/Analitico/Extrato/extrato';
 
 import {
   buscarResumoOperadoresAnalitico,
@@ -89,22 +90,6 @@ interface AnaliticoOperadorProps {
   onRefetch: () => void;
   /** Avisa a página qual aba interna está aberta (o Ranking não usa Dia/Período). */
   onAbaMudou?: (aba: AbaOperador) => void;
-}
-
-function chipForma(forma: AnaliticoRecebimento['forma_pagamento'], detalhe?: string | null) {
-  const isCartao = forma === 'cartao';
-  // BookPlay traz o rótulo real (Boleto, Pix, Pix Automático…); PaguePlay usa o genérico.
-  const texto = detalhe || (isCartao ? 'Cartão' : 'Boleto/Pix');
-  return (
-    <Badge variant="outline" className={cn(
-      'text-xs',
-      isCartao
-        ? 'border-purple-300 text-purple-700 dark:text-purple-400'
-        : 'border-blue-300 text-blue-700 dark:text-blue-400',
-    )}>
-      {texto}
-    </Badge>
-  );
 }
 
 export function AnaliticoOperador({
@@ -210,6 +195,23 @@ export function AnaliticoOperador({
   const totalRecebido = dadosFiltrados.reduce((s, d) => s + d.valor_recebido, 0);
   const totalHO       = dadosFiltrados.reduce((s, d) => s + d.total_ho, 0);
   const tabulados     = dadosFiltrados.filter(d => d.status_tabulacao === 'tabulado').length;
+  const vinculos      = useMemo(() => resumirVinculos(dadosFiltrados), [dadosFiltrados]);
+  const pctDireto     = vinculos.direto + vinculos.extra > 0
+    ? (vinculos.direto / (vinculos.direto + vinculos.extra)) * 100
+    : 100;
+
+  const hojeISO = getTodayISO();
+  // A fita é sempre do mês inteiro: ela é o mapa para escolher o dia, e
+  // encolher junto com o filtro tiraria do mapa justamente os outros dias.
+  const fitaDoMes = useMemo(() => totaisPorDiaDoMes(dados, mes), [dados, mes]);
+  const diaDaFita = filtroInicio && filtroInicio === filtroFim ? filtroInicio : null;
+  const rotuloDoRecorte = recorte.modo === 'dia'
+    ? new Date(recorte.dia + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' })
+    : recorte.modo === 'periodo'
+      ? [recorte.inicio, recorte.fim]
+          .map(d => (d ? new Date(d + 'T12:00:00').toLocaleDateString('pt-BR') : '…'))
+          .join(' – ')
+      : new Date(mes + '-15T12:00:00').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
 
   // Tipado aqui, e não com genérico no JSX: o `lovable-tagger` (só em dev) não
   // entende `<Componente<T>` e o SWC recusa o arquivo.
@@ -275,9 +277,108 @@ export function AnaliticoOperador({
           </div>
         ) : (
           <div className="space-y-4">
-            {/* Filtro de data */}
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <CalendarDays className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
+            {/* ── O resumo do recorte: quanto entrou, quanto falta tabular, onde
+                eu estou e, no mês, o ritmo dia a dia. Um cartão só no lugar
+                dos três tiles soltos — é a primeira coisa que o operador lê. */}
+            <section
+              aria-label="Meu resumo"
+              className="relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/[0.07] via-card to-card p-4 sm:p-5"
+            >
+              <div className="grid gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                    {recorte.modo === 'dia' ? 'Recebido no dia' : recorte.modo === 'periodo' ? 'Recebido no período' : 'Recebido no mês'}
+                    <span className="ml-1.5 font-normal normal-case tracking-normal text-muted-foreground/80">
+                      · {rotuloDoRecorte}
+                    </span>
+                  </p>
+                  <ValorAnimado
+                    valor={totalRecebido} formatar={formatBRL}
+                    className="mt-1 block truncate font-mono text-3xl font-bold leading-tight tracking-tight text-primary sm:text-[2.1rem]"
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {dadosFiltrados.length} {dadosFiltrados.length === 1 ? 'recebimento' : 'recebimentos'}
+                    {mostrarHO && <> · HO <span className="font-mono text-foreground/80">{formatBRL(totalHO)}</span></>}
+                    {recorte.modo === 'dia' && ' · recebimento vivo'}
+                  </p>
+
+                  {minhaPosicao && (
+                    <div className="mt-3 inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-0.5 rounded-lg border border-warning/25 bg-warning/[0.08] px-2.5 py-1.5 text-xs">
+                      <Trophy className="h-3.5 w-3.5 shrink-0 text-warning" aria-hidden="true" />
+                      <span className="text-muted-foreground">Posição no mês</span>
+                      <strong className="font-mono text-foreground">{minhaPosicao.posicao}º</strong>
+                      <span className="text-muted-foreground">de {minhaPosicao.de}</span>
+                      {minhaPosicao.faltam !== null && (
+                        <span className="text-muted-foreground">
+                          · faltam <strong className="font-mono text-foreground">{formatBRL(minhaPosicao.faltam)}</strong> para o {minhaPosicao.posicao - 1}º
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="min-w-0 space-y-3">
+                  {/* Tabulação: a fração exige conta de cabeça; a barra, não. */}
+                  <div>
+                    <div className="flex items-baseline justify-between gap-2 text-xs">
+                      <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
+                        <ListChecks className="h-3.5 w-3.5 text-success" aria-hidden="true" /> Tabulados
+                      </span>
+                      <span className="font-mono tabular-nums">
+                        <strong className="text-success">{tabulados}</strong>
+                        <span className="text-muted-foreground">/{dadosFiltrados.length}</span>
+                      </span>
+                    </div>
+                    <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-muted">
+                      <div className="h-full rounded-full bg-success transition-[width] duration-500"
+                        style={{ width: `${dadosFiltrados.length ? (tabulados / dadosFiltrados.length) * 100 : 0}%` }} />
+                    </div>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      {dadosFiltrados.length - tabulados > 0
+                        ? <><strong className="text-warning">{dadosFiltrados.length - tabulados}</strong> para tabular — filtre por «A tabular» no extrato.</>
+                        : dadosFiltrados.length > 0 ? 'Tudo tabulado.' : 'Nada no recorte.'}
+                    </p>
+                  </div>
+
+                  {/* Direto × Extra — só quando há Extra; ver `temExtra`. */}
+                  {vinculos.qtdExtra > 0 && (
+                    <div>
+                      <div className="flex items-baseline justify-between gap-2 text-xs">
+                        <span className="font-medium text-foreground">Direto × Extra</span>
+                        <span className="text-[11px] text-muted-foreground">
+                          {vinculos.qtdDireto} direto · {vinculos.qtdExtra} extra
+                        </span>
+                      </div>
+                      <div className="mt-1.5 flex h-2 overflow-hidden rounded-full bg-muted">
+                        <div className="h-full bg-primary/70" style={{ width: `${pctDireto}%` }} />
+                        <div className="h-full bg-amber-500/80" style={{ width: `${100 - pctDireto}%` }} />
+                      </div>
+                      <div className="mt-1 flex justify-between gap-2 font-mono text-[11px] tabular-nums">
+                        <span className="text-foreground/80">{formatBRL(vinculos.direto)}</span>
+                        <span className="text-amber-700 dark:text-amber-400">{formatBRL(vinculos.extra)}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {recorte.modo !== 'dia' && (
+                <FitaDoMes
+                  className="mt-4 border-t border-border/60 pt-3"
+                  dias={fitaDoMes}
+                  hojeISO={hojeISO}
+                  selecionado={diaDaFita}
+                  onSelecionar={dia => {
+                    setFiltroInicio(dia ?? '');
+                    setFiltroFim(dia ?? '');
+                  }}
+                />
+              )}
+            </section>
+
+            {/* Período à mão + busca */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <CalendarDays className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
               <span className="text-xs font-medium text-muted-foreground">Período:</span>
               <DatePickerField
                 value={filtroInicio} onChange={setFiltroInicio}
@@ -295,7 +396,7 @@ export function AnaliticoOperador({
                   <Button size="sm" variant="ghost"
                     className="h-8 gap-1 rounded-lg px-2 text-xs text-muted-foreground"
                     onClick={limparFiltro}>
-                    <X className="w-3 h-3" /> Limpar
+                    <X className="h-3 w-3" /> Limpar
                   </Button>
                   <span className="text-xs text-muted-foreground">
                     {dadosFiltrados.length} de {dados.length} registros
@@ -309,78 +410,11 @@ export function AnaliticoOperador({
               />
             </div>
 
-            {/* O que a reimportação do 59 mexeu na carteira DELE. Some quando
-                não há nada — ver MudancasImportacao. */}
-            {empresaId && mes && (
-              <MudancasImportacao
-                empresaId={empresaId} mes={mes}
-                operadorId={operadorId} modo="operador"
-              />
-            )}
-
-            {/* Resumo */}
-            <div className={cn('grid gap-3', mostrarHO ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2')}>
-              <KpiTile
-                rotulo={recorte.modo === 'dia' ? 'Recebido no dia' : 'Total recebido'}
-                Icon={TrendingUp} tom="primario"
-                valor={formatBRL(totalRecebido)}
-                valorNumerico={totalRecebido} formatar={formatBRL}
-                sub={recorte.modo === 'dia' ? 'Recebimento vivo' : undefined}
-              />
-              {mostrarHO && (
-                <KpiTile
-                  rotulo="Total HO" Icon={CreditCard} tom="neutro"
-                  valor={formatBRL(totalHO)}
-                  valorNumerico={totalHO} formatar={formatBRL}
-                />
-              )}
-              <div className="rounded-xl border border-success/20 bg-gradient-to-br from-success/[0.06] to-transparent p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                      Tabulados
-                    </p>
-                    <p className="mt-1 font-mono text-lg font-bold leading-tight text-success">
-                      {tabulados}<span className="text-muted-foreground">/{dadosFiltrados.length}</span>
-                    </p>
-                  </div>
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-success/12 text-success ring-1 ring-success/20">
-                    <ListChecks className="h-4 w-4" />
-                  </div>
-                </div>
-                {/* A fração exige conta de cabeça; a barra, não. */}
-                <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-muted">
-                  <div className="h-full rounded-full bg-success transition-[width]"
-                    style={{
-                      width: dadosFiltrados.length
-                        ? `${((tabulados / dadosFiltrados.length) * 100).toFixed(0)}%`
-                        : '0%',
-                    }} />
-                </div>
-              </div>
-            </div>
-
-            {minhaPosicao && (
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-border bg-gradient-to-br from-muted/40 to-transparent px-3 py-2">
-                <Trophy className="w-4 h-4 shrink-0 text-warning" />
-                <span className="text-xs text-muted-foreground">Sua posição no mês:</span>
-                <strong className="font-mono text-sm text-foreground">{minhaPosicao.posicao}º</strong>
-                <span className="text-xs text-muted-foreground">de {minhaPosicao.de}</span>
-                {minhaPosicao.faltam !== null && (
-                  <span className="text-xs text-muted-foreground">
-                    · faltam{' '}
-                    <strong className="font-mono text-foreground">{formatBRL(minhaPosicao.faltam)}</strong>{' '}
-                    para o {minhaPosicao.posicao - 1}º
-                  </span>
-                )}
-              </div>
-            )}
-
             {/* Também quando quem esvaziou a lista foi a LENTE: no recorte Dia
                 sem filtro à mão, a condição antiga não cobria nada e a tela
-                ficava com os cards zerados e um vão branco no lugar da tabela. */}
+                ficava com os cards zerados e um vão branco no lugar da lista. */}
             {dadosFiltrados.length === 0 && (
-              <div className="text-center py-8 text-muted-foreground">
+              <div className="rounded-xl border border-dashed border-border py-8 text-center text-muted-foreground">
                 <p className="text-sm">
                   {recorte.modo === 'dia'
                     ? 'Nenhum recebimento seu neste dia.'
@@ -398,117 +432,21 @@ export function AnaliticoOperador({
               </div>
             )}
 
-            {/* Tabela */}
             {linhasDaTabela.length > 0 && (
-              <div className="overflow-hidden rounded-xl border border-border">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="sticky top-0 z-10 border-b border-border bg-muted/60 backdrop-blur">
-                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">CÓDIGO</th>
-                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">FORMA</th>
-                          <th className="text-right px-3 py-3 font-semibold text-muted-foreground">RECEBIDO</th>
-                          {mostrarHO && <th className="text-right px-3 py-3 font-semibold text-muted-foreground">TOTAL HO</th>}
-                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">DATA PGT.</th>
-                          <th className="text-right px-3 py-3 font-semibold text-muted-foreground">AÇÃO</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-border">
-                        {linhasDaTabela.flatMap(linha => {
-                          const rowClass = cn('hover:bg-muted/30 transition-colors', !linha.visto && 'bg-primary/3');
-                          const pagamentos = linha.pagamentos_detalhados;
-
-                          if (!pagamentos || pagamentos.length <= 1) {
-                            return [
-                              <tr key={linha.id} className={rowClass}>
-                                <td className="px-3 py-2.5">
-                                  <div className="flex items-center gap-1.5">
-                                    {!linha.visto && (
-                                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary shrink-0" title="Novo" />
-                                    )}
-                                    <div>
-                                      <span className="font-semibold">{linha.codigo}</span>
-                                      {linha.nome_cliente && (
-                                        <span className="block text-muted-foreground leading-tight truncate max-w-[150px]">
-                                          {linha.nome_cliente}
-                                        </span>
-                                      )}
-                                      {linha.instituicao && (
-                                        <span className="block text-[10px] text-muted-foreground/70 leading-tight truncate max-w-[150px]">
-                                          {linha.instituicao}
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-                                </td>
-                                <td className="px-3 py-2.5">{chipForma(linha.forma_pagamento, linha.forma_detalhe)}</td>
-                                <td className="px-3 py-2.5 text-right font-mono font-medium">{formatBRL(linha.valor_recebido)}</td>
-                                {mostrarHO && <td className="px-3 py-2.5 text-right font-mono text-muted-foreground">{formatBRL(linha.total_ho)}</td>}
-                                <td className="px-3 py-2.5 tabular-nums">
-                                  {new Date(linha.data_pagamento + 'T12:00:00').toLocaleDateString('pt-BR')}
-                                </td>
-                                <td className="px-3 py-2.5 text-right">
-                                  <TabulacaoCell
-                                    linha={linha} empresaId={empresaId}
-                                    operadorId={operadorId} operadorNome={operadorNome}
-                                    onAbrirNovoAcordo={onAbrirNovoAcordo}
-                                    onVerAcordo={onVerAcordo}
-                                    onRefetch={() => { setForceRender(v => v + 1); onRefetch(); }}
-                                  />
-                                </td>
-                              </tr>,
-                            ];
-                          }
-
-                          // Múltiplos pagamentos: uma linha por pagamento, código e ação com rowSpan
-                          return pagamentos.map((p, idx) => (
-                            <tr key={`${linha.id}::${idx}`} className={rowClass}>
-                              {idx === 0 && (
-                                <td rowSpan={pagamentos.length} className="px-3 py-2.5 align-top">
-                                  <div className="flex items-center gap-1.5">
-                                    {!linha.visto && (
-                                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary shrink-0" title="Novo" />
-                                    )}
-                                    <div>
-                                      <span className="font-semibold">{linha.codigo}</span>
-                                      {linha.nome_cliente && (
-                                        <span className="block text-muted-foreground leading-tight truncate max-w-[150px]">
-                                          {linha.nome_cliente}
-                                        </span>
-                                      )}
-                                      {linha.instituicao && (
-                                        <span className="block text-[10px] text-muted-foreground/70 leading-tight truncate max-w-[150px]">
-                                          {linha.instituicao}
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-                                </td>
-                              )}
-                              <td className="px-3 py-2.5">{chipForma(linha.forma_pagamento, linha.forma_detalhe)}</td>
-                              <td className="px-3 py-2.5 text-right font-mono font-medium">{formatBRL(p.valor)}</td>
-                              {mostrarHO && <td className="px-3 py-2.5 text-right font-mono text-muted-foreground">{formatBRL(p.total_ho)}</td>}
-                              <td className="px-3 py-2.5 tabular-nums">
-                                {new Date(p.data + 'T12:00:00').toLocaleDateString('pt-BR')}
-                              </td>
-                              {idx === 0 && (
-                                <td rowSpan={pagamentos.length} className="px-3 py-2.5 text-right align-top">
-                                  <TabulacaoCell
-                                    linha={linha} empresaId={empresaId}
-                                    operadorId={operadorId} operadorNome={operadorNome}
-                                    onAbrirNovoAcordo={onAbrirNovoAcordo}
-                                    onVerAcordo={onVerAcordo}
-                                    onRefetch={() => { setForceRender(v => v + 1); onRefetch(); }}
-                                  />
-                                </td>
-                              )}
-                            </tr>
-                          ));
-                        })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+              <ExtratoRecebimentos
+                linhas={linhasDaTabela}
+                mostrarHO={mostrarHO}
+                hojeISO={hojeISO}
+                renderAcao={linha => (
+                  <TabulacaoCell
+                    linha={linha} empresaId={empresaId}
+                    operadorId={operadorId} operadorNome={operadorNome}
+                    onAbrirNovoAcordo={onAbrirNovoAcordo}
+                    onVerAcordo={onVerAcordo}
+                    onRefetch={() => { setForceRender(v => v + 1); onRefetch(); }}
+                  />
+                )}
+              />
             )}
           </div>
         )

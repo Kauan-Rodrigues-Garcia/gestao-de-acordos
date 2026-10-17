@@ -5,11 +5,14 @@
  * Ela recebe `LinhaOperadorPainel` e não sabe se o número veio do relatório
  * mensal ou do diário. Foi assim que a segunda tela deixou de precisar existir.
  *
- * ## Por que a barra mede a EQUIPE
+ * ## Por que a posição é na EQUIPE
  *
  * A pergunta que o líder faz olhando esta lista é "quem carrega o grupo", e o
- * grupo em que o operador está desenhado é a equipe. Medir contra a empresa
- * daria barras de 3% para todo mundo — verdadeiro e inútil.
+ * grupo em que o operador está desenhado é a equipe. Até 16/10/2026 a resposta
+ * era uma barra com «12% da equipe» — a fatia do operador no total do grupo.
+ * Ninguém lia: exigia conta de cabeça. Agora é a posição, «3º de 8 na
+ * equipe», com o pódio em ouro, prata e bronze; a fatia ficou no passar do
+ * mouse para quem quiser o número.
  */
 import type { ReactNode } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
@@ -17,7 +20,9 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { corDaForma } from '@/lib/formasPagamento';
 import { formatBRL } from '@/lib/money';
 import { cn } from '@/lib/utils';
-import { fatiaDoGrupo, type LinhaOperadorPainel } from './linhaOperador';
+import { fatiaDoGrupo, posicoesNoGrupo, type LinhaOperadorPainel } from './linhaOperador';
+/** Ouro, prata e bronze do pódio da equipe — as mesmas do ranking. */
+const MEDALHA = ['#C9A227', '#A3ADB8', '#B4743F'];
 
 export interface GrupoOperadores {
   equipeId: string | null;
@@ -60,14 +65,19 @@ export function ListaOperadores({
     <div className="space-y-5">
       {grupos.map(grupo => {
         const totalDoGrupo = grupo.itens.reduce((s, l) => s + Math.max(0, l.valor), 0);
+        const posicoes = posicoesNoGrupo(grupo.itens);
         return (
           <div key={grupo.equipeId ?? '__sem__'} className="space-y-1.5">
             <div className="flex items-center gap-2 px-1">
-              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <span className="text-xs font-semibold uppercase tracking-wide text-foreground/80">
                 {grupo.equipeNome}
               </span>
+              <span className="rounded-full bg-muted px-1.5 py-px text-[10px] font-medium tabular-nums text-muted-foreground"
+                title={`${grupo.itens.length} operador${grupo.itens.length !== 1 ? 'es' : ''}`}>
+                {grupo.itens.length}
+              </span>
               <div className="h-px flex-1 bg-border" />
-              <span className="font-mono text-xs text-muted-foreground">
+              <span className="font-mono text-xs font-semibold tabular-nums text-foreground">
                 {formatBRL(totalDoGrupo)}
               </span>
             </div>
@@ -75,18 +85,25 @@ export function ListaOperadores({
             {grupo.itens.map(l => {
               const aberto = expandidos.has(l.operador_id);
               const fatia  = fatiaDoGrupo(l.valor, totalDoGrupo);
+              const pos    = posicoes.get(l.operador_id) ?? 0;
+              const medalha = pos >= 1 && pos <= 3 ? MEDALHA[pos - 1] : null;
               return (
                 <div key={l.operador_id}
                   className={cn(
-                    'rounded-xl border border-border bg-card overflow-hidden transition-colors',
-                    aberto && 'border-primary/30',
+                    'overflow-hidden rounded-xl border border-border bg-card shadow-sm transition-colors hover:border-primary/25',
+                    aberto && 'border-primary/40 ring-1 ring-primary/15',
                   )}
                 >
                   <div
                     role="button" tabIndex={0}
                     onClick={() => onToggle(l.operador_id)}
                     onKeyDown={e => { if (e.key === 'Enter') onToggle(l.operador_id); }}
-                    className="flex cursor-pointer select-none items-center gap-3 px-3 py-2.5 hover:bg-accent/40"
+                    aria-expanded={aberto}
+                    className={cn(
+                      'flex cursor-pointer select-none items-center gap-3 px-3 py-2.5 hover:bg-accent/40',
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
+                      aberto && 'bg-primary/[0.04]',
+                    )}
                   >
                     {aberto
                       ? <ChevronDown  className="w-4 h-4 shrink-0 text-muted-foreground" />
@@ -123,16 +140,27 @@ export function ListaOperadores({
                       </div>
                     </div>
 
-                    <div className="hidden w-28 shrink-0 sm:block">
-                      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                        <div data-testid={`barra-${l.operador_id}`}
-                          className="h-full rounded-full bg-primary/70"
-                          style={{ width: `${(fatia * 100).toFixed(0)}%` }} />
+                    {grupo.itens.length > 1 && (
+                      <div data-testid={`posicao-${l.operador_id}`}
+                        className="hidden shrink-0 items-center gap-1.5 sm:flex"
+                        title={`${pos}º de ${grupo.itens.length} na equipe · ${(fatia * 100).toFixed(0)}% do que a equipe recebeu`}>
+                        <span
+                          className={cn(
+                            'flex h-6 min-w-6 items-center justify-center rounded-full px-1.5 font-mono text-[11px] font-bold tabular-nums',
+                            !medalha && 'bg-muted text-muted-foreground',
+                          )}
+                          style={medalha ? {
+                            background: `color-mix(in oklch, ${medalha} 22%, var(--card))`,
+                            color: `oklch(from ${medalha} clamp(var(--sinal-l-min), l, var(--sinal-l-max)) c h)`,
+                            boxShadow: `inset 0 0 0 1px color-mix(in oklch, ${medalha} 45%, transparent)`,
+                          } : undefined}>
+                          {pos}º
+                        </span>
+                        <span className="w-[4.5rem] text-[10.5px] leading-tight text-muted-foreground">
+                          de {grupo.itens.length}<br />na equipe
+                        </span>
                       </div>
-                      <p className="mt-1 text-right text-[10px] tabular-nums text-muted-foreground">
-                        {(fatia * 100).toFixed(0)}% da equipe
-                      </p>
-                    </div>
+                    )}
 
                     <div className="shrink-0 text-right">
                       <p className="font-mono text-sm font-bold text-primary leading-tight">
@@ -155,7 +183,7 @@ export function ListaOperadores({
                   </div>
 
                   {aberto && (
-                    <div className="border-t border-border">{renderExpandido(l)}</div>
+                    <div className="border-t border-border bg-background/40">{renderExpandido(l)}</div>
                   )}
                 </div>
               );

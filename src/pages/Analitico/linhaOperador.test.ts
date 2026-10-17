@@ -1,6 +1,6 @@
 // src/pages/Analitico/linhaOperador.test.ts
 import { describe, it, expect } from 'vitest';
-import { deResumoAnalitico, deResumoDiario, fatiaDoGrupo } from './linhaOperador';
+import { deResumoAnalitico, deResumoDiario, fatiaDoGrupo, posicoesNoGrupo } from './linhaOperador';
 import type { AnaliticoDashboardLinha } from '@/lib/supabase';
 import type { ResumoOperadorAnalitico } from '@/services/analitico/analitico.service';
 import type { ResumoOperadorDiario } from '@/pages/Analitico/Diario/helpers';
@@ -94,5 +94,22 @@ describe('deResumoDiario', () => {
       { rotulo: 'Pix',    valor: 500 },
       { rotulo: 'Cartão', valor: 100 },
     ]);
+  });
+});
+
+describe('posicoesNoGrupo', () => {
+  it('ordena pelo valor, sem depender da ordem de entrada', () => {
+    const p = posicoesNoGrupo([
+      { operador_id: 'a', valor: 100 }, { operador_id: 'b', valor: 300 }, { operador_id: 'c', valor: 200 },
+    ]);
+    expect([p.get('b'), p.get('c'), p.get('a')]).toEqual([1, 2, 3]);
+  });
+
+  it('empate divide a posição e pula a seguinte', () => {
+    const p = posicoesNoGrupo([
+      { operador_id: 'a', valor: 300 }, { operador_id: 'b', valor: 200 },
+      { operador_id: 'c', valor: 200 }, { operador_id: 'd', valor: 50 },
+    ]);
+    expect([p.get('a'), p.get('b'), p.get('c'), p.get('d')]).toEqual([1, 2, 2, 4]);
   });
 });

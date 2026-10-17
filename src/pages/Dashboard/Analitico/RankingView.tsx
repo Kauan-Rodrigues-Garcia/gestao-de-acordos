@@ -1,39 +1,48 @@
 /**
- * RankingView — pódio do ranking do Analítico.
+ * RankingView — o ranking do Analítico, desenhado como a corrida do mês.
  *
- * Top 3 em pódio, 4º–10º em lista com barra de progresso e demais (11+)
- * em lista compacta. Usado tanto na visão do líder quanto na do operador.
+ * Usado na visão do líder e na do operador. Três partes:
  *
- * `destaqueOperadorId` (opcional): destaca a linha/card do operador atual,
- * útil na visão do operador para ele se localizar no ranking.
+ *   • o 1º num cartão largo de liderança, com a vantagem sobre o 2º;
+ *   • 2º e 3º como perseguidores, cada um com quanto falta para o de cima;
+ *   • do 4º em diante, a PISTA: cada linha tem um trilho onde o marcador fica
+ *     na distância real até o líder, o fantasma é quem está logo à frente e o
+ *     tracejado entre os dois é o que falta correr.
+ *
+ * Quem está olhando (`destaqueOperadorId`) ganha a faixa «Sua corrida» no
+ * topo — posição, alvo e folga — e a própria linha destacada.
+ *
+ * Inspirado no Ranking de quitação (medalha só no anel e no numeral, tokens do
+ * tema por `color-mix`), mas com outro motivo: a bandeira quadriculada de
+ * chegada, no topo do cartão do líder e no fim de cada trilho.
  *
  * ## Os três critérios
  *
  * `recebimento` é o histórico, e é o que a tela faz quando ninguém passa
- * `criterio` — as duas chamadas antigas continuam valendo sem mudança.
- *
- * `percentual` troca a régua: a posição sai do percentual da meta, e o número
- * grande do card passa a ser ele. O valor recebido continua na tela, menor,
- * porque tirar o dinheiro da vista do ranking gera a pergunta "então quanto
- * ele fez?" em toda conversa sobre o pódio.
- *
- * `equipes` troca o SUJEITO: o pódio é de equipes e subgrupos somados. Nesse
- * modo a lista de pessoas continua embaixo, como detalhamento — quem olha o
- * placar de times ainda quer saber quem puxou.
+ * `criterio`. `percentual` troca a régua: a posição e a pista saem do
+ * percentual da meta, e as distâncias passam a ser em pontos percentuais — o
+ * valor recebido continua na tela, menor. `equipes` troca o SUJEITO: a corrida
+ * é de equipes e subgrupos, e a lista de pessoas vem embaixo, como
+ * detalhamento.
  *
  * A ordenação não acontece aqui. Ela mora em `rankingCriterio.ts`, que é puro
  * e testado; esta tela recebe as listas já na ordem e só desenha.
  */
-
-import { Copy } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
+import { useState, type CSSProperties, type ReactNode } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
+import { ChevronDown, Copy, Crosshair, Flag, ShieldCheck, TrendingUp, Users } from 'lucide-react';
 import { formatBRL } from '@/lib/money';
 import { copiarTexto } from '@/lib/clipboard';
 import { cn } from '@/lib/utils';
+import { AvatarParticipante } from '@/pages/Analitico/Desafios/AvatarParticipante';
 import type { ResumoOperadorAnalitico } from '@/services/analitico/analitico.service';
 import type { CriterioRanking } from '@/services/analitico/rankingConfig.service';
 import type { LinhaRanking, LinhaGrupoRanking } from './rankingCriterio';
+import {
+  distancia, fracaoNaPista, maiorBase, nomeCurto, resumoDaCorrida,
+  type Corredor, type ResumoDaCorrida,
+} from './ranking/corrida';
+import './ranking/corrida.css';
 
 interface RankingViewProps {
   /**
@@ -42,7 +51,7 @@ interface RankingViewProps {
    * O tipo aceita `ResumoOperadorAnalitico` puro porque as chamadas que não
    * configuram critério nenhum (a visão do operador, por exemplo) passam o
    * resumo cru — `pct` e `grupoNome` chegam como `undefined` e a tela cai no
-   * desenho de sempre.
+   * desenho por recebimento.
    */
   resumos: (ResumoOperadorAnalitico | LinhaRanking)[];
   destaqueOperadorId?: string | null;
@@ -53,18 +62,33 @@ interface RankingViewProps {
   operadoresOcultos?: Set<string>;
   /** Régua da posição. Ausente = `recebimento`, o comportamento histórico. */
   criterio?: CriterioRanking;
-  /** Pódio de equipes/subgrupos. Só desenhado quando `criterio` é `equipes`. */
+  /** Corrida de equipes/subgrupos. Só desenhada quando `criterio` é `equipes`. */
   grupos?: LinhaGrupoRanking[];
+  /** operador_id → foto_url. Ausente = iniciais. */
+  fotos?: Record<string, string | null>;
 }
 
 /** A linha com os campos opcionais do ranking configurável já resolvidos. */
 type Linha = ResumoOperadorAnalitico & Partial<Pick<LinhaRanking, 'pct' | 'grupoNome'>>;
 
-/** Nome completo do operador reduzido ao primeiro e segundo nome. */
-function primeiroSegundoNome(r: Linha): string {
-  const base = (r.operador_nome ?? r.operador_usuario ?? '').trim();
-  return base.split(/\s+/).slice(0, 2).join(' ');
+/** Um corredor já com o texto que a tela escreve. */
+interface Item extends Corredor {
+  principal: string;
+  legenda: string;
+  linha?: Linha;
+  grupo?: boolean;
 }
+
+/** Ouro, prata e bronze — só no anel, no numeral e no tom dos três cartões. */
+const MEDALHA = ['#C9A227', '#A3ADB8', '#B4743F'] as const;
+
+/** Quantas linhas da pista aparecem antes do «ver todos». */
+const PISTA_INICIAL = 17;
+
+const pp = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
+const textoDistancia = (v: number, porPct: boolean) => (porPct ? `${pp(v)} p.p.` : formatBRL(v));
+
+// ── A mensagem do «Copiar» ─────────────────────────────────────────────────
 
 /** Saudação conforme o horário: manhã, tarde ou noite. */
 function saudacao(): string {
@@ -94,7 +118,7 @@ function montarMensagemRanking(
   }
 
   const sufixo = pos === 2 ? 'para assumir a liderança' : 'para ultrapassar o próximo lugar';
-  const nomeAcima = acima ? primeiroSegundoNome(acima) : '';
+  const nomeAcima = acima ? nomeCurto(acima.operador_nome ?? acima.operador_usuario ?? '') : '';
 
   if (porPct && acima?.pct != null) {
     const falta = Math.max(0, acima.pct - (r.pct ?? 0));
@@ -105,359 +129,484 @@ function montarMensagemRanking(
   return `${ola}, ${nome}! Você está em ${pos}º lugar, com ${meu}. À sua frente está ${nomeAcima}, e faltam ${formatBRL(gap)} ${sufixo}.`;
 }
 
-function CopiarMsgBtn({
-  pos, r, acima, criterio, className,
+function CopiarMsg({
+  pos, item, acima, criterio, compacto,
 }: {
-  pos: number;
-  r: Linha;
-  acima: Linha | null;
-  criterio: CriterioRanking;
-  className?: string;
+  pos: number; item: Item; acima: Item | null; criterio: CriterioRanking; compacto?: boolean;
 }) {
-  const msg = montarMensagemRanking(pos, primeiroSegundoNome(r), r, acima, criterio);
+  if (!item.linha) return null;
+  const msg = montarMensagemRanking(pos, nomeCurto(item.nome), item.linha, acima?.linha ?? null, criterio);
+  const copiar = (e: React.MouseEvent) => { e.stopPropagation(); void copiarTexto(msg, 'Mensagem copiada'); };
+  if (compacto) {
+    return (
+      <button type="button" onClick={copiar}
+        title="Copiar mensagem" aria-label={`Copiar mensagem para ${item.nome}`}
+        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        <Copy className="h-3.5 w-3.5" />
+      </button>
+    );
+  }
   return (
-    <button
-      type="button"
-      onClick={(e) => { e.stopPropagation(); void copiarTexto(msg, 'Mensagem copiada'); }}
-      className={cn(
-        'inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground',
-        'hover:text-foreground hover:bg-muted/60 border border-border rounded-md px-2 py-1 transition-colors',
-        className,
-      )}
-    >
-      <Copy className="w-3 h-3 shrink-0" /> Copiar mensagem
+    <button type="button" onClick={copiar}
+      className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background/60 px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+      <Copy className="h-3 w-3 shrink-0" /> Copiar mensagem
     </button>
   );
 }
 
-const PODIO_STYLE = [
-  {
-    border: 'border-yellow-400/60', bg: 'bg-yellow-50/60 dark:bg-yellow-950/20',
-    medal: '🥇', text: 'text-yellow-700 dark:text-yellow-400',
-  },
-  {
-    border: 'border-slate-400/60',  bg: 'bg-slate-50/60 dark:bg-slate-900/20',
-    medal: '🥈', text: 'text-slate-600 dark:text-slate-400',
-  },
-  {
-    border: 'border-amber-700/40',  bg: 'bg-orange-50/40 dark:bg-orange-950/10',
-    medal: '🥉', text: 'text-amber-700 dark:text-amber-500',
-  },
-];
+// ── Peças ──────────────────────────────────────────────────────────────────
 
-/**
- * Pódio de equipes e subgrupos.
- *
- * Sem "faltam R$ X para ultrapassar": entre times a distância é responsabilidade
- * coletiva, e a frase individual empurra a leitura para culpar uma pessoa pelo
- * gap do grupo inteiro.
- */
-function PodioGrupos({ grupos, criterio }: { grupos: LinhaGrupoRanking[]; criterio: CriterioRanking }) {
-  if (grupos.length === 0) {
+function Rosto({ item, className }: { item: Item; className?: string }) {
+  if (item.grupo) {
     return (
-      <p className="text-sm text-muted-foreground text-center py-8">
-        Nenhuma equipe com recebimento neste mês.
-      </p>
+      <span className={cn('flex shrink-0 items-center justify-center rounded-full border border-border bg-primary/10 text-primary', className)}>
+        <Users className="h-[45%] w-[45%]" aria-hidden="true" />
+      </span>
     );
   }
+  return <AvatarParticipante nome={item.nome} fotoUrl={item.foto} className={cn('shrink-0', className)} />;
+}
 
-  const porPct = criterio === 'percentual';
-  const max = (porPct
-    ? grupos.find(g => g.pct != null)?.pct ?? 0
-    : grupos[0]?.totalRecebido) || 1;
-
+function SeloVoce() {
   return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {grupos.slice(0, 3).map((g, i) => {
-          const s = PODIO_STYLE[i];
+    <span className="shrink-0 rounded-full bg-primary/15 px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-primary">
+      Você
+    </span>
+  );
+}
+
+/** O 1º: o cartão largo, com a vantagem sobre o 2º. */
+function Pole({ item, segundo, podio, maior, porPct, voce, acao }: {
+  item: Item; segundo: Item | null; podio: Item[]; maior: number; porPct: boolean; voce: boolean; acao?: ReactNode;
+}) {
+  const folga = segundo ? distancia(item, segundo) : null;
+  return (
+    <article className="rc-pole flex h-full flex-col p-5 sm:p-6" style={{ '--medalha': MEDALHA[0] } as CSSProperties}
+      aria-label={`1º lugar: ${item.nome}, ${item.principal}`}>
+      <span className="rc-faixa rc-quadriculado" aria-hidden="true" />
+      <span className="rc-numeral rc-numeral-topo" aria-hidden="true">1</span>
+
+      <div className="flex items-center gap-4 pr-9 sm:pr-14">
+        <div className="relative isolate shrink-0">
+          <span className="rc-brilho" aria-hidden="true" />
+          <div className="rc-anel rounded-full p-[3px]">
+            <Rosto item={item} className="h-16 w-16 border-2 border-card bg-card text-lg sm:h-20 sm:w-20" />
+          </div>
+        </div>
+        <div className="min-w-0">
+          <p className="rc-tinta flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.14em]">
+            <Flag className="h-3.5 w-3.5" aria-hidden="true" /> 1º lugar<span className="hidden sm:inline"> · lidera o mês</span>
+          </p>
+          <p className="mt-0.5 flex min-w-0 items-center gap-2 text-lg font-bold leading-tight text-foreground sm:text-xl">
+            <span className="truncate">{item.nome}</span>
+            {voce && <SeloVoce />}
+          </p>
+          {item.sub && <p className="truncate font-mono text-xs text-muted-foreground">{item.sub}</p>}
+        </div>
+      </div>
+
+      <div className="mt-5 flex flex-wrap items-end justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate font-mono text-3xl font-bold tracking-tight text-foreground sm:text-4xl">{item.principal}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">{item.legenda}</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {segundo && folga != null && folga > 0 && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background/70 px-2.5 py-1 text-xs text-muted-foreground backdrop-blur-sm">
+              <TrendingUp className="rc-tinta h-3.5 w-3.5" aria-hidden="true" />
+              <strong className="font-mono text-foreground">{textoDistancia(folga, porPct)}</strong> à frente do 2º
+            </span>
+          )}
+          {!segundo && (
+            <span className="rounded-full border border-border bg-background/70 px-2.5 py-1 text-xs text-muted-foreground">
+              Sozinho na pista
+            </span>
+          )}
+          {acao}
+        </div>
+      </div>
+
+      {podio.length > 1 && <PodioNaPista podio={podio} maior={maior} />}
+    </article>
+  );
+}
+
+/**
+ * Os três medalhões na mesma régua do líder: mostra num relance se o pódio é
+ * disputado (medalhões encostados) ou se o 1º disparou (medalhões espalhados).
+ */
+function PodioNaPista({ podio, maior }: { podio: Item[]; maior: number }) {
+  const reduzir = useReducedMotion();
+  const pos = (f: number) => `calc(${(f * 100).toFixed(2)}% - ${(f * 22).toFixed(2)}px)`;
+  return (
+    <div className="mt-auto pt-6">
+      <p className="mb-2.5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+        Pódio na pista
+      </p>
+      <div className="rc-trilho rc-trilho-podio" aria-hidden="true">
+        <span className="rc-linha" />
+        {[0.25, 0.5, 0.75].map(m => <span key={m} className="rc-marca" style={{ left: pos(m) }} />)}
+        <span className="rc-chegada rc-quadriculado" />
+        {[...podio].reverse().map((c, iRev) => {
+          const i = podio.length - 1 - iRev;
+          const alvo = pos(fracaoNaPista(c.base, maior));
           return (
-            <Card key={g.grupoId ?? '__sem_grupo__'} className={cn('border-2', s.border, s.bg)}>
-              <CardContent className="p-4 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-2xl">{s.medal}</span>
-                  <Badge variant="outline" className={cn('text-xs font-bold', s.text)}>
-                    {i + 1}º lugar
-                  </Badge>
-                </div>
-                <p className="font-bold text-sm leading-tight">{g.grupoNome}</p>
-                <div>
-                  {porPct && g.pct != null ? (
-                    <>
-                      <p className="text-lg font-bold text-primary font-mono">{g.pct}%</p>
-                      <p className="text-xs text-muted-foreground font-mono">{formatBRL(g.totalRecebido)}</p>
-                    </>
-                  ) : (
-                    <p className="text-lg font-bold text-primary font-mono">{formatBRL(g.totalRecebido)}</p>
-                  )}
-                  <p className="text-xs text-muted-foreground">
-                    {g.operadores} {g.operadores === 1 ? 'pessoa' : 'pessoas'} · {g.totalPagamentos} pgtos.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
+            <motion.span key={c.id} className="rc-medalhao"
+              title={`${i + 1}º · ${c.nome} · ${c.principal}`}
+              style={{ '--medalha': MEDALHA[i], ...(reduzir ? { left: alvo } : {}) } as CSSProperties}
+              initial={reduzir ? false : { left: pos(0) }}
+              animate={{ left: alvo }}
+              transition={{ duration: 0.9, delay: reduzir ? 0 : 0.1 * (2 - i), ease: [0.22, 1, 0.36, 1] }}>
+              {i + 1}
+            </motion.span>
           );
         })}
       </div>
+      <div className="mt-1.5 flex justify-between font-mono text-[10px] text-muted-foreground" aria-hidden="true">
+        <span>largada</span>
+        <span>chegada</span>
+      </div>
+    </div>
+  );
+}
 
-      {grupos.length > 3 && (
-        <Card className="border-border">
-          <CardContent className="p-0">
-            {grupos.slice(3).map((g, i) => {
-              const base = porPct ? (g.pct ?? 0) : g.totalRecebido;
-              const w = Math.max(4, Math.round((base / max) * 100));
-              return (
-                <div key={g.grupoId ?? `__sem_grupo__${i}`} className={cn(
-                  'flex items-center gap-3 px-3 py-2.5 hover:bg-muted/30 transition-colors',
-                  i > 0 && 'border-t border-border',
-                )}>
-                  <span className="text-sm font-bold text-muted-foreground w-6 text-right shrink-0">{i + 4}º</span>
-                  <div className="flex-1 min-w-0">
-                    <span className="text-sm font-medium truncate">{g.grupoNome}</span>
-                    <div className="mt-1 h-1 rounded-full bg-border overflow-hidden">
-                      <div className="h-full rounded-full bg-primary/40" style={{ width: `${Math.min(100, w)}%` }} />
-                    </div>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-sm font-mono font-bold text-primary">
-                      {porPct && g.pct != null ? `${g.pct}%` : formatBRL(g.totalRecebido)}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {porPct ? formatBRL(g.totalRecebido) : `${g.totalPagamentos} pgtos.`}
-                    </p>
-                  </div>
-                </div>
-              );
-            })}
-          </CardContent>
-        </Card>
+/** 2º e 3º: quanto falta para quem está logo acima. */
+function Perseguidor({ item, posicao, frente, porPct, voce, acao }: {
+  item: Item; posicao: 2 | 3; frente: Item; porPct: boolean; voce: boolean; acao?: ReactNode;
+}) {
+  const falta = distancia(frente, item);
+  const proporcao = frente.base && item.base != null ? Math.min(1, item.base / frente.base) : 0;
+  return (
+    <article className="rc-perseguidor flex flex-col p-4" style={{ '--medalha': MEDALHA[posicao - 1] } as CSSProperties}
+      aria-label={`${posicao}º lugar: ${item.nome}, ${item.principal}`}>
+      <span className="rc-numeral rc-numeral-topo" aria-hidden="true">{posicao}</span>
+      <div className="flex items-center gap-3 pr-9 sm:pr-14">
+        <div className="rc-anel shrink-0 rounded-full p-[2px]">
+          <Rosto item={item} className="h-11 w-11 border-2 border-card bg-card text-sm" />
+        </div>
+        <div className="min-w-0">
+          <p className="rc-tinta text-[10px] font-bold uppercase tracking-[0.14em]">{posicao}º lugar</p>
+          <p className="flex min-w-0 items-center gap-1.5 text-sm font-semibold leading-tight text-foreground">
+            <span className="truncate">{item.nome}</span>
+            {voce && <SeloVoce />}
+          </p>
+          {item.sub && <p className="truncate font-mono text-[11px] text-muted-foreground">{item.sub}</p>}
+        </div>
+      </div>
+      <div className="mt-3 flex items-end justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate font-mono text-xl font-bold tracking-tight text-foreground">{item.principal}</p>
+          <p className="text-[11px] text-muted-foreground">{item.legenda}</p>
+        </div>
+        {acao}
+      </div>
+      {falta != null && falta > 0 && (
+        <div className="mt-auto pt-3">
+          <div className="flex items-baseline justify-between gap-2 text-[11px]">
+            <span className="text-muted-foreground">
+              Faltam <strong className="font-mono text-foreground">{textoDistancia(falta, porPct)}</strong> para o {posicao - 1}º
+            </span>
+            <span className="font-mono tabular-nums text-muted-foreground">{Math.round(proporcao * 100)}%</span>
+          </div>
+          <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
+            <div className="rc-barra-medalha h-full rounded-full" style={{ width: `${Math.max(3, proporcao * 100)}%` }} />
+          </div>
+        </div>
+      )}
+    </article>
+  );
+}
+
+/** «Sua corrida»: posição, quem perseguir e quanto de folga. */
+function SuaCorrida({ r, porPct }: { r: ResumoDaCorrida; porPct: boolean }) {
+  return (
+    <section aria-label="Sua corrida" className="rc-sua grid overflow-hidden sm:grid-cols-3">
+      <div className="flex items-center gap-3 px-4 py-3">
+        <Flag className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+        <div>
+          <p className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Sua posição</p>
+          <p className="text-sm text-muted-foreground">
+            <strong className="font-mono text-xl text-foreground">{r.posicao}º</strong> de {r.de}
+          </p>
+        </div>
+      </div>
+      <div className="flex items-center gap-3 px-4 py-3">
+        <Crosshair className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+        <div className="min-w-0">
+          <p className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Seu alvo</p>
+          {r.alvo ? (
+            <p className="truncate text-sm text-muted-foreground">
+              {r.alvo.falta != null
+                ? <>Faltam <strong className="font-mono text-foreground">{textoDistancia(r.alvo.falta, porPct)}</strong> para </>
+                : <>À frente: </>}
+              <span className="text-foreground">{nomeCurto(r.alvo.nome)}</span> ({r.alvo.posicao}º)
+            </p>
+          ) : (
+            <p className="text-sm font-medium text-foreground">Você lidera o mês</p>
+          )}
+        </div>
+      </div>
+      <div className="flex items-center gap-3 px-4 py-3">
+        <ShieldCheck className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+        <div className="min-w-0">
+          <p className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Sua folga</p>
+          {r.folga ? (
+            <p className="truncate text-sm text-muted-foreground">
+              {r.folga.valor != null && <><strong className="font-mono text-foreground">{textoDistancia(r.folga.valor, porPct)}</strong> sobre </>}
+              <span className="text-foreground">{nomeCurto(r.folga.nome)}</span> ({r.folga.posicao}º)
+            </p>
+          ) : (
+            <p className="text-sm text-muted-foreground">Ninguém atrás de você</p>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/** O trilho de uma linha: o corredor, o fantasma da frente e o que falta. */
+function Trilho({ item, frente, maior }: { item: Item; frente: Item | null; maior: number }) {
+  const reduzir = useReducedMotion();
+  // Até 10 px antes do fim: o último trecho é a chegada quadriculada.
+  const pos = (f: number) => `calc(${(f * 100).toFixed(2)}% - ${(f * 10).toFixed(2)}px)`;
+  const eu = fracaoNaPista(item.base, maior);
+  const ff = frente ? fracaoNaPista(frente.base, maior) : null;
+  const semRegua = item.base == null;
+  return (
+    <div className="rc-trilho" aria-hidden="true">
+      <span className="rc-linha" />
+      {[0.25, 0.5, 0.75].map(m => <span key={m} className="rc-marca" style={{ left: pos(m) }} />)}
+      <span className="rc-chegada rc-quadriculado" />
+      {ff != null && !semRegua && ff > eu && (
+        <>
+          <span className="rc-falta" style={{ left: pos(eu), width: `calc(${((ff - eu) * 100).toFixed(2)}% - ${((ff - eu) * 10).toFixed(2)}px)` }} />
+          <span className="rc-fantasma" style={{ left: pos(ff) }} />
+        </>
+      )}
+      {!semRegua && (
+        <motion.span
+          className="rc-marcador"
+          initial={reduzir ? false : { left: pos(0) }}
+          animate={{ left: pos(eu) }}
+          transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+          style={reduzir ? { left: pos(eu) } : undefined}
+        />
       )}
     </div>
   );
 }
 
+/** A pista: do `inicio`º em diante, cada linha com o seu trilho. */
+function Pista({
+  titulo, itens, todos, inicio, maior, porPct, destaqueId, acao,
+}: {
+  titulo: string;
+  itens: Item[];
+  /** A lista inteira, para achar quem está à frente do primeiro da pista. */
+  todos: Item[];
+  inicio: number;
+  maior: number;
+  porPct: boolean;
+  destaqueId?: string | null;
+  acao?: (item: Item, pos: number, frente: Item | null) => ReactNode;
+}) {
+  const [verTodos, setVerTodos] = useState(false);
+  if (itens.length === 0) return null;
+  // Quem está olhando nunca fica escondido atrás do «ver todos».
+  const idxVoce = destaqueId ? itens.findIndex(i => i.id === destaqueId) : -1;
+  const corte = Math.max(PISTA_INICIAL, idxVoce + 1);
+  const visiveis = verTodos ? itens : itens.slice(0, corte);
+
+  return (
+    <section className="space-y-2" aria-label={titulo}>
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-1">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{titulo}</p>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground" aria-hidden="true">
+          <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-primary" /> posição</span>
+          <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full border-2 border-primary/45" /> quem está à frente</span>
+          <span className="inline-flex items-center gap-1.5"><span className="w-4 border-t-2 border-dashed border-primary/55" /> o que falta</span>
+          <span className="inline-flex items-center gap-1.5"><span className="rc-quadriculado h-3 w-2 rounded-[2px] opacity-45" /> 1º</span>
+        </div>
+      </div>
+
+      <ol className="rc-pista overflow-hidden">
+        {visiveis.map((item, i) => {
+          const pos = inicio + i;
+          const frente = todos[pos - 2] ?? null;
+          const falta = distancia(frente, item);
+          const voce = !!destaqueId && item.id === destaqueId;
+          const denso = pos > 10;
+          return (
+            <li key={item.id}
+              aria-label={`${pos}º: ${item.nome}, ${item.principal}${falta ? `, faltam ${textoDistancia(falta, porPct)} para o ${pos - 1}º` : ''}`}
+              className={cn(
+                'grid grid-cols-[1.75rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 px-3 sm:px-4',
+                'md:grid-cols-[1.75rem_minmax(11rem,16rem)_minmax(0,1fr)_auto]',
+                denso ? 'py-2' : 'py-2.5',
+                voce ? 'rc-eu' : 'transition-colors hover:bg-muted/25',
+              )}>
+              <span className={cn('text-right font-mono font-bold tabular-nums', voce ? 'text-primary' : 'text-muted-foreground', denso ? 'text-xs' : 'text-sm')}>
+                {pos}º
+              </span>
+              <div className="flex min-w-0 items-center gap-2.5">
+                <Rosto item={item} className={cn(denso ? 'h-7 w-7 text-[10px]' : 'h-8 w-8 text-xs')} />
+                <div className="min-w-0">
+                  <p className={cn('flex min-w-0 items-center gap-1.5 font-medium text-foreground', denso ? 'text-xs' : 'text-sm')}>
+                    <span className="truncate">{item.nome}</span>
+                    {voce && <SeloVoce />}
+                  </p>
+                  {item.sub && <p className="truncate text-[11px] text-muted-foreground">{item.sub}</p>}
+                </div>
+              </div>
+              <div className="order-last col-span-3 md:order-none md:col-span-1">
+                <Trilho item={item} frente={frente} maior={maior} />
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="text-right">
+                  <p className={cn('font-mono font-bold tabular-nums text-foreground', denso ? 'text-xs' : 'text-sm')}>{item.principal}</p>
+                  <p className="whitespace-nowrap text-[11px] text-muted-foreground">
+                    {falta != null && falta > 0
+                      ? <>faltam <span className="font-mono text-primary">{textoDistancia(falta, porPct)}</span></>
+                      : item.legenda}
+                  </p>
+                </div>
+                {acao?.(item, pos, frente)}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+
+      {itens.length > corte && (
+        <div className="flex justify-center">
+          <button type="button" onClick={() => setVerTodos(v => !v)}
+            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', verTodos && 'rotate-180')} />
+            {verTodos ? 'Mostrar menos' : `Ver todos (${itens.length - corte} a mais)`}
+          </button>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** Pódio + pista para uma lista de corredores já ordenada. */
+function Corrida({
+  itens, porPct, destaqueId, criterio, mostrarCopiar, tituloPista,
+}: {
+  itens: Item[]; porPct: boolean; destaqueId?: string | null; criterio: CriterioRanking;
+  mostrarCopiar?: boolean; tituloPista: string;
+}) {
+  const maior = maiorBase(itens);
+  const [primeiro, segundo, terceiro] = itens;
+  const ehVoce = (i?: Item) => !!i && !!destaqueId && i.id === destaqueId;
+  const copiar = (item: Item, pos: number, frente: Item | null, compacto?: boolean) =>
+    mostrarCopiar ? <CopiarMsg pos={pos} item={item} acima={frente} criterio={criterio} compacto={compacto} /> : null;
+
+  return (
+    <div className="space-y-4">
+      <div className={cn('grid gap-3', segundo && 'lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]')}>
+        <Pole item={primeiro} segundo={segundo ?? null} podio={itens.slice(0, 3)} maior={maior}
+          porPct={porPct} voce={ehVoce(primeiro)}
+          acao={copiar(primeiro, 1, null)} />
+        {segundo && (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+            <Perseguidor item={segundo} posicao={2} frente={primeiro} porPct={porPct} voce={ehVoce(segundo)}
+              acao={copiar(segundo, 2, primeiro, true)} />
+            {terceiro && (
+              <Perseguidor item={terceiro} posicao={3} frente={segundo} porPct={porPct} voce={ehVoce(terceiro)}
+                acao={copiar(terceiro, 3, segundo, true)} />
+            )}
+          </div>
+        )}
+      </div>
+
+      <Pista
+        titulo={tituloPista}
+        itens={itens.slice(3)}
+        todos={itens}
+        inicio={4}
+        maior={maior}
+        porPct={porPct}
+        destaqueId={destaqueId}
+        acao={mostrarCopiar ? (item, pos, frente) => copiar(item, pos, frente, true) : undefined}
+      />
+    </div>
+  );
+}
+
+// ── O componente ───────────────────────────────────────────────────────────
+
 export function RankingView({
   resumos, destaqueOperadorId, mostrarCopiar, operadoresOcultos,
-  criterio = 'recebimento', grupos,
+  criterio = 'recebimento', grupos, fotos,
 }: RankingViewProps) {
   // Item 5: férias/desligado saem do ranking (o recebimento deles segue nos totais).
   const todas = resumos as Linha[];
   const lista = operadoresOcultos ? todas.filter(r => !operadoresOcultos.has(r.operador_id)) : todas;
-
   const porPct = criterio === 'percentual';
 
-  /**
-   * Base da barra de progresso.
-   *
-   * No percentual não é `lista[0].pct` direto: o primeiro da lista pode estar
-   * sem meta quando NINGUÉM tem meta, e aí a barra dividiria por `null`.
-   */
-  const max = (porPct
-    ? lista.find(r => r.pct != null)?.pct ?? 0
-    : lista[0]?.total_recebido) || 1;
+  const pessoas: Item[] = lista.map(r => {
+    const semMeta = porPct && r.pct == null;
+    const pagamentos = `${r.total_pagamentos} ${r.total_pagamentos === 1 ? 'pagamento' : 'pagamentos'}`;
+    return {
+      id: r.operador_id,
+      nome: r.operador_nome ?? r.operador_usuario,
+      sub: r.grupoNome ?? r.operador_usuario ?? null,
+      foto: fotos?.[r.operador_id] ?? null,
+      base: porPct ? (r.pct ?? null) : r.total_recebido,
+      principal: porPct ? (semMeta ? 'sem meta' : `${pp(r.pct!)}%`) : formatBRL(r.total_recebido),
+      legenda: porPct ? `${formatBRL(r.total_recebido)} · ${pagamentos}` : pagamentos,
+      linha: r,
+    };
+  });
 
-  /** O número grande de cada posição, na régua do critério. */
-  const destaqueValor = (r: Linha) =>
-    porPct && r.pct != null ? `${r.pct}%` : formatBRL(r.total_recebido);
-
-  /** A legenda logo abaixo dele. */
-  const legendaValor = (r: Linha) =>
-    porPct
-      ? (r.pct != null ? formatBRL(r.total_recebido) : 'sem meta definida')
-      : `${r.total_pagamentos} pagamentos`;
-
-  const top3  = lista.slice(0, 3);
-  const meio  = lista.slice(3, 10);
-  const resto = lista.slice(10);
-
-  const ehVoce = (id: string) => !!destaqueOperadorId && id === destaqueOperadorId;
-
-  // Critério de equipes: o pódio é dos grupos, e as pessoas viram detalhamento.
+  // Critério de equipes: a corrida é dos grupos, e as pessoas viram detalhamento.
   if (criterio === 'equipes' && grupos) {
+    if (grupos.length === 0) {
+      return <p className="py-8 text-center text-sm text-muted-foreground">Nenhuma equipe com recebimento neste mês.</p>;
+    }
+    const times: Item[] = grupos.map((g, i) => ({
+      id: g.grupoId ?? `__sem_grupo__${i}`,
+      nome: g.grupoNome,
+      sub: `${g.operadores} ${g.operadores === 1 ? 'pessoa' : 'pessoas'}`,
+      base: g.totalRecebido,
+      principal: formatBRL(g.totalRecebido),
+      legenda: `${g.totalPagamentos} pagamentos`,
+      grupo: true,
+    }));
     return (
-      <div className="space-y-5">
-        <PodioGrupos grupos={grupos} criterio={criterio} />
-        {lista.length > 0 && (
-          <>
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-1">
-              Quem puxou o resultado
-            </p>
-            <Card className="border-border">
-              <CardContent className="p-0">
-                {lista.slice(0, 20).map((r, i) => (
-                  <div key={r.operador_id} className={cn(
-                    'flex items-center gap-3 px-3 py-2 text-xs transition-colors',
-                    ehVoce(r.operador_id) ? 'bg-primary/10' : 'hover:bg-muted/20',
-                    i > 0 && 'border-t border-border',
-                  )}>
-                    <span className="font-bold text-muted-foreground w-8 text-right shrink-0">{i + 1}º</span>
-                    <span className="flex-1 truncate font-medium">{r.operador_nome ?? r.operador_usuario}</span>
-                    {r.grupoNome && (
-                      <span className="text-muted-foreground truncate max-w-[120px] shrink-0">{r.grupoNome}</span>
-                    )}
-                    <span className="font-mono font-semibold text-primary shrink-0">{formatBRL(r.total_recebido)}</span>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          </>
+      <div className="space-y-6">
+        <Corrida itens={times} porPct={false} criterio={criterio} tituloPista="A pista das equipes · 4º em diante" />
+        {pessoas.length > 0 && (
+          <Pista
+            titulo="Quem puxou o resultado"
+            itens={pessoas}
+            todos={pessoas}
+            inicio={1}
+            maior={maiorBase(pessoas)}
+            porPct={false}
+            destaqueId={destaqueOperadorId}
+          />
         )}
       </div>
     );
   }
 
+  if (pessoas.length === 0) return null;
+  const sua = destaqueOperadorId ? resumoDaCorrida(pessoas, destaqueOperadorId) : null;
+
   return (
     <div className="space-y-4">
-      {/* Pódio — top 3 */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {top3.map((r, i) => {
-          const acima = i > 0 ? lista[i - 1] : null;
-          // No percentual a distância também é em pontos percentuais: mostrar
-          // reais aqui contradiria a régua que decidiu a posição.
-          const gap = !acima
-            ? 0
-            : porPct && acima.pct != null && r.pct != null
-              ? Math.max(0, acima.pct - r.pct)
-              : acima.total_recebido - r.total_recebido;
-          const baseAcima = porPct ? (acima?.pct ?? 0) : (acima?.total_recebido ?? 0);
-          const baseMinha = porPct ? (r.pct ?? 0) : r.total_recebido;
-          const prox = acima && baseAcima > 0
-            ? Math.min(100, Math.round((baseMinha / baseAcima) * 100))
-            : 100;
-          const s = PODIO_STYLE[i];
-          const voce = ehVoce(r.operador_id);
-          return (
-            <Card key={r.operador_id} className={cn('border-2', s.border, s.bg, voce && 'ring-2 ring-primary ring-offset-1')}>
-              <CardContent className="p-4 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-2xl">{s.medal}</span>
-                  <Badge variant="outline" className={cn('text-xs font-bold', s.text)}>
-                    {i + 1}º lugar
-                  </Badge>
-                </div>
-                <div>
-                  <p className="font-bold text-sm leading-tight flex items-center gap-1.5">
-                    {r.operador_nome ?? r.operador_usuario}
-                    {voce && <span className="text-[10px] font-bold uppercase text-primary bg-primary/10 rounded-full px-1.5 py-0.5">Você</span>}
-                  </p>
-                  <p className="text-xs text-muted-foreground font-mono">
-                    {r.grupoNome ?? r.operador_usuario}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-lg font-bold text-primary font-mono">{destaqueValor(r)}</p>
-                  <p className="text-xs text-muted-foreground">{legendaValor(r)}</p>
-                </div>
-                {i === 0 ? (
-                  <p className="text-xs font-medium text-yellow-600 dark:text-yellow-400">★ Líder do ranking</p>
-                ) : gap > 0 ? (
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground">
-                      Faltam <strong>{porPct ? `${gap} p.p.` : formatBRL(gap)}</strong> p/ ultrapassar
-                    </p>
-                    <div className="h-1.5 rounded-full bg-border overflow-hidden">
-                      <div className="h-full rounded-full bg-primary/50 transition-all"
-                        style={{ width: `${prox}%` }} />
-                    </div>
-                  </div>
-                ) : null}
-                {mostrarCopiar && (
-                  <CopiarMsgBtn pos={i + 1} r={r} acima={acima} criterio={criterio} className="w-full justify-center mt-1" />
-                )}
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
-
-      {/* 4º ao 10º */}
-      {meio.length > 0 && (
-        <>
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-1">4º ao 10º lugar</p>
-          <Card className="border-border">
-            <CardContent className="p-0">
-              {meio.map((r, i) => {
-                const pos   = i + 4;
-                const base  = porPct ? (r.pct ?? 0) : r.total_recebido;
-                const w     = Math.max(4, Math.min(100, Math.round((base / max) * 100)));
-                const acima = lista[pos - 2];
-                const gap = !acima
-                  ? 0
-                  : porPct && acima.pct != null && r.pct != null
-                    ? Math.max(0, acima.pct - r.pct)
-                    : acima.total_recebido - r.total_recebido;
-                const voce  = ehVoce(r.operador_id);
-                return (
-                  <div key={r.operador_id} className={cn(
-                    'flex items-center gap-3 px-3 py-2.5 transition-colors',
-                    voce ? 'bg-primary/10' : 'hover:bg-muted/30',
-                    i > 0 && 'border-t border-border',
-                  )}>
-                    <span className="text-sm font-bold text-muted-foreground w-6 text-right shrink-0">{pos}º</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium truncate">{r.operador_nome ?? r.operador_usuario}</span>
-                        {voce && <span className="text-[10px] font-bold uppercase text-primary bg-primary/10 rounded-full px-1.5 py-0.5 shrink-0">Você</span>}
-                        {gap > 0 && (
-                          <span className="text-xs text-muted-foreground shrink-0">
-                            faltam {porPct ? `${gap} p.p.` : formatBRL(gap)}
-                          </span>
-                        )}
-                      </div>
-                      <div className="mt-1 h-1 rounded-full bg-border overflow-hidden">
-                        <div className="h-full rounded-full bg-primary/40" style={{ width: `${w}%` }} />
-                      </div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-sm font-mono font-bold text-primary">{destaqueValor(r)}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {porPct
-                          ? (r.pct != null ? formatBRL(r.total_recebido) : 'sem meta')
-                          : `${r.total_pagamentos} pgtos.`}
-                      </p>
-                    </div>
-                    {mostrarCopiar && <CopiarMsgBtn pos={pos} r={r} acima={acima ?? null} criterio={criterio} className="shrink-0" />}
-                  </div>
-                );
-              })}
-            </CardContent>
-          </Card>
-        </>
-      )}
-
-      {/* Demais (11+) */}
-      {resto.length > 0 && (
-        <>
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-1">Demais operadores</p>
-          <Card className="border-border">
-            <CardContent className="p-0">
-              {resto.map((r, i) => {
-                const pos   = i + 11;
-                const acima = lista[pos - 2] ?? null;
-                const voce  = ehVoce(r.operador_id);
-                return (
-                  <div key={r.operador_id} className={cn(
-                    'flex items-center gap-3 px-3 py-2 transition-colors text-xs',
-                    voce ? 'bg-primary/10' : 'hover:bg-muted/20',
-                    i > 0 && 'border-t border-border',
-                  )}>
-                    <span className="font-bold text-muted-foreground w-8 text-right shrink-0">{pos}º</span>
-                    <span className="flex-1 truncate font-medium flex items-center gap-1.5">
-                      {r.operador_nome ?? r.operador_usuario}
-                      {voce && <span className="text-[10px] font-bold uppercase text-primary bg-primary/10 rounded-full px-1.5 py-0.5 shrink-0">Você</span>}
-                    </span>
-                    <span className="font-mono font-semibold text-primary shrink-0">{destaqueValor(r)}</span>
-                    <span className="text-muted-foreground shrink-0">
-                      {porPct ? formatBRL(r.total_recebido) : `${r.total_pagamentos} pgtos.`}
-                    </span>
-                    {mostrarCopiar && <CopiarMsgBtn pos={pos} r={r} acima={acima} criterio={criterio} className="shrink-0" />}
-                  </div>
-                );
-              })}
-            </CardContent>
-          </Card>
-        </>
-      )}
+      {sua && <SuaCorrida r={sua} porPct={porPct} />}
+      <Corrida
+        itens={pessoas}
+        porPct={porPct}
+        destaqueId={destaqueOperadorId}
+        criterio={criterio}
+        mostrarCopiar={mostrarCopiar}
+        tituloPista="A pista · 4º em diante"
+      />
     </div>
   );
 }

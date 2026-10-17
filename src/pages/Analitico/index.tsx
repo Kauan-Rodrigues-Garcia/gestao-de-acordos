@@ -2,7 +2,6 @@ import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { BarChart2, User, Users, Building2, Layers3, Trophy, Medal } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -32,6 +31,7 @@ import { useSetoresDoRanking } from './RankingQuitacao/useSetoresDoRanking';
 import { useSetoresDoDesafio } from '@/hooks/useDesafios';
 import { useMesGlobal } from '@/providers/MesProvider';
 import { ValidacaoRelatorioSetor } from './ValidacaoRelatorioSetor';
+import { MudancasImportacao } from '@/pages/Dashboard/Analitico/MudancasImportacao';
 import { SeletorRecorte } from './SeletorRecorte';
 import { mesDoRecorte, recorteDaQuery, type Recorte } from './recorte';
 import { COLUNAS_SETOR_DO_FILTRO, setoresDosFiltros } from '@/lib/setoresDosFiltros';
@@ -40,6 +40,11 @@ import { COLUNAS_SETOR_DO_FILTRO, setoresDosFiltros } from '@/lib/setoresDosFilt
 const TODOS_SETORES = '__todos__';
 
 type AbaPrincipal = 'analitico' | 'colchao' | 'ranking_quitacao' | 'desafios';
+
+const ABAS_DE_VISAO: AbaSegmentada<'individual' | 'geral'>[] = [
+  { key: 'individual', label: 'Minha visão', Icon: User },
+  { key: 'geral',      label: 'Visão geral', Icon: Users },
+];
 
 export default function PaginaAnalitico() {
   // ── Todos os hooks ANTES de qualquer return condicional ──────────────────
@@ -410,19 +415,22 @@ export default function PaginaAnalitico() {
   }
 
   return (
-    <div className="p-6 max-w-[1400px] mx-auto space-y-6">
+    <div className="mx-auto max-w-[1400px] space-y-5 p-4 sm:p-6">
 
-      {/* Cabeçalho */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <BarChart2 className="w-6 h-6 text-primary" />
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Analítico</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              Recebimentos do ERP · {tenant.isPaguePlay ? 'PaguePlay' : 'BookPlay'}
+      {/* Cabeçalho. A marca saiu do subtítulo: ela é da cidade do setor
+          (`lib/marca.ts`), não da empresa, e aqui não há setor único. */}
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary/12 text-primary ring-1 ring-primary/20">
+            <BarChart2 className="h-5 w-5" />
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold leading-tight tracking-tight text-foreground">Analítico</h1>
+            <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground">
+              Recebimentos do relatório do ERP
               {novosCount > 0 && (
-                <span className="ml-2 inline-flex items-center gap-1 text-primary font-medium">
-                  <span className="w-1.5 h-1.5 rounded-full bg-primary inline-block" />
+                <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
+                  <span className="h-1.5 w-1.5 rounded-full bg-primary" />
                   {novosCount} novo{novosCount !== 1 ? 's' : ''}
                 </span>
               )}
@@ -432,40 +440,82 @@ export default function PaginaAnalitico() {
 
         {/* Alternador de visão — para quem tem os dois níveis (hoje, o elite) */}
         {podeAlternarVisao && (
-          <div className="flex items-center gap-1 border rounded-lg p-0.5 bg-muted/30">
-            <button
-              onClick={() => setVisao('individual')}
-              className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
-                visao === 'individual'
-                  ? 'bg-background shadow-sm text-foreground'
-                  : 'text-muted-foreground hover:text-foreground',
-              )}
-            >
-              <User className="w-3.5 h-3.5" /> Minha visão
-            </button>
-            <button
-              onClick={() => setVisao('geral')}
-              className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
-                visao === 'geral'
-                  ? 'bg-background shadow-sm text-foreground'
-                  : 'text-muted-foreground hover:text-foreground',
-              )}
-            >
-              <Users className="w-3.5 h-3.5" /> Visão geral
-            </button>
-          </div>
+          <AbasSegmentadas
+            abas={ABAS_DE_VISAO}
+            ativa={visao}
+            onTrocar={(k: 'individual' | 'geral') => setVisao(k)}
+            rotulo="Visão"
+          />
         )}
+      </header>
+
+      {/* Barra de comando: a seção à esquerda, o recorte (lente + setor) à
+          direita. Uma superfície só — antes eram três faixas soltas. */}
+      <div className="flex flex-col gap-2 rounded-2xl border border-border bg-card/70 p-2 shadow-sm lg:flex-row lg:items-center lg:justify-between">
+        {/* Abas internas: Analítico × Colchão × Ranking de quitação × Desafios */}
+        <AbasSegmentadas
+          abas={abasDaRegua}
+          ativa={abaVisivel}
+          onTrocar={(k: AbaPrincipal) => setAbaPrincipal(k)}
+          rotulo="Seção do Analítico"
+        />
+
+        <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+          {/* A lente não vale para Desafios: o recorte de lá é o PERÍODO da
+              campanha, que pode atravessar a virada do mês. O filtro de setor
+              logo abaixo continua valendo — ele é o recorte de quem olha. */}
+          {abaVisivel !== 'desafios' && (
+            <SeletorRecorte
+              recorte={recorte}
+              onMudar={setRecorte}
+              podeVerDia={temPermissao('analitico_sub_recebimento_diario')}
+              somenteMes={lenteSoMes}
+            />
+          )}
+
+          {/* Filtro de setor — para quem tem o nível `todos_setores` nesta aba.
+              Quem não tem fica no próprio setor e vê a etiqueta abaixo. */}
+          {podeVerSetor && veTodosSetores && setores.length > 0 && (
+            <div className="flex items-center gap-2">
+              <Building2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <Select
+                value={filtroSetorId ?? TODOS_SETORES}
+                onValueChange={v => setFiltroSetorId(v === TODOS_SETORES ? null : v)}
+              >
+                <SelectTrigger className="h-8 w-44 rounded-lg text-xs">
+                  <SelectValue placeholder="Todos os setores" />
+                </SelectTrigger>
+                <SelectContent>
+                  {/* O `Select` do shadcn recusa `value=""` — daí o sentinela. */}
+                  <SelectItem value={TODOS_SETORES}>Todos os setores</SelectItem>
+                  {/* Sem setor de sistema, e sem inativo do mês corrente em diante —
+                      `lib/setoresDosFiltros`. */}
+                  {setoresDosFiltros(setores, { mes: mesDaLente }).map(s => (
+                    <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          {podeVerSetor && !veTodosSetores && setorProprio && (
+            <span className="flex items-center gap-1.5 rounded-lg border border-border bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
+              <Building2 className="h-3.5 w-3.5" />
+              {setores.find(s => s.id === setorProprio)?.nome ?? 'Meu setor'}
+            </span>
+          )}
+        </div>
       </div>
 
-      {/* Abas internas: Analítico × Colchão × Ranking de quitação × Desafios */}
-      <AbasSegmentadas
-        abas={abasDaRegua}
-        ativa={abaVisivel}
-        onTrocar={(k: AbaPrincipal) => setAbaPrincipal(k)}
-        rotulo="Seção do Analítico"
-      />
+      {/* O que a reimportação do 59 mexeu neste mês — sempre aqui, logo abaixo
+          da barra, nas duas visões. Antes ficava no meio da aba do operador e
+          em cima dos números do líder; agora é uma faixa de uma linha que abre
+          o painel com o detalhe. Some quando não há nada. */}
+      {abaVisivel === 'analitico' && (mostrarVisaoGeral || mostrarVisaoIndividual) && (
+        <MudancasImportacao
+          empresaId={empresa.id} mes={mesDaLente}
+          operadorId={perfil.id} modo={mostrarVisaoGeral ? 'lideranca' : 'operador'}
+        />
+      )}
 
       {/* Nenhuma aba interna liberada: dizer isso é melhor do que uma página
           em branco, que se lê como defeito. */}
@@ -474,52 +524,6 @@ export default function PaginaAnalitico() {
           Nenhuma aba do Analítico está liberada para o seu cargo.
         </div>
       )}
-
-      {/* A lente + filtro de setor */}
-      <div className="flex items-center gap-4 flex-wrap">
-        {/* A lente não vale para Desafios: o recorte de lá é o PERÍODO da
-            campanha, que pode atravessar a virada do mês. O filtro de setor
-            logo abaixo continua valendo — ele é o recorte de quem olha. */}
-        {abaVisivel !== 'desafios' && (
-          <SeletorRecorte
-            recorte={recorte}
-            onMudar={setRecorte}
-            podeVerDia={temPermissao('analitico_sub_recebimento_diario')}
-            somenteMes={lenteSoMes}
-          />
-        )}
-
-        {/* Filtro de setor — para quem tem o nível `todos_setores` nesta aba.
-            Quem não tem fica no próprio setor e vê a etiqueta abaixo. */}
-        {podeVerSetor && veTodosSetores && setores.length > 0 && (
-          <div className="flex items-center gap-2">
-            <Building2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-            <Select
-              value={filtroSetorId ?? TODOS_SETORES}
-              onValueChange={v => setFiltroSetorId(v === TODOS_SETORES ? null : v)}
-            >
-              <SelectTrigger className="h-8 w-44 rounded-lg text-xs">
-                <SelectValue placeholder="Todos os setores" />
-              </SelectTrigger>
-              <SelectContent>
-                {/* O `Select` do shadcn recusa `value=""` — daí o sentinela. */}
-                <SelectItem value={TODOS_SETORES}>Todos os setores</SelectItem>
-                {/* Sem setor de sistema, e sem inativo do mês corrente em diante —
-                    `lib/setoresDosFiltros`. */}
-                {setoresDosFiltros(setores, { mes: mesDaLente }).map(s => (
-                  <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-        {podeVerSetor && !veTodosSetores && setorProprio && (
-          <span className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted/40 border border-border px-3 py-1.5 rounded-lg">
-            <Building2 className="w-3.5 h-3.5" />
-            {setores.find(s => s.id === setorProprio)?.nome ?? 'Meu setor'}
-          </span>
-        )}
-      </div>
 
       {/* Validação do relatório (Fase 1) — só administrador/super_admin */}
       {abaVisivel === 'analitico' && podeValidarRelatorio && (

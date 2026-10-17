@@ -84,7 +84,6 @@ import { getTodayISO } from '@/lib/index';
 import { diasNoMes as diasDoMes, primeiroDiaDoMes, ultimoDiaDoMes } from '@/lib/mesReferencia';
 import { toast } from 'sonner';
 import { TabulacaoCell } from './TabulacaoCell';
-import { MudancasImportacao } from './MudancasImportacao';
 import { percentualImplicito, rotuloHoPercentual } from '@/lib/hoPercentual';
 import { ImportarModal } from './ImportarModal';
 import { RankingView } from './RankingView';
@@ -102,6 +101,8 @@ import { KpiTile } from '@/components/KpiTile';
 import { AbasSegmentadas, type AbaSegmentada } from '@/components/AbasSegmentadas';
 import { DatePickerField } from '@/components/DatePickerField';
 import { ListaOperadores, type GrupoOperadores } from '@/pages/Analitico/ListaOperadores';
+import { ExtratoRecebimentos, SeloVinculo } from '@/pages/Analitico/Extrato/ExtratoRecebimentos';
+import { vinculoDaLinha } from '@/pages/Analitico/Extrato/extrato';
 import {
   deResumoAnalitico, deResumoDiario, type LinhaOperadorPainel,
 } from '@/pages/Analitico/linhaOperador';
@@ -1546,6 +1547,7 @@ export function AnaliticoLider({
    * o card da pessoa logo abaixo — já filtrado pelo mesmo termo.
    */
   function resultadosDaBusca() {
+    const achadosTemExtra = achadosDoPainel.some(a => vinculoDaLinha(a) === 'extra');
     const nomeDe = new Map(gruposDoPainel.flatMap(g => g.itens.map(i => [i.operador_id, i.nome ?? i.usuario] as const)));
     return (
       <div className="overflow-hidden rounded-xl border border-primary/30 bg-primary/[0.03]">
@@ -1580,7 +1582,10 @@ export function AnaliticoLider({
                     title={aberto ? 'Card do operador aberto abaixo' : 'Abrir o card do operador'}
                     onClick={() => { if (!aberto) void toggleExpandido(opId); }}>
                     <td className="px-3 py-2">
-                      <span className="font-semibold">{a.codigo}</span>
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="font-mono font-semibold">{a.codigo}</span>
+                        {achadosTemExtra && <SeloVinculo vinculo={vinculoDaLinha(a)} />}
+                      </span>
                       {a.nome_cliente && (
                         <span className="block max-w-[200px] truncate text-muted-foreground">{a.nome_cliente}</span>
                       )}
@@ -1674,111 +1679,31 @@ export function AnaliticoLider({
   }
 
   /**
-   * A lista de acordos do operador — a mesma tabela de sempre, agora numa
-   * função própria porque quem a desenha passou a ser `ListaOperadores`.
+   * A lista de acordos do operador — o mesmo extrato da visão do operador
+   * (`ExtratoRecebimentos`), embutido no card. Em setor com Extra (Receptivo,
+   * por exemplo) cada cliente sai marcado EXTRA ou DIRETO.
    */
   function tabelaDeLinhas(
     l: LinhaOperadorPainel, linhas: AnaliticoRecebimento[], temFiltro: boolean,
   ) {
     return (
-      <table className="w-full text-xs">
-        <thead>
-          <tr className="sticky top-0 z-10 bg-muted">
-            <th className="text-left px-3 py-2 font-semibold text-muted-foreground">CÓDIGO</th>
-            <th className="text-left px-3 py-2 font-semibold text-muted-foreground">FORMA</th>
-            <th className="text-right px-3 py-2 font-semibold text-muted-foreground">RECEBIDO</th>
-            {mostrarHO && <th className="text-right px-3 py-2 font-semibold text-muted-foreground">HO</th>}
-            <th className="text-left px-3 py-2 font-semibold text-muted-foreground">DATA</th>
-            <th className="text-right px-3 py-2 font-semibold text-muted-foreground">AÇÃO</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border">
-          {linhas.length === 0 ? (
-            <tr>
-              <td colSpan={6} className="px-3 py-6 text-center text-muted-foreground text-xs">
-                {temFiltro ? 'Nenhum registro no período.' : 'Sem registros.'}
-              </td>
-            </tr>
-          ) : linhas.flatMap(linha => {
-            const pagamentos = linha.pagamentos_detalhados;
-            const formaBadge = (
-              <Badge variant="outline" className={
-                linha.forma_pagamento === 'cartao'
-                  ? 'text-xs border-purple-300 dark:border-purple-800/60 text-purple-700 dark:text-purple-300'
-                  : 'text-xs border-blue-300 dark:border-blue-800/60 text-blue-700 dark:text-blue-300'
-              }>
-                {linha.forma_detalhe || (linha.forma_pagamento === 'cartao' ? 'Cartão' : 'Boleto/Pix')}
-              </Badge>
-            );
-
-            if (!pagamentos || pagamentos.length <= 1) {
-              return [
-                <tr key={linha.id} className="hover:bg-muted/20">
-                  <td className="px-3 py-2">
-                    <span className="font-semibold">{linha.codigo}</span>
-                    {linha.nome_cliente && (
-                      <span className="block text-muted-foreground truncate max-w-[120px]">{linha.nome_cliente}</span>
-                    )}
-                    {linha.instituicao && (
-                      <span className="block text-[10px] text-muted-foreground/70 truncate max-w-[120px]">{linha.instituicao}</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2">{formaBadge}</td>
-                  <td className="px-3 py-2 text-right font-mono">{formatBRL(linha.valor_recebido)}</td>
-                  {mostrarHO && <td className="px-3 py-2 text-right font-mono text-muted-foreground">{formatBRL(linha.total_ho)}</td>}
-                  <td className="px-3 py-2 tabular-nums">
-                    {new Date(linha.data_pagamento + 'T12:00:00').toLocaleDateString('pt-BR')}
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <TabulacaoCell
-                      linha={linha} empresaId={empresaId}
-                      operadorId={l.operador_id}
-                      operadorNome={l.nome ?? l.usuario}
-                      onAbrirNovoAcordo={onAbrirNovoAcordo}
-                      onVerAcordo={onVerAcordo}
-                      onRefetch={onRefetch}
-                    />
-                  </td>
-                </tr>,
-              ];
-            }
-
-            return pagamentos.map((p, idx) => (
-              <tr key={`${linha.id}::${idx}`} className="hover:bg-muted/20">
-                {idx === 0 && (
-                  <td rowSpan={pagamentos.length} className="px-3 py-2 align-top">
-                    <span className="font-semibold">{linha.codigo}</span>
-                    {linha.nome_cliente && (
-                      <span className="block text-muted-foreground truncate max-w-[120px]">{linha.nome_cliente}</span>
-                    )}
-                    {linha.instituicao && (
-                      <span className="block text-[10px] text-muted-foreground/70 truncate max-w-[120px]">{linha.instituicao}</span>
-                    )}
-                  </td>
-                )}
-                <td className="px-3 py-2">{formaBadge}</td>
-                <td className="px-3 py-2 text-right font-mono">{formatBRL(p.valor)}</td>
-                {mostrarHO && <td className="px-3 py-2 text-right font-mono text-muted-foreground">{formatBRL(p.total_ho)}</td>}
-                <td className="px-3 py-2 tabular-nums">
-                  {new Date(p.data + 'T12:00:00').toLocaleDateString('pt-BR')}
-                </td>
-                {idx === 0 && (
-                  <td rowSpan={pagamentos.length} className="px-3 py-2 text-right align-top">
-                    <TabulacaoCell
-                      linha={linha} empresaId={empresaId}
-                      operadorId={l.operador_id}
-                      operadorNome={l.nome ?? l.usuario}
-                      onAbrirNovoAcordo={onAbrirNovoAcordo}
-                      onVerAcordo={onVerAcordo}
-                      onRefetch={onRefetch}
-                    />
-                  </td>
-                )}
-              </tr>
-            ));
-          })}
-        </tbody>
-      </table>
+      <ExtratoRecebimentos
+        embutido
+        linhas={linhas}
+        mostrarHO={mostrarHO}
+        hojeISO={hojeISO}
+        vazio={temFiltro ? 'Nenhum registro no período.' : 'Sem registros.'}
+        renderAcao={linha => (
+          <TabulacaoCell
+            linha={linha} empresaId={empresaId}
+            operadorId={l.operador_id}
+            operadorNome={l.nome ?? l.usuario}
+            onAbrirNovoAcordo={onAbrirNovoAcordo}
+            onVerAcordo={onVerAcordo}
+            onRefetch={onRefetch}
+          />
+        )}
+      />
     );
   }
 
@@ -1824,15 +1749,6 @@ export function AnaliticoLider({
             </p>
           </div>
         </div>
-      )}
-
-      {/* O histórico do mês: o que a reimportação do 59 removeu, transferiu ou
-          reavaliou no escopo desta liderança. Some quando não há nada. */}
-      {empresaId && mes && (
-        <MudancasImportacao
-          empresaId={empresaId} mes={mes}
-          operadorId={perfil?.id ?? ''} modo="lideranca"
-        />
       )}
 
       {/* ── Cards de resumo do recorte ─────────────────────────────────────── */}
@@ -2214,6 +2130,7 @@ export function AnaliticoLider({
               resumos={rank.linhas}
               grupos={rank.grupos}
               criterio={rank.config.criterio}
+              fotos={fotos}
               mostrarCopiar
             />
           )}

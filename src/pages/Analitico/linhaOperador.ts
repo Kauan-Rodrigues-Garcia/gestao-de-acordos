@@ -134,3 +134,20 @@ export function deResumoDiario(
     };
   });
 }
+
+/**
+ * A posição de cada operador dentro da própria equipe, pelo valor recebido.
+ *
+ * Substituiu, na lista do líder, a barra de «12% da equipe»: a fatia exigia
+ * conta de cabeça e ninguém lia. «3º de 8 na equipe» responde direto quem
+ * carrega o grupo. Empate divide a posição (dois 2º, depois o 4º).
+ */
+export function posicoesNoGrupo(itens: readonly Pick<LinhaOperadorPainel, 'operador_id' | 'valor'>[]): Map<string, number> {
+  const ordenados = [...itens].sort((a, b) => b.valor - a.valor);
+  const pos = new Map<string, number>();
+  ordenados.forEach((l, i) => {
+    const anterior = ordenados[i - 1];
+    pos.set(l.operador_id, anterior && anterior.valor === l.valor ? pos.get(anterior.operador_id)! : i + 1);
+  });
+  return pos;
+}
