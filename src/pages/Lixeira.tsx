@@ -2,22 +2,33 @@
  * Lixeira.tsx
  * Exibe acordos excluídos (manual ou transferência de NR) armazenados em lixeira_acordos.
  * Acessível por líder e administrador via /admin/lixeira
+ *
+ * ## O desenho
+ *
+ * O mesmo vocabulário da Lixeira de Vendas e do extrato do Analítico: cabeçalho
+ * com ícone neutro e filtro em `AbasSegmentadas`. A tela antiga tinha faixa em
+ * degradê, três cartões coloridos que só contavam e as ações escondidas no
+ * hover — o que no celular, sem hover, sumia com o botão de restaurar.
+ *
+ * A lista continua sendo a tabela do modelo antigo — uma coluna por informação,
+ * com cabeçalho e larguras fixas —, porque foi o que se leu melhor: uma lista
+ * em flex, sem colunas, deixava cada linha alinhar de um jeito e um vão no
+ * meio. A tabela ganhou só as faixas de dia (Hoje, Ontem, data), da exclusão
+ * mais recente para a mais antiga, com a quantidade e o total do dia. O prazo
+ * só ganha cor quando aperta (vermelho com menos de 24 h, âmbar com menos de 48 h).
  */
-import { useState, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useEffect, useCallback, useMemo, type ReactNode } from 'react';
 import {
-  Trash2, RefreshCw, Search, Clock, ArrowRightLeft,
-  AlertTriangle, X, Info, ShieldAlert, FileX2,
-  RotateCcw,
+  Trash2, RefreshCw, Search, ArrowRightLeft, X, Undo2, Layers,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
-  Dialog, DialogContent, DialogDescription, DialogTitle, DialogFooter,
+  Dialog, DialogContent, DialogDescription, DialogTitle,
 } from '@/components/ui/dialog';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { AbasSegmentadas, type AbaSegmentada } from '@/components/AbasSegmentadas';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
@@ -32,6 +43,16 @@ import { formatCurrency, formatDate } from '@/lib/index';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
+type FiltroMotivo = 'todos' | 'exclusao' | 'transferencia';
+
+const ABAS_MOTIVO: readonly AbaSegmentada<FiltroMotivo>[] = [
+  { key: 'todos',         label: 'Todos',          Icon: Layers },
+  { key: 'exclusao',      label: 'Exclusões',      Icon: Trash2 },
+  { key: 'transferencia', label: 'Transferências', Icon: ArrowRightLeft },
+];
+
+const DIAS_SEMANA = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+
 function tempoRestante(expiraEm?: string): string {
   if (!expiraEm) return '—';
   const diff = new Date(expiraEm).getTime() - Date.now();
@@ -43,35 +64,103 @@ function tempoRestante(expiraEm?: string): string {
   return 'Menos de 1h';
 }
 
+/** A cor do prazo: só pinta quando aperta. */
+function tomDoPrazo(expiraEm?: string): string {
+  if (!expiraEm) return 'text-muted-foreground';
+  const diff = new Date(expiraEm).getTime() - Date.now();
+  if (diff < 86_400_000) return 'text-destructive';
+  if (diff < 2 * 86_400_000) return 'text-warning';
+  return 'text-muted-foreground';
+}
+
+function textoDoPrazo(expiraEm?: string): string {
+  const t = tempoRestante(expiraEm);
+  if (t === '—') return 'sem prazo';
+  if (t === 'Expirado') return 'expirado';
+  return `some em ${t.toLowerCase()}`;
+}
+
+/** YYYY-MM-DD no fuso da máquina — o dia em que a pessoa viu o acordo sair. */
+function diaLocal(iso: string): string {
+  const d = new Date(iso);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+function rotuloDoDia(dia: string, hoje: string): { principal: string; detalhe: string } {
+  const d = new Date(dia + 'T12:00:00');
+  const ontem = new Date(hoje + 'T12:00:00');
+  ontem.setDate(ontem.getDate() - 1);
+  const dataCurta = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+  const semana = DIAS_SEMANA[d.getDay()];
+  if (dia === hoje) return { principal: 'Hoje', detalhe: `${semana} · ${dataCurta}` };
+  if (dia === diaLocal(ontem.toISOString())) return { principal: 'Ontem', detalhe: `${semana} · ${dataCurta}` };
+  return { principal: dataCurta, detalhe: semana };
+}
+
+function hora(iso?: string): string {
+  if (!iso) return '';
+  return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function iniciais(nome: string): string {
+  return nome.split(' ').filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase();
+}
+
+/** Primeiro e último nome: só o primeiro confunde (há várias Isabelas). */
+function nomeCurto(nome: string): string {
+  const partes = nome.trim().split(/\s+/);
+  return partes.length > 1 ? `${partes[0]} ${partes[partes.length - 1]}` : partes[0] ?? nome;
+}
+
 /**
  * O selo do motivo. Até 28/09/2026 só `transferencia_nr` era reconhecido, e a
  * transferência aprovada por pedido (`autorizacao_solicitada`) e a troca
  * Extra → Direto (`troca_extra`) apareciam como «Exclusão Manual».
+ *
+ * Exclusão é o caso comum e fica neutra; transferência é a exceção — o acordo
+ * não volta — e leva o âmbar.
  */
-function badgeMotivo(motivo: string) {
+function SeloMotivo({ motivo, className }: { motivo: string; className?: string }) {
+  const base = cn('inline-flex items-center gap-1 rounded border px-1.5 py-px text-[10px] font-medium leading-tight whitespace-nowrap', className);
   if (ehTransferenciaLixeira(motivo)) {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold border border-amber-400/30 bg-amber-400/10 text-amber-700 dark:text-amber-500 shadow-[0_0_8px_rgba(251,191,36,0.12)]">
-        <ArrowRightLeft className="w-3 h-3" /> {ROTULO_MOTIVO_LIXEIRA[motivo] ?? 'Transferência'}
+      <span
+        className={cn(base, 'border-amber-500/35 bg-amber-500/10 text-amber-700 dark:text-amber-300')}
+        title={ROTULO_MOTIVO_LIXEIRA[motivo] ?? 'Transferência'}
+      >
+        <ArrowRightLeft className="h-2.5 w-2.5" aria-hidden />
+        {motivo === 'troca_extra' ? 'Extra → Direto' : 'Transferência'}
       </span>
     );
   }
+  return <span className={cn(base, 'border-border bg-muted/50 text-muted-foreground')}>Exclusão</span>;
+}
+
+function Pessoa({ nome, foto, destaque }: { nome: string; foto?: string | null; destaque?: boolean }) {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold border border-red-500/30 bg-red-500/10 text-red-500 shadow-[0_0_8px_rgba(239,68,68,0.12)]">
-      <Trash2 className="w-3 h-3" /> Exclusão Manual
+    <span className="flex min-w-0 items-center gap-1.5" title={nome}>
+      <Avatar className="h-5 w-5 shrink-0">
+        <AvatarImage src={foto ?? undefined} alt={nome} />
+        <AvatarFallback className="bg-muted text-[8px] font-semibold text-muted-foreground">
+          {iniciais(nome)}
+        </AvatarFallback>
+      </Avatar>
+      <span className={cn('truncate', destaque ? 'text-foreground' : 'text-muted-foreground')}>
+        {nomeCurto(nome)}
+      </span>
     </span>
   );
 }
 
-function tempoUrgencia(expiraEm?: string): 'green' | 'yellow' | 'red' | 'gray' {
-  if (!expiraEm) return 'gray';
-  const diff = new Date(expiraEm).getTime() - Date.now();
-  if (diff <= 0) return 'red';
-  if (diff < 86_400_000) return 'red';
-  if (diff < 2 * 86_400_000) return 'yellow';
-  return 'green';
+function Campo({ rotulo, children, className }: { rotulo: string; children: ReactNode; className?: string }) {
+  return (
+    <div className={className}>
+      <dt className="text-[11px] text-muted-foreground">{rotulo}</dt>
+      <dd className="mt-0.5 text-[13px] text-foreground">{children}</dd>
+    </div>
+  );
 }
-
 
 export default function Lixeira() {
   const { perfil } = useAuth();
@@ -81,6 +170,7 @@ export default function Lixeira() {
   const [itens, setItens]               = useState<LixeiraAcordo[]>([]);
   const [loading, setLoading]           = useState(true);
   const [busca, setBusca]               = useState('');
+  const [filtro, setFiltro]             = useState<FiltroMotivo>('todos');
   const [detalhe, setDetalhe]           = useState<LixeiraAcordo | null>(null);
   const [confirmEsvaziar, setConfirmEsvaziar] = useState(false);
   const [esvaziando, setEsvaziando]     = useState(false);
@@ -176,7 +266,7 @@ export default function Lixeira() {
     setConfirmEsvaziar(false);
     if (ok) {
       setItens([]);
-      toast.success('Lixeira esvaziada com sucesso!');
+      toast.success('Lixeira esvaziada.');
     } else {
       toast.error('Erro ao esvaziar lixeira: ' + error);
     }
@@ -214,7 +304,7 @@ export default function Lixeira() {
     if (!permissoesCarregando) carregar();
   }, [carregar, permissoesCarregando]);
 
-  const itensFiltrados = itens.filter(item => {
+  const encontrados = useMemo(() => itens.filter(item => {
     // Defesa em profundidade: se por qualquer motivo a purga server-side
     // falhou, não mostra itens cujo expira_em já passou.
     if (item.expira_em && new Date(item.expira_em).getTime() < Date.now()) return false;
@@ -227,7 +317,34 @@ export default function Lixeira() {
       item.transferido_para_nome?.toLowerCase().includes(b) ||
       (item as { instituicao?: string | null }).instituicao?.toLowerCase().includes(b)
     );
-  });
+  }), [itens, busca]);
+
+  const itensFiltrados = useMemo(() => encontrados.filter(item => {
+    if (filtro === 'todos') return true;
+    return (filtro === 'transferencia') === ehTransferenciaLixeira(item.motivo);
+  }), [encontrados, filtro]);
+
+  const valorTotal = useMemo(
+    () => itensFiltrados.reduce((s, i) => s + (Number(i.valor) || 0), 0),
+    [itensFiltrados],
+  );
+
+  const hoje = diaLocal(new Date().toISOString());
+  const dias = useMemo(() => {
+    const grupos = new Map<string, LixeiraAcordo[]>();
+    for (const item of itensFiltrados) {
+      const dia = item.excluido_em ? diaLocal(item.excluido_em) : 'sem-data';
+      const lista = grupos.get(dia);
+      if (lista) lista.push(item); else grupos.set(dia, [item]);
+    }
+    return [...grupos.entries()]
+      .sort(([a], [b]) => (a === 'sem-data' ? 1 : b === 'sem-data' ? -1 : b.localeCompare(a)))
+      .map(([dia, lista]) => {
+        lista.sort((a, b) => (b.excluido_em ?? '').localeCompare(a.excluido_em ?? ''));
+        const total = lista.reduce((s, i) => s + (Number(i.valor) || 0), 0);
+        return { dia, lista, total };
+      });
+  }, [itensFiltrados]);
 
   if (!podeAcessar) {
     return (
@@ -237,571 +354,404 @@ export default function Lixeira() {
     );
   }
 
-  const totalTransferencias = itens.filter(i => ehTransferenciaLixeira(i.motivo)).length;
-  const totalExclusoes = itens.filter(i => !ehTransferenciaLixeira(i.motivo)).length;
-
-  const statsCards = [
-    {
-      label: 'Total na Lixeira',
-      value: itensFiltrados.length,
-      icon: <Trash2 className="w-4 h-4" />,
-      color: 'from-slate-500/20 to-slate-600/10 border-slate-500/20',
-      iconBg: 'bg-slate-500/15 text-slate-400',
-      valueColor: 'text-foreground',
-    },
-    {
-      label: 'Transferências de NR',
-      value: totalTransferencias,
-      icon: <ArrowRightLeft className="w-4 h-4" />,
-      color: 'from-amber-500/20 to-amber-600/10 border-amber-500/20',
-      iconBg: 'bg-amber-500/15 text-amber-700 dark:text-amber-400',
-      valueColor: 'text-amber-700 dark:text-amber-400',
-    },
-    {
-      label: 'Exclusões Manuais',
-      value: totalExclusoes,
-      icon: <FileX2 className="w-4 h-4" />,
-      color: 'from-red-500/20 to-red-600/10 border-red-500/20',
-      iconBg: 'bg-red-500/15 text-red-700 dark:text-red-400',
-      valueColor: 'text-red-700 dark:text-red-400',
-    },
-  ];
+  const filtrando = busca.trim() !== '' || filtro !== 'todos';
+  const qtd = itensFiltrados.length;
 
   return (
-    <div className="min-h-screen">
-      {/* Gradient accent strip at top */}
-      <div className="h-1 w-full bg-gradient-to-r from-red-500 via-rose-400 to-orange-400 opacity-80" />
-
-      <div className="p-6 max-w-[1280px] mx-auto space-y-6">
-
-        {/* ── Header ── */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-start gap-4">
-            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-red-500/20 to-rose-600/10 border border-red-500/20 flex items-center justify-center shadow-md flex-shrink-0">
-              <Trash2 className="w-5 h-5 text-red-700 dark:text-red-400" />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold text-foreground tracking-tight leading-tight">
-                Lixeira de Acordos
-              </h1>
-              <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1.5">
-                <Clock className="w-3 h-3" />
-                Acordos excluídos ou transferidos — retidos por <strong className="text-foreground/70">3 dias</strong> antes da exclusão definitiva.
-              </p>
-            </div>
+    <div className="mx-auto max-w-[1280px] space-y-4 p-4 md:p-6">
+      {/* ── Cabeçalho ── */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="rounded-xl border border-border bg-card p-2">
+            <Trash2 className="h-5 w-5 text-muted-foreground" aria-hidden />
           </div>
-
-          {/* Action buttons */}
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={carregar}
-              disabled={loading}
-              className="gap-1.5 h-8 text-xs rounded-lg border-border/60 hover:bg-accent/50"
-            >
-              <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
-              Atualizar
-            </Button>
-            {podeEsvaziar && itens.length > 0 && (
-              <Button
-                size="sm"
-                onClick={() => setConfirmEsvaziar(true)}
-                className="gap-1.5 h-8 text-xs rounded-lg bg-red-500/10 text-red-700 dark:text-red-400 border border-red-500/30 hover:bg-red-500/20 hover:text-red-800 dark:hover:text-red-300 shadow-none"
-                variant="ghost"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                Esvaziar Lixeira
-              </Button>
-            )}
+          <div>
+            <h1 className="text-lg font-semibold leading-tight">Lixeira de Acordos</h1>
+            <p className="text-[12px] text-muted-foreground">
+              {loading
+                ? 'Carregando…'
+                : qtd === 0 && !filtrando
+                  ? 'Acordos excluídos ficam 3 dias aqui antes de sumir'
+                  : `${qtd} ${qtd === 1 ? 'acordo' : 'acordos'} · ${formatCurrency(valorTotal)} · cada um fica 3 dias`}
+            </p>
           </div>
         </div>
 
-        {/* ── Stats Cards ── */}
-        {!loading && (
-          <div className="grid grid-cols-3 gap-3">
-            {statsCards.map((stat, i) => (
-              <motion.div
-                key={stat.label}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.07, duration: 0.35, ease: 'easeOut' }}
-              >
-                <div className={cn(
-                  'rounded-xl border bg-gradient-to-br p-3.5 flex items-center gap-3 backdrop-blur-sm',
-                  stat.color
-                )}>
-                  <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0', stat.iconBg)}>
-                    {stat.icon}
-                  </div>
-                  <div>
-                    <p className={cn('text-xl font-bold leading-none', stat.valueColor)}>{stat.value}</p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">{stat.label}</p>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        )}
-
-        {/* ── Search Bar ── */}
-        <div className="relative max-w-md">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/70 pointer-events-none" />
-          <Input
-            placeholder="Buscar por NR, cliente, operador ou destino..."
-            value={busca}
-            onChange={e => setBusca(e.target.value)}
-            className="pl-10 pr-9 h-10 text-sm rounded-xl border-border/60 shadow-sm bg-background/80 focus-visible:ring-1 focus-visible:ring-primary/40"
-          />
-          <AnimatePresence>
+        <div className="flex w-full items-center gap-2 sm:w-auto">
+          <div className="relative min-w-0 flex-1 sm:flex-none">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />
+            <Input
+              value={busca}
+              onChange={e => setBusca(e.target.value)}
+              placeholder="NR, cliente ou operador"
+              aria-label="Buscar na lixeira"
+              className="h-8 w-full pl-8 sm:w-[240px] pr-7 text-[12px]"
+            />
             {busca && (
-              <motion.button
-                initial={{ opacity: 0, scale: 0.7 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.7 }}
-                transition={{ duration: 0.15 }}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+              <button
+                type="button"
                 onClick={() => setBusca('')}
+                aria-label="Limpar busca"
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                <X className="w-3.5 h-3.5" />
-              </motion.button>
+                <X className="h-3.5 w-3.5" />
+              </button>
             )}
-          </AnimatePresence>
-        </div>
-
-        {/* ── Table Card ── */}
-        <div className="rounded-xl border border-border/60 bg-card shadow-sm overflow-hidden">
-          {loading ? (
-            <div className="p-5 space-y-2.5">
-              {[...Array(6)].map((_, i) => (
-                <Skeleton key={i} className="h-12 w-full rounded-lg" />
-              ))}
-            </div>
-          ) : itensFiltrados.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-24 gap-4 text-muted-foreground">
-              <div className="w-16 h-16 rounded-2xl bg-muted/40 border border-border/50 flex items-center justify-center">
-                <Trash2 className="w-7 h-7 opacity-30" />
-              </div>
-              <div className="text-center space-y-1">
-                <p className="font-semibold text-sm text-foreground/70">Lixeira vazia</p>
-                <p className="text-xs text-muted-foreground/70">
-                  {busca ? 'Nenhum resultado para a busca atual.' : 'Nenhum acordo excluído nos últimos 3 dias.'}
-                </p>
-              </div>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b border-border/60 bg-muted/20">
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground/80 uppercase tracking-wider text-[10px]">
-                      NR / Código
-                    </th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground/80 uppercase tracking-wider text-[10px]">
-                      Cliente
-                    </th>
-                    <th className="text-right px-4 py-3 font-semibold text-muted-foreground/80 uppercase tracking-wider text-[10px]">
-                      Valor
-                    </th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground/80 uppercase tracking-wider text-[10px]">
-                      Motivo
-                    </th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground/80 uppercase tracking-wider text-[10px]">
-                      Operador Anterior
-                    </th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground/80 uppercase tracking-wider text-[10px]">
-                      Transferido Para
-                    </th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground/80 uppercase tracking-wider text-[10px]">
-                      Excluído Em
-                    </th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground/80 uppercase tracking-wider text-[10px]">
-                      Expira Em
-                    </th>
-                    <th className="px-3 py-3" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {itensFiltrados.map((item, i) => {
-                    const urgencia = tempoUrgencia(item.expira_em);
-                    const urgenciaColors = {
-                      green:  'text-emerald-700 dark:text-emerald-400',
-                      yellow: 'text-amber-700 dark:text-amber-400',
-                      red:    'text-red-700 dark:text-red-400',
-                      gray:   'text-muted-foreground',
-                    };
-                    return (
-                      <motion.tr
-                        key={item.id}
-                        initial={{ opacity: 0, y: 6 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: Math.min(i * 0.025, 0.4), duration: 0.28, ease: 'easeOut' }}
-                        className={cn(
-                          'border-b border-border/30 transition-colors duration-150 group cursor-default',
-                          'hover:bg-accent/20',
-                          i % 2 === 1 && 'bg-muted/5'
-                        )}
-                      >
-                        {/* NR / Inscrição */}
-                        <td className="px-4 py-3">
-                          <span className="font-mono font-bold text-foreground text-xs">
-                            {item.nr_cliente || item.instituicao || '—'}
-                          </span>
-                        </td>
-
-                        {/* Cliente */}
-                        <td className="px-4 py-3 max-w-[160px]">
-                          <span className="text-foreground/80 truncate block">
-                            {item.nome_cliente || '—'}
-                          </span>
-                        </td>
-
-                        {/* Valor */}
-                        <td className="px-4 py-3 text-right">
-                          <span className="font-mono font-semibold text-emerald-700 dark:text-emerald-400">
-                            {item.valor ? formatCurrency(item.valor) : '—'}
-                          </span>
-                        </td>
-
-                        {/* Motivo */}
-                        <td className="px-4 py-3">
-                          {badgeMotivo(item.motivo)}
-                        </td>
-
-                        {/* Operador */}
-                        <td className="px-4 py-3">
-                          {item.operador_nome ? (
-                            <div className="flex items-center gap-2">
-                              <Avatar className="w-6 h-6 flex-shrink-0">
-                                <AvatarImage src={item.operador_id ? (fotoMap[item.operador_id] ?? undefined) : undefined} alt={item.operador_nome} />
-                                <AvatarFallback className="text-[9px] font-bold bg-primary/15 border border-primary/20 text-primary">
-                                  {item.operador_nome.split(' ').slice(0,2).map((p: string) => p[0]).join('').toUpperCase()}
-                                </AvatarFallback>
-                              </Avatar>
-                              <span className="text-muted-foreground truncate max-w-[110px]">{item.operador_nome}</span>
-                            </div>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </td>
-
-                        {/* Transferido para */}
-                        <td className="px-4 py-3">
-                          {item.transferido_para_nome ? (
-                            <div className="flex items-center gap-2">
-                              <Avatar className="w-6 h-6 flex-shrink-0">
-                                <AvatarImage src={item.transferido_para_id ? (fotoMap[item.transferido_para_id] ?? undefined) : undefined} alt={item.transferido_para_nome} />
-                                <AvatarFallback className="text-[9px] font-bold bg-primary/10 border border-primary/20 text-primary">
-                                  {item.transferido_para_nome.split(' ').slice(0, 2).map((p: string) => p[0]).join('').toUpperCase()}
-                                </AvatarFallback>
-                              </Avatar>
-                              <span className="text-primary font-medium truncate max-w-[110px]">
-                                {item.transferido_para_nome}
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="text-muted-foreground/50">—</span>
-                          )}
-                        </td>
-
-                        {/* Excluído em */}
-                        <td className="px-4 py-3 font-mono text-muted-foreground">
-                          {item.excluido_em
-                            ? new Date(item.excluido_em).toLocaleDateString('pt-BR')
-                            : '—'}
-                        </td>
-
-                        {/* Expira em */}
-                        <td className="px-4 py-3">
-                          <span className={cn(
-                            'inline-flex items-center gap-1 font-semibold',
-                            urgenciaColors[urgencia]
-                          )}>
-                            <Clock className="w-3 h-3 flex-shrink-0" />
-                            {tempoRestante(item.expira_em)}
-                          </span>
-                        </td>
-
-                        {/* Ações */}
-                        <td className="px-3 py-3">
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-150">
-                            {podeRestaurarItem(item) && (
-                            <button
-                              title={`Restaurar acordo — volta para ${item.operador_nome ?? 'o operador'}`}
-                              disabled={restaurandoId === item.id}
-                              onClick={() => handleRestaurar(item)}
-                              className="w-7 h-7 rounded-lg flex items-center justify-center text-emerald-700 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 hover:bg-emerald-500/10 transition-all duration-150 disabled:opacity-50"
-                            >
-                              {restaurandoId === item.id
-                                ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                                : <RotateCcw className="w-3.5 h-3.5" />}
-                            </button>
-                            )}
-                            <button
-                              title="Ver detalhes"
-                              onClick={() => setDetalhe(item)}
-                              className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-all duration-150"
-                            >
-                              <Info className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </td>
-                      </motion.tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+          </div>
+          <Button
+            variant="ghost" size="icon" className="h-8 w-8"
+            onClick={carregar} disabled={loading} aria-label="Recarregar"
+          >
+            <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
+          </Button>
+          {podeEsvaziar && itens.length > 0 && (
+            <Button
+              variant="ghost" size="sm"
+              onClick={() => setConfirmEsvaziar(true)}
+              className="h-8 gap-1.5 text-[12px] text-destructive hover:bg-destructive/10 hover:text-destructive"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Esvaziar
+            </Button>
           )}
         </div>
+      </div>
 
-        {/* ── Detail Modal ── */}
-        <Dialog open={!!detalhe} onOpenChange={open => { if (!open) setDetalhe(null); }}>
-          <DialogContent className="max-w-[520px] p-0 overflow-hidden rounded-2xl border border-border/60 shadow-2xl" aria-describedby="lixeira-dlg-desc">
-            {/* Modal header */}
-            <div className="flex items-center gap-3 px-5 py-4 border-b border-border/50 bg-muted/20">
-              <div className="w-8 h-8 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center">
-                <Trash2 className="w-4 h-4 text-red-700 dark:text-red-400" />
-              </div>
-              <div>
-                <DialogTitle className="text-sm font-semibold text-foreground leading-none">
-                  Detalhes do Acordo Excluído
-                </DialogTitle>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Registro retido temporariamente na lixeira
-                </p>
-              </div>
-            </div>
-            <DialogDescription id="lixeira-dlg-desc" className="sr-only">Detalhes completos do acordo excluído</DialogDescription>
+      <AbasSegmentadas rotulo="Motivo" abas={ABAS_MOTIVO} ativa={filtro} onTrocar={(k: FiltroMotivo) => setFiltro(k)} />
 
-            {detalhe && (
-              <>
-              <ScrollArea className="max-h-[520px]">
-                <div className="p-5 space-y-4">
-
-                  {/* Section: Dados do Acordo */}
-                  <div className="rounded-xl border border-border/50 overflow-hidden">
-                    <div className="px-4 py-2.5 bg-muted/30 border-b border-border/40 flex items-center gap-2">
-                      <div className="w-1 h-4 rounded-full bg-primary" />
-                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-                        Dados do Acordo
-                      </p>
-                    </div>
-                    <div className="p-4 grid grid-cols-2 gap-x-6 gap-y-3 text-xs">
-                      <div>
-                        <p className="text-muted-foreground mb-0.5">NR / Código</p>
-                        <p className="font-mono font-bold text-foreground">{detalhe.nr_cliente || detalhe.instituicao || '—'}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground mb-0.5">Cliente</p>
-                        <p className="font-semibold text-foreground">{detalhe.nome_cliente || '—'}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground mb-0.5">Valor</p>
-                        <p className="font-mono font-bold text-emerald-700 dark:text-emerald-400">{detalhe.valor ? formatCurrency(detalhe.valor) : '—'}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground mb-0.5">Vencimento</p>
-                        <p className="font-semibold text-foreground">{detalhe.vencimento ? formatDate(detalhe.vencimento) : '—'}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground mb-0.5">Status anterior</p>
-                        <p className="font-semibold text-foreground">{detalhe.status || '—'}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground mb-0.5">Tipo</p>
-                        <p className="font-semibold text-foreground">{detalhe.tipo || '—'}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Section: Motivo */}
-                  <div className="rounded-xl border border-border/50 overflow-hidden">
-                    <div className="px-4 py-2.5 bg-muted/30 border-b border-border/40 flex items-center gap-2">
-                      <div className="w-1 h-4 rounded-full bg-amber-400" />
-                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-                        Motivo da Exclusão
-                      </p>
-                    </div>
-                    <div className="p-4 space-y-3">
-                      <div>{badgeMotivo(detalhe.motivo)}</div>
-
-                      {ehTransferenciaLixeira(detalhe.motivo) && (
-                        <p className="text-[11px] text-muted-foreground">
-                          Transferência não se restaura pela lixeira: o acordo já é de outra pessoa.
-                        </p>
-                      )}
-                      {!ehTransferenciaLixeira(detalhe.motivo) && detalhe.excluido_por_nome && (
-                        <p className="text-xs text-muted-foreground">
-                          Excluído por <strong className="text-foreground">{detalhe.excluido_por_nome}</strong>
-                          {detalhe.excluido_por_nome !== detalhe.operador_nome && detalhe.operador_nome
-                            ? <> · o acordo é de <strong className="text-foreground">{detalhe.operador_nome}</strong></>
-                            : null}
-                        </p>
-                      )}
-
-                      {ehTransferenciaLixeira(detalhe.motivo) && (
-                        /* Visual transfer chain */
-                        <div className="mt-2 space-y-0">
-                          {[
-                            { label: 'Operador anterior', value: detalhe.operador_nome, color: 'bg-slate-500/15 text-slate-400 border-slate-500/20' },
-                            { label: 'Transferido para', value: detalhe.transferido_para_nome, color: 'bg-primary/10 text-primary border-primary/20' },
-                            { label: 'Autorizado por', value: detalhe.autorizado_por_nome, color: 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20' },
-                          ].map((step, idx, arr) => (
-                            <div key={step.label} className="flex flex-col items-start">
-                              <div className={cn(
-                                'w-full flex items-center gap-2.5 rounded-lg border px-3 py-2 text-xs',
-                                step.color
-                              )}>
-                                <div className="w-5 h-5 rounded-full bg-current/10 flex items-center justify-center flex-shrink-0 opacity-70">
-                                  <span className="text-[9px] font-bold">{idx + 1}</span>
-                                </div>
-                                <div>
-                                  <p className="opacity-70 text-[10px]">{step.label}</p>
-                                  <p className="font-semibold">{step.value || '—'}</p>
-                                </div>
-                              </div>
-                              {idx < arr.length - 1 && (
-                                <div className="ml-4 w-px h-3 bg-border/60" />
-                              )}
+      {/* ── Lista ── */}
+      {loading ? (
+        <div className="space-y-2">
+          {[0, 1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-full rounded-xl" />)}
+        </div>
+      ) : qtd === 0 ? (
+        <div className="rounded-xl border border-border bg-card px-3 py-10 text-center text-[12px] text-muted-foreground">
+          {filtrando ? (
+            <>
+              <p>Nada na lixeira com esse filtro.</p>
+              <button
+                type="button"
+                onClick={() => { setBusca(''); setFiltro('todos'); }}
+                className="mt-2 inline-flex items-center gap-1 rounded-md px-2 py-1 font-medium text-primary hover:bg-primary/5"
+              >
+                <X className="h-3 w-3" /> Limpar filtros
+              </button>
+            </>
+          ) : (
+            <p>A lixeira está vazia. É o estado bom.</p>
+          )}
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-xl border border-border bg-card">
+          {/*
+            Desktop: tabela de verdade, como era antes — uma coluna por
+            informação, com cabeçalho, e larguras fixas (`table-fixed`) para
+            que NR, motivo, pessoas, horário e valor caiam no mesmo lugar em
+            todas as linhas e em todos os dias. O cliente fica com o que sobra.
+          */}
+          {/* `relative`: sem ele o «Ações» só-leitor-de-tela (absolute) escapa da rolagem e alarga a página. */}
+          <div className="relative hidden overflow-x-auto md:block">
+            <table className="w-full min-w-[972px] table-fixed text-[12px] min-[1440px]:min-w-[1128px]">
+              <colgroup>
+                <col className="w-[96px]" />
+                <col />
+                <col className="w-[116px]" />
+                <col className="w-[148px]" />
+                {/*
+                  Abaixo de 1440 px o destino fica só no detalhe: o cliente precisa do
+                  espaço. A coluna encolhe para largura 0 em vez de sumir — uma <col>
+                  com `hidden` vira coluna automática e divide a sobra com o Cliente,
+                  e uma <td> com `hidden` sai da linha e empurra as seguintes uma casa.
+                */}
+                <col className="w-0 min-[1440px]:w-[156px]" />
+                <col className="w-[72px]" />
+                <col className="w-[84px]" />
+                <col className="w-[112px]" />
+                {podeRestaurar && <col className="w-[104px]" />}
+              </colgroup>
+              <thead>
+                <tr className="border-b border-border bg-muted/30 text-left text-[10px] uppercase tracking-wider whitespace-nowrap text-muted-foreground">
+                  <th scope="col" className="px-3 py-2 font-semibold">NR</th>
+                  <th scope="col" className="px-3 py-2 font-semibold">Cliente</th>
+                  <th scope="col" className="px-3 py-2 font-semibold">Motivo</th>
+                  <th scope="col" className="px-3 py-2 font-semibold">Operador</th>
+                  <th scope="col" className="overflow-hidden p-0 font-semibold min-[1440px]:px-3 min-[1440px]:py-2">
+                    <span className="hidden min-[1440px]:inline">Transferido para</span>
+                  </th>
+                  <th scope="col" className="px-3 py-2 font-semibold">Excluído</th>
+                  <th scope="col" className="px-3 py-2 font-semibold">Some em</th>
+                  <th scope="col" className="px-3 py-2 text-right font-semibold">Valor</th>
+                  {podeRestaurar && <th scope="col" className="px-3 py-2"><span className="sr-only">Ações</span></th>}
+                </tr>
+              </thead>
+              {dias.map(({ dia, lista, total }) => {
+                const rotulo = dia === 'sem-data' ? { principal: 'Sem data', detalhe: '' } : rotuloDoDia(dia, hoje);
+                return (
+                  <tbody key={dia} aria-label={`Excluídos em ${rotulo.principal}`}>
+                    <tr className="border-b border-border/70 bg-muted/35">
+                      <td colSpan={podeRestaurar ? 9 : 8} className="px-3 py-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold text-foreground">{rotulo.principal}</span>
+                          {rotulo.detalhe && <span className="text-[11px] text-muted-foreground">{rotulo.detalhe}</span>}
+                          <span className="ml-auto text-[11px] text-muted-foreground">
+                            {lista.length} {lista.length === 1 ? 'acordo' : 'acordos'}
+                          </span>
+                          <span className="font-mono text-xs font-semibold tabular-nums text-foreground">
+                            {formatCurrency(total)}
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                    {lista.map(item => {
+                      const restaurando = restaurandoId === item.id;
+                      return (
+                        <tr
+                          key={item.id}
+                          onClick={() => setDetalhe(item)}
+                          className="cursor-pointer border-b border-border/50 last:border-b-0 hover:bg-accent/30"
+                        >
+                          <td className="truncate px-3 py-2 font-mono tabular-nums text-muted-foreground">
+                            {item.nr_cliente || item.instituicao || '—'}
+                          </td>
+                          <td className="px-3 py-2">
+                            {/* O botão é o caminho do teclado; o clique na linha inteira, o do mouse. */}
+                            <button
+                              type="button"
+                              onClick={e => { e.stopPropagation(); setDetalhe(item); }}
+                              title={item.nome_cliente || undefined}
+                              className="block w-full truncate rounded-sm text-left text-[13px] text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            >
+                              {item.nome_cliente || <span className="text-muted-foreground">sem cliente</span>}
+                            </button>
+                          </td>
+                          <td className="px-3 py-2"><SeloMotivo motivo={item.motivo} /></td>
+                          <td className="px-3 py-2">
+                            {item.operador_nome
+                              ? <Pessoa nome={item.operador_nome} foto={item.operador_id ? fotoMap[item.operador_id] : null} />
+                              : <span className="text-muted-foreground">—</span>}
+                          </td>
+                          <td className="overflow-hidden p-0 min-[1440px]:px-3 min-[1440px]:py-2">
+                            <div className="hidden min-[1440px]:block">
+                              {item.transferido_para_nome
+                                ? <Pessoa nome={item.transferido_para_nome} foto={item.transferido_para_id ? fotoMap[item.transferido_para_id] : null} destaque />
+                                : <span className="text-muted-foreground/60">—</span>}
                             </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                          </td>
+                          <td className="px-3 py-2 font-mono tabular-nums text-muted-foreground">{hora(item.excluido_em) || '—'}</td>
+                          <td className={cn('px-3 py-2 font-medium', tomDoPrazo(item.expira_em))}>
+                            {tempoRestante(item.expira_em).toLowerCase()}
+                          </td>
+                          <td className="px-3 py-2 text-right font-mono text-[13px] font-semibold tabular-nums text-foreground">
+                            {item.valor ? formatCurrency(item.valor) : '—'}
+                          </td>
+                          {podeRestaurar && (
+                            <td className="px-3 py-1.5 text-right">
+                              {podeRestaurarItem(item) && (
+                                <Button
+                                  size="sm" variant="outline" className="h-7 gap-1 px-2 text-[11px]"
+                                  disabled={restaurando}
+                                  onClick={e => { e.stopPropagation(); handleRestaurar(item); }}
+                                  title={`Restaurar — volta para ${item.operador_nome ?? 'o operador'}`}
+                                >
+                                  <Undo2 className={cn('h-3.5 w-3.5', restaurando && 'animate-spin')} />
+                                  Restaurar
+                                </Button>
+                              )}
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                );
+              })}
+            </table>
+          </div>
 
-                  {/* Section: Retenção */}
-                  <div className="rounded-xl border border-border/50 overflow-hidden">
-                    <div className="px-4 py-2.5 bg-muted/30 border-b border-border/40 flex items-center gap-2">
-                      <div className="w-1 h-4 rounded-full bg-red-400" />
-                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-                        Período de Retenção
+          {/* Celular: tabela não cabe; cada acordo vira duas linhas. */}
+          <div className="md:hidden">
+            {dias.map(({ dia, lista, total }) => {
+              const rotulo = dia === 'sem-data' ? { principal: 'Sem data', detalhe: '' } : rotuloDoDia(dia, hoje);
+              return (
+                <section key={dia} aria-label={`Excluídos em ${rotulo.principal}`}>
+                  <header className="flex items-center gap-2 border-b border-border/70 bg-muted/35 px-3 py-1.5">
+                    <span className="text-xs font-semibold text-foreground">{rotulo.principal}</span>
+                    {rotulo.detalhe && <span className="text-[11px] text-muted-foreground">{rotulo.detalhe}</span>}
+                    <span className="ml-auto font-mono text-xs font-semibold tabular-nums text-foreground">
+                      {formatCurrency(total)}
+                    </span>
+                  </header>
+                  <ul className="divide-y divide-border/70">
+                    {lista.map(item => {
+                      const restaurando = restaurandoId === item.id;
+                      return (
+                        <li key={item.id} className="flex items-center gap-2 pr-3">
+                          <button
+                            type="button"
+                            onClick={() => setDetalhe(item)}
+                            className="flex min-w-0 flex-1 items-center gap-3 py-2 pl-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                          >
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-[13px] text-foreground">
+                                {item.nome_cliente || <span className="text-muted-foreground">sem cliente</span>}
+                              </span>
+                              <span className="mt-0.5 flex items-center gap-2 font-mono text-[11px] tabular-nums text-muted-foreground">
+                                {item.nr_cliente || item.instituicao || '—'} · {hora(item.excluido_em)}
+                                <SeloMotivo motivo={item.motivo} className="font-sans" />
+                              </span>
+                            </span>
+                            <span className="shrink-0 text-right">
+                              <span className="block font-mono text-[13px] font-semibold tabular-nums text-foreground">
+                                {item.valor ? formatCurrency(item.valor) : '—'}
+                              </span>
+                              <span className={cn('block text-[11px]', tomDoPrazo(item.expira_em))}>
+                                {textoDoPrazo(item.expira_em)}
+                              </span>
+                            </span>
+                          </button>
+                          {podeRestaurarItem(item) ? (
+                            <Button
+                              size="icon" variant="outline" className="h-8 w-8 shrink-0"
+                              disabled={restaurando}
+                              onClick={() => handleRestaurar(item)}
+                              aria-label={`Restaurar — volta para ${item.operador_nome ?? 'o operador'}`}
+                            >
+                              <Undo2 className={cn('h-3.5 w-3.5', restaurando && 'animate-spin')} />
+                            </Button>
+                          ) : podeRestaurar ? (
+                            // Guarda o lugar do botão: sem ele o valor desta linha sai da coluna.
+                            <span className="w-8 shrink-0" aria-hidden />
+                          ) : null}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </section>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── Detalhe ── */}
+      <Dialog open={!!detalhe} onOpenChange={open => { if (!open) setDetalhe(null); }}>
+        <DialogContent className="max-w-[460px] gap-0 p-0" aria-describedby="lixeira-dlg-desc">
+          {detalhe && (
+            <>
+              <div className="space-y-1.5 px-5 pb-4 pt-5 pr-10">
+                <SeloMotivo motivo={detalhe.motivo} />
+                <DialogTitle className="text-base font-semibold leading-tight">
+                  {detalhe.nome_cliente || 'Acordo sem cliente'}
+                </DialogTitle>
+                <DialogDescription id="lixeira-dlg-desc" className="text-[12px]">
+                  <span className="font-mono tabular-nums">{detalhe.nr_cliente || detalhe.instituicao || '—'}</span>
+                  {' · '}
+                  <span className="font-mono font-semibold tabular-nums text-foreground">
+                    {detalhe.valor ? formatCurrency(detalhe.valor) : '—'}
+                  </span>
+                </DialogDescription>
+              </div>
+
+              <div className="space-y-4 border-t border-border px-5 py-4">
+                <dl className="grid grid-cols-3 gap-x-4 gap-y-3">
+                  <Campo rotulo="Vencimento">{detalhe.vencimento ? formatDate(detalhe.vencimento) : '—'}</Campo>
+                  <Campo rotulo="Status anterior">{detalhe.status || '—'}</Campo>
+                  <Campo rotulo="Tipo">{detalhe.tipo || '—'}</Campo>
+                </dl>
+
+                <div className="space-y-1 text-[12px] text-muted-foreground">
+                  {ehTransferenciaLixeira(detalhe.motivo) ? (
+                    <>
+                      <p className="text-foreground">
+                        {ROTULO_MOTIVO_LIXEIRA[detalhe.motivo] ?? 'Transferência'}:{' '}
+                        <strong className="font-medium">{detalhe.operador_nome || '—'}</strong>
+                        {' → '}
+                        <strong className="font-medium">{detalhe.transferido_para_nome || '—'}</strong>
                       </p>
-                    </div>
-                    <div className="p-4 grid grid-cols-2 gap-x-6 gap-y-3 text-xs">
-                      <div>
-                        <p className="text-muted-foreground mb-0.5">Excluído em</p>
-                        <p className="font-semibold text-foreground">
-                          {detalhe.excluido_em ? new Date(detalhe.excluido_em).toLocaleString('pt-BR') : '—'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground mb-0.5">Expira em</p>
-                        <p className="font-semibold text-amber-700 dark:text-amber-400">
-                          {detalhe.expira_em ? new Date(detalhe.expira_em).toLocaleString('pt-BR') : '—'}
-                        </p>
-                      </div>
-                      <div className="col-span-2">
-                        <p className="text-muted-foreground mb-1">Tempo restante</p>
-                        <div className={cn(
-                          'inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border font-bold text-xs',
-                          tempoUrgencia(detalhe.expira_em) === 'green' && 'bg-emerald-500/10 border-emerald-500/25 text-emerald-700 dark:text-emerald-400',
-                          tempoUrgencia(detalhe.expira_em) === 'yellow' && 'bg-amber-500/10 border-amber-500/25 text-amber-700 dark:text-amber-400',
-                          tempoUrgencia(detalhe.expira_em) === 'red' && 'bg-red-500/10 border-red-500/25 text-red-700 dark:text-red-400',
-                          tempoUrgencia(detalhe.expira_em) === 'gray' && 'bg-muted border-border text-muted-foreground',
-                        )}>
-                          <Clock className="w-3.5 h-3.5" />
-                          {tempoRestante(detalhe.expira_em)}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
+                      {detalhe.autorizado_por_nome && <p>Autorizado por {detalhe.autorizado_por_nome}.</p>}
+                      <p>Transferência não se restaura pela lixeira: o acordo já é de outra pessoa.</p>
+                    </>
+                  ) : (
+                    <p>
+                      Excluído por <strong className="font-medium text-foreground">{detalhe.excluido_por_nome || '—'}</strong>
+                      {detalhe.operador_nome && detalhe.excluido_por_nome !== detalhe.operador_nome
+                        ? <> · o acordo é de <strong className="font-medium text-foreground">{detalhe.operador_nome}</strong></>
+                        : null}
+                    </p>
+                  )}
                 </div>
-              </ScrollArea>
 
-              {/* Footer: restaurar acordo */}
-              <div className="px-5 py-3 border-t border-border/50 bg-muted/20 flex items-center justify-end gap-2">
+                <dl className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-lg bg-muted/40 px-3 py-2.5">
+                  <Campo rotulo="Excluído em">
+                    {detalhe.excluido_em ? new Date(detalhe.excluido_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '—'}
+                  </Campo>
+                  <Campo rotulo="Some em">
+                    <span className={cn('font-medium', tomDoPrazo(detalhe.expira_em))}>
+                      {detalhe.expira_em ? new Date(detalhe.expira_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '—'}
+                    </span>
+                    {detalhe.expira_em && (
+                      <span className="ml-1 text-[11px] text-muted-foreground">({tempoRestante(detalhe.expira_em).toLowerCase()})</span>
+                    )}
+                  </Campo>
+                </dl>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">
                 <Button
-                  variant="outline"
-                  size="sm"
+                  variant="ghost" size="sm" className="h-8 text-[12px]"
                   onClick={() => setDetalhe(null)}
                   disabled={restaurandoId === detalhe.id}
-                  className="h-8 text-xs rounded-lg"
                 >
                   Fechar
                 </Button>
                 {podeRestaurarItem(detalhe) && (
-                <Button
-                  size="sm"
-                  onClick={() => handleRestaurar(detalhe)}
-                  disabled={restaurandoId === detalhe.id}
-                  className="h-8 text-xs rounded-lg gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white border-0 shadow-md shadow-emerald-500/20"
-                >
-                  {restaurandoId === detalhe.id
-                    ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    : <RotateCcw className="w-3.5 h-3.5" />}
-                  {restaurandoId === detalhe.id ? 'Restaurando...' : 'Restaurar Acordo'}
-                </Button>
+                  <Button
+                    size="sm" className="h-8 gap-1.5 text-[12px]"
+                    onClick={() => handleRestaurar(detalhe)}
+                    disabled={restaurandoId === detalhe.id}
+                  >
+                    <Undo2 className={cn('h-3.5 w-3.5', restaurandoId === detalhe.id && 'animate-spin')} />
+                    {restaurandoId === detalhe.id ? 'Restaurando…' : 'Restaurar acordo'}
+                  </Button>
                 )}
               </div>
-              </>
-            )}
-          </DialogContent>
-        </Dialog>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
-        {/* ── Empty Trash Confirmation Modal ── */}
-        <Dialog open={confirmEsvaziar} onOpenChange={setConfirmEsvaziar}>
-          <DialogContent className="max-w-[420px] p-0 overflow-hidden rounded-2xl border border-border/60 shadow-2xl" aria-describedby="dlg-esvaziar-desc">
-            {/* Dramatic red gradient header */}
-            <div className="bg-gradient-to-br from-red-600/25 via-red-500/15 to-rose-600/10 border-b border-red-500/20 px-6 py-5 flex items-start gap-4">
-              <div className="w-10 h-10 rounded-xl bg-red-500/20 border border-red-500/30 flex items-center justify-center flex-shrink-0">
-                <ShieldAlert className="w-5 h-5 text-red-700 dark:text-red-400" />
-              </div>
-              <div>
-                <DialogTitle className="text-sm font-bold text-foreground">
-                  Esvaziar Lixeira
-                </DialogTitle>
-                <p className="text-xs text-red-700/80 dark:text-red-400/80 mt-0.5 font-medium">
-                  Esta ação é permanente e irreversível
-                </p>
-              </div>
-            </div>
-
-            <div className="px-6 py-5 space-y-3">
-              <DialogDescription id="dlg-esvaziar-desc" className="text-xs text-muted-foreground leading-relaxed">
-                Você está prestes a excluir permanentemente todos os acordos da lixeira.
-                Após a confirmação, <strong className="text-foreground">não será possível recuperar</strong> esses registros.
-              </DialogDescription>
-
-              <div className="rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 flex items-center gap-3">
-                <AlertTriangle className="w-4 h-4 text-red-700 dark:text-red-400 flex-shrink-0" />
-                <p className="text-xs text-foreground/80">
-                  <span className="font-bold text-red-700 dark:text-red-400 text-sm">{itens.length}</span>{' '}
-                  acordo{itens.length !== 1 ? 's' : ''} ser{itens.length !== 1 ? 'ão' : 'á'} excluído{itens.length !== 1 ? 's' : ''} permanentemente.
-                </p>
-              </div>
-            </div>
-
-            <DialogFooter className="px-6 pb-5 flex-row gap-2 justify-end">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setConfirmEsvaziar(false)}
-                disabled={esvaziando}
-                className="h-8 text-xs rounded-lg"
-              >
-                Cancelar
-              </Button>
-              <Button
-                size="sm"
-                onClick={handleEsvaziar}
-                disabled={esvaziando}
-                className="h-8 text-xs rounded-lg gap-1.5 bg-red-500 hover:bg-red-600 text-white border-0 shadow-md shadow-red-500/20"
-              >
-                {esvaziando ? (
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Trash2 className="w-3.5 h-3.5" />
-                )}
-                {esvaziando ? 'Esvaziando...' : 'Esvaziar Definitivamente'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-      </div>
+      {/* ── Esvaziar ── */}
+      <Dialog open={confirmEsvaziar} onOpenChange={setConfirmEsvaziar}>
+        <DialogContent className="max-w-[400px] gap-0 p-0" aria-describedby="dlg-esvaziar-desc">
+          <div className="space-y-2 px-5 pb-4 pt-5 pr-10">
+            <DialogTitle className="text-base font-semibold">Esvaziar a lixeira?</DialogTitle>
+            <DialogDescription id="dlg-esvaziar-desc" className="text-[12px] leading-relaxed">
+              {itens.length === 1 ? 'O acordo' : `Os ${itens.length} acordos`} da lixeira{' '}
+              {itens.length === 1 ? 'será excluído' : 'serão excluídos'} de vez.{' '}
+              <strong className="font-medium text-foreground">Não dá para recuperar depois.</strong>
+            </DialogDescription>
+          </div>
+          <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">
+            <Button
+              variant="ghost" size="sm" className="h-8 text-[12px]"
+              onClick={() => setConfirmEsvaziar(false)}
+              disabled={esvaziando}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive" size="sm" className="h-8 gap-1.5 text-[12px]"
+              onClick={handleEsvaziar}
+              disabled={esvaziando}
+            >
+              {esvaziando
+                ? <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                : <Trash2 className="h-3.5 w-3.5" />}
+              {esvaziando ? 'Esvaziando…' : `Esvaziar ${itens.length} ${itens.length === 1 ? 'acordo' : 'acordos'}`}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
