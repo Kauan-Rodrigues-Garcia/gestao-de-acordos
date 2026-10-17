@@ -500,12 +500,18 @@ export function PixAutomatico() {
    * O Ranking é só de quem vê o Pix dos outros (o operador enxerga só as
    * próprias linhas, e um pódio de uma pessoa não diz nada): pedido por quem
    * não pode, cai em Registros em vez de abrir uma aba vazia.
+   *
+   * A Premiação dobrada também (16/10/2026): para o operador ela só repetia o
+   * card da comissão dobrada, que já fica em Registros. Saiu da lista dele, e
+   * um link antigo com `?aba=premiacao` cai em Registros.
    */
   const abaDaUrl = searchParams.get('aba');
   const subAbaPedida: SubAbaPix = (SUB_ABAS_PIX as readonly string[]).includes(abaDaUrl ?? '')
     ? abaDaUrl as SubAbaPix
     : 'registros';
-  const subAba: SubAbaPix = subAbaPedida === 'ranking' && !podeVerDeOutros ? 'registros' : subAbaPedida;
+  const subAba: SubAbaPix = (subAbaPedida === 'ranking' || subAbaPedida === 'premiacao') && !podeVerDeOutros
+    ? 'registros'
+    : subAbaPedida;
   const trocarSubAba = useCallback((aba: SubAbaPix) => {
     setSearchParams(atual => {
       const params = new URLSearchParams(atual);
@@ -2351,20 +2357,17 @@ export function PixAutomatico() {
       contador: divergenciasAbertas,
       alerta: divergenciasAbertas > 0,
     },
-    {
-      key: 'premiacao', label: 'Premiação dobrada', Icon: Trophy,
-      resumo: resumoPremiacao
-        ? resumoPremiacao.pessoas === 0
-          ? 'Ninguém dobrou ainda'
-          : resumoPremiacao.falta >= 0.005
-            ? `${formatCurrency(resumoPremiacao.falta)} a pagar`
-            : 'Tudo quitado'
-        : dobra.atingiu
-          ? 'Sua comissão dobrou!'
-          : `${dobra.requisitosOk}/2 requisitos cumpridos`,
-      contador: resumoPremiacao?.aPagar ?? 0,
-    },
+    // Premiação e Ranking só para quem vê o Pix dos outros: a comissão dobrada
+    // do operador fica em Registros (16/10/2026).
     ...(podeVerDeOutros ? [{
+      key: 'premiacao' as const, label: 'Premiação dobrada', Icon: Trophy,
+      resumo: !resumoPremiacao || resumoPremiacao.pessoas === 0
+        ? 'Ninguém dobrou ainda'
+        : resumoPremiacao.falta >= 0.005
+          ? `${formatCurrency(resumoPremiacao.falta)} a pagar`
+          : 'Tudo quitado',
+      contador: resumoPremiacao?.aPagar ?? 0,
+    }, {
       key: 'ranking' as const, label: 'Ranking', Icon: Medal,
       resumo: 'Pódio do setor no mês',
     }] : []),
@@ -2728,6 +2731,16 @@ export function PixAutomatico() {
           parseValor={parseCurrencyInput}
         />
       ))}
+
+      {/* ── Comissão dobrada do operador ──
+          O lugar dela para o operador (16/10/2026): ele abre a tela para
+          registrar, e os dois requisitos ficam à vista junto dos totais, como
+          eram antes das sub-abas. A sub-aba «Premiação dobrada» só repetia
+          este card e saiu da lista dele. Para quem vê o Pix dos outros, o
+          lugar continua sendo a sub-aba da premiação. */}
+      {!loading && !podeVerDeOutros && (
+        <PixComissaoDobrada dobra={dobra} projecao={bonusMeta?.projecao ?? null} />
+      )}
 
       {/* O operador não anota saldo, mas precisa saber que há um no nome dele —
           senão o próximo Pix chega com valor diferente e ninguém explicou. */}
@@ -3436,37 +3449,34 @@ export function PixAutomatico() {
       )}
 
       {/* ════════════════ Sub-aba: Premiação dobrada ════════════════
-          Em cima, a dobra de QUEM ESTÁ OLHANDO — sempre para o operador, que
-          precisa saber que a regra existe, e para o líder que também fecha
-          acordo. Embaixo, para quem vê o Pix dos outros, a lista de quem dobrou
-          e quanto falta pagar. */}
-      {subAba === 'premiacao' && (
+          Só para quem vê o Pix dos outros (o operador vê a dobra dele em
+          Registros). Em cima, a dobra de quem está olhando, se ele também fecha
+          acordo; embaixo, a lista de quem dobrou e quanto falta pagar. */}
+      {subAba === 'premiacao' && podeVerDeOutros && (
         loading ? (
           <div className="space-y-2.5">
             {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-28 w-full rounded-xl" />)}
           </div>
         ) : (
         <div className="space-y-4">
-          {(!podeVerDeOutros || dobra.feitos > 0) && (
+          {dobra.feitos > 0 && (
             <PixComissaoDobrada dobra={dobra} projecao={bonusMeta?.projecao ?? null} />
           )}
-          {podeVerDeOutros && (
-            <PixPainelPremiacoes
-              itens={visiveis}
-              pctPorSetor={pctPorSetor}
-              mes={mes}
-              metaPorOperador={metaPorOperador}
-              metaPorSetor={metaPorSetor}
-              pagamentos={pagamentosPremiacao}
-              podeMarcarPago={podeMarcarPremiacaoPaga}
-              alterandoOperadorId={alterandoPremiacaoId}
-              fotoPorOperador={fotoPorOperador}
-              rotuloMes={rotuloDoMes(mes)}
-              // Busca e recorte sobrevivem a sair da aba e voltar.
-              chaveEstado={`${chaveAba}|premiacoes`}
-              onMarcarPago={alternarPremiacaoPaga}
-            />
-          )}
+          <PixPainelPremiacoes
+            itens={visiveis}
+            pctPorSetor={pctPorSetor}
+            mes={mes}
+            metaPorOperador={metaPorOperador}
+            metaPorSetor={metaPorSetor}
+            pagamentos={pagamentosPremiacao}
+            podeMarcarPago={podeMarcarPremiacaoPaga}
+            alterandoOperadorId={alterandoPremiacaoId}
+            fotoPorOperador={fotoPorOperador}
+            rotuloMes={rotuloDoMes(mes)}
+            // Busca e recorte sobrevivem a sair da aba e voltar.
+            chaveEstado={`${chaveAba}|premiacoes`}
+            onMarcarPago={alternarPremiacaoPaga}
+          />
         </div>
         )
       )}

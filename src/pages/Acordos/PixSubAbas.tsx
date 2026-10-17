@@ -16,7 +16,10 @@
  *   Registros ........ registrar, conferir, aprovar e pagar linha a linha
  *   NRs divergentes .. o que espera decisão ou registro — e PISCA até resolver
  *   Premiação dobrada  quem dobrou a comissão e quanto falta pagar
- *   Ranking .......... o pódio do setor (só quem vê o Pix dos outros)
+ *   Ranking .......... o pódio do setor
+ *
+ * Premiação e Ranking são só de quem vê o Pix dos outros. O operador fica com
+ * duas: a comissão dobrada dele mora em Registros (16/10/2026).
  *
  * ## O pisca não sai quando a aba é aberta
  *
@@ -56,7 +59,9 @@ export function PixSubAbas({ abas, ativa, onTrocar }: Props) {
       aria-label="Seções do Pix Automático"
       className={cn(
         'grid gap-1.5 rounded-xl border border-border bg-muted/40 p-1',
-        abas.length >= 4 ? 'grid-cols-2 lg:grid-cols-4' : 'grid-cols-1 sm:grid-cols-3',
+        abas.length >= 4 ? 'grid-cols-2 lg:grid-cols-4'
+          : abas.length === 3 ? 'grid-cols-1 sm:grid-cols-3'
+          : 'grid-cols-1 sm:grid-cols-2',
       )}
     >
       {abas.map(({ key, label, Icon, resumo, contador, alerta }) => {
