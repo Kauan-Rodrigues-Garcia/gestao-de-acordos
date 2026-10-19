@@ -5,7 +5,7 @@
 import { formatBRL } from '@/lib/money';
 import {
   duracaoCurta, minutosParaComecar, minutosRestantes, rotuloHora,
-  type DiarioDesafio, type Entrada, type SituacaoDoDia,
+  ehLinhaDoSetor, type DiarioDesafio, type Entrada, type SituacaoDoDia,
 } from '@/services/desafios/desafioDoDia';
 
 /** Inteiro de pagamentos, ou R$ sem centavos — a barra não tem espaço para eles. */
@@ -38,7 +38,8 @@ export function rotuloDoTempo(
 /** «+R$ 350 · Ana» — a maior entrada do lote, e quantas mais vieram. */
 export function textoDaEntrada(entradas: Entrada[], porQuantidade: boolean): string {
   const [primeira, ...resto] = entradas;
-  const nome = primeira.nome.split(' ')[0];
+  // «Receptivo» e «Sem operador» vão inteiros: o primeiro nome é de pessoa.
+  const nome = ehLinhaDoSetor(primeira.id) ? primeira.nome : primeira.nome.split(' ')[0];
   const valor = porQuantidade
     ? `+${primeira.qtd} pag.`
     : `+${formatBRL(primeira.valor).replace(/,\d{2}$/, '')}`;

@@ -95,3 +95,32 @@ describe('fn_desafio_diario', () => {
     expect(NOVA).toContain('GRANT EXECUTE ON FUNCTION public.fn_desafio_diario(UUID) TO authenticated;');
   });
 });
+
+describe('20261019180000 — o receptivo e o «sem operador» no placar', () => {
+  const RECEPTIVO = migration('_desafio_do_dia_receptivo.sql');
+  const antigo = corpo(migration('_desafio_do_dia.sql'), /FUNCTION public\.fn_desafio_diario\(p_desafio_id UUID\)/);
+  const novo = corpo(RECEPTIVO, /FUNCTION public\.fn_desafio_diario\(p_desafio_id UUID\)/);
+
+  it('o total continua vindo das mesmas somas do Painel', () => {
+    for (const trecho of [
+      'public.fn_recebido_por_setor(v_empresas, v_mes, v_dia, v_dia, v_de, v_ate)',
+      'public.fn_recebido_por_equipe(v_empresas, v_mes, v_dia, v_dia, FALSE, v_de, v_ate)',
+    ]) {
+      expect(liso(antigo)).toContain(trecho);
+      expect(liso(novo)).toContain(trecho);
+    }
+  });
+
+  it('separa a contribuição do receptivo nas linhas sem operador do alvo, na janela', () => {
+    const l = liso(novo);
+    expect(l).toContain("FILTER (WHERE ar.procedencia = 'contribuicao_59')");
+    expect(l).toContain('AND ar.setor_id = v_alvo AND ar.operador_id IS NULL AND ar.data_pagamento = v_dia');
+    expect(l).toContain('AND (v_de IS NULL OR ar.importado_em >= v_de) AND (v_ate IS NULL OR ar.importado_em < v_ate)');
+    expect(l).toContain("'contribuicao_receptivo', jsonb_build_object(");
+    expect(l).toContain("'sem_operador', jsonb_build_object(");
+  });
+
+  it('o CREATE OR REPLACE não perde o limite de tempo', () => {
+    expect(liso(RECEPTIVO)).toContain("ALTER FUNCTION public.fn_desafio_diario(UUID) SET statement_timeout = '15s'");
+  });
+});

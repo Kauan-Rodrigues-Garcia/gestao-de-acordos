@@ -8,7 +8,7 @@
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
-  CalendarDays, Clock, Database, Gauge, Gift, Hourglass, Sparkles, Target, Trophy, Users, Zap,
+  CalendarDays, Clock, Database, Gauge, Gift, Headset, Hourglass, Radio, Sparkles, Target, Trophy, UserX, Users, Zap,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatBRL } from '@/lib/money';
@@ -17,7 +17,8 @@ import { ValorAnimado } from '@/components/ValorAnimado';
 import { AvatarParticipante } from '@/pages/Analitico/Desafios/AvatarParticipante';
 import type { UsoPlacarDoDia } from '@/hooks/useDesafioDoDia';
 import {
-  ROTULO_PUBLICO, duracaoCurta, minutosRestantes, rotuloAlvo, rotuloHora, rotuloJanela,
+  ID_RECEPTIVO, ROTULO_PUBLICO, duracaoCurta, ehLinhaDoSetor, linhasDoPlacar, minutosRestantes,
+  rotuloAlvo, rotuloHora, rotuloJanela,
   type Entrada,
 } from '@/services/desafios/desafioDoDia';
 import type { Desafio } from '@/services/desafios/types';
@@ -49,6 +50,28 @@ function horaCurta(iso: string | null): string | null {
   }).format(new Date(iso));
 }
 
+/**
+ * O rosto de uma linha do placar: a foto da pessoa, ou o ícone do dinheiro do
+ * setor que não é de ninguém (o Receptivo, o «sem operador»).
+ */
+function RostoDaLinha({ id, nome, fotoUrl, className, classeIcone }: {
+  id: string; nome: string; fotoUrl: string | null; className: string; classeIcone: string;
+}) {
+  if (!ehLinhaDoSetor(id)) return <AvatarParticipante nome={nome} fotoUrl={fotoUrl} className={className} />;
+  const Icone = id === ID_RECEPTIVO ? Headset : UserX;
+  return (
+    <span className={cn('flex shrink-0 items-center justify-center rounded-full bg-muted', className)} aria-hidden="true">
+      <Icone className={cn('text-muted-foreground', classeIcone)} />
+    </span>
+  );
+}
+
+/** «10h07» — a próxima passada do robô do 59, no minuto 07 de cada hora. */
+function proximaRodada(minutoDoDia: number): string {
+  const hora = minutoDoDia % 60 < 7 ? Math.floor(minutoDoDia / 60) : Math.floor(minutoDoDia / 60) + 1;
+  return `${String(hora % 24).padStart(2, '0')}h07`;
+}
+
 function dataCurta(iso: string): string {
   const [ano, mes, dia] = iso.split('-');
   return `${dia}/${mes}/${ano}`;
@@ -56,7 +79,7 @@ function dataCurta(iso: string): string {
 
 export function PainelDesafioDoDia({ desafio, uso, operadorId, variante = 'gaveta' }: Props) {
   const diario = desafio.regra.diario!;
-  const { resposta, placar, andamento, situacao, minuto, hoje, entradas, loteId, carregando, erro } = uso;
+  const { resposta, placar, andamento, situacao, minuto, hoje, entradas, loteId, carregando, erro, aoVivo, lidoEm } = uso;
   const bateu = !!andamento?.bateu;
   const estilo = bateu ? ESTILO_BATIDO : estiloDoDia(desafio.visual.acento);
   const porQtd = !!andamento?.porQuantidade;
@@ -102,7 +125,11 @@ export function PainelDesafioDoDia({ desafio, uso, operadorId, variante = 'gavet
     );
   }
 
-  const total = placar.contribuintes.reduce((s, c) => s + (porQtd ? c.qtd : c.total), 0) || 1;
+  // As pessoas e, embaixo, o dinheiro do setor (Receptivo, sem operador): as
+  // barras dividem o TOTAL do desafio, que conta os dois.
+  const linhas = linhasDoPlacar(placar);
+  const total = linhas.reduce((s, c) => s + (porQtd ? c.qtd : c.total), 0) || 1;
+  const receptivo = placar.contribuicaoReceptivo;
   const restante = minutosRestantes(diario, minuto);
   const horasRestantes = restante / 60;
   const ritmo = situacao === 'valendo' && !bateu && diario.horaFim !== null && andamento?.meta && horasRestantes > 0
@@ -181,6 +208,12 @@ export function PainelDesafioDoDia({ desafio, uso, operadorId, variante = 'gavet
               <span className="inline-flex items-center gap-1 rounded-full bg-background/70 px-2 py-1 text-muted-foreground">
                 <Target className="h-3 w-3" aria-hidden="true" />{rotuloAlvo(diario, formatBRL)}
               </span>
+              {!porQtd && receptivo.total > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-background/70 px-2 py-1 text-muted-foreground">
+                  <Headset className="h-3 w-3" aria-hidden="true" />
+                  inclui <span className="font-semibold tabular-nums text-foreground">{formatBRL(receptivo.total)}</span> do Receptivo
+                </span>
+              )}
               {situacao === 'valendo' && diario.horaFim !== null && (
                 <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-1 font-semibold', estilo.suave, estilo.texto)}>
                   <Clock className="h-3 w-3" aria-hidden="true" />termina em {duracaoCurta(restante)}
@@ -235,27 +268,29 @@ export function PainelDesafioDoDia({ desafio, uso, operadorId, variante = 'gavet
               <h3 className="text-sm font-semibold text-foreground">Quem está fazendo acontecer</h3>
               <span className="text-xs text-muted-foreground">{placar.contribuintes.length} {placar.contribuintes.length === 1 ? 'pessoa' : 'pessoas'}</span>
             </header>
-            {placar.contribuintes.length === 0 ? (
+            {linhas.length === 0 ? (
               <p className="px-4 py-8 text-center text-sm text-muted-foreground">
                 {situacao === 'agendado' ? 'O desafio ainda não começou.' : 'Ainda não entrou nenhum pagamento. O primeiro a fazer entrar aparece aqui.'}
               </p>
             ) : (
               <ol className="divide-y divide-border">
-                {placar.contribuintes.map((c, i) => {
+                {linhas.map((c, i) => {
                   const valor = porQtd ? c.qtd : c.total;
                   const parte = Math.max(2, (valor / total) * 100);
                   const voce = c.id === operadorId;
+                  const doSetor = ehLinhaDoSetor(c.id);
                   return (
                     <motion.li
                       layout
                       key={c.id}
-                      className={cn('flex items-center gap-3 px-4 py-2.5', voce && estilo.suave)}
+                      className={cn('flex items-center gap-3 px-4 py-2.5', voce && estilo.suave, doSetor && 'bg-muted/30')}
                     >
-                      <span className="w-5 text-right text-xs font-semibold tabular-nums text-muted-foreground">{i + 1}</span>
-                      <AvatarParticipante nome={c.nome} fotoUrl={c.fotoUrl} className="h-8 w-8" />
+                      <span className="w-5 text-right text-xs font-semibold tabular-nums text-muted-foreground">{doSetor ? '' : i + 1}</span>
+                      <RostoDaLinha id={c.id} nome={c.nome} fotoUrl={c.fotoUrl} className="h-8 w-8" classeIcone="h-4 w-4" />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium text-foreground">
-                          {c.nome}{voce && <span className={cn('ml-1.5 text-[10px] font-semibold uppercase', estilo.texto)}>você</span>}
+                          {c.id === ID_RECEPTIVO ? 'Contribuição do Receptivo' : doSetor ? 'Pagamento sem operador' : c.nome}
+                          {voce && <span className={cn('ml-1.5 text-[10px] font-semibold uppercase', estilo.texto)}>você</span>}
                         </p>
                         <div className="mt-1 h-1 overflow-hidden rounded-full bg-muted">
                           <motion.div className={cn('h-full rounded-full', estilo.barra)} initial={false} animate={{ width: `${parte}%` }} transition={{ duration: 0.6 }} />
@@ -299,8 +334,10 @@ export function PainelDesafioDoDia({ desafio, uso, operadorId, variante = 'gavet
                       <ul className="space-y-1">
                         {lote.entradas.slice(0, 5).map(e => (
                           <li key={e.id} className="flex items-center gap-2 text-xs">
-                            <AvatarParticipante nome={e.nome} fotoUrl={e.fotoUrl} className="h-5 w-5" />
-                            <span className="min-w-0 flex-1 truncate text-foreground">{e.nome}</span>
+                            <RostoDaLinha id={e.id} nome={e.nome} fotoUrl={e.fotoUrl} className="h-5 w-5" classeIcone="h-3 w-3" />
+                            <span className="min-w-0 flex-1 truncate text-foreground">
+                              {e.id === ID_RECEPTIVO ? 'Contribuição do Receptivo' : e.nome}
+                            </span>
                             <span className={cn('font-semibold tabular-nums', estilo.texto)}>
                               {porQtd ? `+${e.qtd}` : `+${formatBRL(e.valor)}`}
                             </span>
@@ -316,10 +353,25 @@ export function PainelDesafioDoDia({ desafio, uso, operadorId, variante = 'gavet
           </section>
 
           <div className="space-y-1.5 rounded-xl border border-dashed border-border p-3 text-[11px] leading-relaxed text-muted-foreground">
+            {situacao !== 'encerrado' && situacao !== 'agendado' && (
+              <p className="flex items-start gap-1.5">
+                <Radio className={cn('mt-0.5 h-3 w-3 shrink-0', aoVivo && estilo.texto)} aria-hidden="true" />
+                {aoVivo ? (
+                  <span>
+                    <span className={cn('font-semibold', estilo.texto)}>Ao vivo.</span> O placar se atualiza sozinho a cada
+                    rodada do relatório; a próxima é por volta das <span className="font-medium text-foreground">{proximaRodada(minuto)}</span>.
+                    {lidoEm && <> Lido às <span className="font-medium text-foreground">{horaCurta(new Date(lidoEm).toISOString())}</span>.</>}
+                  </span>
+                ) : (
+                  <span>Você não está neste desafio: o placar é o de quando você abriu.</span>
+                )}
+              </p>
+            )}
             <p className="flex items-start gap-1.5">
               <Database className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
               <span>
                 Mesma conta do Painel do Líder: o Analítico, alimentado pelo relatório 58 e reconciliado pelo 59.
+                {placar.publico === 'setor' && ' Conta tudo o que entrou no setor com pagamento do dia, a Contribuição do Receptivo incluída.'}
                 {atualizado && <> Última chegada às <span className="font-medium text-foreground">{atualizado}</span>.</>}
               </span>
             </p>

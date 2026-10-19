@@ -258,6 +258,33 @@ export interface Contribuinte {
   ultima: string | null;
 }
 
+export interface ParteDoSetor { total: number; qtd: number }
+
+/** As duas linhas do placar que não são pessoas. Os ids não colidem com UUID. */
+export const ID_RECEPTIVO = 'setor:receptivo';
+export const ID_SEM_OPERADOR = 'setor:sem-operador';
+
+export function ehLinhaDoSetor(id: string): boolean {
+  return id === ID_RECEPTIVO || id === ID_SEM_OPERADOR;
+}
+
+/**
+ * As linhas do placar: as pessoas, e depois o Receptivo e o «sem operador»
+ * quando houver. É com elas que o «Entrou agora» compara as leituras — sem
+ * isto, a contribuição do Receptivo subia o total sem ninguém aparecer.
+ */
+export function linhasDoPlacar(p: Pick<PlacarDoDia, 'contribuintes' | 'contribuicaoReceptivo' | 'semOperador'>): Contribuinte[] {
+  const doSetor: Contribuinte[] = [];
+  const parte = (id: string, nome: string, v: ParteDoSetor) => {
+    if (v.total > 0.004 || v.qtd > 0) {
+      doSetor.push({ id, nome, fotoUrl: null, equipe: null, total: v.total, qtd: v.qtd, ultima: null });
+    }
+  };
+  parte(ID_RECEPTIVO, 'Receptivo', p.contribuicaoReceptivo);
+  parte(ID_SEM_OPERADOR, 'Sem operador', p.semOperador);
+  return [...p.contribuintes, ...doSetor];
+}
+
 export interface PlacarDoDia {
   /** `false` = setor Cofen, que esta versão não mede. */
   suportado: boolean;
@@ -266,6 +293,15 @@ export interface PlacarDoDia {
   total: number;
   qtd: number;
   contribuintes: Contribuinte[];
+  /**
+   * O dinheiro do setor que não é de ninguém, JÁ DENTRO de `total` (19/10/2026,
+   * migration 20261019180000). Só no desafio de setor; zerado nos outros.
+   *   contribuicaoReceptivo  o Integral que o Receptivo cobrou para o setor
+   *                          (`procedencia = contribuicao_59`);
+   *   semOperador            o pagamento de quem não tem conta.
+   */
+  contribuicaoReceptivo: ParteDoSetor;
+  semOperador: ParteDoSetor;
   ultimaChegada: string | null;
   metaMes: number | null;
   feriados: string[];
