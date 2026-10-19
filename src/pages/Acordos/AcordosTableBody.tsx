@@ -37,7 +37,8 @@ import { agruparAcordosPorDia, resumirSelecaoDoDia } from '@/lib/acordosPorDia';
 import { AvisoCpfAcordo } from '@/components/AvisoCpfAcordo';
 import { CodigoAcordoCopiavel } from '@/components/CodigoAcordoCopiavel';
 import { AcordoNovoInline } from '@/components/AcordoNovoInline';
-import { AcordoEditInline } from '@/components/AcordoEditInline';
+import { AcordoEditInline } from '@/components/AcordoEditInlineSobDemanda';
+import { usePrecarregarAcordoEditInline } from '@/hooks/usePrecarregarAcordoEditInline';
 import { AcordoDetalheInline } from '@/components/AcordoDetalheInline';
 import { LinhaDoDiaAcordos, SetaDetalhe } from '@/components/AcordosDoDia';
 import { VinculoTag } from '@/components/VinculoTag';
@@ -424,6 +425,7 @@ export function AcordosTableBody({
   enviarUmWhatsapp, setConfirmandoExclusao,
   limparFiltros,
 }: AcordosTableBodyProps) {
+  usePrecarregarAcordoEditInline(podeEditar);
   const grupos = agruparAcordosPorDia<AcordoComVinculo>(acordosParaExibir, acordoTemCpf);
   /** Ações por referência: ver `AcoesLinha`. */
   const acoes = useRef<AcoesLinha>(null as unknown as AcoesLinha);

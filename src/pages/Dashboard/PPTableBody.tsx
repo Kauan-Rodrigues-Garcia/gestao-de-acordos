@@ -25,7 +25,8 @@ import { CodigoAcordoCopiavel } from '@/components/CodigoAcordoCopiavel';
 import { VinculoTag } from '@/components/VinculoTag';
 import { AcordoTags } from '@/components/AcordoTags';
 import { OperadorCell } from '@/components/OperadorCell';
-import { AcordoEditInline } from '@/components/AcordoEditInline';
+import { AcordoEditInline } from '@/components/AcordoEditInlineSobDemanda';
+import { usePrecarregarAcordoEditInline } from '@/hooks/usePrecarregarAcordoEditInline';
 import { AcordoDetalheInline } from '@/components/AcordoDetalheInline';
 import { AcordoNovoInline } from '@/components/AcordoNovoInline';
 import { LinhaDoDiaAcordos, SetaDetalhe } from '@/components/AcordosDoDia';
@@ -111,6 +112,7 @@ export function PPTableBody({
   empresaTags, operadoresMap,
   temFiltros, limparFiltros,
 }: PPTableBodyProps) {
+  usePrecarregarAcordoEditInline(podeEditar);
   // checkbox, código, estado, vencimento, valor, tipo, link, status, [operador], ações
   const colSpan = visaoAmpla ? 10 : 9;
   // O «Desfazer» do pago some sozinho depois de 5 min: redesenha quando fecha.
