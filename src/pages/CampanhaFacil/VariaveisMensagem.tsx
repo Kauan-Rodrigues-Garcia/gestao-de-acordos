@@ -24,8 +24,8 @@ export const VARIABLE_GROUPS: GrupoDeVariaveis[] = [
   {
     titulo: 'Cliente e empresa', dica: 'Sem valor — servem em qualquer relatório', tom: 'neutro',
     itens: [
-      // O {{cpf}} sai mascarado, só os 3 últimos dígitos (19/10/2026).
-      ['primeiro_nome', 'Primeiro nome'], ['nome', 'Nome completo'], ['cpf', 'CPF (3 últimos)'],
+      // O {{cpf}} sai mascarado, só os 5 últimos dígitos (19/10/2026).
+      ['primeiro_nome', 'Primeiro nome'], ['nome', 'Nome completo'], ['cpf', 'CPF (5 últimos)'],
       ['contrato', 'Contrato'], ['protocolo', 'Protocolo'], ['empresa', 'Empresa'],
       ['atendimento', '0800 da empresa'], ['link', 'Link'],
     ],

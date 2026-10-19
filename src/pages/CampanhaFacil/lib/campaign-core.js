@@ -1120,21 +1120,24 @@ Contrato: *{{contrato}}*
   }
 
   /**
-   * O CPF com só os 3 últimos dígitos: «***.***.**9-00» (Cleber, 19/10/2026).
+   * O CPF com só os 5 últimos dígitos: «xxx.xxx.789-00» (Cleber, 19/10/2026).
    *
    * Os ÚLTIMOS, e não os primeiros, de propósito: o mascaramento comum (gov.br e
    * cia.) mostra os dígitos do meio, «***.456.789-**». Quem juntasse esse com os
-   * 3 primeiros teria 9 dígitos, e os 2 verificadores saem deles: o CPF inteiro.
-   * Os 3 últimos são 1 dígito mais os 2 verificadores — não completam nada.
+   * primeiros teria 9 dígitos, e os 2 verificadores saem deles: o CPF inteiro.
+   * Os 5 últimos são 3 dígitos mais os 2 verificadores — não completam.
    *
-   * Documento que não tem 11 dígitos (CNPJ, número torto) vira «***» com os 3
+   * «x», e não «*»: no WhatsApp o asterisco liga o negrito, e as mensagens
+   * prontas já escrevem «*_CPF: {{cpf}}_*» — com «***» a formatação quebrava.
+   *
+   * Documento que não tem 11 dígitos (CNPJ, número torto) vira «xxx» com os 5
    * últimos. Vazio continua vazio.
    */
   function maskCpf(value) {
     const d = String(value ?? "").replace(/\D/g, "");
     if (!d) return "";
-    if (d.length === 11) return `***.***.**${d[8]}-${d.slice(9)}`;
-    return `***${d.slice(-3)}`;
+    if (d.length === 11) return `xxx.xxx.${d.slice(6, 9)}-${d.slice(9)}`;
+    return `xxx${d.slice(-5)}`;
   }
 
   function titleCase(value) {
@@ -1367,7 +1370,7 @@ Contrato: *{{contrato}}*
     return {
       nome: titleCase(item.name),
       primeiro_nome: item.firstName,
-      // Só os 3 últimos dígitos (19/10/2026): o CPF inteiro não sai do navegador.
+      // Só os 5 últimos dígitos (19/10/2026): o CPF inteiro não sai do navegador.
       cpf: maskCpf(item.cpf),
       contrato: item.contract,
       protocolo: item.protocol,

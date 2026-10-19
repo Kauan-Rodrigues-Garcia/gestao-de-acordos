@@ -1,5 +1,5 @@
 /**
- * O {{cpf}} da Campanha Fácil sai com só os 3 últimos dígitos (19/10/2026).
+ * O {{cpf}} da Campanha Fácil sai com só os 5 últimos dígitos (19/10/2026).
  *
  * O que se perde se isto quebrar: o CPF inteiro do cliente volta a ser gravado
  * no texto de cada mensagem da campanha (`campanha_facil_contatos`) e nas
@@ -19,25 +19,29 @@ function item(cpf: string) {
 }
 
 describe('CPF mascarado', () => {
-  it('mostra só os 3 últimos dígitos, com ou sem pontuação', () => {
-    expect(CampaignCore.maskCpf('123.456.789-00')).toBe('***.***.**9-00');
-    expect(CampaignCore.maskCpf('12345678900')).toBe('***.***.**9-00');
+  it('mostra só os 5 últimos dígitos, com x, com ou sem pontuação', () => {
+    expect(CampaignCore.maskCpf('123.456.789-00')).toBe('xxx.xxx.789-00');
+    expect(CampaignCore.maskCpf('12345678900')).toBe('xxx.xxx.789-00');
   });
 
-  it('documento de outro tamanho fica com os 3 últimos; vazio continua vazio', () => {
-    expect(CampaignCore.maskCpf('12.345.678/0001-90')).toBe('***190');
+  it('sem asterisco: no WhatsApp ele liga o negrito e quebra «*_CPF: {{cpf}}_*»', () => {
+    expect(CampaignCore.maskCpf('123.456.789-00')).not.toContain('*');
+  });
+
+  it('documento de outro tamanho fica com os 5 últimos; vazio continua vazio', () => {
+    expect(CampaignCore.maskCpf('12.345.678/0001-90')).toBe('xxx00190');
     expect(CampaignCore.maskCpf('')).toBe('');
     expect(CampaignCore.maskCpf(null)).toBe('');
   });
 
   it('o {{cpf}} da mensagem e o das variáveis gravadas no banco saem mascarados', () => {
     const i = item('123.456.789-00');
-    expect(CampaignCore.variablesFor(i, CampaignCore.DEFAULT_DISCOUNTS).cpf).toBe('***.***.**9-00');
+    expect(CampaignCore.variablesFor(i, CampaignCore.DEFAULT_DISCOUNTS).cpf).toBe('xxx.xxx.789-00');
     const texto = CampaignCore.renderTemplate('Olá {{nome}} - CPF: {{cpf}}', CampaignCore.variablesFor(i, CampaignCore.DEFAULT_DISCOUNTS));
-    expect(texto).toContain('***.***.**9-00');
+    expect(texto).toContain('xxx.xxx.789-00');
     expect(texto).not.toMatch(/123\.?456/);
     const contato = contatoDoItem({ ...i, message: texto }, 1);
-    expect(contato.variaveis?.cpf).toBe('***.***.**9-00');
+    expect(contato.variaveis?.cpf).toBe('xxx.xxx.789-00');
     expect(JSON.stringify(contato)).not.toMatch(/123\.?456\.?789/);
   });
 });

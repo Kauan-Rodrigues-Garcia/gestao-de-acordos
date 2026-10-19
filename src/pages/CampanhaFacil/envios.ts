@@ -140,7 +140,7 @@ export function resumoDaEquipe(e: Pick<EquipeDaLista, 'operadores' | 'lideres'>)
 
 /**
  * Uma mensagem como vai ao banco (`campanha_facil_contatos`). Dono, empresa e
- * validade o banco copia do envio. O CPF só vai mascarado (os 3 últimos dígitos).
+ * validade o banco copia do envio. O CPF só vai mascarado (os 5 últimos dígitos).
  */
 export interface ContatoEnvio {
   ordem: number;

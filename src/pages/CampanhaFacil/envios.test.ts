@@ -48,8 +48,8 @@ describe('repartirPorOperador', () => {
   it('leva as variáveis do modelo, com o CPF só mascarado (19/10/2026)', () => {
     const [{ contatos: [c] }] = repartirPorOperador(campanha(1, [ANA.id]), [ANA]);
     expect(c.variaveis).toMatchObject({ primeiro_nome: 'Cliente', contrato: 'C0' });
-    // O CPF do arquivo é '123': fora dos 11 dígitos, só os 3 últimos.
-    expect(c.variaveis?.cpf).toBe('***123');
+    // O CPF do arquivo é '123': fora dos 11 dígitos, os últimos que houver.
+    expect(c.variaveis?.cpf).toBe('xxx123');
   });
 });
 
