@@ -215,6 +215,7 @@ export function useDesempenhoDia(params: ParametrosDesempenhoDia): DadosDesempen
           de: diasAntes(dia, JANELA_DIAS),
           ate: dia,
           operadorId: opDaQuery,
+          escopo: escopoDoDia.escopo,
         }),
         buscarAcordosDoDia({
           empresaId: empresa.id, dia,

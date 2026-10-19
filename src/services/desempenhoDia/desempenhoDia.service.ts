@@ -32,6 +32,7 @@ import {
   linhaNoEscopo, ESCOPO_EMPRESA, type EscopoAnalitico,
 } from '@/services/analitico/escopoAnalitico';
 import { equipesDaPessoa } from '@/services/equipes/equipeDoLider';
+import { paginarParalelo } from '@/services/analitico/analitico.service';
 
 /** Uma linha do analítico, com o mínimo que o painel usa. */
 export interface LinhaAnaliticoDia {
@@ -58,20 +59,68 @@ export interface LinhaPixDia {
   pct_comissao: number | null;
 }
 
-const PAGINA = 1000;
 /**
- * Teto de páginas. A janela do painel são ~15 dias; a BookPlay faz ~7.700 linhas
- * em 30 dias, então 8 páginas cobrem com folga. O teto existe para um filtro
- * quebrado não virar download infinito no navegador de quem abriu o painel.
+ * O que da leitura pode descer ao banco, por escopo.
+ *
+ *   operador ... só as linhas dele
+ *   pessoas .... só as linhas COM operador do conjunto (equipe, setor do dia)
+ *   empresa .... tudo menos a contribuição do Receptivo
+ *   tudo ....... sem recorte no banco (setor por carimbo, união) — o filtro em
+ *                memória continua decidindo
+ *
+ * O recorte do banco é exatamente o de `linhaNoEscopo` para os três primeiros —
+ * o filtro em memória continua rodando por cima e não muda nada; ele só deixa
+ * de receber o que jogaria fora.
+ *
+ * ## Por que existe (19/10/2026)
+ *
+ * A leitura baixava a EMPRESA inteira para qualquer escopo e parava em 12
+ * páginas. Com o 59 escrevendo no analítico, a janela de 15 dias da BookPlay
+ * passou de 12 mil linhas (12.423 na janela que termina em 16/10), e o corte
+ * levava justamente as linhas mais novas: o painel do setor mostrava menos do
+ * que o setor recebeu, sem aviso.
  */
-const MAX_PAGINAS = 12;
+export type RecorteDoPeriodo =
+  | { tipo: 'operador'; operadorId: string }
+  | { tipo: 'pessoas'; operadores: string[] }
+  | { tipo: 'empresa' }
+  | { tipo: 'tudo' };
+
+export function recorteDoPeriodo(
+  escopo: EscopoAnalitico | null | undefined,
+  operadorId?: string | null,
+): RecorteDoPeriodo {
+  if (operadorId) return { tipo: 'operador', operadorId };
+  if (!escopo) return { tipo: 'tudo' };
+  switch (escopo.tipo) {
+    case 'operador': return { tipo: 'operador', operadorId: escopo.operadorId };
+    // `creditos` traz gente que já não é membro: o recorte por pessoa a
+    // perderia. Sem créditos, a equipe só soma linhas de quem está nela.
+    case 'equipe':
+      return escopo.creditos?.size
+        ? { tipo: 'tudo' }
+        : { tipo: 'pessoas', operadores: [...escopo.operadores] };
+    case 'empresa': return { tipo: 'empresa' };
+    default: return { tipo: 'tudo' };
+  }
+}
 
 /**
- * Lê o analítico de um intervalo, paginando.
+ * Quantos ids vão num `in()`. O filtro viaja na URL; 100 UUIDs são ~3,7 mil
+ * caracteres, longe do limite e ainda poucas requisições para um setor inteiro.
+ */
+const IDS_POR_PEDIDO = 100;
+
+const COLUNAS_DIA =
+  'data_pagamento, valor_recebido, total_ho, operador_id, setor_id, procedencia, contribuicao_de_setor_id';
+
+/**
+ * Lê o analítico de um intervalo, paginando até o fim.
  *
- * A paginação é obrigatória: o PostgREST devolve 1.000 linhas por vez, e uma
- * janela de 15 dias da BookPlay inteira passa disso. Sem ela o painel mostraria
- * um número truncado — plausível, e errado.
+ * A paginação é obrigatória: o PostgREST devolve 1.000 linhas por vez. E não há
+ * teto que corte: um número truncado é plausível, e errado. O recorte do escopo
+ * desce ao banco (`recorteDoPeriodo`), então o volume é o do escopo, não o da
+ * empresa.
  */
 export async function buscarAnaliticoPeriodo(params: {
   empresaId: string;
@@ -79,37 +128,53 @@ export async function buscarAnaliticoPeriodo(params: {
   ate: string;
   /** Quando o escopo é uma pessoa só, o filtro vai ao banco e a página encolhe. */
   operadorId?: string | null;
+  /** O escopo do painel: decide o que o banco já devolve recortado. */
+  escopo?: EscopoAnalitico | null;
 }): Promise<{ linhas: LinhaAnaliticoDia[]; erro: string | null }> {
-  const { empresaId, de, ate, operadorId } = params;
-  const linhas: LinhaAnaliticoDia[] = [];
+  const { empresaId, de, ate } = params;
+  const recorte = recorteDoPeriodo(params.escopo, params.operadorId);
 
-  for (let pagina = 0; pagina < MAX_PAGINAS; pagina++) {
-    let q = supabase
-      .from('analitico_recebimentos')
-      .select('data_pagamento, valor_recebido, total_ho, operador_id, setor_id, procedencia, contribuicao_de_setor_id')
-      .eq('empresa_id', empresaId)
-      .gte('data_pagamento', de)
-      .lte('data_pagamento', ate)
-      // Ordem total pela PK: sem ela as páginas se sobrepõem e o total muda a
-      // cada abertura do painel. Mesmo contrato de `paginarParalelo`.
-      .order('id', { ascending: true })
-      .range(pagina * PAGINA, pagina * PAGINA + PAGINA - 1);
+  const base = () => supabase
+    .from('analitico_recebimentos')
+    .select(COLUNAS_DIA)
+    .eq('empresa_id', empresaId)
+    .gte('data_pagamento', de)
+    .lte('data_pagamento', ate);
 
-    if (operadorId) q = q.eq('operador_id', operadorId);
+  type Crua = LinhaAnaliticoDia & { procedencia?: string };
+  // Ordem total pela PK: sem ela as páginas se sobrepõem e o total muda a cada
+  // abertura do painel. Contrato de `paginarParalelo`.
+  const ler = (filtrar: (q: ReturnType<typeof base>) => ReturnType<typeof base>) =>
+    paginarParalelo<Crua>(async (deLinha, ateLinha) => {
+      const r = await filtrar(base()).order('id', { ascending: true }).range(deLinha, ateLinha);
+      return { data: (r.data as unknown as Crua[]) ?? [], error: r.error?.message ?? null };
+    });
 
-    const { data, error } = await q;
-    if (error) return { linhas: [], erro: error.message };
-
-    type Crua = LinhaAnaliticoDia & { procedencia?: string };
-    const lote = ((data as unknown as Crua[] | null) ?? []).map(({ procedencia, ...l }) => ({
-      ...l,
-      // `linhaNoEscopo` decide pela flag; a coluna crua não sai daqui.
-      contribuicao: procedencia === 'contribuicao_59',
-    }));
-    linhas.push(...lote);
-    if (lote.length < PAGINA) break;
+  let leituras: Array<{ data: Crua[]; error: string | null }>;
+  if (recorte.tipo === 'operador') {
+    leituras = [await ler(q => q.eq('operador_id', recorte.operadorId))];
+  } else if (recorte.tipo === 'pessoas') {
+    if (recorte.operadores.length === 0) return { linhas: [], erro: null };
+    const fatias: string[][] = [];
+    for (let i = 0; i < recorte.operadores.length; i += IDS_POR_PEDIDO) {
+      fatias.push(recorte.operadores.slice(i, i + IDS_POR_PEDIDO));
+    }
+    leituras = await Promise.all(fatias.map(ids => ler(q => q.in('operador_id', ids))));
+  } else if (recorte.tipo === 'empresa') {
+    // `neq` sozinho descartaria a linha com procedência nula.
+    leituras = [await ler(q => q.or('procedencia.is.null,procedencia.neq.contribuicao_59'))];
+  } else {
+    leituras = [await ler(q => q)];
   }
 
+  const comErro = leituras.find(l => l.error);
+  if (comErro) return { linhas: [], erro: comErro.error };
+
+  const linhas = leituras.flatMap(l => l.data).map(({ procedencia, ...l }) => ({
+    ...l,
+    // `linhaNoEscopo` decide pela flag; a coluna crua não sai daqui.
+    contribuicao: procedencia === 'contribuicao_59',
+  }));
   return { linhas, erro: null };
 }
 

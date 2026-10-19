@@ -110,7 +110,7 @@ interface RespostaPagina<T> {
  * total torna o range determinístico. Ordenar por qualquer outra coisa exige
  * `id` como último critério de desempate.
  */
-async function paginarParalelo<T>(
+export async function paginarParalelo<T>(
   buscarPagina: (de: number, ate: number) => Promise<RespostaPagina<T>>,
 ): Promise<{ data: T[]; error: string | null }> {
   const primeira = await buscarPagina(0, PAGE_SUPABASE - 1);
@@ -293,6 +293,11 @@ export interface ResultadoImportacao {
    * se resolve. Ver `fn_analitico_fonte_do_setor`.
    */
   sincronizadoPelo59?: boolean;
+  /**
+   * Linhas do arquivo que NÃO foram gravadas porque o mês já é do 59: dias
+   * anteriores a ontem, ou NR+dia que o 59 já trouxe. Ver `linhasDo58NoMesDo59`.
+   */
+  ignoradasPelo59?: number;
   erros: string[];
 }
 
@@ -376,6 +381,67 @@ export function idsAusentesDoRelatorioMensal(
     .filter(linha => (linha.procedencia ?? 'relatorio_58') === 'relatorio_58')
     .filter(linha => !presentes.has(chaveLinhaAnalitico(linha)))
     .map(linha => linha.id);
+}
+
+/** O dia (`yyyy-MM-dd`) em São Paulo, deslocado em dias. A sincronização do 59 usa o mesmo fuso. */
+export function diaLocalSP(deslocamento = 0, agora: Date = new Date()): string {
+  const hoje = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(agora);
+  const d = new Date(`${hoje}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + deslocamento);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * O que o 58 grava num mês que já é do 59.
+ *
+ * Mês do 58: tudo, como sempre. Mês do 59: só a linha de ONTEM em diante cujo
+ * NR+dia o 59 ainda não tem — a mesma regra com que a sincronização do 59
+ * decide qual linha do 58 sobrevive (20260928200000). Qualquer outra seria
+ * apagada ou reescrita por ela na entrada seguinte.
+ *
+ * `jaNo59` = chaves `codigo::data_pagamento` presentes no 59 a partir de ontem.
+ */
+export function linhasDo58NoMesDo59<T extends { codigo: string; data_pagamento: string; mes_referencia: string }>(
+  linhas: readonly T[],
+  mesesDo59: ReadonlySet<string>,
+  ontem: string,
+  jaNo59: ReadonlySet<string>,
+): T[] {
+  return linhas.filter(l =>
+    !mesesDo59.has(l.mes_referencia)
+    || (l.data_pagamento >= ontem && !jaNo59.has(`${l.codigo}::${l.data_pagamento}`)));
+}
+
+/**
+ * NR+dia que o 59 já gravou no analítico, de `desde` em diante, para estes NRs.
+ * `null` = a leitura falhou (quem chama não recorta).
+ */
+async function nrDiaJaNo59(
+  empresaId: string, codigos: readonly string[], desde: string,
+): Promise<Set<string> | null> {
+  const unicos = [...new Set(codigos)];
+  const chaves = new Set<string>();
+  const FATIA = 200;
+  for (let i = 0; i < unicos.length; i += FATIA) {
+    const fatia = unicos.slice(i, i + FATIA);
+    const { data, error } = await paginarParalelo<{ codigo: string; data_pagamento: string }>(async (de, ate) => {
+      const r = await supabase
+        .from('analitico_recebimentos')
+        .select('codigo, data_pagamento')
+        .eq('empresa_id', empresaId)
+        .in('procedencia', ['relatorio_59', 'contribuicao_59'])
+        .gte('data_pagamento', desde)
+        .in('codigo', fatia)
+        .order('id', { ascending: true })
+        .range(de, ate);
+      return { data: (r.data as unknown as { codigo: string; data_pagamento: string }[]) ?? [], error: r.error?.message ?? null };
+    });
+    if (error) return null;
+    for (const l of data) chaves.add(`${l.codigo}::${l.data_pagamento}`);
+  }
+  return chaves;
 }
 
 /**
@@ -517,12 +583,23 @@ export async function importarLoteAnalitico(
    * sincronização é gatilho e não botão: se dependesse de alguém lembrar de
    * clicar, esses R$ 40 mil virariam permanentes.
    *
-   * O que se consulta aqui não muda o que é gravado — serve só para a tela
-   * dizer, depois, que aqueles números ainda passam pelo 59.
+   * ## Num mês do 59, o 58 grava só o que o 59 ainda não tem (19/10/2026)
+   *
+   * A sincronização do 59 guarda, das linhas do 58, só as de HOJE e de ONTEM
+   * cujo NR+dia ela ainda não trouxe — o resto ela apaga ou reescreve na
+   * entrada seguinte. Gravar o mês inteiro era trabalho jogado fora, e pior:
+   * cada NR em que as duas fontes discordam da chave virava linha nova que a
+   * reconciliação zerava. Medido no Play 1 em 19/10: 94 inseridas, 64 zeradas
+   * na hora, ~4.700 linhas relidas para isso.
+   *
+   * Então, para o mês que é do 59, entram só as linhas de hoje e de ontem com
+   * NR+dia que o 59 não tem — exatamente o conjunto que a sincronização
+   * preserva (`fn_mestre_sincronizar_analitico_aplicar`, 20260928200000). A
+   * remoção dos ausentes continua comparando com o ARQUIVO inteiro.
    */
-  const rows = todasAsLinhas;
-  const mesesDoArquivo = [...new Set(rows.map(r => r.mes_referencia))];
+  const mesesDoArquivo = [...new Set(todasAsLinhas.map(r => r.mes_referencia))];
   let sincronizadoPelo59 = false;
+  const mesesDo59 = new Set<string>();
   if (setorImportacaoId) {
     for (const mes of mesesDoArquivo) {
       const { data, error } = await rpcSemTipo<string>('fn_analitico_fonte_do_setor', {
@@ -530,12 +607,27 @@ export async function importarLoteAnalitico(
         p_mes: String(mes).slice(0, 7),
         p_setor_id: setorImportacaoId,
       });
-      /* Falha aqui é cosmética: o aviso não aparece e a importação segue igual.
-         Não pode virar erro — a gravação não depende desta resposta. */
+      /* Falha aqui não pode virar erro: sem resposta o mês é tratado como do
+         58 e grava inteiro, que é o comportamento anterior. */
       if (error) console.warn('[analitico] fonte do setor não verificada:', error.message);
-      else if (data === 'relatorio_59') sincronizadoPelo59 = true;
+      else if (data === 'relatorio_59') { sincronizadoPelo59 = true; mesesDo59.add(mes); }
     }
   }
+
+  let rows = todasAsLinhas;
+  if (mesesDo59.size > 0) {
+    const ontem = diaLocalSP(-1);
+    const recentes = todasAsLinhas.filter(r => mesesDo59.has(r.mes_referencia) && r.data_pagamento >= ontem);
+    const jaNo59 = await nrDiaJaNo59(empresaId, recentes.map(r => r.codigo), ontem);
+    if (jaNo59 === null) {
+      // Sem saber o que o 59 tem, não dá para recortar com segurança: grava
+      // como antes e a sincronização seguinte acerta.
+      console.warn('[analitico] linhas do 59 não lidas; o 58 grava o mês inteiro.');
+    } else {
+      rows = linhasDo58NoMesDo59(todasAsLinhas, mesesDo59, ontem, jaNo59);
+    }
+  }
+  const ignoradasPelo59 = todasAsLinhas.length - rows.length;
 
   const CHUNK = 200;
   let inseridos = 0;
@@ -560,7 +652,7 @@ export async function importarLoteAnalitico(
    * reconciliação pode abortar), e os dois precisam registrar.
    */
   const registrarResumo = (reconciliou: boolean) => {
-    const mesesDoLote = [...new Set(rows.map(r => r.mes_referencia))].sort();
+    const mesesDoLote = [...mesesDoArquivo].sort();
     void registrarLog({
       acao: erros.length > 0 ? 'importacao_falhou' : 'importacao_concluida',
       categoria: 'importacao',
@@ -588,10 +680,11 @@ export async function importarLoteAnalitico(
         meses: mesesDoLote,
         operadores_sem_vinculo: [...new Set(rows.filter(r => !r.operador_id).map(r => r.operador_usuario))].slice(0, 20),
         setor_importacao_id: setorImportacaoId ?? null,
-        /* Linhas lidas e NÃO gravadas porque aquele mês já é do 59. Fica no
-           log para a pergunta «importei e o número não mudou, por quê?» ter
-           resposta sem precisar reproduzir a importação. */
         sincronizado_pelo_59: sincronizadoPelo59,
+        /* Linhas lidas e NÃO gravadas porque o 59 já as tem (ou vai
+           reescrevê-las). Fica no log para a pergunta «importei e o número não
+           mudou, por quê?» ter resposta sem reproduzir a importação. */
+        ignoradas_pelo_59: ignoradasPelo59,
         primeiros_erros: erros.slice(0, 20),
       },
       usuarioId: importadoPorId,
@@ -714,8 +807,15 @@ export async function importarLoteAnalitico(
   type AlvoAgg = { rep: RowImport; valor: number; ho: number };
   const alvoPorGrupo = new Map<string, AlvoAgg>();
   const chavesVistasPorGrupo = new Map<string, Set<string>>();
+  // Num mês do 59 a conferência é por NR+DIA e só contra linhas do 58: o 58
+  // trouxe só hoje e ontem, e comparar isso com o mês inteiro do banco (que é
+  // do 59) daria um «banco tem a mais» falso e tiraria valor de linha do 59.
+  const chaveConferencia = (r: GrupoRelatorioAnalitico & { data_pagamento: string }) =>
+    mesesDo59.has(r.mes_referencia)
+      ? `${chaveGrupoAnalitico(r)}::${r.data_pagamento}`
+      : chaveGrupoAnalitico(r);
   for (const r of rows) {
-    const k  = chaveGrupoAnalitico(r);
+    const k  = chaveConferencia(r);
     const dk = `${r.data_pagamento}::${r.forma_pagamento}`;
     let vistas = chavesVistasPorGrupo.get(k);
     if (!vistas) { vistas = new Set(); chavesVistasPorGrupo.set(k, vistas); }
@@ -747,7 +847,7 @@ export async function importarLoteAnalitico(
     const { data, error } = await paginarParalelo<ExRow>(async (de, ate) => {
       const r = await supabase
         .from('analitico_recebimentos')
-        .select('id, codigo, operador_usuario, mes_referencia, data_pagamento, forma_pagamento, valor_recebido, total_ho')
+        .select('id, codigo, operador_usuario, mes_referencia, data_pagamento, forma_pagamento, valor_recebido, total_ho, procedencia')
         .eq('empresa_id', empresaId)
         .in('mes_referencia', meses)
         .in('codigo', fatia)
@@ -765,12 +865,14 @@ export async function importarLoteAnalitico(
   if (!leituraCompleta) {
     erros.push('Conferência de valores não executada (falha ao ler o mês). Reimporte para refazê-la.');
     registrarResumo(false);
-    return { inseridos, duplicados, atualizados, removidos, tiposPreenchidos, sincronizadoPelo59, erros };
+    return { inseridos, duplicados, atualizados, removidos, tiposPreenchidos, sincronizadoPelo59, ignoradasPelo59, erros };
   }
 
   const dbPorGrupo = new Map<string, ExRow[]>();
   for (const ex of existentes) {
-    const k = chaveGrupoAnalitico(ex);
+    // Mês do 59: a linha do 59 é a autoridade e o 58 nunca a ajusta.
+    if (mesesDo59.has(ex.mes_referencia) && (ex.procedencia ?? 'relatorio_58') !== 'relatorio_58') continue;
+    const k = chaveConferencia(ex);
     if (!alvoPorGrupo.has(k)) continue;
     const lista = dbPorGrupo.get(k);
     if (lista) lista.push(ex); else dbPorGrupo.set(k, [ex]);
@@ -842,7 +944,7 @@ export async function importarLoteAnalitico(
           .select('id, codigo, operador_usuario, mes_referencia, data_pagamento, forma_pagamento, valor_recebido, total_ho, procedencia')
           .eq('empresa_id', empresaId)
           .eq('setor_id', setorImportacaoId)
-          .in('mes_referencia', meses)
+          .in('mes_referencia', mesesDoArquivo)
           .order('id', { ascending: true })
           .range(de, ate);
         return { data: (r.data as unknown as ExRow[]) ?? [], error: r.error?.message ?? null };
@@ -851,7 +953,9 @@ export async function importarLoteAnalitico(
       if (leituraSetor.error) {
         erros.push(`Leitura para sincronização mensal: ${leituraSetor.error}`);
       } else {
-        const idsAusentes = idsAusentesDoRelatorioMensal(leituraSetor.data, rows);
+        // Contra o ARQUIVO inteiro, não contra o recorte gravado: a linha que
+        // o 59 já tem continua no relatório e não pode ser dada como ausente.
+        const idsAusentes = idsAusentesDoRelatorioMensal(leituraSetor.data, todasAsLinhas);
         /*
          * Copiar e apagar, numa transação só.
          *
@@ -885,7 +989,7 @@ export async function importarLoteAnalitico(
   }
 
   registrarResumo(true);
-  return { inseridos, duplicados, atualizados, removidos, tiposPreenchidos, sincronizadoPelo59, erros };
+  return { inseridos, duplicados, atualizados, removidos, tiposPreenchidos, sincronizadoPelo59, ignoradasPelo59, erros };
 }
 
 // ── Revínculo de órfãos (operador criado após importação anterior) ────────────
