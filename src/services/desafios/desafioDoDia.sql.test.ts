@@ -1,0 +1,97 @@
+/**
+ * A migration do desafio do dia, conferida no SQL.
+ *
+ * As duas somas do Painel do Líder (`fn_recebido_por_equipe` e
+ * `fn_recebido_por_setor`) ganharam uma versão com janela de chegada, e a
+ * versão antiga passou a chamá-la. O corpo da nova é uma CÓPIA do anterior com
+ * duas linhas a mais — e é justamente aí que um erro de cópia mudaria, sem
+ * aviso, o número do resumo do celular, dos avisos de equipe e do desafio. Este
+ * teste compara letra por letra.
+ */
+import { describe, expect, it } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
+
+const MIGRATIONS = path.resolve(__dirname, '../../../supabase/migrations');
+
+function migration(sufixo: string): string {
+  const arquivo = fs.readdirSync(MIGRATIONS).find(f => f.endsWith(sufixo));
+  expect(arquivo, `migration *${sufixo} não encontrada`).toBeTruthy();
+  return fs.readFileSync(path.join(MIGRATIONS, arquivo as string), 'utf8');
+}
+
+/** Sem comentários e com espaços colapsados. */
+function liso(sql: string): string {
+  return sql.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/--[^\n]*/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/** O corpo entre `AS $function$` e `$function$;` da função que casa com `cabecalho`. */
+function corpo(sql: string, cabecalho: RegExp): string {
+  const i = sql.search(cabecalho);
+  expect(i, `função ${cabecalho} não encontrada`).toBeGreaterThan(-1);
+  const ini = sql.indexOf('$function$', i) + '$function$'.length;
+  const fim = sql.indexOf('$function$;', ini);
+  return sql.slice(ini, fim).trim();
+}
+
+const NOVA = liso(migration('_desafio_do_dia.sql'));
+const JANELA = 'AND (p_chegada_de IS NULL OR ar.importado_em >= p_chegada_de) AND (p_chegada_ate IS NULL OR ar.importado_em < p_chegada_ate)';
+
+describe('as somas do Painel ganham a janela sem mudar o resto', () => {
+  it('equipe: o corpo é o de 20261006180729 mais a janela', () => {
+    const antiga = corpo(liso(migration('_lider_nao_conta_na_equipe_do_alternativo.sql')),
+      /FUNCTION public\.fn_recebido_por_equipe\(/);
+    const nova = corpo(NOVA, /FUNCTION public\.fn_recebido_por_equipe\( p_empresas UUID\[\], p_mes TEXT, p_ini DATE, p_fim DATE, p_com_ajustes BOOLEAN, p_chegada_de/);
+    expect(nova).toContain(JANELA);
+    expect(nova.replace(` ${JANELA}`, '')).toBe(antiga);
+  });
+
+  it('setor: o corpo é o de 20261006230500 mais a janela', () => {
+    const antiga = corpo(liso(migration('_app_resumo_das_visoes.sql')),
+      /FUNCTION public\.fn_recebido_por_setor\(/);
+    const nova = corpo(NOVA, /FUNCTION public\.fn_recebido_por_setor\( p_empresas UUID\[\], p_mes TEXT, p_ini DATE, p_fim DATE, p_chegada_de/);
+    expect(nova).toContain(JANELA);
+    expect(nova.replace(` ${JANELA}`, '')).toBe(antiga);
+  });
+
+  it('as versões antigas viram a nova com a janela vazia', () => {
+    expect(NOVA).toContain('FROM public.fn_recebido_por_equipe( p_empresas, p_mes, p_ini, p_fim, p_com_ajustes, NULL::TIMESTAMPTZ, NULL::TIMESTAMPTZ) r;');
+    expect(NOVA).toContain('FROM public.fn_recebido_por_setor( p_empresas, p_mes, p_ini, p_fim, NULL::TIMESTAMPTZ, NULL::TIMESTAMPTZ) r;');
+    // O padrão do ajuste continua lá: quem chama com quatro argumentos não quebra.
+    expect(NOVA).toMatch(/p_fim DATE, p_com_ajustes BOOLEAN DEFAULT FALSE \)/);
+  });
+
+  it('as internas continuam fechadas para o app', () => {
+    expect(NOVA).toContain('REVOKE ALL ON FUNCTION public.fn_recebido_por_equipe(UUID[], TEXT, DATE, DATE, BOOLEAN, TIMESTAMPTZ, TIMESTAMPTZ) FROM PUBLIC, anon, authenticated;');
+    expect(NOVA).toContain('REVOKE ALL ON FUNCTION public.fn_recebido_por_setor(UUID[], TEXT, DATE, DATE, TIMESTAMPTZ, TIMESTAMPTZ) FROM PUBLIC, anon, authenticated;');
+  });
+});
+
+describe('fn_desafio_diario', () => {
+  const fn = corpo(NOVA, /FUNCTION public\.fn_desafio_diario\(/);
+
+  it('os três portões de fn_desafio_dados', () => {
+    expect(fn).toContain('fn_desafio_alcanca_empresa(v_empresas)');
+    expect(fn).toMatch(/v_d\.status = 'rascunho' AND NOT public\.fn_user_tem\('desafios_configurar'\) AND NOT public\.fn_user_tem\('desafios_configurar_setor'\)/);
+    expect(fn).toContain('fn_desafio_no_meu_alcance(v_d.setor_id, v_d.regra, v_d.visibilidade)');
+  });
+
+  it('a janela é a de chegada, no fuso de São Paulo, com a hora do robô', () => {
+    expect(fn).toContain("(v_dia + make_interval(hours => v_h_ini + 1)) AT TIME ZONE 'America/Sao_Paulo'");
+    expect(fn).toContain("(v_dia + make_interval(hours => v_h_fim + 1)) AT TIME ZONE 'America/Sao_Paulo'");
+  });
+
+  it('o total é a conta do Painel', () => {
+    expect(fn).toContain('fn_recebido_por_setor(v_empresas, v_mes, v_dia, v_dia, v_de, v_ate)');
+    expect(fn).toContain('fn_recebido_por_equipe(v_empresas, v_mes, v_dia, v_dia, FALSE, v_de, v_ate)');
+  });
+
+  it('Cofen fica de fora, pela regra do setor', () => {
+    expect(fn).toMatch(/IF v_regra = 'cofen' THEN RETURN jsonb_build_object\( 'suportado', FALSE/);
+  });
+
+  it('só quem está logado chama', () => {
+    expect(NOVA).toContain('REVOKE ALL ON FUNCTION public.fn_desafio_diario(UUID) FROM PUBLIC, anon;');
+    expect(NOVA).toContain('GRANT EXECUTE ON FUNCTION public.fn_desafio_diario(UUID) TO authenticated;');
+  });
+});

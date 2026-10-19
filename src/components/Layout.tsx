@@ -54,6 +54,7 @@ import { ThemeToggle } from './ThemeToggle';
 import { HelpDrawer } from './HelpDrawer';
 import { OnboardingTour } from './OnboardingTour';
 import { DesafioMenu } from './DesafioMenu';
+import { BarraDesafioDoDia } from './DesafioDoDia/BarraDesafioDoDia';
 import { useDesafioEmCartaz } from '@/hooks/useDesafios';
 import { AvisoNotificacaoHeader } from './AvisoNotificacaoHeader';
 import { BotaoSomAmbiente } from './Halloween/SomAmbiente/BotaoSomAmbiente';
@@ -823,6 +824,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               um item de flex, não um card flutuante. Ver o cabeçalho do
               arquivo para o que isso substituiu. */}
           <AvisoNotificacaoHeader />
+
+          {/* O desafio do dia de quem participa: quanto falta, a barra e o
+              tempo. Mesma chave da aba Desafios; quem está no alvo, o placar
+              responde. Ver `DesafioDoDia/BarraDesafioDoDia.tsx`. */}
+          <BarraDesafioDoDia ativo={!permLoading && temPermissao('analitico_sub_desafios')} />
 
           {/* O X do chefão da Caça, no meio da barra: esconde e, com outro
               clique, mostra de novo. Só existe enquanto há chefão. Desde

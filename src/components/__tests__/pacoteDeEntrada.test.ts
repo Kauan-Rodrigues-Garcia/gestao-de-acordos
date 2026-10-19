@@ -50,6 +50,12 @@ describe('pacote de entrada', () => {
     }
   });
 
+  it('a barra do desafio do dia só baixa a gaveta no primeiro clique', () => {
+    const imports = importsEstaticos(ler('components/DesafioDoDia/BarraDesafioDoDia.tsx'));
+    expect(imports).not.toContain('./GavetaDesafioDoDia');
+    expect(imports).not.toContain('./PainelDesafioDoDia');
+  });
+
   it('a Caça aos Zumbis só baixa a cena (e a física) quando há zumbi ou faixa', () => {
     // A cena do chefão (`cenaChefao.tsx`) usa a morte da cena comum: ela mesma
     // só é baixada quando o chefão aparece (regra abaixo).

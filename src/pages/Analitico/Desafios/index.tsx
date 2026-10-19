@@ -32,10 +32,14 @@
 import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { useCallback, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Plus, Settings2 } from 'lucide-react';
+import { ArrowLeft, Plus, Settings2, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
+import { getTodayISO } from '@/lib';
+import { ehDesafioDoDia } from '@/services/desafios/desafioDoDia';
+import { CriadorDesafioDoDia } from './CriadorDesafioDoDia';
+import { DetalheDesafioDoDia, SecaoDesafiosDoDia } from './DesafiosDoDia';
 import { fetchEmpresasLiberadas } from '@/services/empresas.service';
 import { useDesafios, useResultadoDesafio, useSetoresDoDesafio } from '@/hooks/useDesafios';
 import { estiloDaCampanha } from './tema';
@@ -94,7 +98,9 @@ export interface AbaDesafiosProps {
 type Vista =
   | { modo: 'catalogo' }
   | { modo: 'detalhe'; desafio: Desafio }
-  | { modo: 'config'; desafio: Desafio | null };
+  | { modo: 'config'; desafio: Desafio | null }
+  /** O formulário curto do desafio do dia. */
+  | { modo: 'config-dia'; desafio: Desafio | null };
 
 function EsqueletoDesafio() {
   return (
@@ -163,9 +169,24 @@ export function AbaDesafios({
   // Monitoramento de uso: lista, placar ou configuração, abaixo de «Desafios».
   useSubAbaUso(vista.modo, 2);
 
+  /*
+   * O desafio do dia tem a seção dele no topo. Fora das fileiras de campanha,
+   * para não aparecer duas vezes — e porque o de ontem continua `ativo` no
+   * banco (ninguém encerra um desafio que acabou sozinho à meia-noite).
+   */
+  const hoje = getTodayISO();
+  const doDia = useMemo(
+    // Rascunho de um dia que já passou não tem mais o que lançar.
+    () => desafios.filter(d => ehDesafioDoDia(d) && !(d.status === 'rascunho' && d.dataInicio < hoje)),
+    [desafios, hoje],
+  );
+  const campanhas = useMemo(() => desafios.filter(d => !ehDesafioDoDia(d)), [desafios]);
+  const rascunhosCampanha = useMemo(() => rascunhos.filter(d => !ehDesafioDoDia(d)), [rascunhos]);
+  const encerradosCampanha = useMemo(() => encerrados.filter(d => !ehDesafioDoDia(d)), [encerrados]);
+
   const ativos = useMemo(
-    () => desafios.filter(d => d.status === 'ativo'),
-    [desafios],
+    () => campanhas.filter(d => d.status === 'ativo'),
+    [campanhas],
   );
 
   /*
@@ -206,7 +227,10 @@ export function AbaDesafios({
     return desafios.find(d => d.id === vista.desafio.id) ?? vista.desafio;
   }, [vista, desafios]);
 
-  const { resultado, carregando: calculando } = useResultadoDesafio(aberta, {
+  // O desafio do dia tem placar próprio (`usePlacarDoDia`); o quadro de
+  // campanha seria uma ida ao banco cujo resultado ninguém desenha.
+  const { resultado, carregando: calculando } = useResultadoDesafio(
+    aberta && !ehDesafioDoDia(aberta) ? aberta : null, {
     filtroSetorId, operadorId, setorDeCadastro: setorProprio,
   });
 
@@ -285,10 +309,26 @@ export function AbaDesafios({
     );
   }
 
+  if (vista.modo === 'config-dia') {
+    return (
+      <CriadorDesafioDoDia
+        desafio={vista.desafio}
+        empresaId={empresaId}
+        autorId={operadorId}
+        autorNome={operadorNome}
+        restritoAoSetor={restritoAoSetor}
+        setores={setores}
+        podeExcluir={podeExcluir}
+        onVoltar={() => setVista(vista.desafio ? { modo: 'detalhe', desafio: vista.desafio } : { modo: 'catalogo' })}
+        onSalvo={() => { void recarregar(); voltarAoCatalogo(); }}
+      />
+    );
+  }
+
   // ── Catálogo ──────────────────────────────────────────────────────────────
   if (vista.modo === 'catalogo') {
     return (
-      <div className="space-y-4">
+      <div className="space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-xs text-muted-foreground">
             {frasedoEscopo(vejoTudo, vejoSetor, vejoEquipe)}
@@ -296,23 +336,43 @@ export function AbaDesafios({
               && ' Nenhum alcance de Desafios está liberado para o seu cargo.'}
           </p>
           {podeAbrirConfiguracao && (
-            <Button
-              size="sm"
-              className="gap-1.5"
-              onClick={() => setVista({ modo: 'config', desafio: null })}
-            >
-              <Plus className="h-3.5 w-3.5" /> Novo desafio
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                className="gap-1.5 bg-amber-500 text-white hover:bg-amber-600"
+                onClick={() => setVista({ modo: 'config-dia', desafio: null })}
+              >
+                <Zap className="h-3.5 w-3.5" /> Desafio do dia
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5"
+                onClick={() => setVista({ modo: 'config', desafio: null })}
+              >
+                <Plus className="h-3.5 w-3.5" /> Nova campanha
+              </Button>
+            </div>
           )}
         </div>
+
+        {!carregando && (
+          <SecaoDesafiosDoDia
+            desafios={doDia}
+            hoje={hoje}
+            podeCriar={podeAbrirConfiguracao}
+            onCriar={() => setVista({ modo: 'config-dia', desafio: null })}
+            onAbrir={desafio => setVista({ modo: 'detalhe', desafio })}
+          />
+        )}
 
         {carregando ? (
           <EsqueletoCatalogo />
         ) : (
           <CatalogoDesafios
             ativos={ativos}
-            rascunhos={rascunhos}
-            encerrados={encerrados}
+            rascunhos={rascunhosCampanha}
+            encerrados={encerradosCampanha}
             participantesPorDesafio={participantesPorDesafio}
             nomeDaEmpresa={nomeDaEmpresa}
             podeCriar={podeAbrirConfiguracao}
@@ -335,6 +395,21 @@ export function AbaDesafios({
 
   // ── Detalhe de uma campanha ───────────────────────────────────────────────
   if (!aberta) return <EsqueletoDesafio />;
+
+  if (ehDesafioDoDia(aberta)) {
+    return (
+      <DetalheDesafioDoDia
+        desafio={aberta}
+        empresaId={empresaId}
+        autorId={operadorId}
+        operadorId={operadorId}
+        podeEditar={podeAbrirConfiguracao}
+        onVoltar={voltarAoCatalogo}
+        onEditar={() => setVista({ modo: 'config-dia', desafio: aberta })}
+        onMudou={() => { void recarregar(); }}
+      />
+    );
+  }
 
   const semParticipantes = !!resultado && resultado.totalParticipantes === 0;
 
