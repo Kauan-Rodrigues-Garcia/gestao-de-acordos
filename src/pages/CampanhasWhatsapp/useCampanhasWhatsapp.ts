@@ -36,6 +36,12 @@ function lerModo(): ModoAbrir {
   try { return localStorage.getItem(CHAVE_MODO) === 'app' ? 'app' : 'web'; } catch { return 'web'; }
 }
 
+/** Nada pendente: cada mensagem foi enviada ou marcada «não deu». */
+export function concluida(c: EnvioResumo): boolean {
+  const total = c.progresso.total || c.qtd;
+  return total > 0 && c.progresso.enviados + c.progresso.nao_enviados >= total;
+}
+
 /** Qual número abrir: o principal ou o «Fone 2». */
 export type QualNumero = 1 | 2;
 
@@ -86,12 +92,22 @@ export function useCampanhasWhatsapp() {
     );
   }, [perfilId, recarregar]);
 
-  // A escolhida: a da URL, se ainda existir; senão a mais recente.
+  // «Para enviar» mostra só as que ainda têm o que enviar; a concluída vai para
+  // «Meu histórico» (Cleber, 19/10/2026). Concluída = nada pendente: o que
+  // «não deu» também já foi resolvido pelo operador.
+  const paraEnviar = useMemo(() => campanhas.filter(c => !concluida(c)), [campanhas]);
+
+  // A escolhida: a da URL, se ainda existir; senão a que estava aberta (a que
+  // acabou de ser concluída fica na tela até ele sair dela: dá para avaliar,
+  // deixar a observação e desfazer um «não deu»); senão a mais recente aberta.
   const pedida = params.get('envio');
+  const abertaRef = useRef<string | null>(null);
   const selecionadaId = useMemo(() => {
     if (pedida && campanhas.some(c => c.id === pedida)) return pedida;
-    return campanhas[0]?.id ?? null;
-  }, [pedida, campanhas]);
+    if (abertaRef.current && campanhas.some(c => c.id === abertaRef.current)) return abertaRef.current;
+    return paraEnviar[0]?.id ?? null;
+  }, [pedida, campanhas, paraEnviar]);
+  abertaRef.current = selecionadaId;
   const selecionada = campanhas.find(c => c.id === selecionadaId) ?? null;
 
   const selecionar = useCallback((id: string) => {
@@ -266,7 +282,7 @@ export function useCampanhasWhatsapp() {
   }, [alterar]);
 
   return {
-    perfilId, carregando, campanhas, selecionada, selecionar, recarregar,
+    perfilId, carregando, campanhas, paraEnviar, selecionada, selecionar, recarregar,
     contatos, carregandoContatos, contagem,
     modo, setModo, mesmaAba, enviar, copiar, marcarEnviada, marcar, salvarMensagem,
     avaliacoes, avaliar, observacoes, observar,

@@ -443,7 +443,8 @@ export function useCampanhaFacil() {
     }
   }, [isProcessing, templates, corpoDoTemplate, templateId]);
 
-  const removeMailing = useCallback(() => {
+  /** Volta ao passo 1, sem mailing. Mensagem, descontos e operadores ficam. */
+  const limparMailing = useCallback(() => {
     setParsed(null);
     setRemovidos(new Set());
     setFileName('');
@@ -451,8 +452,12 @@ export function useCampanhaFacil() {
     setPage(1);
     setSearch('');
     setStatusFilter('all');
-    toast.success('Mailing removido.');
   }, []);
+
+  const removeMailing = useCallback(() => {
+    limparMailing();
+    toast.success('Mailing removido.');
+  }, [limparMailing]);
 
   const downloadExcluded = useCallback(() => {
     if (!parsed?.excludedRecords?.length) {
@@ -643,11 +648,17 @@ export function useCampanhaFacil() {
     return base ? `campanha-${base}-${date}.xlsx` : `campanha-pronta-${date}.xlsx`;
   }, [fileName]);
 
-  /** Grava a parte de cada operador marcado e notifica. Ver `useEnviosCampanha`. */
+  /**
+   * Grava a parte de cada operador marcado e notifica. Ver `useEnviosCampanha`.
+   *
+   * Liberou: a campanha está feita e a tela volta ao começo, pronta para a
+   * próxima — «como uma forma de finalizar» (Cleber, 19/10/2026). Antes ela
+   * continuava na configuração da campanha que já tinha saído.
+   */
   const { liberar } = envios;
   const liberarCampanha = useCallback(async (): Promise<boolean> => {
     if (!campanhaPorId.length) return false;
-    return liberar(campanhaPorId, {
+    const ok = await liberar(campanhaPorId, {
       titulo: selectedTemplate.name,
       arquivoNome: defaultExportFileName(),
       // O modelo e os descontos vão junto: é o que deixa o líder trocar a
@@ -657,7 +668,13 @@ export function useCampanhaFacil() {
       semValores: relatorioSemValores,
       discounts: discountsApplied,
     });
-  }, [campanhaPorId, liberar, selectedTemplate, selectedTemplateBody, relatorioSemValores, discountsApplied, defaultExportFileName]);
+    if (ok) {
+      limparMailing();
+      // Quem rola é o <main> do Layout, não a janela.
+      (document.querySelector<HTMLElement>('main') ?? document.documentElement).scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    return ok;
+  }, [campanhaPorId, liberar, selectedTemplate, selectedTemplateBody, relatorioSemValores, discountsApplied, defaultExportFileName, limparMailing]);
 
   const copyMessage = useCallback(async (item: CampaignItem | null) => {
     if (!item) return;

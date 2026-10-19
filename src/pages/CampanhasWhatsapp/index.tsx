@@ -22,7 +22,7 @@ import {
 import { cn } from '@/lib/utils';
 import { copiarTexto } from '@/lib/clipboard';
 import type { EnvioResumo } from '@/pages/CampanhaFacil/campanhaFacilEnvios.service';
-import { useCampanhasWhatsapp } from './useCampanhasWhatsapp';
+import { concluida, useCampanhasWhatsapp } from './useCampanhasWhatsapp';
 import { LIMITE_OBSERVACAO } from './campanhasWhatsapp.service';
 import { DialogoMesmaAba, DialogoTrocarApp } from './AjudaWhatsapp';
 import { HistoricoOperador } from './HistoricoOperador';
@@ -72,8 +72,9 @@ export default function CampanhasWhatsapp() {
         <div>
           <h1 className="text-xl font-bold tracking-tight">Campanhas de WhatsApp</h1>
           <p className="text-sm text-muted-foreground">
-            As campanhas que o líder liberou para você. Enviar abre a conversa com a mensagem pronta; Copiar serve para
-            enviar à mão. As duas contam como enviada.
+            As campanhas que o líder liberou para você. Enviar abre a conversa com a mensagem pronta; Copiar mensagem
+            serve para enviar à mão. As duas contam como enviada. Quando não sobra nada pendente, a campanha vai para
+            «Meu histórico».
           </p>
         </div>
         {aba === 'enviar' && (
@@ -116,8 +117,8 @@ export default function CampanhasWhatsapp() {
             )}
           >
             {icone}{rotulo}
-            {v === 'enviar' && w.campanhas.length > 0 && (
-              <span className="rounded-full bg-primary/10 px-1.5 text-xs tabular-nums text-primary">{w.campanhas.length}</span>
+            {v === 'enviar' && w.paraEnviar.length > 0 && (
+              <span className="rounded-full bg-primary/10 px-1.5 text-xs tabular-nums text-primary">{w.paraEnviar.length}</span>
             )}
           </button>
         ))}
@@ -139,37 +140,59 @@ export default function CampanhasWhatsapp() {
         <div className="flex items-center justify-center gap-2 py-24 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" /> Carregando suas campanhas…
         </div>
-      ) : w.campanhas.length === 0 ? (
+      ) : !w.selecionada ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-3 py-20 text-center">
             <div className="rounded-full bg-muted p-4"><Inbox className="h-7 w-7 text-muted-foreground" /></div>
             <div>
-              <p className="font-semibold">Nenhuma campanha no momento</p>
+              <p className="font-semibold">Nenhuma campanha para enviar</p>
               <p className="mt-1 max-w-sm text-sm text-muted-foreground">
                 Quando o líder liberar uma campanha para você, ela aparece aqui e você recebe uma notificação.
-                As que já passaram ficam em «Meu histórico».
+                As que você concluiu ficam em «Meu histórico».
               </p>
             </div>
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setAba('historico')}>
+              <History className="h-3.5 w-3.5" /> Ver meu histórico
+            </Button>
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
-          {/* ── As campanhas ── */}
+          {/* ── As campanhas com o que enviar ── */}
           <nav aria-label="Campanhas" className="space-y-2">
             <p className="px-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              {w.campanhas.length} {w.campanhas.length === 1 ? 'campanha' : 'campanhas'}
+              {w.paraEnviar.length} {w.paraEnviar.length === 1 ? 'campanha' : 'campanhas'} para enviar
             </p>
-            {w.campanhas.map((c) => (
+            {w.paraEnviar.map((c) => (
               <CartaoCampanha
                 key={c.id} c={c} ativa={c.id === w.selecionada?.id} onClick={() => w.selecionar(c.id)}
                 voto={w.avaliacoes.get(c.lote_id)}
               />
             ))}
+            {w.paraEnviar.length === 0 && (
+              <p className="rounded-xl border border-dashed border-border px-3.5 py-6 text-center text-xs text-muted-foreground">
+                Nenhuma outra campanha para enviar.
+              </p>
+            )}
           </nav>
 
           {/* ── A campanha aberta ── */}
           {w.selecionada && (
             <section className="min-w-0 space-y-4">
+              {concluida(w.selecionada) && (
+                <div className="flex flex-wrap items-center gap-3 rounded-xl border border-emerald-500/40 bg-emerald-500/5 px-4 py-3">
+                  <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                  <p className="min-w-0 flex-1 text-sm">
+                    <span className="font-medium">Campanha concluída.</span>{' '}
+                    <span className="text-muted-foreground">
+                      Ela já foi para «Meu histórico» e sai desta tela quando você abrir outra. Antes, avalie o retorno e deixe a observação para o líder.
+                    </span>
+                  </p>
+                  <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => setAba('historico')}>
+                    <History className="h-3.5 w-3.5" /> Meu histórico
+                  </Button>
+                </div>
+              )}
               <Card>
                 <CardContent className="space-y-4 p-5">
                   <div className="flex flex-wrap items-start justify-between gap-3">
@@ -483,6 +506,8 @@ function LinhaContato({ c, proximo, onEnviar, onEnviar2, onCopiar, onEditar, onN
   const texto = textoDoContato(c);
   const fone = telefoneLegivel(c.whatsapp, c.telefone);
   const fone2 = telefoneLegivel(c.whatsapp2, c.telefone2);
+  /** Como o ícone do campo WhatsApp copia: só os dígitos, sem o 55. */
+  const digitosFone = fone.replace(/\D/g, '');
   const enviado = c.status === 'enviado';
   const naoDeu = c.status === 'nao_enviado';
 
@@ -533,12 +558,6 @@ function LinhaContato({ c, proximo, onEnviar, onEnviar2, onCopiar, onEditar, onN
           <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs" onClick={onEditar}>
             <Pencil className="h-3.5 w-3.5" /> Editar
           </Button>
-          <Button
-            variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={onCopiar}
-            title="Copiar a mensagem para enviar à mão. Conta como enviada."
-          >
-            <Copy className="h-3.5 w-3.5" /> Copiar
-          </Button>
           {c.whatsapp2 && (
             <Button
               variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={onEnviar2}
@@ -547,6 +566,21 @@ function LinhaContato({ c, proximo, onEnviar, onEnviar2, onCopiar, onEditar, onN
               <Send className="h-3.5 w-3.5" /> Fone 2
             </Button>
           )}
+          <Button
+            variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={onCopiar}
+            title="Copiar a mensagem para enviar à mão. Conta como enviada."
+          >
+            <Copy className="h-3.5 w-3.5" /> Copiar mensagem
+          </Button>
+          {/* O mesmo do ícone ao lado do número, grande e perto do Enviar
+              (Cleber, 19/10/2026). Copiar o número não conta como enviada. */}
+          <Button
+            variant="outline" size="sm" className="h-8 gap-1.5 text-xs" disabled={!digitosFone}
+            onClick={() => void copiarTexto(digitosFone, 'WhatsApp copiado', 'Não foi possível copiar o WhatsApp.')}
+            title={digitosFone ? `Copiar o número ${fone}` : 'Sem número de WhatsApp'}
+          >
+            <Copy className="h-3.5 w-3.5" /> Copiar WhatsApp
+          </Button>
           <Button
             size="sm"
             className={cn('h-8 gap-1.5 text-xs', !enviado && 'bg-emerald-600 text-white hover:bg-emerald-700')}
