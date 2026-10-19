@@ -166,6 +166,8 @@ export interface CampaignCoreApi {
   formatPercent(value: unknown): string;
   deriveRecord(record: RawRecord, discounts?: Partial<Discounts>): CampaignItem;
   variablesFor(item: CampaignItem, discounts: Discounts): Record<string, string>;
+  /** O CPF com só os 3 últimos dígitos: «***.***.**9-00». */
+  maskCpf(value: unknown): string;
   renderTemplate(template: string, variables: Record<string, string>): string;
   templateRequiresFinancialData(template: string): boolean;
   normalizeSenders(senders: string[] | string): string[];

@@ -925,7 +925,6 @@ function DialogoEditarCampanha({ lote, envios, operadoresDoSetor, onFechar, onSa
   const problemaModelo = !lote.modelo ? null
     : !modelo.trim() ? 'A mensagem não pode ficar vazia.'
     : lote.sem_valores && mensagemUsaValores(modelo) ? 'O relatório desta campanha não tem valores: a mensagem não pode usar parcela, quitação, junção, anual ou cartão.'
-    : /{{\s*cpf\s*}}/i.test(modelo) ? 'O CPF não fica guardado na campanha: tire o {{cpf}} da mensagem.'
     : null;
   const podeSalvar = !!partes && !problemaModelo && !!titulo.trim() && (pendentes === 0 || escolhidos.length > 0);
 
@@ -964,7 +963,6 @@ function DialogoEditarCampanha({ lote, envios, operadoresDoSetor, onFechar, onSa
                 rows={8} className="resize-y text-sm leading-relaxed"
               />
               <VariableChips
-                ocultar={['cpf']}
                 onInsert={(v) => insertVariable(modeloRef, modelo, setModelo, v)}
               />
               {modeloMudou && !problemaModelo && (

@@ -1119,6 +1119,24 @@ Contrato: *{{contrato}}*
     return String(template ?? "").replace(/0800[\s.-]?77[79][\s.-]?(?:2020|4000|6000)/g, "{{atendimento}}");
   }
 
+  /**
+   * O CPF com só os 3 últimos dígitos: «***.***.**9-00» (Cleber, 19/10/2026).
+   *
+   * Os ÚLTIMOS, e não os primeiros, de propósito: o mascaramento comum (gov.br e
+   * cia.) mostra os dígitos do meio, «***.456.789-**». Quem juntasse esse com os
+   * 3 primeiros teria 9 dígitos, e os 2 verificadores saem deles: o CPF inteiro.
+   * Os 3 últimos são 1 dígito mais os 2 verificadores — não completam nada.
+   *
+   * Documento que não tem 11 dígitos (CNPJ, número torto) vira «***» com os 3
+   * últimos. Vazio continua vazio.
+   */
+  function maskCpf(value) {
+    const d = String(value ?? "").replace(/\D/g, "");
+    if (!d) return "";
+    if (d.length === 11) return `***.***.**${d[8]}-${d.slice(9)}`;
+    return `***${d.slice(-3)}`;
+  }
+
   function titleCase(value) {
     return String(value ?? "")
       .toLocaleLowerCase("pt-BR")
@@ -1349,7 +1367,8 @@ Contrato: *{{contrato}}*
     return {
       nome: titleCase(item.name),
       primeiro_nome: item.firstName,
-      cpf: item.cpf,
+      // Só os 3 últimos dígitos (19/10/2026): o CPF inteiro não sai do navegador.
+      cpf: maskCpf(item.cpf),
       contrato: item.contract,
       protocolo: item.protocol,
       empresa: item.company,
@@ -1521,6 +1540,7 @@ Contrato: *{{contrato}}*
     formatPercent,
     deriveRecord,
     variablesFor,
+    maskCpf,
     renderTemplate,
     templateRequiresFinancialData,
     normalizeSenders,

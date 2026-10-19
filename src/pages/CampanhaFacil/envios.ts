@@ -140,7 +140,7 @@ export function resumoDaEquipe(e: Pick<EquipeDaLista, 'operadores' | 'lideres'>)
 
 /**
  * Uma mensagem como vai ao banco (`campanha_facil_contatos`). Dono, empresa e
- * validade o banco copia do envio. CPF não vai: a aba não precisa dele.
+ * validade o banco copia do envio. O CPF só vai mascarado (os 3 últimos dígitos).
  */
 export interface ContatoEnvio {
   ordem: number;
@@ -156,8 +156,9 @@ export interface ContatoEnvio {
   mensagem: string;
   pendencias: string[];
   /**
-   * Os valores do modelo ({{nome}}, {{quitacao}}, …), SEM CPF. É com eles que o
-   * banco refaz o texto quando o líder troca a mensagem (`fn_cf_renderizar`).
+   * Os valores do modelo ({{nome}}, {{quitacao}}, …), com o CPF MASCARADO. É com
+   * eles que o banco refaz o texto quando o líder troca a mensagem
+   * (`fn_cf_renderizar`) — e o {{cpf}} continua mascarado.
    */
   variaveis: Record<string, string> | null;
 }
@@ -179,10 +180,12 @@ export function numeroWhatsApp(telefone: string | null | undefined): string | nu
   return null;
 }
 
-/** As variáveis do modelo para o banco — sem CPF, que não sai do navegador. */
-export function variaveisSemCpf(item: CampaignItem, discounts?: Partial<Discounts>): Record<string, string> {
-  const { cpf: _cpf, ...resto } = CampaignCore.variablesFor(item, { ...CampaignCore.DEFAULT_DISCOUNTS, ...discounts });
-  return resto;
+/**
+ * As variáveis do modelo para o banco. O CPF já vem mascarado de `variablesFor`
+ * (`maskCpf`): o inteiro não sai do navegador.
+ */
+export function variaveisDoContato(item: CampaignItem, discounts?: Partial<Discounts>): Record<string, string> {
+  return CampaignCore.variablesFor(item, { ...CampaignCore.DEFAULT_DISCOUNTS, ...discounts });
 }
 
 export function contatoDoItem(item: CampaignItem, ordem: number, discounts?: Partial<Discounts>): ContatoEnvio {
@@ -198,7 +201,7 @@ export function contatoDoItem(item: CampaignItem, ordem: number, discounts?: Par
     mensagem: String(item.message ?? ''),
     // «Quem encaminhará não informado» não se aplica: quem recebe é o operador.
     pendencias: (item.issues ?? []).filter(i => !/encaminhar/i.test(i)),
-    variaveis: variaveisSemCpf(item, discounts),
+    variaveis: variaveisDoContato(item, discounts),
   };
 }
 
