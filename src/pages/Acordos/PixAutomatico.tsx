@@ -44,7 +44,6 @@ import {
   Pencil, Banknote, AlertTriangle, History, Scale, Eraser, Sparkles,
   ListChecks, ShieldAlert, Trophy, Medal, ArrowRight, ShieldCheck,
 } from 'lucide-react';
-import { read as xlsxRead, utils as xlsxUtils, write as xlsxWrite } from '@e965/xlsx';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -2233,8 +2232,18 @@ export function PixAutomatico() {
   }
 
   // ── Exportar / Importar planilha ──────────────────────────────────────────
-  function exportar() {
+  // O xlsx (~160 kB gzip) vem só no clique: era import estático e a aba Pix
+  // inteira esperava por ele para abrir, sem ninguém ter pedido planilha.
+  async function exportar() {
     if (visiveis.length === 0) { toast.error('Nenhum registro para exportar.'); return; }
+    let xlsx: typeof import('@e965/xlsx');
+    try {
+      xlsx = await import('@e965/xlsx');
+    } catch {
+      toast.error('Não foi possível carregar o gerador de planilha. Tente de novo.');
+      return;
+    }
+    const { utils: xlsxUtils, write: xlsxWrite } = xlsx;
     const rows = visiveis.map(i => ({
       NR:        i.nr_cliente,
       Operador:  i.operador_nome ?? '',
@@ -2271,7 +2280,10 @@ export function PixAutomatico() {
     if (fechamento.impedir('importar Pix neste mês')) return;
     setImportando(true);
     try {
-      const buf = await file.arrayBuffer();
+      const [buf, { read: xlsxRead, utils: xlsxUtils }] = await Promise.all([
+        file.arrayBuffer(),
+        import('@e965/xlsx'),
+      ]);
       const wb = xlsxRead(buf, { type: 'array' });
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = xlsxUtils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' });

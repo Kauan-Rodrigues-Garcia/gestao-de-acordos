@@ -52,9 +52,16 @@ export async function definirStatus(id: string, status: StatusContato): Promise<
 export type Avaliacao = boolean;
 
 /**
- * Os votos e as observações desta pessoa nas campanhas dadas (a policy só
- * devolve os dela). Desde 20261016120000 a linha pode ter só a observação,
- * sem voto (`bom` nulo).
+ * Os votos e as observações desta pessoa nas campanhas dadas. Desde
+ * 20261016120000 a linha pode ter só a observação, sem voto (`bom` nulo).
+ *
+ * O filtro por `operador_id` é obrigatório (19/10/2026). A policy deixou de
+ * devolver só as linhas da pessoa quando ganhou as variantes do autor e do
+ * setor: para um líder, a leitura trazia o voto de todo mundo, o `Map` por lote
+ * guardava o último que chegasse, e a tela mostrava o voto de outro como se
+ * fosse o dele. E sem o filtro o banco avaliava a policy do setor linha a linha
+ * — ~500 ms por chamada. É `auth.uid()`, não `perfil.id`: é quem as RPCs de
+ * avaliar e observar gravam, e as duas diferem na impersonação.
  */
 export async function minhasAvaliacoes(loteIds: readonly string[]): Promise<{
   votos: Map<string, Avaliacao>;
@@ -63,8 +70,11 @@ export async function minhasAvaliacoes(loteIds: readonly string[]): Promise<{
   const votos = new Map<string, Avaliacao>();
   const observacoes = new Map<string, string>();
   if (loteIds.length === 0) return { votos, observacoes };
+  const { data: { session } } = await supabase.auth.getSession();
+  const uid = session?.user.id;
+  if (!uid) return { votos, observacoes };
   const { data, error } = await db.from('campanha_facil_avaliacoes')
-    .select('lote_id, bom, observacao').in('lote_id', [...new Set(loteIds)]);
+    .select('lote_id, bom, observacao').eq('operador_id', uid).in('lote_id', [...new Set(loteIds)]);
   if (error) throw error;
   for (const r of (data ?? []) as { lote_id: string; bom: boolean | null; observacao?: string | null }[]) {
     if (r.bom !== null) votos.set(r.lote_id, r.bom);
