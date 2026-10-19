@@ -17,7 +17,7 @@
  * Em volta, o que os mods fazem: raios girando atrás, o reflexo passando pela
  * placa e a explosão de estrelinhas (essas o palco solta). Só visual.
  */
-import type { Item } from './arte';
+import { NOME_CHEFONA, type Item } from './arte';
 import { escreverMC, larguraTextoMC } from './fonteMC';
 import { BARRA_CONQUISTA_MC, CAIXA_CONQUISTA_MC, MOLDURA_DESAFIO_MC } from './texturasMC';
 import { miniatura } from '../pixels';
@@ -29,6 +29,17 @@ export const SOMBRA_DESAFIO = '#3f153f';
 export const PLACA_MS = 7000;
 /** Cada pixel da placa vira tantos px da tela (a escala da interface do jogo). */
 export const ESCALA_PLACA = 3;
+
+/**
+ * A conquista de quem ajudou a derrubar a chefona (o desafio do Minecraft).
+ * O álbum de insígnias (`Insignias/`) mostra a mesma placa no hover.
+ */
+export const CONQUISTA = {
+  titulo: 'Desafio concluído!',
+  nome: 'Quem Mandou Jogar Poção?',
+  descricao: `Ajudou a derrubar a ${NOME_CHEFONA}`,
+  raridade: '★ Raridade épica ★',
+} as const;
 
 export interface TextosDaPlaca {
   titulo: string;

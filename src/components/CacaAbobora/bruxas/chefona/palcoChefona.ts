@@ -94,7 +94,7 @@ import {
   FEITICOS, FEITICO_FORTE, LISTA_FEITICOS, alvoDaPocao, alvosPorAtributo, disponivel, duracaoDoFeitico, encantoDa,
   escolherVariante, feiticosLeves, forcaDoFeitico, lancar, nivelDaPocao, type AlvosFeitico, type NomeFeitico,
 } from './feiticos';
-import { ESCALA_PLACA, PLACA_MS, montarPlaca } from './conquista';
+import { CONQUISTA, ESCALA_PLACA, PLACA_MS, montarPlaca } from './conquista';
 import { chefonaLeve, criarVigiaDeQuadros, marcarChefonaLeve } from './leve';
 import { ENCANTO, glifo, letrasComRuna } from './galatico';
 import {
@@ -208,13 +208,8 @@ const PROTEGER_S = 1.3;
 export const ABSORCAO_FRACAO = 0.1;
 export const REGEN_FRACAO = 0.15;
 export const REGEN_S = 8;
-/** A conquista de quem ajudou a derrubar a chefona (o desafio do Minecraft). */
-export const CONQUISTA = {
-  titulo: 'Desafio concluído!',
-  nome: 'Quem Mandou Jogar Poção?',
-  descricao: `Ajudou a derrubar a ${NOME_CHEFONA}`,
-  raridade: '★ Raridade épica ★',
-} as const;
+/** A conquista de quem ajudou a derrubar a chefona: mora em `conquista.ts` (o álbum de insígnias também a mostra). */
+export { CONQUISTA };
 /** A toast do jogo (`toastDeConquista`): a cor do título de desafio (§d). */
 const COR_DESAFIO = '#ff55ff';
 const SOMBRA_DESAFIO = '#3f153f';

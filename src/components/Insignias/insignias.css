@@ -1,0 +1,325 @@
+/*
+ * As insígnias das gincanas: a medalha e a placa do hover.
+ *
+ * A medalha é chapada, sem degradê: aro dourado, face cor de pergaminho (o
+ * contorno escuro do pixel aparece nos dois temas) e a fita na cor da
+ * gincana. A que falta é a silhueta, num aro tracejado.
+ *
+ * As placas são letreiros, não pedaços da tela: noite (ou a jaqueta do Rei)
+ * nos dois temas, como as faixas das caças. Arte em pixel: borda em degrau,
+ * sem canto arredondado. Sem `prefers-reduced-motion`, como as caças: nos
+ * computadores da operação ele vem ligado por política (`CacaAbobora/caca.css`).
+ */
+
+/* ── A medalha ───────────────────────────────────────────────────────────── */
+
+.ins-medalha {
+  --tam: 24px;
+  --fita: #888;
+  --ouro: #c9962c;
+  --ouro-claro: #f0c75e;
+  position: relative;
+  width: var(--tam);
+  height: calc(var(--tam) * 1.32);
+  flex-shrink: 0;
+}
+
+/* A fita: uma faixa com a ponta em V, atrás do disco. */
+.ins-medalha .ins-fita {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: calc(var(--tam) * 0.5);
+  height: calc(var(--tam) * 0.62);
+  transform: translateX(-50%);
+  background: linear-gradient(90deg, var(--fita) 0 34%, rgb(255 255 255 / 0.32) 34% 66%, var(--fita) 66% 100%);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 78%, 0 100%);
+}
+
+.ins-medalha .ins-disco {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: var(--tam);
+  height: var(--tam);
+  border-radius: 9999px;
+  background: #f3ead3;
+  border: calc(var(--tam) * 0.06 + 1px) solid var(--ouro);
+  box-shadow: inset 0 0 0 calc(var(--tam) * 0.035 + 0.5px) var(--ouro-claro), 0 1px 2px rgb(0 0 0 / 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.ins-medalha .ins-disco img {
+  image-rendering: pixelated;
+  display: block;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* A que falta: aro tracejado, fita cinza, o desenho em silhueta. */
+.ins-medalha.ins-falta .ins-fita {
+  background: color-mix(in oklch, var(--muted-foreground) 28%, transparent);
+}
+.ins-medalha.ins-falta .ins-disco {
+  background: var(--muted);
+  border: calc(var(--tam) * 0.05 + 1px) dashed color-mix(in oklch, var(--muted-foreground) 50%, transparent);
+  box-shadow: none;
+}
+.ins-medalha.ins-falta .ins-disco img {
+  filter: brightness(0);
+  opacity: 0.25;
+}
+
+/* O golpe final: uma estrelinha no aro. */
+.ins-medalha .ins-estrela {
+  position: absolute;
+  right: -3px;
+  bottom: calc(var(--tam) * 0.6);
+  width: calc(var(--tam) * 0.42);
+  height: calc(var(--tam) * 0.42);
+  border-radius: 9999px;
+  background: var(--ouro-claro);
+  color: #5c3d00;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 0 1.5px var(--card);
+}
+
+/* ── A fileira do topo ───────────────────────────────────────────────────── */
+/* Da altura da barra, quebrando linha por dentro e escondendo a 2ª linha: o
+   que não cabe some inteiro, do fim para o começo — nunca meia medalha. O
+   respiro dos lados é para o brilho e o balanço não serem cortados. */
+.ins-fileira {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  align-self: stretch;
+  align-content: flex-start;
+  column-gap: 6px;
+  row-gap: 40px;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+  padding: 0 4px;
+}
+
+/* ── Pendurada no topo da barra ──────────────────────────────────────────── */
+/* A fita sai da borda de cima; a medalha balança presa nela. */
+
+.ins-medalha.ins-pendurada {
+  --fio: 15px;
+  height: calc(var(--fio) + var(--tam));
+  transform-origin: 50% 0;
+  cursor: default;
+  outline: none;
+}
+.ins-medalha.ins-pendurada .ins-fita {
+  height: calc(var(--fio) + var(--tam) * 0.5);
+  clip-path: none;
+}
+.ins-medalha.ins-pendurada .ins-disco { top: var(--fio); bottom: auto; }
+.ins-medalha.ins-pendurada .ins-estrela { top: calc(var(--fio) - 4px); bottom: auto; }
+
+.ins-medalha.ins-pendurada:hover,
+.ins-medalha.ins-pendurada:focus-visible {
+  animation: ins-balanca 1.1s ease-out;
+}
+.ins-medalha.ins-pendurada:focus-visible .ins-disco { outline: 2px solid var(--ring); outline-offset: 1px; }
+@keyframes ins-balanca {
+  0%   { transform: rotate(0); }
+  20%  { transform: rotate(9deg); }
+  45%  { transform: rotate(-6deg); }
+  70%  { transform: rotate(3deg); }
+  100% { transform: rotate(0); }
+}
+
+/* Ganhou e ainda não passou o mouse: o disco pulsa em dourado. */
+.ins-medalha.ins-nova .ins-disco {
+  animation: ins-chamar 1.6s ease-in-out infinite;
+}
+@keyframes ins-chamar {
+  0%, 100% { box-shadow: inset 0 0 0 1.5px var(--ouro-claro), 0 0 0 0 rgb(240 199 94 / 0); }
+  50%      { box-shadow: inset 0 0 0 1.5px var(--ouro-claro), 0 0 0 5px rgb(240 199 94 / 0.6); }
+}
+
+/* A da próxima gincana: face de noite e o «?» dourado, que acende e apaga. */
+.ins-medalha.ins-misterio .ins-disco {
+  background: #1c1a22;
+  border-color: #8a7a52;
+  box-shadow: inset 0 0 0 calc(var(--tam) * 0.035 + 0.5px) #4a4335, 0 1px 2px rgb(0 0 0 / 0.25);
+}
+.ins-medalha.ins-misterio .ins-interrogacao {
+  font-family: 'Press Start 2P', ui-monospace, monospace;
+  font-size: calc(var(--tam) * 0.42);
+  line-height: 1;
+  color: #f0c75e;
+  text-shadow: 1px 1px 0 #5c3d00;
+  animation: ins-misterio 2.4s steps(6, end) infinite;
+}
+.ins-medalha.ins-misterio + .ins-medalha.ins-misterio .ins-interrogacao { animation-delay: 1.2s; }
+@keyframes ins-misterio {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
+}
+
+/* O ponto colorido da contagem do pessoal. */
+.ins-ponto { width: 10px; height: 10px; border-radius: 9999px; flex-shrink: 0; }
+.ins-ponto-tem { background: var(--fita); box-shadow: 0 0 0 1.5px #c9962c; }
+
+/* ── As placas (o hover) ─────────────────────────────────────────────────── */
+
+.ins-placa {
+  --p-fundo: #0d100f;
+  --p-fundo-2: #161b18;
+  --p-borda: #2f6a17;
+  --p-texto: #ece5d0;
+  --p-selo: #9dff5c;
+  --p-nome: #ece5d0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 300px;
+  padding: 16px 16px 14px;
+  margin: 3px;
+  color: var(--p-texto);
+  font-family: 'Pixelify Sans', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-variant-ligatures: none;
+  image-rendering: pixelated;
+  /* Borda em degrau: quatro sombras retas, o canto fica vazado. */
+  box-shadow:
+    0 -3px 0 0 var(--p-borda), 0 3px 0 0 var(--p-borda),
+    -3px 0 0 0 var(--p-borda), 3px 0 0 0 var(--p-borda),
+    0 10px 24px rgb(0 0 0 / 0.45);
+}
+.ins-placa-arte {
+  flex-shrink: 0;
+  min-width: 56px;
+  display: flex;
+  justify-content: center;
+}
+.ins-placa-arte canvas { display: block; }
+.ins-placa-texto { min-width: 0; }
+.ins-placa-selo {
+  font-family: 'Press Start 2P', ui-monospace, monospace;
+  font-size: 9px;
+  line-height: 1.4;
+  letter-spacing: 0.04em;
+  color: var(--p-selo);
+  text-shadow: 1px 1px 0 rgb(0 0 0 / 0.8);
+}
+.ins-placa-nome {
+  margin-top: 4px;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--p-nome);
+  text-shadow: 2px 2px 0 rgb(0 0 0 / 0.6);
+}
+.ins-placa-linha {
+  margin-top: 3px;
+  font-size: 13px;
+  line-height: 1.25;
+  opacity: 0.88;
+}
+
+/* Zumbi: o letreiro da caça — sangue escorrendo em cima, musgo embaixo. */
+.ins-placa-zumbi {
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='36' height='8' shape-rendering='crispEdges'%3E%3Crect width='36' height='2' fill='%236e0a12'/%3E%3Crect x='4' y='2' width='2' height='4' fill='%236e0a12'/%3E%3Crect x='4' y='6' width='2' height='2' fill='%23c8202a'/%3E%3Crect x='15' y='2' width='2' height='2' fill='%236e0a12'/%3E%3Crect x='26' y='2' width='2' height='6' fill='%236e0a12'/%3E%3Crect x='28' y='2' width='2' height='2' fill='%236e0a12'/%3E%3C/svg%3E") 0 0 / 36px 8px repeat-x,
+    linear-gradient(0deg, var(--p-borda) 0 3px, transparent 3px),
+    repeating-linear-gradient(90deg, var(--p-fundo) 0 4px, var(--p-fundo-2) 4px 8px);
+}
+
+/* Rei do Pop: a jaqueta vermelha com os V pretos; título de filme de terror. */
+.ins-placa-reiDoPop {
+  --p-fundo: #a5141d;
+  --p-borda: #120c16;
+  --p-texto: #fff3e0;
+  --p-selo: #ffe14d;
+  --p-nome: #ffffff;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='16' shape-rendering='crispEdges'%3E%3Cpath d='M0 0h3l9 9 9-9h3L12 12z' fill='%23120c16' fill-opacity='.28'/%3E%3C/svg%3E") 0 0 / 24px 16px repeat,
+    linear-gradient(0deg, #6e0a12 0 3px, transparent 3px),
+    var(--p-fundo);
+}
+.ins-placa-reiDoPop .ins-placa-selo {
+  font-family: 'Creepster', 'Pixelify Sans', cursive;
+  font-size: 22px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-shadow: 2px 2px 0 #120c16;
+}
+
+/* Bruxas: o letreiro das bruxas — bandeirinhas no fio, noite roxa. */
+.ins-placa-bruxas {
+  --p-fundo: #140c20;
+  --p-fundo-2: #1e1430;
+  --p-borda: #6a2aa8;
+  --p-texto: #ece5f5;
+  --p-selo: #ffd34d;
+  --p-nome: #ffd34d;
+  padding-top: 20px;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='42' height='8' shape-rendering='crispEdges'%3E%3Crect width='42' height='1' fill='%23120a1a'/%3E%3Cpath d='M1 1h9v2h-1v2h-1v2h-2v1h-1v-1h-2v-2h-1v-2h-1z' fill='%23ff8a1f'/%3E%3Cpath d='M15 1h9v2h-1v2h-1v2h-2v1h-1v-1h-2v-2h-1v-2h-1z' fill='%238a3ad0'/%3E%3Cpath d='M29 1h9v2h-1v2h-1v2h-2v1h-1v-1h-2v-2h-1v-2h-1z' fill='%236abf3a'/%3E%3C/svg%3E") 0 0 / 42px 8px repeat-x,
+    linear-gradient(0deg, var(--p-borda) 0 3px, transparent 3px),
+    repeating-linear-gradient(90deg, var(--p-fundo) 0 4px, var(--p-fundo-2) 4px 8px);
+}
+.ins-placa-bruxas .ins-placa-nome { text-shadow: 2px 2px 0 #6a3a08; }
+
+/* A da próxima gincana: noite com «?» espalhados. */
+.ins-placa-misterio {
+  --p-fundo: #121018;
+  --p-fundo-2: #1a1722;
+  --p-borda: #8a7a52;
+  --p-selo: #f0c75e;
+  --p-nome: #f0c75e;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='40' shape-rendering='crispEdges'%3E%3Cg fill='%23f0c75e' fill-opacity='.08'%3E%3Cpath d='M6 4h6v2h2v4h-2v2h-2v2H8v-3h2V8h2V6H8v2H6zM8 16h2v2H8zM32 22h6v2h2v4h-2v2h-2v2h-2v-3h2v-3h2v-2h-4v2h-2zM34 34h2v2h-2z'/%3E%3C/g%3E%3C/svg%3E") 0 0 / 48px 40px repeat,
+    linear-gradient(0deg, var(--p-borda) 0 3px, transparent 3px),
+    repeating-linear-gradient(90deg, var(--p-fundo) 0 4px, var(--p-fundo-2) 4px 8px);
+}
+.ins-misterio-grande {
+  font-family: 'Press Start 2P', ui-monospace, monospace;
+  font-size: 40px;
+  line-height: 1;
+  color: #f0c75e;
+  text-shadow: 4px 4px 0 #5c3d00;
+  animation: ins-misterio 2.4s steps(6, end) infinite;
+}
+
+/* Sem a insígnia: apagada, o desenho em silhueta. */
+.ins-placa-trancada { filter: grayscale(1) brightness(0.85); }
+.ins-placa-trancada .ins-placa-arte canvas { filter: brightness(0); opacity: 0.55; }
+.ins-placa-trancada .ins-placa-selo { color: #b8b8b8; }
+
+/* Bruxa do Pântano: a placa do Minecraft, com o reflexo passando. */
+.ins-mc { position: relative; filter: drop-shadow(0 10px 18px rgb(0 0 0 / 0.45)); }
+.ins-mc.ins-placa-trancada { filter: grayscale(1) brightness(0.85) drop-shadow(0 10px 18px rgb(0 0 0 / 0.45)); }
+.ins-mc-cv { display: block; image-rendering: pixelated; }
+.ins-mc-reflexo {
+  position: absolute;
+  inset: 6px 0 0 26px;
+  overflow: hidden;
+  pointer-events: none;
+}
+.ins-mc-reflexo::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 40px;
+  left: -60px;
+  background: rgb(255 255 255 / 0.22);
+  transform: skewX(-20deg);
+  animation: ins-reflexo 2.2s ease-in-out 0.3s infinite;
+}
+@keyframes ins-reflexo {
+  0%   { left: -60px; }
+  60%, 100% { left: 110%; }
+}
+
