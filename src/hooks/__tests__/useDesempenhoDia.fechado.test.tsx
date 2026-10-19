@@ -6,7 +6,7 @@
  * componente roda igual, e com ela os hooks.
  *
  * Sem trava, abrir qualquer tela disparava a leitura de 15 dias de analítico
- * (até 12 páginas de 1.000 linhas) para um painel que ninguém pediu. Era esse
+ * (milhares de linhas) para um painel que ninguém pediu. Era esse
  * trabalho competindo com o resto que deixava a navegação pesada.
  *
  * Este teste fixa a trava. Se alguém remover o `if (!aberto) return`, ele quebra.
