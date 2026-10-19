@@ -142,3 +142,20 @@ export function rotuloDoDia(dia: string, hoje: string): { principal: string; sem
       : d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '');
   return { principal, semana };
 }
+
+/**
+ * Os NRs para o botão «Copiar NRs» (19/10/2026): um por linha, na ordem da
+ * tela, sem repetir (o mesmo NR pode vir em mais de uma linha) e sem vazio.
+ * Quem chama passa o que está na tela — com os filtros aplicados, ou tudo.
+ */
+export function nrsParaCopiar(linhas: readonly Pick<AnaliticoRecebimento, 'codigo'>[]): string[] {
+  const vistos = new Set<string>();
+  const nrs: string[] = [];
+  for (const l of linhas) {
+    const nr = String(l.codigo ?? '').trim();
+    if (!nr || vistos.has(nr)) continue;
+    vistos.add(nr);
+    nrs.push(nr);
+  }
+  return nrs;
+}

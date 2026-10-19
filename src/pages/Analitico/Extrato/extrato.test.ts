@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { AnaliticoRecebimento } from '@/lib/supabase';
 import {
-  agruparPorDia, filtrarExtrato, resumirVinculos, rotuloDoDia, temExtra,
+  agruparPorDia, filtrarExtrato, nrsParaCopiar, resumirVinculos, rotuloDoDia, temExtra,
   totaisPorDiaDoMes, vinculoDaLinha,
 } from './extrato';
 
@@ -90,5 +90,24 @@ describe('rótulo do dia', () => {
     expect(rotuloDoDia('2026-10-15', '2026-10-16').principal).toBe('Ontem');
     expect(rotuloDoDia('2026-10-01', '2026-10-16').principal).toMatch(/01/);
     expect(rotuloDoDia('2026-10-01', '2026-10-16').semana).toBe('quinta');
+  });
+});
+
+describe('copiar NRs', () => {
+  it('um por linha, na ordem da tela, sem repetir nem vazio', () => {
+    const nrs = nrsParaCopiar([
+      linha({ codigo: '13046104' }), linha({ codigo: ' 12965500 ' }),
+      linha({ codigo: '13046104' }), linha({ codigo: '' }),
+    ]);
+    expect(nrs).toEqual(['13046104', '12965500']);
+  });
+
+  it('copia só o que o filtro deixou (ex.: só Direto)', () => {
+    const linhas = [
+      linha({ codigo: '1', tipo_comissao: 'Integral' }),
+      linha({ codigo: '2', tipo_comissao: 'Extra' }),
+    ];
+    expect(nrsParaCopiar(filtrarExtrato(linhas, 'todos', 'direto'))).toEqual(['1']);
+    expect(nrsParaCopiar(filtrarExtrato(linhas, 'todos', 'todos'))).toEqual(['1', '2']);
   });
 });

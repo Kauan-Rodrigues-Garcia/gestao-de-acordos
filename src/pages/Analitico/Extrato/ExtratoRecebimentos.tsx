@@ -16,15 +16,21 @@
  *
  * A ação da linha (tabular, ver acordo, divergente) continua sendo de quem
  * chama: o extrato não sabe quem é o operador da linha nem para onde navegar.
+ *
+ * Copiar NRs (19/10/2026): o botão da barra copia os NRs do que está NA TELA
+ * — com os filtros daqui (situação, Direto/Extra) e os de quem chama (período,
+ * busca) já aplicados; sem filtro, todos. E o NR de cada linha copia no clique.
  */
-import { useMemo, useState, type ReactNode } from 'react';
-import { Link2, X } from 'lucide-react';
+import { useEffect, useMemo, useState, type MouseEvent, type ReactNode } from 'react';
+import { Check, Copy, Link2, X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { copiarTexto } from '@/lib/clipboard';
 import type { AnaliticoRecebimento } from '@/lib/supabase';
 import { corDaForma, rotuloDaForma } from '@/lib/formasPagamento';
 import { formatBRL } from '@/lib/money';
 import { cn } from '@/lib/utils';
 import {
-  agruparPorDia, filtrarExtrato, precisaTabular, resumirVinculos, rotuloDoDia,
+  agruparPorDia, filtrarExtrato, nrsParaCopiar, precisaTabular, resumirVinculos, rotuloDoDia,
   temExtra, vinculoDaLinha, type FiltroStatus, type FiltroVinculo, type VinculoDaLinha,
 } from './extrato';
 
@@ -131,6 +137,31 @@ export function ExtratoRecebimentos({
   const maiorDia = dias.reduce((m, d) => Math.max(m, d.total), 0);
   const filtrando = status !== 'todos' || vinculoEfetivo !== 'todos';
 
+  // Os NRs na ordem em que aparecem (dia a dia), para o «Copiar NRs».
+  const nrs = useMemo(() => nrsParaCopiar(dias.flatMap(d => d.linhas)), [dias]);
+  // O NR que acabou de ser copiado (no botão ou na linha) mostra o ✓ por 1,5 s.
+  const [copiado, setCopiado] = useState<string | null>(null);
+  useEffect(() => {
+    if (!copiado) return;
+    const t = setTimeout(() => setCopiado(null), 1500);
+    return () => clearTimeout(t);
+  }, [copiado]);
+
+  const copiarTodos = async () => {
+    if (nrs.length === 0) return;
+    const ok = await copiarTexto(
+      nrs.join('\n'),
+      `${nrs.length} ${nrs.length === 1 ? 'NR copiado' : 'NRs copiados'}${filtrando ? ' (com o filtro)' : ''}`,
+      'Não foi possível copiar os NRs.',
+    );
+    if (ok) setCopiado('*');
+  };
+  const copiarUm = async (e: MouseEvent, nr: string) => {
+    // Dentro do card do operador (visão do líder) o clique não abre/fecha o card.
+    e.stopPropagation();
+    if (await copiarTexto(nr, `NR ${nr} copiado`, 'Não foi possível copiar o NR.')) setCopiado(nr);
+  };
+
   const opcoesStatus: OpcaoFiltro<FiltroStatus>[] = [
     { key: 'todos', rotulo: 'Todos', detalhe: String(linhas.length) },
     { key: 'a_tabular', rotulo: 'A tabular', detalhe: String(qtdATabular), tom: qtdATabular > 0 ? 'alerta' : undefined },
@@ -150,7 +181,25 @@ export function ExtratoRecebimentos({
         {mostrarVinculo && (
           <GrupoFiltro rotulo="Direto ou Extra" opcoes={opcoesVinculo} ativa={vinculoEfetivo} onTrocar={(k: FiltroVinculo) => setVinculo(k)} />
         )}
-        {acoes && <div className="ml-auto flex items-center gap-1.5">{acoes}</div>}
+        <div className="ml-auto flex items-center gap-1.5">
+          {nrs.length > 0 && (
+            <Button
+              type="button" variant="outline" size="sm"
+              className="h-7 gap-1.5 px-2.5 text-[11px]"
+              onClick={() => void copiarTodos()}
+              title={filtrando
+                ? 'Copia os NRs filtrados, um por linha'
+                : 'Copia os NRs da lista, um por linha'}
+            >
+              {copiado === '*'
+                ? <Check className="h-3.5 w-3.5 text-success" />
+                : <Copy className="h-3.5 w-3.5" />}
+              {filtrando ? 'Copiar filtrados' : 'Copiar NRs'}
+              <span className="font-mono text-[10px] tabular-nums text-muted-foreground">{nrs.length}</span>
+            </Button>
+          )}
+          {acoes}
+        </div>
       </div>
 
       {linhas.length === 0 ? (
@@ -210,9 +259,20 @@ export function ExtratoRecebimentos({
                             {!l.visto && (
                               <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" title="Novo" />
                             )}
-                            <span className="font-mono text-[13px] font-semibold tabular-nums text-foreground">
+                            <button
+                              type="button"
+                              onClick={e => void copiarUm(e, String(l.codigo).trim())}
+                              title="Clique para copiar o NR"
+                              className={cn(
+                                'group/nr inline-flex items-center gap-1 rounded px-1 -mx-1 font-mono text-[13px] font-semibold tabular-nums text-foreground',
+                                'cursor-copy hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                              )}
+                            >
                               {l.codigo}
-                            </span>
+                              {copiado === String(l.codigo).trim()
+                                ? <Check className="h-3 w-3 text-success" aria-hidden="true" />
+                                : <Copy className="h-3 w-3 opacity-0 transition-opacity group-hover/nr:opacity-60" aria-hidden="true" />}
+                            </button>
                             {mostrarVinculo && <SeloVinculo vinculo={vinculoDaLinha(l)} />}
                           </div>
                           {(l.nome_cliente || l.instituicao) && (
