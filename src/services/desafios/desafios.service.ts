@@ -33,6 +33,7 @@ import { getTodayISO } from '@/lib';
 import { diasUteisDoMes, diasUteisDecorridos } from '@/lib/diasUteis';
 import { registrarLog } from '@/services/logs.service';
 import { modeloDoTipo } from './tiposDesafio';
+import { normalizarDiario, type Contribuinte, type PlacarDoDia, type PublicoDoDia } from './desafioDoDia';
 import type {
   AcentoDesafio, ContextoEquipe, DadosDesafio, Desafio, FonteMeta,
   MetricaDesafio, ModoDisputa,
@@ -174,6 +175,8 @@ export function normalizarRegra(bruto: unknown, tipo: TipoDesafio): RegraDesafio
     // ali deixaria um campo ligado que não muda número nenhum.
     agregacaoLider: o.fonteResultado === 'equipe_liderada'
       && o.agregacaoLider === 'media_das_equipes' ? 'media_das_equipes' : 'equipe_unica',
+    // O desafio de um dia. Ausente = campanha comum, como toda anterior a ele.
+    diario: normalizarDiario(o.diario),
   };
 }
 
@@ -614,6 +617,97 @@ export async function buscarDesafiosEmCartaz(): Promise<Desafio[]> {
     if (error || !Array.isArray(data)) throw new Error(error?.message ?? 'resposta inválida');
     return data.map(paraDesafio);
   }).catch((): Desafio[] => []);
+}
+
+// ── O desafio do dia ─────────────────────────────────────────────────────────
+
+/** Resposta de `buscarPlacarDoDia`. */
+export type RespostaPlacarDoDia =
+  | { estado: 'ok'; placar: PlacarDoDia }
+  /** `fn_desafio_diario` ainda não existe — migration 20261019140000 pendente. */
+  | { estado: 'sem_banco' }
+  /** A função devolveu nada: fora do alcance de quem chama. */
+  | { estado: 'fora' };
+
+/**
+ * O placar de um desafio do dia (`fn_desafio_diario`, 20261019140000).
+ *
+ * O total é a conta do Painel do Líder, no servidor — o operador não lê a
+ * linha de ninguém, e a soma do setor tem regras (órfãos, clones, setor da
+ * pessoa) que o cliente não conhece.
+ */
+export async function buscarPlacarDoDia(desafioId: string): Promise<RespostaPlacarDoDia> {
+  const { data, error } = await rpcSemTipo<Record<string, unknown>>(
+    'fn_desafio_diario', { p_desafio_id: desafioId },
+  );
+  if (error) {
+    if (/fn_desafio_diario|does not exist|schema cache|could not find/i.test(error.message)) {
+      return { estado: 'sem_banco' };
+    }
+    throw new Error(error.message);
+  }
+  if (!data) return { estado: 'fora' };
+
+  const config = (data.config_mes ?? {}) as { feriados?: unknown };
+  const contribuintes: Contribuinte[] = Array.isArray(data.contribuintes)
+    ? (data.contribuintes as Record<string, unknown>[]).map(c => ({
+        id:      String(c.id),
+        nome:    String(c.nome ?? ''),
+        fotoUrl: (c.foto_url as string | null) ?? null,
+        equipe:  (c.equipe as string | null) ?? null,
+        total:   Number(c.total) || 0,
+        qtd:     Number(c.qtd) || 0,
+        ultima:  (c.ultima as string | null) ?? null,
+      }))
+    : [];
+
+  return {
+    estado: 'ok',
+    placar: {
+      suportado:     data.suportado !== false,
+      regraSetor:    String(data.regra_setor ?? 'nosso_produto'),
+      publico:       (data.publico as PublicoDoDia) ?? 'setor',
+      total:         Number(data.total) || 0,
+      qtd:           Number(data.qtd) || 0,
+      contribuintes,
+      ultimaChegada: (data.ultima_chegada as string | null) ?? null,
+      metaMes:       data.meta_mes === null || data.meta_mes === undefined ? null : Number(data.meta_mes) || null,
+      feriados:      listaDeTextos(config.feriados),
+      participo:     data.participo === true,
+      acompanho:     data.acompanho === true,
+    },
+  };
+}
+
+/** A regra de negócio do setor (`setores.regra`). Sem coluna = Nosso produto. */
+export async function buscarRegraDoSetor(setorId: string): Promise<string> {
+  const { data, error } = await db('setores').select('id, regra').eq('id', setorId).limit(1);
+  if (error || !data?.length) return 'nosso_produto';
+  return String((data[0] as Record<string, unknown>).regra ?? 'nosso_produto');
+}
+
+/**
+ * A meta do MÊS de um setor, equipe ou operador (`metas`), para a prévia de
+ * «% da meta diária» no formulário. `null` = sem meta cadastrada.
+ */
+export async function buscarMetaDoMes(params: {
+  empresaId: string;
+  tipo: PublicoDoDia;
+  referenciaId: string;
+  diaISO: string;
+}): Promise<number | null> {
+  const [ano, mes] = params.diaISO.split('-').map(Number);
+  const { data, error } = await db('metas')
+    .select('meta_valor')
+    .eq('empresa_id', params.empresaId)
+    .eq('tipo', params.tipo)
+    .eq('referencia_id', params.referenciaId)
+    .eq('mes', mes)
+    .eq('ano', ano)
+    .limit(1);
+  if (error || !data?.length) return null;
+  const v = Number((data[0] as Record<string, unknown>).meta_valor) || 0;
+  return v > 0 ? v : null;
 }
 
 // ── Setores que participam ───────────────────────────────────────────────────

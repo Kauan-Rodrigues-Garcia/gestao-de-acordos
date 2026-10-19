@@ -11,6 +11,8 @@
  * padrão em vez de quebrar a tela.
  */
 
+import type { DiarioDesafio } from './desafioDoDia';
+
 /** Modelos de disputa. O tipo decide o PADRÃO; a regra decide o valor. */
 export type TipoDesafio =
   | 'bater_meta'
@@ -211,6 +213,11 @@ export interface RegraDesafio {
    * não muda nada.
    */
   agregacaoLider: AgregacaoLider;
+  /**
+   * O desafio de UM dia (19/10/2026): para quem, o que conta, o alvo e o
+   * horário. Ausente/`null` = campanha comum. Ver `desafioDoDia.ts`.
+   */
+  diario?: DiarioDesafio | null;
 }
 
 /** Ver `RegraDesafio.fonteResultado`. */
