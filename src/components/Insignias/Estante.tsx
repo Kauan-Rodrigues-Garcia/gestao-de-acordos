@@ -1,26 +1,29 @@
 /**
- * O pedaço do álbum que baixa depois da tela: as medalhas penduradas no topo,
- * com a placa de cada uma no hover (`Placas.tsx`), e a lista do pessoal do
- * super_admin. Fica fora do pacote de entrada porque traz os desenhos das
- * gincanas.
+ * As medalhas penduradas no topo — o pedaço que baixa logo que o app abre.
+ * Traz só o desenho das medalhas (`Medalha.tsx`, `arte.ts`).
+ *
+ * A placa do hover (`Placas.tsx`: os bonecos animados, a placa do Minecraft,
+ * as fontes) é outro pedaço, bem mais pesado, que só baixa quando o mouse
+ * chega perto das medalhas — antes ele vinha junto e atrasava as medalhas
+ * (19/10/2026). A lista do pessoal é outro ainda (`Pessoal.tsx`).
  */
-import { useEffect, useMemo, useState } from 'react';
-import { Loader2, Search } from 'lucide-react';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Input } from '@/components/ui/input';
+import { lazy, Suspense } from 'react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import {
-  INSIGNIAS, TOTAL_INSIGNIAS, ordenarAlbuns, quantas,
-  type Album, type IdInsignia, type Insignia, type Conquista,
-} from './insignias';
-import { lerAlbunsDoPessoal, type Pessoal } from './banco';
+import { INSIGNIAS, type Album, type IdInsignia, type Insignia, type Conquista } from './insignias';
 import { Medalha, MedalhaMisteriosa } from './Medalha';
-import { PlacaDaInsignia, PlacaMisteriosa } from './Placas';
+import { carregarPlacas, prepararPlacas } from './placasSobDemanda';
 
+const PlacaDaInsignia = lazy(() => carregarPlacas().then(m => ({ default: m.PlacaDaInsignia })));
+const PlacaMisteriosa = lazy(() => carregarPlacas().then(m => ({ default: m.PlacaMisteriosa })));
+
+/** O instante entre o hover e a placa baixar (quase nunca visto: ver `prepararPlacas`). */
+function PlacaCarregando() {
+  return <div className="rounded-md border border-border bg-popover px-3 py-2 text-xs text-muted-foreground shadow-md">Carregando…</div>;
+}
 /** O hover sem a caixa do tooltip: a placa é a caixa. */
 const SEM_CAIXA = 'overflow-visible rounded-none border-0 bg-transparent p-0 shadow-none';
 
-function MedalhaComPlaca({
+export function MedalhaComPlaca({
   insignia, conquista, tam, pendurada, nova, aoVer,
 }: {
   insignia: Insignia;
@@ -45,7 +48,9 @@ function MedalhaComPlaca({
         />
       </TooltipTrigger>
       <TooltipContent side="bottom" align="start" sideOffset={6} collisionPadding={12} className={SEM_CAIXA}>
-        <PlacaDaInsignia insignia={insignia} conquista={conquista} />
+        <Suspense fallback={<PlacaCarregando />}>
+          <PlacaDaInsignia insignia={insignia} conquista={conquista} />
+        </Suspense>
       </TooltipContent>
     </Tooltip>
   );
@@ -67,8 +72,12 @@ interface EstanteProps {
 
 export function Estante({ album, novas, aoVer }: EstanteProps) {
   return (
-    <TooltipProvider delayDuration={120} skipDelayDuration={400}>
-      <div className="ins-fileira">
+    // `disableHoverableContent`: a placa não tem nada para clicar. Com ela
+    // «alcançável», o Radix mantinha a primeira aberta enquanto o mouse ia
+    // para a medalha do lado (o caminho até a placa cobre as vizinhas) e a
+    // placa não trocava (19/10/2026).
+    <TooltipProvider delayDuration={120} skipDelayDuration={400} disableHoverableContent>
+      <div className="ins-fileira" onPointerEnter={prepararPlacas} onFocus={prepararPlacas}>
         {INSIGNIAS.filter(ins => album?.conquistas[ins.id]).map(ins => (
           <MedalhaComPlaca
             key={ins.id}
@@ -86,115 +95,12 @@ export function Estante({ album, novas, aoVer }: EstanteProps) {
               <MedalhaMisteriosa tam={24} tabIndex={0} role="img" aria-label="Próxima gincana: ainda é segredo" />
             </TooltipTrigger>
             <TooltipContent side="bottom" align="start" sideOffset={6} collisionPadding={12} className={SEM_CAIXA}>
-              <PlacaMisteriosa ordem={i} />
+              <Suspense fallback={<PlacaCarregando />}>
+                <PlacaMisteriosa ordem={i} />
+              </Suspense>
             </TooltipContent>
           </Tooltip>
         ))}
-      </div>
-    </TooltipProvider>
-  );
-}
-
-// ── O pessoal (super_admin) ─────────────────────────────────────────────────
-
-function iniciais(nome: string) {
-  const p = nome.trim().split(/\s+/).filter(Boolean);
-  return ((p[0]?.[0] ?? '') + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase() || '?';
-}
-
-const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`;
-
-export function DoPessoal() {
-  const [dados, setDados] = useState<Pessoal | null>(null);
-  const [erro, setErro] = useState(false);
-  const [busca, setBusca] = useState('');
-  const [versao, setVersao] = useState(0);
-
-  useEffect(() => {
-    let vivo = true;
-    setErro(false);
-    lerAlbunsDoPessoal()
-      .then(d => { if (vivo) setDados(d); })
-      .catch(() => { if (vivo) setErro(true); });
-    return () => { vivo = false; };
-  }, [versao]);
-
-  const lista = useMemo(() => {
-    if (!dados) return [];
-    const termo = busca.trim().toLocaleLowerCase('pt-BR');
-    const todos = ordenarAlbuns(dados.albuns);
-    if (!termo) return todos;
-    return todos.filter(a =>
-      `${a.nome} ${a.setor ?? ''} ${dados.empresas.get(a.usuario) ?? ''}`.toLocaleLowerCase('pt-BR').includes(termo));
-  }, [dados, busca]);
-
-  if (erro) {
-    return (
-      <div className="space-y-2 py-6 text-center text-xs text-muted-foreground">
-        <p>Não deu para ler as insígnias do pessoal.</p>
-        <button type="button" className="font-medium text-primary hover:underline" onClick={() => setVersao(v => v + 1)}>
-          Tentar de novo
-        </button>
-      </div>
-    );
-  }
-  if (!dados) {
-    return <div className="flex h-40 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
-  }
-
-  const completos = dados.albuns.filter(a => quantas(a) === TOTAL_INSIGNIAS).length;
-
-  return (
-    <TooltipProvider delayDuration={120} skipDelayDuration={400}>
-      <div className="space-y-3">
-        <div>
-          <p className="text-sm font-semibold">Insígnias do pessoal</p>
-          <p className="text-[11px] text-muted-foreground">
-            {plural(dados.albuns.length, 'pessoa tem', 'pessoas têm')} pelo menos uma
-            {completos > 0 && <> · <span className="font-semibold text-amber-600 dark:text-amber-400">{plural(completos, 'completou', 'completaram')} as {TOTAL_INSIGNIAS}</span></>}
-          </p>
-        </div>
-        <div className="grid grid-cols-4 gap-1.5">
-          {INSIGNIAS.map(ins => {
-            const n = dados.albuns.filter(a => a.conquistas[ins.id]).length;
-            return (
-              <div key={ins.id} className="flex items-center justify-center gap-1.5 rounded-md bg-muted/40 py-1.5" title={`${ins.nome}: ${plural(n, 'pessoa', 'pessoas')}`}>
-                <span className="ins-ponto ins-ponto-tem" style={{ ['--fita' as string]: ins.fita }} />
-                <span className="text-xs font-semibold tabular-nums">{n}</span>
-              </div>
-            );
-          })}
-        </div>
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar pessoa, setor ou empresa" className="h-8 pl-8 text-xs" />
-        </div>
-        <ul className="-mx-1 max-h-[55vh] space-y-0.5 overflow-y-auto pr-1">
-          {lista.map(a => {
-            const linha = [a.setor, dados.empresas.get(a.usuario)].filter(Boolean).join(' · ');
-            return (
-              <li key={a.usuario} className="flex items-center justify-between gap-2 rounded-md px-1 py-1 hover:bg-muted/60">
-                <div className="flex min-w-0 items-center gap-2.5">
-                  <Avatar className="h-8 w-8 shrink-0">
-                    {a.foto && <AvatarImage src={a.foto} alt="" className="object-cover" />}
-                    <AvatarFallback className="bg-primary text-[11px] font-bold text-primary-foreground">{iniciais(a.nome)}</AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0">
-                    <p className="truncate text-xs font-semibold">{a.nome}</p>
-                    {linha && <p className="truncate text-[11px] text-muted-foreground">{linha}</p>}
-                  </div>
-                </div>
-                <span className="flex shrink-0 items-center gap-1">
-                  {INSIGNIAS.map(ins => (
-                    <MedalhaComPlaca key={ins.id} insignia={ins} conquista={a.conquistas[ins.id]} tam={20} />
-                  ))}
-                  <span className="ml-1 w-7 text-right text-xs font-semibold tabular-nums">{quantas(a)}/{TOTAL_INSIGNIAS}</span>
-                </span>
-              </li>
-            );
-          })}
-          {lista.length === 0 && <li className="py-6 text-center text-xs text-muted-foreground">Ninguém por aqui.</li>}
-        </ul>
       </div>
     </TooltipProvider>
   );

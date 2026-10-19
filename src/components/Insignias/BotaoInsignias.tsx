@@ -6,8 +6,14 @@
  * `insignias.ts`.
  *
  * Este arquivo é leve (entra com o Layout): lê o álbum e guarda o lugar. As
- * medalhas e as placas trazem os desenhos das gincanas e baixam logo depois
+ * medalhas trazem os desenhos das gincanas e baixam logo que o app abre
  * (`Estante.tsx`); até lá, as fitas das «?» guardam o lugar.
+ *
+ * Carregar NA HORA (19/10/2026, «estão demorando para carregar»): a barra
+ * começa pelo álbum guardado no navegador (`albumGuardado`) e desenha sem
+ * esperar dado nenhum. A leitura do banco vem depois e só atualiza: espalhada
+ * em 3–12 s quando já havia álbum guardado (ninguém vê a espera, e o app que
+ * abre junto de manhã não lê junto), quase imediata no primeiro acesso.
  *
  * Ganhou e ainda não passou o mouse: a medalha pulsa. Pegou o zumbi ou a
  * bruxa agora, ou o chefe caiu e a pessoa ainda não tinha aquela: o álbum
@@ -23,7 +29,7 @@ import { useCacaAbobora } from '@/components/CacaAbobora/caca';
 import { useChefao } from '@/components/CacaAbobora/chefao';
 import { useChefona } from '@/components/CacaAbobora/bruxas/chefona/banco';
 import {
-  INSIGNIAS, insigniaDaCaca, insigniasVistas, marcarInsigniasVistas, novasInsignias,
+  INSIGNIAS, albumGuardado, guardarAlbum, insigniaDaCaca, insigniasVistas, marcarInsigniasVistas, novasInsignias,
   type Album, type IdInsignia,
 } from './insignias';
 import { esquecerAlbuns, lerMeuAlbum } from './banco';
@@ -31,10 +37,13 @@ import './insignias.css';
 
 const carregarEstante = comNovaTentativa(() => import('./Estante'));
 const Estante = lazy(() => carregarEstante().then(m => ({ default: m.Estante })));
-const DoPessoal = lazy(() => carregarEstante().then(m => ({ default: m.DoPessoal })));
+const DoPessoal = lazy(() => comNovaTentativa(() => import('./Pessoal'))().then(m => ({ default: m.DoPessoal })));
 
-/** Espalha a primeira leitura: o app inteiro abre junto de manhã. */
-const ESPALHAR_ENTRADA_MS = 8_000;
+/** Com álbum guardado: a leitura que só atualiza vem espalhada (o app inteiro abre junto de manhã). */
+const ATUALIZAR_DE_MS = 3_000;
+const ATUALIZAR_ESPALHADO_MS = 9_000;
+/** Primeiro acesso (nada guardado): quase na hora — é o que a pessoa está esperando. */
+const PRIMEIRA_LEITURA_MS = 800;
 /** Chefe derrotado: todo mundo que ainda não tinha relê — espalhado. */
 const ESPALHAR_CHEFE_MS = 20_000;
 
@@ -45,8 +54,7 @@ interface Props {
 }
 
 function useMeuAlbum(perfilId: string | null | undefined) {
-  const [album, setAlbum] = useState<Album | null>(null);
-  const [carregado, setCarregado] = useState(false);
+  const [album, setAlbum] = useState<Album | null>(() => (perfilId ? albumGuardado(perfilId) : null));
   const versao = useRef(0);
 
   const ler = useCallback((esperaMs: number, novo = false) => {
@@ -55,19 +63,25 @@ function useMeuAlbum(perfilId: string | null | undefined) {
     const t = setTimeout(() => {
       if (novo) esquecerAlbuns();
       lerMeuAlbum(perfilId)
-        .then(a => { if (versao.current === minha) { setAlbum(a); setCarregado(true); } })
-        .catch(() => { if (versao.current === minha) setCarregado(true); });
+        .then(a => {
+          guardarAlbum(perfilId, a);
+          if (versao.current === minha) setAlbum(a);
+        })
+        .catch(() => { /* fica o guardado; a próxima leitura tenta de novo */ });
     }, esperaMs);
     return () => clearTimeout(t);
   }, [perfilId]);
 
   useEffect(() => {
-    setAlbum(null);
-    setCarregado(false);
-    return ler(Math.random() * ESPALHAR_ENTRADA_MS);
-  }, [ler]);
+    if (!perfilId) { setAlbum(null); return; }
+    const guardado = albumGuardado(perfilId);
+    setAlbum(guardado);
+    return ler(guardado
+      ? ATUALIZAR_DE_MS + Math.random() * ATUALIZAR_ESPALHADO_MS
+      : Math.random() * PRIMEIRA_LEITURA_MS);
+  }, [perfilId, ler]);
 
-  return { album, carregado, ler };
+  return { album, ler };
 }
 
 /** As fitas das «?» sem a medalha: o lugar enquanto o desenho baixa. */
@@ -84,7 +98,7 @@ function Fitas() {
 }
 
 export function BotaoInsignias({ perfilId, empresaId, souSuperAdmin }: Props) {
-  const { album, carregado, ler } = useMeuAlbum(perfilId);
+  const { album, ler } = useMeuAlbum(perfilId);
   const [vistas, setVistas] = useState<IdInsignia[] | null>(null);
 
   useEffect(() => { setVistas(perfilId ? insigniasVistas(perfilId) : null); }, [perfilId]);
@@ -128,11 +142,11 @@ export function BotaoInsignias({ perfilId, empresaId, souSuperAdmin }: Props) {
     // zoom alto, as medalhas somem do fim (as «?» primeiro) e nunca ficam por
     // cima do Calendário nem empurram o sair para fora (19/10/2026).
     <div className="flex min-w-0 shrink-[1000] items-center gap-1 self-stretch">
-      {carregado ? (
-        <Suspense fallback={<Fitas />}>
-          <Estante album={album} novas={novas} aoVer={aoVer} />
-        </Suspense>
-      ) : <Fitas />}
+      {/* Desenha já, com o que tiver (o guardado, ou só as «?»): o pedaço das
+          medalhas começa a baixar aqui, em paralelo com a leitura. */}
+      <Suspense fallback={<Fitas />}>
+        <Estante album={album} novas={novas} aoVer={aoVer} />
+      </Suspense>
       {souSuperAdmin && (
         <Popover>
           <PopoverTrigger asChild>

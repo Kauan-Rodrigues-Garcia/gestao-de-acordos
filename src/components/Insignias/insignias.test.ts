@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  INSIGNIAS, TOTAL_INSIGNIAS, insigniaDaCaca, montarAlbuns, novasInsignias, ordenarAlbuns, quantas,
+  INSIGNIAS, TOTAL_INSIGNIAS, albumGuardado, guardarAlbum, insigniaDaCaca, montarAlbuns, novasInsignias, ordenarAlbuns, quantas,
   type LinhaCaca, type LinhaGolpe,
 } from './insignias';
 
@@ -81,5 +81,27 @@ describe('álbum de insígnias', () => {
     expect(novasInsignias(['zumbi', 'bruxas'], ['zumbi'])).toEqual(['bruxas']);
     expect(novasInsignias(['zumbi'], null)).toEqual(['zumbi']);
     expect(novasInsignias([], null)).toEqual([]);
+  });
+});
+
+describe('álbum guardado no navegador (as medalhas aparecem na hora)', () => {
+  it('guarda e devolve o álbum da pessoa', () => {
+    const a = montarAlbuns([caca({})], [], []).get('ana')!;
+    guardarAlbum('ana', a);
+    expect(albumGuardado('ana')?.conquistas.zumbi?.vezes).toBe(1);
+  });
+
+  it('sem insígnia também é resposta: mostra só as «?» na hora', () => {
+    guardarAlbum('bia', null);
+    expect(albumGuardado('bia')).toMatchObject({ usuario: 'bia', conquistas: {} });
+  });
+
+  it('ignora o que estiver estragado, de outra pessoa ou de insígnia que não existe', () => {
+    localStorage.setItem('insignias:album:v1:caio', '{não é json');
+    expect(albumGuardado('caio')).toBeNull();
+    localStorage.setItem('insignias:album:v1:davi', JSON.stringify({ usuario: 'outro', conquistas: {} }));
+    expect(albumGuardado('davi')).toBeNull();
+    localStorage.setItem('insignias:album:v1:eva', JSON.stringify({ usuario: 'eva', conquistas: { zumbi: { vezes: 1, primeiraEm: 'x' }, fantasma: { vezes: 1, primeiraEm: 'x' } } }));
+    expect(Object.keys(albumGuardado('eva')!.conquistas)).toEqual(['zumbi']);
   });
 });

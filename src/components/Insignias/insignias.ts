@@ -235,3 +235,39 @@ export function marcarInsigniasVistas(usuario: string, ids: readonly IdInsignia[
 export function novasInsignias(tem: readonly IdInsignia[], vistas: readonly IdInsignia[] | null): IdInsignia[] {
   return tem.filter(id => !(vistas ?? []).includes(id));
 }
+
+// ── O álbum guardado no navegador ──────────────────────────────────────────
+//
+// Para as medalhas aparecerem NA HORA ao abrir o app (19/10/2026: «estão
+// demorando para carregar»): a última leitura fica no navegador, por pessoa,
+// e a barra começa por ela; a leitura do banco vem depois e só atualiza. O
+// banco continua com a leitura espalhada — ninguém mais vê a espera.
+
+const CHAVE_ALBUM = (usuario: string) => `insignias:album:v1:${usuario}`;
+const IDS = new Set<string>(INSIGNIAS.map(i => i.id));
+
+export function albumGuardado(usuario: string): Album | null {
+  try {
+    const bruto = localStorage.getItem(CHAVE_ALBUM(usuario));
+    if (!bruto) return null;
+    const a = JSON.parse(bruto) as Album;
+    if (!a || a.usuario !== usuario || typeof a.conquistas !== 'object' || a.conquistas === null) return null;
+    // Só as insígnias que existem, com o mínimo que a medalha e a placa leem.
+    const conquistas: Album['conquistas'] = {};
+    for (const [id, c] of Object.entries(a.conquistas)) {
+      if (IDS.has(id) && c && typeof c.vezes === 'number' && typeof c.primeiraEm === 'string') {
+        conquistas[id as IdInsignia] = c;
+      }
+    }
+    return { ...a, conquistas };
+  } catch {
+    return null;
+  }
+}
+
+export function guardarAlbum(usuario: string, album: Album | null): void {
+  try {
+    const a: Album = album ?? { usuario, nome: '', foto: null, setor: null, conquistas: {} };
+    localStorage.setItem(CHAVE_ALBUM(usuario), JSON.stringify({ ...a, usuario }));
+  } catch { /* sem armazenamento: a barra só espera a leitura, como antes */ }
+}
