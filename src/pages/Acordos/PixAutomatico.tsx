@@ -2684,10 +2684,13 @@ export function PixAutomatico() {
             <motion.div key={s.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.06, duration: 0.3 }}>
               <div className={cn('rounded-xl border bg-gradient-to-br p-4 h-full', s.cls)}>
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
+                {/* Quebra de linha quando o card estreita (zoom de 125%, três
+                    cards lado a lado): a comissão desce em vez de vazar pela
+                    borda — os valores, em fonte mono, não encolhem (19/10/2026). */}
+                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+                  <div className="flex min-w-0 items-center gap-3">
                     {s.icon}
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-[11px] text-muted-foreground">{s.label} · {s.qtd} acordo{s.qtd !== 1 ? 's' : ''}</p>
                       {/* Sem o piscar da tela inteira, um total que muda
                           passaria despercebido. A animacao e o aviso. */}
@@ -2696,7 +2699,7 @@ export function PixAutomatico() {
                         className="block text-lg font-bold font-mono text-foreground leading-tight" />
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="ml-auto text-right">
                     <p className="text-[11px] text-muted-foreground">Comissão Pix</p>
                     <ValorAnimado
                       valor={s.comissao} formatar={formatCurrency}

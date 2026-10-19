@@ -80,6 +80,9 @@ import { TrocarSenhaModal } from './TrocarSenhaModal';
 import { SeletorEmpresa } from './SeletorEmpresa';
 import { PainelSobDemanda } from './PainelSobDemanda';
 import { BotaoCalendario } from './Calendario/BotaoCalendario';
+import { BotaoInsignias } from './Insignias/BotaoInsignias';
+import { BarraRolagemLateral } from './BarraRolagemLateral';
+import { ligarRolagemLateral } from '@/lib/rolagemLateral';
 import { comNovaTentativa } from '@/lib/sobDemanda';
 import { usePrecarregarQuandoOcioso } from '@/hooks/useSobDemanda';
 import { useSobreposicaoUso } from '@/providers/RastreioUsoProvider';
@@ -142,6 +145,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [painelDiaAberto, setPainelDiaAberto] = useState(false);
   const [painelDesafioAberto, setPainelDesafioAberto] = useState(false);
   const [calendarioAberto, setCalendarioAberto] = useState(false);
+  // A área de conteúdo: a barra de rolagem lateral flutuante mede por ela
+  // (`BarraRolagemLateral`), e as fileiras de abas rolam com o mouse no app
+  // inteiro (`lib/rolagemLateral.ts`). Ver o defeito de 19/10/2026 lá.
+  const areaConteudo = useRef<HTMLElement>(null);
+  useEffect(() => ligarRolagemLateral(), []);
   const [fotoUrl, setFotoUrl] = useState<string | null>((perfil as { foto_url?: string | null } | null)?.foto_url ?? null);
   const [uploadingFoto, setUploadingFoto] = useState(false);
   const [deletandoFoto, setDeletandoFoto] = useState(false);
@@ -749,11 +757,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const conteudo = (
     // `data-palco-abobora`: é dentro daqui que a Caça aos Zumbis procura um canto
     // livre (`CacaAbobora/esconderijo.ts`) — nunca no menu nem na barra do topo.
-    <main data-palco-abobora className={cn('flex-1 overflow-y-auto', halloween && 'relative', halloween && temFundo(cenaHalloween) ? 'z-[1] bg-transparent' : 'bg-background')}>
+    <main ref={areaConteudo} data-palco-abobora className={cn('flex-1 overflow-y-auto', halloween && 'relative', halloween && temFundo(cenaHalloween) ? 'z-[1] bg-transparent' : 'bg-background')}>
       {/* Teias, aranha, lanterna e fantasmas moram no alto do conteúdo e
           rolam com a página — ficar parado lá em cima era o defeito. */}
       {halloween && <Suspense fallback={null}><CamadaHalloween cena={cenaHalloween} /></Suspense>}
       {children}
+      <BarraRolagemLateral raiz={areaConteudo} />
     </main>
   );
 
@@ -816,6 +825,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             meuSetorId={perfil?.setor_id ?? null}
             ativo={veCalendario}
             onAbrir={() => setCalendarioAberto(true)}
+          />
+
+          {/* As insígnias das gincanas (19/10/2026): uma medalha por gincana
+              completada, pendurada na borda de cima da barra; o mouse em cima
+              mostra a placa da gincana. O pessoal, só para o super_admin. Ver
+              `Insignias/insignias.ts`. */}
+          <BotaoInsignias
+            perfilId={perfil?.id}
+            empresaId={empresa?.id}
+            souSuperAdmin={userRole === 'super_admin'}
           />
 
           {/* O aviso de notificação nova mora AQUI, no vão que já era vazio
@@ -939,7 +958,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                       <Camera className="w-2 h-2 text-muted-foreground" />
                     </span>
                   </div>
-                  <div className="hidden min-w-0 flex-col gap-0.5 sm:flex">
+                  {/* Só a partir de 1024 px: abaixo disso a barra não cabe e o
+                      sair era empurrado para fora (19/10/2026). */}
+                  <div className="hidden min-w-0 flex-col gap-0.5 lg:flex">
                     <p className="max-w-[220px] truncate text-xs font-semibold leading-4 text-foreground">{perfil?.nome ?? 'Carregando...'}</p>
                     <p className="flex h-4 min-w-0 items-center gap-1 text-[11px] leading-4 text-muted-foreground">
                       <span className={cn('inline-flex h-4 shrink-0 items-center whitespace-nowrap rounded border px-1.5 text-[10px] font-medium leading-none', PERFIL_COLORS[userRole])}>

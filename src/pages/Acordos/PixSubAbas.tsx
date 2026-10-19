@@ -53,15 +53,19 @@ interface Props {
 }
 
 export function PixSubAbas({ abas, ativa, onTrocar }: Props) {
+  // As colunas contam pela largura do BLOCO (`@container`), não da tela: com
+  // zoom de 125% a tela ainda é «larga» (lg), mas o conteúdo tem ~690 px, e as
+  // quatro abas lado a lado viravam «NRs diverge…» (19/10/2026).
   return (
+    <div className="@container">
     <div
       role="group"
       aria-label="Seções do Pix Automático"
       className={cn(
         'grid gap-1.5 rounded-xl border border-border bg-muted/40 p-1',
-        abas.length >= 4 ? 'grid-cols-2 lg:grid-cols-4'
-          : abas.length === 3 ? 'grid-cols-1 sm:grid-cols-3'
-          : 'grid-cols-1 sm:grid-cols-2',
+        abas.length >= 4 ? 'grid-cols-2 @[52rem]:grid-cols-4'
+          : abas.length === 3 ? 'grid-cols-1 @[40rem]:grid-cols-3'
+          : 'grid-cols-1 @[26rem]:grid-cols-2',
       )}
     >
       {abas.map(({ key, label, Icon, resumo, contador, alerta }) => {
@@ -130,6 +134,7 @@ export function PixSubAbas({ abas, ativa, onTrocar }: Props) {
           </button>
         );
       })}
+    </div>
     </div>
   );
 }

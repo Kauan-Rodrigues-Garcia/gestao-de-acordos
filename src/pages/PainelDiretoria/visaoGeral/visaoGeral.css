@@ -209,7 +209,11 @@
 .vg-kpis.vg-kpis-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .vg-kpi { border: 1px solid var(--border); border-radius: 14px; padding: 10px 12px; min-width: 0; display: grid; gap: 3px; align-content: start;
   background: color-mix(in srgb, var(--muted) 30%, var(--card)); }
-.vg-kpi small { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted-foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Zoom alto (19/10/2026): o rótulo usa até duas linhas em vez de virar «Hoje deve…»,
+ e o número encolhe quando o card estreita (o card é um container). */
+.vg-kpi { container-type: inline-size; }
+.vg-kpi small { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted-foreground); overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+@container (max-width: 8.5rem) { .vg-kpi b { font-size: 16px; } }
 .vg-kpi b { font-family: var(--vg-num); font-size: 19px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .vg-kpi em { font-style: normal; font-size: 12px; color: var(--muted-foreground); }
 .vg-kpi.vg-forte { border-color: color-mix(in srgb, var(--vg-d, var(--vg-c)) 45%, var(--border)); background: color-mix(in srgb, var(--vg-d, var(--vg-c)) 8%, var(--card)); }

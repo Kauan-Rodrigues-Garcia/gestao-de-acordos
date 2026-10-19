@@ -42,7 +42,9 @@ export function AlternadorMeta({ nivel, niveis, onEscolher }: AlternadorMetaProp
   return (
     <div className="-my-0.5 flex items-center gap-1.5">
       <span
-        className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+        // Some no card estreito (zoom alto): os botões 1ª…4ª bastam. O card é
+        // o `@container` (`MetricCard`).
+        className="hidden text-[10px] font-medium uppercase tracking-wide text-muted-foreground @[16rem]:inline"
         aria-hidden="true"
       >
         Metas:

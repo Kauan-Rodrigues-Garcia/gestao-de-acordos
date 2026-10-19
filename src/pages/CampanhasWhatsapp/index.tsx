@@ -519,8 +519,13 @@ function LinhaContato({ c, proximo, onEnviar, onEnviar2, onCopiar, onEditar, onN
         enviado && 'opacity-75',
       )}
     >
+      {/* Com zoom (125%/150%) o cartão fica estreito (19/10/2026). Antes, os
+          dados encolhiam até sumir para os botões caberem ao lado, e a grade
+          ficava em 4 colunas pela largura da TELA: telefone cortado e rótulos
+          um em cima do outro. Agora os dados têm largura mínima (os botões
+          descem para a linha de baixo) e a grade conta pela largura dela. */}
       <div className="flex flex-wrap items-start gap-3">
-        <div className="min-w-0 flex-1 space-y-2">
+        <div className="@container min-w-[min(100%,20rem)] flex-1 space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             <p className="truncate font-medium">{nomeBonito(c.nome) || 'Sem nome'}</p>
             {enviado && (
@@ -537,7 +542,7 @@ function LinhaContato({ c, proximo, onEnviar, onEnviar2, onCopiar, onEditar, onN
               <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">Mensagem editada</span>
             )}
           </div>
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-4">
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs @[32rem]:grid-cols-4">
             <Campo rotulo="Contrato (NR)" valor={c.contrato} />
             <Campo rotulo="Empresa" valor={c.empresa_cliente} />
             <Campo rotulo="WhatsApp" valor={fone} copiavel />

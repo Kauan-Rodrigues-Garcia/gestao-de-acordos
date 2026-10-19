@@ -87,7 +87,7 @@ export function MetricCard({
     <motion.div
       variants={itemVariants}
       whileHover={{ y: -2, transition: { duration: 0.18 } }}
-      className="group relative flex flex-col gap-1.5 rounded-xl border border-border/70 bg-card overflow-hidden p-4 shadow-sm hover:shadow-md transition-shadow duration-200"
+      className="@container group relative flex flex-col gap-1.5 rounded-xl border border-border/70 bg-card overflow-hidden p-4 shadow-sm hover:shadow-md transition-shadow duration-200"
     >
       <div
         className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-xl"
@@ -101,8 +101,11 @@ export function MetricCard({
           }}
         />
       )}
-      <div className="flex items-center justify-between gap-2 pl-1">
-        <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide truncate">
+      {/* Com zoom o card estreita (19/10/2026): o rótulo não encolhe abaixo de
+          4rem — se não couber com a ação ao lado, a ação desce de linha. Antes
+          o seletor de metas espremia «Projeção» até «PR…». */}
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 pl-1">
+        <span className="min-w-0 flex-1 basis-16 text-[11px] font-medium text-muted-foreground uppercase tracking-wide truncate">
           {label}
         </span>
         <div className="flex items-center gap-1 shrink-0">

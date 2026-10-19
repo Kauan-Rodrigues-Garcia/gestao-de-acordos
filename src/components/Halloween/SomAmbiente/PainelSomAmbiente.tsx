@@ -41,6 +41,7 @@ import {
 import { EMBUTIDAS, estiloDaFaixa, infoDaFaixa, infoDaPlaylist, type InfoFaixa } from './faixas';
 import { CapaFaixa } from './CapaFaixa';
 import { Equalizador } from './Equalizador';
+import { marcarPontas } from '@/lib/rolagemLateral';
 import './somAmbiente.css';
 
 const mmss = (seg: number) => {
@@ -391,6 +392,10 @@ function SeletorFaixas({ escolhida, noAr, playlists, fila }: {
   // seu título na lista.
   const [genero, setGenero] = useState<Genero | 'todos'>('todos');
   const lista = useRef<HTMLDivElement>(null);
+  // A fileira de gêneros rola arrastando com o mouse e com a roda, como toda
+  // fileira do app (`lib/rolagemLateral.ts`); aqui só se marca a ponta apagada
+  // ao abrir (depois, a rolagem marca sozinha).
+  const fileiraGeneros = useRef<HTMLDivElement>(null);
 
   // Trocou a faixa (anterior/próxima, ou a sequência andou): vai até ela —
   // e o filtro de gênero solta, se ela é de outro.
@@ -428,6 +433,9 @@ function SeletorFaixas({ escolhida, noAr, playlists, fila }: {
   };
 
   const naAbaMusicas = aba === 'musicas';
+  useEffect(() => {
+    if (naAbaMusicas && fileiraGeneros.current) marcarPontas(fileiraGeneros.current);
+  }, [naAbaMusicas]);
   const todos = naAbaMusicas && genero !== 'todos'
     ? listas.musicas.filter(x => generoDe(x.id) === genero)
     : listas[aba];
@@ -518,7 +526,7 @@ function SeletorFaixas({ escolhida, noAr, playlists, fila }: {
       </div>
 
       {naAbaMusicas && (
-        <div role="radiogroup" aria-label="Gênero" className="som-generos mt-2 flex shrink-0 gap-1 overflow-x-auto pb-0.5">
+        <div ref={fileiraGeneros} role="radiogroup" aria-label="Gênero" className="som-generos mt-2 flex shrink-0 gap-1 overflow-x-auto pb-0.5">
           {[{ id: 'todos' as const, rotulo: 'Todos' }, ...GENEROS].map(g => {
             const ativo = genero === g.id;
             const qtd = g.id === 'todos' ? listas.musicas.length : listas.musicas.filter(x => generoDe(x.id) === g.id).length;
@@ -529,7 +537,12 @@ function SeletorFaixas({ escolhida, noAr, playlists, fila }: {
                 type="button"
                 role="radio"
                 aria-checked={ativo}
-                onClick={() => { setGenero(g.id); if (lista.current) lista.current.scrollTop = 0; }}
+                onClick={e => {
+                  setGenero(g.id);
+                  if (lista.current) lista.current.scrollTop = 0;
+                  // O chip escolhido inteiro à vista, sem rolar o painel.
+                  e.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+                }}
                 className={cn(
                   'flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',

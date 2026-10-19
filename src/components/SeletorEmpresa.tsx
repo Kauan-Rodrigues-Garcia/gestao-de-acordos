@@ -92,7 +92,7 @@ export function SeletorEmpresa() {
           title="Trocar de empresa"
         >
           <Building2 className="w-3.5 h-3.5 shrink-0" />
-          <span className="hidden sm:inline max-w-[120px] truncate">
+          <span className="hidden lg:inline max-w-[120px] truncate">
             {empresa?.nome ?? 'Empresa'}
           </span>
         </Button>

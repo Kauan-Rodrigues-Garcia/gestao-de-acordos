@@ -63,7 +63,10 @@ export function CardMetaDonut({
   const fatias = fatiasDeForma(porForma);
 
   return (
-    <Card className={cn('flex flex-col border-border/70 bg-card shadow-sm', ALTURA_CARD_PROGRESSO)}>
+    // `@container`: o botão do topo encurta pela largura do CARD, não da tela.
+    // Com zoom de 125% o card fica com ~235 px, e «Formas de pagamento» por
+    // extenso espremia o título até «Pr…» (19/10/2026).
+    <Card className={cn('@container flex flex-col border-border/70 bg-card shadow-sm', ALTURA_CARD_PROGRESSO)}>
       <CardHeader className="pb-2 pt-4 px-4">
         <div className="flex items-center justify-between gap-2">
           <CardTitle className="text-sm font-semibold flex items-center gap-2 min-w-0">
@@ -73,7 +76,7 @@ export function CardMetaDonut({
             >
               <Target className="w-3.5 h-3.5" style={{ color: corTexto(cor) }} />
             </div>
-            <span className="truncate">{breakdownAberto ? 'Formas de pagamento' : 'Progresso da meta'}</span>
+            <span className="line-clamp-2 leading-tight">{breakdownAberto ? 'Formas de pagamento' : 'Progresso da meta'}</span>
           </CardTitle>
           {fatias.length > 0 && (
             <Button
@@ -81,8 +84,11 @@ export function CardMetaDonut({
               size="sm"
               className="h-6 text-[11px] gap-1 text-muted-foreground hover:text-foreground px-2 shrink-0"
               onClick={() => setBreakdownAberto(v => !v)}
+              title={breakdownAberto ? 'Progresso da meta' : 'Formas de pagamento'}
+              aria-label={breakdownAberto ? 'Progresso da meta' : 'Formas de pagamento'}
             >
-              {breakdownAberto ? 'Progresso da meta' : 'Formas de pagamento'}
+              <span className="@[19rem]:hidden">{breakdownAberto ? 'Meta' : 'Formas'}</span>
+              <span className="hidden @[19rem]:inline">{breakdownAberto ? 'Progresso da meta' : 'Formas de pagamento'}</span>
               <ChevronRight
                 className={`w-3 h-3 transition-transform duration-200 ${breakdownAberto ? 'rotate-90' : ''}`}
               />

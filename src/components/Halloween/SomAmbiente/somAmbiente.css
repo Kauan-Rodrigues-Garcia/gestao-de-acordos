@@ -144,9 +144,16 @@
   scrollbar-width: thin;
   scrollbar-color: color-mix(in oklab, var(--muted-foreground) 50%, transparent) transparent;
 }
-/* A fileira de gêneros rola de lado em painel estreito, sem barra à vista. */
-.som-generos { scrollbar-width: none; }
+/* A fileira de gêneros rola de lado em painel estreito, sem barra à vista:
+   arrastando com o mouse ou com a roda (`lib/rolagemLateral.ts`). A ponta apaga quando
+   há mais gêneros escondidos daquele lado. */
+.som-generos { scrollbar-width: none; cursor: grab; user-select: none; }
 .som-generos::-webkit-scrollbar { display: none; }
+.som-generos[data-arrastando] { cursor: grabbing; }
+.som-generos[data-arrastando] > * { pointer-events: none; }
+.som-generos[data-mais='direita'] { mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); }
+.som-generos[data-mais='esquerda'] { mask-image: linear-gradient(90deg, transparent, #000 28px); }
+.som-generos[data-mais='os-dois'] { mask-image: linear-gradient(90deg, transparent, #000 28px, #000 calc(100% - 28px), transparent); }
 
 .som-lista::-webkit-scrollbar { width: 8px; }
 .som-lista::-webkit-scrollbar-thumb { background: color-mix(in oklab, var(--muted-foreground) 45%, transparent); border-radius: 9999px; }

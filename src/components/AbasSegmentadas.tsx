@@ -24,7 +24,9 @@
  * com `aria-pressed` é honesto nos dois casos e no das abas de verdade — é o
  * mesmo padrão de `PainelMetas/SeletorUnidade`, que já é a forma da casa.
  */
+import { useEffect, useRef } from 'react';
 import type { LucideIcon } from 'lucide-react';
+import { observarPontas } from '@/lib/rolagemLateral';
 import { cn } from '@/lib/utils';
 
 export interface AbaSegmentada<K extends string> {
@@ -51,13 +53,19 @@ interface AbasSegmentadasProps<K extends string> {
 export function AbasSegmentadas<K extends string>({
   abas, ativa, onTrocar, rotulo, className,
 }: AbasSegmentadasProps<K>) {
+  // Rola por dentro com a roda e o arrasto (`lib/rolagemLateral.ts`); a ponta
+  // apaga onde há mais abas escondidas. Com zoom alto a fileira não cabia e
+  // aparecia uma barra cinza embaixo das abas (19/10/2026).
+  const fileira = useRef<HTMLDivElement>(null);
+  useEffect(() => (fileira.current ? observarPontas(fileira.current) : undefined), [abas.length]);
   if (abas.length === 0) return null;
   return (
     <div
+      ref={fileira}
       role="group"
       aria-label={rotulo}
       className={cn(
-        'inline-flex items-center gap-1 rounded-xl border border-border bg-muted/40 p-1',
+        'fileira-rola inline-flex items-center gap-1 rounded-xl border border-border bg-muted/40 p-1',
         'max-w-full overflow-x-auto',
         className,
       )}
@@ -69,7 +77,7 @@ export function AbasSegmentadas<K extends string>({
           aria-pressed={ativa === key}
           onClick={() => onTrocar(key)}
           className={cn(
-            'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium',
+            'flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium',
             'whitespace-nowrap transition-colors',
             ativa === key
               ? 'bg-background text-foreground shadow-sm'

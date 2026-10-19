@@ -11,6 +11,14 @@
  * `valorNumerico` liga a animação: o número anda até o novo valor em vez de
  * saltar. Sem ele o tile mostra `valor` como texto e fica parado — é o certo
  * para contagens, onde a animação seria ruído.
+ *
+ * ## Card estreito (zoom de 125%/150%, 19/10/2026)
+ *
+ * Com quatro tiles lado a lado e zoom alto, cada um fica com ~165 px, e o valor
+ * em `truncate` virava «R$ 4.511…» — dinheiro cortado. Agora o tile é um
+ * `@container`: estreito, a caixa do ícone some e o valor diminui até caber;
+ * texto longo demais (um período) quebra no espaço em vez de cortar; e a
+ * linha de apoio usa até duas linhas.
  */
 import type { LucideIcon } from 'lucide-react';
 import { ValorAnimado } from '@/components/ValorAnimado';
@@ -59,7 +67,7 @@ export function KpiTile({
 }: KpiTileProps) {
   const t = TONS[tom];
   return (
-    <div className={cn('rounded-xl border bg-gradient-to-br p-4 h-full', t.fundo, className)}>
+    <div className={cn('@container rounded-xl border bg-gradient-to-br p-4 h-full', t.fundo, className)}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
@@ -68,16 +76,16 @@ export function KpiTile({
           {valorNumerico !== undefined && formatar ? (
             <ValorAnimado
               valor={valorNumerico} formatar={formatar}
-              className={cn('block text-lg font-bold font-mono leading-tight mt-1 truncate', t.valor)}
+              className={cn('block text-sm @[11rem]:text-base @[14rem]:text-lg font-bold font-mono leading-tight mt-1 break-words', t.valor)}
             />
           ) : (
-            <p className={cn('text-lg font-bold font-mono leading-tight mt-1 truncate', t.valor)}>
+            <p className={cn('text-sm @[11rem]:text-base @[14rem]:text-lg font-bold font-mono leading-tight mt-1 break-words', t.valor)}>
               {valor}
             </p>
           )}
-          {sub && <p className="text-[10.5px] text-muted-foreground mt-0.5 truncate">{sub}</p>}
+          {sub && <p className="text-[10.5px] text-muted-foreground mt-0.5 line-clamp-2" title={sub}>{sub}</p>}
         </div>
-        <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center shrink-0', t.caixa)}>
+        <div className={cn('hidden @[13rem]:flex w-9 h-9 rounded-xl items-center justify-center shrink-0', t.caixa)}>
           <Icon className="w-4 h-4" />
         </div>
       </div>
