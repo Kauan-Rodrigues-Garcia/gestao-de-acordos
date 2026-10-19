@@ -636,6 +636,11 @@ export type RespostaPlacarDoDia =
  * linha de ninguém, e a soma do setor tem regras (órfãos, clones, setor da
  * pessoa) que o cliente não conhece.
  */
+function parteDoSetor(v: unknown): { total: number; qtd: number } {
+  const o = (v && typeof v === 'object' ? v : {}) as { total?: unknown; qtd?: unknown };
+  return { total: Number(o.total) || 0, qtd: Number(o.qtd) || 0 };
+}
+
 export async function buscarPlacarDoDia(desafioId: string): Promise<RespostaPlacarDoDia> {
   const { data, error } = await rpcSemTipo<Record<string, unknown>>(
     'fn_desafio_diario', { p_desafio_id: desafioId },
@@ -670,6 +675,10 @@ export async function buscarPlacarDoDia(desafioId: string): Promise<RespostaPlac
       total:         Number(data.total) || 0,
       qtd:           Number(data.qtd) || 0,
       contribuintes,
+      // Sem a migration 20261019180000 as chaves não vêm: zerado, e o placar
+      // fica como antes (o total já contava; só não mostrava a parte).
+      contribuicaoReceptivo: parteDoSetor(data.contribuicao_receptivo),
+      semOperador:   parteDoSetor(data.sem_operador),
       ultimaChegada: (data.ultima_chegada as string | null) ?? null,
       metaMes:       data.meta_mes === null || data.meta_mes === undefined ? null : Number(data.meta_mes) || null,
       feriados:      listaDeTextos(config.feriados),

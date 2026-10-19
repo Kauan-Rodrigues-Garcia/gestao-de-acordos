@@ -12,6 +12,15 @@
  *
  * O relógio anda a cada 30 s para o tempo restante e a virada de situação
  * (agendado → valendo → apurando → encerrado), sem ida ao banco.
+ *
+ * ## Ao vivo só para quem participa (19/10/2026)
+ *
+ * O tempo real (o sinal e a releitura de 5 min) fica ligado só para quem está
+ * no desafio (`participo`), para quem o criou (`acompanho`) e na prévia — é
+ * para eles que a pílula aparece. Quem só ENXERGA o desafio pela RLS (o gerente
+ * que vê o desafio de outro setor) lê uma vez, ao abrir. Antes, cada pessoa da
+ * empresa com a aba Desafios relia o placar a cada lote do 59, mesmo com a
+ * pílula escondida.
  */
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -22,7 +31,7 @@ import { useDesafioEmCartaz } from '@/hooks/useDesafios';
 import { ouvirPrevias, previasDaBarra } from '@/lib/previaDesafioDoDia';
 import { buscarPlacarDoDia, type RespostaPlacarDoDia } from '@/services/desafios/desafios.service';
 import {
-  andamentoDoDia, ehDesafioDoDia, entradasNovas, minutoAgoraSaoPaulo, situacaoDoDia,
+  andamentoDoDia, ehDesafioDoDia, entradasNovas, linhasDoPlacar, minutoAgoraSaoPaulo, situacaoDoDia,
   type AndamentoDoDia, type Entrada, type PlacarDoDia, type SituacaoDoDia,
 } from '@/services/desafios/desafioDoDia';
 import type { Desafio } from '@/services/desafios/types';
@@ -67,9 +76,24 @@ export interface UsoPlacarDoDia {
   loteId: number;
   carregando: boolean;
   erro: string | null;
+  /** O placar acompanha o relatório sozinho (ver «Ao vivo só para quem participa»). */
+  aoVivo: boolean;
+  /** Quando o placar foi lido pela última vez (ms), para o «atualizado às». */
+  lidoEm: number | null;
 }
 
-export function usePlacarDoDia(desafio: Desafio | null, ativo = true): UsoPlacarDoDia {
+/** Quem acompanha ao vivo: quem está no desafio ou quem o criou. */
+function acompanhaAoVivo(resposta: RespostaPlacarDoDia | undefined): boolean {
+  return resposta?.estado === 'ok' && (resposta.placar.participo || resposta.placar.acompanho);
+}
+
+export function usePlacarDoDia(
+  desafio: Desafio | null,
+  ativo = true,
+  /** A prévia do rascunho: quem configura acompanha, mesmo fora do alvo. */
+  opcoes: { sempreAoVivo?: boolean } = {},
+): UsoPlacarDoDia {
+  const sempreAoVivo = opcoes.sempreAoVivo === true;
   const { empresa } = useEmpresa();
   const queryClient = useQueryClient();
   const empresaId = empresa?.id ?? null;
@@ -78,7 +102,7 @@ export function usePlacarDoDia(desafio: Desafio | null, ativo = true): UsoPlacar
   const relogio = useRelogioSaoPaulo();
   // Dia que já passou não muda mais (fora a correção tardia do 59): lê uma vez,
   // sem escutar o tempo real.
-  const aoVivo = !!desafio && desafio.dataInicio >= relogio.hoje;
+  const diaVigente = !!desafio && desafio.dataInicio >= relogio.hoje;
 
   const chave = useMemo(() => ['desafio-do-dia', desafioId] as const, [desafioId]);
 
@@ -86,9 +110,12 @@ export function usePlacarDoDia(desafio: Desafio | null, ativo = true): UsoPlacar
     queryKey: chave,
     enabled: !!desafioId,
     queryFn: () => buscarPlacarDoDia(desafioId as string),
-    refetchInterval: aoVivo ? RELEITURA_MS : false,
-    staleTime: aoVivo ? 20_000 : 10 * 60 * 1000,
+    // A releitura de reserva só para quem acompanha: decide pela resposta.
+    refetchInterval: q => (diaVigente && (sempreAoVivo || acompanhaAoVivo(q.state.data)) ? RELEITURA_MS : false),
+    staleTime: diaVigente ? 20_000 : 10 * 60 * 1000,
   });
+
+  const aoVivo = diaVigente && (sempreAoVivo || acompanhaAoVivo(query.data));
 
   useEffect(() => {
     if (!desafioId || !empresaId || !aoVivo) return;
@@ -120,7 +147,9 @@ export function usePlacarDoDia(desafio: Desafio | null, ativo = true): UsoPlacar
     anterior.current = placar;
     // A primeira leitura não é «entrada»: é o placar que já existia.
     if (!antes) return;
-    const novas = entradasNovas(antes.contribuintes, placar.contribuintes);
+    // Pessoas e o dinheiro do setor (o Receptivo, o «sem operador»): os dois
+    // entram no total, e os dois são anunciados.
+    const novas = entradasNovas(linhasDoPlacar(antes), linhasDoPlacar(placar));
     if (!novas.length) return;
     setEntradas(novas);
     setLoteId(n => n + 1);
@@ -151,6 +180,8 @@ export function usePlacarDoDia(desafio: Desafio | null, ativo = true): UsoPlacar
     loteId,
     carregando: !!desafioId && query.isPending,
     erro: query.error instanceof Error ? query.error.message : null,
+    aoVivo,
+    lidoEm: query.dataUpdatedAt || null,
   };
 }
 

@@ -162,7 +162,7 @@ const MARCA_COMEMORADO = 'desafio-do-dia:comemorado:';
 export function PilulaDesafioDoDia({
   desafio, previa, onAbrir, className,
 }: { desafio: Desafio; previa: boolean; onAbrir: (d: Desafio) => void; className?: string }) {
-  const uso = usePlacarDoDia(desafio);
+  const uso = usePlacarDoDia(desafio, true, { sempreAoVivo: previa });
   const { placar, andamento, situacao, minuto, hoje, entradas, loteId } = uso;
   const diario = desafio.regra.diario!;
 

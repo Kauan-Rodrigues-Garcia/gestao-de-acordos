@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  andamentoDoDia, duracaoCurta, ehDesafioDoDia, entradasNovas, metaDiariaDoMes, metaEfetiva,
+  ID_RECEPTIVO, ID_SEM_OPERADOR, andamentoDoDia, duracaoCurta, ehDesafioDoDia, ehLinhaDoSetor, entradasNovas,
+  linhasDoPlacar, metaDiariaDoMes, metaEfetiva,
   minutoAgoraSaoPaulo, minutosRestantes, normalizarDiario, paraGravacao, rotuloJanela,
   situacaoDoDia, type DiarioDesafio,
 } from './desafioDoDia';
@@ -127,5 +128,29 @@ describe('paraGravacao', () => {
   it('quantidade grava a métrica; meta diária grava o R$ calculado', () => {
     expect(paraGravacao({ ...form, diario: { ...BASE, medida: 'quantidade', meta: 30 } }).regra.metrica).toBe('quantidade');
     expect(paraGravacao({ ...form, metaCalculada: 12_000, diario: { ...BASE, medida: 'meta_diaria', meta: 120 } }).regra.metaColetiva).toBe(12_000);
+  });
+});
+
+describe('o dinheiro do setor no placar (19/10/2026)', () => {
+  const pessoa = (id: string, total: number, qtd = 1) =>
+    ({ id, nome: `Pessoa ${id}`, fotoUrl: null, equipe: null, total, qtd, ultima: null });
+  const placar = (receptivo: number, semOperador = 0) => ({
+    contribuintes: [pessoa('a', 400, 2)],
+    contribuicaoReceptivo: { total: receptivo, qtd: receptivo ? 1 : 0 },
+    semOperador: { total: semOperador, qtd: semOperador ? 1 : 0 },
+  });
+
+  it('o Receptivo e o «sem operador» viram linhas depois das pessoas; zerado não aparece', () => {
+    expect(linhasDoPlacar(placar(0)).map(l => l.id)).toEqual(['a']);
+    expect(linhasDoPlacar(placar(1430.81, 226)).map(l => l.id)).toEqual(['a', ID_RECEPTIVO, ID_SEM_OPERADOR]);
+  });
+
+  it('a contribuição do Receptivo que chegou é anunciada no «Entrou agora»', () => {
+    const novas = entradasNovas(linhasDoPlacar(placar(1000)), linhasDoPlacar(placar(1430.81)));
+    expect(novas).toHaveLength(1);
+    expect(novas[0].id).toBe(ID_RECEPTIVO);
+    expect(novas[0].valor).toBeCloseTo(430.81, 2);
+    expect(ehLinhaDoSetor(novas[0].id)).toBe(true);
+    expect(ehLinhaDoSetor('a')).toBe(false);
   });
 });
