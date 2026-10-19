@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  empresaDeOrigem, empresaDoDestino, setoresDeVariasEmpresas,
+  empresaDeOrigem, empresaDoDestino, grupoDoSetor, gruposDeDestino, setoresDeVariasEmpresas,
 } from './empresasDaTransferencia';
 import { tipoDaTransferencia } from '@/services/admin/transferenciaUsuario.service';
 
@@ -36,5 +36,36 @@ describe('empresasDaTransferencia', () => {
   it('só marca a lista como mista quando há duas empresas', () => {
     expect(setoresDeVariasEmpresas([{ empresa_id: BOOKPLAY }, { empresa_id: BOOKPLAY }])).toBe(false);
     expect(setoresDeVariasEmpresas([{ empresa_id: BOOKPLAY }, { empresa_id: PAGUEPLAY }])).toBe(true);
+  });
+});
+
+describe('gruposDeDestino — o destino pela marca, não pela empresa (19/10/2026)', () => {
+  const BP = 'emp-bookplay', PP = 'emp-pagueplay', COM = 'emp-comercial';
+  const cidades = [{ id: 'c-bir', nome: 'Birigui' }, { id: 'c-mar', nome: 'Marília' }];
+  const empresas = [{ id: BP, nome: 'BookPlay' }, { id: PP, nome: 'PaguePlay' }, { id: COM, nome: 'Comercial' }];
+  const setor = (id: string, nome: string, empresa_id: string, cidade_id: string | null) =>
+    ({ id, nome, empresa_id, cidade_id });
+  const setores = [
+    setor('play5', 'Play 5', BP, 'c-bir'),
+    setor('mix', 'Play Mix Marília', BP, 'c-mar'),
+    setor('conecta', 'Conecta Play', PP, 'c-mar'),
+    setor('night', 'Play Night', BP, 'c-bir'),
+    setor('vendas', 'Vendas', COM, null),
+  ];
+
+  it('BookPlay = setores de Birigui; PaguePlay = os de Marília, de qualquer empresa e com o Conecta Play', () => {
+    const g = gruposDeDestino(setores, cidades, empresas);
+    expect(g.map(x => x.chave)).toEqual(['marca:bookplay', 'marca:pagueplay', `empresa:${COM}`]);
+    expect(g[0].setores.map(s => s.id)).toEqual(['play5', 'night']);
+    expect(g[1].setores.map(s => s.id)).toEqual(['conecta', 'mix']);
+    expect(g[2].rotulo).toBe('Comercial · sem cidade');
+  });
+
+  it('grupo vazio não aparece, e o grupo de um setor é achado pelo id', () => {
+    const g = gruposDeDestino(setores.filter(s => s.cidade_id !== 'c-mar'), cidades, empresas);
+    expect(g.some(x => x.chave === 'marca:pagueplay')).toBe(false);
+    expect(grupoDoSetor(g, 'vendas')).toBe(`empresa:${COM}`);
+    expect(grupoDoSetor(g, 'nao-existe')).toBeNull();
+    expect(grupoDoSetor(g, null)).toBeNull();
   });
 });

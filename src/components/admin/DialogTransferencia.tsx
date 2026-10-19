@@ -58,8 +58,9 @@ import {
 } from '@/lib/cargoDoNucleo';
 import { PERFIL_LABELS } from '@/lib/index';
 import {
-  empresaDeOrigem, empresaDoDestino, setoresDeVariasEmpresas,
+  empresaDeOrigem, empresaDoDestino, grupoDoSetor, gruposDeDestino, setoresDeVariasEmpresas,
 } from '@/lib/empresasDaTransferencia';
+import { ROTULO_REGRA, ehRegraDoSetor } from '@/lib/regraDoSetor';
 import { cn } from '@/lib/utils';
 
 interface Props {
@@ -93,9 +94,9 @@ export function DialogTransferencia({
   const { temPermissao } = useCargoPermissoes();
 
   const [destinoSetor,   setDestinoSetor]   = useState('');
-  const [destinoEmpresa, setDestinoEmpresa] = useState('');
-  const [setoresDestino, setSetoresDestino] = useState<Setor[]>([]);
-  const [carregandoDestino, setCarregandoDestino] = useState(false);
+  const [destinoGrupo,   setDestinoGrupo]   = useState('');
+  const [todosSetores,   setTodosSetores]   = useState<Setor[] | null>(null);
+  const [cidades,        setCidades]        = useState<{ id: string; nome: string }[]>([]);
   const [levarAcordos,   setLevarAcordos]   = useState(false);
   const [novoCargo,      setNovoCargo]      = useState<PerfilUsuario | ''>('');
   const [empresas,       setEmpresas]       = useState<{ id: string; nome: string }[]>([]);
@@ -114,10 +115,38 @@ export function DialogTransferencia({
    * pessoa. A da tela só vale de reserva: na lista única da cobrança ela não
    * diz de onde ninguém é. Ver `lib/empresasDaTransferencia.ts`.
    */
+  /*
+   * O destino é escolhido pela MARCA, não pela empresa (19/10/2026): BookPlay
+   * lista os setores de Birigui, PaguePlay os de Marília — o Conecta Play
+   * incluído —, venham da empresa que vierem. Empresa com setor sem cidade
+   * (Comercial, RH) aparece pelo nome. Ver `gruposDeDestino`.
+   */
+  const grupos = useMemo(
+    () => (todosSetores ? gruposDeDestino(todosSetores, cidades, empresas) : []),
+    [todosSetores, cidades, empresas],
+  );
+  const setoresDestino = grupos.length > 0
+    ? (grupos.find(g => g.chave === destinoGrupo)?.setores ?? [])
+    : setores;
+  const carregandoDestino = podeTrocarEmpresa && todosSetores === null;
+
   const setorEscolhido = setoresDestino.find(s => s.id === destinoSetor) ?? null;
   const empresaDestinoEfetiva = empresaId
-    ? empresaDoDestino(setorEscolhido, destinoEmpresa, empresaId)
+    ? empresaDoDestino(setorEscolhido, null, empresaId)
     : '';
+
+  /**
+   * A regra de negócio de um setor (Nosso produto ou Cofen). Marca e regra são
+   * coisas diferentes: o Conecta Play é PaguePlay (Marília) com a regra Cofen.
+   */
+  const regraDe = (setorId: string | null | undefined) => {
+    const s = (todosSetores ?? []).find(x => x.id === setorId) ?? setores.find(x => x.id === setorId);
+    return s && ehRegraDoSetor(s.regra) ? s.regra : null;
+  };
+  const regraDestino = regraDe(destinoSetor);
+  const regrasDeOrigem = [...new Set((alvos ?? []).map(p => regraDe(p.setor_id)))]
+    .filter((r): r is NonNullable<typeof r> => r !== null);
+  const mudaDeRegra = !!regraDestino && regrasDeOrigem.some(r => r !== regraDestino);
 
   /** O destino é outra empresa? Muda o título, some a escolha e o aviso troca. */
   const trocaDeEmpresa = !!empresaId && !!empresaDestinoEfetiva
@@ -142,11 +171,20 @@ export function DialogTransferencia({
   useEffect(() => {
     if (!alvos) return;
     setDestinoSetor(destinoSetorInicial ?? '');
-    setDestinoEmpresa(empresaId ?? '');
-    setSetoresDestino(setores);
+    setDestinoGrupo('');
     setLevarAcordos(false);
     setNovoCargo('');
-  }, [alvos, empresaId, setores, destinoSetorInicial]);
+  }, [alvos, destinoSetorInicial]);
+
+  // Abre na marca do destino já pedido, ou na de quem vai ser transferido.
+  useEffect(() => {
+    if (!alvos || destinoGrupo || grupos.length === 0) return;
+    setDestinoGrupo(
+      grupoDoSetor(grupos, destinoSetorInicial)
+      ?? grupoDoSetor(grupos, alvos[0]?.setor_id)
+      ?? grupos[0].chave,
+    );
+  }, [alvos, destinoGrupo, grupos, destinoSetorInicial]);
 
   useEffect(() => {
     if (!podeTrocarEmpresa) { setEmpresas([]); return; }
@@ -158,27 +196,23 @@ export function DialogTransferencia({
   }, [podeTrocarEmpresa]);
 
   /*
-   * Setores da empresa de DESTINO.
-   *
-   * Sem isto o seletor listava sempre os da empresa atual: ao escolher a outra
-   * empresa não aparecia setor nenhum e a transferência ficava impossível de
-   * concluir.
+   * Os setores ativos de TODAS as empresas, com a cidade, para agrupar pela
+   * marca. Só o super_admin atravessa empresa (`fn_can_access_empresa`), então
+   * só ele carrega isto; os outros ficam com os setores da tela.
    */
   useEffect(() => {
-    if (!alvos || !destinoEmpresa) return;
-    if (destinoEmpresa === empresaId) { setSetoresDestino(setores); return; }
+    if (!alvos || !podeTrocarEmpresa) { setTodosSetores(null); return; }
     let cancel = false;
-    setCarregandoDestino(true);
-    // Setor inativo não recebe ninguém (o da própria empresa já vem filtrado).
-    void supabase.from('setores')
-      .select('*').eq('empresa_id', destinoEmpresa).eq('ativo', true).order('nome')
-      .then(({ data }) => {
-        if (cancel) return;
-        setSetoresDestino((data as Setor[]) ?? []);
-        setCarregandoDestino(false);
-      });
+    void Promise.all([
+      supabase.from('setores').select('*').eq('ativo', true).order('nome'),
+      supabase.from('rh_celulas').select('id, nome'),
+    ]).then(([s, c]) => {
+      if (cancel) return;
+      setCidades((c.data as { id: string; nome: string }[] | null) ?? []);
+      setTodosSetores(s.error ? [] : ((s.data as Setor[] | null) ?? []));
+    });
     return () => { cancel = true; };
-  }, [alvos, destinoEmpresa, empresaId, setores]);
+  }, [alvos, podeTrocarEmpresa]);
 
   /*
    * O cargo de cada pessoa no destino. Ver o cabeçalho, «Entrar ou sair do
@@ -311,23 +345,26 @@ export function DialogTransferencia({
         )}
 
         <div className="space-y-3 py-2">
-          {podeTrocarEmpresa && empresas.length > 1 && (
+          {grupos.length > 1 && (
             <div className="space-y-1.5">
-              <Label className="text-xs">Empresa</Label>
+              <Label className="text-xs">Marca</Label>
               <Select
-                value={destinoEmpresa}
+                value={destinoGrupo}
                 onValueChange={v => {
-                  setDestinoEmpresa(v);
-                  // O setor escolhido pertence à empresa anterior — mantê-lo
-                  // gravaria um setor de outra empresa no perfil.
+                  setDestinoGrupo(v);
+                  // O setor escolhido é de outra marca: limpa, para não ficar
+                  // um destino que a lista não mostra mais.
                   setDestinoSetor('');
                 }}
               >
-                <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione a empresa..." /></SelectTrigger>
+                <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione a marca..." /></SelectTrigger>
                 <SelectContent>
-                  {empresas.map(e => <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>)}
+                  {grupos.map(g => <SelectItem key={g.chave} value={g.chave}>{g.rotulo}</SelectItem>)}
                 </SelectContent>
               </Select>
+              <p className="text-[11px] text-muted-foreground leading-snug">
+                A marca vem da cidade do setor. A regra de negócio é de cada setor.
+              </p>
             </div>
           )}
 
@@ -350,7 +387,12 @@ export function DialogTransferencia({
                     .map(s => (
                       <SelectItem key={s.id} value={s.id}>
                         {s.nome}{!s.ativo && ' (inativo)'}
-                        {mostrarEmpresaNoSetor && nomeDaEmpresa(s.empresa_id) && (
+                        {s.regra === 'cofen' && (
+                          <span className="ml-1.5 rounded bg-amber-500/15 px-1 text-[10px] font-semibold text-amber-700 dark:text-amber-400">
+                            Regra Cofen
+                          </span>
+                        )}
+                        {grupos.length === 0 && mostrarEmpresaNoSetor && nomeDaEmpresa(s.empresa_id) && (
                           <span className="text-muted-foreground"> · {nomeDaEmpresa(s.empresa_id)}</span>
                         )}
                       </SelectItem>
@@ -360,6 +402,14 @@ export function DialogTransferencia({
             </Select>
             {bloqueioDeEmpresa && (
               <p className="text-[11px] text-destructive leading-snug">{bloqueioDeEmpresa}</p>
+            )}
+            {mudaDeRegra && regraDestino && (
+              <p className="text-[11px] rounded-md border border-amber-500/40 bg-amber-500/5 p-2 leading-snug">
+                <strong>Regra de negócio diferente.</strong> Este setor segue a regra{' '}
+                <strong>{ROTULO_REGRA[regraDestino]}</strong>
+                {regrasDeOrigem.length === 1 && <>, e a origem segue <strong>{ROTULO_REGRA[regrasDeOrigem[0]]}</strong></>}.
+                {' '}No destino valem o relatório, a tabela de acordos e as metas da regra {ROTULO_REGRA[regraDestino]}.
+              </p>
             )}
             {/* Setor é obrigatório: sem ele a pessoa some de todo painel escopado
                 por setor, e é um estado que ninguém escolhe de propósito. */}
