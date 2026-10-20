@@ -155,14 +155,6 @@ const EXCECOES: Record<string, Excecao> = {
     linhas: 1, familia: 'chave-mestra',
     motivo: 'a aba Multiempresa só existe para super_admin — quem decide são as RPCs e o trigger em perfis.',
   },
-  'components/CacaAbobora/index.tsx': {
-    linhas: 1, familia: 'chave-mestra',
-    motivo:
-      'os chefes da caça (o Rei do Pop, 09/10/2026, e a Bruxa do Pântano, 15/10/2026) são do super_admin como a '
-      + 'própria caça (o cartão dela em Configurações também é): só ele vê os botões «Recuperar vida», «Poção de '
-      + 'Cura» e «Totem» e ouve os chefes a 100% — operador fica a 12%. Não libera tela nem dado: quem decide são '
-      + 'as RPCs `fn_chefao_*` e `fn_chefona_*`, que conferem fn_user_is_super_admin().',
-  },
   'pages/AdminSetoresAba.tsx': {
     linhas: 1, familia: 'chave-mestra',
     motivo: 'a cidade do setor é do super_admin (decisão do kauan em 02/10/2026) — quem decide é o gatilho de 20261003140000.',

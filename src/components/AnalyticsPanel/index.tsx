@@ -540,8 +540,7 @@ export function AnalyticsPanel({
               <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
                 {isPP ? 'H.O.' : 'Recebido'}
               </span>
-              {/* `data-alvo-feitico`: a Poção de Dano da chefona das bruxas deixa o valor negativo por uns segundos (só visual). */}
-              <span className="font-bold text-emerald-600 dark:text-emerald-500 tabular-nums font-mono" data-alvo-feitico="valor">
+              <span className="font-bold text-emerald-600 dark:text-emerald-500 tabular-nums font-mono">
                 {formatCurrency(valorPrincipal)}
               </span>
             </div>
@@ -745,7 +744,7 @@ export function AnalyticsPanel({
                       </span>
                       <Target className="w-3.5 h-3.5 text-amber-700 dark:text-amber-500" />
                     </div>
-                    <span className="text-xl font-bold tabular-nums font-mono text-amber-700 dark:text-amber-500 pl-1 leading-tight" data-alvo-feitico="valor">
+                    <span className="text-xl font-bold tabular-nums font-mono text-amber-700 dark:text-amber-500 pl-1 leading-tight">
                       {formatCurrency(projecaoMes)}
                     </span>
                     <span className="text-[11px] text-muted-foreground pl-1">ritmo atual</span>

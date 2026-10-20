@@ -97,8 +97,7 @@ export function AcordosFilters({
                 : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border',
             )}
           >
-            {/* A Poção Estranha da chefona das bruxas troca o nome (só visual). */}
-            <span data-alvo-feitico="aba">{tab.label}</span>
+            <span>{tab.label}</span>
           </button>
         ))}
 

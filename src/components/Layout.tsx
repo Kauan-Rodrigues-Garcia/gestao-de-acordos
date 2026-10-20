@@ -67,7 +67,6 @@ import { useHalloweenParado, useVigiaDoHalloween } from '@/components/Halloween/
 import { EVENTO_ABRIR_BOAS_VINDAS, pediuBoasVindasNaUrl, temaEsperaACarta, useHalloween } from '@/components/Halloween/preferencia';
 import { getImpersonacaoAtiva } from '@/services/impersonacao.service';
 import { MarcaHalloween } from '@/components/Halloween/MarcaHalloween';
-import { AboboraDaCaca, BotaoChefao, FaixaDaCaca } from '@/components/CacaAbobora';
 import { useNotificacoes } from '@/providers/NotificacoesProvider';
 import { useEasterEggCriadores, DURACAO_ESCURECIMENTO_MS } from '@/hooks/useEasterEggCriadores';
 // O overlay continua no Layout: a comemoração explode em QUALQUER página, não
@@ -80,7 +79,6 @@ import { TrocarSenhaModal } from './TrocarSenhaModal';
 import { SeletorEmpresa } from './SeletorEmpresa';
 import { PainelSobDemanda } from './PainelSobDemanda';
 import { BotaoCalendario } from './Calendario/BotaoCalendario';
-import { BotaoInsignias } from './Insignias/BotaoInsignias';
 import { BarraRolagemLateral } from './BarraRolagemLateral';
 import { ligarRolagemLateral } from '@/lib/rolagemLateral';
 import { comNovaTentativa } from '@/lib/sobDemanda';
@@ -607,8 +605,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <item.icon className="w-4 h-4 flex-shrink-0" />
             <AnimatePresence>
               {(sidebarOpen || mobileOpen) && (
-                // `data-alvo-feitico`: a Poção Estranha da chefona das bruxas troca o nome (só visual, ver CacaAbobora/bruxas/chefona/feiticos.ts).
-                <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 truncate" data-alvo-feitico="aba">
+                <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 truncate">
                   {item.label}
                 </motion.span>
               )}
@@ -755,9 +752,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   );
 
   const conteudo = (
-    // `data-palco-abobora`: é dentro daqui que a Caça aos Zumbis procura um canto
-    // livre (`CacaAbobora/esconderijo.ts`) — nunca no menu nem na barra do topo.
-    <main ref={areaConteudo} data-palco-abobora className={cn('flex-1 overflow-y-auto', halloween && 'relative', halloween && temFundo(cenaHalloween) ? 'z-[1] bg-transparent' : 'bg-background')}>
+    <main ref={areaConteudo} className={cn('flex-1 overflow-y-auto', halloween && 'relative', halloween && temFundo(cenaHalloween) ? 'z-[1] bg-transparent' : 'bg-background')}>
       {/* Teias, aranha, lanterna e fantasmas moram no alto do conteúdo e
           rolam com a página — ficar parado lá em cima era o defeito. */}
       {halloween && <Suspense fallback={null}><CamadaHalloween cena={cenaHalloween} /></Suspense>}
@@ -775,10 +770,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           e ele só acende quando a busca passa de 320 ms. */}
       <BarraAtualizacao />
 
-      {/* Desktop Sidebar. `data-chefona-livre`: com a chefona da caça na tela, a
-          barra lateral continua clicável (o escudo dela começa depois daqui). */}
+      {/* Desktop Sidebar */}
       <motion.aside
-        data-chefona-livre=""
         animate={{ width: sidebarOpen ? 240 : 64 }}
         transition={{ duration: 0.2, ease: 'easeInOut' }}
         className="hidden md:flex flex-col bg-sidebar border-r border-sidebar-border overflow-hidden flex-shrink-0"
@@ -794,7 +787,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setMobileOpen(false)} />
-            <motion.aside data-chefona-livre="" initial={{ x: -280 }} animate={{ x: 0 }} exit={{ x: -280 }}
+            <motion.aside initial={{ x: -280 }} animate={{ x: 0 }} exit={{ x: -280 }}
               transition={{ type: 'spring', damping: 30, stiffness: 300 }}
               className="fixed left-0 top-0 bottom-0 w-64 bg-sidebar border-r border-sidebar-border z-50 md:hidden">
               {sidebarContent}
@@ -827,16 +820,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             onAbrir={() => setCalendarioAberto(true)}
           />
 
-          {/* As insígnias das gincanas (19/10/2026): uma medalha por gincana
-              completada, pendurada na borda de cima da barra; o mouse em cima
-              mostra a placa da gincana. O pessoal, só para o super_admin. Ver
-              `Insignias/insignias.ts`. */}
-          <BotaoInsignias
-            perfilId={perfil?.id}
-            empresaId={empresa?.id}
-            souSuperAdmin={userRole === 'super_admin'}
-          />
-
           {/* O aviso de notificação nova mora AQUI, no vão que já era vazio
               entre o menu e o bloco de ações — e é ele mesmo que faz o papel do
               antigo `flex-1`. Assim o aviso não pode cobrir botão nenhum: ele é
@@ -848,14 +831,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               tempo. Mesma chave da aba Desafios; quem está no alvo, o placar
               responde. Ver `DesafioDoDia/BarraDesafioDoDia.tsx`. */}
           <BarraDesafioDoDia ativo={!permLoading && temPermissao('analitico_sub_desafios')} />
-
-          {/* O X do chefão da Caça, no meio da barra: esconde e, com outro
-              clique, mostra de novo. Só existe enquanto há chefão. Desde
-              15/10/2026 fica PENDURADO embaixo da barra, como uma aba: no meio
-              dela cobria o aviso de notificação, que também é centrado. Com a
-              chefona na tela, o «Esconder» é o do palco, ao lado dos corações.
-              Ver `CacaAbobora/BotaoChefao.tsx`. */}
-          <BotaoChefao perfilId={perfil?.id} className="absolute left-1/2 top-full z-[36] -translate-x-1/2 rounded-t-none border-t-0 shadow-sm" />
 
           {/* `shrink-0`: o bloco de ações tem tamanho próprio e não cede espaço
               para o aviso. Quem aperta quando a janela encolhe é o aviso, que
@@ -1057,12 +1032,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             </Button>
           </div>
         </header>
-
-        {/* Caça aos Zumbis: o nome de quem matou passa aqui por 10 min. Item do
-            fluxo, logo abaixo da barra — não cobre nada. O zumbi em si é
-            desenhada por cima do conteúdo, num canto sem botão por perto. */}
-        <FaixaDaCaca empresaId={empresa?.id} />
-        <AboboraDaCaca empresaId={empresa?.id} />
 
         {/* Expand toggle */}
         <button

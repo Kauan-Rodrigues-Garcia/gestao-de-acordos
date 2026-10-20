@@ -213,9 +213,6 @@ const LinhaAcordo = memo(function LinhaAcordo({
     : null;
   return (
     <tr
-      // A Poção de Invisibilidade da chefona das bruxas some com a linha por uns
-      // segundos (só visual, ver CacaAbobora/bruxas/chefona/feiticos.ts).
-      data-alvo-feitico="linha"
       className={cn(
         ALTURA_LINHA,
         'border-b border-border/50 hover:bg-accent/40 transition-colors cursor-pointer',
