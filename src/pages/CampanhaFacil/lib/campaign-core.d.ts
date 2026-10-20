@@ -115,9 +115,10 @@ export interface CampaignItem {
   pixAutoParcela: number | null;
   /**
    * Cada modalidade parcelada em 12x, 20x e 21x (16/10/2026): a chave é o
-   * número de parcelas. `null` no relatório sem valores.
+   * número de parcelas. `null` no relatório sem valores. A junção (`bundle`)
+   * sai em 6x e 12x (20/10/2026).
    */
-  installments: Record<'cardSettlement' | 'cardAnnual' | 'pixAuto' | 'pixAutoDiscount', Record<number, number | null>>;
+  installments: Record<'bundle' | 'cardSettlement' | 'cardAnnual' | 'pixAuto' | 'pixAutoDiscount', Record<number, number | null>>;
   /** Os dados do cliente que vêm do mailing; vazio quando a coluna falta. */
   mailing: Record<MailingFieldKey, string>;
   saleType: string;

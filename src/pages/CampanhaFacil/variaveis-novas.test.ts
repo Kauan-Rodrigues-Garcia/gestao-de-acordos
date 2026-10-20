@@ -49,6 +49,34 @@ describe('parcelamentos em 12x, 20x e 21x', () => {
   });
 });
 
+describe('junção parcelada em 6x e 12x (20/10/2026)', () => {
+  // 2 parcelas em atraso de 200: junção = 200 × 3 × (1 − 15%) = 510.
+  const item = CampaignCore.deriveRecord(registro(), CampaignCore.DEFAULT_DISCOUNTS);
+  const v = CampaignCore.variablesFor(item, CampaignCore.DEFAULT_DISCOUNTS);
+
+  it('o valor da junção ÷ n, arredondado para cima, como o cartão', () => {
+    expect(item.bundle).toBe(510);
+    expect(v.juncao_6x).toBe(CampaignCore.formatCurrency(85));
+    expect(v.juncao_12x).toBe(CampaignCore.formatCurrency(43)); // 42,50
+  });
+
+  it('a mensagem do exemplo sai com a junção e a parcela', () => {
+    const texto = CampaignCore.renderTemplate('aproveitando a {{juncao}} em até 12x de {{juncao_12x}}', v);
+    expect(texto).toBe(`aproveitando a ${CampaignCore.formatCurrency(510)} em até 12x de ${CampaignCore.formatCurrency(43)}`);
+  });
+
+  it('sem parcela em atraso, zero, como a junção', () => {
+    const semAtraso = CampaignCore.deriveRecord(registro({ 'Parcelas em atraso': '0' }), CampaignCore.DEFAULT_DISCOUNTS);
+    expect(semAtraso.installments.bundle[6]).toBe(0);
+    expect(semAtraso.installments.bundle[12]).toBe(0);
+  });
+
+  it('são valor: travam no relatório sem valores', () => {
+    expect(mensagemUsaValores('x {{juncao_6x}} y')).toBe(true);
+    expect(mensagemUsaValores('x {{juncao_12x}} y')).toBe(true);
+  });
+});
+
 describe('dados do mailing', () => {
   it('pelo nome da coluna, ou pelo pedaço do nome', () => {
     const item = CampaignCore.deriveRecord(registro({

@@ -45,7 +45,7 @@ import { CampaignCore, type CampaignItem } from './lib/campaign-core';
 import { temPendenciaGrave, useCampanhaFacil, type StatusFilter, type WorkspaceState } from './useCampanhaFacil';
 import { SeletorOperadores } from './SeletorOperadores';
 import { MinhasCampanhas } from './HistoricoCampanhas';
-import { VariableChips, insertVariable } from './VariaveisMensagem';
+import { RealceDeVariavel, VariableChips, insertVariable } from './VariaveisMensagem';
 import { CampoPercentual } from './CampoPercentual';
 import { textoDoPercentual } from './percentual';
 
@@ -76,6 +76,8 @@ export default function CampanhaFacil() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editRef = useRef<HTMLTextAreaElement>(null);
   const addRef = useRef<HTMLTextAreaElement>(null);
+  /** A variável com o mouse em cima, realçada na mensagem (editar ou adicionar). */
+  const [realce, setRealce] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
 
   // Dialogs
@@ -737,16 +739,23 @@ export default function CampanhaFacil() {
       </Tabs>
 
       {/* ══ Dialog: editar mensagem ═════════════════════════════════════════ */}
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+      <Dialog open={editOpen} onOpenChange={(v) => { setEditOpen(v); setRealce(null); }}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Editar mensagem</DialogTitle>
             <DialogDescription>Use as variáveis para inserir dados e valores de cada cliente. O texto é preservado como digitado.</DialogDescription>
           </DialogHeader>
-          <Textarea ref={editRef} rows={16} value={editValue} onChange={(e) => setEditValue(e.target.value)} className="font-mono text-xs" />
+          <div className="relative">
+            <Textarea ref={editRef} rows={16} value={editValue} onChange={(e) => setEditValue(e.target.value)} className="font-mono text-xs" />
+            <RealceDeVariavel alvo={editRef} texto={editValue} variavel={realce} />
+          </div>
           <div className="space-y-1.5">
             <p className="text-xs font-medium text-muted-foreground">Inserir variável</p>
-            <VariableChips onInsert={(v) => insertVariable(editRef, editValue, setEditValue, v)} />
+            <VariableChips
+              texto={editValue}
+              onRealcar={setRealce}
+              onInsert={(v) => insertVariable(editRef, editValue, setEditValue, v)}
+            />
           </div>
           <DialogFooter className="sm:justify-between">
             <Button variant="ghost" onClick={() => { cf.resetTemplateBody(); setEditValue(cf.selectedTemplate.body); }}>Restaurar modelo</Button>
@@ -759,7 +768,7 @@ export default function CampanhaFacil() {
       </Dialog>
 
       {/* ══ Dialog: adicionar mensagem ══════════════════════════════════════ */}
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+      <Dialog open={addOpen} onOpenChange={(v) => { setAddOpen(v); setRealce(null); }}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Adicionar mensagem</DialogTitle>
@@ -778,11 +787,18 @@ export default function CampanhaFacil() {
             </div>
             <div className="space-y-1">
               <label className="text-xs font-medium">Texto da campanha</label>
-              <Textarea ref={addRef} rows={12} value={addCorpo} onChange={(e) => setAddCorpo(e.target.value)} className="font-mono text-xs" placeholder="Cole ou digite a mensagem sem alterar o conteúdo." />
+              <div className="relative">
+                <Textarea ref={addRef} rows={12} value={addCorpo} onChange={(e) => setAddCorpo(e.target.value)} className="font-mono text-xs" placeholder="Cole ou digite a mensagem sem alterar o conteúdo." />
+                <RealceDeVariavel alvo={addRef} texto={addCorpo} variavel={realce} />
+              </div>
             </div>
             <div className="space-y-1.5">
               <p className="text-xs font-medium text-muted-foreground">Inserir variável</p>
-              <VariableChips onInsert={(v) => insertVariable(addRef, addCorpo, setAddCorpo, v)} />
+              <VariableChips
+                texto={addCorpo}
+                onRealcar={setRealce}
+                onInsert={(v) => insertVariable(addRef, addCorpo, setAddCorpo, v)}
+              />
             </div>
           </div>
           <DialogFooter>

@@ -51,7 +51,7 @@ import {
 } from './campanhaFacilEnvios.service';
 import { redistribuir, type MensagemDaCampanha, type OperadorCampanha } from './envios';
 import { mensagemUsaValores } from './regras-mensagem';
-import { VariableChips, insertVariable } from './VariaveisMensagem';
+import { RealceDeVariavel, VariableChips, insertVariable } from './VariaveisMensagem';
 import type { useEnviosCampanha } from './useEnviosCampanha';
 
 type Envios = ReturnType<typeof useEnviosCampanha>;
@@ -932,6 +932,8 @@ function DialogoEditarCampanha({ lote, envios, operadoresDoSetor, onFechar, onSa
   const [titulo, setTitulo] = useState(lote.titulo);
   const [modelo, setModelo] = useState(lote.modelo ?? '');
   const modeloRef = useRef<HTMLTextAreaElement>(null);
+  /** A variável com o mouse em cima, realçada na mensagem. */
+  const [realce, setRealce] = useState<string | null>(null);
   const [mensagens, setMensagens] = useState<MensagemDaCampanha[] | null>(null);
   const [erroCarga, setErroCarga] = useState(false);
   const [salvando, setSalvando] = useState(false);
@@ -1002,11 +1004,16 @@ function DialogoEditarCampanha({ lote, envios, operadoresDoSetor, onFechar, onSa
           <label className="text-xs font-medium" htmlFor="cf-editar-modelo">Mensagem</label>
           {lote.modelo ? (
             <>
-              <Textarea
-                id="cf-editar-modelo" ref={modeloRef} value={modelo} onChange={(e) => setModelo(e.target.value)}
-                rows={8} className="resize-y text-sm leading-relaxed"
-              />
+              <div className="relative">
+                <Textarea
+                  id="cf-editar-modelo" ref={modeloRef} value={modelo} onChange={(e) => setModelo(e.target.value)}
+                  rows={8} className="resize-y text-sm leading-relaxed"
+                />
+                <RealceDeVariavel alvo={modeloRef} texto={modelo} variavel={realce} />
+              </div>
               <VariableChips
+                texto={modelo}
+                onRealcar={setRealce}
                 onInsert={(v) => insertVariable(modeloRef, modelo, setModelo, v)}
               />
               {modeloMudou && !problemaModelo && (

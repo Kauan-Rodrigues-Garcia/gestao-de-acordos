@@ -26,6 +26,12 @@
   const PARCELAMENTOS = Object.freeze([12, 20, 21]);
 
   /**
+   * A junção parcelada (20/10/2026): o mesmo valor da {{juncao}}, já com o
+   * desconto, em 6x ou 12x. A mensagem mostra só o valor de cada parcela.
+   */
+  const PARCELAMENTOS_JUNCAO = Object.freeze([6, 12]);
+
+  /**
    * Dados do cliente que vêm do mailing e a mensagem pode citar (16/10/2026):
    * endereço, cidade, local de trabalho, ocupação e tempo de atraso. Nenhum é
    * valor: a mensagem que só usa estes continua servindo ao relatório 245.
@@ -1288,11 +1294,12 @@ Contrato: *{{contrato}}*
       : null;
     // As outras quantidades de parcelas (16/10/2026), na mesma conta: o total
     // da modalidade ÷ n, arredondado para cima. Chave = n de parcelas.
-    const emParcelas = (total) => Object.fromEntries(PARCELAMENTOS.map((n) => [
+    const emParcelas = (total, parcelamentos = PARCELAMENTOS) => Object.fromEntries(parcelamentos.map((n) => [
       n,
       financialDataAvailable ? (total > 0 ? roundUp(total / n) : 0) : null,
     ]));
     const installments = {
+      bundle: emParcelas(bundle, PARCELAMENTOS_JUNCAO),
       cardSettlement: emParcelas(settlement),
       cardAnnual: emParcelas(annual),
       pixAuto: emParcelas(valueWithInterest),
@@ -1388,6 +1395,8 @@ Contrato: *{{contrato}}*
       quitacao: formatCurrency(item.settlement),
       valor_com_juros: formatCurrency(item.valueWithInterest),
       juncao: formatCurrency(item.bundle),
+      juncao_6x: formatCurrency(item.installments?.bundle[6]),
+      juncao_12x: formatCurrency(item.installments?.bundle[12]),
       anual: formatCurrency(item.annual),
       cartao_quitacao: formatCurrency(item.cardSettlement),
       cartao_anual: formatCurrency(item.cardAnnual),
@@ -1421,7 +1430,7 @@ Contrato: *{{contrato}}*
   }
 
   function templateRequiresFinancialData(template) {
-    return /{{\s*(?:parcela_desconto|quitacao|valor_com_juros|juncao|anual|cartao_quitacao(?:_2[01]x)?|cartao_anual(?:_2[01]x)?|pix_automatico(?:_desconto)?_(?:12|20|21)x|pix_automatico_parcela)\s*}}/i
+    return /{{\s*(?:parcela_desconto|quitacao|valor_com_juros|juncao(?:_(?:6|12)x)?|anual|cartao_quitacao(?:_2[01]x)?|cartao_anual(?:_2[01]x)?|pix_automatico(?:_desconto)?_(?:12|20|21)x|pix_automatico_parcela)\s*}}/i
       .test(String(template ?? ""));
   }
 
