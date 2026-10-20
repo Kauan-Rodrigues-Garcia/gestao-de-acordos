@@ -69,6 +69,8 @@ export interface LinhaConfig {
   empresa_id: string;
   setor_id: string;
   equipe_id: string | null;
+  /** Ausente antes da 20261020140000. */
+  subgrupo_id?: string | null;
   /** Ausente antes da 20260916120000. */
   grupo_usuarios?: boolean | null;
   comissao_config_usuarios?: { usuario_id: string }[] | null;
@@ -113,6 +115,9 @@ export function configDaLinha(linha: LinhaConfig): ConfigComissao {
     empresaId: linha.empresa_id,
     setorId: linha.setor_id,
     equipeId: linha.equipe_id ?? null,
+    // Subgrupo sem equipe não é exceção de subgrupo (a CHECK do banco também recusa).
+    subgrupoId: (linha.equipe_id && linha.subgrupo_id) || null,
+    pessoasDoSubgrupo: [],
     grupoUsuarios: linha.grupo_usuarios === true,
     usuarioIds: (linha.comissao_config_usuarios ?? []).map(u => u.usuario_id),
     ano: Number(linha.ano),
@@ -214,7 +219,7 @@ export async function buscarConfigsDoMes(
     }
 
     return {
-      configs: ((data ?? []) as unknown as LinhaConfig[]).map(configDaLinha),
+      configs: await comPessoasDosSubgrupos(((data ?? []) as unknown as LinhaConfig[]).map(configDaLinha)),
       bonus: bonusRes.error ? [] : ((bonusRes.data ?? []) as LinhaBonus[]).map(bonusDaLinha),
       dbAtiva: true,
     };
@@ -222,6 +227,48 @@ export async function buscarConfigsDoMes(
     console.warn('[comissao] erro na leitura:', err);
     return { configs: [], bonus: [], dbAtiva: true };
   }
+}
+
+/**
+ * Quem está em cada subgrupo com exceção: `perfis.subgrupo_id`, da equipe do
+ * subgrupo (a mesma condição de `grupoDaPessoa`). Volta só quem a leitura de
+ * `perfis` deixa ver — o operador vê ao menos a si mesmo, que é o que a
+ * comissão dele precisa.
+ *
+ * Sem resposta, a exceção de subgrupo fica sem ninguém e as pessoas caem na
+ * da equipe: errar para o lado do que valia antes do subgrupo.
+ */
+async function comPessoasDosSubgrupos(configs: ConfigComissao[]): Promise<ConfigComissao[]> {
+  const subgrupos = [...new Set(configs.map(c => c.subgrupoId).filter((id): id is string => !!id))];
+  if (subgrupos.length === 0) return configs;
+
+  const { data, error } = await db
+    .from('perfis')
+    .select('id, equipe_id, subgrupo_id')
+    .in('subgrupo_id', subgrupos);
+  if (error) {
+    console.warn('[comissao] pessoas dos subgrupos:', error.message);
+    return configs;
+  }
+
+  const porSubgrupo = new Map<string, string[]>();
+  for (const p of (data ?? []) as { id: string; equipe_id: string | null; subgrupo_id: string | null }[]) {
+    if (!p.subgrupo_id) continue;
+    const doSubgrupo = configs.find(c => c.subgrupoId === p.subgrupo_id);
+    if (!doSubgrupo || doSubgrupo.equipeId !== p.equipe_id) continue;
+    porSubgrupo.set(p.subgrupo_id, [...(porSubgrupo.get(p.subgrupo_id) ?? []), p.id]);
+  }
+  return configs.map(c => (c.subgrupoId ? { ...c, pessoasDoSubgrupo: porSubgrupo.get(c.subgrupoId) ?? [] } : c));
+}
+
+/**
+ * O banco já aceita exceção de subgrupo (20261020140000)? Sem a coluna, a
+ * `fn_comissao_salvar` antiga ignora o subgrupo e gravaria por cima da exceção
+ * da EQUIPE — a tela só oferece subgrupo quando isto diz que sim.
+ */
+export async function aceitaExcecaoDeSubgrupo(): Promise<boolean> {
+  const { error } = await db.from('comissao_config').select('subgrupo_id').limit(1);
+  return !error;
 }
 
 // ── Escrita ──────────────────────────────────────────────────────────────────
@@ -232,6 +279,8 @@ export interface PayloadConfig {
   empresaId: string;
   setorId: string;
   equipeId: string | null;
+  /** Exceção de subgrupo: vai com `equipeId` = a equipe dele. */
+  subgrupoId?: string | null;
   /** Exceção por usuário. */
   grupoUsuarios?: boolean;
   /** Na exceção por usuário, SUBSTITUI as pessoas. Ausente = não mexe nelas. */
@@ -270,6 +319,7 @@ export function salvarConfig(p: PayloadConfig): Promise<Resultado<string>> {
       empresa_id: p.empresaId,
       setor_id: p.setorId,
       equipe_id: p.equipeId,
+      ...(p.subgrupoId ? { subgrupo_id: p.subgrupoId } : {}),
       grupo_usuarios: p.grupoUsuarios === true,
       ...(p.usuarios ? { usuarios: p.usuarios } : {}),
       ano: p.ano,

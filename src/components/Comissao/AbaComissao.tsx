@@ -41,7 +41,7 @@ import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { ehMesAtual } from '@/lib/mesReferencia';
 import { configDoOperador, type ConfigComissao } from '@/services/comissao/comissao';
 import {
-  excluirExcecao, importarMesAnterior, mesAnterior, salvarConfig,
+  aceitaExcecaoDeSubgrupo, excluirExcecao, importarMesAnterior, mesAnterior, salvarConfig,
 } from '@/services/comissao/comissao.service';
 import {
   lerMetasExtras, recebidoPorDiaDasLinhas, type MetaLinhaBruta,
@@ -60,6 +60,8 @@ import { ListaComissaoOperadores, type OperadorComissao } from './ListaComissaoO
 import { MetaDoSetorComissao } from './MetaDoSetorComissao';
 import { payloadDe, rascunhoParaExcecao } from './rascunhoConfig';
 import type { PessoaSelecionavel } from './SeletorPessoas';
+import { listarSubgrupos, type SubgrupoEquipe } from '@/services/equipes/equipesSubgrupos.service';
+import { cn } from '@/lib/utils';
 
 const MESES = [
   'janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
@@ -129,8 +131,36 @@ export function AbaComissao({
   const temMesAnterior = doMesAnterior.configs.some(c => c.setorId === setorId);
   const bloqueado = !podeEditar || metaTravada;
 
+  // Os subgrupos das equipes do setor (20/10/2026): também recebem exceção.
+  // Sem a migration 20261020140000 (ou sem a tabela de subgrupos), a lista
+  // fica vazia e a seção é a de antes.
+  const [subgrupos, setSubgrupos] = useState<SubgrupoEquipe[]>([]);
+  useEffect(() => {
+    let vivo = true;
+    void (async () => {
+      const lista = (await aceitaExcecaoDeSubgrupo()) ? await listarSubgrupos(empresaId) : null;
+      if (vivo) setSubgrupos(lista ?? []);
+    })();
+    return () => { vivo = false; };
+  }, [empresaId]);
+
   const nomeDaEquipe = (id: string | null) => equipes.find(e => e.id === id)?.nome ?? 'Equipe';
-  const equipesSemExcecao = equipes.filter(e => !excecoes.some(x => x.equipeId === e.id));
+  const nomeDaExcecaoDeEquipe = (c: Pick<ConfigComissao, 'equipeId' | 'subgrupoId'>) => {
+    if (!c.subgrupoId) return nomeDaEquipe(c.equipeId);
+    return `${nomeDaEquipe(c.equipeId)} › ${subgrupos.find(s => s.id === c.subgrupoId)?.nome ?? 'Subgrupo'}`;
+  };
+  // A equipe e, logo abaixo, os subgrupos dela.
+  const excecoesEmOrdem = [...excecoes].sort((a, b) =>
+    nomeDaEquipe(a.equipeId).localeCompare(nomeDaEquipe(b.equipeId), 'pt-BR')
+    || Number(!!a.subgrupoId) - Number(!!b.subgrupoId)
+    || nomeDaExcecaoDeEquipe(a).localeCompare(nomeDaExcecaoDeEquipe(b), 'pt-BR'));
+  const opcoesDeExcecao = equipes.flatMap(e => [
+    ...(excecoes.some(x => x.equipeId === e.id && !x.subgrupoId)
+      ? [] : [{ valor: `equipe:${e.id}`, nome: e.nome, subgrupo: false }]),
+    ...subgrupos
+      .filter(s => s.equipe_id === e.id && !excecoes.some(x => x.subgrupoId === s.id))
+      .map(s => ({ valor: `subgrupo:${s.id}`, nome: `${e.nome} › ${s.nome}`, subgrupo: true })),
+  ]);
 
   // As pessoas que a exceção por usuário e o bônus oferecem: só as do setor em
   // tela. O clone é de outro setor e é configurado lá.
@@ -141,7 +171,7 @@ export function AbaComissao({
   const nomeDaPessoa = useMemo(() => new Map(operadores.map(o => [o.id, o.nome])), [operadores]);
   const rotuloDaExcecao = (c: ConfigComissao | null) => (c?.grupoUsuarios
     ? resumoDeNomes(c.usuarioIds, nomeDaPessoa)
-    : nomeDaEquipe(c?.equipeId ?? null));
+    : nomeDaExcecaoDeEquipe(c ?? { equipeId: null, subgrupoId: null }));
 
   // O bônus da 1ª…Nª Meta oferece pelo menos as metas que alguém do setor tem.
   const quantasMetas = useMemo(() => Math.max(
@@ -209,8 +239,13 @@ export function AbaComissao({
     atual.recarregar();
   }
 
-  async function criarExcecao(equipeId: string) {
-    const payload = payloadDe(rascunhoParaExcecao(padrao), { empresaId, setorId, equipeId, ano, mes });
+  /** `equipe:<id>` ou `subgrupo:<id>` — o valor do seletor. */
+  async function criarExcecao(valor: string) {
+    const [tipo, id] = valor.split(':');
+    const subgrupoId = tipo === 'subgrupo' ? id : null;
+    const equipeId = subgrupoId ? subgrupos.find(s => s.id === subgrupoId)?.equipe_id : id;
+    if (!equipeId) return;
+    const payload = payloadDe(rascunhoParaExcecao(padrao), { empresaId, setorId, equipeId, subgrupoId, ano, mes });
     if (!payload) {
       toast.warning('Complete os percentuais do padrão antes de criar uma exceção.');
       return;
@@ -220,7 +255,7 @@ export function AbaComissao({
       toast.error('A exceção não foi criada', { description: r.erro });
       return;
     }
-    toast.success(`Exceção de ${nomeDaEquipe(equipeId)} criada com os percentuais do padrão. Ajuste abaixo.`);
+    toast.success(`Exceção de ${nomeDaExcecaoDeEquipe({ equipeId, subgrupoId })} criada com os percentuais do padrão. Ajuste abaixo.`);
     atual.recarregar();
   }
 
@@ -233,7 +268,9 @@ export function AbaComissao({
     }
     toast.success(config.grupoUsuarios
       ? `${rotuloDaExcecao(config)} ${config.usuarioIds.length === 1 ? 'voltou' : 'voltaram'} ao padrão.`
-      : `${nomeDaEquipe(config.equipeId)} voltou ao padrão do setor.`);
+      : config.subgrupoId
+        ? `${nomeDaExcecaoDeEquipe(config)} voltou à regra da equipe.`
+        : `${nomeDaEquipe(config.equipeId)} voltou ao padrão do setor.`);
     atual.recarregar();
   }
 
@@ -315,16 +352,23 @@ export function AbaComissao({
       {padrao && (
         <Secao
           titulo="Exceções por equipe"
-          descricao="Equipes com percentuais próprios. Quando o setor bate a meta, vale a regra do padrão."
+          descricao="Equipes e subgrupos com percentuais próprios. O subgrupo vale no lugar da exceção da equipe. Quando o setor bate a meta, vale a regra do padrão."
         >
           <div className="space-y-2">
             {excecoes.length === 0 && (
-              <p className="text-xs text-muted-foreground">Nenhuma equipe com exceção neste mês.</p>
+              <p className="text-xs text-muted-foreground">Nenhuma equipe ou subgrupo com exceção neste mês.</p>
             )}
-            {excecoes.map(ex => (
-              <details key={ex.id} className="group rounded-lg border border-border">
+            {excecoesEmOrdem.map(ex => (
+              <details key={ex.id} className={cn('group rounded-lg border border-border', ex.subgrupoId && 'ml-4')}>
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2 text-sm font-medium">
-                  {nomeDaEquipe(ex.equipeId)}
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="truncate">{nomeDaExcecaoDeEquipe(ex)}</span>
+                    {ex.subgrupoId && (
+                      <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                        {`subgrupo · ${ex.pessoasDoSubgrupo.length} ${ex.pessoasDoSubgrupo.length === 1 ? 'pessoa' : 'pessoas'}`}
+                      </span>
+                    )}
+                  </span>
                   {!bloqueado && (
                     <Button
                       type="button"
@@ -341,7 +385,7 @@ export function AbaComissao({
                   <FormConfigComissao
                     key={ex.id}
                     config={ex}
-                    alvo={{ empresaId, setorId, equipeId: ex.equipeId, ano, mes }}
+                    alvo={{ empresaId, setorId, equipeId: ex.equipeId, subgrupoId: ex.subgrupoId, ano, mes }}
                     ehPadrao={false}
                     isPaguePlay={isPaguePlay}
                     regraDoSetor={padrao.regraSetor}
@@ -351,13 +395,17 @@ export function AbaComissao({
                 </div>
               </details>
             ))}
-            {!bloqueado && equipesSemExcecao.length > 0 && (
+            {!bloqueado && opcoesDeExcecao.length > 0 && (
               <Select value="" onValueChange={v => void criarExcecao(v)}>
-                <SelectTrigger className="h-8 w-64 text-xs" aria-label="Criar exceção para uma equipe">
-                  <SelectValue placeholder="+ Exceção para uma equipe" />
+                <SelectTrigger className="h-8 w-72 text-xs" aria-label="Criar exceção para uma equipe ou subgrupo">
+                  <SelectValue placeholder="+ Exceção para uma equipe ou subgrupo" />
                 </SelectTrigger>
                 <SelectContent>
-                  {equipesSemExcecao.map(e => <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>)}
+                  {opcoesDeExcecao.map(o => (
+                    <SelectItem key={o.valor} value={o.valor} className={cn(o.subgrupo && 'pl-8 text-muted-foreground')}>
+                      {o.nome}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             )}
@@ -369,7 +417,7 @@ export function AbaComissao({
       {padrao && (
         <Secao
           titulo="Exceções por usuário"
-          descricao="Pessoas com percentuais próprios. Valem no lugar da exceção da equipe e do padrão do setor. Quando o setor bate a meta, vale a regra do padrão."
+          descricao="Pessoas com percentuais próprios. Valem no lugar da exceção do subgrupo, da equipe e do padrão do setor. Quando o setor bate a meta, vale a regra do padrão."
         >
           <ExcecoesPorUsuario
             empresaId={empresaId}
@@ -471,8 +519,10 @@ export function AbaComissao({
             <AlertDialogTitle>{`${rotuloDaExcecao(removendo)} ${removendo?.grupoUsuarios && removendo.usuarioIds.length > 1 ? 'voltam' : 'volta'} ao padrão?`}</AlertDialogTitle>
             <AlertDialogDescription>
               {removendo?.grupoUsuarios
-                ? 'Os percentuais próprios desta exceção neste mês são apagados. As pessoas passam a usar a exceção da equipe delas, se houver, ou o padrão do setor.'
-                : 'Os percentuais próprios desta equipe neste mês são apagados, e ela passa a usar o padrão do setor.'}
+                ? 'Os percentuais próprios desta exceção neste mês são apagados. As pessoas passam a usar a exceção do subgrupo ou da equipe delas, se houver, ou o padrão do setor.'
+                : removendo?.subgrupoId
+                  ? 'Os percentuais próprios deste subgrupo neste mês são apagados. Quem está nele passa a usar a exceção da equipe, se houver, ou o padrão do setor.'
+                  : 'Os percentuais próprios desta equipe neste mês são apagados, e ela passa a usar o padrão do setor. A exceção dos subgrupos dela continua.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

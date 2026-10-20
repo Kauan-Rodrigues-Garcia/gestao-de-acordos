@@ -22,7 +22,7 @@ import { montarEntradaComissao } from './entradaDoOperador';
 
 function config(over: Partial<ConfigComissao> = {}): ConfigComissao {
   return {
-    id: 'cfg-s1', empresaId: 'e1', setorId: 's1', equipeId: null, grupoUsuarios: false, usuarioIds: [],
+    id: 'cfg-s1', empresaId: 'e1', setorId: 's1', equipeId: null, subgrupoId: null, pessoasDoSubgrupo: [], grupoUsuarios: false, usuarioIds: [],
     ano: 2026, mes: 9,
     modoIndireta: 'junto', pctIndireta: null, pctIndiretaEspecial: null,
     regraSetor: 'nenhuma', multiplicador: null,
@@ -351,6 +351,41 @@ describe('configDoOperador', () => {
     // O grupo também tem equipe nula; vir antes na lista não pode fazê-lo virar padrão.
     expect(configDoOperador({ configs, setorId: 's1', equipeId: null, operadorId: 'carla' }).doSetor)
       .toBe(padraoS1);
+  });
+
+  describe('exceção de subgrupo (20/10/2026)', () => {
+    // Subgrupo «Manhã» da equipe X, com Davi e Ana dentro.
+    const manha = config({
+      id: 'cfg-sg', equipeId: 'eq-x', subgrupoId: 'sg-manha', pessoasDoSubgrupo: ['davi', 'ana'],
+    });
+    // A exceção do subgrupo vem ANTES da da equipe na lista de propósito.
+    const comSubgrupo = [padraoS1, individual, manha, excecaoX, padraoS2];
+
+    it('vence a exceção da equipe para quem está no subgrupo', () => {
+      expect(configDoOperador({ configs: comSubgrupo, setorId: 's1', equipeId: 'eq-x', operadorId: 'davi' }))
+        .toEqual({ config: manha, doSetor: padraoS1, origem: 'subgrupo' });
+    });
+
+    it('quem é da equipe e não está no subgrupo continua na exceção da equipe', () => {
+      expect(configDoOperador({ configs: comSubgrupo, setorId: 's1', equipeId: 'eq-x', operadorId: 'carla' }))
+        .toEqual({ config: excecaoX, doSetor: padraoS1, origem: 'equipe' });
+    });
+
+    it('perde para a exceção por usuário', () => {
+      expect(configDoOperador({ configs: comSubgrupo, setorId: 's1', equipeId: 'eq-x', operadorId: 'ana' }).origem)
+        .toBe('usuario');
+    });
+
+    it('só vale com a equipe de origem do subgrupo', () => {
+      expect(configDoOperador({ configs: comSubgrupo, setorId: 's1', equipeId: 'eq-y', operadorId: 'davi' }))
+        .toEqual({ config: padraoS1, doSetor: padraoS1, origem: 'setor' });
+    });
+
+    it('sem exceção da equipe, quem está fora do subgrupo vai para o padrão', () => {
+      const soSubgrupo = [padraoS1, manha];
+      expect(configDoOperador({ configs: soSubgrupo, setorId: 's1', equipeId: 'eq-x', operadorId: 'carla' }).origem)
+        .toBe('setor');
+    });
   });
 
   it('setor sem configuração não herda de outro setor', () => {
