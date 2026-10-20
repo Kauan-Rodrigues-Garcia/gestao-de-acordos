@@ -61,36 +61,39 @@
 .vg-disjuntor .vg-disjuntor-chave > span { background: #fff; }
 
 /* ── O pulso ───────────────────────────────────────────────────────────── */
-.vg-pulso { display: grid; grid-template-columns: minmax(0, 1.6fr) repeat(2, minmax(0, 1fr)); gap: 14px; align-items: stretch; }
+/* Os cartões do pulso dividem as MESMAS quatro linhas (subgrid, 20/10/2026):
+   rótulo · valor · barra · medidas. O valor, a barra e as medidas ficam na
+   mesma altura nos três, e nenhum estica o outro com espaço vazio.
+   A letra se mede pela largura da faixa inteira (`cqi` do .vg-pulso), não do
+   cartão: o escuro é mais largo, mas escreve no mesmo tamanho das cidades. */
+.vg-pulso { container-type: inline-size; display: grid; grid-template-columns: minmax(0, 1.6fr) repeat(2, minmax(0, 1fr)); gap: 12px 14px; }
+.vg-hero, .vg-cid { display: grid; grid-row: span 4; grid-template-rows: subgrid; align-content: start; }
 
-.vg-hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 20px; padding: 22px 24px; border-radius: 24px; color: #fff;
+.vg-hero { grid-template-columns: minmax(0, 1fr) auto; column-gap: 20px; padding: 22px 24px; border-radius: 24px; color: #fff; min-width: 0;
   background: linear-gradient(145deg, var(--vg-escuro), var(--vg-escuro-2)); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .06); }
-.vg-hero .vg-rot { color: rgb(255 255 255 / .72); }
-.vg-grande { font-family: var(--vg-num); font-weight: 700; font-size: clamp(32px, 3.4vw, 46px); line-height: 1; margin-top: 10px; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; white-space: nowrap; }
-.vg-grande small { font-size: .45em; opacity: .7; margin-right: 4px; }
-.vg-vs { font-size: 13px; margin-top: 8px; color: rgb(255 255 255 / .8); }
+.vg-hero > .vg-cid-topo { grid-area: 1 / 1; }
+.vg-hero > .vg-grande { grid-area: 2 / 1; }
+.vg-hero > .vg-anel { grid-column: 2; grid-row: 1 / -1; align-self: center; }
+.vg-hero > .vg-hero-l { grid-area: 4 / 1; }
+.vg-hero .vg-rot, .vg-hero .vg-cid-topo .vg-rot { color: rgb(255 255 255 / .72); }
+.vg-grande, .vg-cid-val { font-family: var(--vg-num); font-weight: 700; font-size: clamp(26px, 2.8cqi, 42px); line-height: 1.05; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; white-space: nowrap; align-self: center; }
+.vg-grande small, .vg-cid-val small { font-size: .45em; opacity: .7; margin-right: 4px; }
 .vg-sobe-h { color: #7fe3b4; } .vg-desce-h { color: #ff9b8f; } .vg-aviso-h { color: #ffcf8a; }
-.vg-anel { position: relative; width: 128px; height: 128px; align-self: center; }
+.vg-hero-semmeta { font-size: 11.5px; font-weight: 600; color: #ffcf8a; white-space: nowrap; }
+
+.vg-anel { position: relative; width: 120px; aspect-ratio: 1; }
 .vg-anel svg { width: 100%; height: 100%; transform: rotate(-90deg); }
 .vg-anel-f { transition: stroke-dasharray .9s var(--vg-ease); }
 .vg-anel > div { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
-.vg-anel b { font-family: var(--vg-num); font-size: 26px; line-height: 1; }
+.vg-anel b { font-family: var(--vg-num); font-size: 24px; line-height: 1; }
 .vg-anel small { display: block; font-size: 10px; letter-spacing: .06em; color: rgb(255 255 255 / .7); margin-top: 3px; }
-.vg-hero-l { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(0, 1.5fr); gap: 10px; margin-top: 10px; }
-.vg-hero-l > div { background: rgb(255 255 255 / .07); border-radius: 14px; padding: 10px 12px; min-width: 0; display: grid; gap: 3px; align-content: start; }
-.vg-hero-l > div > small { font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: rgb(255 255 255 / .66); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.vg-hero-l > div > b { font-family: var(--vg-num); font-size: 19px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.vg-hero-l > div > em { font-style: normal; font-size: 12px; }
-.vg-hero-q .vg-qfaixa { margin-top: 4px; }
-.vg-hero-q .vg-qleg { color: rgb(255 255 255 / .82); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 10px; }
-.vg-hero-q .vg-qleg span { white-space: normal; align-items: baseline; flex-wrap: wrap; column-gap: 5px; }
-.vg-hero-q .vg-qleg small { color: rgb(255 255 255 / .6); font-weight: 500; font-size: 11px; flex-basis: 100%; padding-left: 13px; }
-.vg-hero-pe { grid-column: 1 / -1; }
-.vg-hero-semmeta { color: #ffcf8a; }
-.vg-divisao { display: flex; height: 8px; border-radius: 8px; overflow: hidden; margin-top: 8px; background: rgb(255 255 255 / .14); }
-.vg-divisao i { display: block; height: 100%; transition: width .7s var(--vg-ease); }
-.vg-legenda { display: flex; gap: 6px 14px; flex-wrap: wrap; margin-top: 7px; font-size: 12px; color: rgb(255 255 255 / .85); }
-.vg-legenda span { display: inline-flex; align-items: center; gap: 6px; }
+
+/* As medidas do escuro: a mesma letra das medidas da cidade, mais a linha de baixo. */
+.vg-hero-l { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; min-width: 0; }
+.vg-hero-l > span { display: grid; align-content: start; min-width: 0; }
+.vg-hero-l small { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: rgb(255 255 255 / .66); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vg-hero-l b { font-family: var(--vg-num); font-size: clamp(15px, 1.5cqi, 20px); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.vg-hero-l em { font-style: normal; font-size: 12px; line-height: 1.3; margin-top: 1px; }
 
 /* A barra de meta: o preenchido é o recebido; o risco, o que devia ter hoje. */
 .vg-meta { position: relative; display: block; height: 8px; border-radius: 8px; background: color-mix(in srgb, var(--muted-foreground) 18%, transparent); }
@@ -113,9 +116,9 @@
 .vg-qleg b { color: inherit; font-weight: 700; }
 .vg-qleg small { font-size: 11px; }
 
-.vg-cid { --cc: var(--primary); text-align: left; border: 0; cursor: pointer; border-radius: 24px; padding: 18px 20px; font: inherit; color: var(--foreground);
+.vg-cid { --cc: var(--primary); text-align: left; border: 0; cursor: pointer; border-radius: 24px; padding: 22px 24px; font: inherit; color: var(--foreground);
   background: color-mix(in srgb, var(--cc) 11%, var(--card)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cc) 24%, transparent);
-  display: flex; flex-direction: column; gap: 10px; min-width: 0; transition: transform .2s ease, box-shadow .2s ease; }
+  grid-template-columns: minmax(0, 1fr); min-width: 0; transition: transform .2s ease, box-shadow .2s ease; }
 .vg-cid.bp { --cc: var(--vg-bp); } .vg-cid.pp { --cc: var(--vg-pp); }
 .vg-cid:hover { transform: translateY(-2px); }
 .vg-cid:focus-visible { outline: 2px solid var(--cc); outline-offset: 2px; }
@@ -123,23 +126,10 @@
 .vg-cid-topo { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .vg-cid-topo .vg-rot { color: var(--foreground); }
 .vg-cid-acao { font-size: 12px; font-weight: 700; color: var(--cc); white-space: nowrap; }
-.vg-cid-val { font-family: var(--vg-num); font-size: 28px; font-weight: 700; line-height: 1.05; font-variant-numeric: tabular-nums; white-space: nowrap; letter-spacing: -0.02em; }
-.vg-cid-val small { font-size: .5em; opacity: .6; margin-right: 3px; }
 .vg-cid-mini { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.vg-cid-mini small { display: block; font-size: 10.5px; color: var(--muted-foreground); letter-spacing: .04em; text-transform: uppercase; font-weight: 600; white-space: nowrap; }
-.vg-cid-mini b { font-family: var(--vg-num); font-size: 16px; white-space: nowrap; font-variant-numeric: tabular-nums; }
-/* Os dois cartões têm a altura do escuro: as linhas ficam na mesma altura nos
-   dois, e só o rodapé de carteiras desce para o pé do cartão. */
-.vg-cid-pe { display: flex; justify-content: space-between; gap: 4px 10px; flex-wrap: wrap; font-size: 12px; color: var(--muted-foreground); }
-.vg-cid-pe b { color: var(--foreground); }
-.vg-cid-q { display: block; }
-.vg-cid-q .vg-qfaixa { height: 22px; }
-.vg-cid-q .vg-qleg { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 10px; margin-top: 8px; }
-.vg-cid-q .vg-qleg span { white-space: normal; align-items: baseline; flex-wrap: wrap; column-gap: 5px; color: var(--foreground); }
-.vg-cid-q .vg-qleg small { color: var(--muted-foreground); font-weight: 500; flex-basis: 100%; padding-left: 13px; }
-.vg-cid-cart { margin-top: auto; padding-top: 8px; border-top: 1px dashed color-mix(in srgb, var(--cc) 30%, transparent); }
-.vg-cid-cart b { font-family: var(--font-mono, monospace); font-size: 12px; }
-.vg-cid-cart b.vg-c { color: var(--vg-cofen); }
+.vg-cid-mini small { display: block; font-size: 11px; color: var(--muted-foreground); letter-spacing: .04em; text-transform: uppercase; font-weight: 600; white-space: nowrap; }
+.vg-cid-mini b { font-family: var(--vg-num); font-size: clamp(15px, 1.5cqi, 20px); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.vg-cid > .vg-meta { align-self: center; }
 
 /* ── Pede atenção ──────────────────────────────────────────────────────── */
 .vg-sinais { display: flex; gap: 10px; flex-wrap: wrap; align-items: stretch; }
@@ -386,10 +376,6 @@
 }
 @media (max-width: 700px) {
   .vg-pulso { grid-template-columns: minmax(0, 1fr); }
-  .vg-hero { grid-template-columns: minmax(0, 1fr); }
-  .vg-anel { justify-self: start; width: 104px; height: 104px; }
-  .vg-hero-l { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .vg-hero-q { grid-column: 1 / -1; }
   .vg-kpis, .vg-kpis.vg-kpis-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .vg-barra-dir { margin-left: 0; }
   .vg-qlinha { grid-template-columns: minmax(0, 96px) minmax(0, 1fr); }

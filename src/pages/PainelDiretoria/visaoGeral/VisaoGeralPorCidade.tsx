@@ -4,9 +4,10 @@
  * O objetivo (Cleber, 04/10/2026): a diretoria bate o olho e vê o que importa,
  * e o detalhe só aparece quando ela clica. Três camadas:
  *
- *   1. o PULSO — o mês do geral (ou da empresa filtrada): quanto entrou, quanto
- *      devia ter entrado até hoje, onde fecha, e as pessoas por quartil; e as
- *      cidades, que filtram a tela;
+ *   1. o PULSO — o mês do geral (ou da empresa filtrada) e as cidades, que
+ *      filtram a tela; cada cartão só com recebido, barra da meta, % da meta,
+ *      ritmo e onde fecha (enxugado em 20/10/2026 — quartis e carteiras ficam
+ *      no detalhe do setor);
  *   2. o que PEDE ATENÇÃO — até quatro sinais, cada um abre o setor;
  *   3. o PLACAR — um cartão por setor; o detalhe abre embaixo da fileira dele,
  *      com equipes, quartis, pessoas, agenda e dia a dia.
@@ -251,7 +252,6 @@ export function VisaoGeralPorCidade({ empresaId, mes, versao = 0, reserva }: {
   const escopo = cidadeFiltro ? cidadeFiltro.mes : visao?.geral ?? null;
   const metaEscopo = useMemo(() => metaDoConjunto(doFiltro), [doFiltro]);
   const ritmoEscopo = escopo && cal ? ritmoDe(escopo.valor, metaEscopo.meta, cal) : null;
-  const quartisEscopo = useMemo(() => resumoDe(doFiltro), [resumoDe, doFiltro]);
   const resumoEmpresa = useMemo(() => resumoDe(placar), [resumoDe, placar]);
 
   const sinais = useMemo(() => {
@@ -317,7 +317,6 @@ export function VisaoGeralPorCidade({ empresaId, mes, versao = 0, reserva }: {
     : 'Recebido no mês · geral';
   const cofenDoDia = dia !== null && (!cidadeFiltro || cidadeFiltro.cofen) ? cofenNoDia(c, dia, modo) : null;
   const cidadeComCofen = cidades.find(x => x.cofen) ?? null;
-  const pessoasEscopo = quartisEscopo ? quartisEscopo.total : null;
 
   const detalhe = (s: SetorDoPlacar) => {
     const cid = marcaDe(s);
@@ -352,15 +351,12 @@ export function VisaoGeralPorCidade({ empresaId, mes, versao = 0, reserva }: {
       ) : (
         <>
           <section className="vg-pulso" aria-label="O mês">
-            <CartaoDoMes rotulo={rotuloEscopo} escopo={escopo} ritmo={ritmoEscopo} semMeta={metaEscopo.semMeta}
-              quartis={quartisEscopo} carteiras={cidadeFiltro ? carteirasDaCidade(cidadeFiltro.mes) : visao.carteiras}
-              modo={modo} mesAnterior={dados.mesAnterior} pessoas={pessoasEscopo} />
+            <CartaoDoMes rotulo={rotuloEscopo} escopo={escopo} ritmo={ritmoEscopo} semMeta={metaEscopo.semMeta} />
             {cidades.map(x => {
-              const dela = placar.filter(s => s.cidadeId === x.cidadeId);
-              const m = metaDoConjunto(dela);
+              const m = metaDoConjunto(placar.filter(s => s.cidadeId === x.cidadeId));
               return (
-                <CartaoDaCidade key={x.chave} cidade={x} setores={dela} ritmo={ritmoDe(x.mes.valor, m.meta, cal)}
-                  quartis={resumoDe(dela)} modo={modo} ativa={marca === x.chave} onClick={() => filtrar(x.chave)} />
+                <CartaoDaCidade key={x.chave} cidade={x} ritmo={ritmoDe(x.mes.valor, m.meta, cal)}
+                  ativa={marca === x.chave} onClick={() => filtrar(x.chave)} />
               );
             })}
           </section>
@@ -421,11 +417,4 @@ export function VisaoGeralPorCidade({ empresaId, mes, versao = 0, reserva }: {
       )}
     </div>
   );
-}
-
-/** A barra de carteiras de uma cidade, no formato do geral. */
-function carteirasDaCidade(m: { nossoProduto: number; cofen: { valor: number } | null }) {
-  const r: { chave: 'nosso_produto' | 'cofen'; nome: string; valor: number }[] = [{ chave: 'nosso_produto', nome: 'Nosso produto', valor: m.nossoProduto }];
-  if (m.cofen) r.push({ chave: 'cofen', nome: 'Cofen', valor: m.cofen.valor });
-  return r;
 }

@@ -2,18 +2,17 @@
  * O pulso do mês: o cartão do geral (ou da empresa filtrada) e os cartões das
  * cidades — o que a diretoria lê de primeira vista.
  *
- * Só o que é importante: quanto entrou, quanto devia ter entrado até hoje,
- * onde o mês fecha e como as pessoas se distribuem nos quartis. O resto mora
- * no detalhe do setor.
+ * Só o que é importante: quanto entrou, a barra contra a meta (o risco é o que
+ * devia ter entrado até hoje), o % da meta, o ritmo e onde o mês fecha. Quartis,
+ * carteiras e o resto moram no detalhe do setor.
  */
 import { memo } from 'react';
 import { ValorAnimado } from '@/components/ValorAnimado';
-import { formatBRL } from '@/lib/money';
 import { cn } from '@/lib/utils';
-import { nomeDoMes, variacaoPct, type CidadeDaVisao, type EscopoDaVisao, type ModoCofen, type ParteDoGeral } from './modelo';
-import type { ResumoQuartis, Ritmo, SetorDoPlacar } from './placar';
+import type { CidadeDaVisao, EscopoDaVisao } from './modelo';
+import type { ResumoQuartis, Ritmo } from './placar';
 import { tomDoRitmo } from './placar';
-import { corDaMarca, mil, pct, rotuloModo, sinal } from './formato';
+import { corDaMarca, mil, pct } from './formato';
 
 function ValorGrande({ valor }: { valor: number }) {
   return (
@@ -72,11 +71,24 @@ export function LegendaQuartis({ resumo }: { resumo: ResumoQuartis | null }) {
   );
 }
 
-const COR_DA_CARTEIRA_NO_ESCURO: Record<ParteDoGeral['chave'], string> = {
-  nosso_produto: 'rgb(255 255 255 / .82)',
-  cofen: 'var(--vg-cofen)',
-};
+/**
+ * As três medidas do cartão da cidade: da meta, ritmo e onde fecha.
+ *
+ * Enxugado em 20/10/2026: antes o cartão repetia a leitura de vários jeitos
+ * (quartis em faixa e legenda, divisão de carteiras, melhor/atenção); o
+ * detalhe disso mora no setor.
+ */
+function TresMedidas({ ritmo }: { ritmo: Ritmo | null }) {
+  return (
+    <span className="vg-cid-mini">
+      <span><small>Da meta</small><b>{ritmo ? pct(ritmo.pctMeta) : '—'}</b></span>
+      <span><small>Ritmo</small><b style={ritmo ? { color: `var(--vg-${tomDoRitmo(ritmo.pct)})` } : undefined}>{ritmo ? pct(ritmo.pct) : '—'}</b></span>
+      <span><small>Fecha em</small><b>{ritmo ? mil(ritmo.fecha) : '—'}</b></span>
+    </span>
+  );
+}
 
+/** O % da meta em anel; o risco branco é o que devia ter entrado até hoje. */
 function Anel({ ritmo }: { ritmo: Ritmo | null }) {
   const r = 52, c = 2 * Math.PI * r;
   const f = ritmo ? Math.min(1, ritmo.pctMeta / 100) : 0;
@@ -94,70 +106,50 @@ function Anel({ ritmo }: { ritmo: Ritmo | null }) {
   );
 }
 
-/** O cartão escuro: o escopo inteiro (geral, ou a empresa filtrada). */
-export const CartaoDoMes = memo(function CartaoDoMes({ rotulo, escopo, ritmo, semMeta, quartis, carteiras, modo, mesAnterior, pessoas }: {
-  rotulo: string; escopo: EscopoDaVisao; ritmo: Ritmo | null; semMeta: number; quartis: ResumoQuartis | null;
-  carteiras: ParteDoGeral[]; modo: ModoCofen; mesAnterior: string; pessoas: number | null;
+/**
+ * O cartão escuro: o escopo inteiro (geral, ou a empresa filtrada).
+ *
+ * Mantém o anel e os dois quadros de «hoje deveria ter» e «fecha o mês em»
+ * (pedido de 20/10/2026, depois do enxugamento); quartis e a divisão das
+ * carteiras ficaram de fora, no detalhe do setor.
+ */
+export const CartaoDoMes = memo(function CartaoDoMes({ rotulo, escopo, ritmo, semMeta }: {
+  rotulo: string; escopo: EscopoDaVisao; ritmo: Ritmo | null; semMeta: number;
 }) {
-  const v = variacaoPct(escopo.valor, escopo.valorAnterior);
   const sobra = ritmo ? ritmo.diferenca : 0;
+  // As linhas são as mesmas do cartão da cidade (ver `.vg-pulso` no CSS):
+  // rótulo, valor, [barra — aqui vazia, o anel faz o papel], medidas.
   return (
     <div className="vg-hero">
-      <div className="vg-hero-a">
+      <span className="vg-cid-topo">
         <span className="vg-rot">{rotulo}</span>
-        <div className="vg-grande"><ValorGrande valor={escopo.valor} /></div>
-        <div className="vg-vs">mesmo dia de {nomeDoMes(mesAnterior)} {mil(escopo.valorAnterior)}{' '}
-          {v !== null && <b className={v >= 0 ? 'vg-sobe-h' : 'vg-desce-h'}>{sinal(v)}</b>}</div>
-      </div>
+        {/* Sem isso o «% da meta» leria como do geral inteiro. */}
+        {semMeta > 0 && (
+          <span className="vg-hero-semmeta">{semMeta} {semMeta === 1 ? 'setor' : 'setores'} sem meta</span>
+        )}
+      </span>
+      <div className="vg-grande"><ValorGrande valor={escopo.valor} /></div>
       <Anel ritmo={ritmo} />
-      <div className="vg-hero-l">
-        <div>
+      <span className="vg-hero-l">
+        <span>
           <small>Hoje deveria ter</small>
           <b>{ritmo ? mil(ritmo.esperado) : '—'}</b>
           {ritmo && <em className={sobra >= 0 ? 'vg-sobe-h' : 'vg-desce-h'}>{sobra >= 0 ? `sobra ${mil(sobra)}` : `falta ${mil(-sobra)}`}</em>}
-        </div>
-        <div>
+        </span>
+        <span>
           <small>Fecha o mês em</small>
           <b>{ritmo ? mil(ritmo.fecha) : '—'}</b>
           {ritmo && <em className={ritmo.fecha >= ritmo.meta ? 'vg-sobe-h' : 'vg-aviso-h'}>{pct((ritmo.fecha / ritmo.meta) * 100)} da meta de {mil(ritmo.meta)}</em>}
-        </div>
-        <div className="vg-hero-q">
-          <small>Pessoas por quartil{pessoas !== null ? ` · ${pessoas}` : ''}</small>
-          <FaixaQuartis resumo={quartis} rotulos />
-          <LegendaQuartis resumo={quartis} />
-        </div>
-      </div>
-      {(escopo.cofen || semMeta > 0) && (
-        <div className="vg-hero-pe">
-          {escopo.cofen && escopo.valor > 0 && (
-            <>
-              <div className="vg-divisao" aria-hidden="true">
-                {carteiras.map(p => <i key={p.chave} style={{ width: `${(p.valor / escopo.valor) * 100}%`, background: COR_DA_CARTEIRA_NO_ESCURO[p.chave] }} />)}
-              </div>
-              <div className="vg-legenda">
-                {carteiras.map(p => (
-                  <span key={p.chave}><span className="vg-ponto" style={{ background: COR_DA_CARTEIRA_NO_ESCURO[p.chave] }} />
-                    {p.nome}{p.chave === 'cofen' ? ` (${rotuloModo(modo)})` : ''} <b>{pct((p.valor / escopo.valor) * 100)}</b></span>
-                ))}
-                {semMeta > 0 && <span className="vg-hero-semmeta">{semMeta} {semMeta === 1 ? 'setor' : 'setores'} sem meta cadastrada</span>}
-              </div>
-            </>
-          )}
-          {!escopo.cofen && semMeta > 0 && <div className="vg-legenda"><span className="vg-hero-semmeta">{semMeta} {semMeta === 1 ? 'setor' : 'setores'} sem meta cadastrada</span></div>}
-        </div>
-      )}
+        </span>
+      </span>
     </div>
   );
 });
 
 /** Uma cidade: filtra a tela inteira por ela (e volta ao geral no segundo clique). */
-export const CartaoDaCidade = memo(function CartaoDaCidade({ cidade, setores, ritmo, quartis, modo, ativa, onClick }: {
-  cidade: CidadeDaVisao; setores: SetorDoPlacar[]; ritmo: Ritmo | null; quartis: ResumoQuartis | null;
-  modo: ModoCofen; ativa: boolean; onClick: () => void;
+export const CartaoDaCidade = memo(function CartaoDaCidade({ cidade, ritmo, ativa, onClick }: {
+  cidade: CidadeDaVisao; ritmo: Ritmo | null; ativa: boolean; onClick: () => void;
 }) {
-  const comRitmo = setores.filter(s => s.ritmo).sort((a, b) => (b.ritmo?.pct ?? 0) - (a.ritmo?.pct ?? 0));
-  const melhor = comRitmo[0] ?? null;
-  const atencao = comRitmo.length > 1 ? comRitmo[comRitmo.length - 1] : null;
   return (
     <button type="button" className={cn('vg-cid', cidade.marca)} aria-pressed={ativa} onClick={onClick}
       aria-label={ativa ? `Voltar ao geral` : `Ver só ${cidade.nome}`}>
@@ -168,25 +160,7 @@ export const CartaoDaCidade = memo(function CartaoDaCidade({ cidade, setores, ri
       </span>
       <span className="vg-cid-val"><ValorGrande valor={cidade.mes.valor} /></span>
       <BarraDeMeta ritmo={ritmo} cor="var(--cc)" />
-      <span className="vg-cid-mini">
-        <span><small>Da meta</small><b>{ritmo ? pct(ritmo.pctMeta) : '—'}</b></span>
-        <span><small>Ritmo</small><b style={ritmo ? { color: `var(--vg-${tomDoRitmo(ritmo.pct)})` } : undefined}>{ritmo ? pct(ritmo.pct) : '—'}</b></span>
-        <span><small>Fecha em</small><b>{ritmo ? mil(ritmo.fecha) : '—'}</b></span>
-      </span>
-      <span className="vg-cid-q">
-        <FaixaQuartis resumo={quartis} rotulos />
-        <LegendaQuartis resumo={quartis} />
-      </span>
-      <span className="vg-cid-pe">
-        {melhor?.ritmo && <span>melhor <b className="vg-sobe">{melhor.nome} {pct(melhor.ritmo.pct)}</b></span>}
-        {atencao?.ritmo && <span>atenção <b style={{ color: `var(--vg-${tomDoRitmo(atencao.ritmo.pct)})` }}>{atencao.nome} {pct(atencao.ritmo.pct)}</b></span>}
-      </span>
-      <span className="vg-cid-pe vg-cid-cart">
-        <span>Nosso produto <b>{formatBRL(cidade.mes.nossoProduto)}</b></span>
-        {cidade.cofen
-          ? <span>{cidade.cofen.nome} · Cofen {rotuloModo(modo)} <b className="vg-c">{formatBRL(cidade.cofen.valor)}</b></span>
-          : <span>sem carteira Cofen</span>}
-      </span>
+      <TresMedidas ritmo={ritmo} />
     </button>
   );
 });
