@@ -17,6 +17,13 @@ A gincana do Halloween, ligada pelo super_admin em Configurações → Geral:
   bruxas, Pântano) e o álbum desenhava a arte dos zumbis e das bruxas — sem a
   Caça ele não tinha o que mostrar nem como desenhar.
 
+**O álbum voltou para o código vivo no mesmo 20/10/2026**, sem a
+Caça: está em `src/components/Insignias/` e mostra as medalhas que as
+gincanas já gravaram no banco. Os desenhos que ele usa (zumbis, Rei do Pop,
+bruxas, a placa do Minecraft) foram copiados para
+`src/components/Insignias/desenhos/`; os originais seguem aqui, para a Caça
+continuar inteira. A releitura ao vivo (pegou o zumbi, o chefe caiu) não voltou.
+
 ## Por que saiu
 
 Decisão do Cleber, 20/10/2026: a parte do zumbi e da bruxa sai para o arquivo
@@ -27,7 +34,6 @@ morto. A gincana da vez passa a ser a Corrida da Sorte
 
 ```
 src/components/CacaAbobora/            a caça, o chefão, as bruxas, a chefona e o lobby dela (e os testes)
-src/components/Insignias/              o álbum de medalhas das gincanas
 src/components/admin/CacaAboboraConfig.tsx   o card da aba Geral
 lab-bruxas.html, lab-bruxa-lobby.html  os laboratórios (só no npm run dev)
 public/sons/minecraft/                 os sons da chefona

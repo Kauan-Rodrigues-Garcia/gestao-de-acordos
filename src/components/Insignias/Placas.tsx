@@ -17,14 +17,14 @@
 import { useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { carregarFonte, carregarFontesPixel } from '@/components/Halloween/fonte';
-import { SpriteZumbi } from '@/components/CacaAbobora/SpriteZumbi';
-import { ZUMBIS } from '@/components/CacaAbobora/zumbis';
-import { CHEFAO } from '@/components/CacaAbobora/chefaoArte';
-import { SpriteBruxa } from '@/components/CacaAbobora/bruxas/SpriteBruxa';
-import { BRUXAS } from '@/components/CacaAbobora/bruxas/arte';
-import { miniatura } from '@/components/CacaAbobora/bruxas/pixels';
-import { DROPS, comContorno } from '@/components/CacaAbobora/bruxas/chefona/arte';
-import { CONQUISTA, desenharPlaca, type TextosDaPlaca } from '@/components/CacaAbobora/bruxas/chefona/conquista';
+import { SpriteZumbi } from './desenhos/SpriteZumbi';
+import { ZUMBIS } from './desenhos/zumbis';
+import { CHEFAO } from './desenhos/chefaoArte';
+import { SpriteBruxa } from './desenhos/bruxas/SpriteBruxa';
+import { BRUXAS } from './desenhos/bruxas/arte';
+import { miniatura } from './desenhos/bruxas/pixels';
+import { DROPS, comContorno } from './desenhos/bruxas/chefona/arte';
+import { CONQUISTA, desenharPlaca, type TextosDaPlaca } from './desenhos/bruxas/chefona/conquista';
 import type { Conquista, IdInsignia, Insignia } from './insignias';
 import { nomeDoDesenho } from './arte';
 

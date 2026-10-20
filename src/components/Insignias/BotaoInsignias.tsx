@@ -15,9 +15,12 @@
  * em 3–12 s quando já havia álbum guardado (ninguém vê a espera, e o app que
  * abre junto de manhã não lê junto), quase imediata no primeiro acesso.
  *
- * Ganhou e ainda não passou o mouse: a medalha pulsa. Pegou o zumbi ou a
- * bruxa agora, ou o chefe caiu e a pessoa ainda não tinha aquela: o álbum
- * relê sozinho (o aviso já chega pela caça — nenhuma assinatura nova).
+ * Ganhou e ainda não passou o mouse: a medalha pulsa.
+ *
+ * Desde 20/10/2026 a Caça e os chefes estão no arquivo morto (decisão do
+ * Cleber) e o álbum voltou sozinho: mostra o que as gincanas já gravaram no
+ * banco. Os desenhos que ele usa foram copiados para `desenhos/`; a releitura
+ * ao vivo (pegou o zumbi, o chefe caiu) saiu junto com a Caça.
  *
  * O super_admin tem ainda o botão do pessoal: as insígnias de todo mundo.
  */
@@ -25,14 +28,11 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { Users } from 'lucide-react';
 import { comNovaTentativa } from '@/lib/sobDemanda';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { useCacaAbobora } from '@/components/CacaAbobora/caca';
-import { useChefao } from '@/components/CacaAbobora/chefao';
-import { useChefona } from '@/components/CacaAbobora/bruxas/chefona/banco';
 import {
-  INSIGNIAS, albumGuardado, guardarAlbum, insigniaDaCaca, insigniasVistas, marcarInsigniasVistas, novasInsignias,
+  INSIGNIAS, albumGuardado, guardarAlbum, insigniasVistas, marcarInsigniasVistas, novasInsignias,
   type Album, type IdInsignia,
 } from './insignias';
-import { esquecerAlbuns, lerMeuAlbum } from './banco';
+import { lerMeuAlbum } from './banco';
 import './insignias.css';
 
 const carregarEstante = comNovaTentativa(() => import('./Estante'));
@@ -44,12 +44,9 @@ const ATUALIZAR_DE_MS = 3_000;
 const ATUALIZAR_ESPALHADO_MS = 9_000;
 /** Primeiro acesso (nada guardado): quase na hora — é o que a pessoa está esperando. */
 const PRIMEIRA_LEITURA_MS = 800;
-/** Chefe derrotado: todo mundo que ainda não tinha relê — espalhado. */
-const ESPALHAR_CHEFE_MS = 20_000;
 
 interface Props {
   perfilId: string | null | undefined;
-  empresaId: string | null | undefined;
   souSuperAdmin: boolean;
 }
 
@@ -57,11 +54,10 @@ function useMeuAlbum(perfilId: string | null | undefined) {
   const [album, setAlbum] = useState<Album | null>(() => (perfilId ? albumGuardado(perfilId) : null));
   const versao = useRef(0);
 
-  const ler = useCallback((esperaMs: number, novo = false) => {
+  const ler = useCallback((esperaMs: number) => {
     if (!perfilId) return () => {};
     const minha = ++versao.current;
     const t = setTimeout(() => {
-      if (novo) esquecerAlbuns();
       lerMeuAlbum(perfilId)
         .then(a => {
           guardarAlbum(perfilId, a);
@@ -81,7 +77,7 @@ function useMeuAlbum(perfilId: string | null | undefined) {
       : Math.random() * PRIMEIRA_LEITURA_MS);
   }, [perfilId, ler]);
 
-  return { album, ler };
+  return album;
 }
 
 /** As fitas das «?» sem a medalha: o lugar enquanto o desenho baixa. */
@@ -97,8 +93,8 @@ function Fitas() {
   );
 }
 
-export function BotaoInsignias({ perfilId, empresaId, souSuperAdmin }: Props) {
-  const { album, ler } = useMeuAlbum(perfilId);
+export function BotaoInsignias({ perfilId, souSuperAdmin }: Props) {
+  const album = useMeuAlbum(perfilId);
   const [vistas, setVistas] = useState<IdInsignia[] | null>(null);
 
   useEffect(() => { setVistas(perfilId ? insigniasVistas(perfilId) : null); }, [perfilId]);
@@ -114,26 +110,6 @@ export function BotaoInsignias({ perfilId, empresaId, souSuperAdmin }: Props) {
       return proximas;
     });
   }, [perfilId, tem]);
-
-  // ── Ganhou agora? (o aviso da caça e dos chefes já chega a todo mundo) ────
-  const { rodada } = useCacaAbobora(empresaId);
-  const chefao = useChefao();
-  const chefona = useChefona();
-
-  const peguei = rodada?.situacao === 'achada' && !!perfilId && rodada.achada_por === perfilId
-    ? insigniaDaCaca({ tema: rodada.tema, zumbi: rodada.zumbi })
-    : null;
-  // Relê também quando já tinha: a placa mostra quantas, o headshot e o tempo.
-  const chavePeguei = peguei ? `${rodada?.id}` : null;
-  useEffect(() => {
-    if (chavePeguei) return ler(1_500, true);
-  }, [chavePeguei, ler]);
-
-  const reiCaiu = chefao?.situacao === 'derrotado' && !album?.conquistas.reiDoPop ? chefao.id : null;
-  const pantanoCaiu = chefona?.situacao === 'derrotado' && !album?.conquistas.pantano ? chefona.id : null;
-  useEffect(() => {
-    if (reiCaiu != null || pantanoCaiu != null) return ler(2_000 + Math.random() * ESPALHAR_CHEFE_MS, true);
-  }, [reiCaiu, pantanoCaiu, ler]);
 
   if (!perfilId) return null;
 

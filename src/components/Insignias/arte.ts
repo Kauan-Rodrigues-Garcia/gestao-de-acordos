@@ -7,12 +7,12 @@
  * pessoal mostra centenas de medalhas, e `<img>` com a mesma URL é mais barato
  * que um canvas por medalha. Só entra no pedaço do álbum, que baixa no clique.
  */
-import { ZUMBIS } from '@/components/CacaAbobora/zumbis';
-import { cabecaDoZumbi } from '@/components/CacaAbobora/pixels';
-import { CHEFAO } from '@/components/CacaAbobora/chefaoArte';
-import { BRUXAS } from '@/components/CacaAbobora/bruxas/arte';
-import { cabecaDaBruxa, canvasDaImagem } from '@/components/CacaAbobora/bruxas/pixels';
-import { cabecaMC } from '@/components/CacaAbobora/bruxas/chefona/arte';
+import { ZUMBIS } from './desenhos/zumbis';
+import { cabecaDoZumbi } from './desenhos/pixels';
+import { CHEFAO } from './desenhos/chefaoArte';
+import { BRUXAS } from './desenhos/bruxas/arte';
+import { cabecaDaBruxa, canvasDaImagem } from './desenhos/bruxas/pixels';
+import { cabecaMC } from './desenhos/bruxas/chefona/arte';
 import type { IdInsignia } from './insignias';
 
 export interface Rosto {

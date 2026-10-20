@@ -80,6 +80,7 @@ import { TrocarSenhaModal } from './TrocarSenhaModal';
 import { SeletorEmpresa } from './SeletorEmpresa';
 import { PainelSobDemanda } from './PainelSobDemanda';
 import { BotaoCalendario } from './Calendario/BotaoCalendario';
+import { BotaoInsignias } from './Insignias/BotaoInsignias';
 import { BarraRolagemLateral } from './BarraRolagemLateral';
 import { ligarRolagemLateral } from '@/lib/rolagemLateral';
 import { comNovaTentativa } from '@/lib/sobDemanda';
@@ -819,6 +820,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             meuSetorId={perfil?.setor_id ?? null}
             ativo={veCalendario}
             onAbrir={() => setCalendarioAberto(true)}
+          />
+
+          {/* As insígnias das gincanas (19/10/2026): uma medalha por gincana
+              completada, pendurada na borda de cima da barra; o mouse em cima
+              mostra a placa da gincana. O pessoal, só para o super_admin.
+              Voltaram em 20/10/2026 sem a Caça, que segue no arquivo morto.
+              Ver `Insignias/insignias.ts`. */}
+          <BotaoInsignias
+            perfilId={perfil?.id}
+            souSuperAdmin={userRole === 'super_admin'}
           />
 
           {/* O aviso de notificação nova mora AQUI, no vão que já era vazio
