@@ -101,7 +101,7 @@ describe('meta especial', () => {
 
 describe('o bônus ao lado da comissão', () => {
   const cfg: ConfigComissao = {
-    id: 'cfg', empresaId: 'e1', setorId: 's1', equipeId: null, grupoUsuarios: false, usuarioIds: [],
+    id: 'cfg', empresaId: 'e1', setorId: 's1', equipeId: null, subgrupoId: null, pessoasDoSubgrupo: [], grupoUsuarios: false, usuarioIds: [],
     ano: 2026, mes: 9, modoIndireta: 'junto', pctIndireta: null, pctIndiretaEspecial: null,
     regraSetor: 'nenhuma', multiplicador: null,
     setorMetaConfirmadaEm: null, setorMetaConfirmadaPor: null, setorMetaConfirmadaPorNome: null,

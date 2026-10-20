@@ -61,6 +61,26 @@ describe('Pix Automático 21x', () => {
   });
 });
 
+describe('Pix Automático só na parcela (20/10/2026)', () => {
+  // O registro de teste: 3 parcelas em atraso somando R$ 300 → parcela de R$ 100.
+  it('uma parcela com o desconto da parcela, não o do Pix', () => {
+    const item = CampaignCore.deriveRecord(registro('2100'), CampaignCore.DEFAULT_DISCOUNTS);
+    expect(item.pixAutoParcela).toBe(93);     // 100 × (1 − 7%)
+    const v = CampaignCore.variablesFor(item, CampaignCore.DEFAULT_DISCOUNTS);
+    expect(v.pix_automatico_parcela).toBe(CampaignCore.formatCurrency(93));
+  });
+
+  it('o % do Pix não mexe nela; o da parcela, sim — e arredonda para cima', () => {
+    const descontos = { ...CampaignCore.DEFAULT_DISCOUNTS, overdue: 12.5, pix_automatico: 40 };
+    expect(CampaignCore.deriveRecord(registro('2100'), descontos).pixAutoParcela).toBe(88); // 87,5 → 88
+  });
+
+  it('exige valores, e aparece nos botões do editor', () => {
+    expect(mensagemUsaValores('Pix de {{pix_automatico_parcela}} por mês')).toBe(true);
+    expect(new Map(VARIABLE_LABELS).has('pix_automatico_parcela')).toBe(true);
+  });
+});
+
 describe('migration 20261009180000', () => {
   const MIGRATIONS = path.resolve(__dirname, '../../../supabase/migrations');
   const arquivo = fs.readdirSync(MIGRATIONS).find(f => f.endsWith('_campanha_historico_favoritas_pix.sql'));

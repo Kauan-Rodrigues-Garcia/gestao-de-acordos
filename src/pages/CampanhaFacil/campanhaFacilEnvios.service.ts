@@ -26,9 +26,11 @@ import { COLUNAS_SETOR_DO_FILTRO, listaDoFiltroDeSetores } from '@/lib/setoresDo
 const db = supabase as unknown as SupabaseClient;
 
 /*
- * Quanto tempo a campanha fica na aba do operador: até o mês virar, no horário
- * de Brasília (`fn_cf_fim_do_mes`, 20261015200000 — eram 2 dias). Quem decide
- * é o banco, ao lançar; a tela só mostra o `expira_em`.
+ * Quanto tempo a campanha fica na aba do operador: 3 dias desde o lançamento
+ * ou relançamento (20261020120000 — antes ia até o mês virar). Vencida, a
+ * faxina manda para o histórico só a que ainda tem mensagem pendente; a
+ * completa espera o líder finalizar (`finalizarLote`). Quem decide é o banco;
+ * a tela só mostra o `expira_em`.
  */
 
 /** Mensagens por pedido ao gravar: a campanha inteira num corpo só passa do limite. */
@@ -447,9 +449,18 @@ export async function listarMinhasCampanhas(operadorId: string): Promise<EnvioRe
 
 // ── Controle da campanha ─────────────────────────────────────────────────────
 
-/** Desativar some na hora para os operadores; reativar avisa e vale até o fim do mês. */
+/** Desativar some na hora para os operadores; reativar avisa e vale por 3 dias. */
 export async function ativarLote(loteId: string, ativa: boolean): Promise<void> {
   const { error } = await db.rpc('fn_campanha_facil_lote_ativar', { p_lote: loteId, p_ativa: ativa });
+  if (error) throw error;
+}
+
+/**
+ * Manda a campanha completa para o histórico: placar congelado, some da aba
+ * dos operadores. O banco recusa se ainda há mensagem pendente.
+ */
+export async function finalizarLote(loteId: string): Promise<void> {
+  const { error } = await db.rpc('fn_campanha_facil_lote_finalizar', { p_lote: loteId });
   if (error) throw error;
 }
 

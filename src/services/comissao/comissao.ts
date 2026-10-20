@@ -65,7 +65,17 @@ export interface ConfigComissao {
   empresaId: string;
   setorId: string;
   equipeId: string | null;
-  /** Exceção por usuário — passa na frente da equipe e do setor. */
+  /**
+   * Exceção de subgrupo (20261020140000): `equipeId` é a equipe dele. Passa na
+   * frente da exceção da equipe. `null` = não é de subgrupo.
+   */
+  subgrupoId: string | null;
+  /**
+   * Só na exceção de subgrupo: quem está nele agora (`perfis.subgrupo_id`),
+   * lido junto com a configuração do mês — ver `buscarConfigsDoMes`.
+   */
+  pessoasDoSubgrupo: string[];
+  /** Exceção por usuário — passa na frente do subgrupo, da equipe e do setor. */
   grupoUsuarios: boolean;
   /** Só na exceção por usuário: quem está nela. */
   usuarioIds: string[];
@@ -84,14 +94,18 @@ export interface ConfigComissao {
 }
 
 /** De onde veio a configuração que vale para a pessoa. */
-export type OrigemConfig = 'usuario' | 'equipe' | 'setor';
+export type OrigemConfig = 'usuario' | 'subgrupo' | 'equipe' | 'setor';
 
 /**
  * A configuração que vale para um operador, e a linha do setor dele.
  *
- * A ordem é usuário > equipe > setor (16/09/2026): quem está numa exceção por
- * usuário ignora os percentuais da equipe e os do setor. A regra de quando o
- * setor bate a meta continua sendo a da linha do setor, para todos.
+ * A ordem é usuário > subgrupo > equipe > setor (16/09/2026; o subgrupo entrou
+ * em 20/10/2026): quem está numa exceção por usuário ignora os percentuais do
+ * subgrupo, da equipe e do setor. A regra de quando o setor bate a meta
+ * continua sendo a da linha do setor, para todos.
+ *
+ * O subgrupo só vale com a equipe de origem: a exceção é de um subgrupo DAQUELA
+ * equipe, e quem está nele é achado pela pessoa (`pessoasDoSubgrupo`).
  *
  * `setorId` e `equipeId` são os de ORIGEM — o clone é calculado pelo usuário
  * original, nunca pela equipe que o tomou emprestado. A exceção por usuário é
@@ -110,11 +124,16 @@ export function configDoOperador(params: {
   const individual = operadorId
     ? configs.find(c => c.grupoUsuarios && c.usuarioIds.includes(operadorId)) ?? null
     : null;
+  const doSubgrupo = equipeId && operadorId
+    ? configs.find(c => c.setorId === setorId && c.equipeId === equipeId && c.subgrupoId
+      && c.pessoasDoSubgrupo.includes(operadorId)) ?? null
+    : null;
   const daEquipe = equipeId
-    ? configs.find(c => c.setorId === setorId && c.equipeId === equipeId) ?? null
+    ? configs.find(c => c.setorId === setorId && c.equipeId === equipeId && !c.subgrupoId) ?? null
     : null;
 
   if (individual) return { config: individual, doSetor, origem: 'usuario' };
+  if (doSubgrupo) return { config: doSubgrupo, doSetor, origem: 'subgrupo' };
   if (daEquipe) return { config: daEquipe, doSetor, origem: 'equipe' };
   return { config: doSetor, doSetor, origem: doSetor ? 'setor' : null };
 }

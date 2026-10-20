@@ -60,7 +60,7 @@ import { AbaComissao } from './AbaComissao';
 
 function config(over: Partial<ConfigComissao> = {}): ConfigComissao {
   return {
-    id: 'cfg-set', empresaId: 'e1', setorId: 's1', equipeId: null, grupoUsuarios: false, usuarioIds: [],
+    id: 'cfg-set', empresaId: 'e1', setorId: 's1', equipeId: null, subgrupoId: null, pessoasDoSubgrupo: [], grupoUsuarios: false, usuarioIds: [],
     ano: 2026, mes: 9,
     modoIndireta: 'junto', pctIndireta: null, pctIndiretaEspecial: null,
     regraSetor: 'nenhuma', multiplicador: null,

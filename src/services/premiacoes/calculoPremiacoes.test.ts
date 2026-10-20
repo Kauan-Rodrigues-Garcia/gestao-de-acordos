@@ -16,7 +16,7 @@ import {
 function config(over: Partial<ConfigComissao> = {}): ConfigComissao {
   return {
     id: 'cfg', empresaId: 'e1', setorId: 's1', equipeId: null,
-    grupoUsuarios: false, usuarioIds: [], ano: 2026, mes: 8,
+    subgrupoId: null, pessoasDoSubgrupo: [], grupoUsuarios: false, usuarioIds: [], ano: 2026, mes: 8,
     modoIndireta: 'junto', pctIndireta: null, pctIndiretaEspecial: null,
     regraSetor: 'nenhuma', multiplicador: null,
     setorMetaConfirmadaEm: null, setorMetaConfirmadaPor: null, setorMetaConfirmadaPorNome: null,

@@ -37,6 +37,8 @@ export interface AlvoConfig {
   setorId: string;
   /** `null` = padrão do setor (ou exceção por usuário, com `grupoUsuarios`). */
   equipeId: string | null;
+  /** Exceção de subgrupo: vai junto com a equipe dele. */
+  subgrupoId?: string | null;
   grupoUsuarios?: boolean;
   ano: number;
   mes: number;
