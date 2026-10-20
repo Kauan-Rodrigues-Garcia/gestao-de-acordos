@@ -20,6 +20,8 @@ const DORA  = '00000000-0000-4000-8000-0000000000c4';
 const SETOR = '00000000-0000-4000-8000-0000000000e1';
 
 const SQL = readFileSync(resolve(__dirname, '../../../supabase/migrations/20261020130000_corrida_da_sorte.sql'), 'utf8');
+const SQL_PREENCHER = readFileSync(resolve(__dirname, '../../../supabase/migrations/20261020200000_corrida_preencher_escolhas.sql'), 'utf8');
+const SQL_TEMA = readFileSync(resolve(__dirname, '../../../supabase/migrations/20261020210000_corrida_tema_e_palpite.sql'), 'utf8');
 
 let db: PGlite;
 
@@ -76,6 +78,10 @@ beforeAll(async () => {
   await db.exec(SQL);
   // Reexecutável: aplicar de novo não quebra.
   await db.exec(SQL);
+  await db.exec(SQL_PREENCHER);
+  await db.exec(SQL_PREENCHER);
+  await db.exec(SQL_TEMA);
+  await db.exec(SQL_TEMA);
 });
 
 beforeEach(async () => {
@@ -268,6 +274,100 @@ describe('20261020130000 — o card de divulgação', () => {
     const p = await como<Painel>(ADMIN, 'select public.fn_corrida_divulgar($1, $2, $3, $4, 3) v', ['Vem aí', 'Fique de olho', null, [ANA]]);
     await como(ADMIN, 'select public.fn_corrida_divulgacao_encerrar($1) v', [p.divulgacoes[0].id]);
     expect((await minha(ANA)).divulgacao).toBeNull();
+  });
+});
+
+describe('20261020210000 — o cenário do lobby e o palpite', () => {
+  it('o cenário nasce f1, só o super_admin troca, e só antes da largada', async () => {
+    const p = await criar([ANA, BRUNO], [DORA]);
+    expect((p.corrida as unknown as { tema: string }).tema).toBe('f1');
+    const id = p.corrida!.id;
+    await expect(como(ANA, 'select public.fn_corrida_tema($1, $2) v', [id, 'tv'])).rejects.toThrow(/NAO_AUTORIZADO/);
+    await expect(como(ADMIN, 'select public.fn_corrida_tema($1, $2) v', [id, 'praia'])).rejects.toThrow(/TEMA_INVALIDO/);
+    const q = await como<Painel>(ADMIN, 'select public.fn_corrida_tema($1, $2) v', [id, 'hipodromo']);
+    expect((q.corrida as unknown as { tema: string }).tema).toBe('hipodromo');
+    await como(ADMIN, 'select public.fn_corrida_abrir($1) v', [id]);
+    await como(ADMIN, 'select public.fn_corrida_gravar($1, $2) v', [id, gravacao(ANA)]);
+    await como(ADMIN, 'select public.fn_corrida_iniciar($1) v', [id]);
+    await expect(como(ADMIN, 'select public.fn_corrida_tema($1, $2) v', [id, 'tv'])).rejects.toThrow(/NAO_DA/);
+  });
+
+  it('palpite: quem foi chamado, em quem está no grid, com o lobby aberto; avisa a sala com um recado pequeno', async () => {
+    await criar([ANA, BRUNO], [DORA]);
+    const id = await idAtual();
+    await como(ANA, 'select public.fn_corrida_escolher($1, 1::smallint) v', [id]);
+    await expect(como(DORA, 'select public.fn_corrida_palpitar($1, $2) v', [id, ANA])).rejects.toThrow(/PALPITE_FECHADO/);
+    await como(ADMIN, 'select public.fn_corrida_abrir($1) v', [id]);
+    await expect(como(DORA, 'select public.fn_corrida_palpitar($1, $2) v', [id, BRUNO])).rejects.toThrow(/ALVO_INVALIDO/); // Bruno ainda escolhe
+    await expect(como(CAIO, 'select public.fn_corrida_palpitar($1, $2) v', [id, ANA])).rejects.toThrow(/NAO_AUTORIZADO/);
+    await db.exec('truncate realtime.enviados');
+    const r = await como<{ palpite: string }>(DORA, 'select public.fn_corrida_palpitar($1, $2) v', [id, ANA]);
+    expect(r.palpite).toBe(ANA);
+    const a = await avisos();
+    expect(a).toHaveLength(1);
+    expect(a[0]).toMatchObject({ topic: `corrida-sala:${id}`, event: 'palpite', payload: { usuario: DORA, palpite: ANA } });
+    const sala = await como<{ pessoas: Pessoa[] }>(DORA, 'select public.fn_corrida_sala($1) v', [id]);
+    expect((sala.pessoas.find(p => p.usuario === DORA) as unknown as { palpite: string }).palpite).toBe(ANA);
+  });
+
+  it('clicar sem parar não vira enxurrada: o mesmo palpite ou outro em menos de 1 s não avisa', async () => {
+    await criar([ANA, BRUNO], [DORA]);
+    const id = await idAtual();
+    await como(ANA, 'select public.fn_corrida_escolher($1, 1::smallint) v', [id]);
+    await como(BRUNO, 'select public.fn_corrida_escolher($1, 0::smallint) v', [id]);
+    await como(ADMIN, 'select public.fn_corrida_abrir($1) v', [id]);
+    await db.exec('truncate realtime.enviados');
+    await como(DORA, 'select public.fn_corrida_palpitar($1, $2) v', [id, ANA]);
+    await como(DORA, 'select public.fn_corrida_palpitar($1, $2) v', [id, ANA]);
+    const r = await como<{ palpite: string }>(DORA, 'select public.fn_corrida_palpitar($1, $2) v', [id, BRUNO]);
+    expect(r.palpite).toBe(ANA);
+    expect(await avisos()).toHaveLength(1);
+    // passado 1 s, troca
+    await db.query('update public.corrida_pessoas set palpite_em = palpite_em - interval \'2 seconds\' where usuario = $1', [DORA]);
+    expect((await como<{ palpite: string }>(DORA, 'select public.fn_corrida_palpitar($1, $2) v', [id, BRUNO])).palpite).toBe(BRUNO);
+    expect(await avisos()).toHaveLength(2);
+  });
+
+  it('na largada o palpite fecha', async () => {
+    await criar([ANA, BRUNO], [DORA]);
+    const id = await idAtual();
+    await como(ANA, 'select public.fn_corrida_escolher($1, 1::smallint) v', [id]);
+    await como(ADMIN, 'select public.fn_corrida_abrir($1) v', [id]);
+    await como(ADMIN, 'select public.fn_corrida_gravar($1, $2) v', [id, gravacao(ANA)]);
+    await como(ADMIN, 'select public.fn_corrida_iniciar($1) v', [id]);
+    await expect(como(DORA, 'select public.fn_corrida_palpitar($1, $2) v', [id, ANA])).rejects.toThrow(/PALPITE_FECHADO/);
+  });
+});
+
+describe('20261020200000 — preencher para quem não escolheu', () => {
+  it('só o super_admin; dá 0..2 só a quem corre sem escolha e avisa a pessoa e a sala', async () => {
+    await criar([ANA, BRUNO, CAIO], [DORA]);
+    const id = await idAtual();
+    await como(ANA, 'select public.fn_corrida_escolher($1, 2::smallint) v', [id]);
+    await como(ADMIN, 'select public.fn_corrida_abrir($1) v', [id]);
+    await expect(como(ANA, 'select public.fn_corrida_preencher($1) v', [id])).rejects.toThrow(/NAO_AUTORIZADO/);
+    await db.exec('truncate realtime.enviados');
+    const p = await como<Painel>(ADMIN, 'select public.fn_corrida_preencher($1) v', [id]);
+    const porId = new Map(p.pessoas.map(x => [x.usuario, x]));
+    expect(porId.get(ANA)?.escolha).toBe(2);
+    expect([0, 1, 2]).toContain(porId.get(BRUNO)?.escolha);
+    expect([0, 1, 2]).toContain(porId.get(CAIO)?.escolha);
+    expect(porId.get(DORA)?.escolha).toBeNull();
+    const a = await avisos();
+    expect(a.filter(x => x.event === 'corrida').map(x => x.topic).sort()).toEqual([BRUNO, CAIO].map(u => `corrida-eu:${u}`).sort());
+    expect(a.some(x => x.topic === `corrida-sala:${id}` && x.event === 'pessoas')).toBe(true);
+  });
+
+  it('ninguém sem escolha: não avisa nada; depois de gravada, não preenche', async () => {
+    await criar([ANA, BRUNO], []);
+    const id = await idAtual();
+    await como(ANA, 'select public.fn_corrida_escolher($1, 0::smallint) v', [id]);
+    await como(BRUNO, 'select public.fn_corrida_escolher($1, 1::smallint) v', [id]);
+    await db.exec('truncate realtime.enviados');
+    await como(ADMIN, 'select public.fn_corrida_preencher($1) v', [id]);
+    expect(await avisos()).toEqual([]);
+    await como(ADMIN, 'select public.fn_corrida_gravar($1, $2) v', [id, gravacao(ANA)]);
+    await expect(como(ADMIN, 'select public.fn_corrida_preencher($1) v', [id])).rejects.toThrow(/NAO_DA/);
   });
 });
 

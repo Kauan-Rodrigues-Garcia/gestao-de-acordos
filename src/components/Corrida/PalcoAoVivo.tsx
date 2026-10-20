@@ -7,11 +7,12 @@
  * 250 telas não pedem o mesmo arquivo no mesmo segundo. Depois da largada,
  * quem abre baixa na hora.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useAuthOpcional } from '@/hooks/useAuth';
 import { PalcoCorrida } from './PalcoCorrida';
-import { agoraBanco, assinarSala, baixarArquivo, conferirLobby, entrarNoLobby, mensagemDoErro, useCorridaMinha, type GravacaoResumo } from './banco';
+import { agoraBanco, assinarSala, baixarArquivo, conferirLobby, entrarNoLobby, mensagemDoErro, palpitar, useCorridaMinha, type GravacaoResumo } from './banco';
+import type { Palpite } from './lobbies/cena';
 import { desempacotarGravacao } from './gravacao';
 import type { Gravacao, VideosDaFesta } from './motor/motor';
 
@@ -83,9 +84,24 @@ export default function PalcoAoVivo({ corridaId, onFechar }: Props) {
   }, [resumo?.arquivo, resumo?.video, resumo?.loop]);
 
   const pessoas = useMemo(() => sala?.pessoas ?? [], [sala?.pessoas]);
+  // O palpite: aberto no lobby até a largada; os votos são contados das pessoas da sala.
+  const aberto = corrida?.estado === 'aberta' && !corrida.inicia_em;
+  const palpite = useMemo<Palpite>(() => {
+    const votos: Record<string, number> = {};
+    for (const p of pessoas) if (p.palpite) votos[p.palpite] = (votos[p.palpite] ?? 0) + 1;
+    return { ativo: aberto && !!eu, meu: pessoas.find(p => p.usuario === eu)?.palpite ?? null, votos };
+  }, [pessoas, eu, aberto]);
+  // No máximo um pedido por segundo (o banco também segura): clicar sem parar não vira enxurrada.
+  const ultimoPalpite = useRef(0);
+  const apostar = useCallback((alvo: string) => {
+    if (!eu || alvo === palpite.meu || Date.now() - ultimoPalpite.current < 1_000) return;
+    ultimoPalpite.current = Date.now();
+    palpitar(corridaId, eu, alvo).catch(e => toast.error('O palpite não foi', { description: mensagemDoErro(e) }));
+  }, [corridaId, eu, palpite.meu]);
   if (!corrida) return null;
   return (
     <PalcoCorrida corrida={corrida} pessoas={pessoas} eu={eu} agora={agoraBanco}
-      gravacao={gravacao} videos={videos} onFechar={onFechar} />
+      gravacao={gravacao} videos={videos} onFechar={onFechar}
+      tema={corrida.tema ?? 'f1'} palpite={palpite} onPalpite={apostar} />
   );
 }

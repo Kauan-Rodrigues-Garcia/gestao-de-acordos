@@ -46,6 +46,8 @@ export interface CorridaJson {
   premio: string | null;
   estado: EstadoCorrida;
   versao: number;
+  /** O cenário do lobby (20261020210000; sem a migration, não vem). */
+  tema?: 'f1' | 'hipodromo' | 'tv' | 'atual';
   criada_em: string;
   aberta_em: string | null;
   gravada_em: string | null;
@@ -69,6 +71,8 @@ export interface PessoaJson {
   assiste: boolean;
   escolha: number | null;
   entrou_em: string | null;
+  /** Em quem a pessoa apostou (20261020210000). */
+  palpite?: string | null;
 }
 
 export interface DivulgacaoJson {
@@ -226,6 +230,24 @@ function aplicarEntradas(corridaId: number, entraram: Array<{ usuario: string; e
   if (mudou) publicar({ sala: { ...s, pessoas } });
 }
 
+function aplicarPalpite(corridaId: number, usuario: string, palpite: string | null): void {
+  const s = estado.sala; if (!s || s.corrida.id !== corridaId) return;
+  publicar({ sala: { ...s, pessoas: s.pessoas.map(p => (p.usuario === usuario ? { ...p, palpite } : p)) } });
+}
+
+/** O palpite: aparece na hora na própria tela; o banco avisa os outros. */
+export async function palpitar(corridaId: number, usuario: string, alvo: string): Promise<void> {
+  const antes = estado.sala?.pessoas.find(p => p.usuario === usuario)?.palpite ?? null;
+  aplicarPalpite(corridaId, usuario, alvo);
+  try {
+    const r = await rpc<{ palpite: string | null }>('fn_corrida_palpitar', { p_corrida: corridaId, p_alvo: alvo });
+    aplicarPalpite(corridaId, usuario, r.palpite);
+  } catch (e) {
+    aplicarPalpite(corridaId, usuario, antes);
+    throw e;
+  }
+}
+
 function aplicarEscolha(corridaId: number, usuario: string, escolha: number): void {
   const s = estado.sala; if (!s || s.corrida.id !== corridaId) return;
   publicar({ sala: { ...s, pessoas: s.pessoas.map(p => (p.usuario === usuario ? { ...p, escolha } : p)) } });
@@ -268,12 +290,13 @@ function ouvirSala(): void {
 /** Ouve a sala de uma corrida (o super_admin assistindo sem ter sido chamado também). Devolve a função que desliga. */
 export function assinarSala(id: number): () => void {
   return assinarTabela(
-    { topico: `corrida-sala:${id}`, escutas: [{ sinal: 'estado' }, { sinal: 'lobby' }, { sinal: 'escolha' }, { sinal: 'pessoas' }] },
+    { topico: `corrida-sala:${id}`, escutas: [{ sinal: 'estado' }, { sinal: 'lobby' }, { sinal: 'escolha' }, { sinal: 'pessoas' }, { sinal: 'palpite' }] },
     {
       onSinal: (payload, sinal) => {
-        const p = payload as { agora?: string; corrida?: CorridaJson; entraram?: Array<{ usuario: string; entrou_em: string }>; usuario?: string; escolha?: number };
+        const p = payload as { agora?: string; corrida?: CorridaJson; entraram?: Array<{ usuario: string; entrou_em: string }>; usuario?: string; escolha?: number; palpite?: string | null };
         if (p.agora) ajustarRelogio(p.agora);
         if (sinal === 'lobby') { aplicarEntradas(id, p.entraram); return; }
+        if (sinal === 'palpite') { if (p.usuario) aplicarPalpite(id, p.usuario, p.palpite ?? null); return; }
         aceitarCorrida(p.corrida, p.agora);
         if (sinal === 'escolha' && p.usuario != null && p.escolha != null) aplicarEscolha(id, p.usuario, p.escolha);
         // Mudou quem corre ou quem assiste: o papel de cada um pode ter mudado.

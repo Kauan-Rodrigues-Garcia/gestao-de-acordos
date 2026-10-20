@@ -11,15 +11,20 @@ import { PalcoCorrida } from './PalcoCorrida';
 import { bichinhoDe } from './motor/bichinhos';
 import type { Gravacao, Motor, VideosDaFesta } from './motor/motor';
 import type { CorridaJson, PessoaJson } from './banco';
+import type { Palpite, TemaLobby } from './lobbies/cena';
 
 const NOMES = ['Ana', 'Bruno', 'Carla', 'Diego', 'Elaine', 'Felipe', 'Gabriela', 'Hugo', 'Isabela', 'João', 'Larissa', 'Marcos', 'Natália', 'Otávio', 'Paula', 'Rafael', 'Sabrina', 'Thiago', 'Vanessa', 'Wesley', 'Yasmin', 'Caio', 'Débora', 'Fábio', 'Helena', 'Igor', 'Juliana', 'Lucas'];
 const SETORES = ['Recuperação', 'Receptivo', 'Cartões', 'Veículos', 'Conecta Play'];
 const agoraLocal = () => Date.now() / 1000;
 const iso = (s: number) => new Date(s * 1000).toISOString();
 
-interface Props { premio: string; onFechar: () => void }
+interface Props {
+  premio: string; onFechar: () => void;
+  /** Só no laboratório: o cenário, se você corre ou só assiste, e o palpite de mentira. */
+  tema?: TemaLobby; visao?: 'corredor' | 'torcida'; palpiteDemo?: boolean;
+}
 
-export default function TesteCorrida({ premio, onFechar }: Props) {
+export default function TesteCorrida({ premio, onFechar, tema, visao = 'corredor', palpiteDemo }: Props) {
   const auth = useAuthOpcional();
   const eu = auth?.user?.id ?? 'eu-no-teste';
   const meuNome = (auth?.perfil as { nome?: string } | null | undefined)?.nome ?? 'Você';
@@ -39,20 +44,48 @@ export default function TesteCorrida({ premio, onFechar }: Props) {
       usuario: `teste-${i}`, nome: `${nome} ${String.fromCharCode(65 + (i * 7) % 26)}.`, setor: SETORES[i % SETORES.length], foto: null as string | null,
       corre: i % 3 !== 2, assiste: true, escolha: i % 3, entrou_em: null as string | null,
     }));
-    lista.unshift({ usuario: eu, nome: meuNome, setor: SETORES[0], foto: minhaFoto, corre: true, assiste: true, escolha: 0, entrou_em: null });
+    // e uma torcida maior, só assistindo
+    NOMES.forEach((nome, i) => lista.push({
+      usuario: `torcida-${i}`, nome: `${nome} ${String.fromCharCode(66 + (i * 5) % 24)}.`, setor: SETORES[(i + 2) % SETORES.length], foto: null,
+      corre: false, assiste: true, escolha: null, entrou_em: null,
+    }));
+    lista.unshift({ usuario: eu, nome: meuNome, setor: SETORES[0], foto: minhaFoto, corre: visao === 'corredor', assiste: true, escolha: 0, entrou_em: null });
     return lista;
-  }, [eu, meuNome, minhaFoto]);
+  }, [eu, meuNome, minhaFoto, visao]);
   const atrasos = useMemo(() => base.map((p, i) => (p.usuario === eu ? 0 : 1 + ((i * 2.7) % 22))), [base, eu]);
   useEffect(() => { const id = window.setInterval(() => tique(n => n + 1), 1000); return () => window.clearInterval(id); }, []);
   const agora = agoraLocal();
-  const pessoas = base.map((p, i) => (agora - abertaEm >= atrasos[i] ? { ...p, entrou_em: iso(abertaEm + atrasos[i]) } : p));
+  // Um em cada quatro corredores só escolhe o bichinho 6 s depois de entrar: o grid enche aos poucos.
+  const pessoas = base.map((p, i) => {
+    const t = agora - abertaEm - atrasos[i];
+    if (t < 0) return p.corre && i % 4 === 3 ? { ...p, escolha: null } : p;
+    return { ...p, entrou_em: iso(abertaEm + atrasos[i]), escolha: p.corre && i % 4 === 3 && t < 6 ? null : p.escolha };
+  });
 
   const corrida: CorridaJson = {
     id: ID, nome: 'Teste', premio: premio || null, estado: iniciaEm ? 'correndo' : 'aberta', versao: 1,
     criada_em: iso(abertaEm), aberta_em: iso(abertaEm), gravada_em: gravacao ? iso(abertaEm) : null, inicia_em: iniciaEm ? iso(iniciaEm) : null,
     encerrada_em: null, gravacao: null, vencedor: null, vencedor_nome: null,
-    corredores: base.filter(p => p.corre).length, chamados: base.length, escolheram: base.filter(p => p.corre).length, no_lobby: pessoas.filter(p => p.entrou_em).length,
+    corredores: base.filter(p => p.corre).length, chamados: base.length, escolheram: pessoas.filter(p => p.corre && p.escolha != null).length, no_lobby: pessoas.filter(p => p.entrou_em).length,
   };
+
+  // O palpite de mentira: votos que vão chegando sozinhos, e o seu clique.
+  const [palpite, setPalpite] = useState<Palpite>({ ativo: !!palpiteDemo, meu: null, votos: {} });
+  useEffect(() => {
+    setPalpite(p => ({ ...p, ativo: !!palpiteDemo }));
+    if (!palpiteDemo) return;
+    const id = window.setInterval(() => setPalpite(p => {
+      const ids = base.filter(x => x.corre).map(x => x.usuario), alvo = ids[Math.floor(Math.random() * ids.length)];
+      return alvo ? { ...p, votos: { ...p.votos, [alvo]: (p.votos[alvo] ?? 0) + 1 } } : p;
+    }), 1400);
+    return () => window.clearInterval(id);
+  }, [palpiteDemo, base]);
+  const apostar = (id: string) => setPalpite(p => {
+    if (p.meu === id) return p;
+    const votos = { ...p.votos, [id]: (p.votos[id] ?? 0) + 1 };
+    if (p.meu) votos[p.meu] = Math.max(0, (votos[p.meu] ?? 1) - 1);
+    return { ...p, meu: id, votos };
+  });
 
   const limparVideos = useCallback(() => { setVideos(v => { if (v) { URL.revokeObjectURL(v.festa); URL.revokeObjectURL(v.loop); } return null; }); }, []);
   useEffect(() => () => limparVideos(), [limparVideos]);
@@ -71,7 +104,7 @@ export default function TesteCorrida({ premio, onFechar }: Props) {
     } finally { setGravando(null); }
   };
 
-  const durShow = 10 + 7.2 + 1.9 + 3.8 + 0.55;
+  const durShow = 7.2 + 1.9 + 3.8 + 0.55; // a caixa, o pouso, a abertura e a saída (sem contagem: ver DUR no motor)
   const btn = 'flex items-center gap-1.5 rounded-full border border-white/15 px-3 py-1 text-[13px] font-semibold hover:border-[#ffd84d] disabled:opacity-40';
   const barra = (
     <div className="flex flex-wrap items-center gap-2 border-b border-[#ffd84d]/30 bg-[#ffd84d]/10 px-4 py-2 text-[13px]">
@@ -88,6 +121,6 @@ export default function TesteCorrida({ premio, onFechar }: Props) {
   return (
     <PalcoCorrida corrida={corrida} pessoas={pessoas} eu={eu} agora={agoraLocal}
       gravacao={gravacao} videos={videos} onFechar={onFechar} barraTeste={barra}
-      aoMotor={m => { motorRef.current = m; }} />
+      aoMotor={m => { motorRef.current = m; }} tema={tema} palpite={palpite} onPalpite={apostar} />
   );
 }

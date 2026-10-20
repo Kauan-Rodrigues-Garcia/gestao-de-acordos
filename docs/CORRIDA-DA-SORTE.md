@@ -32,7 +32,7 @@ mesmo segundo. Substitui a Caça aos Zumbis e às Bruxas (ver
    `corridas` e o resumo vai para `corridas.gravacao`. Daí em diante ninguém
    troca bichinho, pessoas nem prêmio (dá para descartar e gravar de novo).
 4. **Largar**: `inicia_em` = hora do banco + 4 s. Cada tela calcula o que
-   mostrar a partir de `agora - inicia_em` (contagem de 10 s, a caixa dos
+   mostrar a partir de `agora - inicia_em` (sem contagem desde 20/10: a largada do lobby ocupa os 4 s antes da hora; depois a caixa dos
    mapas, a abertura, a corrida, a festa). Quem entra atrasado cai no ponto
    certo.
 5. **Encerrar**: depois da festa. Esquecida «correndo», a corrida para de
