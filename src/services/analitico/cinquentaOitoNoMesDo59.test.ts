@@ -10,6 +10,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { linhasDo58NoMesDo59, diaLocalSP } from './analitico.service';
+import { parseRelatorioBookplayRows } from '@/services/bookplay/bookplayRecebimentoParser';
 
 const l = (codigo: string, data: string, mes = '2026-10-01') =>
   ({ codigo, data_pagamento: data, mes_referencia: mes });
@@ -43,6 +44,31 @@ describe('linhasDo58NoMesDo59', () => {
   it('sem mês do 59, nada muda', () => {
     const linhas = [l('1', '2026-10-01'), l('2', '2026-10-19')];
     expect(linhasDo58NoMesDo59(linhas, new Set(), ONTEM, new Set())).toEqual(linhas);
+  });
+
+  /*
+   * O caso de 20/10/2026, do arquivo ao recorte: entrada de R$ 200 em 19/10 (o
+   * 59 já tem) e R$ 544 em 20/10 (o 59 ainda não). Com o NR numa linha só, a
+   * data era 19/10 e o recorte levava os R$ 744 embora.
+   */
+  it('do 58 da BookPlay: o pagamento de hoje entra mesmo com a entrada de ontem no 59', () => {
+    const CAB = ['Cobradora', 'Cliente', 'NrDocumento', 'TpDoc', 'DtPgto', 'Recebido'];
+    const pg = (tp: string, data: string, valor: number) =>
+      ['isabelle_moreira', '11264600 - CLIENTE', '10812488', tp, data, valor];
+    const { analitico } = parseRelatorioBookplayRows([
+      CAB,
+      pg('PIX', '19/10/2026', 200),
+      ...[93, 93, 93, 93, 93, 79].map(v => pg('BOLETO NEGOCIAÇÃO', '20/10/2026', v)),
+    ]);
+    const linhas = analitico.map(a => ({
+      codigo: a.codigo,
+      data_pagamento: `2026-10-${String(a.data_pagamento.getDate()).padStart(2, '0')}`,
+      mes_referencia: '2026-10-01',
+      valor: a.valor_recebido,
+    }));
+
+    const r = linhasDo58NoMesDo59(linhas, OUT, '2026-10-19', new Set(['10812488::2026-10-19']));
+    expect(r).toEqual([{ codigo: '10812488', data_pagamento: '2026-10-20', mes_referencia: '2026-10-01', valor: 544 }]);
   });
 });
 

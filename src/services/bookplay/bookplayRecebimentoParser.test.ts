@@ -112,6 +112,32 @@ describe('parseRelatorioBookplayRows — relatório 58', () => {
     expect(resultado.colchaoNaMeta.linhas).toBe(1);
   });
 
+  /*
+   * Até 20/10/2026 o NR inteiro virava UMA linha com a data do primeiro
+   * pagamento, e num mês do 59 o pagamento de hoje sumia junto com a entrada de
+   * ontem — ver o bloco do Analítico no parser.
+   */
+  it('analítico: uma linha por operador + NR + dia, somando o que caiu no dia', () => {
+    const resultado = parseRelatorioBookplayRows([
+      CABECALHO,
+      linha({ nr: '10812488', tpdoc: 'PIX', parcela: '3', data: '19/10/2026', valor: 200 }),
+      linha({ nr: '10812488', tpdoc: 'BOLETO NEGOCIAÇÃO', parcela: '4', data: '20/10/2026', valor: 93 }),
+      linha({ nr: '10812488', tpdoc: 'BOLETO NEGOCIAÇÃO', parcela: '9', data: '20/10/2026', valor: 79 }),
+      linha({ nr: '10812488', operador: 'OUTRA', tpdoc: 'PIX', data: '20/10/2026', valor: 10 }),
+    ]);
+
+    const resumo = resultado.analitico.map(l => [
+      l.operador_usuario, l.data_pagamento.getDate(), l.valor_recebido, l.forma_detalhe,
+    ]);
+    expect(resumo).toEqual([
+      ['AGATHA_ROCHA', 19, 200, 'Pix'],
+      ['AGATHA_ROCHA', 20, 172, 'Boleto'],
+      ['OUTRA', 20, 10, 'Pix'],
+    ]);
+    // O total não muda: só deixa de ir tudo para o primeiro dia.
+    expect(resultado.analitico.reduce((s, l) => s + l.valor_recebido, 0)).toBe(382);
+  });
+
   it('mantém a regra BookPlay de TpDoc vazio como cartão de crédito', () => {
     expect(labelPagamentoBookplay('')).toBe('Cartão de Crédito');
     const resultado = parseRelatorioBookplayRows([

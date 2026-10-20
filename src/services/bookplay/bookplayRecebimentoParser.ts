@@ -17,8 +17,9 @@
  *   N Recebido    → valor recebido
  *
  * Consolidação:
- *   - Analítico  → 1 linha por (operador + NR): soma TODAS as parcelas do NR
- *     (boleto/pix/cartão) num único valor. Lista enxuta, sem detalhamento.
+ *   - Analítico  → 1 linha por (operador + NR + dia): soma as parcelas do NR
+ *     pagas naquele dia (boleto/pix/cartão). Até 20/10/2026 era 1 linha por
+ *     (operador + NR), com a data do primeiro pagamento — ver o bloco abaixo.
  *   - Diário     → 1 linha por (operador + NR + dia): soma o que aquele NR
  *     recebeu naquele dia (mantém o filtro por dia correto).
  *
@@ -252,10 +253,21 @@ export function parseRelatorioBookplayRows(rows: unknown[][]): ResultadoParseBoo
     });
   }
 
-  // ── Analítico: 1 linha por (operador + NR), somando tudo ──────────────────
+  // ── Analítico: 1 linha por (operador + NR + dia) ──────────────────────────
+  //
+  // Por DIA, e não por NR (20/10/2026). O NR inteiro numa linha só levava a
+  // data do PRIMEIRO pagamento do arquivo, e num mês do 59 isso apagava o resto:
+  // o 58 só grava NR+dia que o 59 ainda não tem (`linhasDo58NoMesDo59`), e o
+  // bolo com a data de ontem casava com a linha de ontem do 59 e saía inteiro —
+  // pagamento de hoje junto. Caso real: NR 10812488, entrada de R$ 200 em 19/10
+  // (já no 59) e R$ 544 em 20/10, que não entraram para a operadora.
+  //
+  // A linha antiga de um NR (gravada por NR) tem a chave do primeiro dia, que é
+  // a mesma da linha nova desse dia; a conferência por NR do mês acerta o valor
+  // dela e as dos outros dias entram ao lado.
   const mapA = new Map<string, LinhaRelatorio>();
   for (const l of brutas) {
-    const chave = `${l.operador_usuario}::${l.codigo}`;
+    const chave = `${l.operador_usuario}::${l.codigo}::${dayKeyDiario(l.data_pagamento)}`;
     const existe = mapA.get(chave);
     if (existe) {
       existe.valor_recebido += l.valor_recebido;
