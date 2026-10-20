@@ -56,9 +56,11 @@ export const VARIABLE_GROUPS: GrupoDeVariaveis[] = [
   },
   {
     // Valor com juros ÷ parcelas, e com o desconto configurado em «Descontos e
-    // cálculos» (09/10/2026; 12x e 20x em 16/10/2026).
+    // cálculos» (09/10/2026; 12x e 20x em 16/10/2026). «Só a parcela»
+    // (20/10/2026): uma parcela com o desconto da parcela.
     titulo: 'Pix Automático', dica: 'Valor de cada parcela', tom: 'ciano',
     itens: [
+      ['pix_automatico_parcela', 'Só a parcela (c/ desc. da parcela)'],
       ['pix_automatico_12x', 'Pix Automático 12x'], ['pix_automatico_20x', 'Pix Automático 20x'],
       ['pix_automatico_21x', 'Pix Automático 21x'],
       ['pix_automatico_desconto_12x', 'c/ desconto 12x'], ['pix_automatico_desconto_20x', 'c/ desconto 20x'],

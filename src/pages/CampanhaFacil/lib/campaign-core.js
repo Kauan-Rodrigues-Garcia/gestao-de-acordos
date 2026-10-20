@@ -1280,6 +1280,12 @@ Contrato: *{{contrato}}*
     const pixAutoDiscount = financialDataAvailable
       ? roundUp((valueWithInterest * (1 - rates.pix_automatico)) / PIX_AUTO_PARCELAS)
       : null;
+    // Pix Automático só na parcela (20/10/2026): UMA parcela (valor em atraso ÷
+    // parcelas em atraso) com o desconto da parcela — não o do Pix. Sem
+    // parcela em atraso, zero, como a junção e o anual.
+    const pixAutoParcela = financialDataAvailable
+      ? (overdueCount > 0 ? roundUp(installmentValue * (1 - rates.overdue)) : 0)
+      : null;
     // As outras quantidades de parcelas (16/10/2026), na mesma conta: o total
     // da modalidade ÷ n, arredondado para cima. Chave = n de parcelas.
     const emParcelas = (total) => Object.fromEntries(PARCELAMENTOS.map((n) => [
@@ -1347,6 +1353,7 @@ Contrato: *{{contrato}}*
       cardAnnual,
       pixAuto,
       pixAutoDiscount,
+      pixAutoParcela,
       installments,
       mailing: mailingFieldsFor(record),
       saleType,
@@ -1386,6 +1393,7 @@ Contrato: *{{contrato}}*
       cartao_anual: formatCurrency(item.cardAnnual),
       pix_automatico_21x: formatCurrency(item.pixAuto),
       pix_automatico_desconto_21x: formatCurrency(item.pixAutoDiscount),
+      pix_automatico_parcela: formatCurrency(item.pixAutoParcela),
       // 20x e 21x em todas as modalidades (16/10/2026). O 12x do cartão segue
       // em {{cartao_quitacao}} / {{cartao_anual}}, e o 21x do Pix Automático
       // nas variáveis acima.
@@ -1413,7 +1421,7 @@ Contrato: *{{contrato}}*
   }
 
   function templateRequiresFinancialData(template) {
-    return /{{\s*(?:parcela_desconto|quitacao|valor_com_juros|juncao|anual|cartao_quitacao(?:_2[01]x)?|cartao_anual(?:_2[01]x)?|pix_automatico(?:_desconto)?_(?:12|20|21)x)\s*}}/i
+    return /{{\s*(?:parcela_desconto|quitacao|valor_com_juros|juncao|anual|cartao_quitacao(?:_2[01]x)?|cartao_anual(?:_2[01]x)?|pix_automatico(?:_desconto)?_(?:12|20|21)x|pix_automatico_parcela)\s*}}/i
       .test(String(template ?? ""));
   }
 

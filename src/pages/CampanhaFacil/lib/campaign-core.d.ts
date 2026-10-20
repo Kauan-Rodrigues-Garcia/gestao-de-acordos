@@ -109,6 +109,11 @@ export interface CampaignItem {
   /** Parcela do Pix Automático com o desconto: valor com juros × (1 − %) ÷ 21. */
   pixAutoDiscount: number | null;
   /**
+   * Pix Automático só na parcela (20/10/2026): uma parcela (valor ÷ parcelas
+   * em atraso) com o desconto da parcela. 0 sem parcela em atraso.
+   */
+  pixAutoParcela: number | null;
+  /**
    * Cada modalidade parcelada em 12x, 20x e 21x (16/10/2026): a chave é o
    * número de parcelas. `null` no relatório sem valores.
    */
