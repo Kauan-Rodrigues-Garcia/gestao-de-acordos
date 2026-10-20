@@ -108,6 +108,8 @@ export interface Motor {
   entrar(): void;
   sair(): void;
   reagir(tipo: 'palmas' | 'torcer' | 'coracao' | 'ola'): void;
+  /** Liga ou desliga o desenho do lobby (o som e a linha do tempo seguem). */
+  setLobbyVisivel(visivel: boolean): void;
   volume(max?: number, mudo?: boolean): void;
   ligarEq(barras: ArrayLike<HTMLElement>): void;
   seguir(id: string | null): void;

@@ -2678,7 +2678,8 @@ function medirCerimonia() { ovl.width = Math.round(cw * dpr); ovl.height = Math.
 const easeOut4 = u => 1 - Math.pow(1 - clamp(u, 0, 1), 4);
 const easeInOut = u => { u = clamp(u, 0, 1); return u < .5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2; };
 const easeBack = u => { u = clamp(u, 0, 1); const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(u - 1, 3) + c1 * Math.pow(u - 1, 2); };
-const DUR = { contagem: 10, caixa: 7.2, pouso: 1.9, intro: 3.8, saida: 0.55 };
+// Sem contagem desde 20/10/2026 (pedido do Cleber): a largada do lobby já é a contagem, e a roleta do mapa entra direto.
+const DUR = { contagem: 0, caixa: 7.2, pouso: 1.9, intro: 3.8, saida: 0.55 };
 const fonteMapa = (id, px) => SKINS[id].pixel ? `${Math.round(px * 0.48)}px "Press Start 2P", monospace` : `${Math.round(px)}px ${SKINS[id].fonte}`;
 function capa(c, img, w, h, z, a) {
   const s = Math.max(w / img.width, h / img.height) * z, iw = img.width * s, ih = img.height * s;
@@ -3426,7 +3427,7 @@ function desenhaLobby(c, w, h, t, agora, ex, modo) {
   c.textAlign = 'left'; c.textBaseline = 'alphabetic';
 }
 function reagir(tipo) {
-  const b = { dataset: { reacao: tipo } }; if (!posVoce) return;
+  const b = { dataset: { reacao: tipo } }; if (!posVoce || bolhasL.length > 40) return; // teto de falas: clicar sem parar não derruba o FPS
   const agora = agoraS(), txt = { palmas: 'Clap clap!', torcer: 'Vaaai!', coracao: '♥ ♥ ♥', ola: 'Olaaa!' }[b.dataset.reacao];
   if (b.dataset.reacao === 'ola') { som.liga(); if (!ola) puxaOla(posVoce.u, agora); bolhasL.push({ x: posVoce.x, y: posVoce.y, txt, t0: agora, cor: '#ffd84d' }); return; }
   bolhasL.push({ x: posVoce.x, y: posVoce.y, txt, t0: agora, cor: '#ffd84d' });
@@ -3622,11 +3623,15 @@ const musica = {
   barras(n) {
     if (!this.analisador || !this.estadoL.toca || prefs.mudo || !this.lobby || this.lobby.paused) return null;
     this.analisador.getByteFrequencyData(this.bins);
+    // As barras acompanham o volume escolhido (20/10/2026): som baixo, barras baixas.
+    const nivel = 0.25 + 0.75 * clamp(this.estadoL.vol / VOL_TETO, 0, 1);
     const lo = 1, hi = Math.floor(this.bins.length * 0.72);
     return Array.from({ length: n }, (_, i) => {
       const a = Math.floor(lo * Math.pow(hi / lo, i / n)), b = Math.max(a + 1, Math.floor(lo * Math.pow(hi / lo, (i + 1) / n)));
-      let m = 0; for (let k = a; k < b; k++) m = Math.max(m, this.bins[k]);
-      return Math.min(1, Math.pow(m / 255, 1.4) * 1.25);
+      let m = 0; for (let k = a; k < b; k++) m += this.bins[k];
+      // a média da faixa, sem o «chão» que a música sempre tem: só o que pulsa acima dele sobe a barra
+      const v = Math.max(0, (m / (b - a) / 255 - 0.3) / 0.6);
+      return Math.min(1, Math.pow(v, 1.5) * nivel);
     });
   },
   parar() { for (const a of [this.lobby, this.vitoria]) if (a) { a.pause(); a.removeAttribute('src'); try { a.load(); } catch (e) { } } },
@@ -3690,6 +3695,7 @@ function quadroFestaViva(tl, agora, dt) {
 /* ================= o laço ================= */
 let rodando = true, raf = 0, ultimoQ = performance.now(), ultPainel = 0, ultLobby = 0, telaAnt = '', ultT = -1;
 let pararGravacao = false;
+let lobbyVisivel = true; // com um cenário novo por cima (LobbyNovo), o lobby daqui não é desenhado
 function quadro() {
   if (!rodando) return;
   const agoraMs = performance.now(), dtR = Math.min(0.05, (agoraMs - ultimoQ) / 1000); ultimoQ = agoraMs;
@@ -3699,7 +3705,7 @@ function quadro() {
     musica.tick(tl, agora);
     if (tl.tela === 'lobby' || tl.tela === 'preparo') {
       // o lobby fica parado a maior parte do tempo: 30 quadros por segundo bastam e deixam o PC folgado
-      if (agoraMs - ultLobby > 28) { ultLobby = agoraMs; octx.setTransform(dpr, 0, 0, dpr, 0, 0); desenhaLobby(octx, cw, ch, agora, agora, 0, tl.tela === 'preparo' ? 'preparo' : 'lobby'); }
+      if (lobbyVisivel && agoraMs - ultLobby > 28) { ultLobby = agoraMs; octx.setTransform(dpr, 0, 0, dpr, 0, 0); desenhaLobby(octx, cw, ch, agora, agora, 0, tl.tela === 'preparo' ? 'preparo' : 'lobby'); }
       mexeEq();
     } else if (tl.tela === 'show') {
       desenhaShow(tl, agora, dtR); mexeEq();
@@ -3838,6 +3844,8 @@ return {
   entrar() { entrei = true; som.liga(); musica.ligar(); },
   sair() { entrei = false; },
   reagir(tipo) { reagir(tipo); },
+  /** Liga ou desliga o desenho do lobby (o som e a linha do tempo seguem). */
+  setLobbyVisivel(v) { lobbyVisivel = !!v; if (!v) { octx.setTransform(1, 0, 0, 1, 0, 0); octx.clearRect(0, 0, ovl.width, ovl.height); } else lobbyCache = null; },
   /** O player: o teto do volume (0 a 20%) e o mudo. */
   volume(max, mudo) { if (typeof max === 'number') prefs.max = clamp(max, 0, VOL_TETO); if (typeof mudo === 'boolean') prefs.mudo = mudo; salvaPrefs(); },
   ligarEq(elementos) { eqBarras = Array.from(elementos || []); eqParado = true; },

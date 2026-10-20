@@ -7,7 +7,13 @@
  * fica em `bichinhos.d.ts`. Também é usado fora da corrida (a escolha do
  * bichinho e o card de divulgação), por isso não depende do motor.
  */
-export const CALMO = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+/**
+ * A corrida NÃO segue o «reduzir animações» do sistema (decisão do Cleber, 20/10/2026): o Windows dos
+ * computadores da empresa vem com os efeitos de animação desligados, e com isso a corrida ficava parada
+ * (bichinhos, torcida, barrinhas da música). É um jogo que a pessoa abre de propósito, no clique em «Assistir».
+ * O mesmo motivo do Easter Egg (ver o comentário em `src/index.css`).
+ */
+export const CALMO = false;
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 
 /* ================= cores, estilos, utilidades ================= */

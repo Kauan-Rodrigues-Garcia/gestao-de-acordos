@@ -29,4 +29,18 @@
 .cds-entra { animation: cds-entra .45s cubic-bezier(.2, 1.3, .4, 1) both; }
 @keyframes cds-pisca { 50% { opacity: .3; } }
 .cds-ao-vivo { animation: cds-pisca 1s infinite; }
-@media (prefers-reduced-motion: reduce) { .cds-entra, .cds-ao-vivo { animation: none; } .cds-eq i { transition: none; } }
+/* Fora do «reduzir animações» do sistema de propósito (ver CALMO em motor/bichinhos.js). No Modo leve, que acaba toda
+   animação em 1 ms, a luz de «ao vivo» e as barrinhas da música seguem mexendo: são poucas e baratas. */
+html[data-leve] .cds-ao-vivo { animation-duration: 1s !important; animation-iteration-count: infinite !important; }
+html[data-leve] .cds-eq i { transition-duration: .07s !important; }
+
+/* a barra do volume */
+.cds-volume { -webkit-appearance: none; appearance: none; width: 84px; height: 4px; border-radius: 2px; background: linear-gradient(to right, #ffd84d var(--v), rgba(255,255,255,.25) var(--v)); cursor: pointer; }
+.cds-volume::-webkit-slider-thumb { -webkit-appearance: none; width: 13px; height: 13px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 2px #ffd84d; }
+.cds-volume::-moz-range-thumb { width: 13px; height: 13px; border: 0; border-radius: 50%; background: #fff; box-shadow: 0 0 0 2px #ffd84d; }
+
+
+/* as reações: a varredura escura mostra o tempo até poder reagir de novo (1,5 s) */
+@keyframes cds-recarga { from { transform: scaleY(1); } to { transform: scaleY(0); } }
+.cds-recarga { transform-origin: bottom; animation: cds-recarga 1.5s linear both; }
+html[data-leve] .cds-recarga { animation-duration: 1.5s !important; }

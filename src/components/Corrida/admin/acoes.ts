@@ -24,7 +24,9 @@ export const criarCorrida = (premio: string, corredores: string[], plateia: stri
 export const ajustarCorrida = (id: number, premio: string, corredores: string[], plateia: string[]) =>
   rpc<Painel>('fn_corrida_ajustar', { p_corrida: id, p_premio: premio, p_corredores: corredores, p_plateia: plateia });
 export const abrirCorrida = (id: number) => rpc<Painel>('fn_corrida_abrir', { p_corrida: id });
-export const iniciarCorrida = (id: number) => rpc<Painel>('fn_corrida_iniciar', { p_corrida: id });
+export const definirTema = (id: number, tema: string) => rpc<Painel>('fn_corrida_tema', { p_corrida: id, p_tema: tema });
+export const preencherEscolhas = (id: number) => rpc<Painel>('fn_corrida_preencher', { p_corrida: id });
+export const iniciarCorrida =(id: number) => rpc<Painel>('fn_corrida_iniciar', { p_corrida: id });
 export const encerrarCorrida = (id: number, cancelar: boolean) => rpc<Painel>('fn_corrida_encerrar', { p_corrida: id, p_cancelar: cancelar });
 export const descartarGravacao = (id: number) => rpc<Painel>('fn_corrida_gravar', { p_corrida: id, p_gravacao: null });
 export const divulgar = (titulo: string, mensagem: string, premio: string, alvos: string[], dias: number) =>

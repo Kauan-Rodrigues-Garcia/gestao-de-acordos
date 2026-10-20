@@ -5,6 +5,8 @@
  * no texto de cada mensagem da campanha (`campanha_facil_contatos`) e nas
  * variáveis que o banco usa para refazer o texto.
  */
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { CampaignCore, type RawRecord } from './lib/campaign-core';
 import { contatoDoItem } from './envios';
@@ -43,5 +45,20 @@ describe('CPF mascarado', () => {
     const contato = contatoDoItem({ ...i, message: texto }, 1);
     expect(contato.variaveis?.cpf).toBe('xxx.xxx.789-00');
     expect(JSON.stringify(contato)).not.toMatch(/123\.?456\.?789/);
+  });
+});
+
+describe('a máscara no banco (20261019200000) é a mesma da tela', () => {
+  const sql = readFileSync(resolve(__dirname, '../../../supabase/migrations/20261019200000_campanha_cpf_mascarado_no_banco.sql'), 'utf8');
+
+  it('o gatilho mascara mensagem, mensagem editada e variaveis, por último', () => {
+    expect(sql).toContain('BEFORE INSERT OR UPDATE OF mensagem, mensagem_editada, variaveis');
+    expect(sql).toContain('trg_cf_contatos_zz_mascarar_cpf');
+  });
+
+  it('o formato do banco é o de maskCpf: xxx.xxx.789-00', () => {
+    expect(sql).toContain("'xxx.xxx.' || substr(v_dig, 7, 3) || '-' || substr(v_dig, 10, 2)");
+    expect(sql).toContain("'Olá - *_CPF: xxx.xxx.789-00_*'");
+    expect(CampaignCore.maskCpf('123.456.789-00')).toBe('xxx.xxx.789-00');
   });
 });
