@@ -23,6 +23,7 @@ import AdminLogs from '@/pages/AdminLogs';
 import AdminDiretoExtra from '@/pages/AdminDiretoExtra';
 import AdminTags from '@/components/admin/AdminTags';
 import AcessoMultiempresa from '@/components/admin/AcessoMultiempresa';
+import CorridaConfig from '@/components/admin/CorridaConfig';
 import LiberacaoChat from '@/components/admin/LiberacaoChat';
 import LiberacaoHalloween from '@/components/admin/LiberacaoHalloween';
 import AdminDocumentacoes from '@/pages/AdminDocumentacoes';
@@ -295,6 +296,10 @@ export default function AdminConfiguracoes() {
               Some sozinho depois de liberado. Só super_admin — a função
               `fn_halloween_liberar` confere de novo no banco. */}
           {ehSuperAdmin && <LiberacaoHalloween />}
+
+          {/* ── Corrida da Sorte: o sorteio em forma de corrida (20/10/2026). Só
+              super_admin — as funções `fn_corrida_*` conferem de novo no banco. */}
+          {ehSuperAdmin && <CorridaConfig />}
 
           {ehSuperAdmin && <LiberacaoChat />}
 

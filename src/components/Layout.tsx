@@ -55,6 +55,7 @@ import { HelpDrawer } from './HelpDrawer';
 import { OnboardingTour } from './OnboardingTour';
 import { DesafioMenu } from './DesafioMenu';
 import { BarraDesafioDoDia } from './DesafioDoDia/BarraDesafioDoDia';
+import { CorridaDaSorte } from './Corrida';
 import { useDesafioEmCartaz } from '@/hooks/useDesafios';
 import { AvisoNotificacaoHeader } from './AvisoNotificacaoHeader';
 import { BotaoSomAmbiente } from './Halloween/SomAmbiente/BotaoSomAmbiente';
@@ -1032,6 +1033,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             </Button>
           </div>
         </header>
+
+        {/* A Corrida da Sorte (20/10/2026): a escolha do bichinho, o convite e o
+            palco aparecem por cima de tudo, só para quem foi chamado. Leve: o
+            palco só desce quando a pessoa está numa corrida. Ver `Corrida/index.tsx`. */}
+        <CorridaDaSorte />
 
         {/* Expand toggle */}
         <button
