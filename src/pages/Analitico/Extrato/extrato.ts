@@ -20,6 +20,7 @@
  */
 import type { AnaliticoRecebimento } from '@/lib/supabase';
 import { classificarComissao } from '@/services/analitico/analiticoComum';
+import { familiaDaForma, rotuloDaForma } from '@/lib/formasPagamento';
 
 export type VinculoDaLinha = 'direto' | 'extra' | null;
 
@@ -65,15 +66,60 @@ export function temExtra(linhas: readonly AnaliticoRecebimento[]): boolean {
   return linhas.some(l => vinculoDaLinha(l) === 'extra');
 }
 
+// ── Formas de pagamento ─────────────────────────────────────────────────────
+
+/**
+ * A família da forma da linha: Pix, Pix automático, Boleto, Cartão, Cartão
+ * recorrente… (`familiaDaForma`, a mesma do card do Dashboard e da aba Formas
+ * de pagamento). Rótulo que não casa com família nenhuma fica sozinho, com o
+ * nome do ERP — um «Outros» esconderia a forma nova no mês em que ela aparece.
+ *
+ * Linha consolidada (boleto + pix do mesmo NR) conta pela forma da linha, como
+ * em `agregarFormas`: é um recebimento só, não dois.
+ */
+export function formaDaLinha(
+  l: Pick<AnaliticoRecebimento, 'forma_pagamento' | 'forma_detalhe'>,
+): { chave: string; rotulo: string } {
+  const rotulo = rotuloDaForma(l.forma_pagamento, l.forma_detalhe);
+  return familiaDaForma(rotulo) ?? { chave: `cru:${rotulo}`, rotulo };
+}
+
+export interface ResumoForma {
+  chave: string;
+  rotulo: string;
+  qtd: number;
+  valor: number;
+}
+
+/** Quantos recebimentos e quanto entrou por forma — a mais usada primeiro. */
+export function resumirFormas(linhas: readonly AnaliticoRecebimento[]): ResumoForma[] {
+  const porChave = new Map<string, ResumoForma>();
+  for (const l of linhas) {
+    const f = formaDaLinha(l);
+    let r = porChave.get(f.chave);
+    if (!r) { r = { chave: f.chave, rotulo: f.rotulo, qtd: 0, valor: 0 }; porChave.set(f.chave, r); }
+    r.qtd += 1;
+    r.valor += l.valor_recebido;
+  }
+  return [...porChave.values()].sort((a, b) => b.qtd - a.qtd || b.valor - a.valor);
+}
+
+/**
+ * Filtra por situação, vínculo e — quando `formas` vem com alguma chave — pelas
+ * formas escolhidas. `null` ou vazio = todas.
+ */
 export function filtrarExtrato(
   linhas: readonly AnaliticoRecebimento[],
   status: FiltroStatus,
   vinculo: FiltroVinculo,
+  formas?: ReadonlySet<string> | null,
 ): AnaliticoRecebimento[] {
+  const porForma = formas && formas.size > 0 ? formas : null;
   return linhas.filter(l => {
     if (status === 'a_tabular' && !precisaTabular(l)) return false;
     if (status === 'tabulados' && precisaTabular(l)) return false;
     if (vinculo !== 'todos' && vinculoDaLinha(l) !== vinculo) return false;
+    if (porForma && !porForma.has(formaDaLinha(l).chave)) return false;
     return true;
   });
 }

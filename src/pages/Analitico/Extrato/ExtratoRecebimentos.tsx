@@ -12,7 +12,9 @@
  *   • o selo EXTRA / DIRETO vem da coluna "Tipo comissão" do relatório e só
  *     aparece quando a lista tem algum Extra — ver `temExtra`;
  *   • os filtros «A tabular» e «Direto/Extra» trazem a contagem e o valor,
- *     para que filtrar já responda "quanto".
+ *     para que filtrar já responda "quanto";
+ *   • a faixa de formas (Pix, Cartão, Boleto…) diz quantos recebimentos
+ *     entraram por cada uma e filtra a lista no clique — ver `FaixaFormas`.
  *
  * A ação da linha (tabular, ver acordo, divergente) continua sendo de quem
  * chama: o extrato não sabe quem é o operador da linha nem para onde navegar.
@@ -26,12 +28,14 @@ import { Check, Copy, Link2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { copiarTexto } from '@/lib/clipboard';
 import type { AnaliticoRecebimento } from '@/lib/supabase';
-import { corDaForma, rotuloDaForma } from '@/lib/formasPagamento';
+import { corDaForma, iconeDaForma, rotuloDaForma } from '@/lib/formasPagamento';
 import { formatBRL } from '@/lib/money';
+import { corTexto } from '@/lib/temas';
 import { cn } from '@/lib/utils';
 import {
-  agruparPorDia, filtrarExtrato, nrsParaCopiar, precisaTabular, resumirVinculos, rotuloDoDia,
-  temExtra, vinculoDaLinha, type FiltroStatus, type FiltroVinculo, type VinculoDaLinha,
+  agruparPorDia, filtrarExtrato, nrsParaCopiar, precisaTabular, resumirFormas, resumirVinculos,
+  rotuloDoDia, temExtra, vinculoDaLinha,
+  type FiltroStatus, type FiltroVinculo, type ResumoForma, type VinculoDaLinha,
 } from './extrato';
 
 interface ExtratoRecebimentosProps {
@@ -114,6 +118,72 @@ function GrupoFiltro<K extends string>({
   );
 }
 
+/**
+ * A faixa das formas de pagamento (20/10/2026): quantos recebimentos entraram
+ * por Pix, Cartão, Boleto… e quanto, com um chip por forma que filtra a lista.
+ *
+ * Só os chips, com a quantidade — sem barra de proporção e sem o valor
+ * (tirados a pedido no mesmo dia: poluíam). A pergunta do operador é «quantos
+ * Pix eu fiz?». Uma forma por vez: o clique troca a escolha, não soma.
+ */
+function FaixaFormas({
+  formas, total, selecao, onAlternar, onTodas,
+}: {
+  formas: ResumoForma[];
+  total: number;
+  selecao: ReadonlySet<string> | null;
+  onAlternar: (chave: string) => void;
+  onTodas: () => void;
+}) {
+  return (
+    <div className="border-b border-border px-3 py-2.5">
+      <div role="group" aria-label="Forma de pagamento" className="flex flex-wrap items-center gap-1.5">
+        <button type="button" aria-pressed={!selecao} onClick={onTodas}
+          className={cn(
+            'inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+            !selecao
+              ? 'border-primary/40 bg-primary/10 text-foreground'
+              : 'border-border bg-background text-muted-foreground hover:text-foreground',
+          )}>
+          Todas as formas
+          <span className="font-mono text-[10px] tabular-nums text-muted-foreground">{total}</span>
+        </button>
+
+        {formas.map(f => {
+          const cor = corDaForma(f.rotulo);
+          const Icone = iconeDaForma(f.rotulo);
+          const on = !!selecao?.has(f.chave);
+          const pct = total > 0 ? Math.round((f.qtd / total) * 100) : 0;
+          return (
+            <button key={f.chave} type="button" aria-pressed={on}
+              onClick={() => onAlternar(f.chave)}
+              title={`${f.qtd} ${f.qtd === 1 ? 'recebimento' : 'recebimentos'} por ${f.rotulo} (${pct}%)`}
+              className={cn(
+                'inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                on
+                  ? 'text-foreground shadow-sm'
+                  : 'border-border bg-background text-muted-foreground hover:border-foreground/25 hover:text-foreground',
+                selecao && !on && 'opacity-60 hover:opacity-100',
+              )}
+              style={on ? {
+                borderColor: cor,
+                backgroundColor: `color-mix(in srgb, ${cor} 14%, transparent)`,
+              } : undefined}>
+              <Icone className="h-3.5 w-3.5 shrink-0" style={{ color: corTexto(cor) }} aria-hidden="true" />
+              {f.rotulo}
+              <span className="rounded-full bg-muted px-1.5 font-mono text-[10px] font-bold tabular-nums text-foreground">
+                {f.qtd}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function dataCurta(iso: string) {
   return new Date(iso + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 }
@@ -129,13 +199,25 @@ export function ExtratoRecebimentos({
   const resumo = useMemo(() => resumirVinculos(linhas), [linhas]);
   const qtdATabular = useMemo(() => linhas.filter(precisaTabular).length, [linhas]);
 
+  // Formas: as que a lista tem, e a escolha cruzada com elas — trocar o
+  // período ou a busca pode tirar a forma escolhida da lista, e aí a escolha
+  // que não sobrou nada vale «todas» em vez de esvaziar a tela sem motivo.
+  // Uma forma por vez: clicar em outra troca, clicar na mesma volta a «todas».
+  const formas = useMemo(() => resumirFormas(linhas), [linhas]);
+  const [formaSel, setFormaSel] = useState<string | null>(null);
+  const selecaoFormas = useMemo<ReadonlySet<string> | null>(
+    () => (formaSel && formas.some(f => f.chave === formaSel) ? new Set([formaSel]) : null),
+    [formaSel, formas],
+  );
+  const alternarForma = (chave: string) => setFormaSel(atual => (atual === chave ? null : chave));
+
   const filtradas = useMemo(
-    () => filtrarExtrato(linhas, status, vinculoEfetivo),
-    [linhas, status, vinculoEfetivo],
+    () => filtrarExtrato(linhas, status, vinculoEfetivo, selecaoFormas),
+    [linhas, status, vinculoEfetivo, selecaoFormas],
   );
   const dias = useMemo(() => agruparPorDia(filtradas), [filtradas]);
   const maiorDia = dias.reduce((m, d) => Math.max(m, d.total), 0);
-  const filtrando = status !== 'todos' || vinculoEfetivo !== 'todos';
+  const filtrando = status !== 'todos' || vinculoEfetivo !== 'todos' || !!selecaoFormas;
 
   // Os NRs na ordem em que aparecem (dia a dia), para o «Copiar NRs».
   const nrs = useMemo(() => nrsParaCopiar(dias.flatMap(d => d.linhas)), [dias]);
@@ -202,6 +284,16 @@ export function ExtratoRecebimentos({
         </div>
       </div>
 
+      {formas.length > 0 && (
+        <FaixaFormas
+          formas={formas}
+          total={linhas.length}
+          selecao={selecaoFormas}
+          onAlternar={alternarForma}
+          onTodas={() => setFormaSel(null)}
+        />
+      )}
+
       {linhas.length === 0 ? (
         <p className="px-3 py-8 text-center text-xs text-muted-foreground">{vazio ?? 'Sem registros.'}</p>
       ) : filtradas.length === 0 ? (
@@ -209,7 +301,7 @@ export function ExtratoRecebimentos({
           <p>Nenhum recebimento com esse filtro.</p>
           <button type="button"
             className="mt-2 inline-flex items-center gap-1 rounded-md px-2 py-1 font-medium text-primary hover:bg-primary/5"
-            onClick={() => { setStatus('todos'); setVinculo('todos'); }}>
+            onClick={() => { setStatus('todos'); setVinculo('todos'); setFormaSel(null); }}>
             <X className="h-3 w-3" /> Limpar filtros
           </button>
         </div>

@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import type { AnaliticoRecebimento } from '@/lib/supabase';
 import {
-  agruparPorDia, filtrarExtrato, nrsParaCopiar, resumirVinculos, rotuloDoDia, temExtra,
-  totaisPorDiaDoMes, vinculoDaLinha,
+  agruparPorDia, filtrarExtrato, formaDaLinha, nrsParaCopiar, resumirFormas, resumirVinculos,
+  rotuloDoDia, temExtra, totaisPorDiaDoMes, vinculoDaLinha,
 } from './extrato';
 
 function linha(p: Partial<AnaliticoRecebimento>): AnaliticoRecebimento {
@@ -56,6 +56,39 @@ describe('filtros do extrato', () => {
   it('combina situação e vínculo', () => {
     expect(filtrarExtrato(ls, 'a_tabular', 'extra').map(l => l.id)).toEqual(['c']);
     expect(filtrarExtrato(ls, 'tabulados', 'direto')).toEqual([]);
+  });
+});
+
+describe('formas de pagamento do extrato', () => {
+  const ls = [
+    linha({ id: 'p1', forma_detalhe: 'Pix', valor_recebido: 50 }),
+    linha({ id: 'p2', forma_detalhe: 'PIX', valor_recebido: 30 }),
+    linha({ id: 'pa', forma_detalhe: 'Pix Automático', valor_recebido: 20 }),
+    linha({ id: 'c1', forma_pagamento: 'cartao', forma_detalhe: 'Cartão de Crédito', valor_recebido: 200 }),
+    linha({ id: 'cr', forma_pagamento: 'cartao', forma_detalhe: 'Cartão Recorrente', valor_recebido: 10 }),
+    linha({ id: 'x', forma_detalhe: 'Depósito', valor_recebido: 5 }),
+  ];
+
+  it('agrupa por família e ordena pela quantidade', () => {
+    expect(resumirFormas(ls).map(f => [f.rotulo, f.qtd, f.valor])).toEqual([
+      ['Pix', 2, 80],
+      ['Cartão', 1, 200],
+      ['Pix automático', 1, 20],
+      ['Cartão recorrente', 1, 10],
+      ['Depósito', 1, 5],
+    ]);
+  });
+
+  it('sem detalhe do ERP usa o consolidado do enum', () => {
+    expect(formaDaLinha(linha({ forma_pagamento: 'cartao', forma_detalhe: null })).chave).toBe('cartao');
+  });
+
+  it('filtra pelas formas escolhidas; vazio é todas', () => {
+    expect(filtrarExtrato(ls, 'todos', 'todos', new Set(['pix'])).map(l => l.id)).toEqual(['p1', 'p2']);
+    expect(filtrarExtrato(ls, 'todos', 'todos', new Set(['pix', 'cartao'])).map(l => l.id))
+      .toEqual(['p1', 'p2', 'c1']);
+    expect(filtrarExtrato(ls, 'todos', 'todos', new Set())).toHaveLength(ls.length);
+    expect(filtrarExtrato(ls, 'todos', 'todos', null)).toHaveLength(ls.length);
   });
 });
 
