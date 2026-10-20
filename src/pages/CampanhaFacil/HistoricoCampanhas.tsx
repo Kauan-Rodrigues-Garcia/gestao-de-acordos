@@ -400,7 +400,7 @@ function DialogoCampanha({ lote, envios, somenteLeitura, onFechar }: {
   const [carregando, setCarregando] = useState(aberta);
   const [atualizadoEm, setAtualizadoEm] = useState<Date | null>(null);
   const [operadoresSetor, setOperadoresSetor] = useState<OperadorCampanha[]>([]);
-  const [acao, setAcao] = useState<null | 'repasse' | 'editar' | 'excluir' | 'desativar'>(null);
+  const [acao, setAcao] = useState<null | 'repasse' | 'editar' | 'excluir' | 'desativar' | 'finalizar'>(null);
   const [ocupado, setOcupado] = useState(false);
 
   const { recarregarHistorico } = envios;
@@ -450,6 +450,10 @@ function DialogoCampanha({ lote, envios, somenteLeitura, onFechar }: {
   );
   const pendentes = soma.total - soma.enviados - soma.nao;
   const concluiram = placar.filter((o) => o.total > 0 && o.enviados + o.nao_enviados >= o.total).length;
+  // Toda mensagem enviada ou «não deu» (20/10/2026): a campanha não vai mais
+  // sozinha para o histórico — espera o líder finalizar. Só com o andamento
+  // lido: sem ele a soma é zero e o botão não aparece.
+  const completa = aberta && !!atualizadoEm && soma.total > 0 && pendentes <= 0;
 
   async function executar(f: () => Promise<boolean>, fechar = false) {
     setOcupado(true);
@@ -486,7 +490,7 @@ function DialogoCampanha({ lote, envios, somenteLeitura, onFechar }: {
             {lote.setor_nome ? ` · ${lote.setor_nome}` : ''}
             {lote.relancada_em ? ` · relançada ${quando(lote.relancada_em)}` : ''}
             {lote.editada_em ? ` · editada ${quando(lote.editada_em)}` : ''}
-            {situacao === 'ativa' && ` · disponível até ${quando(lote.expira_em)}`}
+            {situacao === 'ativa' && new Date(lote.expira_em) > new Date() && ` · disponível até ${quando(lote.expira_em)}`}
             {situacao === 'desativada' && ` · desativada ${quando(lote.desativada_em)}`}
             {situacao === 'encerrada' && ` · encerrada ${quando(lote.encerrada_em)}`}
           </DialogDescription>
@@ -499,6 +503,21 @@ function DialogoCampanha({ lote, envios, somenteLeitura, onFechar }: {
           <Numero rotulo="não deu" valor={soma.nao} tom="alerta" />
           <Numero rotulo="faltam" valor={Math.max(pendentes, 0)} />
         </div>
+
+        {completa ? (
+          <p className="flex items-start gap-2 rounded-lg border border-success/30 bg-success/10 px-3 py-2 text-xs">
+            <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" />
+            <span>
+              Todas as mensagens foram encaminhadas ou marcadas «não deu».
+              {!somenteLeitura && ' Finalize para mandar a campanha ao histórico.'}
+            </span>
+          </p>
+        ) : aberta && atualizadoEm && (
+          <p className="flex items-start gap-2 text-xs text-muted-foreground">
+            <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            Se ainda faltar mensagem em {quando(lote.expira_em)}, a campanha vai sozinha para o histórico.
+          </p>
+        )}
 
         <RetornoDaOperacao lote={lote} operadores={placar.length} />
 
@@ -580,10 +599,18 @@ function DialogoCampanha({ lote, envios, somenteLeitura, onFechar }: {
                   <Button variant="outline" className="gap-1.5" onClick={() => setAcao('editar')} disabled={ocupado || carregando}>
                     <Pencil className="h-4 w-4" /> Editar
                   </Button>
-                  <Button className="gap-1.5" onClick={() => void executar(() => envios.ativar(lote, true))} disabled={ocupado}>
+                  <Button
+                    variant={completa ? 'outline' : 'default'} className="gap-1.5"
+                    onClick={() => void executar(() => envios.ativar(lote, true))} disabled={ocupado}
+                  >
                     {ocupado ? <Loader2 className="h-4 w-4 animate-spin" /> : <Power className="h-4 w-4" />} Liberar de novo
                   </Button>
                 </>
+              )}
+              {completa && (
+                <Button className="gap-1.5" onClick={() => setAcao('finalizar')} disabled={ocupado || carregando}>
+                  <CheckCircle2 className="h-4 w-4" /> Finalizar campanha
+                </Button>
               )}
             </div>
           </DialogFooter>
@@ -596,12 +623,29 @@ function DialogoCampanha({ lote, envios, somenteLeitura, onFechar }: {
             <AlertDialogTitle>Desativar esta campanha?</AlertDialogTitle>
             <AlertDialogDescription>
               Ela some na hora da aba Campanhas de WhatsApp de todos os operadores. O que já foi enviado fica registrado.
-              Depois você pode editar a mensagem ou quem recebe e liberar de novo. Ela só encerra quando o mês virar.
+              Depois você pode editar a mensagem ou quem recebe e liberar de novo, o que renova os 3 dias. Se ainda
+              faltar mensagem em {quando(lote.expira_em)}, ela vai sozinha para o histórico.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Voltar</AlertDialogCancel>
             <AlertDialogAction onClick={() => void executar(() => envios.ativar(lote, false))}>Desativar</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={acao === 'finalizar'} onOpenChange={(v) => { if (!v) setAcao(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Finalizar esta campanha?</AlertDialogTitle>
+            <AlertDialogDescription>
+              “{lote.titulo}” sai da aba dos operadores e vai para o histórico, com o placar de quem encaminhou.
+              Depois de finalizada, não dá para liberar de novo.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Voltar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void executar(() => envios.finalizar(lote), true)}>Finalizar</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

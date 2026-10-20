@@ -9,7 +9,7 @@
  * O histórico traz as campanhas DESTE líder e, só para acompanhar, as dos
  * outros líderes do setor (16/10/2026): as abertas com o andamento ao vivo, as
  * encerradas com o placar congelado. Nas dele, repassa, desativa, edita,
- * relança e exclui.
+ * relança, finaliza e exclui.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
@@ -22,7 +22,7 @@ import {
 } from './envios';
 import {
   listarOperadoresParaCampanha, listarSetoresParaCampanha,
-  liberarCampanha, listarHistorico, repassarEnvios, ativarLote, excluirLote, editarLote,
+  liberarCampanha, listarHistorico, repassarEnvios, ativarLote, excluirLote, editarLote, finalizarLote,
   mensagemDoErro, type EnvioResumo, type LoteCampanha,
 } from './campanhaFacilEnvios.service';
 
@@ -193,7 +193,7 @@ export function useEnviosCampanha(empresaId: string | null, perfil: Perfil | nul
     try {
       await ativarLote(lote.id, ativa);
       toast.success(ativa
-        ? 'Campanha liberada de novo. Os operadores foram avisados; ela vale até o fim do mês.'
+        ? 'Campanha liberada de novo. Os operadores foram avisados; ela vale por 3 dias.'
         : 'Campanha desativada. Ela sumiu da aba dos operadores.');
       return true;
     } catch (err) {
@@ -213,6 +213,20 @@ export function useEnviosCampanha(empresaId: string | null, perfil: Perfil | nul
     } catch (err) {
       console.error('[CampanhaFacil] excluir:', err);
       toast.error(mensagemDoErro(err, 'Não foi possível excluir a campanha.'));
+      return false;
+    } finally {
+      await recarregarHistorico();
+    }
+  }, [recarregarHistorico]);
+
+  const finalizar = useCallback(async (lote: LoteCampanha): Promise<boolean> => {
+    try {
+      await finalizarLote(lote.id);
+      toast.success('Campanha finalizada. Ela está no histórico.');
+      return true;
+    } catch (err) {
+      console.error('[CampanhaFacil] finalizar:', err);
+      toast.error(mensagemDoErro(err, 'Não foi possível finalizar a campanha.'));
       return false;
     } finally {
       await recarregarHistorico();
@@ -243,6 +257,6 @@ export function useEnviosCampanha(empresaId: string | null, perfil: Perfil | nul
     carregandoOperadores, selecionados, operadoresSelecionados,
     alternar, marcarTodos, desmarcarTodos,
     empresaId, autorId, historico, carregandoHistorico, recarregarHistorico,
-    liberando, liberar, repassar, ativar, excluir, editar,
+    liberando, liberar, repassar, ativar, excluir, editar, finalizar,
   };
 }
