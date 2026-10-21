@@ -23,7 +23,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { cn } from '@/lib/utils';
 import { SeletorPessoas } from '@/components/Corrida/admin/SeletorPessoas';
 import { lerPessoasDoCadastro, type PessoaDoCadastro } from '@/components/Corrida/admin/pessoas';
-import { abrirCorrida, ajustarCorrida, criarCorrida, definirTema, descartarGravacao, divulgar, encerrarCorrida, gravarCorrida, iniciarCorrida, lerPainel, preencherEscolhas, tirarDivulgacao, type Painel } from '@/components/Corrida/admin/acoes';
+import { abrirCorrida, ajustarCorrida, criarCorrida, definirTema, descartarGravacao, divulgar, encerrarCorrida, gravarCorrida, iniciarCorrida, lerPainel, preencherEscolhas, tirarDivulgacao, type CorredorSemPerfil, type Painel } from '@/components/Corrida/admin/acoes';
+import { CorredoresSemPerfil } from '@/components/Corrida/admin/CorredoresSemPerfil';
 import { agoraBanco, mensagemDoErro, segundos } from '@/components/Corrida/banco';
 import { destravarAudio, NOME_CORRIDA } from '@/components/Corrida/nome';
 import { TEMAS, type TemaLobby } from '@/components/Corrida/lobbies/cena';
@@ -49,6 +50,7 @@ export default function CorridaConfig() {
   const [premio, setPremio] = useState('R$ 30');
   const [corredores, setCorredores] = useState<Set<string>>(new Set());
   const [plateia, setPlateia] = useState<Set<string>>(new Set());
+  const [avulsos, setAvulsos] = useState<CorredorSemPerfil[]>([]);
   const [montando, setMontando] = useState(false);
   const [tema, setTema] = useState<TemaLobby>('f1');
   const [ocupado, setOcupado] = useState(false);
@@ -83,6 +85,9 @@ export default function CorridaConfig() {
   const gravada = !!corrida?.gravada_em;
   const etapa = !corrida ? -1 : corrida.estado === 'encerrada' || corrida.estado === 'cancelada' ? 4 : corrida.estado === 'correndo' ? 3 : gravada ? 2 : corrida.estado === 'aberta' ? 1 : 0;
   const pessoasDaCorrida = useMemo(() => painel?.pessoas ?? [], [painel]);
+  const setoresDoCadastro = useMemo(() => [...new Set((pessoas ?? []).map(p => p.setor).filter(s => s !== 'Sem setor'))].sort((a, b) => a.localeCompare(b)), [pessoas]);
+  const totalCorrendo = corredores.size + avulsos.length;
+  const vencedorSetor = corrida?.vencedor ? pessoasDaCorrida.find(p => p.usuario === corrida.vencedor)?.setor ?? null : null;
 
   const rodar = async (fn: () => Promise<Painel>, ok?: string) => {
     setOcupado(true);
@@ -94,16 +99,17 @@ export default function CorridaConfig() {
   const comecarMontagem = (ajustar: boolean) => {
     if (ajustar && corrida) {
       setPremio(corrida.premio ?? '');
-      setCorredores(new Set(pessoasDaCorrida.filter(p => p.corre).map(p => p.usuario)));
+      setCorredores(new Set(pessoasDaCorrida.filter(p => p.corre && !p.avulso).map(p => p.usuario)));
       setPlateia(new Set(pessoasDaCorrida.filter(p => p.assiste).map(p => p.usuario)));
+      setAvulsos(pessoasDaCorrida.filter(p => p.avulso).map(p => ({ id: p.usuario, nome: p.nome, setor: p.setor ?? '' })));
       setTema(corrida.tema ?? 'f1');
-    } else { setCorredores(new Set()); setPlateia(new Set()); setTema('f1'); }
+    } else { setCorredores(new Set()); setPlateia(new Set()); setAvulsos([]); setTema('f1'); }
     setMontando(true);
   };
   const salvarMontagem = () => rodar(async () => {
     let p = corrida && emAndamento
-      ? await ajustarCorrida(corrida.id, premio, [...corredores], [...plateia])
-      : await criarCorrida(premio, [...corredores], [...plateia]);
+      ? await ajustarCorrida(corrida.id, premio, [...corredores], [...plateia], avulsos)
+      : await criarCorrida(premio, [...corredores], [...plateia], avulsos);
     if (p.corrida && (p.corrida.tema ?? 'f1') !== tema) p = await definirTema(p.corrida.id, tema);
     setMontando(false);
     return p;
@@ -137,7 +143,7 @@ export default function CorridaConfig() {
   const statusTxt = !corrida ? 'Nenhuma corrida ainda.' : corrida.estado === 'preparando'
     ? `${corrida.escolheram} de ${corrida.corredores} escolheram o bichinho. Quem não escolher corre com um dos três.`
     : corrida.estado === 'aberta' ? (gravada ? `Gravada e pronta. ${corrida.no_lobby} de ${corrida.chamados} no lobby. O mapa está na gravação: nem você vê antes.` : `Lobby aberto: ${corrida.no_lobby} de ${corrida.chamados} entraram. Grave para liberar a largada.`)
-      : corrida.estado === 'correndo' ? `Correndo agora para ${corrida.no_lobby} pessoas.` : corrida.estado === 'encerrada' ? `Encerrada${corrida.vencedor_nome ? `: ${corrida.vencedor_nome} venceu` : ''}.` : 'Cancelada.';
+      : corrida.estado === 'correndo' ? `Correndo agora para ${corrida.no_lobby} pessoas.` : corrida.estado === 'encerrada' ? `Encerrada${corrida.vencedor_nome ? `: ${corrida.vencedor_nome}${vencedorSetor ? ` (${vencedorSetor})` : ''} venceu` : ''}.` : 'Cancelada.';
 
   return (
     <Card className={cn(emAndamento && 'border-amber-500/60')}>
@@ -257,13 +263,17 @@ export default function CorridaConfig() {
               {pessoas ? <SeletorPessoas pessoas={pessoas} marcados={corredores} onChange={setCorredores} rotulo={n => (n === 1 ? 'pessoa correndo' : 'pessoas correndo')} /> : <p className="text-xs text-muted-foreground">Carregando as pessoas…</p>}
             </div>
             <div className="space-y-1.5">
+              <h4 className="text-xs font-semibold">Corredor sem perfil <span className="font-normal text-muted-foreground">(quem não tem perfil no sistema: digite o nome e o setor; o bichinho é sorteado e ele já entra no grid)</span></h4>
+              <CorredoresSemPerfil avulsos={avulsos} onChange={setAvulsos} setores={setoresDoCadastro} />
+            </div>
+            <div className="space-y-1.5">
               <h4 className="text-xs font-semibold">Quem assiste <span className="font-normal text-muted-foreground">(recebe o card «Assistir» quando você abrir; quem corre já assiste)</span></h4>
               {pessoas ? <SeletorPessoas pessoas={pessoas} marcados={plateia} onChange={setPlateia} rotulo={n => (n === 1 ? 'pessoa assistindo' : 'pessoas assistindo')} /> : null}
             </div>
             <div className="flex flex-wrap justify-end gap-2">
               <Button size="sm" variant="ghost" onClick={() => setMontando(false)}>Voltar</Button>
-              <Button size="sm" className="gap-1.5" disabled={ocupado || corredores.size < 2} onClick={() => void salvarMontagem()}>
-                <Send className="h-3.5 w-3.5" /> {corrida && emAndamento ? 'Salvar e avisar quem mudou' : `Chamar ${corredores.size} para escolher o bichinho`}
+              <Button size="sm" className="gap-1.5" disabled={ocupado || totalCorrendo < 2} onClick={() => void salvarMontagem()}>
+                <Send className="h-3.5 w-3.5" /> {corrida && emAndamento ? 'Salvar e avisar quem mudou' : avulsos.length ? `Criar a corrida com ${totalCorrendo} correndo` : `Chamar ${corredores.size} para escolher o bichinho`}
               </Button>
             </div>
           </div>
@@ -277,8 +287,8 @@ export default function CorridaConfig() {
                 <li key={p.usuario} className="flex items-center gap-2 px-3 py-1.5">
                   {p.foto ? <img src={p.foto} alt="" className="h-5 w-5 rounded-full object-cover" /> : <span className="h-5 w-5 rounded-full bg-muted" />}
                   <span className="min-w-0 flex-1 truncate">{p.nome} <span className="text-muted-foreground">· {p.setor ?? 'Sem setor'}</span></span>
-                  <span className="text-muted-foreground">{p.corre ? (p.escolha != null ? 'corre · escolheu' : 'corre · escolhendo') : 'assiste'}</span>
-                  <span className={cn('w-14 text-right', p.entrou_em ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground')}>{p.entrou_em ? 'no lobby' : '—'}</span>
+                  <span className="text-muted-foreground">{p.avulso ? 'corre · sem perfil' : p.corre ? (p.escolha != null ? 'corre · escolheu' : 'corre · escolhendo') : 'assiste'}</span>
+                  <span className={cn('w-14 text-right', p.entrou_em ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground')}>{p.avulso ? 'no grid' : p.entrou_em ? 'no lobby' : '—'}</span>
                 </li>
               ))}
             </ul>

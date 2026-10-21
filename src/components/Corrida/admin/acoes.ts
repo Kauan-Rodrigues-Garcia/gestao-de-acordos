@@ -18,11 +18,21 @@ export interface Painel {
   divulgacoes: Array<{ id: number; titulo: string; criada_em: string; expira_em: string; alvos: number; fecharam: number }>;
 }
 
+/**
+ * Corredor sem perfil no sistema (20261021120000). Sem `id` é novo; com o `id`
+ * que o painel devolveu, é o mesmo de antes (guarda o bichinho).
+ */
+export interface CorredorSemPerfil {
+  id?: string;
+  nome: string;
+  setor: string;
+}
+
 export const lerPainel = () => rpc<Painel>('fn_corrida_painel');
-export const criarCorrida = (premio: string, corredores: string[], plateia: string[]) =>
-  rpc<Painel>('fn_corrida_criar', { p_nome: 'Corrida da Sorte', p_premio: premio, p_corredores: corredores, p_plateia: plateia });
-export const ajustarCorrida = (id: number, premio: string, corredores: string[], plateia: string[]) =>
-  rpc<Painel>('fn_corrida_ajustar', { p_corrida: id, p_premio: premio, p_corredores: corredores, p_plateia: plateia });
+export const criarCorrida = (premio: string, corredores: string[], plateia: string[], avulsos: CorredorSemPerfil[]) =>
+  rpc<Painel>('fn_corrida_criar', { p_nome: 'Corrida da Sorte', p_premio: premio, p_corredores: corredores, p_plateia: plateia, p_avulsos: avulsos });
+export const ajustarCorrida = (id: number, premio: string, corredores: string[], plateia: string[], avulsos: CorredorSemPerfil[]) =>
+  rpc<Painel>('fn_corrida_ajustar', { p_corrida: id, p_premio: premio, p_corredores: corredores, p_plateia: plateia, p_avulsos: avulsos });
 export const abrirCorrida = (id: number) => rpc<Painel>('fn_corrida_abrir', { p_corrida: id });
 export const definirTema = (id: number, tema: string) => rpc<Painel>('fn_corrida_tema', { p_corrida: id, p_tema: tema });
 export const preencherEscolhas = (id: number) => rpc<Painel>('fn_corrida_preencher', { p_corrida: id });

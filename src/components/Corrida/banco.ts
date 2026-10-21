@@ -73,6 +73,8 @@ export interface PessoaJson {
   entrou_em: string | null;
   /** Em quem a pessoa apostou (20261020210000). */
   palpite?: string | null;
+  /** Corredor sem perfil no sistema: nome e setor digitados, bichinho sorteado (20261021120000). */
+  avulso?: boolean;
 }
 
 export interface DivulgacaoJson {

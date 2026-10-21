@@ -143,7 +143,11 @@ export function PalcoCorrida({ corrida, pessoas, eu, agora, gravacao, videos, on
     if (tela === 'show') return 'Sorteio do mapa';
     if (tela === 'carregando') return 'Carregando';
     if (tela === 'corrida') return `Ao vivo · ${fmtMs(painel?.tempo ?? 0)}`;
-    if (tela === 'festa' || tela === 'video') return painel?.vencedor ? `${painel.vencedor.nome} venceu!` : 'Chegada';
+    if (tela === 'festa' || tela === 'video') {
+      if (!painel?.vencedor) return 'Chegada';
+      const setor = pessoas.find(p => p.usuario === painel.vencedor?.id)?.setor;
+      return `${painel.vencedor.nome}${setor ? ` (${setor})` : ''} venceu!`;
+    }
     return '';
   })();
 

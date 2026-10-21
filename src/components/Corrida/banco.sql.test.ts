@@ -22,6 +22,7 @@ const SETOR = '00000000-0000-4000-8000-0000000000e1';
 const SQL = readFileSync(resolve(__dirname, '../../../supabase/migrations/20261020130000_corrida_da_sorte.sql'), 'utf8');
 const SQL_PREENCHER = readFileSync(resolve(__dirname, '../../../supabase/migrations/20261020200000_corrida_preencher_escolhas.sql'), 'utf8');
 const SQL_TEMA = readFileSync(resolve(__dirname, '../../../supabase/migrations/20261020210000_corrida_tema_e_palpite.sql'), 'utf8');
+const SQL_AVULSO = readFileSync(resolve(__dirname, '../../../supabase/migrations/20261021120000_corrida_corredor_sem_perfil.sql'), 'utf8');
 
 let db: PGlite;
 
@@ -82,6 +83,8 @@ beforeAll(async () => {
   await db.exec(SQL_PREENCHER);
   await db.exec(SQL_TEMA);
   await db.exec(SQL_TEMA);
+  await db.exec(SQL_AVULSO);
+  await db.exec(SQL_AVULSO);
 });
 
 beforeEach(async () => {
@@ -368,6 +371,84 @@ describe('20261020200000 — preencher para quem não escolheu', () => {
     expect(await avisos()).toEqual([]);
     await como(ADMIN, 'select public.fn_corrida_gravar($1, $2) v', [id, gravacao(ANA)]);
     await expect(como(ADMIN, 'select public.fn_corrida_preencher($1) v', [id])).rejects.toThrow(/NAO_DA/);
+  });
+});
+
+describe('20261021120000 — corredor sem perfil', () => {
+  type ComAvulso = Pessoa & { avulso: boolean };
+  const criarComAvulsos = (corredores: string[], plateia: string[], avulsos: unknown[]) =>
+    como<Painel>(ADMIN, 'select public.fn_corrida_criar($1, $2, $3, $4, $5) v', ['Corrida da Sorte', 'R$ 30', corredores, plateia, JSON.stringify(avulsos)]);
+  const ajustar = (id: number, corredores: string[], avulsos: unknown[]) =>
+    como<Painel>(ADMIN, 'select public.fn_corrida_ajustar($1, $2, $3, $4, $5) v', [id, 'R$ 30', corredores, [], JSON.stringify(avulsos)]);
+  const avulsosDe = (p: Painel) => (p.pessoas as ComAvulso[]).filter(x => x.avulso);
+
+  it('entra com nome e setor digitados, já com bichinho, só correndo', async () => {
+    const p = await criarComAvulsos([ANA], [], [{ nome: '  João  ', setor: 'Play 4' }]);
+    const [joao] = avulsosDe(p);
+    expect(joao).toMatchObject({ nome: 'João', setor: 'Play 4', corre: true, assiste: false, foto: null });
+    expect([0, 1, 2]).toContain(joao.escolha);
+    // Conta para o mínimo de 2 e já está no grid.
+    expect(p.corrida).toMatchObject({ corredores: 2, escolheram: 1 });
+    expect((p.pessoas as ComAvulso[]).find(x => x.usuario === ANA)?.avulso).toBe(false);
+  });
+
+  it('um perfil e um avulso bastam; só avulsos também valem', async () => {
+    await expect(criarComAvulsos([], [], [{ nome: 'João', setor: 'Play 4' }])).rejects.toThrow(/POUCA_GENTE/);
+    const p = await criarComAvulsos([], [], [{ nome: 'João', setor: 'Play 4' }, { nome: 'Maria', setor: 'Receptivo' }]);
+    expect(p.corrida?.corredores).toBe(2);
+  });
+
+  it('sem nome ou sem setor, recusa', async () => {
+    await expect(criarComAvulsos([ANA, BRUNO], [], [{ nome: 'João', setor: '  ' }])).rejects.toThrow(/AVULSO_INVALIDO/);
+    await expect(criarComAvulsos([ANA, BRUNO], [], [{ nome: '', setor: 'Play 4' }])).rejects.toThrow(/AVULSO_INVALIDO/);
+    await expect(criarComAvulsos([ANA, BRUNO], [], [{ nome: 'x'.repeat(41), setor: 'Play 4' }])).rejects.toThrow(/AVULSO_INVALIDO/);
+  });
+
+  it('não recebe aviso nenhum: nem o convite, nem a abertura, nem o cancelamento', async () => {
+    const p = await criarComAvulsos([ANA], [DORA], [{ nome: 'João', setor: 'Play 4' }]);
+    const joao = avulsosDe(p)[0].usuario;
+    const id = p.corrida!.id;
+    await como(ADMIN, 'select public.fn_corrida_abrir($1) v', [id]);
+    await como(ADMIN, 'select public.fn_corrida_encerrar($1, true) v', [id]);
+    expect((await avisos()).some(x => x.topic === `corrida-eu:${joao}`)).toBe(false);
+  });
+
+  it('ajustar: quem volta com o id fica com o mesmo bichinho; quem não volta sai; quem vem sem id é novo', async () => {
+    const p = await criarComAvulsos([ANA], [], [{ nome: 'João', setor: 'Play 4' }, { nome: 'Maria', setor: 'Receptivo' }]);
+    const [a, b] = avulsosDe(p);
+    const joao = a.nome === 'João' ? a : b;
+    await db.exec('truncate realtime.enviados');
+
+    const p2 = await ajustar(p.corrida!.id, [ANA], [{ id: joao.usuario, nome: 'João Pedro', setor: 'Play 5' }, { nome: 'Lia', setor: 'Play 1' }]);
+    const depois = avulsosDe(p2);
+    expect(depois.map(x => x.nome).sort()).toEqual(['João Pedro', 'Lia']);
+    expect(depois.find(x => x.nome === 'João Pedro')).toMatchObject({ usuario: joao.usuario, setor: 'Play 5', escolha: joao.escolha });
+    // Avulso não entra na conta de quem precisa de aviso pessoal.
+    expect((await avisos()).filter(x => x.event === 'corrida')).toEqual([]);
+  });
+
+  it('o id de um perfil não vira avulso, e o avulso não vira perfil', async () => {
+    const p = await criarComAvulsos([ANA], [], [{ id: BRUNO, nome: 'Impostor', setor: 'X' }]);
+    const av = avulsosDe(p)[0];
+    expect(av.usuario).not.toBe(BRUNO);
+    expect((p.pessoas as ComAvulso[]).some(x => x.usuario === BRUNO)).toBe(false);
+  });
+
+  it('pode vencer: a gravação aceita o avulso e o nome dele vai para a corrida', async () => {
+    const p = await criarComAvulsos([ANA], [], [{ nome: 'João', setor: 'Play 4' }]);
+    const joao = avulsosDe(p)[0].usuario;
+    const g = await como<Painel>(ADMIN, 'select public.fn_corrida_gravar($1, $2) v', [p.corrida!.id, gravacao(joao)]);
+    expect(g.corrida?.vencedor_nome).toBe('João');
+  });
+
+  it('a chamada antiga, sem a lista, continua valendo', async () => {
+    const p = await como<Painel>(ADMIN, 'select public.fn_corrida_criar($1, $2, $3, $4) v', ['Corrida da Sorte', null, [ANA, BRUNO], []]);
+    expect(p.corrida?.corredores).toBe(2);
+  });
+
+  it('as funções internas novas não ficam abertas', async () => {
+    const r = await db.query<{ ok: boolean }>(`select has_function_privilege('authenticated', 'public.fn_corrida_contar_avulsos(jsonb)', 'EXECUTE') ok`);
+    expect(r.rows[0].ok).toBe(false);
   });
 });
 

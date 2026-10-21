@@ -2506,8 +2506,15 @@ function desenhar(dtR) {
     desenhaAlma(c3, ax, 128, 30, est, { expr: 'feliz', t: T, lx: 0, ly: 0 });
     c3.font = px ? `${Math.min(22, cw / 26)}px "Press Start 2P", monospace` : `${Math.min(50, cw / 10)}px ${SK.fonte}`; c3.fillStyle = '#efe6d4'; c3.textBaseline = 'middle';
     c3.fillText(`${rec.nomes[rec.vencedor]} venceu!`, ax + 46, 118);
+    // O setor vem primeiro e maior, na cor do bichinho: é a pergunta de todo mundo («de onde ele é?»).
+    const setorV = (rec.setores[rec.vencedor] || '').trim().toUpperCase();
+    let xm = ax + 48;
+    if (setorV) {
+      c3.font = `700 ${px ? 10 : 15}px ${px ? '"Press Start 2P", monospace' : 'Rubik, sans-serif'}`; c3.fillStyle = est.cor;
+      c3.fillText(setorV, xm, 152); xm += c3.measureText(setorV).width + 10;
+    }
     c3.font = '500 11px "IBM Plex Mono", monospace'; c3.fillStyle = '#c8bcd6';
-    c3.fillText(`${MAPA.nome.toUpperCase()} · ${fmt(rec.tVenc - 3)} · ${rec.setores[rec.vencedor].toUpperCase()}`, ax + 48, 152);
+    c3.fillText(`${setorV ? '· ' : ''}${MAPA.nome.toUpperCase()} · ${fmt(rec.tVenc - 3)}`, xm, 152);
     c3.textBaseline = 'alphabetic'; c3.globalAlpha = 1;
   }
   const foto = rec.foto;
@@ -2985,9 +2992,27 @@ function desenhaFesta(agora, dt) {
   c.save(); c.translate(cx, fy + fr + 44); c.scale(tw0, tw0); c.shadowColor = cor; c.shadowBlur = 26; c.fillStyle = '#fff6e6';
   let fs = Math.min(50, w / 11); c.font = fonteMapa(MAPA.id, fs); const lg = c.measureText(`${nome} venceu!`).width; if (lg > w * 0.9) { fs *= w * 0.9 / lg; c.font = fonteMapa(MAPA.id, fs); }
   c.fillText(`${nome} venceu!`, 0, 0); c.restore();
-  c.fillStyle = '#d8cce6'; c.font = '600 11px "IBM Plex Mono", monospace'; c.fillText(`${rec.setores[rec.vencedor].toUpperCase()} · ${MAPA.nome.toUpperCase()} · ${fmt(rec.tVenc - 3)}`, cx, fy + fr + 66);
+  // O setor de quem ganhou, em destaque (pedido do Cleber, 21/10/2026): antes ia
+  // miúdo, na linha do mapa, e ninguém via de onde era o vencedor.
+  const setorVenc = (rec.setores[rec.vencedor] || '').trim();
+  let ySetor = fy + fr + 66;
+  if (setorVenc) {
+    const sa = easeBack(clamp((t - 0.3) / 0.5, 0, 1)), sy = fy + fr + 78;
+    c.save(); c.translate(cx, sy); c.scale(sa, sa);
+    let sf = Math.min(18, w / 26); c.font = `700 ${sf}px Rubik, sans-serif`;
+    const stxt = setorVenc.toUpperCase(); let sw = c.measureText(stxt).width;
+    if (sw > w * 0.8) { sf *= w * 0.8 / sw; c.font = `700 ${sf}px Rubik, sans-serif`; sw = c.measureText(stxt).width; }
+    const sh = sf + 14;
+    // Fundo escuro com a borda na cor do bichinho: o branco lê bem em qualquer cor (a amarela inclusive).
+    c.fillStyle = 'rgba(16,12,21,.82)'; rr(c, -sw / 2 - 16, -sh / 2, sw + 32, sh, sh / 2); c.fill();
+    c.strokeStyle = cor; c.lineWidth = 2; rr(c, -sw / 2 - 16, -sh / 2, sw + 32, sh, sh / 2); c.stroke();
+    c.fillStyle = '#ffffff'; c.textBaseline = 'middle'; c.fillText(stxt, 0, 1);
+    c.restore(); c.textBaseline = 'alphabetic';
+    ySetor = sy + sh / 2 + 18;
+  }
+  c.fillStyle = '#d8cce6'; c.font = '600 11px "IBM Plex Mono", monospace'; c.fillText(`${MAPA.nome.toUpperCase()} · ${fmt(rec.tVenc - 3)}`, cx, ySetor);
   if (festa.premio) {
-    const pa = easeBack(clamp((t - 0.45) / 0.5, 0, 1)), py = fy + fr + 98;
+    const pa = easeBack(clamp((t - 0.45) / 0.5, 0, 1)), py = ySetor + 32;
     c.save(); c.translate(cx, py); c.scale(pa, pa); c.font = `600 ${Math.min(20, w / 22)}px Rubik, sans-serif`;
     const txt = `Prêmio: ${festa.premio}`, pw = c.measureText(txt).width + 36;
     c.fillStyle = '#ffd84d'; rr(c, -pw / 2, -17, pw, 34, 17); c.fill();
