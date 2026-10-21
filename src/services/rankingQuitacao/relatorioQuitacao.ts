@@ -23,6 +23,20 @@
  *     contrato, mesma data) é UMA quitação, com a soma dos acordos. O código
  *     gravado é o do acordo Quitação, se houver.
  *
+ * Quitação que completa um Parcelamento (pedido de 21/10/2026, NR 12800154):
+ *
+ *   - o cliente pagou parte de um Parcelamento (R$ 1.095,00 de R$ 1.793,00) e
+ *     quitou o saldo (R$ 698,00) com outros acordos no mesmo contrato e na
+ *     mesma data (Quitação R$ 648,00 + Parcela única R$ 50,00). É UMA quitação
+ *     completa, de R$ 1.793,00 — não só os R$ 648,00 do acordo Quitação;
+ *   - só vale quando os números FECHAM: o saldo dos acordos em aberto do
+ *     contrato, naquela data, é o que os outros acordos pagaram (até R$ 1,00
+ *     de diferença, o arredondamento do ERP). O valor é o pago de cada um:
+ *     Valor Acordo − Valor Restante do que estava aberto, mais o resto;
+ *   - acordo já pago por inteiro, sem saldo em aberto no contrato (ex.:
+ *     Quitação + um Parcelamento antigo terminado), continua NÃO somando —
+ *     é a pergunta que ficou em aberto em 13/10.
+ *
  * «Nr. Documento» e «Valor Restante» são opcionais: sem eles, cada acordo
  * conta sozinho e a Junção vale só com a data.
  *
@@ -52,6 +66,8 @@ export interface RelatorioQuitacao {
   quitadosForaDoMes: number;
   /** Quantas das quitações do mês vieram de uma Junção (sozinha ou somada a outro acordo). */
   quitadosPorJuncao: number;
+  /** Quantas quitaram o saldo de um Parcelamento do mesmo contrato e somaram o pago dele. */
+  quitadosCompletandoParcelamento: number;
   erros: string[];
 }
 
@@ -102,7 +118,7 @@ function mesDoArquivo(datas: (Date | null)[]): string | null {
 
 export function extrairQuitacoes(rows: unknown[][]): RelatorioQuitacao {
   const vazio = (erro: string): RelatorioQuitacao =>
-    ({ mes: null, acordos: [], linhasLidas: 0, quitadosForaDoMes: 0, quitadosPorJuncao: 0, erros: [erro] });
+    ({ mes: null, acordos: [], linhasLidas: 0, quitadosForaDoMes: 0, quitadosPorJuncao: 0, quitadosCompletandoParcelamento: 0, erros: [erro] });
   if (rows.length < 2) return vazio('Planilha sem dados.');
 
   const cab = (rows[0] ?? []).map(norm);
@@ -126,19 +142,34 @@ export function extrairQuitacoes(rows: unknown[][]): RelatorioQuitacao {
   type Quitou = AcordoQuitado & { contrato: string; juncao: boolean };
   const porAcordo = new Map<string, Quitou>();
   const foraDoMes = new Set<string>();
+  /** Os OUTROS acordos do contrato com data de quitação no mês: `contrato|operador|dia` → por Cód. Acordo. */
+  type Peca = { valor: number; restante: number };
+  const pecas = new Map<string, Map<string, Peca>>();
   for (const r of linhas) {
     const situacao = norm(r[idx.situacaoAtual]);
     const juncao = situacao === 'juncao';
-    if (situacao !== 'quitacao' && !juncao) continue;
     const cod = String(r[idx.codAcordo] ?? '').trim();
     const operador = String(r[idx.operador] ?? '').trim();
     const valor = numero(r[idx.valorAcordo]);
     const quitou = toDate(r[idx.dataQuitacao]);
     if (!cod || !operador || valor == null || !quitou) continue;
-    // Junção só quita com saldo zerado e a data real (a zerada do ERP é 1899).
-    if (juncao && (quitou.getFullYear() < 2000 || (iRestante >= 0 && numero(r[iRestante]) !== 0))) continue;
-    const contrato = (iNr >= 0 ? String(r[iNr] ?? '').trim() : '') || `acordo:${cod}`;
+    const restante = iRestante >= 0 ? numero(r[iRestante]) : null;
+    const nr = iNr >= 0 ? String(r[iNr] ?? '').trim() : '';
+    const contrato = nr || `acordo:${cod}`;
     const dia = iso(quitou);
+    // Quitação ou Junção que quita (saldo zerado e a data real — a zerada do ERP é 1899).
+    const quita = situacao === 'quitacao'
+      || (juncao && quitou.getFullYear() >= 2000 && (iRestante < 0 || restante === 0));
+    if (!quita) {
+      // Guardado só com contrato e saldo conhecidos: sem eles não há o que conferir.
+      if (nr && restante != null && dia.slice(0, 7) === mes.slice(0, 7)) {
+        const chave = `${contrato}|${operador}|${dia}`;
+        const doContrato = pecas.get(chave) ?? new Map<string, Peca>();
+        if (!doContrato.has(cod)) doContrato.set(cod, { valor, restante });
+        pecas.set(chave, doContrato);
+      }
+      continue;
+    }
     if (dia.slice(0, 7) !== mes.slice(0, 7)) { foraDoMes.add(contrato); continue; }
     if (!porAcordo.has(cod)) {
       porAcordo.set(cod, { cod_acordo: cod, operador_usuario: operador, valor_acordo: valor, data_quitacao: dia, contrato, juncao });
@@ -160,6 +191,27 @@ export function extrairQuitacoes(rows: unknown[][]): RelatorioQuitacao {
     }
   }
 
+  /*
+   * A quitação que pagou o saldo de um Parcelamento do mesmo contrato, na mesma
+   * data. Soma só quando os números fecham: o saldo em aberto é o que os outros
+   * acordos pagaram. Sem acordo em aberto, nada muda (ver o cabeçalho).
+   */
+  const centavos = (v: number) => Math.round(v * 100);
+  let completandoParcelamento = 0;
+  for (const q of porContrato.values()) {
+    const outras = pecas.get(`${q.contrato}|${q.operador_usuario}|${q.data_quitacao}`);
+    if (!outras) continue;
+    const abertas = [...outras.values()].filter(p => p.restante > 0);
+    if (!abertas.length) continue;
+    const fechadas = [...outras.values()].filter(p => p.restante <= 0);
+    const faltava = abertas.reduce((s, p) => s + centavos(p.restante), 0);
+    const quitouCom = centavos(q.valor_acordo) + fechadas.reduce((s, p) => s + centavos(p.valor), 0);
+    if (Math.abs(faltava - quitouCom) > 100) continue;
+    const pagoNasAbertas = abertas.reduce((s, p) => s + centavos(p.valor) - centavos(p.restante), 0);
+    q.valor_acordo = (quitouCom + pagoNasAbertas) / 100;
+    completandoParcelamento += 1;
+  }
+
   const quitacoes = [...porContrato.values()];
   return {
     mes,
@@ -168,6 +220,7 @@ export function extrairQuitacoes(rows: unknown[][]): RelatorioQuitacao {
     linhasLidas: linhas.length,
     quitadosForaDoMes: foraDoMes.size,
     quitadosPorJuncao: quitacoes.filter(q => q.juncao).length,
+    quitadosCompletandoParcelamento: completandoParcelamento,
     erros: [],
   };
 }
@@ -178,7 +231,7 @@ export async function lerRelatorioQuitacao(arquivo: File): Promise<RelatorioQuit
   const wb = read(await arquivo.arrayBuffer(), { cellDates: true });
   const nome = wb.SheetNames.find(n => norm(n) === 'informacoes') ?? wb.SheetNames[0];
   const ws = nome ? wb.Sheets[nome] : undefined;
-  if (!ws) return { mes: null, acordos: [], linhasLidas: 0, quitadosForaDoMes: 0, quitadosPorJuncao: 0, erros: ['Planilha vazia ou inválida.'] };
+  if (!ws) return { mes: null, acordos: [], linhasLidas: 0, quitadosForaDoMes: 0, quitadosPorJuncao: 0, quitadosCompletandoParcelamento: 0, erros: ['Planilha vazia ou inválida.'] };
   return extrairQuitacoes(utils.sheet_to_json(ws, { header: 1, defval: null }) as unknown[][]);
 }
 

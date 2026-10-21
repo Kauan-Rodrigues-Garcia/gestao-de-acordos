@@ -89,6 +89,61 @@ describe('relatório mensal de parcelas pagas → acordos quitados no mês', () 
     });
   });
 
+  describe('quitação que completa um Parcelamento', () => {
+    const CAB_NR = ['Cód. Acordo', 'Nr. Documento', 'Operador', 'Dt. Pgto', 'Valor Acordo', 'Valor Restante', 'Situação Atual', 'Data da quitação'];
+    const p = (cod: string, nr: string, valor: number, restante: number, atual: string, quitou = '2026-10-20') =>
+      [cod, nr, 'LUIZ', d('2026-10-20'), valor, restante, atual, d(quitou)];
+
+    it('NR 12800154: pagou R$ 1.095 do Parcelamento e o saldo com R$ 648 + R$ 50 — quitação de R$ 1.793', () => {
+      const r = extrairQuitacoes([
+        CAB_NR,
+        p('5863453', '12800154', 648, 0, 'Quitação'),
+        p('5863434', '12800154', 50, 0, 'Parcela única'),
+        p('5863389', '12800154', 1793, 698, 'Parcelamento'),
+      ]);
+      expect(r.acordos).toEqual([{ cod_acordo: '5863453', operador_usuario: 'LUIZ', valor_acordo: 1793, data_quitacao: '2026-10-20' }]);
+      expect(r.quitadosCompletandoParcelamento).toBe(1);
+    });
+
+    it('fecha com até R$ 1,00 de diferença (arredondamento do ERP), e soma o que foi pago', () => {
+      const r = extrairQuitacoes([
+        CAB_NR,
+        p('1', '700', 687, 0, 'Quitação', '2026-10-01'),
+        p('2', '700', 1586, 686, 'Parcelamento', '2026-10-01'),
+      ]);
+      expect(r.acordos[0].valor_acordo).toBe(1587);
+    });
+
+    it('não soma quando o saldo não fecha com o que a quitação pagou', () => {
+      const r = extrairQuitacoes([
+        CAB_NR,
+        p('1', '701', 300, 0, 'Quitação'),
+        p('2', '701', 2000, 900, 'Parcelamento'),
+      ]);
+      expect(r.acordos[0].valor_acordo).toBe(300);
+      expect(r.quitadosCompletandoParcelamento).toBe(0);
+    });
+
+    it('Parcelamento antigo já pago por inteiro, sem saldo no contrato, continua não somando', () => {
+      const r = extrairQuitacoes([
+        CAB_NR,
+        p('1', '702', 1817, 0, 'Quitação'),
+        p('2', '702', 500, 0, 'Parcelamento'),
+      ]);
+      expect(r.acordos[0].valor_acordo).toBe(1817);
+    });
+
+    it('outro contrato ou outra data não entram na conta', () => {
+      const r = extrairQuitacoes([
+        CAB_NR,
+        p('1', '703', 698, 0, 'Quitação'),
+        p('2', '704', 1793, 698, 'Parcelamento'),
+        p('3', '703', 1793, 698, 'Parcelamento', '2026-10-19'),
+      ]);
+      expect(r.acordos[0].valor_acordo).toBe(698);
+    });
+  });
+
   it('aceita datas como número serial do Excel e valor em texto pt-BR', () => {
     // 46267 = 2026-09-02.
     const r = extrairQuitacoes([CAB, ['9', 1, 'ANA', 46267, 100, 'Quitação', '1.234,50', 'Quitação', 46267]]);

@@ -88,7 +88,8 @@ export function ImportarRankingModal({ aberto, empresaId, onFechar, onImportado 
             O relatório mensal de parcelas pagas do ERP (ex.: SETEMBRO.xls). Entram os acordos
             com «Situação Atual» Quitação e a data da quitação dentro do mês — e a Junção que
             quitou o contrato (saldo zerado e data da quitação). Pagamento desmembrado no mesmo
-            contrato conta como uma quitação.
+            contrato conta como uma quitação, e a quitação que pagou o saldo de um Parcelamento
+            soma o que já tinha sido pago nele.
           </DialogDescription>
         </DialogHeader>
 
@@ -127,6 +128,13 @@ export function ImportarRankingModal({ aberto, empresaId, onFechar, onImportado 
               <p className="text-xs text-muted-foreground">
                 {previa.quitadosPorJuncao} quitaç{previa.quitadosPorJuncao === 1 ? 'ão veio' : 'ões vieram'} de
                 Junção que fechou o contrato.
+              </p>
+            )}
+            {previa.quitadosCompletandoParcelamento > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {previa.quitadosCompletandoParcelamento} quitaç{previa.quitadosCompletandoParcelamento === 1 ? 'ão pagou' : 'ões pagaram'} o
+                saldo de um Parcelamento do mesmo contrato e soma{previa.quitadosCompletandoParcelamento === 1 ? '' : 'm'} o
+                que já tinha sido pago nele.
               </p>
             )}
             {previa.quitadosForaDoMes > 0 && (
