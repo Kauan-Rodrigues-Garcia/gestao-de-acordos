@@ -214,9 +214,10 @@ export function usePremiacoesComissoes(params: {
     if (!ativo || !empresaId) return;
     const agrupador = criarAgrupador(() => { void carregar(); }, { esperaMs: 1_500, tetoMs: 6_000 });
     const reler = () => { void carregar(); };
+    // Tabulação (UPDATE) não muda o recebido: só ela, e a releitura espera 5 min.
     const cancelarAnalitico = assinarSinal('analitico', empresaId, {
       onMudou: agrupador.avisar, onReconectado: reler,
-    });
+    }, { minimoSoUpdateMs: 5 * 60_000 });
     const cancelarAjustes = assinarSinal('ajustes', empresaId, {
       onMudou: () => { invalidarSomasDeAjuste(); agrupador.avisar(); },
       onReconectado: () => { invalidarSomasDeAjuste(); reler(); },

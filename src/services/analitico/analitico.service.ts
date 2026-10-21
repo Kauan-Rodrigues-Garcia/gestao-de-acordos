@@ -40,7 +40,8 @@ import { ROTA_ANALITICO } from '@/lib/notificacoes-rota';
 import { idsDaEmpresa } from '@/services/notificacoes.service';
 import { tabelaSemTipo, rpcSemTipo } from '@/lib/supabaseSemTipo';
 import type { LinhaRelatorio } from './analiticoComum';
-import { lerComCache } from '@/lib/cacheCurto';
+import { invalidarCache, lerComCache } from '@/lib/cacheCurto';
+import { prefixoCacheDoSinal } from '@/lib/sinais';
 import { chaveComposicao, invalidarComposicaoEquipes, PREFIXO_COMPOSICAO, VALIDADE_COMPOSICAO_MS } from './composicaoCache';
 import { buscarPessoasDoRetrato } from './pessoasDoMes';
 
@@ -506,7 +507,11 @@ export interface OpcoesImportacaoAnalitico {
  * importado. O relatório 58 completo da BookPlay ativa explicitamente a
  * sincronização de ausentes no mesmo setor/mês.
  */
-export async function importarLoteAnalitico(
+export function importarLoteAnalitico(...args: Parameters<typeof importarLoteAnaliticoNoBanco>) {
+  return gravandoNoMes(() => importarLoteAnaliticoNoBanco(...args));
+}
+
+async function importarLoteAnaliticoNoBanco(
   empresaId: string,
   importadoPorId: string,
   loteId: string,
@@ -1013,7 +1018,11 @@ export interface ResultadoRevinculo {
  * Escopo: toda a empresa (não filtra por mês) — qualquer linha órfã do username
  * passa a apontar para o operador recém-criado.
  */
-export async function revincularOrfaosAnalitico(
+export function revincularOrfaosAnalitico(...args: Parameters<typeof revincularOrfaosAnaliticoNoBanco>) {
+  return gravandoNoMes(() => revincularOrfaosAnaliticoNoBanco(...args));
+}
+
+async function revincularOrfaosAnaliticoNoBanco(
   empresaId: string,
   operadoresMap: OperadorResolvidoMap,
 ): Promise<ResultadoRevinculo> {
@@ -1421,12 +1430,20 @@ export async function marcarVistoAnalitico(
 
 // ── Remover linhas ────────────────────────────────────────────────────────────
 
-export async function removerLinhaAnalitico(id: string): Promise<{ error: string | null }> {
+export function removerLinhaAnalitico(...args: Parameters<typeof removerLinhaAnaliticoNoBanco>) {
+  return gravandoNoMes(() => removerLinhaAnaliticoNoBanco(...args));
+}
+
+async function removerLinhaAnaliticoNoBanco(id: string): Promise<{ error: string | null }> {
   const { error } = await supabase.from('analitico_recebimentos').delete().eq('id', id);
   return { error: error?.message ?? null };
 }
 
-export async function removerLinhasSemOperador(
+export function removerLinhasSemOperador(...args: Parameters<typeof removerLinhasSemOperadorNoBanco>) {
+  return gravandoNoMes(() => removerLinhasSemOperadorNoBanco(...args));
+}
+
+async function removerLinhasSemOperadorNoBanco(
   empresaId: string,
   loteId?: string,
 ): Promise<{ removidos: number; error: string | null }> {
@@ -1442,7 +1459,11 @@ export async function removerLinhasSemOperador(
 }
 
 /** Remove TODOS os registros analíticos de um mês (usado pelo líder para reimportar do zero). */
-export async function limparDadosDoMes(
+export function limparDadosDoMes(...args: Parameters<typeof limparDadosDoMesNoBanco>) {
+  return gravandoNoMes(() => limparDadosDoMesNoBanco(...args));
+}
+
+async function limparDadosDoMesNoBanco(
   empresaId: string,
   mes: string,
 ): Promise<{ error: string | null }> {
@@ -1512,7 +1533,11 @@ export interface EscopoLimpezaSetor {
  * Em ambos, a linha antiga sem carimbo (anterior à migration 20260712a) cai
  * pelo operador ou por quem importou — mesma escada de `setorDaLinha`.
  */
-export async function limparDadosDoMesSetor(
+export function limparDadosDoMesSetor(...args: Parameters<typeof limparDadosDoMesSetorNoBanco>) {
+  return gravandoNoMes(() => limparDadosDoMesSetorNoBanco(...args));
+}
+
+async function limparDadosDoMesSetorNoBanco(
   empresaId: string,
   mes: string,
   escopo: EscopoLimpezaSetor,
@@ -1576,7 +1601,11 @@ export async function limparDadosDoMesSetor(
  * `importado_por_id`, como antes, deixava para trás justamente o órfão que o
  * líder estava vendo: carimbado no setor dele, importado por outra pessoa.
  */
-export async function removerOrfaosDoMes(
+export function removerOrfaosDoMes(...args: Parameters<typeof removerOrfaosDoMesNoBanco>) {
+  return gravandoNoMes(() => removerOrfaosDoMesNoBanco(...args));
+}
+
+async function removerOrfaosDoMesNoBanco(
   empresaId: string,
   mes: string,
   escopo?: { setorId: string | null; perfilIds: string[] },
@@ -1705,11 +1734,23 @@ export async function buscarDestaquesPorGrupo(
 // Promise.all; o gráfico pede a terceira ao lado).
 //
 // Agora existe uma leitura só, com o superconjunto de colunas, e as três
-// funções derivam o resultado dela em memória. A deduplicação é por REQUISIÇÃO
-// EM VOO: enquanto a busca está pendente, chamadas simultâneas recebem a mesma
-// Promise; quando ela termina, a entrada é descartada. Isso elimina o trabalho
-// repetido sem criar cache com prazo de validade — nenhuma chamada futura corre
-// o risco de receber número velho.
+// funções derivam o resultado dela em memória. Chamadas simultâneas recebem a
+// mesma Promise.
+//
+// ## Guardada por um minuto (21/10/2026)
+//
+// Só a requisição em voo era compartilhada, e a releitura a cada montagem de
+// tela custava caro: 21,7 mil páginas de 65 ms em 25 h, 15% do tempo do banco
+// — o mês da BookPlay são 16 páginas. Agora a leitura fica guardada por
+// `VALIDADE_MES_MS`, e o número velho não aparece porque ela some antes:
+//
+//   - o sinal `analitico` derruba a guardada ao CHEGAR (`prefixoCacheDoSinal`),
+//     antes do portão — a releitura que ele dispara já lê do banco;
+//   - quem grava aqui (importar, revincular, remover, limpar) derruba ao
+//     terminar (`esquecerMesAnalitico`).
+//
+// Sobra o caso de uma aba sem ninguém ouvindo o sinal: ela enxerga a mudança
+// em até um minuto.
 //
 // A agregação continua no CLIENTE de propósito. A regra "este recebimento conta
 // neste setor?" mora em `setoresDoOperador` (setor próprio + setores das equipes
@@ -1901,23 +1942,39 @@ async function linhasDeAjusteDoMes(
   }
 }
 
-const mesEmVoo = new Map<string, Promise<MesCarregado>>();
+/** Ver «Guardada por um minuto» no início desta seção. */
+const VALIDADE_MES_MS = 60_000;
+
+/** Descarta o mês guardado de todas as empresas. Quem grava chama ao terminar. */
+export function esquecerMesAnalitico(): void {
+  invalidarCache(prefixoCacheDoSinal('analitico'));
+}
+
+/**
+ * Executa a gravação e, dando certo ou não, descarta o mês guardado — a
+ * gravação pode ter ido ao banco mesmo quando a resposta volta com erro.
+ */
+async function gravandoNoMes<T>(gravar: () => Promise<T>): Promise<T> {
+  try {
+    return await gravar();
+  } finally {
+    esquecerMesAnalitico();
+  }
+}
 
 /**
  * Lê o mês uma vez, compartilhando a requisição entre chamadas simultâneas.
- * Nunca rejeita: falha vira `linhas: null`, como as funções antigas faziam.
+ * Nunca rejeita: falha vira `linhas: null`, como as funções antigas faziam —
+ * e falha não fica guardada.
  */
 function lerMesAnaliticoDedup(empresaId: string, mes: string): Promise<MesCarregado> {
-  const chave = `${empresaId}::${mes}`;
-  const emAndamento = mesEmVoo.get(chave);
-  if (emAndamento) return emAndamento;
-
-  const promessa = lerMesAnalitico(empresaId, mes)
-    .catch((): MesCarregado => ({ linhas: null, setorDoPerfil: new Map() }))
-    .finally(() => { mesEmVoo.delete(chave); });
-
-  mesEmVoo.set(chave, promessa);
-  return promessa;
+  return lerComCache(
+    `${prefixoCacheDoSinal('analitico', empresaId)}mes:${mes}`,
+    VALIDADE_MES_MS,
+    () => lerMesAnalitico(empresaId, mes)
+      .catch((): MesCarregado => ({ linhas: null, setorDoPerfil: new Map() })),
+    { guardarSe: m => m.linhas !== null },
+  );
 }
 
 /** Setor de uma linha: o carimbado na importação; senão o setor de quem importou. */

@@ -83,7 +83,11 @@ export function useMudancasImportacao(
   useEffect(() => {
     if (!empresaId) return;
     const reler = () => { void carregar(); };
-    return assinarSinal('analitico', empresaId, { onMudou: reler, onReconectado: reler });
+    // Tabulação (UPDATE) não cria mudança de dono nem de valor: só a importação
+    // cria. Sem o piso, o card relia a cada tabulação da empresa (6% do banco
+    // em 21/10/2026).
+    return assinarSinal('analitico', empresaId, { onMudou: reler, onReconectado: reler },
+      { minimoSoUpdateMs: 5 * 60_000 });
   }, [empresaId, carregar]);
 
   return { mudancas, carregando, erro, recarregar: () => { void carregar(); } };

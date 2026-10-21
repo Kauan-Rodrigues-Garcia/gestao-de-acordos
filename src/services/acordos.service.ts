@@ -117,6 +117,18 @@ export async function fetchTagsEmUso(
   return [...vistas];
 }
 
+/**
+ * O texto da busca pronto para o `.or(... ilike ...)` do PostgREST.
+ *
+ * Vírgula, parêntese, aspas, dois-pontos e barra invertida quebram a sintaxe
+ * do filtro — o banco responde 400 e a lista não carrega (medido em
+ * 20/10/2026: 81 erros seguidos de quem colou «18,11» na busca). `%`, `*` e
+ * `_` virariam coringa. Saem todos, como em `termoParaBanco` do Analítico.
+ */
+export function buscaParaFiltro(busca: string): string {
+  return busca.replace(/[,()"'\\:%*_]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 /** Busca acordos com filtros opcionais e suporte a paginação server-side */
 export async function fetchAcordos(filtros?: FiltrosAcordo): Promise<{ data: Acordo[], count: number }> {
   // Quando há filtro de intervalo de mês usa a tabela direta (sem dedup).
@@ -165,9 +177,10 @@ export async function fetchAcordos(filtros?: FiltrosAcordo): Promise<{ data: Aco
     // `overlaps` = interseccao nao vazia entre o array da coluna e o filtro,
     // que e o que "tem esta tag" significa num campo multivalorado.
     if (filtros?.tag_ids?.length) q = q.overlaps('tag_ids', filtros.tag_ids);
-    if (filtros?.busca) {
+    const busca = filtros?.busca ? buscaParaFiltro(filtros.busca) : '';
+    if (busca) {
       q = q.or(
-        `nome_cliente.ilike.%${filtros.busca}%,nr_cliente.ilike.%${filtros.busca}%,whatsapp.ilike.%${filtros.busca}%,instituicao.ilike.%${filtros.busca}%`
+        `nome_cliente.ilike.%${busca}%,nr_cliente.ilike.%${busca}%,whatsapp.ilike.%${busca}%,instituicao.ilike.%${busca}%`
       );
     }
     return q;

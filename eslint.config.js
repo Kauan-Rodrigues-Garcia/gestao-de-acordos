@@ -12,7 +12,8 @@ export default tseslint.config(
   // `coverage` entrou junto com `dist`: os dois são gerados e ignorados pelo
   // git, e o relatório do v8 traz JS de terceiros (prettify, sorter) que o
   // lint reclamava — seis avisos sobre arquivos que nem estão no repositório.
-  { ignores: ["dist", "coverage", "arquivo-morto", "src/lib/database.types.ts", "scripts/robo59/robo59.mjs"] },
+  // `tmp` e `work` são rascunhos locais, fora do git (.gitignore).
+  { ignores: ["dist", "coverage", "arquivo-morto", "tmp", "work", "src/lib/database.types.ts", "scripts/robo59/robo59.mjs"] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],

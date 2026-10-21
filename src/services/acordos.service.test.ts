@@ -218,6 +218,25 @@ describe('fetchAcordos', () => {
     );
   });
 
+  // Vírgula e parêntese no texto quebravam o `.or()` — o banco respondia 400.
+  it('tira da busca o que quebra a sintaxe do filtro', async () => {
+    resultsByTable['acordos_deduplicados'] = [{ data: [], error: null, count: 0 }];
+
+    await fetchAcordos({ busca: 'vale 18,11 (dia)' });
+
+    expect(calls[0].or).toBe(
+      'nome_cliente.ilike.%vale 18 11 dia%,nr_cliente.ilike.%vale 18 11 dia%,whatsapp.ilike.%vale 18 11 dia%,instituicao.ilike.%vale 18 11 dia%'
+    );
+  });
+
+  it('busca só de pontuação não vira filtro', async () => {
+    resultsByTable['acordos_deduplicados'] = [{ data: [], error: null, count: 0 }];
+
+    await fetchAcordos({ busca: ',,()' });
+
+    expect(calls[0].or).toBeUndefined();
+  });
+
   it('paginação server-side usa range(from,to) correto e conta acumulada', async () => {
     resultsByTable['acordos_deduplicados'] = [{
       data: new Array(20).fill(0).map((_, i) => ({ id: `a${i}` })),

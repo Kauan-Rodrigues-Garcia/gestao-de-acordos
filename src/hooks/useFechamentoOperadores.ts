@@ -235,9 +235,10 @@ export function useFechamentoOperadores({
     const reler = () => { void carregar(); };
     // O analítico e o ajuste manual vêm por sinal do banco (um aviso por
     // comando); o do ajuste é o mesmo tópico da tela de ajustes — um canal só.
+    // Tabulação (UPDATE) não muda o recebido: só ela, e a releitura espera 5 min.
     const cancelarAnalitico = assinarSinal('analitico', empresaId, {
       onMudou: agrupador.avisar, onReconectado: reler,
-    });
+    }, { minimoSoUpdateMs: 5 * 60_000 });
     const cancelarAjustes = assinarSinal('ajustes', empresaId, {
       // As somas de ajuste ficam guardadas por segundos (`somasPorOperador`):
       // o card mudou em outra tela, então a releitura não pode usar a guardada.

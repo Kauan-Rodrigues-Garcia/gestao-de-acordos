@@ -23,6 +23,8 @@ const { estado, servico } = vi.hoisted(() => ({
     confirmarMetaSetor:  vi.fn(async () => ({ ok: true })),
     salvarBonus:         vi.fn(async () => ({ ok: true, dados: 'bonus' })),
     excluirBonus:        vi.fn(async () => ({ ok: true })),
+    // Sem a coluna de subgrupo: a aba não busca os subgrupos.
+    aceitaExcecaoDeSubgrupo: vi.fn(async () => false),
   },
 }));
 

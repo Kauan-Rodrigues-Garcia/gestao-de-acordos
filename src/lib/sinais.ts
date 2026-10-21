@@ -48,6 +48,7 @@
  * o `minimoMs` da regra — importação continua chegando em 30 s.
  */
 import { assinarTabela } from '@/lib/realtime';
+import { invalidarCache } from '@/lib/cacheCurto';
 
 /**
  * Os tópicos que o banco escreve: migration 20260917110000, e `diario`
@@ -116,6 +117,17 @@ export const REGRAS_SINAL: Record<NomeSinal, RegraPortao> = {
 
 export function topicoDoSinal(nome: NomeSinal, empresaId: string): string {
   return `${nome}:${empresaId}`;
+}
+
+/**
+ * Prefixo das leituras guardadas em `cacheCurto` que este sinal derruba.
+ *
+ * O sinal chega e a guardada some NA HORA, antes do portão: quando o consumidor
+ * relê, lê do banco. Sem isso, guardar por alguns segundos uma leitura que o
+ * sinal manda reler entregaria o número de antes da importação (21/10/2026).
+ */
+export function prefixoCacheDoSinal(nome: NomeSinal, empresaId?: string): string {
+  return `sinal:${nome}:${empresaId ? `${empresaId}|` : ''}`;
 }
 
 function normalizar(payload: Record<string, unknown>): SinalMudou {
@@ -219,10 +231,12 @@ export function assinarSinal(
     { topico: topicoDoSinal(nome, empresaId), escutas: [{ sinal: 'mudou' }] },
     {
       onSinal: (payload) => {
+        invalidarCache(prefixoCacheDoSinal(nome, empresaId));
         pendente = juntar(pendente, normalizar(payload));
         agendar();
       },
       onReconectado: () => {
+        invalidarCache(prefixoCacheDoSinal(nome, empresaId));
         reconectou = true;
         agendar();
       },

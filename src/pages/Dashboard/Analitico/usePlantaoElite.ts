@@ -54,9 +54,11 @@ export function usePlantaoElite(empresaId: string) {
 
   // O robô do 59 sobe o analítico de hora em hora: o sinal do banco avisa, e o
   // quadro relê em silêncio (o portão do sinal já espaça as releituras).
+  // Tabulação (UPDATE) não muda o recebido: só ela, e a releitura espera 5 min.
   useEffect(() => {
     const reler = () => { void carregar(true); };
-    return assinarSinal('analitico', empresaId, { onMudou: reler, onReconectado: reler });
+    return assinarSinal('analitico', empresaId, { onMudou: reler, onReconectado: reler },
+      { minimoSoUpdateMs: 5 * 60_000 });
   }, [empresaId, carregar]);
 
   const quadro = useMemo(() => (resposta
