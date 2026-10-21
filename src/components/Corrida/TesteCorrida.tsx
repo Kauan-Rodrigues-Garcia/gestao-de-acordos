@@ -16,7 +16,27 @@ import type { Palpite, TemaLobby } from './lobbies/cena';
 const NOMES = ['Ana', 'Bruno', 'Carla', 'Diego', 'Elaine', 'Felipe', 'Gabriela', 'Hugo', 'Isabela', 'João', 'Larissa', 'Marcos', 'Natália', 'Otávio', 'Paula', 'Rafael', 'Sabrina', 'Thiago', 'Vanessa', 'Wesley', 'Yasmin', 'Caio', 'Débora', 'Fábio', 'Helena', 'Igor', 'Juliana', 'Lucas'];
 const SETORES = ['Recuperação', 'Receptivo', 'Cartões', 'Veículos', 'Conecta Play'];
 const agoraLocal = () => Date.now() / 1000;
+/** Uma «foto de perfil» de mentira (fundo colorido e um rosto), para o teste mostrar quem tem foto e quem não tem. */
+const ROSTOS = ['😀', '😎', '🤩', '😄', '🥳', '😺', '🦊', '🐼'];
+function fotoDeMentira(i: number): string | null {
+  try {
+    const cv = document.createElement('canvas'); cv.width = cv.height = 64;
+    const c = cv.getContext('2d'); if (!c) return null;
+    const g = c.createLinearGradient(0, 0, 64, 64); g.addColorStop(0, `hsl(${(i * 47) % 360} 70% 60%)`); g.addColorStop(1, `hsl(${(i * 47 + 60) % 360} 70% 40%)`);
+    c.fillStyle = g; c.fillRect(0, 0, 64, 64);
+    c.font = '40px "Segoe UI Emoji", "Apple Color Emoji", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(ROSTOS[i % ROSTOS.length], 32, 36);
+    return cv.toDataURL('image/png');
+  } catch { return null; }
+}
 const iso = (s: number) => new Date(s * 1000).toISOString();
+/** `quemAposta` passa a apostar em `alvo` (sai de onde estava). */
+function muda(p: Palpite, quemAposta: string, alvo: string, eu: string): Palpite {
+  const quem: Record<string, string[]> = {};
+  for (const [a, ids] of Object.entries(p.quem)) { const r = ids.filter(i => i !== quemAposta); if (r.length) quem[a] = r; }
+  (quem[alvo] ??= []).push(quemAposta);
+  const votos = Object.fromEntries(Object.entries(quem).map(([a, ids]) => [a, ids.length]));
+  return { ...p, quem, votos, meu: quemAposta === eu ? alvo : p.meu };
+}
 
 interface Props {
   premio: string; onFechar: () => void;
@@ -41,12 +61,12 @@ export default function TesteCorrida({ premio, onFechar, tema, visao = 'corredor
   // Pessoas de mentira (e você, correndo), entrando no lobby aos poucos.
   const base = useMemo<PessoaJson[]>(() => {
     const lista: PessoaJson[] = NOMES.map((nome, i) => ({
-      usuario: `teste-${i}`, nome: `${nome} ${String.fromCharCode(65 + (i * 7) % 26)}.`, setor: SETORES[i % SETORES.length], foto: null as string | null,
+      usuario: `teste-${i}`, nome: `${nome} ${String.fromCharCode(65 + (i * 7) % 26)}.`, setor: SETORES[i % SETORES.length], foto: i % 2 ? null : fotoDeMentira(i),
       corre: i % 3 !== 2, assiste: true, escolha: i % 3, entrou_em: null as string | null,
     }));
     // e uma torcida maior, só assistindo
     NOMES.forEach((nome, i) => lista.push({
-      usuario: `torcida-${i}`, nome: `${nome} ${String.fromCharCode(66 + (i * 5) % 24)}.`, setor: SETORES[(i + 2) % SETORES.length], foto: null,
+      usuario: `torcida-${i}`, nome: `${nome} ${String.fromCharCode(66 + (i * 5) % 24)}.`, setor: SETORES[(i + 2) % SETORES.length], foto: i % 3 ? fotoDeMentira(i + 30) : null,
       corre: false, assiste: true, escolha: null, entrou_em: null,
     }));
     lista.unshift({ usuario: eu, nome: meuNome, setor: SETORES[0], foto: minhaFoto, corre: visao === 'corredor', assiste: true, escolha: 0, entrou_em: null });
@@ -70,22 +90,20 @@ export default function TesteCorrida({ premio, onFechar, tema, visao = 'corredor
   };
 
   // O palpite de mentira: votos que vão chegando sozinhos, e o seu clique.
-  const [palpite, setPalpite] = useState<Palpite>({ ativo: !!palpiteDemo, meu: null, votos: {} });
+  // Cada pessoa de mentira aposta uma vez só (como no banco): `quem` diz em quem.
+  const [palpite, setPalpite] = useState<Palpite>({ ativo: !!palpiteDemo, meu: null, votos: {}, quem: {} });
   useEffect(() => {
     setPalpite(p => ({ ...p, ativo: !!palpiteDemo }));
     if (!palpiteDemo) return;
     const id = window.setInterval(() => setPalpite(p => {
-      const ids = base.filter(x => x.corre).map(x => x.usuario), alvo = ids[Math.floor(Math.random() * ids.length)];
-      return alvo ? { ...p, votos: { ...p.votos, [alvo]: (p.votos[alvo] ?? 0) + 1 } } : p;
+      const ja = new Set(Object.values(p.quem).flat());
+      const alvos = base.filter(x => x.corre).map(x => x.usuario), livres = base.filter(x => x.usuario !== eu && !ja.has(x.usuario));
+      const alvo = alvos[Math.floor(Math.random() * alvos.length)], quem = livres[Math.floor(Math.random() * livres.length)];
+      return alvo && quem ? muda(p, quem.usuario, alvo, eu) : p;
     }), 1400);
     return () => window.clearInterval(id);
-  }, [palpiteDemo, base]);
-  const apostar = (id: string) => setPalpite(p => {
-    if (p.meu === id) return p;
-    const votos = { ...p.votos, [id]: (p.votos[id] ?? 0) + 1 };
-    if (p.meu) votos[p.meu] = Math.max(0, (votos[p.meu] ?? 1) - 1);
-    return { ...p, meu: id, votos };
-  });
+  }, [palpiteDemo, base, eu]);
+  const apostar = (id: string) => setPalpite(p => (p.meu === id ? p : muda(p, eu, id, eu)));
 
   const limparVideos = useCallback(() => { setVideos(v => { if (v) { URL.revokeObjectURL(v.festa); URL.revokeObjectURL(v.loop); } return null; }); }, []);
   useEffect(() => () => limparVideos(), [limparVideos]);

@@ -13,7 +13,7 @@
  * as pessoas e o relógio.
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Crosshair, Maximize2, Minimize2, Volume2, VolumeX, X } from 'lucide-react';
+import { Coins, Crosshair, Maximize2, Minimize2, Volume2, VolumeX, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { criarMotor, type Gravacao, type Motor, type Painel, type VideosDaFesta } from './motor/motor';
 import { bichinhoDe } from './motor/bichinhos';
@@ -54,7 +54,7 @@ const REACOES: ReadonlyArray<readonly [Reacao, string, string, string]> = [
 ];
 const ESPERA_REACAO = 1500;
 const VOL_TETO = 0.2; // o teto do volume no motor (20% do som cheio)
-const SEM_PALPITE: Palpite = { ativo: false, meu: null, votos: {} };
+const SEM_PALPITE: Palpite = { ativo: false, meu: null, votos: {}, quem: {} };
 const fmtMs = (s: number) => `${Math.floor(Math.max(0, s) / 60)}:${String(Math.floor(Math.max(0, s) % 60)).padStart(2, '0')}`;
 
 export function PalcoCorrida({ corrida, pessoas, eu, agora, gravacao, videos, onFechar, barraTeste, aoMotor, tema = 'atual', palpite = SEM_PALPITE, onPalpite }: PalcoProps) {
@@ -68,6 +68,7 @@ export function PalcoCorrida({ corrida, pessoas, eu, agora, gravacao, videos, on
   const [painel, setPainel] = useState<Painel | null>(null);
   const [seguindo, setSeguindo] = useState(false);
   const [grande, setGrande] = useState(false);
+  const [verApostas, setVerApostas] = useState(false);
   const agoraRef = useRef(agora);
   agoraRef.current = agora;
 
@@ -136,6 +137,20 @@ export function PalcoCorrida({ corrida, pessoas, eu, agora, gravacao, videos, on
   const euCorro = useMemo(() => pessoas.some(p => p.usuario === eu && p.corre), [pessoas, eu]);
   const naCorrida = tela === 'corrida' || tela === 'festa' || tela === 'video';
   const noLobby = useMemo(() => pessoas.filter(p => p.entrou_em).length, [pessoas]);
+  // Fora do lobby a janela fica no formato do vídeo da festa (800×700): a corrida aparece mais e o
+  // replay e a festa encaixam sem borda, pequena ou ampliada (pedido do Cleber, 21/10/2026).
+  const quadrada = tela !== 'lobby' && tela !== 'preparo' && tela !== 'nada';
+
+  // Quem apostou em quem: a lista do lobby e, na festa, quem acreditou em quem venceu.
+  const porId = useMemo(() => new Map(pessoas.map(p => [p.usuario, p])), [pessoas]);
+  const apostas = useMemo(() => Object.entries(palpite.quem)
+    .map(([alvo, ids]) => ({ alvo: porId.get(alvo), quem: ids.flatMap((id): PessoaJson[] => { const p = porId.get(id); return p ? [p] : []; }) }))
+    .filter((a): a is { alvo: PessoaJson; quem: PessoaJson[] } => !!a.alvo && a.quem.length > 0)
+    .sort((a, b) => b.quem.length - a.quem.length), [palpite.quem, porId]);
+  const totalApostas = apostas.reduce((n, a) => n + a.quem.length, 0);
+  const acreditaram = painel?.vencedor?.id && painel.festa && !painel.festa.replay
+    ? apostas.find(a => a.alvo.usuario === painel.vencedor?.id) ?? null : null;
+  useEffect(() => { if (tela !== 'lobby') setVerApostas(false); }, [tela]);
 
   const status = (() => {
     if (corrida.estado === 'cancelada') return 'A corrida foi cancelada';
@@ -168,10 +183,11 @@ export function PalcoCorrida({ corrida, pessoas, eu, agora, gravacao, videos, on
     <>
       {barraTeste && <div className="cds-palco fixed left-1/2 top-2 z-[92] max-w-[calc(100vw-16px)] -translate-x-1/2 overflow-hidden rounded-xl border border-[#ffd84d]/30 bg-[#0b1022]/95 text-[#e8eefc] shadow-xl">{barraTeste}</div>}
       {grande && <div className="fixed inset-0 z-[89] bg-black/55" onClick={() => setGrande(false)} aria-hidden="true" />}
-      <div className={cn('cds-palco cds-entra fixed z-[90]',
+      <div className={cn('cds-palco cds-entra cds-janela fixed z-[90]',
           grande
-            ? 'left-1/2 top-1/2 h-[min(780px,calc(100dvh-24px))] w-[min(1280px,calc(100vw-24px))] -translate-x-1/2 -translate-y-1/2 rounded-2xl'
-            : 'bottom-3 right-3 h-[min(450px,calc(100dvh-24px))] w-[min(760px,calc(100vw-24px))] rounded-2xl max-sm:bottom-0 max-sm:right-0 max-sm:h-[58dvh] max-sm:w-full max-sm:rounded-b-none')}>
+            ? 'cds-grande left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-2xl'
+            : 'cds-pequena bottom-3 right-3 rounded-2xl max-sm:bottom-0 max-sm:right-0 max-sm:rounded-b-none',
+          quadrada && 'cds-quadrada')}>
       {/* as reações, do lado de fora da janela, para chamar o clique */}
       {tela === 'lobby' && (
         <div className="absolute bottom-4 right-full mr-3 flex flex-col gap-2.5 max-sm:bottom-full max-sm:left-3 max-sm:right-auto max-sm:mb-2 max-sm:mr-0 max-sm:flex-row">
@@ -203,6 +219,12 @@ export function PalcoCorrida({ corrida, pessoas, eu, agora, gravacao, videos, on
                 onChange={ev => { const v = Number(ev.target.value); ajusta((v / 100) * VOL_TETO, v === 0); }} />
               <span className="w-8 text-right tabular-nums">{volPct}%</span>
             </span>
+            {tela === 'lobby' && (palpite.ativo || totalApostas > 0) && (
+              <button type="button" onClick={() => setVerApostas(v => !v)} aria-pressed={verApostas} title="Quem apostou em quem"
+                className={cn('mr-0.5 flex h-7 items-center gap-1.5 rounded-full px-2.5 text-[12px] text-white/85 hover:bg-white/15 hover:text-white', verApostas && 'bg-[#ffd84d] text-[#1b1405] hover:bg-[#ffd84d] hover:text-[#1b1405]')}>
+                <Coins className="h-3.5 w-3.5" aria-hidden="true" /> Apostas{totalApostas > 0 && <span className="tabular-nums">· {totalApostas}</span>}
+              </button>
+            )}
             {euCorro && naCorrida && (
               <button type="button" onClick={() => setSeguindo(s => !s)} aria-pressed={seguindo} title={seguindo ? 'Seguindo o meu' : 'Seguir o meu bichinho'}
                 className={cn(icone, seguindo && 'bg-[#ffd84d] text-[#1b1405] hover:bg-[#ffd84d] hover:text-[#1b1405]')}>
@@ -227,9 +249,72 @@ export function PalcoCorrida({ corrida, pessoas, eu, agora, gravacao, videos, on
               iniciaEm={segundos(corrida.inicia_em)} agora={agora} palpite={palpite} onPalpite={id => onPalpite?.(id)}
               aoCena={c => { cenaRef.current = c; }} />
           )}
+          {verApostas && tela === 'lobby' && <ListaApostas apostas={apostas} eu={eu} />}
+          {acreditaram && <Acreditaram vencedor={acreditaram.alvo} quem={acreditaram.quem} eu={eu} />}
         </div>
       </div>
       </div>
     </>
+  );
+}
+
+/** A foto (ou as iniciais) de uma pessoa, pequena. */
+function Cara({ p, tam = 22, eu }: { p: PessoaJson; tam?: number; eu?: string | null }) {
+  const ini = p.nome.split(/\s+/).filter(Boolean).map(s => s[0]).slice(0, 2).join('').toUpperCase() || '?';
+  const anel = p.usuario === eu ? 'ring-[#ffd84d]' : 'ring-black/40';
+  return p.foto
+    ? <img src={p.foto} alt="" className={cn('shrink-0 rounded-full object-cover ring-2', anel)} style={{ width: tam, height: tam }} />
+    : <span className={cn('grid shrink-0 place-items-center rounded-full bg-white/15 font-bold ring-2', anel)} style={{ width: tam, height: tam, fontSize: tam * 0.4 }}>{ini}</span>;
+}
+const nomeDe = (p: PessoaJson, eu: string | null) => (p.usuario === eu ? 'Você' : p.nome);
+
+/** A lista do lobby: cada corredor e quem apostou nele, do mais apostado para o menos. */
+function ListaApostas({ apostas, eu }: { apostas: Array<{ alvo: PessoaJson; quem: PessoaJson[] }>; eu: string | null }) {
+  return (
+    <div className="cds-entra absolute right-2 top-2 z-10 flex max-h-[calc(100%-16px)] w-[min(300px,calc(100%-16px))] flex-col overflow-hidden rounded-xl border border-[#ffd84d]/40 bg-[#080a16]/95 text-[12px] shadow-xl">
+      <div className="flex items-center gap-1.5 border-b border-white/10 px-3 py-2 font-bold uppercase tracking-wide text-[#ffd84d]"><Coins className="h-3.5 w-3.5" aria-hidden="true" /> Quem apostou em quem</div>
+      {apostas.length === 0
+        ? <p className="px-3 py-3 text-white/60">Ninguém apostou ainda. Toque num corredor para apostar nele.</p>
+        : <ul className="min-h-0 flex-1 space-y-2.5 overflow-y-auto px-3 py-2.5">
+            {apostas.map(({ alvo, quem }) => (
+              <li key={alvo.usuario}>
+                <div className="flex items-center gap-2 font-semibold">
+                  <Cara p={alvo} tam={24} eu={eu} />
+                  <span className="min-w-0 truncate">{nomeDe(alvo, eu)}</span>
+                  <span className="ml-auto shrink-0 rounded-full bg-[#ffd84d] px-1.5 text-[11px] font-bold tabular-nums text-[#1b1405]">{quem.length}</span>
+                </div>
+                <div className="mt-1 flex flex-wrap gap-1 pl-8">
+                  {quem.map(p => (
+                    <span key={p.usuario} className={cn('flex items-center gap-1 rounded-full bg-white/10 py-0.5 pl-0.5 pr-2', p.usuario === eu && 'bg-[#ffd84d]/25 text-[#ffd84d]')}>
+                      <Cara p={p} tam={16} eu={eu} />{nomeDe(p, eu).split(/\s+/)[0]}
+                    </span>
+                  ))}
+                </div>
+              </li>
+            ))}
+          </ul>}
+    </div>
+  );
+}
+
+/** Na festa, depois do replay: quem acreditou em quem venceu. */
+function Acreditaram({ vencedor, quem, eu }: { vencedor: PessoaJson; quem: PessoaJson[]; eu: string | null }) {
+  const MAX = 8, lista = quem.slice(0, MAX), resto = quem.length - lista.length;
+  const acertei = quem.some(p => p.usuario === eu);
+  return (
+    <div className="cds-entra pointer-events-none absolute left-2 top-2 z-10 w-max max-w-[min(230px,38%)] rounded-xl border border-[#ffd84d]/50 bg-[#080a16]/85 px-2.5 py-2 text-[11px] shadow-xl backdrop-blur-sm">
+      <div className="mb-1.5 flex items-center gap-1.5 font-bold uppercase leading-tight tracking-wide text-[#ffd84d]">
+        <Coins className="h-3.5 w-3.5 shrink-0" aria-hidden="true" /> Acreditaram em {vencedor.usuario === eu ? 'você' : vencedor.nome.split(/\s+/)[0]}
+      </div>
+      {acertei && <div className="mb-1.5 rounded-md bg-[#ffd84d] px-1.5 py-0.5 text-center font-bold text-[#1b1405]">Você acertou! 🎉</div>}
+      <ul className="space-y-1">
+        {lista.map(p => (
+          <li key={p.usuario} className="flex items-center gap-1.5">
+            <Cara p={p} tam={18} eu={eu} /><span className={cn('min-w-0 truncate', p.usuario === eu && 'font-bold text-[#ffd84d]')}>{nomeDe(p, eu)}</span>
+          </li>
+        ))}
+      </ul>
+      {resto > 0 && <div className="mt-1 text-white/60">e mais {resto}</div>}
+    </div>
   );
 }

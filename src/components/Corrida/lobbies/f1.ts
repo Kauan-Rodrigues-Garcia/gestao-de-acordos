@@ -3,12 +3,14 @@
  * fundo, a arquibancada de aço com fileiras iluminadas, a tela de LED correndo,
  * e cada corredor na frente da sua garagem. A largada é o pórtico de 5 luzes.
  */
-import { bicho, calmo, fichaPalpite, fileiras, marcaVoce, primeiroNome, rosto, semente, texto, type DesenhaTema, type Quadro } from './cena';
+import { bicho, calmo, fichaPalpite, fileiras, fotoDoCorredor, marcaVoce, primeiroNome, rosto, semente, texto, type DesenhaTema, type Quadro } from './cena';
 import { hashStr } from '../motor/bichinhos';
 
 const ORB = '"Orbitron", "Saira Condensed", sans-serif';
 const SAI = '"Saira Condensed", Rubik, sans-serif';
 const EQUIPES = ['#ff1e2d', '#00e5ff', '#ffb000', '#7cff4f', '#ff4fd8', '#8a7dff', '#ff7a1a', '#ffffff'];
+// Embaixo de cada box, de cima para baixo: o bichinho, a placa do nome e a foto de quem corre.
+const BICHO_Y = 540 - 86, NOME_Y = 540 - 48, FOTO_Y = 540 - 19;
 
 // A cidade não muda: prédios e janelas sorteados uma vez por largura.
 let cidade: { W: number; predios: Array<{ x: number; w: number; h: number; jan: Array<[number, number, string]> }>; estrelas: Array<[number, number, number]> } | null = null;
@@ -74,11 +76,11 @@ function fundo(q: Quadro) {
     c.fillStyle = cor; c.fillRect(x + 3, gy + 80, bw - 6, 3);
     texto(c, String(i + 1).padStart(2, '0'), cx, gy + 38, `700 ${Math.min(16, bw * 0.3)}px ${ORB}`, 'rgba(255,255,255,.25)');
     // a marca do box no chão
-    c.strokeStyle = 'rgba(255,255,255,.5)'; c.lineWidth = 1.5; c.strokeRect(x + 6, gy + 92, bw - 12, H - gy - 132);
+    c.strokeStyle = 'rgba(255,255,255,.5)'; c.lineWidth = 1.5; c.strokeRect(x + 6, gy + 92, bw - 12, NOME_Y - gy - 98);
     // o nome
     c.font = `700 ${Math.min(11, bw / 6)}px ${SAI}`; const nm = primeiroNome(p).toUpperCase().slice(0, 10), tw = c.measureText(nm).width;
-    c.fillStyle = p.voce ? '#ffd84d' : '#0b0b10'; c.fillRect(cx - tw / 2 - 5, H - 30, tw + 10, 15);
-    c.fillStyle = p.voce ? '#1b1405' : '#fff'; c.textAlign = 'center'; c.fillText(nm, cx, H - 22);
+    c.fillStyle = p.voce ? '#ffd84d' : '#0b0b10'; c.fillRect(cx - tw / 2 - 5, NOME_Y, tw + 10, 15);
+    c.fillStyle = p.voce ? '#1b1405' : '#fff'; c.textAlign = 'center'; c.fillText(nm, cx, NOME_Y + 8);
   });
   c.textAlign = 'left';
   // o pórtico (as luzes acendem no quadro)
@@ -132,10 +134,11 @@ function quadro(q: Quadro) {
   e.corredores.forEach((p, i) => {
     const x = x0 + i * bw, cx = x + bw / 2, cor = EQUIPES[hashStr(p.id) % EQUIPES.length];
     // o bichinho, com fumacinha do escapamento
-    const by = H - 70, desde = q.agora - (p.entrou ?? q.agora - 9);
+    const by = BICHO_Y, desde = q.agora - (p.entrou ?? q.agora - 9);
     if (!calmo) for (let k = 0; k < 3; k++) { const f = ((t * 1.4 + k / 3 + i * 0.37) % 1); c.fillStyle = `rgba(200,205,220,${0.25 * (1 - f)})`; c.beginPath(); c.arc(cx - r - f * 22, by + r * 0.5 - f * 8, 2 + f * 5, 0, Math.PI * 2); c.fill(); }
     const pulo = largada && !calmo ? Math.abs(Math.sin(t * 12 + i)) * 4 : 0;
     bicho(c, cx, by, r * (calmo ? 1 : Math.min(1, 0.4 + desde)), p, t, { pulo, feliz: e.palpite.meu === p.id });
+    fotoDoCorredor(c, cx, FOTO_Y, Math.min(11, bw * 0.2), p, p.voce ? '#ffd84d' : cor);
     q.alvo(p, cx, by, r);
     fichaPalpite(c, q, p, cx, by - r * 1.45, r, cor);
     if (p.voce) { q.souEu(cx, by - r); marcaVoce(c, cx, by - r * 1.5 - (e.palpite.ativo ? 18 : 0), t); }
@@ -143,12 +146,12 @@ function quadro(q: Quadro) {
   if (!e.corredores.length) texto(c, 'AS EQUIPES ESTÃO CHEGANDO AO BOX…', W / 2, H - 80, `700 14px ${ORB}`, 'rgba(255,255,255,.5)');
   c.textAlign = 'left';
 
-  // o pórtico de 5 luzes
-  const acesas = !largada ? 0 : q.falta! < 0.4 ? 0 : Math.min(5, Math.floor((4.4 - q.falta!) / 0.8) + 1);
+  // o pórtico de 5 luzes: acendem 4 vermelhas, e na vez da 5ª as cinco ficam verdes até o GO (Cleber, 21/10/2026)
+  const passo = !largada ? 0 : Math.floor((4.4 - q.falta!) / 0.8) + 1, verde = largada && passo >= 5, acesas = verde ? 5 : Math.max(0, passo);
   for (let i = 0; i < 5; i++) {
     const on = i < acesas, x = px + 8 + i * 34 + 17;
-    c.save(); if (on) { c.shadowColor = '#ff1e2d'; c.shadowBlur = 22; }
-    c.fillStyle = on ? '#ff2a36' : `rgba(90,10,16,${0.6 + 0.3 * Math.sin(t * 2 - i * 0.6)})`; c.beginPath(); c.arc(x, py + 20, 12, 0, Math.PI * 2); c.fill(); c.restore();
+    c.save(); if (on) { c.shadowColor = verde ? '#1eff5a' : '#ff1e2d'; c.shadowBlur = 22; }
+    c.fillStyle = on ? (verde ? '#2bff6a' : '#ff2a36') : `rgba(90,10,16,${0.6 + 0.3 * Math.sin(t * 2 - i * 0.6)})`; c.beginPath(); c.arc(x, py + 20, 12, 0, Math.PI * 2); c.fill(); c.restore();
   }
   if (e.palpite.ativo && !e.palpite.meu && !largada) {
     c.globalAlpha = 0.65 + 0.35 * Math.sin(t * 3); c.textAlign = 'center';

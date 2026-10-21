@@ -23,7 +23,21 @@
 .cds-eq i { display: block; width: 3px; height: 100%; border-radius: 1px; background: linear-gradient(to top, #e2343f, #ff8a3d 55%, #ffd84d); transform-origin: bottom; transform: scaleY(.1); opacity: .5; transition: transform .07s linear; }
 .cds-eq.tocando i { opacity: 1; }
 
-.cds-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #070a16; }
+/* Fora do lobby a janela tem o formato do vídeo da festa (800×700): o vídeo enche a janela; o «cover» só come o
+   pixel de arredondamento. */
+.cds-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #070a16; }
+
+/* O tamanho da janela. No lobby, larga; da largada em diante, no formato 8×7 (o do vídeo), crescendo para cima.
+   O +42px é a barrinha de cima (40) e a borda (1 + 1). */
+.cds-janela { transition: width .45s cubic-bezier(.2, .9, .3, 1), height .45s cubic-bezier(.2, .9, .3, 1); }
+.cds-pequena { width: min(760px, calc(100vw - 24px)); height: min(450px, calc(100dvh - 24px)); }
+.cds-grande { width: min(1280px, calc(100vw - 24px)); height: min(780px, calc(100dvh - 24px)); }
+.cds-quadrada { --cds-w: min(640px, calc(100vw - 24px), calc((100dvh - 66px) * 8 / 7 + 2px)); width: var(--cds-w); height: calc((var(--cds-w) - 2px) * 7 / 8 + 42px); }
+.cds-quadrada.cds-grande { --cds-w: min(1280px, calc(100vw - 24px), calc((min(780px, 100dvh - 24px) - 42px) * 8 / 7 + 2px)); }
+@media (max-width: 639px) {
+  .cds-pequena { width: 100%; height: 58dvh; }
+  .cds-quadrada.cds-pequena { --cds-w: min(100vw, calc((100dvh - 54px) * 8 / 7 + 2px)); width: var(--cds-w); height: calc((var(--cds-w) - 2px) * 7 / 8 + 42px); }
+}
 
 @keyframes cds-entra { from { transform: translateY(18px) scale(.96); opacity: 0; } to { transform: none; opacity: 1; } }
 .cds-entra { animation: cds-entra .45s cubic-bezier(.2, 1.3, .4, 1) both; }

@@ -76,13 +76,13 @@ export type TelaDoMotor = 'nada' | 'preparo' | 'lobby' | 'show' | 'carregando' |
 
 export interface Painel {
   tela: TelaDoMotor;
-  musica: { qual: 'lobby' | 'vitoria' | null; tocando: boolean; pct: number };
+  musica: { qual: 'lobby' | 'corrida' | 'vitoria' | null; tocando: boolean; pct: number };
   volume: { max: number; mudo: boolean };
   placar?: Array<{ pos: number; id: string | null; nome: string; setor: string; onde: string; est: Estilo; voce: boolean }>;
   narracao?: Array<{ t: number; txt: string }>;
   tempo?: number;
   vencedor?: { id: string | null; nome: string };
-  festa?: { ef: number; acabou: boolean };
+  festa?: { ef: number; acabou: boolean; replay: boolean };
   show?: { fase: string; t: number };
 }
 
@@ -91,7 +91,7 @@ export interface OpcoesMotor {
   cerimonia: HTMLCanvasElement;
   videoFesta?: HTMLVideoElement | null;
   videoLoop?: HTMLVideoElement | null;
-  sons: { lobby: string; vitoria: string };
+  sons: { lobby: string; vitoria: string; corrida?: readonly string[] };
   /** O AudioContext criado no clique («Assistir», «Testar»): o navegador só deixa tocar som depois de um clique. */
   audio?: AudioContext | null;
   aoPainel?: (painel: Painel) => void;

@@ -87,9 +87,9 @@ export default function PalcoAoVivo({ corridaId, onFechar }: Props) {
   // O palpite: aberto no lobby até a largada; os votos são contados das pessoas da sala.
   const aberto = corrida?.estado === 'aberta' && !corrida.inicia_em;
   const palpite = useMemo<Palpite>(() => {
-    const votos: Record<string, number> = {};
-    for (const p of pessoas) if (p.palpite) votos[p.palpite] = (votos[p.palpite] ?? 0) + 1;
-    return { ativo: aberto && !!eu, meu: pessoas.find(p => p.usuario === eu)?.palpite ?? null, votos };
+    const votos: Record<string, number> = {}, quem: Record<string, string[]> = {};
+    for (const p of pessoas) if (p.palpite) { votos[p.palpite] = (votos[p.palpite] ?? 0) + 1; (quem[p.palpite] ??= []).push(p.usuario); }
+    return { ativo: aberto && !!eu, meu: pessoas.find(p => p.usuario === eu)?.palpite ?? null, votos, quem };
   }, [pessoas, eu, aberto]);
   // No máximo um pedido por segundo (o banco também segura): clicar sem parar não vira enxurrada.
   const ultimoPalpite = useRef(0);

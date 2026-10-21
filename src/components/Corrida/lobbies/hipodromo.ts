@@ -4,7 +4,7 @@
  * cerca branca e cada corredor no seu portão de largada. A largada é o sino e
  * os portões abrindo.
  */
-import { bicho, calmo, fichaPalpite, fileiras, marcaVoce, primeiroNome, rosto, semente, texto, type DesenhaTema, type Quadro } from './cena';
+import { bicho, calmo, fichaPalpite, fileiras, fotoDoCorredor, marcaVoce, primeiroNome, rosto, semente, texto, type DesenhaTema, type Quadro } from './cena';
 import { hashStr } from '../motor/bichinhos';
 
 const CIN = '"Cinzel Decorative", Georgia, serif';
@@ -141,6 +141,7 @@ function desenhaQuadro(q: Quadro) {
     const x = x0 + i * sw, cx = x + sw / 2;
     const by = gy + 76, pulo = largada && !calmo ? Math.abs(Math.sin(t * 9 + i)) * 3 : 0;
     bicho(c, cx, by, r, p, t, { pulo, feliz: e.palpite.meu === p.id || abre });
+    fotoDoCorredor(c, cx, gy + 143, Math.min(11, sw * 0.2), p, p.voce ? OURO : CREME);
     q.alvo(p, cx, by, r);
     // as portas da frente: grades que abrem na largada
     const ang = abre ? Math.min(1, (0.4 - q.falta!) / 0.25) * 1.3 : 0;

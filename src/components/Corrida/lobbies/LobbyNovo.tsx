@@ -49,7 +49,9 @@ export default function LobbyNovo({ tema, corridaId, pessoas, eu, premio, inicia
     });
     const corredores = pessoas.filter(p => p.corre).map(gente);
     const plateia = pessoas.filter(p => !p.corre && p.entrou_em).sort((a, b) => (a.entrou_em! < b.entrou_em! ? -1 : 1)).map(gente);
-    cena.current?.setEstado({ corredores, plateia, premio, iniciaEm, palpite });
+    const porId = new Map(pessoas.map(p => [p.usuario, p]));
+    const apostas = Object.fromEntries(Object.entries(palpite.quem).map(([alvo, ids]) => [alvo, ids.flatMap(id => { const p = porId.get(id); return p ? [gente(p)] : []; })]));
+    cena.current?.setEstado({ corredores, plateia, premio, iniciaEm, palpite, apostas });
   }, [pessoas, eu, corridaId, premio, iniciaEm, palpite]);
 
   return <canvas ref={ref} className="absolute inset-0 h-full w-full touch-manipulation" aria-label="O lobby da corrida" />;

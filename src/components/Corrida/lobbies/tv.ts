@@ -4,7 +4,7 @@
  * pedestal de participante e a plateia nas poltronas da frente. A largada é a
  * contagem no telão, com chuva de papel picado.
  */
-import { bicho, calmo, fichaPalpite, fileiras, marcaVoce, primeiroNome, rosto, semente, texto, type DesenhaTema, type Quadro } from './cena';
+import { bicho, calmo, fichaPalpite, fileiras, fotoDoCorredor, marcaVoce, primeiroNome, rosto, semente, texto, type DesenhaTema, type Quadro } from './cena';
 import { hashStr } from '../motor/bichinhos';
 
 const SAI = '"Saira Condensed", Rubik, sans-serif';
@@ -23,7 +23,8 @@ function pedestal(q: Quadro, i: number) {
   const arco = Math.pow((cx - W / 2) / (W / 2), 2) * 26, base = (fila ? 336 : 414) - arco, r = Math.max(9, Math.min(fila ? 16 : 22, passo * 0.3));
   return { cx, base, r, passo, pw: r * 2.1, cor: LUZES[hashStr(e.corredores[i].id) % LUZES.length] };
 }
-const filasPlateia = (W: number) => [0, 1, 2].map(k => ({ y: 452 + k * 34, x0: 30, x1: W - 30 }));
+// a plateia desceu um pouco (21/10/2026) para caber a foto embaixo do nome de quem corre
+const filasPlateia = (W: number) => [0, 1, 2].map(k => ({ y: 464 + k * 28, x0: 30, x1: W - 30 }));
 // A grade de pixels do telão: um ladrilho de 5×5 desenhado uma vez, repetido num retângulo só.
 let pixels: CanvasPattern | null = null;
 function grade(c: CanvasRenderingContext2D) {
@@ -126,9 +127,10 @@ function desenhaQuadro(q: Quadro) {
   c.fillStyle = `rgba(255,30,30,${0.5 + 0.5 * Math.sin(t * 6)})`; c.beginPath(); c.arc(camx + 8, camy - 4, 2.5, 0, Math.PI * 2); c.fill();
 
   e.corredores.forEach((p, i) => {
-    const { cx, base, r } = pedestal(q, i);
+    const { cx, base, r, passo } = pedestal(q, i);
     const by = base - 26 - r * 0.95, pulo = ja && !calmo ? Math.abs(Math.sin(t * 14 + i)) * 6 : 0;
     bicho(c, cx, by, r, p, t, { pulo, feliz: e.palpite.meu === p.id || ja });
+    fotoDoCorredor(c, cx, base + 26, Math.min(9, passo * 0.18), p, p.voce ? AMARELO : '#fff');
     q.alvo(p, cx, by, r);
     fichaPalpite(c, q, p, cx, by - r * 1.35, r, VERMELHO);
     if (p.voce) { q.souEu(cx, by - r); marcaVoce(c, cx, by - r * 1.4 - (e.palpite.ativo ? 18 : 0), t, AMARELO, AZUL); }

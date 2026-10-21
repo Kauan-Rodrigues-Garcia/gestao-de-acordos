@@ -3011,7 +3011,12 @@ function desenhaFesta(agora, dt) {
     ySetor = sy + sh / 2 + 18;
   }
   c.fillStyle = '#d8cce6'; c.font = '600 11px "IBM Plex Mono", monospace'; c.fillText(`${MAPA.nome.toUpperCase()} · ${fmt(rec.tVenc - 3)}`, cx, ySetor);
-  if (festa.premio) {
+  const valor = valorDoPremio(festa.premio);
+  if (valor) {
+    // prêmio em dinheiro: em vez da faixa, uma nota com o valor (pedido do Cleber, 21/10/2026)
+    const nw = Math.min(200, w * 0.34), nh = nw * 0.47, ny = ySetor + 16 + nh / 2;
+    notaDeDinheiro(c, cx, ny, nw, nh, valor, t - 0.45, calmo);
+  } else if (festa.premio) {
     const pa = easeBack(clamp((t - 0.45) / 0.5, 0, 1)), py = ySetor + 32;
     c.save(); c.translate(cx, py); c.scale(pa, pa); c.font = `600 ${Math.min(20, w / 22)}px Rubik, sans-serif`;
     const txt = `Prêmio: ${festa.premio}`, pw = c.measureText(txt).width + 36;
@@ -3027,6 +3032,57 @@ function desenhaFesta(agora, dt) {
   }
   desenhaCParts(c, dt);
   c.textAlign = 'left';
+}
+/* «R$ 30», «R$ 1.500,00», «30 reais»: devolve o número (30, 1500); prêmio que não é dinheiro devolve null */
+function valorDoPremio(premio) {
+  const s = String(premio || '').trim();
+  const m = s.match(/^R\$\s*([\d.]+(?:,\d{1,2})?)$/i) || s.match(/^([\d.]+(?:,\d{1,2})?)\s*(?:reais|real)$/i);
+  if (!m) return null;
+  const v = Number(m[1].replace(/\./g, '').replace(',', '.'));
+  return isFinite(v) && v > 0 ? v : null;
+}
+/* as cores das cédulas do real (2 azul, 5 roxa, 10 vermelha, 20 amarela, 50 laranja, 100 azul, 200 sépia); outro valor, verde */
+const CEDULAS = { 2: ['#6f8fb0', '#3e5c7c'], 5: ['#9a7cc0', '#5b3f86'], 10: ['#d06a5a', '#8c3328'], 20: ['#e6c25a', '#a37a1c'], 50: ['#e09450', '#9a5420'], 100: ['#6aa6d6', '#2c5f8e'], 200: ['#b9a07a', '#6e5838'] };
+const fmtReal = v => 'R$ ' + (Number.isInteger(v) ? v.toLocaleString('pt-BR') : v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+/* a nota: entra girando de leve, balança no ar e um brilho passa por ela; tudo conta do tempo (o loop do vídeo repete igual) */
+function notaDeDinheiro(c, x, y, w, h, valor, t, calmo) {
+  if (t < 0) return;
+  const [cl, ce] = CEDULAS[valor] || ['#5fbf86', '#2a7a4f'];
+  const ap = easeBack(clamp(t / 0.55, 0, 1)), bal = calmo ? 0 : Math.sin(t * 2 * Math.PI / (CICLO / 2)) * 0.035;
+  const flut = calmo ? 0 : Math.sin(t * 2 * Math.PI / CICLO) * 3;
+  c.save(); c.translate(x, y + flut); c.rotate(bal + (1 - ap) * -0.5); c.scale(ap, ap);
+  c.shadowColor = 'rgba(0,0,0,.45)'; c.shadowBlur = 16; c.shadowOffsetY = 6;
+  const g = c.createLinearGradient(-w / 2, -h / 2, w / 2, h / 2); g.addColorStop(0, cl); g.addColorStop(1, ce);
+  c.fillStyle = g; rr(c, -w / 2, -h / 2, w, h, 6); c.fill();
+  c.shadowColor = 'transparent';
+  c.save(); rr(c, -w / 2, -h / 2, w, h, 6); c.clip();
+  // as linhas de segurança (guilhoché)
+  c.strokeStyle = 'rgba(255,255,255,.16)'; c.lineWidth = 1;
+  for (let k = 0; k < 7; k++) { c.beginPath(); for (let xx = -w / 2; xx <= w / 2; xx += 4) c.lineTo(xx, -h / 2 + h * (k + 0.5) / 7 + Math.sin(xx / 9 + k) * 3); c.stroke(); }
+  // a efígie: um círculo claro com a estrela da sorte
+  const ex = -w * 0.25, er = h * 0.3;
+  c.fillStyle = 'rgba(255,255,255,.28)'; circ(c, ex, 0, er + 4); c.fill();
+  c.fillStyle = 'rgba(255,255,255,.55)'; circ(c, ex, 0, er); c.fill();
+  c.fillStyle = ce; estrela(c, ex, 0, er * 0.72, er * 0.32, 5, -Math.PI / 2); c.fill();
+  // o brilho que passa
+  if (!calmo) {
+    const ph = ((t / CICLO) % 1 + 1) % 1, bx = -w + ph * w * 3;
+    const gb = c.createLinearGradient(bx - 30, 0, bx + 30, 0); gb.addColorStop(0, 'rgba(255,255,255,0)'); gb.addColorStop(0.5, 'rgba(255,255,255,.45)'); gb.addColorStop(1, 'rgba(255,255,255,0)');
+    c.fillStyle = gb; c.fillRect(-w / 2, -h / 2, w, h);
+  }
+  c.restore();
+  // a moldura
+  c.strokeStyle = 'rgba(255,255,255,.75)'; c.lineWidth = 1.5; rr(c, -w / 2 + 5, -h / 2 + 5, w - 10, h - 10, 4); c.stroke();
+  // o valor
+  c.textAlign = 'right'; c.textBaseline = 'middle';
+  const txt = fmtReal(valor); let fs = h * 0.42; c.font = `800 ${fs}px Rubik, sans-serif`;
+  const lim = w * 0.5; if (c.measureText(txt).width > lim) { fs *= lim / c.measureText(txt).width; c.font = `800 ${fs}px Rubik, sans-serif`; }
+  c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,.25)'; c.strokeText(txt, w / 2 - 12, h * 0.02);
+  c.fillStyle = '#ffffff'; c.fillText(txt, w / 2 - 12, h * 0.02);
+  c.font = `700 ${Math.max(7, h * 0.12)}px Rubik, sans-serif`; c.fillStyle = 'rgba(255,255,255,.85)';
+  c.fillText('CORRIDA DA SORTE', w / 2 - 12, -h / 2 + 14);
+  c.fillText('PRÊMIO', w / 2 - 12, h / 2 - 13);
+  c.restore(); c.textAlign = 'center'; c.textBaseline = 'alphabetic';
 }
 /* parado, o confete e o brilho são contas do tempo (sem sorteio): o último trecho repete igual a cada CICLO segundos */
 const CONF_CORES = ['#ffd84d', '#ffffff', '#ff6fb5', '#8fe36b'];
@@ -3464,7 +3520,26 @@ function reagir(tipo) {
 
 /* ================= a contagem e a caixa dos mapas ================= */
 const CAIXA_N = 64, CAIXA_WIN = 54;
-function geraFaixa(rg, mapa) { const f = []; for (let i = 0; i < CAIXA_N; i++) f.push(MAPAS[Math.floor(rg() * MAPAS.length)].id); f[CAIXA_WIN] = mapa; return f; }
+/* A faixa da roleta: os mapas saem em rodadas embaralhadas (cada rodada passa por todos), sem dois iguais
+   lado a lado. Antes era um sorteio solto por casa, e às vezes saíam três iguais seguidos (Cleber, 21/10/2026). */
+function geraFaixa(rg, mapa) {
+  const ids = MAPAS.map(m => m.id), f = [];
+  while (f.length < CAIXA_N) {
+    const r = ids.slice();
+    for (let i = r.length - 1; i > 0; i--) { const j = Math.floor(rg() * (i + 1)); [r[i], r[j]] = [r[j], r[i]]; }
+    if (f.length && r[0] === f[f.length - 1]) r.push(r.shift());
+    f.push(...r);
+  }
+  f.length = CAIXA_N;
+  // o sorteado entra na casa da vitória; se o vizinho for igual, troca com uma casa longe que não repita
+  f[CAIXA_WIN] = mapa;
+  for (const k of [CAIXA_WIN - 1, CAIXA_WIN + 1]) {
+    if (f[k] !== mapa) continue;
+    const t = f.findIndex((id, i) => id !== mapa && Math.abs(i - CAIXA_WIN) > 2 && id !== f[k - 1] && id !== f[k + 1] && f[i - 1] !== mapa && f[i + 1] !== mapa);
+    if (t >= 0) [f[k], f[t]] = [f[t], f[k]];
+  }
+  return f;
+}
 function desenhaContagem(c, w, h, t, agora) {
   desenhaLobby(c, w, h, agora, agora, Math.min(1, 0.3 + t / 10), 'lobby');
   c.fillStyle = 'rgba(5,3,8,.6)'; c.fillRect(0, 0, w, h);
@@ -3583,18 +3658,24 @@ function desenhaShow(tl, agora, dt) {
 }
 let SHOW_ATUAL = { mapa: 'halloween', faixa: [], parada: 0.5, tique: -1 };
 
-/* ================= a música: o lobby (15 s depois de abrir, 10% subindo rápido até 20%) e o Tema da Vitória ================= */
-const LOBBY_ATRASO = 15, LOBBY_SUBIDA = 6, VOL_TETO = 0.2;
+/* ================= a música: o lobby (15 s depois de abrir, 10% subindo rápido até 20%), a da corrida e o Tema da Vitória ================= */
+// LOBBY_INICIO: a faixa do lobby começa (e volta, no loop) do 6º segundo, pedido do Cleber em 21/10/2026
+const LOBBY_ATRASO = 15, LOBBY_SUBIDA = 6, LOBBY_INICIO = 6, VOL_TETO = 0.2;
+// a música da corrida entra no «já» (T = 3, depois dos três bipes), um pouco abaixo do teto para os efeitos aparecerem
+const CORRIDA_LARGA = 3, CORRIDA_VOL = 0.8;
+const faixaCorrida = () => { const l = opcoes.sons.corrida || []; return l.length ? l[hashStr(String((rec && rec.mapa) || CORRIDA.mapa || '')) % l.length] : null; };
 const volVitoria = s => s < 15 ? 0.25 : s < 17 ? 0.25 - 0.10 * (s - 15) / 2 : 0.15;
 let prefs = { max: VOL_TETO, mudo: false };
 try { const p = JSON.parse(localStorage.getItem('corrida-volume') || 'null'); if (p && typeof p.max === 'number') prefs = { max: clamp(p.max, 0, VOL_TETO), mudo: !!p.mudo }; } catch (e) { }
 const salvaPrefs = () => { try { localStorage.setItem('corrida-volume', JSON.stringify(prefs)); } catch (e) { } };
 const musica = {
-  lobby: null, vitoria: null, ganhoL: null, ganhoV: null, analisador: null, bins: null, ligada: false,
+  lobby: null, vitoria: null, corrida: null, ganhoL: null, ganhoV: null, ganhoC: null, analisador: null, bins: null, ligada: false,
   criar() {
     if (this.lobby) return;
-    this.lobby = new Audio(); this.lobby.preload = 'auto'; this.lobby.loop = true; this.lobby.src = opcoes.sons.lobby;
+    // sem loop do próprio elemento: no fim, o tick manda de volta ao LOBBY_INICIO (o loop nativo voltaria ao 0)
+    this.lobby = new Audio(); this.lobby.preload = 'auto'; this.lobby.src = opcoes.sons.lobby;
     this.vitoria = new Audio(); this.vitoria.preload = 'auto'; this.vitoria.src = opcoes.sons.vitoria;
+    this.corrida = new Audio(); this.corrida.preload = 'auto'; const fc = faixaCorrida(); if (fc) this.corrida.src = fc;
   },
   /* chamado dentro do clique: o volume vai por um GainNode (o Safari do iPhone ignora o volume do elemento)
      e o analisador fica antes do volume, para as barrinhas mostrarem a música e não o volume */
@@ -3609,13 +3690,15 @@ const musica = {
       ac.createMediaElementSource(this.lobby).connect(this.analisador).connect(this.ganhoL).connect(ac.destination);
       this.ganhoV = ac.createGain(); this.ganhoV.gain.value = 0;
       ac.createMediaElementSource(this.vitoria).connect(this.ganhoV).connect(ac.destination);
+      this.ganhoC = ac.createGain(); this.ganhoC.gain.value = 0;
+      ac.createMediaElementSource(this.corrida).connect(this.ganhoC).connect(ac.destination);
       this.ligada = true;
     } catch (e) { this.ligada = false; }
-    // os dois tocam um instante no clique: fica liberado para tocar depois, sem outro clique
-    for (const a of [this.lobby, this.vitoria]) { const p = a.play(); if (p) p.then(() => { if (!this.querendo(a)) a.pause(); }).catch(() => { }); }
+    // tocam um instante no clique: fica liberado para tocar depois, sem outro clique
+    for (const a of [this.lobby, this.vitoria, this.corrida]) { if (!a.src) continue; const p = a.play(); if (p) p.then(() => { if (!this.querendo(a)) a.pause(); }).catch(() => { }); }
   },
-  querendo(a) { return a === this.lobby ? this.estadoL.toca : this.estadoV.toca; },
-  estadoL: { toca: false, vol: 0, pos: 0 }, estadoV: { toca: false, vol: 0, pos: 0 },
+  querendo(a) { return a === this.lobby ? this.estadoL.toca : a === this.corrida ? this.estadoC.toca : this.estadoV.toca; },
+  estadoL: { toca: false, vol: 0, pos: 0 }, estadoV: { toca: false, vol: 0, pos: 0 }, estadoC: { toca: false, vol: 0, pos: 0 },
   ajusta(a, ganho, alvo, pos, dur) {
     if (!a) return;
     if (alvo.toca) {
@@ -3635,13 +3718,19 @@ const musica = {
     L.vol = tl.tela === 'show' ? rampa * clamp(1 - tl.t / 2.5, 0, 1) : rampa;
     const naFesta = entrei && (tl.tela === 'video' || tl.tela === 'festa') && tl.ef < FESTA_MUSICA;
     V.toca = !!naFesta; V.vol = naFesta ? volVitoria(tl.ef) * (prefs.max / VOL_TETO) : 0;
-    if (!this.lobby && (L.toca || V.toca)) this.criar();
-    this.ajusta(this.lobby, this.ganhoL, L, Math.max(0, pL), this.lobby && isFinite(this.lobby.duration) ? this.lobby.duration : 0);
+    const C = this.estadoC, pC = tl.tela === 'corrida' ? tl.T - CORRIDA_LARGA : -1;
+    C.toca = !!entrei && pC >= 0; C.vol = prefs.max * CORRIDA_VOL;
+    if (!this.lobby && (L.toca || V.toca || C.toca)) this.criar();
+    const dL = this.lobby && isFinite(this.lobby.duration) && this.lobby.duration > LOBBY_INICIO + 1 ? this.lobby.duration - LOBBY_INICIO : 0;
+    this.ajusta(this.lobby, this.ganhoL, L, LOBBY_INICIO + (dL ? Math.max(0, pL) % dL : Math.max(0, pL)), 0);
     this.ajusta(this.vitoria, this.ganhoV, V, naFesta ? tl.ef : 0, 0);
+    if (this.corrida && C.toca) { const fc = faixaCorrida(); if (fc && !this.corrida.src.endsWith(fc)) this.corrida.src = fc; }
+    this.ajusta(this.corrida, this.ganhoC, C, Math.max(0, pC), this.corrida && isFinite(this.corrida.duration) ? this.corrida.duration : 0);
   },
   /** o que o player mostra: qual música, se está tocando e o volume de agora (já com a subida) */
   painel(tl) {
     if (this.estadoV.toca) return { qual: 'vitoria', tocando: true, pct: prefs.mudo ? 0 : this.estadoV.vol };
+    if (this.estadoC.toca) return { qual: 'corrida', tocando: true, pct: prefs.mudo ? 0 : this.estadoC.vol };
     if (tl.tela === 'lobby' || tl.tela === 'show') return { qual: 'lobby', tocando: this.estadoL.toca, pct: prefs.mudo ? 0 : this.estadoL.vol };
     return { qual: null, tocando: false, pct: 0 };
   },
@@ -3659,7 +3748,7 @@ const musica = {
       return Math.min(1, Math.pow(v, 1.5) * nivel);
     });
   },
-  parar() { for (const a of [this.lobby, this.vitoria]) if (a) { a.pause(); a.removeAttribute('src'); try { a.load(); } catch (e) { } } },
+  parar() { for (const a of [this.lobby, this.vitoria, this.corrida]) if (a) { a.pause(); a.removeAttribute('src'); try { a.load(); } catch (e) { } } },
 };
 let eqBarras = [], eqParado = true, eqPulo = false;
 function mexeEq() {
@@ -3786,7 +3875,11 @@ function avisaPainel(tl) {
     base.tempo = Math.max(0, T - 3);
     if (rec.vencedor >= 0 && T >= rec.tVenc) base.vencedor = { id: (rec.ids || [])[rec.vencedor] || null, nome: rec.nomes[rec.vencedor] };
   }
-  if (tl.tela === 'video' || tl.tela === 'festa') base.festa = { ef: tl.ef, acabou: tl.ef > FESTA_MUSICA };
+  if (tl.tela === 'video' || tl.tela === 'festa') {
+    // o replay da chegada vem primeiro (no vídeo e ao vivo): a tela de cima só mostra coisa por cima da festa depois dele
+    const durReplay = rec && rec.vencedor >= 0 ? (rec.tVenc + 0.6 - Math.max(3, rec.tVenc - 3.5)) / VEL_REPLAY : 0;
+    base.festa = { ef: tl.ef, acabou: tl.ef > FESTA_MUSICA, replay: tl.ef < durReplay };
+  }
   if (tl.tela === 'show') base.show = { fase: tl.fase, t: tl.t };
   aoPainel(base);
 }

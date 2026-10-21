@@ -24,7 +24,8 @@ export interface Gente {
   est: Estilo | null; entrou: number | null; voce: boolean;
 }
 
-export interface Palpite { ativo: boolean; meu: string | null; votos: Record<string, number> }
+/** O palpite: `quem` é, para cada corredor, quem apostou nele (ids, na ordem em que chegaram). */
+export interface Palpite { ativo: boolean; meu: string | null; votos: Record<string, number>; quem: Record<string, string[]> }
 
 export interface Estado {
   corredores: Gente[];          // no grid (já escolheram o bichinho)
@@ -32,6 +33,8 @@ export interface Estado {
   premio: string | null;
   iniciaEm: number | null;      // segundos no relógio do banco
   palpite: Palpite;
+  /** Quem apostou em cada corredor, já como gente (rosto e nome), para a ficha e a lista do lobby. */
+  apostas: Record<string, Gente[]>;
 }
 
 export const H = 540;
@@ -98,6 +101,16 @@ export function rosto(c: CanvasRenderingContext2D, x: number, y: number, r: numb
   if (borda) { c.strokeStyle = borda; c.lineWidth = Math.max(1, r * 0.16); c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.stroke(); }
 }
 
+/**
+ * A foto do cadastro embaixo do nome do corredor (pedido do Cleber, 21/10/2026). Só para quem tem foto:
+ * sem foto, nada (as iniciais ali só fariam barulho). Desenhada a cada quadro, porque a foto chega depois.
+ */
+export function fotoDoCorredor(c: CanvasRenderingContext2D, x: number, y: number, r: number, g: Gente, borda: string) {
+  if (!g.foto || !foto(g.foto)) return;
+  c.save(); c.shadowColor = 'rgba(0,0,0,.55)'; c.shadowBlur = 6; c.fillStyle = borda; c.beginPath(); c.arc(x, y, r + 1.5, 0, Math.PI * 2); c.fill(); c.restore();
+  rosto(c, x, y, r, g, borda);
+}
+
 /** O bichinho de quem corre, respirando, piscando e olhando em volta. */
 export function bicho(c: CanvasRenderingContext2D, x: number, y: number, r: number, g: Gente, t: number, extra: { pulo?: number; feliz?: boolean; olha?: number } = {}) {
   if (!g.est) return;
@@ -129,12 +142,45 @@ export function fichaPalpite(c: CanvasRenderingContext2D, q: Quadro, g: Gente, x
     c.setLineDash([5, 4]); c.lineDashOffset = -q.t * 20; c.beginPath(); c.ellipse(x, y + r * 1.75, r * 1.25, r * 0.4, 0, 0, Math.PI * 2); c.stroke(); c.restore();
   }
   if (!n && !meu) return;
-  const txt = String(n), fw = 16 + txt.length * 6.5, fy = y - 2;
+  // os rostinhos de quem apostou (até 3) e o total: dá para ver quem aposta em quem (Cleber, 21/10/2026)
+  const gente = (q.e.apostas[g.id] ?? []).slice(0, 3), fr = 6.5, passoR = 9;
+  const txt = String(n); c.font = '700 11px "Saira Condensed", Rubik, sans-serif';
+  const tw = c.measureText(txt).width, caras = gente.length ? fr * 2 + (gente.length - 1) * passoR : 9;
+  const fw = 6 + caras + 4 + tw + 7, fy = y - 2, x0 = x - fw / 2;
   c.save();
-  c.fillStyle = meu ? '#ffd84d' : cor; c.beginPath(); c.roundRect(x - fw / 2, fy - 9, fw, 16, 8); c.fill();
-  c.fillStyle = meu ? '#7a5200' : 'rgba(0,0,0,.35)'; c.beginPath(); c.arc(x - fw / 2 + 8, fy - 1, 4.5, 0, Math.PI * 2); c.fill();
+  c.fillStyle = meu ? '#ffd84d' : cor; c.beginPath(); c.roundRect(x0, fy - 10, fw, 18, 9); c.fill();
+  if (gente.length) gente.forEach((p, i) => rosto(c, x0 + 6 + fr + i * passoR, fy - 1, fr, p, meu ? '#ffd84d' : cor));
+  else { c.fillStyle = meu ? '#7a5200' : 'rgba(0,0,0,.35)'; c.beginPath(); c.arc(x0 + 10, fy - 1, 4.5, 0, Math.PI * 2); c.fill(); }
   c.fillStyle = meu ? '#1b1405' : '#fff'; c.font = '700 11px "Saira Condensed", Rubik, sans-serif'; c.textAlign = 'left'; c.textBaseline = 'middle';
-  c.fillText(txt, x - fw / 2 + 15, fy - 0.5);
+  c.fillText(txt, x0 + 6 + caras + 4, fy - 0.5);
+  c.restore();
+}
+
+/** O cartão com os nomes de quem apostou no corredor sob o ponteiro. */
+function cartaoApostas(c: CanvasRenderingContext2D, W: number, x: number, y: number, alvo: Gente | undefined, gente: Gente[]) {
+  if (!gente.length) return;
+  const MAX = 6, linhas = gente.slice(0, MAX), resto = gente.length - linhas.length;
+  const titulo = `${gente.length} ${gente.length === 1 ? 'aposta' : 'apostas'}${alvo ? ` em ${primeiroNome(alvo)}` : ''}`;
+  c.save();
+  c.font = '700 12px "Saira Condensed", Rubik, sans-serif';
+  let w = c.measureText(titulo).width + 24;
+  c.font = '600 12px Rubik, sans-serif';
+  for (const p of linhas) w = Math.max(w, c.measureText(p.voce ? 'Você' : p.nome).width + 44);
+  w = Math.min(w, 240);
+  const h = 28 + linhas.length * 20 + (resto > 0 ? 16 : 0) + 6;
+  const bx = Math.max(8, Math.min(W - w - 8, x - w / 2)), by = Math.max(8, y - h - 14);
+  c.fillStyle = 'rgba(8,10,22,.94)'; c.strokeStyle = 'rgba(255,216,77,.6)'; c.lineWidth = 1.5;
+  c.beginPath(); c.roundRect(bx, by, w, h, 10); c.fill(); c.stroke();
+  c.textAlign = 'left'; c.textBaseline = 'middle';
+  c.fillStyle = '#ffd84d'; c.font = '700 12px "Saira Condensed", Rubik, sans-serif'; c.fillText(`🪙 ${titulo}`, bx + 10, by + 15);
+  linhas.forEach((p, i) => {
+    const ly = by + 36 + i * 20;
+    rosto(c, bx + 19, ly, 8, p);
+    c.fillStyle = p.voce ? '#ffd84d' : '#e8eefc'; c.font = '600 12px Rubik, sans-serif';
+    let nm = p.voce ? 'Você' : p.nome; while (nm.length > 3 && c.measureText(nm).width > w - 44) nm = nm.slice(0, -2) + '…';
+    c.fillText(nm, bx + 33, ly + 0.5);
+  });
+  if (resto > 0) { c.fillStyle = 'rgba(232,238,252,.6)'; c.font = '600 11px Rubik, sans-serif'; c.fillText(`e mais ${resto}`, bx + 33, by + 36 + linhas.length * 20 - 2); }
   c.restore();
 }
 
@@ -168,7 +214,7 @@ export interface Cena {
 /** Liga o canvas a um tema. `aoPalpite` recebe o corredor clicado. */
 export function criarCena(cv: HTMLCanvasElement, desenha: DesenhaTema, agora: () => number, aoPalpite: (id: string) => void): Cena {
   const c = cv.getContext('2d')!;
-  let tema = desenha, estado: Estado = { corredores: [], plateia: [], premio: null, iniciaEm: null, palpite: { ativo: false, meu: null, votos: {} } };
+  let tema = desenha, estado: Estado = { corredores: [], plateia: [], premio: null, iniciaEm: null, palpite: { ativo: false, meu: null, votos: {}, quem: {} }, apostas: {} };
   let W = 960, k = 1, dpr = 1, vivo = true, raf = 0, ult = 0;
   let mouse: { x: number; y: number } | null = null;
   let alvos: Array<{ id: string; x: number; y: number; r: number }> = [];
@@ -224,6 +270,9 @@ export function criarCena(cv: HTMLCanvasElement, desenha: DesenhaTema, agora: ()
       c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, cv.width, cv.height); c.drawImage(fundoCv, 0, 0);
       c.setTransform(...m);
       tema.quadro(q);
+      // por cima de tudo: quem apostou no corredor sob o ponteiro
+      const sob = mouse && acha(mouse);
+      if (sob) cartaoApostas(c, W, sob.x, sob.y - sob.r * 2.2, estado.corredores.find(g => g.id === sob.id), estado.apostas[sob.id] ?? []);
     } catch (err) { console.error('[corrida] lobby novo', err); }
     const d0 = performance.now() - ini;
     custo = custo ? custo * 0.9 + d0 * 0.1 : d0;
