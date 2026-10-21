@@ -1962,7 +1962,9 @@ export async function fetchPedidosNr(
     .select('*')
     .eq('empresa_id', empresaId);
   if (apenasAbertos) q = q.eq('status', 'pendente');
-  if (setorId) q = q.eq('setor_id', setorId);
+  // Os DOIS lados: o setor de quem pede e o do registro que já existia — o
+  // líder do segundo lado também assina. Ver `pedidosDoSetor`.
+  if (setorId) q = q.or(`setor_id.eq.${setorId},conflito_setor_id.eq.${setorId}`);
 
   const { data, error } = await q;
   if (error) {

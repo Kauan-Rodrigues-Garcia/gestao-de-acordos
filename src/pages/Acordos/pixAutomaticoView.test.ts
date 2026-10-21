@@ -864,6 +864,17 @@ describe('pedidosDoSetor', () => {
   it('sem foco devolve a fila inteira', () => {
     expect(pedidosDoSetor(fila, null)).toHaveLength(3);
   });
+
+  /**
+   * O NR 13052205 (21/10/2026): o Receptivo pediu um NR registrado no Play 2.
+   * O líder do Play 2 assina o lado dele — e não via o pedido.
+   */
+  it('pedido entre setores aparece para os DOIS lados', () => {
+    const entre = [{ id: 'nr-13052205', setor_id: 'receptivo', conflito_setor_id: 'play-2' }];
+    expect(pedidosDoSetor(entre, 'play-2').map(p => p.id)).toEqual(['nr-13052205']);
+    expect(pedidosDoSetor(entre, 'receptivo').map(p => p.id)).toEqual(['nr-13052205']);
+    expect(pedidosDoSetor(entre, 'play-3')).toEqual([]);
+  });
 });
 
 describe('setoresComAcordosPix', () => {

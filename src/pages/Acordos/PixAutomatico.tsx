@@ -1497,8 +1497,11 @@ export function PixAutomatico() {
       const setor = i.setor_id ?? operadorSetor[i.operador_id] ?? null;
       if (setor && m[setor]) m[setor].acordos += 1;
     }
+    // O pedido entre dois setores conta no chip dos DOIS — os dois líderes assinam.
     for (const pedido of pedidosNr) {
-      if (pedido.setor_id && m[pedido.setor_id]) m[pedido.setor_id].pedidos += 1;
+      for (const setor of new Set([pedido.setor_id, pedido.conflito_setor_id])) {
+        if (setor && m[setor]) m[setor].pedidos += 1;
+      }
     }
     return m;
   }, [setores, itens, mes, operadorSetor, pedidosNr]);

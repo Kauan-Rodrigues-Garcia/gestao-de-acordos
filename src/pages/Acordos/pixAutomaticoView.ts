@@ -761,13 +761,29 @@ export function rankingPixSetor(
  * cadastro, e a RPC copia o setor do perfil no momento do pedido. Escondido de
  * todos, viraria fila orfa — ninguem decide, e o segundo registro nunca entra.
  * Quem enxerga a empresa inteira e o dono natural desse caso.
+ *
+ * ## Os DOIS lados do pedido (21/10/2026)
+ *
+ * O pedido entre setores tem dois lados que assinam: o setor de quem pede
+ * (`setor_id`) e o do registro que ja existia (`conflito_setor_id`). Recortar
+ * so pelo primeiro escondia o pedido do lider do SEGUNDO lado — o NR 13052205,
+ * pedido pelo Receptivo contra um registro do Play 2, nunca chegou ao lider do
+ * Play 2, e a disputa ficou parada esperando a assinatura dele. «Outro setor»
+ * e o pedido em que o setor nao e nenhum dos dois lados.
  */
-export function pedidosDoSetor<T extends { setor_id: string | null }>(
+export function pedidoEhDoSetor(
+  pedido: { setor_id: string | null; conflito_setor_id?: string | null },
+  setorId: string,
+): boolean {
+  return pedido.setor_id === setorId || pedido.conflito_setor_id === setorId;
+}
+
+export function pedidosDoSetor<T extends { setor_id: string | null; conflito_setor_id?: string | null }>(
   pedidos: T[],
   setorFoco: string | null,
 ): T[] {
   if (!setorFoco) return pedidos;
-  return pedidos.filter(p => p.setor_id === setorFoco);
+  return pedidos.filter(p => pedidoEhDoSetor(p, setorFoco));
 }
 
 /**
