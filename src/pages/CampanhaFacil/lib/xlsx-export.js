@@ -45,9 +45,11 @@
     // contrato, empresa, os dois números, a mensagem e quem encaminha. CPF,
     // valores, STATUS e PENDÊNCIAS saíram — a mensagem já leva os valores.
     // Mesma lista do CSV (`CAMPAIGN_COLUMNS` em campaign-core.js).
-    const headers = ["NOME", "CONTRATO (NR)", "EMPRESA", "WHATSAPP", "FONE 2", "MENSAGEM", "ENCAMINHADA POR"];
-    const widths = [31, 18, 23, 19, 19, 86, 25];
-    const styles = [2, 2, 2, 2, 2, 7, 8];
+    // VALOR EM ABERTO (21/10/2026): o total do contrato, em R$ (estilo 3).
+    const headers = ["NOME", "CONTRATO (NR)", "EMPRESA", "VALOR EM ABERTO", "WHATSAPP", "FONE 2", "MENSAGEM", "ENCAMINHADA POR"];
+    const widths = [31, 18, 23, 18, 19, 19, 86, 25];
+    const styles = [2, 2, 2, 3, 2, 2, 7, 8];
+    const COLUNA_VALOR = 3;
     const columns = widths
       .map((width, index) => `<col min="${index + 1}" max="${index + 1}" width="${width}" customWidth="1"/>`)
       .join("");
@@ -57,8 +59,13 @@
 
     items.forEach((item, itemIndex) => {
       const rowNumber = itemIndex + 2;
-      const values = [item.name, item.contract, item.company, item.phone, item.phone2 || "", item.message, item.sender];
-      const cells = values.map((value, index) => inlineCell(`${columnLetter(index)}${rowNumber}`, value, styles[index]));
+      const values = [item.name, item.contract, item.company, item.openValueTotal, item.phone, item.phone2 || "", item.message, item.sender];
+      const cells = values.map((value, index) => {
+        const ref = `${columnLetter(index)}${rowNumber}`;
+        if (index !== COLUNA_VALOR) return inlineCell(ref, value, styles[index]);
+        // Número de verdade, para somar no Excel; sem valor no arquivo, célula vazia.
+        return value == null ? inlineCell(ref, "", 2) : numericCell(ref, value, styles[index]);
+      });
       rows.push(buildRow(rowNumber, cells, 30));
     });
 

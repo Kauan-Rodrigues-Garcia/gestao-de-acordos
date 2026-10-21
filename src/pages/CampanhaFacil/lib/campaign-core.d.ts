@@ -96,6 +96,10 @@ export interface CampaignItem {
   protest: number | null;
   value: number | null;
   openValue: number | null;
+  /** «Valor Aberto» do arquivo, também no 245 (que não o usa na mensagem). `null` = não veio. */
+  openValueFile: number | null;
+  /** Soma de `openValueFile` do mesmo contrato na campanha — a coluna VALOR EM ABERTO. */
+  openValueTotal: number | null;
   updatedValue: number | null;
   overdueDiscounted: number | null;
   settlement: number | null;

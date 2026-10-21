@@ -906,6 +906,9 @@ Contrato: *{{contrato}}*
         normalized,
         sourceType: "report-245",
         financialDataAvailable: false,
+        // Só para a coluna VALOR EM ABERTO do Excel (21/10/2026). Fica fora de
+        // `values` de propósito: a mensagem do preventivo continua sem valores.
+        openValueFile: reportValue(row, "Valor Aberto"),
       });
       stats.included += 1;
     });
@@ -1232,6 +1235,12 @@ Contrato: *{{contrato}}*
       : null;
     const value = financialDataAvailable ? (parsedValue.valid ? parsedValue.value : 0) : null;
     const openValue = financialDataAvailable ? (parsedOpenValue.valid ? parsedOpenValue.value : 0) : null;
+    // O valor em aberto que vai para a coluna do Excel: o do arquivo, inclusive
+    // no 245 (que não usa valores na mensagem). `null` = o arquivo não traz.
+    const parsedOpenValueFile = financialDataAvailable
+      ? parsedOpenValue
+      : parseNumberStrict(record?.openValueFile, { minExclusive: 0 });
+    const openValueFile = parsedOpenValueFile.valid ? parsedOpenValueFile.value : null;
     const updatedValue = financialDataAvailable ? (parsedUpdatedValue.valid ? parsedUpdatedValue.value : 0) : null;
     const saleType = getField(record, "Tp. Venda", "Tipo Venda");
     const whats = getField(record, "Whats Titular");
@@ -1350,6 +1359,9 @@ Contrato: *{{contrato}}*
       protest,
       value,
       openValue,
+      openValueFile,
+      // Preenchido por `buildCampaign`: a soma do contrato na campanha inteira.
+      openValueTotal: openValueFile,
       updatedValue,
       overdueDiscounted,
       settlement,
@@ -1462,7 +1474,7 @@ Contrato: *{{contrato}}*
     const requiresFinancialData = templateRequiresFinancialData(template);
     const mailingFieldsUsed = mailingFieldsInTemplate(template);
 
-    return records.map((record, index) => {
+    const items = records.map((record, index) => {
       const item = deriveRecord(record, discounts);
       if (!item.financialDataAvailable && requiresFinancialData) {
         const issue = "O modelo selecionado exige valores financeiros indisponíveis no relatório 245";
@@ -1486,6 +1498,20 @@ Contrato: *{{contrato}}*
       item.message = finishMessage(renderTemplate(template, variablesFor(item, discounts)));
       return item;
     });
+
+    // VALOR EM ABERTO total (21/10/2026): o mesmo NR em mais de uma linha soma,
+    // e cada linha do contrato mostra o total dele. Sem valor no arquivo, vazio.
+    const totalPorContrato = new Map();
+    items.forEach((item) => {
+      const nr = String(item.contract ?? "").trim();
+      if (!nr || item.openValueFile == null) return;
+      totalPorContrato.set(nr, (totalPorContrato.get(nr) ?? 0) + Math.round(item.openValueFile * 100));
+    });
+    items.forEach((item) => {
+      const nr = String(item.contract ?? "").trim();
+      if (nr && totalPorContrato.has(nr)) item.openValueTotal = totalPorContrato.get(nr) / 100;
+    });
+    return items;
   }
 
   function csvCell(value) {
@@ -1520,11 +1546,12 @@ Contrato: *{{contrato}}*
    * leva os valores. Mesma lista do Excel (`xlsx-export.js`).
    */
   const CAMPAIGN_COLUMNS = Object.freeze([
-    "NOME", "CONTRATO (NR)", "EMPRESA", "WHATSAPP", "FONE 2", "MENSAGEM", "ENCAMINHADA POR",
+    "NOME", "CONTRATO (NR)", "EMPRESA", "VALOR EM ABERTO", "WHATSAPP", "FONE 2", "MENSAGEM", "ENCAMINHADA POR",
   ]);
 
   function campaignRow(item) {
-    return [item.name, item.contract, item.company, item.phone, item.phone2 || "", item.message, item.sender];
+    const aberto = item.openValueTotal == null ? "" : formatCurrency(item.openValueTotal);
+    return [item.name, item.contract, item.company, aberto, item.phone, item.phone2 || "", item.message, item.sender];
   }
 
   function campaignToCsv(items) {

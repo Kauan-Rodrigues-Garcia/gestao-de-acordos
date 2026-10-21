@@ -12,6 +12,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { CampaignCore } from './lib/campaign-core';
+import { CampaignXlsx } from './lib/xlsx-export';
 
 // ── 245: cabeçalho real do .xls ─────────────────────────────────────────────
 const CAB_245 = [
@@ -174,6 +175,8 @@ describe('247 — mantém os valores', () => {
     expect(item.settlement).toBeGreaterThan(0);
     expect(item.name).toBe('MAXMYLIANO DE SOUSA MOURAO');
     expect(item.contract).toBe('13002180');
+    // A coluna VALOR EM ABERTO do Excel é o «Valor Aberto» do arquivo.
+    expect(item.openValueFile).toBe(4725);
   });
 
   it('lê acento em Windows-1252 sem quebrar', () => {
@@ -256,17 +259,39 @@ describe('exportação do preventivo', () => {
     return CampaignCore.buildCampaign(parsed.records, { senders: ['Bianca'], template: preventivo.body });
   }
 
-  it('CSV só com as colunas de envio (07/10/2026), sem campos financeiros', () => {
+  it('CSV só com as colunas de envio (07/10/2026) e o VALOR EM ABERTO (21/10/2026)', () => {
     const csv = CampaignCore.campaignToCsv(itens());
     const cabecalho = csv.split('\r\n')[0];
 
     expect(cabecalho.replace(/^\uFEFF/, '').split(';')).toEqual([
-      'NOME', 'CONTRATO (NR)', 'EMPRESA', 'WHATSAPP', 'FONE 2', 'MENSAGEM', 'ENCAMINHADA POR',
+      'NOME', 'CONTRATO (NR)', 'EMPRESA', 'VALOR EM ABERTO', 'WHATSAPP', 'FONE 2', 'MENSAGEM', 'ENCAMINHADA POR',
     ]);
-    for (const financeiro of ['QUITACAO', 'PARCELA', 'JUNCAO', 'ANUAL', 'CARTAO', 'VALOR']) {
+    // Os valores de negociação continuam fora — a mensagem é que os leva.
+    for (const financeiro of ['QUITACAO', 'PARCELA', 'JUNCAO', 'ANUAL', 'CARTAO']) {
       expect(cabecalho).not.toContain(financeiro);
     }
     expect(csv).toContain('37999176351');
+  });
+
+  it('VALOR EM ABERTO: o do 245, somado quando o mesmo NR vem em mais de uma linha', () => {
+    const parsed = CampaignCore.parseReport245(planilha245([
+      linha245({ 'Nr.Documento': '100', 'Valor Aberto': '190.00', 'Telefone 1': '999170001' }),
+      linha245({ 'Nr.Documento': '100', 'Valor Aberto': '190.00', 'Telefone 1': '999170002' }),
+      linha245({ 'Nr.Documento': '200', 'Valor Aberto': '1,330.50', 'Telefone 1': '999170003' }),
+      linha245({ 'Nr.Documento': '300', 'Valor Aberto': '', 'Telefone 1': '999170004' }),
+    ]));
+    const preventivo = CampaignCore.TEMPLATES.find((t) => t.id === 'preventivo')!;
+    const campanha = CampaignCore.buildCampaign(parsed.records, { senders: ['Bianca'], template: preventivo.body });
+    expect(campanha.map((i) => [i.contract, i.openValueTotal])).toEqual([
+      ['100', 380], ['100', 380], ['200', 1330.5], ['300', null],
+    ]);
+    // A mensagem do preventivo continua sem dinheiro.
+    expect(campanha[0].message).not.toMatch(/R\$/);
+  });
+
+  it('o Excel leva o VALOR EM ABERTO como número em R$', () => {
+    const bytes = CampaignXlsx.createWorkbook(itens());
+    expect(CampaignXlsx.isValidWorkbook(bytes)).toBe(true);
   });
 
   it('Fone 2 é o segundo número do relatório, diferente do primeiro', () => {
