@@ -141,6 +141,11 @@ export interface Perfil {
    * anteriores a ele não passaram por essa conferência.
    */
   subgrupo_id?: string | null;
+  /**
+   * Contrato de menor aprendiz (migration 20261021130000). Só cadastro, por
+   * enquanto: nenhuma meta, jornada ou régua lê a marcação.
+   */
+  menor_aprendiz?: boolean;
   empresa_id?: string;
   usuario?: string;
   foto_url?: string | null;

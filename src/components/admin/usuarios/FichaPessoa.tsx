@@ -121,6 +121,7 @@ export function FichaPessoa({
             <span className="text-xs font-semibold">{PERFIL_LABELS[u.perfil] ?? u.perfil}</span>
             {marca && <span className={cn('us-tag', marca)}>{marca === 'bp' ? 'BookPlay' : 'PaguePlay'}</span>}
             {cofen && <span className="us-tag cofen">Regra Cofen</span>}
+            {u.menor_aprendiz && <span className="us-tag">Menor aprendiz</span>}
             <span className="inline-flex items-center gap-1.5 text-xs font-semibold" style={{ color: COR_SITUACAO[situacao] }}>
               <span className="us-ponto" style={{ background: COR_SITUACAO[situacao] }} />{ROTULO_SITUACAO[situacao]}
               {situacao === 'ferias' && u.ferias_ate && <span className="font-normal text-muted-foreground">até {u.ferias_ate.slice(8, 10)}/{u.ferias_ate.slice(5, 7)}</span>}

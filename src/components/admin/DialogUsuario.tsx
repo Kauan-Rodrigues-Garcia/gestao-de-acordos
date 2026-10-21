@@ -81,6 +81,13 @@ export interface UserForm {
    * alguma coisa sobre alguém.
    */
   robo:       boolean;
+  /**
+   * Contrato de menor aprendiz? (`perfis.menor_aprendiz`)
+   *
+   * Controle de cadastro, e só isso: nenhuma meta, jornada ou régua lê a
+   * marcação. Quem marca é quem mexe no cargo (`usuarios_editar_cargo`).
+   */
+  menor_aprendiz: boolean;
 }
 
 /** O que o cargo de quem está editando pode mexer nesta pessoa. */
@@ -535,6 +542,32 @@ export function DialogUsuario({
                 </label>
               </div>
             )}
+
+            {/* Menor aprendiz — cadastro, para controle. Mesma chave do cargo. */}
+            <div className="space-y-1.5">
+              <Label className="text-xs">Contrato</Label>
+              {pode.cargo ? (
+                <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-border bg-muted/20 px-3 py-2">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
+                    checked={form.menor_aprendiz}
+                    onChange={e => setForm(f => ({ ...f, menor_aprendiz: e.target.checked }))}
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium">Menor aprendiz</span>
+                    <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">
+                      Marcação de controle. Não muda meta nem recebimento.
+                    </span>
+                  </span>
+                </label>
+              ) : (
+                <CampoTrancado
+                  valor={form.menor_aprendiz ? 'Menor aprendiz' : 'Não é menor aprendiz'}
+                  motivo={SEM_PERMISSAO}
+                />
+              )}
+            </div>
 
             {/* Setor: escolhido ao CRIAR, somente leitura ao editar.
                 ─────────────────────────────────────────────────────────────

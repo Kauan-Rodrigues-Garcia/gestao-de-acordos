@@ -32,6 +32,7 @@ const PESSOA = {
 const FORM: UserForm = {
   nome: 'Ana Souza', email: 'ana@empresa.com', usuario: 'ana.souza',
   senha: '', perfil: 'operador', setor_id: 'setor-1', empresa_id: 'emp-1',
+  robo: false, menor_aprendiz: false,
 };
 
 const SETORES = [{ id: 'setor-1', nome: 'Play 1', ativo: true, empresa_id: 'emp-1' }] as Setor[];

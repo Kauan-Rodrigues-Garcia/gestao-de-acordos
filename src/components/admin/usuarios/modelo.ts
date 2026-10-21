@@ -89,9 +89,11 @@ export interface Filtros {
   cargo: string | null;
   situacao: FiltroSituacao | null;
   pendencia: ChavePendencia | null;
+  /** Só quem tem contrato de menor aprendiz (`perfis.menor_aprendiz`). */
+  aprendiz: boolean;
 }
 
-export const FILTROS_VAZIOS: Filtros = { marca: null, cargo: null, situacao: null, pendencia: null };
+export const FILTROS_VAZIOS: Filtros = { marca: null, cargo: null, situacao: null, pendencia: null, aprendiz: false };
 
 export function passaNosFiltros(
   u: Perfil, f: Filtros,
@@ -102,6 +104,7 @@ export function passaNosFiltros(
   if (f.situacao === 'online' && !ctx.online(u.id)) return false;
   if (f.situacao && f.situacao !== 'online' && (u.situacao ?? 'ativo') !== f.situacao) return false;
   if (f.pendencia && !temPendencia(u, f.pendencia, ctx)) return false;
+  if (f.aprendiz && !u.menor_aprendiz) return false;
   return true;
 }
 
@@ -112,9 +115,10 @@ const campoCsv = (v: string) => (/[";\n]/.test(v) ? `"${v.replace(/"/g, '""')}"`
 /** A lista como CSV (separador `;`, que o Excel em português abre direto). */
 export function listaEmCsv(linhas: readonly {
   nome: string; login: string; email: string; cargo: string; setor: string; equipe: string; marca: string; situacao: string;
+  aprendiz: string;
 }[]): string {
-  const cab = ['Nome', 'Login', 'E-mail', 'Cargo', 'Setor', 'Equipe', 'Marca', 'Situação'];
-  const corpo = linhas.map(l => [l.nome, l.login, l.email, l.cargo, l.setor, l.equipe, l.marca, l.situacao].map(campoCsv).join(';'));
+  const cab = ['Nome', 'Login', 'E-mail', 'Cargo', 'Setor', 'Equipe', 'Marca', 'Situação', 'Menor aprendiz'];
+  const corpo = linhas.map(l => [l.nome, l.login, l.email, l.cargo, l.setor, l.equipe, l.marca, l.situacao, l.aprendiz].map(campoCsv).join(';'));
   // O BOM na frente faz o Excel ler os acentos como UTF-8.
   const bom = String.fromCharCode(0xFEFF);
   return bom + [cab.join(';'), ...corpo].join('\r\n');

@@ -52,15 +52,18 @@ describe('os filtros', () => {
     expect(passaNosFiltros(pessoa({ id: 'x' }), { ...FILTROS_VAZIOS, situacao: 'online' }, c)).toBe(false);
     expect(passaNosFiltros(u, { ...FILTROS_VAZIOS, situacao: 'ferias' }, c)).toBe(false);
     expect(passaNosFiltros(pessoa({ id: 'outro' }), { ...FILTROS_VAZIOS, pendencia: 'sem_meta' }, c)).toBe(true);
+    // Menor aprendiz (21/10/2026): só quem tem a marcação.
+    expect(passaNosFiltros(u, { ...FILTROS_VAZIOS, aprendiz: true }, c)).toBe(false);
+    expect(passaNosFiltros(pessoa({ menor_aprendiz: true }), { ...FILTROS_VAZIOS, aprendiz: true }, c)).toBe(true);
   });
 });
 
 describe('exportar', () => {
   it('CSV com «;», BOM para o Excel e aspas onde precisa', () => {
-    const csv = listaEmCsv([{ nome: 'Ana; Paula', login: 'ana', email: 'a@x', cargo: 'Operador', setor: 'Play 1', equipe: '', marca: 'BookPlay', situacao: 'Ativo' }]);
+    const csv = listaEmCsv([{ nome: 'Ana; Paula', login: 'ana', email: 'a@x', cargo: 'Operador', setor: 'Play 1', equipe: '', marca: 'BookPlay', situacao: 'Ativo', aprendiz: 'Não' }]);
     expect(csv.charCodeAt(0)).toBe(0xFEFF);
     const linhas = csv.slice(1).split('\r\n');
-    expect(linhas[0]).toBe('Nome;Login;E-mail;Cargo;Setor;Equipe;Marca;Situação');
-    expect(linhas[1]).toBe('"Ana; Paula";ana;a@x;Operador;Play 1;;BookPlay;Ativo');
+    expect(linhas[0]).toBe('Nome;Login;E-mail;Cargo;Setor;Equipe;Marca;Situação;Menor aprendiz');
+    expect(linhas[1]).toBe('"Ana; Paula";ana;a@x;Operador;Play 1;;BookPlay;Ativo;Não');
   });
 });

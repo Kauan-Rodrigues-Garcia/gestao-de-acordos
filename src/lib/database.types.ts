@@ -5058,6 +5058,7 @@ export type Database = {
           foto_url: string | null
           id: string
           lider_id: string | null
+          menor_aprendiz: boolean
           nome: string
           perfil: string
           pet_despedida: string | null
@@ -5089,6 +5090,7 @@ export type Database = {
           foto_url?: string | null
           id: string
           lider_id?: string | null
+          menor_aprendiz?: boolean
           nome: string
           perfil: string
           pet_despedida?: string | null
@@ -5120,6 +5122,7 @@ export type Database = {
           foto_url?: string | null
           id?: string
           lider_id?: string | null
+          menor_aprendiz?: boolean
           nome?: string
           perfil?: string
           pet_despedida?: string | null

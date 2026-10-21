@@ -422,7 +422,7 @@ export default function AdminUsuarios() {
   });
 
   const [saving,      setSaving]      = useState(false);
-  const [form,        setForm]        = useState<UserForm>({ nome: '', email: '', usuario: '', senha: '', perfil: 'operador', setor_id: '', empresa_id: '', robo: false });
+  const [form,        setForm]        = useState<UserForm>({ nome: '', email: '', usuario: '', senha: '', perfil: 'operador', setor_id: '', empresa_id: '', robo: false, menor_aprendiz: false });
   /*
    * Qual setor é o Núcleo na empresa do FORMULÁRIO — o super_admin cadastra
    * gente em outra empresa, e o Núcleo dela é outro. Decide onde o cargo
@@ -623,6 +623,7 @@ export default function AdminUsuarios() {
       // Pessoa até que alguém diga o contrário. O prefixo `ia_` do login é
       // pista e nunca cadastro — quem marca é a caixa, não a string.
       robo: false,
+      menor_aprendiz: false,
     });
     setDialogOpen(true);
   }
@@ -633,6 +634,7 @@ export default function AdminUsuarios() {
       nome: u.nome, email: u.email, usuario: u.usuario ?? '', senha: '',
       perfil: u.perfil, setor_id: u.setor_id ?? '', empresa_id: u.empresa_id ?? '',
       robo: (u as { robo?: boolean | null }).robo === true,
+      menor_aprendiz: u.menor_aprendiz === true,
     });
     setNovaSenha('');
     setDialogOpen(true);
@@ -686,6 +688,12 @@ export default function AdminUsuarios() {
      */
     if (mostrarRobo && podeNoUsuario.cargo) {
       updatePayload.robo = form.robo;
+    }
+    // Menor aprendiz é cadastro de contrato: mesma chave do cargo. Só viaja
+    // quando muda — com a migration 20261021130000 pendente, mandá-la sempre
+    // faria o banco recusar toda edição de perfil.
+    if (podeNoUsuario.cargo && form.menor_aprendiz !== (editando?.menor_aprendiz === true)) {
+      updatePayload.menor_aprendiz = form.menor_aprendiz;
     }
     /*
      * Nada a gravar não é erro. Acontece quando o cargo só podia redefinir a
@@ -746,7 +754,7 @@ export default function AdminUsuarios() {
         // permissão de quem pede e grava o cargo. O `signUp` no navegador
         // exigia o cadastro público ligado — por onde qualquer pessoa criava a
         // própria conta como super_admin (auditoria de segurança, 06/10/2026).
-        await criarUsuario({
+        const novoId = await criarUsuario({
           nome: form.nome.trim(),
           email: resolvedEmail,
           senha: form.senha,
@@ -757,6 +765,13 @@ export default function AdminUsuarios() {
           setor_id: cargoEscopoEmpresa ? null : (form.setor_id || null),
           empresa_id: empresaId,
         });
+        // A rota de criação não conhece a marcação; ela vai num update logo
+        // depois. Falhar aqui não desfaz a conta — avisa e segue.
+        if (form.menor_aprendiz && podeNoUsuario.cargo) {
+          const { error: errAprendiz } = await supabase.from('perfis')
+            .update({ menor_aprendiz: true }).eq('id', novoId);
+          if (errAprendiz) toast.warning('Usuário criado, mas a marcação de menor aprendiz não foi gravada. Edite a pessoa e marque de novo.');
+        }
         toast.success('Usuário criado com sucesso!');
       }
       setDialogOpen(false);
@@ -1098,7 +1113,7 @@ export default function AdminUsuarios() {
     comMeta: new Set(metasDoMes.keys()),
   };
   const ctxFiltro = { ...ctxPendencia, marcaDe, online: (id: string) => onlineIds.has(id) };
-  const filtrosAtivos = !!(filtros.marca || filtros.cargo || filtros.situacao || filtros.pendencia);
+  const filtrosAtivos = !!(filtros.marca || filtros.cargo || filtros.situacao || filtros.pendencia || filtros.aprendiz);
 
   /*
    * Os clones de OUTRO setor que esta tela mostra, antes dos filtros — em
@@ -1268,6 +1283,7 @@ export default function AdminUsuarios() {
       cargo: PERFIL_LABELS[u.perfil] ?? u.perfil, setor: nomeSetor(u) === '—' ? '' : nomeSetor(u),
       equipe: nomeEquipe(u) ?? '', marca: marcaDe(u) === 'bp' ? 'BookPlay' : marcaDe(u) === 'pp' ? 'PaguePlay' : '',
       situacao: (u.situacao ?? 'ativo') === 'ferias' ? 'Férias' : (u.situacao ?? 'ativo') === 'desligado' ? 'Desligado' : 'Ativo',
+      aprendiz: u.menor_aprendiz ? 'Sim' : 'Não',
     })));
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
     const a = document.createElement('a');
@@ -1466,6 +1482,15 @@ export default function AdminUsuarios() {
                 ))}
               </SelectContent>
             </Select>
+
+            <button type="button" aria-pressed={filtros.aprendiz}
+              onClick={() => setFiltros(f => ({ ...f, aprendiz: !f.aprendiz }))}
+              className={cn('h-9 px-3 rounded-lg border text-xs font-semibold transition-colors',
+                filtros.aprendiz
+                  ? 'border-primary/40 bg-primary/10 text-primary'
+                  : 'border-input text-muted-foreground hover:text-foreground')}>
+              Menor aprendiz
+            </button>
 
             {filtrosAtivos && (
               <Button variant="ghost" size="sm" className="h-9 text-xs gap-1" onClick={() => setFiltros(FILTROS_VAZIOS)}>

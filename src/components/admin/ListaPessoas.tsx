@@ -376,6 +376,14 @@ function LinhaPessoa({
                 IA
               </span>
             )}
+            {u.menor_aprendiz && (
+              <span
+                className="text-[9px] bg-muted text-muted-foreground border border-border rounded px-1 py-0 font-semibold whitespace-nowrap shrink-0"
+                title="Menor aprendiz"
+              >
+                aprendiz
+              </span>
+            )}
             {ehClone && (
               <span
                 className="text-[9px] bg-warning/15 text-warning border border-warning/30 rounded px-1 py-0 font-semibold whitespace-nowrap shrink-0"

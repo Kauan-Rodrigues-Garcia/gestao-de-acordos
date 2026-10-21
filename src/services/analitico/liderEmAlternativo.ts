@@ -15,6 +15,11 @@
  * Fora do alternativo continua a regra de 29/09/2026 (`equipeDoLider.ts`): o
  * líder conta em todas as equipes que lidera.
  *
+ * ## A exceção: a equipe Treinamento (21/10/2026)
+ *
+ * Na equipe Treinamento, do setor alternativo Treinamento, o líder CONTA na
+ * equipe — Samara Chamarelli e Vanessa Pereira. Só nela: `EQUIPES_ALTERNATIVO_COM_LIDER`.
+ *
  * ## Como
  *
  * A composição já chega montada (ao vivo ou do retrato), com o líder em todas
@@ -25,6 +30,16 @@
  * Sem React e sem banco.
  */
 import type { OperadorEquipeInfo } from './analitico.service';
+
+/**
+ * Equipes de setor alternativo em que o líder conta na equipe, como fora do
+ * alternativo. Pelo id: há uma equipe «Treinamento» em cada setor, e só esta é
+ * a do setor alternativo. A mesma lista está em `fn_recebido_por_equipe`
+ * (20261021120000) — mudar aqui sem mudar lá desencontra Painel e desafio.
+ */
+export const EQUIPES_ALTERNATIVO_COM_LIDER: ReadonlySet<string> = new Set([
+  'f44b422a-2ef1-4eec-9fd0-1b46b370dd1d', // Treinamento (setor Treinamento)
+]);
 
 export interface EntradaLiderEmAlternativo {
   operadorEquipeMap: Record<string, OperadorEquipeInfo>;
@@ -47,7 +62,8 @@ export function liderNaoContaEmEquipeDeAlternativo(e: EntradaLiderEmAlternativo)
   }
   const operadorEquipeMap = { ...e.operadorEquipeMap };
   const equipesExtrasPorOperador = { ...e.equipesExtrasPorOperador };
-  const ehAlternativa = (eq: string) => alternativos.has(setorDaEquipe.get(eq) ?? '');
+  const ehAlternativa = (eq: string) =>
+    alternativos.has(setorDaEquipe.get(eq) ?? '') && !EQUIPES_ALTERNATIVO_COM_LIDER.has(eq);
 
   for (const [pessoa, equipes] of Object.entries(lideradas)) {
     const info = operadorEquipeMap[pessoa];

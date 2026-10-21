@@ -78,3 +78,44 @@ describe('o líder não conta na equipe de setor alternativo', () => {
     expect(s.operadorEquipeMap).toBe(base.operadorEquipeMap);
   });
 });
+
+/*
+ * A exceção de 21/10/2026: na equipe Treinamento do setor alternativo o líder
+ * conta na equipe. Samara lidera ela e as Treinamento de dois setores normais;
+ * Vanessa, só ela. Brunno, no Digital, segue a regra.
+ */
+describe('na equipe Treinamento o líder conta na equipe', () => {
+  const TRE = 'f44b422a-2ef1-4eec-9fd0-1b46b370dd1d';
+  const ALT = 'alt-treinamento', P1 = 'play1', P2 = 'play2';
+  const setorDaEquipe = new Map([[TRE, ALT], ['t1', P1], ['t2', P2], ['d1', DIG]]);
+  const nomeDaEquipe = new Map([[TRE, 'Treinamento'], ['t1', 'Treinamento'], ['t2', 'Treinamento'], ['d1', 'Digital 1']]);
+  const r = liderNaoContaEmEquipeDeAlternativo({
+    operadorEquipeMap: {
+      samara:  { equipe_id: 't1', equipe_nome: 'Treinamento', setor_id: P1 },
+      vanessa: { equipe_id: TRE, equipe_nome: 'Treinamento', setor_id: ALT },
+      brunno:  { equipe_id: 'd1', equipe_nome: 'Digital 1', setor_id: DIG },
+    },
+    equipesExtrasPorOperador: { samara: [TRE, 't2'] },
+    lideradas: { samara: [TRE, 't1', 't2'], vanessa: [TRE], brunno: ['d1'] },
+    setorDaEquipe, nomeDaEquipe,
+    alternativos: new Set([ALT, DIG]),
+  });
+
+  it('o líder fica na Treinamento', () => {
+    expect(r.operadorEquipeMap.vanessa.equipe_id).toBe(TRE);
+    expect(r.equipesExtrasPorOperador.samara).toEqual([TRE, 't2']);
+  });
+
+  it('o dinheiro do líder entra no card da Treinamento, uma vez cada', () => {
+    const porEquipe = somarPorEquipe({
+      resumos: [resumo('samara', 200), resumo('vanessa', 50)],
+      operadorEquipeMap: r.operadorEquipeMap, equipesExtrasPorOperador: r.equipesExtrasPorOperador,
+      creditosDeOrigem: [],
+    });
+    expect(porEquipe[TRE].bruto).toBe(250);
+  });
+
+  it('nas outras equipes de alternativo a regra continua', () => {
+    expect(r.operadorEquipeMap.brunno.equipe_id).toBeNull();
+  });
+});
