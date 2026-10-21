@@ -49,6 +49,12 @@ export interface EntradaPercentualRh {
   /** Feriados e quartis do mês (`metas_config_mes`). `null` = padrões. */
   configMes: MetasConfigMes | null;
   /**
+   * Os dias úteis do setor do operador, quando o setor tem os próprios
+   * (`lib/diasUteisDoSetor`). Ausente = os feriados e o `contar_dia_atual` de
+   * `configMes`. Os quartis continuam vindo de `configMes`.
+   */
+  diasDoSetor?: { feriados: string[]; contarDiaAtual: boolean } | null;
+  /**
    * «Hoje» em `yyyy-MM-dd`, de São Paulo.
    *
    * Entra como parâmetro em vez de sair de `new Date()` aqui porque uma
@@ -86,11 +92,13 @@ export interface PercentualRh {
  */
 export function calcularPercentualRh(e: EntradaPercentualRh): PercentualRh {
   const { ano, mes } = partesDoMes(e.mesApuracao);
-  const feriados = e.configMes?.feriados ?? [];
+  const feriados = e.diasDoSetor?.feriados ?? e.configMes?.feriados ?? [];
   const quartis  = e.configMes?.quartis?.length ? e.configMes.quartis : QUARTIS_PADRAO;
   // `contar_dia_atual` é decisão do mês configurado; num mês já encerrado ela
   // não muda nada, porque todos os dias úteis já passaram de qualquer forma.
-  const contarHoje = e.configMes?.contar_dia_atual === true;
+  const contarHoje = e.diasDoSetor
+    ? e.diasDoSetor.contarDiaAtual
+    : e.configMes?.contar_dia_atual === true;
   const inicio = e.inicioEquipeISO ?? undefined;
 
   const diasUteis = diasUteisDoMes(ano, mes, feriados, inicio);

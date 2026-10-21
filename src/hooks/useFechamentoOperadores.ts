@@ -37,6 +37,7 @@ import { invalidarSomasDeAjuste } from '@/services/analitico/ajusteManual.servic
 import { criarAgrupador } from '@/lib/agrupador';
 import { comecouAtualizacao } from '@/lib/estadoAtualizacao';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
+import { diasUteisDoSetor, type DiasUteisPorSetor } from '@/lib/diasUteisDoSetor';
 import { lerMetasExtras } from '@/services/comissao/entradaDoOperador';
 import {
   buscarEquipesComOperadores, buscarResumoOperadoresAnalitico,
@@ -71,6 +72,8 @@ interface BaseFechamento {
   quartis: QuartilConfig[];
   feriados: string[];
   contarHoje: boolean;
+  /** Setores com dias úteis próprios — ver `lib/diasUteisDoSetor`. */
+  porSetor: DiasUteisPorSetor;
   /** equipe_id → início do treinamento (só equipes em treinamento). */
   treino: Map<string, string | null>;
   composicao: ComposicaoEquipes;
@@ -200,6 +203,7 @@ export function useFechamentoOperadores({
         quartis: cfg.data?.quartis?.length ? cfg.data.quartis : QUARTIS_PADRAO,
         feriados: cfg.data?.feriados ?? [],
         contarHoje: cfg.data?.contar_dia_atual === true,
+        porSetor: cfg.porSetor ?? {},
         treino,
         composicao,
         temConfig: !!cfg.data,
@@ -256,10 +260,8 @@ export function useFechamentoOperadores({
     const setorDaEquipe = mapaSetorDaEquipe(composicao.equipes);
     const nomeDaEquipe = new Map(composicao.equipes.map(e => [e.id, e.nome]));
 
-    const totalUteis = diasUteisDoMes(ano, mesNum, base.feriados);
-    const decorridos = Math.max(
-      diasUteisDecorridos(ano, mesNum, base.feriados, getTodayISO(), undefined, base.contarHoje), 1,
-    );
+    const hoje = getTodayISO();
+    const geral = { data: { feriados: base.feriados, contar_dia_atual: base.contarHoje }, porSetor: base.porSetor };
 
     const montadas = base.perfis
       .filter(p => {
@@ -273,16 +275,16 @@ export function useFechamentoOperadores({
         return setores.has(setorId);
       })
       .map(p => {
-        // Treinamento: mesma redução de dias úteis da aba Quartis.
-        const inicio = p.equipe_id ? base.treino.get(p.equipe_id) : null;
-        const dias = inicio
-          ? {
-              totalUteis: diasUteisDoMes(ano, mesNum, base.feriados, inicio),
-              decorridos: Math.max(
-                diasUteisDecorridos(ano, mesNum, base.feriados, getTodayISO(), inicio, base.contarHoje), 1,
-              ),
-            }
-          : { totalUteis, decorridos };
+        // Os dias úteis do setor da pessoa (a exceção dele, se houver) e,
+        // no treinamento, a mesma redução da aba Quartis.
+        const regua = diasUteisDoSetor(geral, p.setor_id);
+        const inicio = (p.equipe_id ? base.treino.get(p.equipe_id) : null) ?? undefined;
+        const dias = {
+          totalUteis: diasUteisDoMes(ano, mesNum, regua.feriados, inicio),
+          decorridos: Math.max(
+            diasUteisDecorridos(ano, mesNum, regua.feriados, hoje, inicio, regua.contarDiaAtual), 1,
+          ),
+        };
 
         const meta = base.metas.get(p.id);
         const manual = manuais.get(p.id) ?? MANUAL_VAZIO;

@@ -25,6 +25,7 @@ import { diasUteisDoMes, diasUteisDecorridos, QUARTIS_PADRAO } from '@/lib/diasU
 import { ehMesAtual } from '@/lib/mesReferencia';
 import { buscarPessoasDoRetrato, pessoasDoMes } from '@/services/analitico/pessoasDoMes';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
+import { diasUteisDoSetor, type DiasUteisPorSetor } from '@/lib/diasUteisDoSetor';
 import {
   buscarEquipesComOperadores, buscarLideresDoRetrato, buscarRecebidoPorDia,
   buscarResumoOperadoresAnalitico, operadoresDaEquipe,
@@ -45,6 +46,8 @@ interface Base {
   quartis: QuartilConfig[];
   feriados: string[];
   contarHoje: boolean;
+  /** Setores com dias úteis próprios — ver `lib/diasUteisDoSetor`. */
+  porSetor: DiasUteisPorSetor;
   identidade: Record<string, { nome: string; fotoUrl: string | null }>;
   treino: Record<string, string | null>;
   lideres: Record<string, LiderInfo[]>;
@@ -129,6 +132,7 @@ export function useEquipesDiretoria(
           quartis: config.data?.quartis?.length ? config.data.quartis : QUARTIS_PADRAO,
           feriados: config.data?.feriados ?? [],
           contarHoje: config.data?.contar_dia_atual === true,
+          porSetor: config.porSetor ?? {},
           identidade,
           treino,
           lideres: doRetrato ?? lideresDaEquipe({
@@ -148,11 +152,16 @@ export function useEquipesDiretoria(
   }, [empresaId, mes, ano, mesNum, ativo, versao]);
 
   const diasDaEquipe = useCallback((equipeId: string) => {
-    const feriados = base?.feriados ?? [];
+    // Os dias úteis do setor da equipe: os dele, se ele trabalha diferente.
+    const setorDaEquipe = base?.composicao.equipes.find(e => e.id === equipeId)?.setor_id ?? null;
+    const regua = diasUteisDoSetor(
+      base ? { data: { feriados: base.feriados, contar_dia_atual: base.contarHoje }, porSetor: base.porSetor } : null,
+      setorDaEquipe,
+    );
     const inicio = base?.treino[equipeId] ?? undefined;
     return {
-      totalUteis: diasUteisDoMes(ano, mesNum, feriados, inicio),
-      decorridos: diasUteisDecorridos(ano, mesNum, feriados, getTodayISO(), inicio, base?.contarHoje ?? false),
+      totalUteis: diasUteisDoMes(ano, mesNum, regua.feriados, inicio),
+      decorridos: diasUteisDecorridos(ano, mesNum, regua.feriados, getTodayISO(), inicio, regua.contarDiaAtual),
       treino: base ? equipeId in base.treino : false,
     };
   }, [base, ano, mesNum]);

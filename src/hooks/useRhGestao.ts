@@ -43,6 +43,7 @@ import { assinarSinal } from '@/lib/sinais';
 import { getTodayISO } from '@/lib/index';
 import { mesAtual, deslocarMes, normalizarMes, partesDoMes } from '@/lib/mesReferencia';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
+import { diasUteisDoSetor, type DiasUteisPorSetor } from '@/lib/diasUteisDoSetor';
 import { buscarResumoOperadoresAnalitico } from '@/services/analitico/analitico.service';
 import { calcularPercentualRh, type PercentualRh } from '@/services/rh/rhPercentual';
 import {
@@ -150,6 +151,8 @@ export function useRhGestao(): EstadoRhGestao {
   const [metasOp, setMetasOp]       = useState<Record<string, number>>({});
   const [recebidoOp, setRecebidoOp] = useState<Record<string, number>>({});
   const [configMes, setConfigMes]   = useState<MetasConfigMes | null>(null);
+  /** Setores com dias úteis próprios no mês apurado (`lib/diasUteisDoSetor`). */
+  const [diasPorSetor, setDiasPorSetor] = useState<DiasUteisPorSetor>({});
   const [inicioEquipe, setInicioEquipe] = useState<Record<string, string | null>>({});
 
   const primeiraCarga = useRef(true);
@@ -237,6 +240,7 @@ export function useRhGestao(): EstadoRhGestao {
     setMetasOp(a => (iguaisProfundo(a, metas) ? a : metas));
 
     setConfigMes(a => reconciliarItem(a, cfgRes.data, iguaisProfundo));
+    setDiasPorSetor(a => { const novo = cfgRes.porSetor ?? {}; return iguaisProfundo(a, novo) ? a : novo; });
 
     // BRUTO, e não H.O. — ver o cabeçalho do arquivo.
     const receb: Record<string, number> = {};
@@ -305,17 +309,20 @@ export function useRhGestao(): EstadoRhGestao {
     const hoje = getTodayISO();
     for (const l of lancamentos) {
       const inicio = l.equipe_id_snapshot ? inicioEquipe[l.equipe_id_snapshot] : null;
+      // O setor do lançamento é o retratado: o da pessoa no mês apurado.
+      const regua = diasUteisDoSetor({ data: configMes, porSetor: diasPorSetor }, l.setor_id_snapshot);
       saida[l.operador_id] = calcularPercentualRh({
         mesApuracao,
         meta: metasOp[l.operador_id] ?? null,
         recebido: recebidoOp[l.operador_id] ?? 0,
         configMes,
+        diasDoSetor: regua.doSetor ? regua : null,
         hojeISO: hoje,
         inicioEquipeISO: inicio,
       });
     }
     return saida;
-  }, [lancamentos, mesApuracao, metasOp, recebidoOp, configMes, inicioEquipe]);
+  }, [lancamentos, mesApuracao, metasOp, recebidoOp, configMes, diasPorSetor, inicioEquipe]);
 
   const selecionarFechamento = useCallback((id: string) => {
     setFechamentoId(id);

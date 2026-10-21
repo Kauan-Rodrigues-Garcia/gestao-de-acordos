@@ -100,6 +100,20 @@ describe('montarLinhasQuartil', () => {
     expect(a.dias).toEqual({ totalUteis: 8, decorridos: 8 });
     expect(a.projecao).toBe(35);
   });
+
+  it('quem é de setor com dias úteis próprios é medido pelos dias do setor', () => {
+    // Geral: folga no 07/09 (21 dias úteis). O s2 trabalha nele (22).
+    const r = montarLinhasQuartil(entrada({
+      feriados: ['2026-09-07'],
+      diasPorSetor: { s2: { feriados: [], contar_dia_atual: true } },
+      operadores: [op('a'), op('b', { setor_id: 's2', equipe_id: 'eq2' })],
+      resumos: [resumo('a', 1000), resumo('b', 1000)],
+      metasOp: { a: 1000, b: 1000 },
+    }));
+    const porId = new Map(todas(r).map(l => [l.op.id, l]));
+    expect(porId.get('a')?.dias.totalUteis).toBe(21);
+    expect(porId.get('b')?.dias.totalUteis).toBe(22);
+  });
 });
 
 describe('distribuicaoQuartis', () => {

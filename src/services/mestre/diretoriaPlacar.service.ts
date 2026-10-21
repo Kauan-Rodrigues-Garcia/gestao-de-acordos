@@ -19,6 +19,7 @@ import { rpcSemTipo } from '@/lib/supabaseSemTipo';
 import { QUARTIS_PADRAO } from '@/lib/diasUteis';
 import type { QuartilConfig } from '@/lib/supabase';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
+import type { DiasUteisPorSetor } from '@/lib/diasUteisDoSetor';
 import { carregarFontes } from '@/pages/Mobile/equipe/useTelaEquipe';
 import { buscarRecebimentoIndireto, type MapaRecebimentoIndireto } from '@/services/metas/recebimentoIndireto.service';
 import { VALIDADE_58_MS, espiarDo59, lerDo59 } from './cache59';
@@ -28,6 +29,8 @@ export interface MetasDoPainel {
   metas: Record<string, number>;
   feriados: string[];
   contarHoje: boolean;
+  /** Setores com dias úteis próprios — ver `lib/diasUteisDoSetor`. */
+  porSetor: DiasUteisPorSetor;
   quartis: QuartilConfig[];
 }
 
@@ -48,6 +51,7 @@ async function metasNoBanco(empresaId: string, mes: string): Promise<MetasDoPain
     metas,
     feriados: cfg.data?.feriados ?? [],
     contarHoje: cfg.data?.contar_dia_atual === true,
+    porSetor: cfg.porSetor ?? {},
     quartis: cfg.data?.quartis?.length ? cfg.data.quartis : QUARTIS_PADRAO,
   };
 }

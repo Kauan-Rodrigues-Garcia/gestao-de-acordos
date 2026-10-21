@@ -46,6 +46,7 @@ import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { veAlemDeSi } from '@/lib/permissoes-escopo';
 import { ESCOPO_EMPRESA } from '@/services/analitico/escopoAnalitico';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
+import { diasUteisDoSetor, type DiasUteisPorSetor } from '@/lib/diasUteisDoSetor';
 import {
   buscarDiretoExtraDoMes, buscarAgendadoPorDia, buscarExtraTabuladoDoMes,
   type TotaisDiretoExtra, type PontoAgendadoDia, type ExtraTabulado,
@@ -380,14 +381,17 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
 
   // ── Config do mês (feriados, quartis, contar_dia_atual) ────────────────────
   const [config, setConfig] = useState<MetasConfigMes | null>(null);
+  /** Exceções de dias úteis por setor — ver `lib/diasUteisDoSetor`. */
+  const [porSetor, setPorSetor] = useState<DiasUteisPorSetor>({});
   const [configCarregada, setConfigCarregada] = useState(false);
   useEffect(() => {
     let cancelado = false;
     if (!empresa?.id) { setConfigCarregada(true); return; }
     setConfigCarregada(false);
-    void getMetasConfig(empresa.id, mesNum, ano).then(({ data }) => {
+    void getMetasConfig(empresa.id, mesNum, ano).then(({ data, porSetor: excecoes }) => {
       if (cancelado) return;
       setConfig(data);
+      setPorSetor(excecoes ?? {});
       setConfigCarregada(true);
     });
     return () => { cancelado = true; };
@@ -589,10 +593,21 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
   // entram, e cada uma na sua data.
   const inicioTreino = (modo === 'eu' ? minhaEquipe : equipeSelecionada)
     ?.treinamentoInicio ?? undefined;
-  // Memoizado porque `?? []` cria um array NOVO a cada render quando não há
-  // config — e os dois `useMemo` de dias úteis logo abaixo, que dependem dele,
-  // recalculavam em toda renderização.
-  const feriados = useMemo(() => config?.feriados ?? [], [config?.feriados]);
+  //
+  // A régua é a DO SETOR em foco (21/10/2026): o setor que trabalha diferente
+  // tem feriados e `contar_dia_atual` próprios. Sem setor no filtro, vale o
+  // setor do perfil.
+  //
+  // Memoizada porque a régua devolve um array NOVO a cada cálculo — e os dois
+  // `useMemo` de dias úteis logo abaixo, que dependem dele, recalculariam em
+  // toda renderização.
+  const setorDaRegua = setorId ?? perfil?.setor_id ?? null;
+  const regua = useMemo(
+    () => diasUteisDoSetor({ data: config, porSetor }, setorDaRegua),
+    [config, porSetor, setorDaRegua],
+  );
+  const feriados = regua.feriados;
+  const contarDiaAtual = regua.contarDiaAtual;
 
   const diasUteisTotal = useMemo(
     () => diasUteisDoMes(ano, mesNum, feriados, inicioTreino),
@@ -600,9 +615,9 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
   );
   const diasUteisPassados = useMemo(
     () => diasUteisDecorridos(
-      ano, mesNum, feriados, getTodayISO(), inicioTreino, config?.contar_dia_atual === true,
+      ano, mesNum, feriados, getTodayISO(), inicioTreino, contarDiaAtual,
     ),
-    [ano, mesNum, feriados, inicioTreino, config?.contar_dia_atual],
+    [ano, mesNum, feriados, inicioTreino, contarDiaAtual],
   );
 
   const quartis = config?.quartis?.length ? config.quartis : QUARTIS_PADRAO;

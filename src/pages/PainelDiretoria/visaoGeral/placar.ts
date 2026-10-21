@@ -162,8 +162,8 @@ export function pessoasDaEmpresa(
   const [anoNum, mesNum] = fontes.mes.split('-').map(Number);
   return montarLinhasQuartil({
     anoNum, mesNum, mes: fontes.mes, hojeISO: cal.hojeISO,
-    feriados: fontes.feriados, contarHoje: fontes.contarHoje, quartis: fontes.quartis,
-    resumos: fontes.resumos, operadores: fontes.operadores,
+    feriados: fontes.feriados, contarHoje: fontes.contarHoje, diasPorSetor: fontes.diasPorSetor,
+    quartis: fontes.quartis, resumos: fontes.resumos, operadores: fontes.operadores,
     metasOp: fontes.metasOperador, metasIndiretas: fontes.metasIndiretas, indiretoMap,
     emHO, ho, setorIds: [], equipeIds: [],
     operadorEquipeMap: fontes.operadorEquipeMap,
@@ -236,8 +236,11 @@ export interface SetorDoPlacar {
 export function setoresDoPlacar(params: {
   visao: VisaoMontada; setores: readonly InfoDoSetor[]; metas: Record<string, number>;
   cofen: CofenDoMes | null; modo: ModoCofen; cal: Calendario;
+  /** O calendário de um setor que tem dias úteis próprios. Ausente = `cal`. */
+  calDoSetor?: (setorId: string) => Calendario;
 }): SetorDoPlacar[] {
-  const { visao, setores, metas, cofen, modo, cal } = params;
+  const { visao, setores, metas, cofen, modo } = params;
+  const cal = (setorId: string) => params.calDoSetor?.(setorId) ?? params.cal;
   const out: SetorDoPlacar[] = [];
   for (const c of visao.cidades) {
     const presentes = new Set(c.setores.map(s => s.setorId));
@@ -245,7 +248,7 @@ export function setoresDoPlacar(params: {
       out.push({
         chave: s.setorId, setorId: s.setorId, nome: s.nome, cidadeId: c.cidadeId, cidadeNome: c.nome, marca: c.marca,
         cofen: false, alternativo: s.alternativo, valor: s.valor, valorAnterior: s.valorAnterior, temAnterior: s.temAnterior,
-        operadores: s.operadores, ritmo: ritmoDe(s.valor, metas[s.setorId], cal),
+        operadores: s.operadores, ritmo: ritmoDe(s.valor, metas[s.setorId], cal(s.setorId)),
       });
     }
     // Setor com meta que ainda não recebeu nada no mês: aparece zerado — é
@@ -255,7 +258,7 @@ export function setoresDoPlacar(params: {
       out.push({
         chave: s.id, setorId: s.id, nome: s.nome, cidadeId: c.cidadeId, cidadeNome: c.nome, marca: c.marca,
         cofen: false, alternativo: s.alternativo === true,
-        valor: 0, valorAnterior: 0, temAnterior: false, operadores: 0, ritmo: ritmoDe(0, metas[s.id], cal),
+        valor: 0, valorAnterior: 0, temAnterior: false, operadores: 0, ritmo: ritmoDe(0, metas[s.id], cal(s.id)),
       });
     }
     if (c.cofen && cofen) {
@@ -263,7 +266,7 @@ export function setoresDoPlacar(params: {
       out.push({
         chave: 'cofen', setorId: c.cofen.setorId, nome: c.cofen.nome, cidadeId: c.cidadeId, cidadeNome: c.nome, marca: c.marca,
         cofen: true, alternativo: false, valor: c.cofen.valor, valorAnterior: c.cofen.valorAnterior, temAnterior: c.cofen.valorAnterior > 0,
-        operadores: c.cofen.operadores, ritmo: ritmoDe(c.cofen.valor, meta, cal),
+        operadores: c.cofen.operadores, ritmo: ritmoDe(c.cofen.valor, meta, cal(c.cofen.setorId)),
       });
     }
   }

@@ -28,12 +28,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
+import { diasUteisDoSetor, type DiasUteisPorSetor } from '@/lib/diasUteisDoSetor';
 
 export interface MetasDiariasDoMes {
   /** operador_id → meta direta bruta do mês. Só metas positivas. */
   metaPorOperador: Record<string, number>;
   /** equipe_id → início do treinamento. Só equipes em treinamento. */
   treinoPorEquipe: Record<string, string | null>;
+  /** Do setor pedido, quando ele tem dias úteis próprios; senão os gerais. */
   feriados: string[];
   contarHoje: boolean;
   /** Os dados acima são da empresa e do mês pedidos? */
@@ -41,12 +43,14 @@ export interface MetasDiariasDoMes {
 }
 
 interface Lido extends Omit<MetasDiariasDoMes, 'carregado'> {
+  /** Setores com dias úteis próprios — `feriados` aqui são os gerais. */
+  porSetor: DiasUteisPorSetor;
   /** `empresaId|mes` de onde os dados vieram. */
   chave: string;
 }
 
 const NADA_LIDO: Lido = {
-  chave: '', metaPorOperador: {}, treinoPorEquipe: {}, feriados: [], contarHoje: false,
+  chave: '', metaPorOperador: {}, treinoPorEquipe: {}, feriados: [], contarHoje: false, porSetor: {},
 };
 
 export function useMetaDiariaOperadores(params: {
@@ -55,8 +59,10 @@ export function useMetaDiariaOperadores(params: {
   empresaId: string;
   /** `yyyy-MM`. */
   mes: string;
+  /** Setor em foco: os dias úteis são os dele, se ele tiver os próprios. */
+  setorId?: string | null;
 }): MetasDiariasDoMes {
-  const { ativo, empresaId, mes } = params;
+  const { ativo, empresaId, mes, setorId } = params;
   const chave = `${empresaId}|${mes}`;
   const [lido, setLido] = useState<Lido>(NADA_LIDO);
 
@@ -99,6 +105,7 @@ export function useMetaDiariaOperadores(params: {
           treinoPorEquipe,
           feriados:   cfg.data?.feriados ?? [],
           contarHoje: cfg.data?.contar_dia_atual === true,
+          porSetor:   cfg.porSetor ?? {},
         };
       } catch { /* sem régua — ninguém ganha estrela, a lista segue igual */ }
       if (vivo) setLido(lidoAgora);
@@ -108,11 +115,17 @@ export function useMetaDiariaOperadores(params: {
   }, [ativo, empresaId, mes, chave, lido.chave]);
 
   const carregado = lido.chave === chave;
-  return useMemo(() => ({
-    metaPorOperador: lido.metaPorOperador,
-    treinoPorEquipe: lido.treinoPorEquipe,
-    feriados:        lido.feriados,
-    contarHoje:      lido.contarHoje,
-    carregado,
-  }), [lido, carregado]);
+  return useMemo(() => {
+    const regua = diasUteisDoSetor(
+      { data: { feriados: lido.feriados, contar_dia_atual: lido.contarHoje }, porSetor: lido.porSetor },
+      setorId,
+    );
+    return {
+      metaPorOperador: lido.metaPorOperador,
+      treinoPorEquipe: lido.treinoPorEquipe,
+      feriados:        regua.feriados,
+      contarHoje:      regua.contarDiaAtual,
+      carregado,
+    };
+  }, [lido, carregado, setorId]);
 }

@@ -4341,6 +4341,67 @@ export type Database = {
           },
         ]
       }
+      metas_config_setor_mes: {
+        Row: {
+          ano: number
+          atualizado_em: string
+          atualizado_por: string | null
+          contar_dia_atual: boolean
+          criado_em: string
+          empresa_id: string
+          feriados: Json
+          id: string
+          mes: number
+          setor_id: string
+        }
+        Insert: {
+          ano: number
+          atualizado_em?: string
+          atualizado_por?: string | null
+          contar_dia_atual?: boolean
+          criado_em?: string
+          empresa_id: string
+          feriados?: Json
+          id?: string
+          mes: number
+          setor_id: string
+        }
+        Update: {
+          ano?: number
+          atualizado_em?: string
+          atualizado_por?: string | null
+          contar_dia_atual?: boolean
+          criado_em?: string
+          empresa_id?: string
+          feriados?: Json
+          id?: string
+          mes?: number
+          setor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "metas_config_setor_mes_atualizado_por_fkey"
+            columns: ["atualizado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "metas_config_setor_mes_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "metas_config_setor_mes_setor_id_fkey"
+            columns: ["setor_id"]
+            isOneToOne: false
+            referencedRelation: "setores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       metas_validacoes: {
         Row: {
           ano: number

@@ -49,7 +49,7 @@ import { cofenNoDia, foraDaConta, montarVisao, nomeDoMes, type InfoDoSetor, type
 import {
   calendarioDoMes, diaDeHoje, metaDoConjunto, ordenarPlacar, pessoasDaEmpresa, pessoasDoAlternativo, resumirQuartis, ritmoDe,
   setoresDoPlacar, sinaisDoPlacar,
-  type OrdemDoPlacar, type ResumoQuartis, type SetorDoPlacar,
+  type Calendario, type OrdemDoPlacar, type ResumoQuartis, type SetorDoPlacar,
 } from './placar';
 import { DisjuntorCofen, ForaDaConta } from './partes';
 import { CartaoDaCidade, CartaoDoMes } from './Pulso';
@@ -206,9 +206,30 @@ export function VisaoGeralPorCidade({ empresaId, mes, versao = 0, reserva }: {
     () => (dados ? calendarioDoMes(mes, diaDeHoje(mes, getTodayISO(), dados.diasNoMes), dados.diasNoMes, metas?.feriados ?? [], metas?.contarHoje ?? false) : null),
     [dados, mes, metas],
   );
+  /*
+   * O calendário de UM setor: o dele, quando o setor tem dias úteis próprios
+   * (`lib/diasUteisDoSetor`); senão o geral acima. A cidade e o geral seguem
+   * no calendário geral — são soma de setores, e não têm um calendário só.
+   */
+  const calDoSetor = useMemo(() => {
+    const doCorte = new Map<string, Calendario>();
+    const doMes = new Map<string, Calendario>();
+    for (const [sid, d] of Object.entries(metas?.porSetor ?? {})) {
+      if (!dados) break;
+      doCorte.set(sid, calendarioDoMes(mes, dados.diaCorte, dados.diasNoMes, d.feriados, d.contar_dia_atual));
+      doMes.set(sid, calendarioDoMes(mes, diaDeHoje(mes, getTodayISO(), dados.diasNoMes), dados.diasNoMes, d.feriados, d.contar_dia_atual));
+    }
+    return {
+      corte: (sid: string | null | undefined) => (sid ? doCorte.get(sid) : undefined) ?? cal,
+      mes: (sid: string | null | undefined) => (sid ? doMes.get(sid) : undefined) ?? calMes,
+    };
+  }, [metas, dados, mes, cal, calMes]);
   const placar = useMemo(
-    () => (visao && cal ? setoresDoPlacar({ visao, setores, metas: metas?.metas ?? {}, cofen: c, modo, cal }) : []),
-    [visao, cal, setores, metas, c, modo],
+    () => (visao && cal ? setoresDoPlacar({
+      visao, setores, metas: metas?.metas ?? {}, cofen: c, modo, cal,
+      calDoSetor: sid => calDoSetor.corte(sid) ?? cal,
+    }) : []),
+    [visao, cal, calDoSetor, setores, metas, c, modo],
   );
   const quartisCfg = useMemo(() => metas?.quartis ?? fontesBP?.quartis ?? [], [metas, fontesBP]);
   const pessoasBP = useMemo(() => (fontesBP && calMes ? pessoasDaEmpresa(fontesBP, calMes, false, ho) : fontesBP), [fontesBP, calMes, ho]);
@@ -322,7 +343,8 @@ export function VisaoGeralPorCidade({ empresaId, mes, versao = 0, reserva }: {
     const cid = marcaDe(s);
     const daMarca = placar.filter(x => x.cidadeId === s.cidadeId);
     return (
-      <DetalheDoSetor key={s.chave} setor={s} cal={cal} calMes={calMes} indireto={s.cofen ? indiretoPP : undefined} modo={modo} ho={ho} mes={mes} mesAnterior={dados.mesAnterior}
+      <DetalheDoSetor key={s.chave} setor={s} cal={calDoSetor.corte(s.setorId) ?? cal}
+        calMes={calDoSetor.mes(s.setorId) ?? calMes} indireto={s.cofen ? indiretoPP : undefined} modo={modo} ho={ho} mes={mes} mesAnterior={dados.mesAnterior}
         diaCorte={dados.diaCorte} diasNoMes={dados.diasNoMes} empresaId={empresaId}
         empresaDoSetor={s.cofen ? ppId : empresaId}
         fontes={s.cofen ? fontesPP : fontesBP} linhas={linhasDe(s)} quartis={quartisCfg}

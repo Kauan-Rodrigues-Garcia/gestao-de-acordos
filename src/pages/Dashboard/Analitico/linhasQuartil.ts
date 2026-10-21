@@ -8,6 +8,7 @@
  * vieram junto.
  */
 import { diasUteisDecorridos, diasUteisDoMes } from '@/lib/diasUteis';
+import { diasUteisDoSetor, type DiasUteisPorSetor } from '@/lib/diasUteisDoSetor';
 import { calcularProjecao } from '@/lib/projecaoMetas';
 import { metaNaUnidade } from '@/lib/unidadeValor';
 import type { QuartilConfig } from '@/lib/supabase';
@@ -72,8 +73,14 @@ export interface EntradaLinhasQuartil {
   /** 'yyyy-MM' */
   mes: string;
   hojeISO: string;
+  /** Os feriados e o `contar_dia_atual` GERAIS do mês. */
   feriados: string[];
   contarHoje: boolean;
+  /**
+   * Setores com dias úteis próprios (`lib/diasUteisDoSetor`). Quem é de um
+   * deles é medido pelos dias do setor dele; ausente = todos pela geral.
+   */
+  diasPorSetor?: DiasUteisPorSetor;
   quartis: QuartilConfig[];
   resumos: ReadonlyArray<ResumoOperadorAnalitico>;
   operadores: ReadonlyArray<PerfilOp>;
@@ -107,10 +114,11 @@ export interface LinhasQuartil {
 
 export function montarLinhasQuartil(entrada: EntradaLinhasQuartil): LinhasQuartil {
   const {
-    anoNum, mesNum, mes, hojeISO, feriados, contarHoje, quartis, resumos, operadores,
+    anoNum, mesNum, mes, hojeISO, feriados, contarHoje, diasPorSetor, quartis, resumos, operadores,
     metasOp, metasIndiretas, indiretoMap, emHO, ho, setorIds, equipeIds,
     operadorEquipeMap, equipesExtrasPorOperador, setorDaEquipe, nomeDaEquipe, treinoMap,
   } = entrada;
+  const geral = { data: { feriados, contar_dia_atual: contarHoje }, porSetor: diasPorSetor };
   const setoresFoco = new Set(setorIds);
   const equipesFoco = new Set(equipeIds);
 
@@ -139,13 +147,18 @@ export function montarLinhasQuartil(entrada: EntradaLinhasQuartil): LinhasQuarti
    * duas faixas diferentes em duas abas do mesmo painel — e a de treinamento
    * saía sempre pior, porque era cobrada por dias em que a equipe nem existia.
    */
+  //
+  // E pelos dias do SETOR da pessoa, quando o setor dela trabalha diferente
+  // (21/10/2026): é o setor de origem, e não o em exibição — o clone emprestado
+  // trabalha no calendário do setor dele.
   const diasDoOperador = (op: PerfilOp): { totalUteis: number; decorridos: number } => {
-    const inicio = op.equipe_id ? treinoMap[op.equipe_id] : null;
-    if (!inicio) return { totalUteis, decorridos };
+    const inicio = (op.equipe_id ? treinoMap[op.equipe_id] : null) ?? undefined;
+    const regua = diasUteisDoSetor(geral, op.setor_id);
+    if (!inicio && !regua.doSetor) return { totalUteis, decorridos };
     return {
-      totalUteis: diasUteisDoMes(anoNum, mesNum, feriados, inicio),
+      totalUteis: diasUteisDoMes(anoNum, mesNum, regua.feriados, inicio),
       decorridos: Math.max(
-        diasUteisDecorridos(anoNum, mesNum, feriados, hojeISO, inicio, contarHoje), 1,
+        diasUteisDecorridos(anoNum, mesNum, regua.feriados, hojeISO, inicio, regua.contarDiaAtual), 1,
       ),
     };
   };

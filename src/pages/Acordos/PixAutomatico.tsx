@@ -97,6 +97,7 @@ import { PixRankingSetor, type AbaRankingPix } from './PixRankingSetor';
 import { PixBarraSetores, type ResumoSetorPix } from './PixBarraSetores';
 import { PixMetaPainel } from './PixMetaPainel';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
+import { configComDiasDoSetor, type DiasUteisPorSetor } from '@/lib/diasUteisDoSetor';
 import { buscarResumoOperadoresAnalitico } from '@/services/analitico/analitico.service';
 import {
   PixAutoAcordo, PixAutoStatus, PixAutoConfig, PIX_AUTO_PCT_PADRAO,
@@ -638,6 +639,8 @@ export function PixAutomatico() {
   // Meta / quartil do operador logado (card de bônus)
   const [metaValor, setMetaValor]   = useState<number | null>(null);
   const [configMes, setConfigMes]   = useState<MetasConfigMes | null>(null);
+  /** Setores com dias úteis próprios — a conta de cada setor usa os dele. */
+  const [diasPorSetor, setDiasPorSetor] = useState<DiasUteisPorSetor>({});
   const [recebidoMes, setRecebidoMes] = useState<number | null>(null);
   /*
    * Meta de recebimento e recebido do mes, POR OPERADOR.
@@ -1129,6 +1132,8 @@ export function PixAutomatico() {
         const minhaMeta = linhasMeta.find(m => m.referencia_id === perfil.id);
         setMetaValor(minhaMeta ? Number(minhaMeta.meta_valor) || null : null);
         setConfigMes(cfg.data);
+        setDiasPorSetor(cfg.porSetor ?? {});
+        setDiasPorSetor(cfg.porSetor ?? {});
         const minha = resumo.data.find(r => r.operador_id === perfil.id);
         setRecebidoMes(minha ? Number(minha.total_recebido) || 0 : 0);
 
@@ -1376,10 +1381,12 @@ export function PixAutomatico() {
   //   • 1º quartil  → projetando a meta, mensagem de incentivo (azul)
   //   • demais      → informativo (destaque do tema)
   const bonusMeta = useMemo(() => calcularBonusMeta({
-    operadorId: perfil?.id, itens, pctPorSetor, metaValor, recebidoMes, configMes,
+    operadorId: perfil?.id, itens, pctPorSetor, metaValor, recebidoMes,
+    // Os dias úteis do setor de quem olha (a exceção dele, se houver).
+    configMes: configComDiasDoSetor(configMes, diasPorSetor, meuSetor),
     // Mês e "hoje" de São Paulo, não do relógio de quem abre a tela.
     mes, hojeISO: getTodayISO(),
-  }), [perfil?.id, itens, pctPorSetor, metaValor, configMes, recebidoMes, mes]);
+  }), [perfil?.id, itens, pctPorSetor, metaValor, configMes, diasPorSetor, meuSetor, recebidoMes, mes]);
 
   // ── Comissão dobrada: meta de acordos do setor + meta do mês ────────────
   // Sempre sobre os acordos do próprio usuário, mesmo quando ele é líder e a
@@ -1568,12 +1575,12 @@ export function PixAutomatico() {
             metaAcordos: Number(m.meta_acordos) || 0,
           })),
         equipePorOperador: operadorEquipe,
-        configMes,
+        configMes: configComDiasDoSetor(configMes, diasPorSetor, sid),
         mes, hojeISO: getTodayISO(),
       }),
     }));
   }, [podeVerDeOutros, itens, itensDoCarimbo, metasPix, equipes, setores, setorFoco, setorEscopo,
-      operadorEquipe, operadorSetor, configMes, mes]);
+      operadorEquipe, operadorSetor, configMes, diasPorSetor, mes]);
 
   // ── Ações ───────────────────────────────────────────────────────────────
   async function registrar() {

@@ -1372,6 +1372,18 @@ cadastrados em `metas_config_mes.feriados`. Feriado que cai em fim de semana
 
 Equipes de treinamento têm `inicioISO`: contam só a partir daquela data.
 
+**Dias úteis por setor (21/10/2026).** A configuração do mês é geral, mas o
+setor que trabalha diferente pode ter os próprios feriados e o próprio
+`contar_dia_atual`, em `metas_config_setor_mes` (migration `20261021140000`).
+A linha do setor é a lista INTEIRA, não uma diferença: ligar a exceção na aba
+Metas copia a geral, e dali o setor tira ou põe dias. Sem linha, o setor segue
+a geral. Os quartis continuam sendo da empresa. Quem conta dia útil escolhe a
+régua por `diasUteisDoSetor` (`src/lib/diasUteisDoSetor.ts`), com o setor da
+pessoa (ou o da equipe, ou o setor em foco). Ainda NÃO seguem a exceção as
+funções do banco que leem `metas_config_mes` direto: os desafios
+(`fn_desafio_contexto_equipe`, `fn_desafio_diario`) e o resumo do app
+(`fn_app_resumo_visoes`).
+
 ### 12.2 Projeção e quartil
 
 ```

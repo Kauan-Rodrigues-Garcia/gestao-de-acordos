@@ -37,6 +37,7 @@ import { useTenant } from '@/lib/tenant-config';
 import { assinarSinal } from '@/lib/sinais';
 import { reconciliarMapa } from '@/lib/dadosVivos';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
+import { diasUteisDoSetor, type DiasUteisPorSetor } from '@/lib/diasUteisDoSetor';
 import { salvarFotoSetor, type CampoFotoSetor } from '@/services/setores/fotoSetor.service';
 import {
   buscarContribuicoesDigitadas, mesclarContribuicoes, salvarMetaContribuicaoReceptivo,
@@ -332,6 +333,9 @@ export function DesempenhoEquipes({
   const [quartis, setQuartis]   = useState<QuartilConfig[]>(QUARTIS_PADRAO);
   // metas_config_mes.contar_dia_atual — padrão false (o dia de hoje ainda corre)
   const [contarHoje, setContarHoje] = useState(false);
+  // Setores com dias úteis próprios (`lib/diasUteisDoSetor`): o card de cada
+  // setor, e as equipes dele, contam pelos dias do setor.
+  const [diasPorSetor, setDiasPorSetor] = useState<DiasUteisPorSetor>({});
   const [lideres, setLideres]   = useState<Record<string, LiderInfo[]>>({});  // equipe_id → líderes (inclui clones)
   const [setores, setSetores]   = useState<Record<string, string>>({});    // setor_id → nome
   // Quem conta no recebimento: nome e foto para a área expandida do card.
@@ -522,6 +526,8 @@ export function DesempenhoEquipes({
         setMetas((metasData as MetaRow[]) ?? []);
         setFeriados(cfg.data?.feriados ?? []);
         setContarHoje(cfg.data?.contar_dia_atual === true);
+        setDiasPorSetor(cfg.porSetor ?? {});
+        setDiasPorSetor(cfg.porSetor ?? {});
         setQuartis(cfg.data?.quartis ?? QUARTIS_PADRAO);
         const idMap: Record<string, IdentidadeOperador> = {};
         const opsDoMes = pessoasDoMes(
@@ -657,11 +663,29 @@ export function DesempenhoEquipes({
       grupos.get(sid)!.push(eq);
     }
 
+    /*
+     * Os dias úteis de UM setor: os dele, se ele trabalha diferente; senão os
+     * gerais acima. O card do setor e os das equipes dele usam estes.
+     */
+    const hoje = getTodayISO();
+    const diasDoSetor = (sid: string) => {
+      const regua = diasUteisDoSetor(
+        { data: { feriados, contar_dia_atual: contarHoje }, porSetor: diasPorSetor }, sid,
+      );
+      if (!regua.doSetor) return { totalUteis, decorridos, feriados, contarHoje };
+      return {
+        totalUteis: diasUteisDoMes(anoNum, mesNum, regua.feriados),
+        decorridos: diasUteisDecorridos(anoNum, mesNum, regua.feriados, hoje, undefined, regua.contarDiaAtual),
+        feriados: regua.feriados,
+        contarHoje: regua.contarDiaAtual,
+      };
+    };
+
     return {
-      totalUteis, decorridos, porEquipe, porSetor, metaDe, grupos,
+      totalUteis, decorridos, diasDoSetor, porEquipe, porSetor, metaDe, grupos,
       recebidoPorOperador, metaPorOperador, setorDaEquipe,
     };
-  }, [anoNum, mesNum, feriados, contarHoje, resumos, operadorEquipeMap, equipesExtrasPorOperador,
+  }, [anoNum, mesNum, feriados, contarHoje, diasPorSetor, resumos, operadorEquipeMap, equipesExtrasPorOperador,
       orfaosPorSetor, creditosDeOrigem, equipes, metas, setoresFoco, equipesFoco]);
 
   /**
@@ -761,6 +785,7 @@ export function DesempenhoEquipes({
           receptivoPorSetor: contrib,
         });
         const metaSetor = dados.metaDe('setor', sid);
+        const diasSid = dados.diasDoSetor(sid);
         // Receptivo (BookPlay): o card aparece quando o 59 traz contribuição para
         // o setor, e só então. O botão de adicionar à mão saiu (14/09/2026).
         const receptivoCabe = !isPP && setorInteiro && sid !== 'sem_setor';
@@ -812,8 +837,8 @@ export function DesempenhoEquipes({
               acumuladoHO={acumuladoSetor.ho}
               ajusteManual={acumuladoSetor.ajuste}
               meta={metaSetor}
-              totalUteis={dados.totalUteis}
-              decorridos={dados.decorridos}
+              totalUteis={diasSid.totalUteis}
+              decorridos={diasSid.decorridos}
               quartis={quartis}
               // Abre como o card de equipe — degraus, ritmo e pessoas —, também
               // com a conciliação (pedido de 14/09/2026: o clique não fazia
@@ -829,8 +854,8 @@ export function DesempenhoEquipes({
           {mostrarReceptivo && (
             <CardContribuicaoReceptivo
               dados={contrib[sid]}
-              totalUteis={dados.totalUteis}
-              decorridos={dados.decorridos}
+              totalUteis={diasSid.totalUteis}
+              decorridos={diasSid.decorridos}
               quartis={quartis}
               podeEditar={podeEditarContrib}
               salvando={salvandoContrib === sid}
@@ -853,9 +878,10 @@ export function DesempenhoEquipes({
               const inicioTreino = treinoMap[eq.id] ?? undefined;
               const { totalUteis: eqUteis, decorridos: eqDecorridos } = inicioTreino
                 ? diasDaEquipe({
-                    ano: anoNum, mes: mesNum, feriados, hojeISO: getTodayISO(), contarHoje, inicioTreino,
+                    ano: anoNum, mes: mesNum, feriados: diasSid.feriados, hojeISO: getTodayISO(),
+                    contarHoje: diasSid.contarHoje, inicioTreino,
                   })
-                : { totalUteis: dados.totalUteis, decorridos: dados.decorridos };
+                : { totalUteis: diasSid.totalUteis, decorridos: diasSid.decorridos };
               const metaEquipe = dados.metaDe('equipe', eq.id);
               return (
                 <CardEquipe
@@ -900,7 +926,8 @@ export function DesempenhoEquipes({
         {usarConciliacao
           ? `O acumulado do setor vem da conciliação; as equipes vêm do ${fonteLabel}`
           : `Acumulado e diário vêm do ${fonteLabel}`} · meta, dias úteis e feriados
-        vêm da aba Metas ({dados.decorridos} de {dados.totalUteis} dias úteis
+        vêm da aba Metas ({(setorUnico ? dados.diasDoSetor(setorUnico) : dados).decorridos} de{' '}
+        {(setorUnico ? dados.diasDoSetor(setorUnico) : dados).totalUteis} dias úteis
         trabalhados) · clique num card para ver os degraus de quartil, o ritmo
         necessário e a distribuição das pessoas, e para copiar o resumo que vai
         para a equipe.

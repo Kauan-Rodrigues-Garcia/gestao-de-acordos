@@ -541,6 +541,24 @@ export interface MetasConfigMes {
   atualizado_em: string;
 }
 
+/**
+ * Dias úteis de um setor que trabalha diferente (migration 20261021140000).
+ * `feriados` é a lista INTEIRA do setor no mês, não uma diferença sobre a
+ * geral. Sem linha, o setor segue `metas_config_mes`.
+ */
+export interface MetasConfigSetorMes {
+  id: string;
+  empresa_id: string;
+  setor_id: string;
+  mes: number;
+  ano: number;
+  feriados: string[];
+  contar_dia_atual: boolean;
+  atualizado_por: string | null;
+  criado_em: string;
+  atualizado_em: string;
+}
+
 /** Linha agregada de fn_analitico_dashboard_mes (dia × operador × forma × tabulação). */
 export interface AnaliticoDashboardLinha {
   dia: string;               // 'yyyy-MM-dd'

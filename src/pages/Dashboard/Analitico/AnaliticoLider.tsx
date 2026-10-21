@@ -1241,6 +1241,8 @@ export function AnaliticoLider({
     ativo: abaVisivel === 'operadores' && (noRecorteDia || visaoOperadores === 'mapa'),
     empresaId,
     mes,
+    // O setor que trabalha diferente mede pelos dias úteis dele.
+    setorId,
   });
   const emDiaPorOperador = useMemo<Map<string, AvaliacaoEmDia>>(() => {
     if (!noRecorteDia || !metasDoMes.carregado) return new Map();

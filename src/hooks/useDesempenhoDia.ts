@@ -18,6 +18,7 @@ import { useEmpresa } from './useEmpresa';
 import { useCargoPermissoes } from './useCargoPermissoes';
 import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
+import { diasUteisDoSetor } from '@/lib/diasUteisDoSetor';
 import {
   buscarAnaliticoPeriodo, somarPorDia, buscarAcordosDoDia,
   contarFormalizadosDoDia, buscarPixDoDia, buscarMetaDoEscopo,
@@ -250,7 +251,8 @@ export function useDesempenhoDia(params: ParametrosDesempenhoDia): DadosDesempen
       setFormalizados(qtdFormalizados);
       setLinhasPix(pix);
       setMetaMensal(meta);
-      setFeriados(config.data?.feriados ?? []);
+      // Os feriados do setor do recorte (ou do próprio): a exceção dele, se houver.
+      setFeriados(diasUteisDoSetor(config, setorDaQuery ?? perfil.setor_id ?? null).feriados);
     } catch (e) {
       if (meu !== requisicao.current) return;
       console.warn('[useDesempenhoDia]', e);

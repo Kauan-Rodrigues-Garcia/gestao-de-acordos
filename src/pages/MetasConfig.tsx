@@ -68,6 +68,8 @@ import { getHoPercentual, useHoPercentual, rotuloHoPercentual } from "@/lib/hoPe
 import { CardPercentualHO } from "@/components/PainelMetas/CardPercentualHO";
 import { diasUteisDoMes, diasUteisDecorridos, ordenarQuartis, QUARTIS_PADRAO } from "@/lib/diasUteis";
 import { getMetasConfig, upsertMetasConfig } from "@/services/metas/metasConfig.service";
+import { diasUteisDoSetor, type DiasUteisPorSetor, type DiasUteisSetor } from "@/lib/diasUteisDoSetor";
+import { CardDiasUteisSetor } from "@/components/PainelMetas/CardDiasUteisSetor";
 import {
   getMetaValidacaoStatus, upsertMetas, validarMetaSetor, reabrirMetaSetor, excluirMetas,
   type MetaValidacaoStatus,
@@ -659,6 +661,15 @@ export default function MetasConfig() {
   const [configDbAtiva, setConfigDbAtiva] = useState(true);
   const [configCarregada, setConfigCarregada] = useState(false);
   /*
+   * Dias úteis próprios de cada setor (21/10/2026) — `metas_config_setor_mes`.
+   * `configLida` diz de que empresa/mês é a leitura na tela: o cartão do setor
+   * só aparece quando ela é a do mês em tela, e `versaoConfig` o remonta a cada
+   * leitura nova, para o rascunho dele nascer do banco.
+   */
+  const [diasPorSetor, setDiasPorSetor] = useState<DiasUteisPorSetor>({});
+  const [configLida, setConfigLida] = useState("");
+  const [versaoConfig, setVersaoConfig] = useState(0);
+  /*
    * O retrato do que veio do banco — e a razão de ele existir.
    *
    * `metas_config_mes` é UMA linha por empresa/mês, mas quem salva é cada
@@ -808,6 +819,27 @@ export default function MetasConfig() {
       : null),
     [ano, mes, feriados, hojeISO, mesAtualVisivel, contarDiaAtual],
   );
+
+  // A régua do setor em tela: a exceção dele, se tiver; senão, a geral acima.
+  // É a que as equipes de treinamento do setor usam.
+  const reguaDoSetor = useMemo(
+    () => diasUteisDoSetor(
+      { data: { feriados, contar_dia_atual: contarDiaAtual }, porSetor: diasPorSetor },
+      setorSelecionado || null,
+    ),
+    [feriados, contarDiaAtual, diasPorSetor, setorSelecionado],
+  );
+  const diasUteisDoSetorEmTela = useMemo(
+    () => diasUteisDoMes(ano, mes, reguaDoSetor.feriados),
+    [ano, mes, reguaDoSetor.feriados],
+  );
+  const mudouExcecaoDoSetor = useCallback((setorId: string, excecao: DiasUteisSetor | null) => {
+    setDiasPorSetor(atual => {
+      const novo = { ...atual };
+      if (excecao) novo[setorId] = excecao; else delete novo[setorId];
+      return novo;
+    });
+  }, []);
 
   // A tela diverge do que veio do banco? (ver `configOriginal`)
   const configAlterada = useMemo(() => {
@@ -973,13 +1005,16 @@ export default function MetasConfig() {
   // Config mensal (feriados + quartis) — PP
   const fetchConfig = useCallback(async () => {
     if (!empresa?.id || !temConfigMes) { setConfigCarregada(true); return; }
-    const { data, dbAtiva } = await getMetasConfig(empresa.id, mes, ano);
+    const { data, dbAtiva, porSetor } = await getMetasConfig(empresa.id, mes, ano);
     const doBanco = {
       feriados:       data?.feriados ?? [],
       quartis:        data?.quartis ?? QUARTIS_PADRAO,
       contarDiaAtual: data?.contar_dia_atual === true,
     };
     setConfigDbAtiva(dbAtiva);
+    setDiasPorSetor(porSetor ?? {});
+    setConfigLida(`${empresa.id}|${mes}|${ano}`);
+    setVersaoConfig(v => v + 1);
     setFeriados(doBanco.feriados);
     setQuartis(doBanco.quartis);
     setContarDiaAtual(doBanco.contarDiaAtual);
@@ -1550,8 +1585,8 @@ export default function MetasConfig() {
       {temConfigMes && configDbAtiva && configCarregada && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <SectionCard
-            title="Dias úteis do mês"
-            description="Segunda a sexta, menos os feriados cadastrados. Usado para calcular a meta diária."
+            title="Dias úteis do mês (geral)"
+            description="Segunda a sexta, menos os feriados cadastrados. Usado para calcular a meta diária. Vale para todos os setores, menos os que têm dias úteis próprios."
             icon={<CalendarDays className="h-4 w-4" />}
           >
             <div className="space-y-3">
@@ -1671,6 +1706,26 @@ export default function MetasConfig() {
 
       {setorSelecionado && (
         <>
+          {/* Dias úteis próprios do setor — a exceção à configuração geral. */}
+          {temConfigMes && configDbAtiva && configCarregada && empresa?.id && perfil?.id
+            && configLida === `${empresa.id}|${mes}|${ano}` && (
+            <CardDiasUteisSetor
+              key={`${setorSelecionado}|${versaoConfig}`}
+              empresaId={empresa.id}
+              perfilId={perfil.id}
+              setorId={setorSelecionado}
+              setorNome={setorNome}
+              mes={mes}
+              ano={ano}
+              geral={{ feriados, contarDiaAtual }}
+              excecao={diasPorSetor[setorSelecionado] ?? null}
+              onExcecao={mudouExcecaoDoSetor}
+              podeEditar={podeEditarDiasUteis && !fechamento.bloqueado}
+              podeExcluir={podeExcluirDiasUteis && !fechamento.bloqueado}
+              impedir={fechamento.impedir}
+            />
+          )}
+
           {/* Equipes de treinamento — data de início + dias úteis reduzidos */}
           {equipesTreinamento.length > 0 && (
             <SectionCard
@@ -1682,7 +1737,7 @@ export default function MetasConfig() {
               <div className="space-y-2">
                 {equipesTreinamento.map(eq => {
                   const inicio = eq.treinamento_inicio ?? "";
-                  const uteis = diasUteisDoMes(ano, mes, feriados, inicio || undefined);
+                  const uteis = diasUteisDoMes(ano, mes, reguaDoSetor.feriados, inicio || undefined);
                   return (
                     <div key={eq.id} className="flex flex-col sm:flex-row sm:items-center gap-3 py-2 border-b border-border last:border-0">
                       <div className="flex items-center gap-2 sm:w-52 shrink-0">
@@ -1701,7 +1756,7 @@ export default function MetasConfig() {
                           />
                         </div>
                         <div className="rounded-lg border border-border bg-muted/30 px-3 py-1.5 text-center">
-                          <p className="text-base font-bold tabular-nums">{inicio ? uteis : totalDiasUteis}</p>
+                          <p className="text-base font-bold tabular-nums">{inicio ? uteis : diasUteisDoSetorEmTela}</p>
                           <p className="text-[11px] text-muted-foreground">
                             {inicio ? "dias úteis no treino" : "sem data — mês cheio"}
                           </p>

@@ -22,6 +22,7 @@ import { diasUteisDecorridos, diasUteisDoMes, QUARTIS_PADRAO, COR_QUARTIL } from
 import { metaNaUnidade } from '@/lib/unidadeValor';
 import { supabase, type Perfil, type SituacaoUsuario } from '@/lib/supabase';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
+import { diasUteisDoSetor } from '@/lib/diasUteisDoSetor';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import type { InfoDeSetor } from './modelo';
@@ -53,12 +54,14 @@ async function lerMes(u: Perfil, meta: number, cofen: boolean): Promise<MesDaPes
   const linhas = (lin.data as { valor_recebido: number; total_ho: number | null }[] | null) ?? [];
   const recebido = linhas.reduce((a, l) => a + (Number(cofen ? l.total_ho : l.valor_recebido) || 0), 0);
   const metaUnid = cofen ? metaNaUnidade(meta, 'ho') ?? meta : meta;
-  const feriados = cfg.data?.feriados ?? [];
+  // Os dias úteis do setor DELA: a exceção do setor, se houver; senão a geral.
+  const regua = diasUteisDoSetor(cfg, u.setor_id);
+  const feriados = regua.feriados;
   const quartis = cfg.data?.quartis?.length ? cfg.data.quartis : QUARTIS_PADRAO;
   const p = calcularProjecao({
     meta: metaUnid, recebido, quartis,
     totalUteis: diasUteisDoMes(ano, mesNum, feriados),
-    decorridos: diasUteisDecorridos(ano, mesNum, feriados, hoje, undefined, cfg.data?.contar_dia_atual === true),
+    decorridos: diasUteisDecorridos(ano, mesNum, feriados, hoje, undefined, regua.contarDiaAtual),
   });
   if (!p) return null;
   return { recebido, meta: metaUnid, esperado: p.esperado, pct: p.projecaoPct, quartil: p.quartil?.quartil ?? null, emHO: cofen };

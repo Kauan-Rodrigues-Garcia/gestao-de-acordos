@@ -66,6 +66,7 @@ import { useAxisColors, useChartColors } from '@/hooks/useChartColors';
 import { supabase } from '@/lib/supabase';
 import type { QuartilConfig } from '@/lib/supabase';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
+import { diasUteisDoSetor, type DiasUteisPorSetor } from '@/lib/diasUteisDoSetor';
 import { QUARTIS_PADRAO, corProjecao } from '@/lib/diasUteis';
 import { partesDoMes, rotuloDoMes } from '@/lib/mesReferencia';
 import { corDaForma, agruparFormas } from '@/lib/formasPagamento';
@@ -346,6 +347,8 @@ export function DiretoriaSetores({
   const [feriados, setFeriados] = useState<string[]>([]);
   const [quartis, setQuartis]   = useState<QuartilConfig[]>(QUARTIS_PADRAO);
   const [contarDiaAtual, setContarDiaAtual] = useState(false);
+  /** Setores com dias úteis próprios: a projeção deles usa esses dias. */
+  const [diasPorSetor, setDiasPorSetor] = useState<DiasUteisPorSetor>({});
 
   // O mesmo azul da Visão Geral, pelo mesmo motivo — ver o cabeçalho de lá.
   const { tickColor, gridColor } = useAxisColors();
@@ -398,6 +401,7 @@ export function DiretoriaSetores({
       setFeriados(config.data?.feriados ?? []);
       setQuartis(config.data?.quartis?.length ? config.data.quartis : QUARTIS_PADRAO);
       setContarDiaAtual(config.data?.contar_dia_atual === true);
+      setDiasPorSetor(config.porSetor ?? {});
     })();
     return () => { vivo = false; };
   }, [empresaId, mes]);
@@ -463,16 +467,20 @@ export function DiretoriaSetores({
     // O alternativo entra: ele TEM meta configurada, e sem isto o card dele
     // mostraria «sem meta» ao lado de uma meta que existe.
     for (const s of [...(grade?.setores ?? []), ...(grade?.alternativos ?? [])]) {
+      // Os dias úteis do setor: os dele, se ele trabalha diferente.
+      const regua = diasUteisDoSetor(
+        { data: { feriados, contar_dia_atual: contarDiaAtual }, porSetor: diasPorSetor }, s.setorId,
+      );
       r[s.setorId] = projecaoDoSetor({
         meta: metas[s.setorId],
         recebido: s.valor,
         mes,
         diaCorte: grade?.diaCorte ?? 1,
-        feriados, quartis, contarDiaAtual,
+        feriados: regua.feriados, quartis, contarDiaAtual: regua.contarDiaAtual,
       });
     }
     return r;
-  }, [grade, metas, mes, feriados, quartis, contarDiaAtual]);
+  }, [grade, metas, mes, feriados, quartis, contarDiaAtual, diasPorSetor]);
 
   const agendadoDoSetor = useMemo(() => {
     const r: Record<string, SetorAgregado> = {};

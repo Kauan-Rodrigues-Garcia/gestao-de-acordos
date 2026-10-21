@@ -102,6 +102,7 @@ import {
 import { useHoPercentual, rotuloHoPercentual } from '@/lib/hoPercentual';
 import { useTenant } from '@/lib/tenant-config';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
+import type { DiasUteisPorSetor } from '@/lib/diasUteisDoSetor';
 import { buscarPessoasDoRetrato, pessoasDoMes } from '@/services/analitico/pessoasDoMes';
 import {
   QUARTIS_PADRAO, COR_QUARTIL,
@@ -565,6 +566,8 @@ export function QuartisOperadores({
    */
   const [quartilFoco, setQuartilFoco] = useState<number | null>(null);
   const [contarHoje, setContarHoje] = useState(false);
+  // Setores com dias úteis próprios — quem é de um deles é medido por eles.
+  const [diasPorSetor, setDiasPorSetor] = useState<DiasUteisPorSetor>({});
   const [carregado, setCarregado]   = useState(false);
 
   /*
@@ -700,6 +703,7 @@ export function QuartisOperadores({
         setMetasIndiretas(iMap);
         setFeriados(cfg.data?.feriados ?? []);
         setContarHoje(cfg.data?.contar_dia_atual === true);
+        setDiasPorSetor(cfg.porSetor ?? {});
         setQuartis(cfg.data?.quartis ?? QUARTIS_PADRAO);
         const sMap: Record<string, string> = {};
         for (const s of (setoresData as { id: string; nome: string }[]) ?? []) sMap[s.id] = s.nome;
@@ -748,13 +752,13 @@ export function QuartisOperadores({
   // A conta das linhas mora em `linhasQuartil.ts` desde 30/09/2026 — a aba
   // Quartis do celular usa a MESMA função.
   const gruposEsemMeta = useMemo(() => montarLinhasQuartil({
-    anoNum, mesNum, mes, hojeISO: getTodayISO(), feriados, contarHoje, quartis, resumos,
+    anoNum, mesNum, mes, hojeISO: getTodayISO(), feriados, contarHoje, diasPorSetor, quartis, resumos,
     operadores, metasOp, metasIndiretas, indiretoMap, emHO, ho, setorIds, equipeIds,
     operadorEquipeMap, equipesExtrasPorOperador, setorDaEquipe, nomeDaEquipe, treinoMap,
   // `emHO` é dependência de verdade: sem ele, trocar a unidade no alternador
   // não recalcularia linha nenhuma — a tabela ficaria na unidade anterior e só
   // o rótulo mudaria.
-  }), [anoNum, mesNum, mes, feriados, contarHoje, quartis, resumos, operadores, metasOp,
+  }), [anoNum, mesNum, mes, feriados, contarHoje, diasPorSetor, quartis, resumos, operadores, metasOp,
       metasIndiretas, indiretoMap, emHO, ho, setorIds, equipeIds,
       operadorEquipeMap, equipesExtrasPorOperador, setorDaEquipe, nomeDaEquipe, treinoMap]);
 

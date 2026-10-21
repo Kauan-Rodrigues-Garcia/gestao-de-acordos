@@ -16,6 +16,7 @@
  */
 import { metaNaUnidade } from '@/lib/unidadeValor';
 import { QUARTIS_PADRAO } from '@/lib/diasUteis';
+import { diasUteisDoSetor, type DiasUteisPorSetor } from '@/lib/diasUteisDoSetor';
 import { alvoDoDia, type AlvoDoDia } from '@/lib/mobile/alvoDoDia';
 import type { QuartilConfig } from '@/lib/supabase';
 import {
@@ -52,8 +53,11 @@ export interface FontesEquipe {
   /** operador_id → meta indireta bruta `[PP]`. */
   metasIndiretas: Record<string, number>;
   indiretoMap: MapaRecebimentoIndireto;
+  /** Feriados e `contar_dia_atual` GERAIS do mês. */
   feriados: string[];
   contarHoje: boolean;
+  /** Setores com dias úteis próprios (`lib/diasUteisDoSetor`). */
+  diasPorSetor?: DiasUteisPorSetor;
   quartis: QuartilConfig[];
   /** equipe_id → início do treinamento. */
   treinoMap: Record<string, string | null>;
@@ -98,9 +102,14 @@ export function montarEquipe(fontes: FontesEquipe, equipeId: string): EquipeNaTe
   const quartis = fontes.quartis.length ? fontes.quartis : QUARTIS_PADRAO;
   const inicioTreino = fontes.treinoMap[equipeId] ?? null;
   const treinamento = equipeId in fontes.treinoMap;
+  // Os dias úteis do setor da equipe: os dele, se ele trabalha diferente.
+  const regua = diasUteisDoSetor(
+    { data: { feriados: fontes.feriados, contar_dia_atual: fontes.contarHoje }, porSetor: fontes.diasPorSetor },
+    eq.setor_id,
+  );
   const dias = diasDaEquipe({
-    ano, mes: mesNum, feriados: fontes.feriados, hojeISO: fontes.hojeISO,
-    contarHoje: fontes.contarHoje, inicioTreino,
+    ano, mes: mesNum, feriados: regua.feriados, hojeISO: fontes.hojeISO,
+    contarHoje: regua.contarDiaAtual, inicioTreino,
   });
 
   const soma = somarPorEquipe({
@@ -140,15 +149,15 @@ export function montarEquipe(fontes: FontesEquipe, equipeId: string): EquipeNaTe
   const alvo = esperado !== null && meta !== null
     ? alvoDoDia({
         recebido: acumulado, esperado, metaDiaria: meta / dias.totalUteis,
-        hojeISO: fontes.hojeISO, feriados: fontes.feriados,
+        hojeISO: fontes.hojeISO, feriados: regua.feriados,
       })
     : null;
 
   const nomeDaEquipe = new Map(fontes.equipes.map(e => [e.id, e.nome] as const));
   const { porSetor, semMeta } = montarLinhasQuartil({
     anoNum: ano, mesNum, mes: fontes.mes, hojeISO: fontes.hojeISO,
-    feriados: fontes.feriados, contarHoje: fontes.contarHoje, quartis,
-    resumos: fontes.resumos, operadores: fontes.operadores,
+    feriados: fontes.feriados, contarHoje: fontes.contarHoje, diasPorSetor: fontes.diasPorSetor,
+    quartis, resumos: fontes.resumos, operadores: fontes.operadores,
     metasOp: fontes.metasOperador, metasIndiretas: fontes.metasIndiretas,
     indiretoMap: fontes.indiretoMap, emHO: fontes.emHO, ho: fontes.ho,
     setorIds: [], equipeIds: [equipeId],

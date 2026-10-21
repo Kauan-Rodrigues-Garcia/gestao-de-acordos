@@ -26,6 +26,7 @@ import { ehDiaUtil as ehSegundaASexta } from '@/lib/diasUteis';
 import { CALENDARIO_PADRAO, ehDiaUtilComercial, type CalendarioDoMes } from '@/lib/vendasCalendario';
 import type { Produto } from '@/lib/produto';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
+import { diasUteisDoSetor, type FonteDiasUteis } from '@/lib/diasUteisDoSetor';
 import { buscarCalendario } from '@/services/vendas/calendarioVendas.service';
 import {
   buscarMes, listarSetoresDoCalendario, EVENTO_CALENDARIO_SETOR,
@@ -43,7 +44,8 @@ const SEM_FERIADOS: string[] = [];
 const CACHE = {
   setores: new Map<string, SetorDoCalendario[]>(),
   meses: new Map<string, MesDoCalendario>(),
-  metas: new Map<string, string[]>(),
+  /** A config do mês inteira: o feriado que vale depende do setor aberto. */
+  metas: new Map<string, FonteDiasUteis>(),
   vendas: new Map<string, CalendarioDoMes>(),
 };
 
@@ -141,15 +143,20 @@ export function useCalendarioSetor(
         .finally(lidos);
     } else {
       void getMetasConfig(empresaId, m, ano)
-        .then(r => CACHE.metas.set(chaveFeriados, r.data?.feriados ?? []))
-        .catch(() => { if (!CACHE.metas.has(chaveFeriados)) CACHE.metas.set(chaveFeriados, []); })
+        .then(r => CACHE.metas.set(chaveFeriados, r))
+        .catch(() => { if (!CACHE.metas.has(chaveFeriados)) CACHE.metas.set(chaveFeriados, { data: null }); })
         .finally(lidos);
     }
     return () => { vivo = false; };
   }, [empresaId, produto, ano, m, chaveFeriados, versao]);
 
   const calVendas = CACHE.vendas.get(chaveFeriados) ?? CALENDARIO_PADRAO;
-  const feriadosMetas = CACHE.metas.get(chaveFeriados);
+  // Os feriados DO SETOR aberto: a exceção dele, se tiver; senão os gerais.
+  const fonteMetas = CACHE.metas.get(chaveFeriados);
+  const feriadosMetas = useMemo(
+    () => (fonteMetas ? diasUteisDoSetor(fonteMetas, setorId).feriados : undefined),
+    [fonteMetas, setorId],
+  );
   const feriadosOficiais = produto === 'comercial' ? calVendas.feriados : (feriadosMetas ?? SEM_FERIADOS);
   const ehDiaUtil = useCallback((iso: string) => {
     if (produto === 'comercial') return ehDiaUtilComercial(iso, calVendas);
