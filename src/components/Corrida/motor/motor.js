@@ -3604,7 +3604,14 @@ function desenhaCaixa(c, w, h, u, sh, foco, agora) {
    a festa saem de `agora - inicia_em`. Quem chega atrasado cai no ponto certo; ninguém «pula» nada. */
 const SHOW = (() => { let t = 0; const fases = []; for (const f of ['contagem', 'caixa', 'pouso', 'intro', 'saida']) { fases.push({ f, t0: t }); t += DUR[f]; } return { fases, total: t }; })();
 const FESTA_MUSICA = 77; // o Tema da Vitória tem 77 s; depois dele a festa fica no último quadro, parada
-function janelaLenta() { const f = rec && rec.foto; return f && f.d2 >= 0 && f.t2 - f.t1 < 1 ? [Math.max(0, f.t1 - 1.3), f.t2 + 0.15] : null; }
+/* A câmera lenta da chegada: SEMPRE que alguém vence (21/10/2026). Antes ela só existia com «foto de
+   chegada» — o 2º a menos de 1 s do 1º —, e o vencedor que caía direto, sozinho na frente, cruzava a
+   linha em velocidade normal. Com o 2º colado, a janela vai até ele cruzar, como sempre foi. */
+function janelaLenta() {
+  const f = rec && rec.foto; if (!f) return null;
+  const colado = f.d2 >= 0 && f.t2 - f.t1 < 1;
+  return [Math.max(0, f.t1 - 1.3), (colado ? f.t2 : f.t1) + (colado ? 0.15 : 0.4)];
+}
 /** Segundos de relógio desde a largada da pista → T da gravação (a câmera lenta da foto de chegada a 30%). */
 function tDaCorrida(e) {
   const j = janelaLenta(); if (!j || e <= j[0]) return e;
