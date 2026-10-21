@@ -89,8 +89,8 @@ describe('seletor de faixas', () => {
     const funks = MUSICAS.filter(id => GENERO_DA_MUSICA[id] === 'funk');
     fireEvent.click(screen.getByRole('radio', { name: /^Funk/ }));
     expect(faixasNaTela()).toHaveLength(funks.length);
-    expect(within(screen.getByRole('tabpanel')).getByText(EMBUTIDAS.malvadinho.nome)).toBeInTheDocument();
-    expect(within(screen.getByRole('tabpanel')).queryByText(EMBUTIDAS.leao.nome)).toBeNull();
+    expect(within(screen.getByRole('tabpanel')).getByText(EMBUTIDAS.mdt.nome)).toBeInTheDocument();
+    expect(within(screen.getByRole('tabpanel')).queryByText(EMBUTIDAS.cowboy.nome)).toBeNull();
 
     fireEvent.click(screen.getByRole('radio', { name: /^Todos/ }));
     expect(faixasNaTela()).toHaveLength(MUSICAS.length);
@@ -115,15 +115,15 @@ describe('seletor de faixas', () => {
   it('clicar escolhe a faixa', () => {
     render(<PainelSomAmbiente />);
     fireEvent.click(screen.getByRole('tab', { name: /Músicas/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Do I Wanna Know/ }));
-    expect(motor.escolher).toHaveBeenCalledWith('doiwannaknow');
+    fireEvent.click(screen.getByRole('button', { name: /Walk Em Down/ }));
+    expect(motor.escolher).toHaveBeenCalledWith('walkemdown');
   });
 
   it('trocar de faixa pelo anterior/próxima leva à aba dela', () => {
     render(<PainelSomAmbiente />);
     publicar({ prefs: { ...PADRAO, faixa: MUSICAS[MUSICAS.length - 1], playlists: [] } });
     expect(screen.getByRole('tab', { name: /Músicas/ })).toHaveAttribute('aria-selected', 'true');
-    expect(within(screen.getByRole('tabpanel')).getByText('Somebody That I Used To Know')).toBeInTheDocument();
+    expect(within(screen.getByRole('tabpanel')).getByText("They Don't Care About Us")).toBeInTheDocument();
   });
 
   it('completo: tem a aba YouTube, com as da pessoa e o campo de busca', () => {

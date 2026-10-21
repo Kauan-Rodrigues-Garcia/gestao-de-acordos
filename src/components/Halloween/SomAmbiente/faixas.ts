@@ -64,94 +64,88 @@ export const EMBUTIDAS: Record<FaixaEmbutida, InfoFaixa> = {
     nome: 'Stranger Things', descricao: 'Tema de Kyle Dixon e Michael Stein', capa: capa('stranger'), Icone: Ghost,
     cor: { fundo: 'hsl(0 45% 9%)', destaque: 'hsl(0 85% 57%)' },
   },
-  provavelmente: {
-    nome: 'Provavelmente', descricao: 'Hungria', capa: capa('provavelmente'), Icone: Music,
-    cor: { fundo: 'hsl(220 6% 13%)', destaque: 'hsl(0 0% 90%)' },
+  // As de 21/10/2026 entraram no lugar de todas as músicas de antes. Capas do
+  // Spotify (oEmbed) e cores tiradas olhando a capa.
+  // Funk
+  // O preto e branco e o vermelho do «300».
+  trezentosno7: {
+    nome: '300 no 7', descricao: 'MC GP, MC Jvila e MC LUUKY · Dj Yuri Pedrada', capa: capa('trezentosno7'), Icone: Music,
+    cor: { fundo: 'hsl(0 6% 10%)', destaque: 'hsl(0 82% 54%)' },
   },
-  doiwannaknow: {
-    nome: 'Do I Wanna Know?', descricao: 'Arctic Monkeys', capa: capa('doiwannaknow'), Icone: Music,
-    cor: { fundo: 'hsl(190 10% 10%)', destaque: 'hsl(0 0% 92%)' },
+  // Foto em preto e branco, corredor cinza-azulado: sem cor viva, destaque neutro.
+  mdt: {
+    nome: 'MDT', descricao: 'Mc Kelvinho e MC Jvila · Caio Passos, DJ Glenner e DJ Thi Marquez', capa: capa('mdt'), Icone: Music,
+    cor: { fundo: 'hsl(210 10% 12%)', destaque: 'hsl(0 0% 90%)' },
   },
-  novobalanco: {
-    nome: 'Novo Balanço', descricao: 'Veigh', capa: capa('novobalanco'), Icone: Music,
-    cor: { fundo: 'hsl(30 28% 15%)', destaque: 'hsl(36 85% 60%)' },
+  // O vermelho escuro da festa e o vermelho do moletom.
+  postounodaily: {
+    nome: 'Me Postou no Daily · Festa do Big G', descricao: 'MC GP e Mc Lele JP · DJ Davi DogDog e Dj Andrabeat', capa: capa('postounodaily'), Icone: Music,
+    cor: { fundo: 'hsl(355 45% 11%)', destaque: 'hsl(358 78% 55%)' },
   },
-  raindance: {
-    nome: 'Raindance', descricao: 'Dave, com Tems', capa: capa('raindance'), Icone: Music,
-    cor: { fundo: 'hsl(40 22% 13%)', destaque: 'hsl(43 90% 62%)' },
+  // A capa do Deezer (o Spotify não achou a faixa): o álbum «Feliz no Simples».
+  // O vermelho do conversível.
+  novinhamidia: {
+    nome: 'Tô com uma Novinha Mídia', descricao: 'MC IG, Mc Lele JP e MC Neguinho Prt · Oldilla', capa: capa('novinhamidia'), Icone: Music,
+    cor: { fundo: 'hsl(356 40% 11%)', destaque: 'hsl(356 80% 54%)' },
   },
-  // Capa amarela com o vestido verde-azulado: o fundo vem do vestido, o
-  // destaque do dourado do título «Decretos Reais».
-  leao: {
-    nome: 'Leão', descricao: 'Marília Mendonça', capa: capa('leao'), Icone: Music,
-    cor: { fundo: 'hsl(186 34% 13%)', destaque: 'hsl(44 88% 58%)' },
+  // Rap e trap
+  // O estádio no escuro e as luzes vermelhas.
+  donodaverdade: {
+    nome: 'Dono da Verdade (Ao Vivo)', descricao: 'Veigh', capa: capa('donodaverdade'), Icone: Music,
+    cor: { fundo: 'hsl(0 50% 9%)', destaque: 'hsl(0 80% 56%)' },
   },
-  // As de 14/10/2026, cores tiradas olhando a capa.
-  // A parede escura da favela e o creme do título.
-  poesiaacustica: {
-    nome: 'Poesia Acústica #6', descricao: 'Era uma Vez · Pineapple StormTv', capa: capa('poesiaacustica'), Icone: Music,
-    cor: { fundo: 'hsl(28 20% 12%)', destaque: 'hsl(50 80% 70%)' },
+  // O escritório cinza e o azul-claro do tênis.
+  clickbait: {
+    nome: 'Clickbait', descricao: 'Veigh, com Niink', capa: capa('clickbait'), Icone: Music,
+    cor: { fundo: 'hsl(200 8% 12%)', destaque: 'hsl(190 45% 70%)' },
   },
-  // O céu azul atrás do Veigh.
-  vidachique: {
-    nome: 'Vida Chique', descricao: 'Veigh', capa: capa('vidachique'), Icone: Music,
-    cor: { fundo: 'hsl(205 30% 13%)', destaque: 'hsl(203 70% 64%)' },
+  // O fundo creme e o azul das tranças.
+  walkemdown: {
+    nome: 'Walk Em Down', descricao: 'NLE Choppa, com Roddy Ricch', capa: capa('walkemdown'), Icone: Music,
+    cor: { fundo: 'hsl(35 15% 12%)', destaque: 'hsl(210 80% 64%)' },
   },
-  // O diabinho roxo no fundo preto.
-  malvadinho: {
-    nome: 'Malvadinho', descricao: 'MC Luuky · DJ JB Mix', capa: capa('malvadinho'), Icone: Music,
-    cor: { fundo: 'hsl(282 32% 10%)', destaque: 'hsl(286 72% 64%)' },
+  // Capa do Deezer. O cinza-lilás das nuvens e o amarelo do título.
+  mantemopique: {
+    nome: 'Mantém o Pique', descricao: 'Ryu, the Runner', capa: capa('mantemopique'), Icone: Music,
+    cor: { fundo: 'hsl(250 10% 12%)', destaque: 'hsl(48 95% 56%)' },
   },
-  // O palco azul do «Ao Vivo».
-  infiel: {
-    nome: 'Infiel', descricao: 'Marília Mendonça', capa: capa('infiel'), Icone: Music,
-    cor: { fundo: 'hsl(232 40% 13%)', destaque: 'hsl(226 85% 68%)' },
+  // Sertanejo
+  // O sépia do palco e o bege do «PÓS».
+  pos: {
+    nome: 'Pós (Ao Vivo)', descricao: 'Felipe e Rodrigo', capa: capa('pos'), Icone: Music,
+    cor: { fundo: 'hsl(25 25% 11%)', destaque: 'hsl(32 45% 68%)' },
   },
-  // A tinta azul-marinho e o pêssego de «Bloom».
-  innerbloom: {
-    nome: 'Innerbloom', descricao: 'RÜFÜS DU SOL', capa: capa('innerbloom'), Icone: Music,
-    cor: { fundo: 'hsl(222 36% 13%)', destaque: 'hsl(22 72% 70%)' },
+  // A capa toda em vermelho.
+  cowboy: {
+    nome: 'Nunca Namore um Cowboy (Ao Vivo)', descricao: 'João Carreiro', capa: capa('cowboy'), Icone: Music,
+    cor: { fundo: 'hsl(355 35% 12%)', destaque: 'hsl(355 70% 62%)' },
   },
-  // A faixa marrom do topo e o cáqui do violão.
-  deixemeir: {
-    nome: 'Deixe Me Ir', descricao: '1Kilo · Baviera, Pablo Martins e Knust', capa: capa('deixemeir'), Icone: Music,
-    cor: { fundo: 'hsl(35 26% 12%)', destaque: 'hsl(42 42% 64%)' },
+  // A capa no Spotify é um quadro do vídeo (16:9); o recorte quadrado pega o
+  // centro. O azul-marinho da camisa listrada.
+  temporaldeamor: {
+    nome: 'Temporal de Amor / Página de Amigos / Não Olha Assim', descricao: 'César Menotti & Fabiano · Ao Vivo', capa: capa('temporaldeamor'), Icone: Music,
+    cor: { fundo: 'hsl(220 30% 10%)', destaque: 'hsl(215 60% 64%)' },
   },
-  // Papel cru com quatro quadrantes; o laranja é o único tom vivo.
-  somebody: {
-    nome: 'Somebody That I Used To Know', descricao: 'Gotye, com Kimbra', capa: capa('somebody'), Icone: Music,
-    cor: { fundo: 'hsl(36 10% 12%)', destaque: 'hsl(30 88% 56%)' },
+  // O palco escuro e o dourado do nome.
+  umdegrau: {
+    nome: 'Um Degrau na Escada (Ao Vivo)', descricao: 'Chico Rey & Paraná', capa: capa('umdegrau'), Icone: Music,
+    cor: { fundo: 'hsl(35 30% 10%)', destaque: 'hsl(45 85% 58%)' },
   },
-  // As de 16/10/2026, capas do Spotify (oEmbed) e cores tiradas olhando a capa.
-  // A fumaça marrom do salão e o dourado do título.
-  famosoima: {
-    nome: 'Famoso Ímã | O Poderoso Chatão', descricao: 'MC Lele JP, MC Poze do Rodo e MC Leozinho ZS', capa: capa('famosoima'), Icone: Music,
-    cor: { fundo: 'hsl(28 25% 11%)', destaque: 'hsl(42 80% 58%)' },
+  // O DVD inteiro, 43 minutos. O azul-petróleo do título e o amarelo da moldura.
+  cetadoido: {
+    nome: 'Cê Tá Doido (DVD completo)', descricao: 'Ícaro e Gilmar, Panda e Humberto & Ronaldo', capa: capa('cetadoido'), Icone: Music,
+    cor: { fundo: 'hsl(200 45% 12%)', destaque: 'hsl(42 90% 58%)' },
   },
-  // O céu e a represa, e o azul das letras.
-  penaporta: {
-    nome: 'É os Pé na Porta', descricao: 'MC Leozinho ZS · Dj Lv Mdp', capa: capa('penaporta'), Icone: Music,
-    cor: { fundo: 'hsl(205 35% 14%)', destaque: 'hsl(210 85% 62%)' },
+  // Pop
+  // O dourado de «Xscape».
+  chicago: {
+    nome: 'Chicago', descricao: 'Michael Jackson', capa: capa('chicago'), Icone: Music,
+    cor: { fundo: 'hsl(38 30% 11%)', destaque: 'hsl(40 75% 58%)' },
   },
-  // O fundo azul-royal e o azul do moletom.
-  termineicomaex: {
-    nome: 'Terminei com a Ex', descricao: 'MC Rick e Mc Leozin · Dj Caio Vieira', capa: capa('termineicomaex'), Icone: Music,
-    cor: { fundo: 'hsl(232 45% 14%)', destaque: 'hsl(228 80% 66%)' },
-  },
-  // A digital preta e o vermelho do título.
-  barulhodorock: {
-    nome: 'Escuta o Barulho do Rock', descricao: 'MC VK da VS · DJ Aimi, Moura DJ e DJ Modder', capa: capa('barulhodorock'), Icone: Music,
-    cor: { fundo: 'hsl(0 8% 10%)', destaque: 'hsl(0 85% 55%)' },
-  },
-  // Papel cinza e o vermelho de «Longe».
-  longedemagnata: {
-    nome: 'Longe de Magnata', descricao: 'MC Tuto, MC Vine7, MC Joãozinho VT e Borges · Deejhay RB', capa: capa('longedemagnata'), Icone: Music,
-    cor: { fundo: 'hsl(0 6% 12%)', destaque: 'hsl(358 80% 55%)' },
-  },
-  // A casa no escuro e a porta vermelha.
-  flexiona: {
-    nome: 'Flexiona / Poder da Gestão', descricao: 'Nagalli · Veigh, MC Tuto, G.A e MC Joãozinho VT', capa: capa('flexiona'), Icone: Music,
-    cor: { fundo: 'hsl(0 10% 8%)', destaque: 'hsl(358 75% 52%)' },
+  // O céu vermelho atrás da estátua de «HIStory».
+  theydontcare: {
+    nome: "They Don't Care About Us", descricao: 'Michael Jackson', capa: capa('theydontcare'), Icone: Music,
+    cor: { fundo: 'hsl(5 40% 10%)', destaque: 'hsl(8 80% 56%)' },
   },
 };
 

@@ -76,10 +76,14 @@ describe('preferências do Som ambiente', () => {
     expect(lerPosicao('p1')).toBeNull();
   });
 
-  it('quem tinha um tema que saiu fica com «Halloween»; uma música, com «Provavelmente»', () => {
+  it('quem tinha um tema que saiu fica com «Halloween»; uma música, com «300 no 7»', () => {
     for (const t of ['sexta13', 'candyman', 'pesadelo', 'pecadores']) expect(normalizar({ faixa: t }).faixa).toBe('halloween');
     for (const m of ['rainha', 'boladao', 'numb', 'byob', 'bicho', 'gemebaixo', 'veigh', 'puxalanca', 'reliquia']) {
-      expect(normalizar({ faixa: m }).faixa).toBe('provavelmente');
+      expect(normalizar({ faixa: m }).faixa).toBe('trezentosno7');
+    }
+    // As que saíram em 21/10/2026.
+    for (const m of ['provavelmente', 'raindance', 'leao', 'innerbloom', 'flexiona', 'malvadinho']) {
+      expect(normalizar({ faixa: m }).faixa).toBe('trezentosno7');
     }
   });
 

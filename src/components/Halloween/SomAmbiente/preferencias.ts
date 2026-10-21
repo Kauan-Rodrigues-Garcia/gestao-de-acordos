@@ -19,18 +19,21 @@ export const TEMAS_DE_TERROR = ['saw', 'deadsilence', 'it', 'halloween', 'strang
  * Desde 16/10/2026 ficam agrupadas pelo gênero (`GENERO_DA_MUSICA`), na
  * ordem de `GENEROS` — é a ordem do painel e a da sequência. Seis entraram no
  * mesmo dia: cinco funks e «Flexiona / Poder da Gestão».
+ *
+ * Em 21/10/2026 todas as músicas foram trocadas pelas treze de agora (as que
+ * saíram vão para `SUBSTITUTAS`). Os temas de terror ficaram. No mesmo dia
+ * entraram mais duas, cada uma no fim do seu gênero: «Tô com uma Novinha
+ * Mídia» (funk) e «Mantém o Pique» (rap).
  */
 export const MUSICAS = [
   // Funk
-  'malvadinho', 'famosoima', 'penaporta', 'termineicomaex', 'barulhodorock', 'longedemagnata',
+  'trezentosno7', 'mdt', 'postounodaily', 'novinhamidia',
   // Rap e trap
-  'provavelmente', 'novobalanco', 'vidachique', 'flexiona', 'raindance', 'poesiaacustica', 'deixemeir',
+  'donodaverdade', 'clickbait', 'walkemdown', 'mantemopique',
   // Sertanejo
-  'leao', 'infiel',
-  // Pop e rock
-  'doiwannaknow', 'somebody',
-  // Eletrônica
-  'innerbloom',
+  'pos', 'cowboy', 'temporaldeamor', 'umdegrau', 'cetadoido',
+  // Pop
+  'chicago', 'theydontcare',
 ] as const;
 export type Musica = (typeof MUSICAS)[number];
 
@@ -38,26 +41,24 @@ export type Musica = (typeof MUSICAS)[number];
  * Os gêneros das músicas, na ordem do painel (16/10/2026: «separe por
  * categorias, funk, eletrônica etc.»). O gênero de cada uma foi conferido
  * pelo artista e pela faixa no Spotify; rap e trap ficam juntos porque os
- * artistas transitam entre os dois (Veigh, Nagalli), e pop e rock também —
- * são duas faixas.
+ * artistas transitam entre os dois (Veigh, NLE Choppa). Desde 21/10/2026 não
+ * há rock nem eletrônica na lista: o gênero vazio sairia como filtro sem
+ * nenhuma faixa, então saiu também.
  */
 export const GENEROS = [
   { id: 'funk', rotulo: 'Funk' },
   { id: 'rap', rotulo: 'Rap e trap' },
   { id: 'sertanejo', rotulo: 'Sertanejo' },
-  { id: 'pop', rotulo: 'Pop e rock' },
-  { id: 'eletronica', rotulo: 'Eletrônica' },
+  { id: 'pop', rotulo: 'Pop' },
 ] as const;
 export type Genero = (typeof GENEROS)[number]['id'];
 
 export const GENERO_DA_MUSICA: Record<Musica, Genero> = {
-  malvadinho: 'funk', famosoima: 'funk', penaporta: 'funk', termineicomaex: 'funk',
-  barulhodorock: 'funk', longedemagnata: 'funk',
-  provavelmente: 'rap', novobalanco: 'rap', vidachique: 'rap', flexiona: 'rap',
-  raindance: 'rap', poesiaacustica: 'rap', deixemeir: 'rap',
-  leao: 'sertanejo', infiel: 'sertanejo',
-  doiwannaknow: 'pop', somebody: 'pop',
-  innerbloom: 'eletronica',
+  trezentosno7: 'funk', mdt: 'funk', postounodaily: 'funk', novinhamidia: 'funk',
+  donodaverdade: 'rap', clickbait: 'rap', walkemdown: 'rap', mantemopique: 'rap',
+  pos: 'sertanejo', cowboy: 'sertanejo', temporaldeamor: 'sertanejo', umdegrau: 'sertanejo',
+  cetadoido: 'sertanejo',
+  chicago: 'pop', theydontcare: 'pop',
 };
 /** Todas as de fábrica, na ordem do painel. */
 export const FAIXAS_EMBUTIDAS = [...TEMAS_DE_TERROR, ...MUSICAS] as const;
@@ -72,24 +73,21 @@ export const ARQUIVOS: Record<FaixaEmbutida, string> = {
   it: '/sounds/halloween-it-every-27-years.mp3',
   halloween: '/sounds/halloween-john-carpenter.mp3',
   stranger: '/sounds/halloween-stranger-things.mp3',
-  provavelmente: '/sounds/halloween-hungria-provavelmente.mp3',
-  doiwannaknow: '/sounds/halloween-arctic-monkeys-do-i-wanna-know.mp3',
-  novobalanco: '/sounds/halloween-veigh-novo-balanco.mp3',
-  raindance: '/sounds/halloween-raindance.mp3',
-  leao: '/sounds/halloween-marilia-mendonca-leao.mp3',
-  poesiaacustica: '/sounds/halloween-poesia-acustica-6.mp3',
-  vidachique: '/sounds/halloween-veigh-vida-chique.mp3',
-  malvadinho: '/sounds/halloween-mc-luuky-malvadinho.mp3',
-  infiel: '/sounds/halloween-marilia-mendonca-infiel.mp3',
-  innerbloom: '/sounds/halloween-rufus-du-sol-innerbloom.mp3',
-  deixemeir: '/sounds/halloween-1kilo-deixe-me-ir.mp3',
-  somebody: '/sounds/halloween-gotye-somebody.mp3',
-  famosoima: '/sounds/halloween-famoso-ima-poderoso-chatao.mp3',
-  penaporta: '/sounds/halloween-leozinho-zs-pe-na-porta.mp3',
-  termineicomaex: '/sounds/halloween-terminei-com-a-ex.mp3',
-  barulhodorock: '/sounds/halloween-escuta-o-barulho-do-rock.mp3',
-  longedemagnata: '/sounds/halloween-longe-de-magnata.mp3',
-  flexiona: '/sounds/halloween-nagalli-flexiona.mp3',
+  trezentosno7: '/sounds/halloween-mc-gp-300-no-7.mp3',
+  mdt: '/sounds/halloween-mc-kelvinho-mdt.mp3',
+  postounodaily: '/sounds/halloween-me-postou-no-daily.mp3',
+  novinhamidia: '/sounds/halloween-to-com-uma-novinha-midia.mp3',
+  donodaverdade: '/sounds/halloween-veigh-dono-da-verdade.mp3',
+  clickbait: '/sounds/halloween-veigh-clickbait.mp3',
+  walkemdown: '/sounds/halloween-nle-choppa-walk-em-down.mp3',
+  mantemopique: '/sounds/halloween-ryu-the-runner-mantem-o-pique.mp3',
+  pos: '/sounds/halloween-felipe-e-rodrigo-pos.mp3',
+  cowboy: '/sounds/halloween-joao-carreiro-nunca-namore-um-cowboy.mp3',
+  temporaldeamor: '/sounds/halloween-cesar-menotti-fabiano-temporal-de-amor.mp3',
+  umdegrau: '/sounds/halloween-chico-rey-parana-um-degrau-na-escada.mp3',
+  cetadoido: '/sounds/halloween-ce-ta-doido-dvd.mp3',
+  chicago: '/sounds/halloween-michael-jackson-chicago.mp3',
+  theydontcare: '/sounds/halloween-michael-jackson-they-dont-care-about-us.mp3',
 };
 
 /**
@@ -114,6 +112,13 @@ export const ARQUIVOS: Record<FaixaEmbutida, string> = {
  * bem altos: «Escuta o Barulho do Rock» a −5,6, a mais alta de todas — ganho
  * 0,42, o primeiro abaixo de 0,5.
  *
+ * As de 21/10/2026 também, decodificadas no Chrome (a régua conferida em
+ * Raindance −9,1, Halloween −11,3 e Stranger Things −13,2, antes de Raindance
+ * sair). «They Don't Care About Us» veio baixa (−20,4, ganho 2,33, quase a de
+ * «Every 27 Years»); o DVD de «Cê Tá Doido» foi medido inteiro, os 43 minutos.
+ * As duas que entraram depois, no mesmo dia, também no Chrome, com a régua
+ * conferida em «300 no 7» (−8,7) e «They Don't Care About Us» (−20,4).
+ *
  * Faixa nova: medir e pôr aqui (o teste cobra que toda faixa tenha ganho).
  */
 export const GANHO: Record<FaixaEmbutida, number> = {
@@ -122,24 +127,21 @@ export const GANHO: Record<FaixaEmbutida, number> = {
   it: 2.30,            // -20,3
   halloween: 0.82,     // -11,3
   stranger: 1.04,      // -13,3
-  provavelmente: 0.95, // -12,5
-  doiwannaknow: 0.68,  // -9,6
-  novobalanco: 0.71,   // -10,0
-  raindance: 0.64,     // -9,1 (11/10/2026)
-  leao: 0.50,          // -7,0 (13/10/2026) — a mais alta da lista
-  poesiaacustica: 0.94, // -12,4 (14/10/2026)
-  vidachique: 0.74,    // -10,4
-  malvadinho: 0.72,    // -10,2
-  infiel: 0.65,        // -9,2
-  innerbloom: 0.73,    // -10,3
-  deixemeir: 0.92,     // -12,3
-  somebody: 2.86,      // -22,1 — a mais baixa da lista
-  famosoima: 0.50,     // -7,0 (16/10/2026)
-  penaporta: 0.67,     // -9,5
-  termineicomaex: 0.56, // -8,0
-  barulhodorock: 0.42, // -5,6 — a mais alta da lista
-  longedemagnata: 0.77, // -10,8
-  flexiona: 0.55,      // -7,8
+  trezentosno7: 0.61,  // -8,7 (21/10/2026)
+  mdt: 0.69,           // -9,7
+  postounodaily: 0.65, // -9,3
+  novinhamidia: 0.80,  // -11,1 (21/10/2026, a segunda leva)
+  donodaverdade: 1.05, // -13,5
+  clickbait: 0.69,     // -9,7
+  walkemdown: 0.74,    // -10,4
+  mantemopique: 1.00,  // -13,0 — já no alvo
+  pos: 0.58,           // -8,2
+  cowboy: 0.63,        // -9,0
+  temporaldeamor: 1.52, // -16,6
+  umdegrau: 1.32,      // -15,4
+  cetadoido: 0.54,     // -7,6 — a mais alta da lista
+  chicago: 0.65,       // -9,2
+  theydontcare: 2.33,  // -20,4 — a mais baixa da lista
 };
 
 /**
@@ -149,13 +151,18 @@ export const GANHO: Record<FaixaEmbutida, number> = {
  *
  * Temas que saíram em 13/10/2026 vão para «Halloween», o padrão; músicas — as
  * de 13/10 e as que já tinham saído antes (Veigh em 05/10, «Puxa o Lança» e
- * «Na Relíquia do 2T» em 08/10) — para «Provavelmente», a primeira das músicas.
+ * «Na Relíquia do 2T» em 08/10) — para a primeira das músicas. Desde
+ * 21/10/2026 é «300 no 7», e vão para ela também as dezoito que saíram nesse dia.
  */
 const SUBSTITUTAS: Record<string, FaixaEmbutida> = {
   sexta13: 'halloween', candyman: 'halloween', pesadelo: 'halloween', pecadores: 'halloween',
-  rainha: 'provavelmente', boladao: 'provavelmente', numb: 'provavelmente', byob: 'provavelmente',
-  bicho: 'provavelmente', gemebaixo: 'provavelmente',
-  veigh: 'provavelmente', puxalanca: 'provavelmente', reliquia: 'provavelmente',
+  ...Object.fromEntries([
+    'rainha', 'boladao', 'numb', 'byob', 'bicho', 'gemebaixo', 'veigh', 'puxalanca', 'reliquia',
+    // As de antes de 21/10/2026.
+    'malvadinho', 'famosoima', 'penaporta', 'termineicomaex', 'barulhodorock', 'longedemagnata',
+    'provavelmente', 'novobalanco', 'vidachique', 'flexiona', 'raindance', 'poesiaacustica', 'deixemeir',
+    'leao', 'infiel', 'doiwannaknow', 'somebody', 'innerbloom',
+  ].map(id => [id, 'trezentosno7' as const])),
 };
 
 export interface PlaylistSalva {
