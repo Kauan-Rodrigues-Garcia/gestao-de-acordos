@@ -3,7 +3,7 @@
 /** Uma corrida simulada: o que a gravação leva e cada tela reproduz. */
 export interface CorridaCavalos {
   seed: number;
-  /** A «personalidade» da corrida: normal, pelotão, virada ou disparada. */
+  /** A «personalidade» da corrida: normal, pelotão, virada, disparada ou duelo (os dois da frente, na reta final). */
   tipo: string;
   /** Quantos cavalos (um por raia, na ordem da `faixa`). */
   n: number;

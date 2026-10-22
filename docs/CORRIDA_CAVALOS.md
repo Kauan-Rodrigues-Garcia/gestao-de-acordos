@@ -204,6 +204,37 @@ e ninguém contava. Nada disto mexe na física nem no banco.
   fecha nos últimos 150 m até o mesmo recorte do replay. As fotos da
   arquibancada saem enquanto vale o zoom.
 
+## A reta final na física: o fim de cada um, a pressão e o duelo (22/10/2026)
+
+Essa mudança, ao contrário do locutor, mexe no resultado, mas só das corridas
+**novas**. A gravação guarda as posições, não a semente, então uma corrida já
+gravada não muda. Os sorteios novos ficam no fim (`fimA`, `duelo`), como pede o
+contrato. Constantes e medida estão no comentário em cima de `simular`.
+
+- **O fim de cada um:** a partir de 80% da pista, cada cavalo ganha ou perde até
+  8% de ritmo (`FIM_A`, sorteado por cavalo).
+- **A pressão no líder:** na reta final, o líder perde até 5% de ritmo
+  (`PRESSAO`), proporcional à folga sobre o segundo, até 20 px.
+- **O duelo** (tipo novo, `rec.tipo === 'duelo'`): metade das corridas normais,
+  ~20% de todas. Aos 75%, os dois da frente duelam até a linha. A diferença
+  entre eles segue um caminho que troca de lado 2 ou 3 vezes, até 14 px no
+  começo e 7 px na linha, e termina com o vencedor sorteado. Quem chega perto da
+  dupla cansa. O locutor anuncia «RETA FINAL: #A CONTRA #B!».
+
+| 2.000 corridas de 10 | Antes | Agora |
+|---|---|---|
+| Quem lidera aos 90% vence | 55,6% | 41,3% |
+| Trocas de ponta visíveis no último quarto | 1,13 | 1,35 |
+| Sem troca de ponta no último quarto | 24,5% | 17,3% |
+| Chegada apertada | 33,3% | 37,0% |
+| Vitória por posição aos 3 s (justo = 10%) | 8,9% a 11,3% | 9,0% a 11,3% |
+
+Com 4 cavalos, o líder aos 90% vence 52% (era 66%); com 24, vence 39% (era 48%).
+«Trocas visíveis» usa a mesma folga do placar (6 px). Na primeira versão do
+duelo a correção era fraca: as ondas de ritmo (até ±18%) brigavam com ela, e um
+terceiro cavalo passava pelos dois. Daí o `DUELO_KP` alto e o cansaço de quem
+se aproxima.
+
 ## Leveza (o que não pode voltar)
 
 - **Paddock:** 30 quadros por segundo, e 15 atrás da tela de escolha. No

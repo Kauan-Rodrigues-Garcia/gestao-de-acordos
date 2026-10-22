@@ -2988,7 +2988,8 @@ function montarLances(rec) {
   for (let f = 0; f <= fim; f++) {
     const lx = x(f, ponta[f]);
     if (lx < L - RETA_PX) continue;
-    if (reta < 0) { reta = f / FPS; bruto.push({ t: reta, tipo: 'reta' }); }
+    // no duelo (`simulacao.js`), a dupla é a dos dois da frente aos 75%: o mesmo ponto da reta final
+    if (reta < 0) { reta = f / FPS; const [a, b] = ordem(f); bruto.push(rec.tipo === 'duelo' ? { t: reta, tipo: 'reta', i: a, j: b } : { t: reta, tipo: 'reta' }); }
     const [a, b] = ordem(f), gap = x(f, a) - x(f, b);
     colados = gap <= COLADO_PX ? colados + 1 : 0;
     if (!deuColados && colados >= 15 && f / FPS >= reta + FAIXA_ESPACO) { deuColados = true; bruto.push({ t: f / FPS, tipo: 'colados', i: a, j: b }); }
@@ -3017,6 +3018,7 @@ function narrar(e) {
   const frases = FRASES[e.tipo];
   if (frases) { if (cav) feed(`<b>#${cav.num}</b>${quem(cav)} ${frases[Math.round(e.t * FPS) % frases.length]}`, cav); return; }
   if (e.tipo === 'colados') faixa(`#${G.cavalos[e.i].num} E #${G.cavalos[e.j].num} CABEÇA A CABEÇA!`, true);
+  else if (e.tipo === 'reta' && e.j !== undefined) faixa(`RETA FINAL: #${G.cavalos[e.i].num} CONTRA #${G.cavalos[e.j].num}!`, true);
   else faixa(e.tipo === 'reta' ? 'RETA FINAL!' : 'FOTO À VISTA!', true);
   Som.anuncio();
 }
@@ -3123,7 +3125,7 @@ function animarCards(wall) {
 }
 async function infoLab() {
   const el = $('#lInfo'); if (!G) return;
-  const rec = G.rec, nomes = { normal: 'normal', pelotao: 'pelotão', virada: 'virada', disparada: 'disparada' };
+  const rec = G.rec, nomes = { normal: 'normal', pelotao: 'pelotão', virada: 'virada', disparada: 'disparada', duelo: 'duelo' };
   let txt = `semente ${G.seed} · ${MAPA.nome}`;
   if (rec) {
     txt += `<br>corrida: ${nomes[rec.tipo]} · ${rec.frames} quadros · ${rec.dur.toFixed(1)} s<br>simulada em ${Math.round(G.msSim)} ms${rec.tentativas ? ` (${rec.tentativas} sementes até a apertada)` : ''}<br>chegada: ${rec.gap.toFixed(3)} s entre 1º e 2º${rec.apertada ? ' → foto' : ''}`;

@@ -46,6 +46,22 @@ export const SALTO0 = -12, SALTO1 = 50, SALTO_ALT = 19, SALTO_BATE = 10, SALTO_Q
 // É igual para todos, nos mesmos pontos da pista: não mexe na justiça.
 export const RECUP = 0.16, RECUP_PX = 110;
 export const pouso = d => d <= 0 || d >= RECUP_PX ? 0 : d < 18 ? suave(d / 18) : 1 - suave((d - 18) / (RECUP_PX - 18));
+/*
+ * A reta final (medida em 2.000 corridas de 10, 22/10/2026). Antes, quem liderava aos 90% vencia
+ * 55,6%, e 24,5% das corridas não tinham troca de ponta visível no último quarto. Três coisas:
+ * - cada cavalo tem o seu fim, de −FIM_A a +FIM_A de ritmo, a partir de FIM_INI;
+ * - o líder sente quem vem colado: perde até PRESSAO com 20 px de folga sobre o segundo;
+ * - o duelo: metade das corridas normais (~20% de todas) vira duelo dos dois da frente aos
+ *   DUELO_INI. A diferença entre os dois segue um caminho que troca de lado 2 ou 3 vezes
+ *   (DUELO_AMP px no começo, DUELO_FIM na linha) e termina com o vencedor que o sorteio mandou;
+ *   quem chega perto da dupla cansa (DUELO_RESTO). DUELO_KP e DUELO_MAX: a força da correção
+ *   (as ondas de ritmo chegam a ±18% e brigam com ela; com menos que isso a dupla se perdia).
+ * Resultado: líder aos 90% vence 41,3%, sem troca no último quarto 17,3%, trocas visíveis no
+ * último quarto 1,13 → 1,35, chegada apertada 33% → 37%. A vitória por posição aos 3 s segue
+ * entre 9% e 11,3%: tudo é igual para todos e só olha a posição.
+ */
+const FIM_INI = 0.8, FIM_A = 0.08, PRESSAO = 0.05;
+const CHANCE_DUELO = 0.5, DUELO_INI = 0.75, DUELO_AMP = 14, DUELO_FIM = 7, DUELO_KP = 0.03, DUELO_MAX = 0.2, DUELO_RESTO = 0.15;
 export function simular(seed, n) {
   const r = rng(seed ^ 0x9e3779b9);
   const tipo = ['normal', 'normal', 'pelotao', 'virada', 'disparada'][Math.floor(r() * 5)];
@@ -71,14 +87,23 @@ export function simular(seed, n) {
   const barreiras = BARREIRAS_EM.map(f => X0 + f * DIST);
   for (const p of P) p.bate = barreiras.map(() => r() < CHANCE_BATER);
 
+  // A reta final (22/10/2026): sorteios novos só aqui, no fim, como pede o contrato.
+  // Cada cavalo tem o seu fim (de −1 a +1, vezes FIM_A); e numa parte das corridas normais
+  // os dois da frente aos 75% fazem um duelo até a linha, com o vencedor já sorteado.
+  for (const p of P) p.fimA = (r() - 0.5) * 2;
+  const duelo = tipo === 'normal' && r() < CHANCE_DUELO ? { lado: r() < 0.5 ? 1 : -1, voltas: 2 + Math.floor(r() * 2), a: -1, b: -1, rel0: 0 } : null;
+
   const DT = 1 / 120, PASSO = 120 / FPS;
   const xs = new Float64Array(n).fill(X0), vs = new Float64Array(n), fin = new Float64Array(n).fill(-1);
   const quadrosX = []; let t = 0, step = 0, ultimo = -1;
   while (true) {
     if (step % PASSO === 0) { const q = new Int16Array(n); for (let i = 0; i < n; i++) q[i] = Math.round((xs[i] - X0) * 4); quadrosX.push(q); }
     // o primeiro e o segundo de quem ainda corre: é contra eles que se mede «ficou para trás»
-    let x1 = -1e9, x2 = -1e9;
-    for (let i = 0; i < n; i++) { if (fin[i] >= 0) continue; if (xs[i] > x1) { x2 = x1; x1 = xs[i]; } else if (xs[i] > x2) x2 = xs[i]; }
+    let x1 = -1e9, x2 = -1e9, i1 = -1, i2 = -1;
+    for (let i = 0; i < n; i++) { if (fin[i] >= 0) continue; if (xs[i] > x1) { x2 = x1; i2 = i1; x1 = xs[i]; i1 = i; } else if (xs[i] > x2) { x2 = xs[i]; i2 = i; } }
+    const progLid = (x1 - X0) / DIST;
+    if (duelo && duelo.a < 0 && i2 >= 0 && progLid >= DUELO_INI) Object.assign(duelo, { a: i1, b: i2, rel0: x1 - x2 });
+    const uDuelo = duelo && duelo.a >= 0 ? clamp((progLid - DUELO_INI) / (1 - DUELO_INI), 0, 1) : 0;
     for (let i = 0; i < n; i++) {
       const p = P[i]; let alvo = 0;
       if (fin[i] >= 0) alvo = Math.max(22, p.vmax * (1 - (t - fin[i]) * 0.45));
@@ -111,6 +136,25 @@ export function simular(seed, n) {
           m -= RECUP * pouso(d);
           if (p.bate[o] && d > 0 && d < TOMBO_PX) m -= TOMBO;
         }
+        const duela = duelo && duelo.a >= 0 && (i === duelo.a || i === duelo.b);
+        if (duela) {
+          // O duelo: a diferença entre os dois segue um caminho que troca de lado `voltas` vezes e
+          // termina com quem o sorteio mandou na frente (`lado` 1: quem liderava aos 75%), por um pescoço.
+          const { a, b, lado, voltas, rel0 } = duelo, u = uDuelo;
+          const caminho = lado * (DUELO_AMP - (DUELO_AMP - DUELO_FIM) * u) * Math.cos(Math.PI * voltas * (1 - u));
+          const alvoRel = rel0 + (caminho - rel0) * suave(u / 0.3), rel = xs[a] - xs[b];
+          const corr = clamp((alvoRel - rel) * DUELO_KP, -DUELO_MAX, DUELO_MAX);
+          m += i === a ? corr : -corr;
+        } else {
+          // Os outros: no duelo, cansam ao chegar perto da dupla (ninguém se mete entre os dois);
+          // fora dele, cada um com o seu fim, e o líder sente quem vem colado.
+          if (uDuelo > 0) m -= DUELO_RESTO * clamp((xs[i] - Math.min(xs[duelo.a], xs[duelo.b]) + 22) / 14, 0, 1);
+          const uf = suave((prog - FIM_INI) / 0.1);
+          if (uf > 0) {
+            m += FIM_A * k * p.fimA * uf;
+            if (xs[i] === x1 && x2 > -1e9) m -= PRESSAO * k * uf * clamp((x1 - x2) / 20, 0, 1);
+          }
+        }
         alvo = p.vmax * m;
       }
       const dv = alvo - vs[i]; vs[i] += dv > 0 ? Math.min(dv, p.acel * DT) : Math.max(dv, -70 * DT);
@@ -126,5 +170,5 @@ export function simular(seed, n) {
   quadrosX.forEach((q, f) => X.set(q, f * n));
   const ordem = [...Array(n).keys()].sort((a, b) => fin[a] - fin[b] || a - b);
   const gap = fin[ordem[1]] - fin[ordem[0]];
-  return { seed, tipo, n, frames, X, fin: Array.from(fin), ordem, barreiras, bate: P.map(p => p.bate), vencedor: ordem[0], tVenc: fin[ordem[0]], gap, apertada: gap < 0.045, dur: (frames - 1) / FPS };
+  return { seed, tipo: duelo ? 'duelo' : tipo, n, frames, X, fin: Array.from(fin), ordem, barreiras, bate: P.map(p => p.bate), vencedor: ordem[0], tVenc: fin[ordem[0]], gap, apertada: gap < 0.045, dur: (frames - 1) / FPS };
 }
