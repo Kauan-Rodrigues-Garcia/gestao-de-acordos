@@ -49,9 +49,14 @@ import { RealceDeVariavel, VariableChips, insertVariable } from './VariaveisMens
 import { CampoPercentual } from './CampoPercentual';
 import { textoDoPercentual } from './percentual';
 
-const DISCOUNT_FIELDS: [keyof typeof CampaignCore.DEFAULT_DISCOUNTS, string][] = [
-  ['overdue', 'Parcela em atraso'], ['settlement', 'Quitação'], ['interest', 'Valor com juros'],
-  ['bundle', 'Junção'], ['annual', 'Anual'], ['pix_automatico', 'Pix Automático'],
+/** Cada %, e o que ele muda (21/10/2026): um desconto, um grupo de variáveis. */
+const DISCOUNT_FIELDS: [keyof typeof CampaignCore.DEFAULT_DISCOUNTS, string, string][] = [
+  ['overdue', 'Atrasadas', 'Todas e 1 parcela'],
+  ['settlement', 'Quitação', 'Pix e cartão'],
+  ['interest', 'Juros', 'Saldo com juros'],
+  ['bundle', 'Junção', 'À vista, 6x e 12x'],
+  ['annual', 'Anual', 'À vista e cartão'],
+  ['pix_automatico', 'Pix Automático', 'Só o com desconto'],
 ];
 
 export default function CampanhaFacil() {
@@ -456,10 +461,11 @@ export default function CampanhaFacil() {
                       )}
                     </div>
                     <div className="grid grid-cols-2 gap-2">
-                      {DISCOUNT_FIELDS.map(([key, label]) => (
+                      {DISCOUNT_FIELDS.map(([key, label, afeta]) => (
                         <label key={key} className="flex min-w-0 flex-col gap-1 rounded-md border border-border px-2.5 py-2 text-xs">
                           <span className="truncate text-muted-foreground" title={label}>{label}</span>
                           <CampoPercentual rotulo={label} valor={cf.discountsInput[key]} aoMudar={(n) => cf.setDiscount(key, n)} />
+                          <span className="truncate whitespace-nowrap text-[10px] leading-tight text-muted-foreground/80" title={`Afeta: ${afeta}`}>{afeta}</span>
                         </label>
                       ))}
                     </div>
@@ -740,7 +746,7 @@ export default function CampanhaFacil() {
 
       {/* ══ Dialog: editar mensagem ═════════════════════════════════════════ */}
       <Dialog open={editOpen} onOpenChange={(v) => { setEditOpen(v); setRealce(null); }}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-h-[92vh] max-w-5xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Editar mensagem</DialogTitle>
             <DialogDescription>Use as variáveis para inserir dados e valores de cada cliente. O texto é preservado como digitado.</DialogDescription>
@@ -769,7 +775,7 @@ export default function CampanhaFacil() {
 
       {/* ══ Dialog: adicionar mensagem ══════════════════════════════════════ */}
       <Dialog open={addOpen} onOpenChange={(v) => { setAddOpen(v); setRealce(null); }}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-h-[92vh] max-w-5xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Adicionar mensagem</DialogTitle>
             <DialogDescription>O texto será salvo exatamente como for digitado e ficará disponível só para os líderes {doSetor}.</DialogDescription>

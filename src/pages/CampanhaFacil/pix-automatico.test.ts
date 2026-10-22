@@ -1,7 +1,8 @@
 /**
- * Pix Automático em 21x (09/10/2026): {{pix_automatico_21x}} = valor com juros
- * ÷ 21; {{pix_automatico_desconto_21x}} = valor com juros menos o % do Pix
+ * Pix Automático em 21x (09/10/2026): {{pix_automatico_21x}} = Valor Aberto
+ * ÷ 21; {{pix_automatico_desconto_21x}} = Valor Aberto menos o % do Pix
  * Automático, ÷ 21. Arredondado para cima, em reais inteiros — como o cartão.
+ * Até 21/10/2026 a base era o valor com juros; agora é a da quitação.
  */
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
@@ -10,10 +11,10 @@ import { CampaignCore, type RawRecord } from './lib/campaign-core';
 import { mensagemUsaValores } from './regras-mensagem';
 import { VARIABLE_LABELS } from './VariaveisMensagem';
 
-function registro(valorAtualizado: string): RawRecord {
+function registro(valorAberto: string, valorAtualizado = '9999'): RawRecord {
   const values: Record<string, string> = {
     Nome: 'MARIA DA SILVA', CPF: '123', Contrato: '999', 'Parcelas em atraso': '3', Protesto: '0',
-    Valor: '300', 'Valor Aberto': '1000', 'Valor Atualizado': valorAtualizado, 'Tp. Venda': 'BOOK',
+    Valor: '300', 'Valor Aberto': valorAberto, 'Valor Atualizado': valorAtualizado, 'Tp. Venda': 'BOOK',
     'Whats Titular': '18999999999',
   };
   const normalized = Object.fromEntries(Object.entries(values).map(([k, v]) => [CampaignCore.normalizeHeader(k), v]));
@@ -25,11 +26,18 @@ describe('Pix Automático 21x', () => {
     expect(CampaignCore.DEFAULT_DISCOUNTS.pix_automatico).toBe(5);
   });
 
-  it('valor com juros ÷ 21, e com desconto', () => {
-    const item = CampaignCore.deriveRecord(registro('2100'), CampaignCore.DEFAULT_DISCOUNTS);
-    expect(item.valueWithInterest).toBe(2100);
+  it('Valor Aberto ÷ 21, e com desconto — o valor com juros não entra', () => {
+    const item = CampaignCore.deriveRecord(registro('2100', '4200'), CampaignCore.DEFAULT_DISCOUNTS);
+    expect(item.valueWithInterest).toBe(4200);
     expect(item.pixAuto).toBe(100);           // 2100 / 21
     expect(item.pixAutoDiscount).toBe(95);    // 2100 × 0,95 / 21 = 95
+  });
+
+  it('só o % do Pix entra: o de juros e o de quitação, não', () => {
+    const descontos = { ...CampaignCore.DEFAULT_DISCOUNTS, interest: 50, settlement: 80 };
+    const item = CampaignCore.deriveRecord(registro('2100'), descontos);
+    expect(item.pixAuto).toBe(100);
+    expect(item.pixAutoDiscount).toBe(95);
   });
 
   it('usa o % configurado e arredonda para cima', () => {

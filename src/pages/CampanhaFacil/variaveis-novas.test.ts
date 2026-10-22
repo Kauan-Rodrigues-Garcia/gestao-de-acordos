@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import { CampaignCore, type RawRecord } from './lib/campaign-core';
 import { mensagemUsaValores } from './regras-mensagem';
-import { VARIABLE_GROUPS, VARIABLE_LABELS } from './VariaveisMensagem';
+import { SECOES, VARIABLE_GROUPS, VARIABLE_LABELS } from './VariaveisMensagem';
 
 function registro(extra: Record<string, string> = {}): RawRecord {
   const values: Record<string, string> = {
@@ -33,13 +33,13 @@ describe('parcelamentos em 12x, 20x e 21x', () => {
     expect(v.cartao_anual_21x).toBe(CampaignCore.formatCurrency(86)); // 85,71
   });
 
-  it('Pix Automático: com e sem desconto, e o 21x de antes continua igual', () => {
-    expect(v.pix_automatico_12x).toBe(CampaignCore.formatCurrency(175)); // 2100 / 12
-    expect(v.pix_automatico_20x).toBe(CampaignCore.formatCurrency(105));
-    expect(v.pix_automatico_21x).toBe(CampaignCore.formatCurrency(100));
-    expect(v.pix_automatico_desconto_12x).toBe(CampaignCore.formatCurrency(167)); // 1995 / 12 = 166,25
-    expect(v.pix_automatico_desconto_20x).toBe(CampaignCore.formatCurrency(100)); // 99,75
-    expect(v.pix_automatico_desconto_21x).toBe(CampaignCore.formatCurrency(95));
+  it('Pix Automático: do Valor Aberto, com e sem desconto (21/10/2026)', () => {
+    expect(v.pix_automatico_12x).toBe(CampaignCore.formatCurrency(167)); // 2000 / 12 = 166,67
+    expect(v.pix_automatico_20x).toBe(CampaignCore.formatCurrency(100));
+    expect(v.pix_automatico_21x).toBe(CampaignCore.formatCurrency(96)); // 95,24
+    expect(v.pix_automatico_desconto_12x).toBe(CampaignCore.formatCurrency(159)); // 1900 / 12 = 158,33
+    expect(v.pix_automatico_desconto_20x).toBe(CampaignCore.formatCurrency(95));
+    expect(v.pix_automatico_desconto_21x).toBe(CampaignCore.formatCurrency(91)); // 90,48
   });
 
   it('as variáveis novas de valor travam no relatório sem valores', () => {
@@ -122,8 +122,41 @@ describe('os botões das variáveis, por categoria', () => {
     expect(grupo('nome')).toBe(grupo('empresa'));
     expect(grupo('quitacao')).not.toBe(grupo('nome'));
     expect(grupo('cidade')).toBe('Do mailing');
-    expect(grupo('cartao_quitacao_21x')).toBe('Cartão de crédito');
-    expect(grupo('pix_automatico_12x')).toBe('Pix Automático');
+  });
+
+  const doGrupo = (k: string) => VARIABLE_GROUPS.find((g) => g.itens.some(([v]) => v === k));
+
+  it('cada forma de pagamento no seu bloco: Pix Automático só com Pix Automático (21/10/2026)', () => {
+    const pix = VARIABLE_GROUPS.filter((g) => g.secao === 'pix_automatico').flatMap((g) => g.itens.map(([v]) => v));
+    expect(pix.sort()).toEqual([
+      'pix_automatico_12x', 'pix_automatico_20x', 'pix_automatico_21x',
+      'pix_automatico_desconto_12x', 'pix_automatico_desconto_20x', 'pix_automatico_desconto_21x',
+      'pix_automatico_parcela',
+    ]);
+    for (const k of ['quitacao', 'cartao_quitacao', 'cartao_quitacao_20x', 'cartao_quitacao_21x']) {
+      expect(doGrupo(k)?.secao).toBe('quitacao');
+    }
+    for (const k of ['anual', 'cartao_anual', 'cartao_anual_20x', 'cartao_anual_21x']) {
+      expect(doGrupo(k)?.secao).toBe('anual');
+    }
+    for (const k of ['parcela_desconto', 'juncao', 'juncao_6x', 'juncao_12x']) {
+      expect(doGrupo(k)?.secao).toBe('atraso');
+    }
+    expect(SECOES.map((s) => s.id)).toEqual(['cliente', 'pix_automatico', 'quitacao', 'atraso', 'anual', 'juros', 'percentuais']);
+  });
+
+  it('dentro do bloco, sem desconto e com desconto em grupos separados', () => {
+    for (const k of ['valor_com_juros', 'pix_automatico_12x', 'pix_automatico_20x', 'pix_automatico_21x']) {
+      expect(doGrupo(k)?.desconto).toBe(false);
+    }
+    for (const k of ['parcela_desconto', 'pix_automatico_parcela', 'juncao', 'juncao_12x', 'quitacao',
+      'cartao_quitacao', 'anual', 'cartao_anual_21x', 'pix_automatico_desconto_21x']) {
+      expect(doGrupo(k)?.desconto).toBe(true);
+    }
+    // Nenhum grupo mistura: o sem desconto é sempre rosa, o com desconto sempre verde.
+    for (const g of VARIABLE_GROUPS.filter((x) => x.desconto !== undefined)) {
+      expect(g.tom).toBe(g.desconto ? 'verde' : 'rosa');
+    }
   });
 
   it('toda variável que a mensagem conhece tem botão, e nenhuma aparece duas vezes', () => {

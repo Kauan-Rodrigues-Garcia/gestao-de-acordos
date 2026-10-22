@@ -11,7 +11,8 @@
     interest: 0,
     bundle: 15,
     annual: 25,
-    // Pix Automático em 21x (09/10/2026): desconto sobre o valor com juros.
+    // Pix Automático em 21x (09/10/2026): desconto sobre o Valor Aberto
+    // (21/10/2026; antes, sobre o valor com juros).
     pix_automatico: 5,
   });
 
@@ -1288,12 +1289,14 @@ Contrato: *{{contrato}}*
       : null;
     const cardSettlement = financialDataAvailable && settlement > 0 ? roundUp(settlement / 12) : (financialDataAvailable ? 0 : null);
     const cardAnnual = financialDataAvailable && annual > 0 ? roundUp(annual / 12) : (financialDataAvailable ? 0 : null);
-    // Pix Automático em 21 parcelas (09/10/2026): o valor com juros ÷ 21; com
-    // desconto, o valor com juros menos o % configurado, ÷ 21. Arredonda para
-    // cima, como o cartão.
-    const pixAuto = financialDataAvailable ? roundUp(valueWithInterest / PIX_AUTO_PARCELAS) : null;
+    // Pix Automático em 21 parcelas: parte do Valor Aberto, a mesma base da
+    // quitação — não do valor com juros (21/10/2026). Sem desconto, Valor
+    // Aberto ÷ 21; com desconto, só o % do Pix Automático, ÷ 21. Arredonda
+    // para cima, como o cartão.
+    const pixAutoBase = financialDataAvailable ? openValue : 0;
+    const pixAuto = financialDataAvailable ? roundUp(pixAutoBase / PIX_AUTO_PARCELAS) : null;
     const pixAutoDiscount = financialDataAvailable
-      ? roundUp((valueWithInterest * (1 - rates.pix_automatico)) / PIX_AUTO_PARCELAS)
+      ? roundUp((pixAutoBase * (1 - rates.pix_automatico)) / PIX_AUTO_PARCELAS)
       : null;
     // Pix Automático só na parcela (20/10/2026): UMA parcela (valor em atraso ÷
     // parcelas em atraso) com o desconto da parcela — não o do Pix. Sem
@@ -1311,8 +1314,8 @@ Contrato: *{{contrato}}*
       bundle: emParcelas(bundle, PARCELAMENTOS_JUNCAO),
       cardSettlement: emParcelas(settlement),
       cardAnnual: emParcelas(annual),
-      pixAuto: emParcelas(valueWithInterest),
-      pixAutoDiscount: emParcelas(financialDataAvailable ? valueWithInterest * (1 - rates.pix_automatico) : 0),
+      pixAuto: emParcelas(pixAutoBase),
+      pixAutoDiscount: emParcelas(pixAutoBase * (1 - rates.pix_automatico)),
     };
 
     const issues = [];

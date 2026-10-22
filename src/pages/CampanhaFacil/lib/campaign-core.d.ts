@@ -8,7 +8,7 @@ export interface Discounts {
   interest: number;
   bundle: number;
   annual: number;
-  /** % de desconto do Pix Automático 21x sobre o valor com juros (09/10/2026). */
+  /** % de desconto do Pix Automático sobre o Valor Aberto (21/10/2026; antes, sobre o valor com juros). */
   pix_automatico: number;
 }
 
@@ -108,9 +108,9 @@ export interface CampaignItem {
   annual: number | null;
   cardSettlement: number | null;
   cardAnnual: number | null;
-  /** Parcela do Pix Automático: valor com juros ÷ 21. */
+  /** Parcela do Pix Automático: Valor Aberto ÷ 21, sem desconto (21/10/2026). */
   pixAuto: number | null;
-  /** Parcela do Pix Automático com o desconto: valor com juros × (1 − %) ÷ 21. */
+  /** Parcela do Pix Automático com o desconto: Valor Aberto × (1 − % Pix) ÷ 21. */
   pixAutoDiscount: number | null;
   /**
    * Pix Automático só na parcela (20/10/2026): uma parcela (valor ÷ parcelas

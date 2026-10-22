@@ -986,7 +986,7 @@ function DialogoEditarCampanha({ lote, envios, operadoresDoSetor, onFechar, onSa
 
   return (
     <Dialog open onOpenChange={(v) => { if (!v && !salvando) onFechar(); }}>
-      <DialogContent className="max-h-[92vh] max-w-2xl overflow-y-auto">
+      <DialogContent className="max-h-[92vh] max-w-5xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Editar campanha</DialogTitle>
           <DialogDescription>
