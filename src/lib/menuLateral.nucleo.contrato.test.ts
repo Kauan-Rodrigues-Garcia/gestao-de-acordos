@@ -43,7 +43,8 @@ describe('o recorte por setor saiu', () => {
     // (`useNucleo`). O painel virou a aba Dashboard – ADM, e quem não tem o
     // Dashboard da cobrança mas tem a aba nova é mandado para ela pela CHAVE.
     expect(APP).not.toContain('useNucleo');
-    expect(APP).toMatch(/alternativa=\{\{\s*permissao: 'ver_dashboard_adm'/);
+    // Desde a Cantina (22/10/2026) a alternativa é uma lista de portas.
+    expect(APP).toMatch(/alternativa=\{\[?\s*\{\s*permissao: 'ver_dashboard_adm'/);
   });
 
   it('Controle de Números, Meus Chips e Dashboard – ADM são abertos pela chave, como toda aba', () => {

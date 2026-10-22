@@ -42,6 +42,7 @@ export type CategoriaNotificacao =
   | 'importacao'  // planilha, analítico, recebimento diário
   | 'numeros'     // Controle de Números e Meus Chips: prazo de espera vencido
   | 'campanha'    // Campanha Fácil: a parte do operador está pronta para baixar
+  | 'cantina'     // pedido da cantina: pronto, cancelado, mensagem do balcão
   | 'sistema';    // o que não se encaixa — ver o cabeçalho
 
 /**
@@ -71,6 +72,7 @@ export const CATEGORIA_LABEL: Record<CategoriaNotificacao, string> = {
   importacao:  'Importações',
   numeros:     'Números',
   campanha:    'Campanhas',
+  cantina:     'Cantina',
   sistema:     'Sistema',
 };
 
@@ -90,6 +92,7 @@ export const CATEGORIA_ICONE: Record<CategoriaNotificacao, string> = {
   importacao:  'Upload',
   numeros:     'Smartphone',
   campanha:    'Megaphone',
+  cantina:     'UtensilsCrossed',
   sistema:     'Info',
 };
 
@@ -109,6 +112,7 @@ export const CATEGORIA_COR: Record<CategoriaNotificacao, string> = {
   importacao:  'bg-teal-500/12 text-teal-600 dark:text-teal-500 ring-teal-500/25',
   numeros:     'bg-indigo-500/12 text-indigo-500 ring-indigo-500/25',
   campanha:    'bg-rose-500/12 text-rose-600 dark:text-rose-500 ring-rose-500/25',
+  cantina:     'bg-orange-500/12 text-orange-600 dark:text-orange-500 ring-orange-500/25',
   sistema:     'bg-muted text-muted-foreground ring-border',
 };
 
@@ -173,6 +177,19 @@ interface Regra {
  * o esquecimento aparece na suíte.
  */
 const REGRAS: readonly Regra[] = [
+  // ── Cantina — fn_cantina_notificar, 20261022153000 ─────────────────────
+  // Pela rota, e antes de tudo: «Mensagem da cantina» casaria com o chat e
+  // «cancelou seu pedido» com o acordo. Pedido cancelado ou não retirado mexe
+  // no bolso de quem pediu: crítica. Pronto e mensagem: atenção.
+  {
+    casa: (t, r) => r.startsWith('/cantina') && (t.includes('cancelou') || t.includes('nao retirado')),
+    tipo: { categoria: 'cantina', urgencia: 'critica' },
+  },
+  {
+    casa: (_t, r) => r.startsWith('/cantina'),
+    tipo: { categoria: 'cantina', urgencia: 'atencao' },
+  },
+
   // ── Campanha Fácil (BookPlay) — campanhaFacilEnvios.service, 20260929100000
   // PRIMEIRA, e pela rota: o título leva o nome da mensagem escolhida pelo
   // líder (texto livre), que pode conter «pix», «acordo», «extra»… e cairia em

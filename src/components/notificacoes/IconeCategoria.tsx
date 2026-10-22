@@ -11,7 +11,7 @@
  */
 import {
   MessageSquare, Headset, Zap, Link2, FileText, Upload, Smartphone, Megaphone, Info,
-  type LucideIcon,
+  UtensilsCrossed, type LucideIcon,
 } from 'lucide-react';
 import {
   CATEGORIA_ICONE, CATEGORIA_COR, type CategoriaNotificacao,
@@ -20,6 +20,7 @@ import { cn } from '@/lib/utils';
 
 const ICONES: Record<string, LucideIcon> = {
   MessageSquare, Headset, Zap, Link2, FileText, Upload, Smartphone, Megaphone, Info,
+  UtensilsCrossed,
 };
 
 /** O componente do ícone de uma categoria. `Info` cobre o que faltar. */

@@ -50,6 +50,10 @@ const SO_COMERCIAL: readonly Produto[] = ['comercial'];
  * declaram o mesmo produto.
  */
 const COBRANCA_E_COMERCIAL: readonly Produto[] = ['cobranca', 'comercial'];
+/** Pedir na cantina: toda operação (22/10/2026). */
+const TODOS_OS_PRODUTOS: readonly Produto[] = ['cobranca', 'comercial', 'rh'];
+/** A fila da cantina: só a empresa Cantina. */
+const SO_CANTINA: readonly Produto[] = ['cantina'];
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -107,6 +111,8 @@ const MobileSetor       = lazy(() => import('@/pages/Mobile/setor'));
 // A rota `/` do Comercial. Lazy como o resto: quem é da cobrança nunca baixa
 // este pedaço, e quem é do Comercial nunca baixa o Dashboard da cobrança.
 const DashboardComercial = lazy(() => import('@/pages/Vendas/DashboardComercial'));
+const PaginaCantina     = lazy(() => import('@/pages/Cantina'));
+const PainelCantina     = lazy(() => import('@/pages/Cantina/Painel'));
 const VendasPainelLider  = lazy(() => import('@/pages/Vendas/PainelLiderComercial'));
 const VendasPainelDiretoria = lazy(() => import('@/pages/Vendas/PainelDiretoriaComercial'));
 const VendasLixeira      = lazy(() => import('@/pages/Vendas/LixeiraVendas'));
@@ -241,6 +247,9 @@ function PainelDeEntrada(): React.ReactElement {
   // carregamento — e trocá-lo por um esqueleto aqui piscaria duas vezes.
   if (loading || produto === 'cobranca') return <Dashboard />;
   if (produto === 'comercial') return <DashboardComercial />;
+  // A Cantina não tem Dashboard: a porta de entrada é a fila (quem tem acesso
+  // total chega aqui; o cargo `cantina` já foi pela `alternativa` da rota).
+  if (produto === 'cantina') return <Navigate to={ROUTE_PATHS.CANTINA_PAINEL} replace />;
   return <ProdutoEmMontagem produto={produto} />;
 }
 
@@ -419,7 +428,10 @@ export default function App() {
                 <LayoutWrapper>
                   <ProtectedRoute
                     requiredPermissao="ver_dashboard" mostrarSemAcesso
-                    alternativa={{ permissao: 'ver_dashboard_adm', rota: ROUTE_PATHS.DASHBOARD_ADM }}
+                    alternativa={[
+                      { permissao: 'ver_dashboard_adm', rota: ROUTE_PATHS.DASHBOARD_ADM },
+                      { permissao: 'cantina_painel', rota: ROUTE_PATHS.CANTINA_PAINEL },
+                    ]}
                   >
                     <PainelDeEntrada />
                   </ProtectedRoute>
@@ -700,6 +712,23 @@ export default function App() {
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
+              {/* Cantina (22/10/2026): pedir, em toda operação; atender, só na
+                  empresa Cantina. Ver a migration 20261022153000. */}
+              <Route path={ROUTE_PATHS.CANTINA} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={TODOS_OS_PRODUTOS} requiredPermissao="ver_cantina">
+                    <PaginaCantina />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+              <Route path={ROUTE_PATHS.CANTINA_PAINEL} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_CANTINA} requiredPermissao="cantina_painel">
+                    <PainelCantina />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+
               <Route path={ROUTE_PATHS.TICKETS} element={
                 <LayoutWrapper>
                   <ProtectedRoute produtos={COBRANCA_E_COMERCIAL} requiredPermissao="ver_tickets">

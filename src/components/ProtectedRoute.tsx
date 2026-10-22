@@ -74,8 +74,12 @@ interface ProtectedRouteProps {
    * inicial dele é o Dashboard – ADM. Sem isto ele entraria no sistema lendo
    * «aba não liberada». Quem decide continua sendo a chave — nada aqui pergunta
    * cargo ou setor —, e a rota de destino exige `permissao`, então não há laço.
+   *
+   * Aceita uma lista desde a Cantina (22/10/2026): quem atende a cantina também
+   * não tem o Dashboard, e a tela inicial dele é o Painel da Cantina. A
+   * primeira porta que a pessoa tem é a que vale.
    */
-  alternativa?: { permissao: string; rota: string };
+  alternativa?: { permissao: string; rota: string } | readonly { permissao: string; rota: string }[];
 }
 
 export function ProtectedRoute({
@@ -161,8 +165,10 @@ export function ProtectedRoute({
      * Ausência agora nega, como em todo o resto do sistema.
      */
     if (!temPermissao(requiredPermissao)) {
-      if (alternativa && temPermissao(alternativa.permissao)) {
-        return <Navigate to={alternativa.rota} replace />;
+      const portas = alternativa === undefined ? [] : 'permissao' in alternativa ? [alternativa] : alternativa;
+      const porta = portas.find(a => temPermissao(a.permissao));
+      if (porta) {
+        return <Navigate to={porta.rota} replace />;
       }
       if (mostrarSemAcesso) {
         return (

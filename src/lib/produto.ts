@@ -16,6 +16,7 @@
  *   cobranca   BookPlay, PaguePlay   (duas empresas, um produto)
  *   comercial  Comercial             (vendas)
  *   rh         Recursos Humanos
+ *   cantina    Cantina               (quem atende os pedidos de lanche, 22/10/2026)
  *
  * ## Lista branca, não lista negra
  *
@@ -32,9 +33,9 @@
  */
 import type { Empresa } from '@/lib/supabase';
 
-export type Produto = 'cobranca' | 'comercial' | 'rh';
+export type Produto = 'cobranca' | 'comercial' | 'rh' | 'cantina';
 
-export const PRODUTOS: readonly Produto[] = ['cobranca', 'comercial', 'rh'] as const;
+export const PRODUTOS: readonly Produto[] = ['cobranca', 'comercial', 'rh', 'cantina'] as const;
 
 /**
  * O produto de cada slug conhecido.
@@ -50,6 +51,7 @@ const POR_SLUG: Readonly<Record<string, Produto>> = {
   pagueplay: 'cobranca',
   comercial: 'comercial',
   rh:        'rh',
+  cantina:   'cantina',
 };
 
 function normalizar(valor: string | null | undefined): string {
@@ -107,6 +109,7 @@ export function rotuloDoProduto(produto: Produto | null): string {
     case 'cobranca':  return 'Cobrança';
     case 'comercial': return 'Comercial';
     case 'rh':        return 'Recursos Humanos';
+    case 'cantina':   return 'Cantina';
     default:          return 'Sem produto definido';
   }
 }

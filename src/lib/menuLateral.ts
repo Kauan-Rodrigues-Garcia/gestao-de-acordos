@@ -33,7 +33,7 @@ import {
   LayoutDashboard, FileText, Plus, Users, Settings, Trash2, TrendingUp,
   BarChart3, Upload, Target, BarChart2, Megaphone, MessageSquarePlus,
   Ticket, ClipboardList, ClipboardCheck, Smartphone, MessageCircle, Gauge,
-  ShoppingBag, Handshake, Send, Zap,
+  ShoppingBag, Handshake, Send, Zap, UtensilsCrossed, ChefHat,
 } from 'lucide-react';
 import { ROUTE_PATHS } from '@/lib/index';
 import { produtoPermite, type Produto } from '@/lib/produto';
@@ -114,6 +114,12 @@ const SO_COMERCIAL: readonly Produto[] = ['comercial'];
  * aba que ninguém revisou aparecendo para ninguém.
  */
 const COBRANCA_E_COMERCIAL: readonly Produto[] = ['cobranca', 'comercial'];
+
+/**
+ * Só a Cantina (22/10/2026): a empresa de quem atende os pedidos de lanche.
+ * Ela vê o painel e mais nada — nem Dashboard, nem Usuários, nem o chat.
+ */
+const SO_CANTINA: readonly Produto[] = ['cantina'];
 
 export const NAV_ITEMS: NavItem[] = [
   // A única aba que existe em todo produto por necessidade: é a rota `/`, a
@@ -242,6 +248,10 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'Campanha Fácil',   icon: Megaphone,       to: ROUTE_PATHS.CAMPANHA_FACIL,      produtos: SO_COBRANCA, hiddenForPaguePay: true, permissaoKey: 'ver_campanha_facil' },
   { label: 'Campanha', icon: Send, to: ROUTE_PATHS.CAMPANHAS_WHATSAPP, produtos: SO_COBRANCA, hiddenForPaguePay: true, permissaoKey: 'ver_campanhas_whatsapp' },
   { label: 'Importar Excel',   icon: Upload,          to: '/acordos/importar',             produtos: SO_COBRANCA, permissaoKey: 'importar_excel' },
+  // Cantina (22/10/2026). Pedir lanche é de quem trabalha em qualquer operação;
+  // a fila é só da empresa Cantina. Ver a migration 20261022153000.
+  { label: 'Cantina',          icon: UtensilsCrossed, to: ROUTE_PATHS.CANTINA,             produtos: TODOS_OS_PRODUTOS, permissaoKey: 'ver_cantina' },
+  { label: 'Painel da Cantina', icon: ChefHat,        to: ROUTE_PATHS.CANTINA_PAINEL,      produtos: SO_CANTINA, permissaoKey: 'cantina_painel' },
 ];
 
 /**

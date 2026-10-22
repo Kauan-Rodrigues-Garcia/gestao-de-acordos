@@ -211,6 +211,8 @@ export const GRUPOS_PERMISSAO = [
   'Vendas',
   // Calendário do setor, 06/10/2026. Neutro de produto: cobrança e Comercial.
   'Calendário',
+  // Cantina, 22/10/2026. Pedir (toda operação) e atender (empresa Cantina).
+  'Cantina',
 ] as const;
 export type GrupoPermissao = typeof GRUPOS_PERMISSAO[number];
 
@@ -293,6 +295,9 @@ const SO_COMERCIAL: readonly Produto[] = ['comercial'];
  * chave que o Comercial consulta e o painel dele não mostra.
  */
 const COBRANCA_E_COMERCIAL: readonly Produto[] = ['cobranca', 'comercial'];
+
+/** Só a empresa Cantina, que atende os pedidos de lanche (22/10/2026). */
+const SO_CANTINA: readonly Produto[] = ['cantina'];
 
 /** Atalhos para os padrões que se repetem. */
 const LIDERANCA: Partial<Record<CargoConfiguravel, boolean>> = {
@@ -2602,6 +2607,21 @@ export const PERMISSOES: PermissaoMeta[] = [
       chaves: ['ver_calendario'],
       motivo: 'O alcance vale dentro da aba.',
     },
+  },
+
+  // ── Cantina (22/10/2026) ────────────────────────────────────────────────
+  // Pedir lanche é de quem trabalha em qualquer operação, inclusive RH e o
+  // Núcleo. A fila é só da empresa Cantina: a chave nasce desligada para todo
+  // cargo e a migration 20261022153000 a liga no cargo `cantina`, lá.
+  {
+    key: 'ver_cantina', label: 'Aba Cantina',
+    descricao: 'Fazer pedidos na cantina e acompanhar os próprios pedidos',
+    grupo: 'Cantina', produtos: TODA_OPERACAO, padrao: { ...CHAT_TODOS },
+  },
+  {
+    key: 'cantina_painel', label: 'Painel da Cantina',
+    descricao: 'Atender a fila de pedidos da cantina: preparar, entregar, conversar e exportar o mês',
+    grupo: 'Cantina', produtos: SO_CANTINA, padrao: {},
   },
 ];
 

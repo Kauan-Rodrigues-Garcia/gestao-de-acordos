@@ -22,6 +22,8 @@ export type ModuloPermissaoId =
   | 'solicitacoes_whatsapp'
   | 'tickets'
   | 'calendario'
+  | 'cantina'
+  | 'cantina_painel'
   | 'rh'
   | 'acordos'
   | 'pix'
@@ -141,6 +143,16 @@ export const MODULOS_PERMISSAO: readonly DefinicaoModulo[] = [
     id: 'calendario', rotulo: 'Calendário', interruptor: 'ver_calendario',
     descricao: 'O mês do setor: dias úteis, banco de horas, feriados, aniversariantes e avisos.',
     grupos: ['Calendário'],
+  },
+  {
+    // Cantina (22/10/2026). Dois cards e não um: pedir existe em toda
+    // operação, atender só na empresa Cantina — cada painel mostra o seu.
+    id: 'cantina', rotulo: 'Cantina', interruptor: 'ver_cantina',
+    descricao: 'Fazer pedidos na cantina e acompanhar os próprios pedidos.',
+  },
+  {
+    id: 'cantina_painel', rotulo: 'Painel da Cantina', interruptor: 'cantina_painel',
+    descricao: 'A fila de pedidos de quem atende a cantina.',
   },
   {
     id: 'rh', rotulo: 'RH Gestão', interruptor: 'ver_rh_gestao', escopo: 'rh',

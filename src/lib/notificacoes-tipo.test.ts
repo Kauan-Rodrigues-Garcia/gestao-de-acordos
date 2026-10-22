@@ -37,6 +37,11 @@ const INVENTARIO: Caso[] = [
   ['Pix automático — registro excluído', '/acordos?tab=pix', 'pix', 'critica'],
   // 20260911170000 — fn_numeros_avisar_prazos
   ['Número pronto — (18) 99999-9999', '/meus-chips', 'numeros', 'atencao'],
+  // 20261022153000 — fn_cantina_notificar
+  ['Seu pedido está pronto', '/cantina?pedido=1', 'cantina', 'atencao'],
+  ['Mensagem da cantina', '/cantina?pedido=1', 'cantina', 'atencao'],
+  ['Cantina cancelou seu pedido', '/cantina?pedido=1', 'cantina', 'critica'],
+  ['Pedido não retirado', '/cantina?pedido=1', 'cantina', 'critica'],
 
   // ── Produtores em TypeScript ──────────────────────────────────────────────
   // tratarExclusaoVinculo.ts / desligamento.service.ts

@@ -39,6 +39,13 @@ export const ROUTE_PATHS = {
   TICKETS: '/tickets',
   RH_GESTAO: '/rh-gestao',
   /**
+   * A cantina (22/10/2026). `/cantina` é onde o colaborador pede, em qualquer
+   * operação; `/cantina/painel` é a fila de quem atende — a tela inicial da
+   * empresa Cantina. Ver a migration 20261022153000.
+   */
+  CANTINA: '/cantina',
+  CANTINA_PAINEL: '/cantina/painel',
+  /**
    * O fechamento mensal por operador — a planilha de fechamento da gerência.
    * Não confundir com o relatório de fechamento (`BotaoFechamento`), que é um
    * arquivo baixado e não tem rota.
