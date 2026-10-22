@@ -37,6 +37,8 @@ export interface GravacaoResumo {
   mapa: string;
   semente: number;
   faixa: string[];
+  /** Corrida de cavalos: o cavalo (0 a 23) de cada raia, na ordem da `faixa`. */
+  cavalos?: number[];
   parada: number;
   vencedor: string;
   dur_show?: number;

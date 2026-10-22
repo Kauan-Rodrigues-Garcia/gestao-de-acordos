@@ -281,6 +281,18 @@ body.adm #janela.dica #balao{bottom:calc(100% + 64px)}
 #org small{font-family:PS2P,Pixelify,monospace;font-size:8px;color:var(--acc);white-space:nowrap}
 #org span{font-size:14px;color:var(--mut)}
 #org .bt{padding:10px 12px;font-size:10px;white-space:nowrap}
+/* O teste do super admin: a barra fica em cima da janela pequena, ou no alto da tela com ela grande. */
+body:not(.modo-teste) #teste{display:none!important}
+#teste{position:fixed;right:12px;bottom:calc(min(450px,100dvh - 24px) + 22px);width:min(760px,calc(100vw - 24px));z-index:66;display:flex;flex-wrap:wrap;align-items:center;gap:6px;background:#000000d6;border:2px dashed #ffd84d;border-radius:14px;padding:7px 10px;font:600 12px Pixelify,system-ui,sans-serif;color:#fff6e6}
+body.jan-grande #teste{bottom:auto;top:6px;right:auto;left:50%;transform:translateX(-50%)}
+#teste small{font-family:PS2P,Pixelify,monospace;font-size:8px;color:#ffd84d;white-space:nowrap;margin-right:4px}
+#teste button{border:1px solid #ffffff33;background:transparent;color:inherit;border-radius:99px;padding:4px 10px;font:inherit;cursor:pointer;white-space:nowrap}
+#teste button:hover:not(:disabled){border-color:#ffd84d}
+#teste button:disabled{opacity:.4;cursor:default}
+#teste label{display:flex;align-items:center;gap:5px;white-space:nowrap;color:#c2cbc4}
+#teste select{font:inherit;background:#1b1b1b;color:#fff6e6;border:1px solid #ffffff33;border-radius:8px;padding:2px 4px}
+body.modo-teste #toast{top:130px}
+body.modo-teste .esc{padding-top:100px}
 
 /* ---------- confirmação e convite ---------- */
 #modal,#convite{position:fixed;inset:0;z-index:40;display:grid;place-items:center;background:#000a;padding:16px}
@@ -308,7 +320,25 @@ body.adm #janela.dica #balao{bottom:calc(100% + 64px)}
 .lb-lista span.eu{background:var(--acc);color:#1b1b1b}
 .lb-lista i{width:9px;height:9px;border-radius:2px;display:block}
 .lb-palp{flex:1;min-width:0;display:flex;gap:6px;overflow-x:auto;padding-bottom:2px}
-.hp{flex:none;display:flex;flex-direction:column;align-items:center;gap:1px;background:#ffffff12;border:2px solid transparent;border-radius:10px;padding:3px 5px;cursor:pointer;min-width:56px}
+.hp{flex:none;display:flex;flex-direction:column;align-items:center;gap:1px;background:#ffffff12;border:2px solid transparent;border-radius:10px;padding:3px 5px;cursor:pointer;min-width:72px;color:inherit;font:inherit}
+.hp .dn{display:flex;align-items:center;gap:3px;max-width:86px;font-size:11px;white-space:nowrap;overflow:hidden}
+.hp .dn span{overflow:hidden;text-overflow:ellipsis}.hp .dn.vazio{opacity:.5}
+/* A ficha do cavalo: clicou no cavalo do paddock, aparece de quem é e quem apostou nele. */
+#ficha{position:absolute;top:8px;right:8px;z-index:8;width:min(240px,46%);max-height:calc(100% - 16px);overflow:auto;background:#0b1022ee;color:#fff6e6;border:2px solid var(--acc);border-radius:12px;padding:10px;font-size:13px;pointer-events:auto;box-shadow:0 10px 26px #0008}
+#ficha.esq{right:auto;left:8px}
+#area:has(#ficha:not(.oculto)) #feed{display:none}
+.fi-x{position:absolute;top:4px;right:6px;border:0;background:transparent;color:#fff;font-size:18px;line-height:1;cursor:pointer}
+.fi-cab{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.fi-cab canvas{width:50px;height:34px;image-rendering:pixelated}
+.fi-cab b{display:block;font-family:PS2P,Pixelify,monospace;font-size:11px;font-weight:normal;color:var(--acc)}
+.fi-cab span{font-size:12px;color:var(--mut)}
+.fi-dono{display:flex;align-items:center;gap:9px;background:#ffffff12;border-radius:10px;padding:7px 8px;margin-bottom:8px}
+.fi-dono small,.fi-ap small{display:block;font-size:10px;letter-spacing:.06em;color:var(--mut)}
+.fi-dono b{display:block;font-size:15px}.fi-dono span{display:block;font-size:12px;color:var(--mut)}
+.fi-ap ul{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:4px}
+.fi-ap li{display:flex;align-items:center;gap:4px;background:#ffffff12;border-radius:99px;padding:2px 7px 2px 2px;font-size:12px}
+.fi-ap li.eu{background:var(--acc);color:#1b1b1b}
+.pe .nm b{font-weight:700;color:var(--acc)}.pe .nm.eu b{color:#1b1b1b}
 .hp:hover{border-color:#7fe3ff80}
 .hp.on{border-color:#7fe3ff;background:#7fe3ff26}
 .hp canvas{width:50px;height:34px;image-rendering:pixelated}
@@ -438,6 +468,20 @@ body.modo-escolha #escolha{z-index:20}
 
 <div id="org"><small>ORGANIZADOR</small><span id="orgTxt"></span><button class="bt" id="orgBt">PREPARAR CORRIDA</button></div>
 
+<!-- O teste do super admin («Testar só na minha tela»): nada anda sozinho, quem comanda é esta barra. -->
+<div id="teste" class="oculto">
+  <small>TESTE · SÓ NA SUA TELA</small>
+  <button type="button" data-t="zero">↺ Lobby do zero</button>
+  <button type="button" data-t="encher">👥 Encher o paddock</button>
+  <button type="button" data-t="musica">♪ Música agora</button>
+  <button type="button" data-t="gravar">● Gravar</button>
+  <button type="button" data-t="largar">▶ Largar</button>
+  <button type="button" data-t="pular">⏩ Pular a contagem</button>
+  <button type="button" data-t="chegada">🏁 Ir para a chegada</button>
+  <label>Visão <select id="tVisao"><option value="assiste">quem assiste</option><option value="corre">quem corre</option></select></label>
+  <label><input type="checkbox" id="tAp"> chegada apertada</label>
+</div>
+
 <div id="convite" class="oculto">
   <div class="mod">
     <canvas id="cvConv" width="250" height="170"></canvas>
@@ -555,6 +599,7 @@ body.modo-escolha #escolha{z-index:20}
         <div id="flash"></div>
         <div id="foto"><div class="polaroid"><canvas id="cvFoto" width="420" height="318"></canvas><div class="tit"><span>FOTO DE CHEGADA</span><em id="fotoTempo"></em></div><div class="leg" id="fotoLeg"></div></div></div>
         <div id="gente"></div>
+        <div id="ficha" class="oculto" role="dialog" aria-label="Ficha do cavalo"></div>
       </div>
       <aside id="apostas" aria-label="Quem apostou em quem"></aside>
       <aside id="placar" aria-label="Posições na corrida"><h4>POSIÇÕES <span id="placarVolta"></span></h4><div id="placarLin"></div></aside>
@@ -1565,34 +1610,52 @@ const Som = (() => {
       faixa.n++; faixa.prox += sc;
     }
   }
-  // O tema da festa (pedido do Cleber, 22/10/2026): O Rei do Gado, o arquivo de verdade, e não sintetizado.
-  // Entra devagar depois da fanfarra e sai devagar quando a festa acaba (qualquer outra música o tira).
-  let tema = null;
+  // O tema da chegada (pedido do Cleber, 22/10/2026): O Rei do Gado, o arquivo de verdade, e não sintetizado.
+  // Entra JÁ ALTO no instante em que o vencedor cruza a linha (a música do jogo vem baixando na reta
+  // final, ver `volume`) e segue pelo replay, pela foto e pela festa até a música acabar. Só uma
+  // música de jogo nova (a do paddock de outra corrida) o tira. O arquivo desce antes (`baixarTema`):
+  // na chegada ele só toca, sem esperar a rede.
+  let tema = null, temaEl = null;
   const TEMA_VOL = 0.5;
-  function temaFesta(on) {
+  function baixarTema() {
+    if (!temaEl) { temaEl = new Audio('/sons/cavalos/rei-do-gado.mp3'); temaEl.preload = 'auto'; }
+    return temaEl;
+  }
+  /** Liga (do segundo `desde` da música: quem chega atrasado ouve o mesmo trecho) ou desliga, devagar. */
+  function temaFesta(on, desde = 0) {
     if (!on) {
       if (!tema) return;
       const a = tema; tema = null; clearInterval(a.rampa);
       a.rampa = setInterval(() => { if (a.volume <= 0.05) { clearInterval(a.rampa); a.pause(); } else a.volume = Math.max(0, a.volume - 0.05); }, 60);
       return;
     }
-    temaFesta(false);
-    const a = tema = new Audio('/sons/cavalos/rei-do-gado.mp3');
-    a.muted = mudo; a.volume = 0; a.play().catch(() => {});
-    a.rampa = setInterval(() => { a.volume = Math.min(TEMA_VOL, a.volume + 0.03); if (a.volume >= TEMA_VOL) clearInterval(a.rampa); }, 80);
+    if (tema) return;
+    const a = tema = baixarTema(); clearInterval(a.rampa);
+    a.onended = () => { if (tema === a) tema = null; };
+    a.muted = mudo; a.volume = TEMA_VOL;
+    try { a.currentTime = Math.max(0, desde); } catch { /* sem os metadados ainda: começa do início */ }
+    a.play().catch(() => {});
   }
-  /** Troca a música de fundo, com uma passagem curta. `null` = silêncio. */
+  /** Troca a música de fundo, com uma passagem curta. `null` = silêncio (o tema da chegada continua). */
   function musica(nome) {
-    temaFesta(false);
+    if (nome) temaFesta(false);
     desejada = nome; if (!ac) return;
     if (faixa && faixa.nome === nome) return;
     if (faixa) { const g = faixa.g; g.gain.cancelScheduledValues(ac.currentTime); g.gain.setTargetAtTime(0, ac.currentTime, 0.2); setTimeout(() => g.disconnect(), 1800); faixa = null; }
     if (!nome) return;
     const g = ac.createGain(); g.gain.setValueAtTime(0, ac.currentTime); g.gain.linearRampToValueAtTime(MUSICAS[nome].vol, ac.currentTime + 0.5); g.connect(mestre);
-    faixa = { nome, g, n: 0, prox: ac.currentTime + 0.06 };
+    faixa = { nome, g, n: 0, prox: ac.currentTime + 0.06, k: 1 };
+  }
+  /** O volume da música de jogo, de 0 a 1 do normal: na reta final ela vai baixando. */
+  function volume(k) {
+    if (!ac || !faixa || Math.abs(faixa.k - k) < 0.02) return;
+    faixa.k = k; faixa.g.gain.cancelScheduledValues(ac.currentTime);
+    faixa.g.gain.setTargetAtTime(MUSICAS[faixa.nome].vol * k, ac.currentTime, 0.15);
   }
   return {
-    init, musica, tema: temaFesta,
+    init, musica, volume, baixarTema, tema: temaFesta,
+    /** Toca de novo, do começo, a música que está valendo (o «Música agora» do teste). */
+    recomecar() { const n = desejada; if (!n) return; musica(null); musica(n); },
     alternar() { mudo = !mudo; if (mestre) mestre.gain.value = mudo ? 0 : 0.55; if (tema) tema.muted = mudo; return mudo; },
     trompete() { if (!ok()) return; let t = ac.currentTime + 0.05; for (const [f, d] of [[392, .16], [523.25, .16], [659.25, .16], [783.99, .32], [0, .08], [659.25, .16], [783.99, .62]]) { if (f) { nota(f, t, d * 0.95, 'square', 0.055); nota(f * 2, t, d * 0.9, 'triangle', 0.025); } t += d; } },
     sino() { if (!ok()) return; const t = ac.currentTime; for (let i = 0; i < 7; i++) { nota(1568, t + i * 0.085, 0.14, 'square', 0.03); nota(2093, t + i * 0.085, 0.12, 'sine', 0.05); } },
@@ -1811,10 +1874,17 @@ function criarPessoa({ nome, tipo, voce = false, cav = null, foto = false }) {
   [p.x, p.y] = noCaminho(p.u, p.d);
   p.q = construirBoneco(p); p.cx = Math.round(p.x - BW / 2) + 7; p.cy = Math.round(p.y - BH + 1) + 5.5;
   const el = document.createElement('div'); el.className = 'pe chega' + (voce ? ' voce' : '');
-  el.innerHTML = `${p.foto ? `<img class="ft${voce ? ' eu' : ''}" src="${p.foto}" alt="">` : ''}<span class="nm${voce ? ' eu' : ''}">${cav ? `<i style="background:${cav.pano.pano}"></i>` : ''}${voce ? 'Você' : curto(nome)}</span>`;
+  el.innerHTML = `${p.foto ? `<img class="ft${voce ? ' eu' : ''}" src="${p.foto}" alt="">` : ''}<span class="nm${voce ? ' eu' : ''}">${nomeDoBoneco(p)}</span>`;
   $('#gente').appendChild(el); p.el = el; el.style.transform = `translate(${p.cx * ESCALA}px,${p.cy * ESCALA}px)`;
   G.pessoas.push(p); G.poofs.push({ x: p.x, y: p.y, t0: wall });
   return p;
+}
+/** O nome em cima do boneco; quem corre leva junto o número do cavalo dele. */
+const nomeDoBoneco = p => `${p.cav ? `<i style="background:${p.cav.pano.pano}"></i><b>#${p.cav.num}</b>` : ''}${p.voce ? 'Você' : esc(curto(p.nome))}`;
+/** O cavalo de quem corre mudou (escolheu já no paddock, ou foi sorteado): o boneco mostra. */
+function marcarCavalo(p, cav) {
+  if (!p || p.cav === cav) return;
+  p.cav = cav; p.el.querySelector('.nm').innerHTML = nomeDoBoneco(p);
 }
 
 /** Anda um trecho, para um pouco, anda de novo — sempre pelo caminho de fora. */
@@ -1885,10 +1955,11 @@ function desenharPasto(c, wall) {
     else if (o.cavalo) desenharCavaloPasto(c, o, wall);
     else desenharBoneco(c, o, wall);
   }
-  // você / seu palpite
+  // você / seu palpite / o da ficha aberta
   for (const h of G.pasto) {
     const eu = h.cav === G.voce.cavalo, pal = h.cav === G.voce.palpite;
     if (eu || pal) seta(c, Math.round(h.x), Math.round(h.y) - 41, eu ? '#ffd24a' : '#7fe3ff', eu ? 'VOCE' : 'PALPITE', wall);
+    else if (h.cav === fichaCav) seta(c, Math.round(h.x), Math.round(h.y) - 41, '#ffffff', String(h.cav.num), wall);
   }
   // a fumacinha de quem acabou de chegar
   if (G.poofs.length) G.poofs = G.poofs.filter(p => wall - p.t0 < 0.45);
@@ -1956,6 +2027,7 @@ function tamanho(grande, animar = false) {
   const j = $('#janela'), antes = animar && !j.classList.contains('oculto') ? j.getBoundingClientRect() : null;
   JAN.grande = grande;
   j.classList.toggle('grande', grande); j.classList.toggle('pequena', !grande);
+  document.body.classList.toggle('jan-grande', grande);
   if (antes) {
     ajustar();  // o conteúdo já no tamanho final, antes do primeiro quadro da animação
     const d = j.getBoundingClientRect();
@@ -2334,11 +2406,12 @@ function reiniciar() {
 
 function novaCorrida(cfg = configDoLab()) {
   QUAL.econ = false; QUAL.media = 16; QUAL.ruim = 0;
-  Petalas.parar(); Som.musica('lobby');
+  Petalas.parar(); Som.musica('lobby'); Som.baixarTema();
   JAN.aberta = false; JAN.dicaFechada = false; tamanho(false); esconderDica(false);
   $('#janela').classList.add('oculto'); $('#voltar').classList.add('oculto');
   document.body.append($('#org'));
   for (const id of ['#festa', '#foto', '#apostas']) $(id).classList.remove('on');
+  fecharFicha();
   for (const id of ['#modal', '#lobby', '#convite']) $(id).classList.add('oculto');
   $('#palco').classList.remove('replay');
   $('#posicoes').innerHTML = ''; $('#meuLugar').innerHTML = ''; $('#contagem').innerHTML = ''; $('#faixa').innerHTML = ''; $('#gente').innerHTML = '';
@@ -2400,7 +2473,8 @@ function atualizarEscolha() {
     const { el, cav } = cd, meu = cav === G.voce.cavalo;
     el.classList.toggle('ocupado', !!cav.dono && !meu); el.classList.toggle('meu', meu);
     let tag = el.querySelector('.dono');
-    const quer = cav.dono ? (meu ? `${avatar('Você', '#1b1b1b')}<span>Seu cavalo</span>` : `${avatar(cav.dono.nome, cav.pano.pano)}<span>${esc(curto(cav.dono.nome))}</span>`) : '';
+    // o dono de cada cavalo, com a foto quando tem (sem foto, as iniciais na cor do cavalo)
+    const quer = cav.dono ? (meu ? `${avatar('Você', '#1b1b1b')}<span>Seu cavalo</span>` : `${cav.dono.foto ? cara(cav.dono, 22) : avatar(cav.dono.nome, cav.pano.pano)}<span>${esc(curto(cav.dono.nome))}</span>`) : '';
     if (quer && !tag) { tag = document.createElement('div'); tag.className = 'dono'; el.appendChild(tag); }
     if (tag) { if (!quer) tag.remove(); else if (tag.dataset.k !== quer) { tag.innerHTML = quer; tag.dataset.k = quer; } }
     el.querySelector('.palp').textContent = cav.palpites ? `${cav.palpites} palpite${cav.palpites > 1 ? 's' : ''}` : '';
@@ -2466,13 +2540,15 @@ function entrarNoPaddock() {
   for (const id of ['#escolha', '#convite']) $(id).classList.add('oculto');
   if (!G.eu && !ADM()) G.eu = criarPessoa({ nome: 'Você', tipo: ST.modo, voce: true, cav: G.voce.cavalo, foto: true });
   $('#lobby').classList.remove('oculto'); Som.chegou();
+  if (MODO === 'teste') telaDoTeste(JAN.grande);
   abrirJanela(); atualizarLobby(); atualizarOrg(); ajustar();
 }
 /** A fileira de cavalos do palpite: quem assiste (e o super admin, só para ele). */
 function montarPalpites() {
   const box = $('#lbPalp'), palpita = ST.modo !== 'corre';
   box.classList.toggle('oculto', !palpita); $('#lbLista').classList.toggle('oculto', palpita);
-  box.innerHTML = palpita ? G.cavalos.map(c => `<button class="hp" data-i="${c.i}" title="#${c.num} · ${c.pel.nome}"><canvas width="50" height="34"></canvas><b>#${c.num}</b><small></small></button>`).join('') : '';
+  // Um card por cavalo, com quem corre nele: o palpite é aqui (clicar no cavalo do paddock só abre a ficha).
+  box.innerHTML = palpita ? G.cavalos.map(c => `<button type="button" class="hp" data-i="${c.i}" title="Palpite no #${c.num} · ${c.pel.nome}"><canvas width="50" height="34"></canvas><b>#${c.num}</b><span class="dn"></span><small></small></button>`).join('') : '';
   box.querySelectorAll('.hp').forEach(b => {
     const cav = G.cavalos[+b.dataset.i], x = b.querySelector('canvas').getContext('2d');
     x.imageSmoothingEnabled = false; x.drawImage(quadros(cav).p[0], 0, 0);
@@ -2511,13 +2587,19 @@ function atualizarLobby() {
     const fig = cav ? '<canvas width="50" height="34"></canvas>' : '';
     if (ST.modo === 'corre') eu.innerHTML = `${fig}<span>Você corre com o <b>#${cav.num}</b> · ${cav.pel.nome}</span>`;
     else if (ADM()) eu.innerHTML = cav ? `${fig}<span>Seu palpite: <b>#${cav.num}</b><small>só você vê — ninguém sabe que você está aqui</small></span>` : '<span>Assistindo como organizador<small>ninguém vê você no paddock</small></span>';
-    else eu.innerHTML = cav ? `${fig}<span>Seu palpite: <b>#${cav.num}</b> 🍀<small>é só pela sorte: quem assiste não concorre a prêmio</small></span>` : '<span>Dê seu palpite: clique num cavalo<small>é só pela sorte — o prêmio é de quem corre</small></span>';
+    else eu.innerHTML = cav ? `${fig}<span>Seu palpite: <b>#${cav.num}</b> 🍀<small>é só pela sorte: quem assiste não concorre a prêmio</small></span>` : '<span>Dê seu palpite: escolha um card aqui do lado<small>clique no cavalo do paddock para ver de quem é · é só pela sorte</small></span>';
     const c = eu.querySelector('canvas'); if (c) { const x = c.getContext('2d'); x.imageSmoothingEnabled = false; x.drawImage(quadros(cav).p[0], 0, 0, 50, 34); }
   }
   $('#lbPalp').querySelectorAll('.hp').forEach(b => {
     const c = G.cavalos[+b.dataset.i]; b.classList.toggle('on', c === G.voce.palpite);
     b.querySelector('small').textContent = c.palpites ? `🪙 ${c.palpites}` : '';
+    const d = c.dono, dn = b.querySelector('.dn'), k = d ? `${d.nome}|${d.foto ?? ''}` : '-';
+    if (dn.dataset.k !== k) {
+      dn.dataset.k = k; dn.classList.toggle('vazio', !d);
+      dn.innerHTML = d ? `${cara({ nome: d.voce ? 'Você' : d.nome, foto: (d.voce ? G.eu?.foto : d.foto) ?? null }, 14)}<span>${esc(d.voce ? 'Você' : d.nome.split(' ')[0])}</span>` : '<span>sem dono</span>';
+    }
   });
+  if (fichaCav) desenharFicha();
   $('#lbLista').innerHTML = G.cavalos.map(c => `<span class="${c.dono ? (c.dono.voce ? 'eu' : '') : 'vazio'}"><i style="background:${c.pano.pano}"></i>#${c.num} ${c.dono ? (c.dono.voce ? 'Você' : esc(curto(c.dono.nome))) : '—'}</span>`).join('');
   desenharApostas();
 }
@@ -2542,6 +2624,34 @@ function desenharApostas() {
         <div class="ap-quem">${quem.slice(0, MAX).map(q => `<span class="${q.voce ? 'eu' : ''}">${cara(q, 16)}${esc(q.voce ? 'Você' : q.nome.split(' ')[0])}</span>`).join('')}${quem.length > MAX ? `<span>+${quem.length - MAX}</span>` : ''}</div></li>`).join('')}</ul>`
       : `<p class="ap-vazio">Ninguém apostou ainda.${clica ? ' Clique num cavalo para apostar nele.' : ''}</p>`);
 }
+/*
+ * A ficha do cavalo (pedido do Cleber, 22/10/2026): clicar no cavalo do paddock
+ * mostra quem corre com ele (com a foto) e quem apostou nele. Não dá palpite —
+ * o palpite é nos cards de baixo. Fica do lado oposto ao cavalo, para não tampá-lo,
+ * e se atualiza com a sala (alguém escolheu o cavalo, alguém apostou).
+ */
+let fichaCav = null;
+function abrirFicha(cav) { fichaCav = cav; Som.pop(); desenharFicha(); }
+function fecharFicha() { if (!fichaCav) return; fichaCav = null; $('#ficha').classList.add('oculto'); $('#ficha').dataset.k = ''; }
+function desenharFicha() {
+  const box = $('#ficha'), cav = fichaCav;
+  if (!cav || !G || !G.cavalos.includes(cav)) { fecharFicha(); return; }
+  const h = G.pasto.find(p => p.cav === cav), d = cav.dono, MAX = 12;
+  const quem = apostas().find(a => a.cav === cav)?.quem ?? [];
+  const dono = d && { nome: d.voce ? 'Você' : d.nome, foto: (d.voce ? G.eu?.foto : d.foto) ?? null };
+  const html = `<button type="button" class="fi-x" aria-label="Fechar a ficha">×</button>
+    <div class="fi-cab"><canvas width="50" height="34"></canvas><div><b>#${cav.num}</b><span>${esc(cav.pel.nome)}</span></div></div>
+    <div class="fi-dono">${dono
+      ? `${cara(dono, 44)}<div><small>QUEM CORRE COM ELE</small><b>${esc(dono.nome)}</b>${d.setor ? `<span>${esc(d.setor)}</span>` : ''}</div>`
+      : '<div><small>QUEM CORRE COM ELE</small><span>Ainda sem dono: quem corre escolhe antes da largada.</span></div>'}</div>
+    <div class="fi-ap"><small>🪙 ${quem.length ? `${quem.length} palpite${quem.length > 1 ? 's' : ''} neste cavalo` : 'Ninguém apostou nele ainda'}</small>${quem.length
+      ? `<ul>${quem.slice(0, MAX).map(q => `<li class="${q.voce ? 'eu' : ''}">${cara(q, 18)}${esc(q.voce ? 'Você' : q.nome.split(' ')[0])}</li>`).join('')}${quem.length > MAX ? `<li>+${quem.length - MAX}</li>` : ''}</ul>` : ''}</div>`;
+  box.classList.toggle('esq', !!h && h.x > W / 2);
+  box.classList.remove('oculto');
+  if (box.dataset.k === html) return;   // nada mudou: não refaz (as fotos piscariam)
+  box.dataset.k = html; box.innerHTML = html;
+  const x = box.querySelector('canvas').getContext('2d'); x.imageSmoothingEnabled = false; x.drawImage(quadros(cav).p[0], 0, 0);
+}
 function alternarApostas() {
   const on = !$('#apostas').classList.contains('on');
   $('#apostas').classList.toggle('on', on); $('#btApostas').setAttribute('aria-pressed', on); $('#btApostas').classList.toggle('on', on);
@@ -2557,7 +2667,12 @@ function atualizarOrg() {
   const bt = $('#orgBt'), txt = $('#orgTxt'); bt.classList.remove('oculto'); bt.disabled = false;
   if (emPasto()) { txt.textContent = `${G.cavalos.filter(c => c.dono).length}/${G.n} cavalos com dono · ${noPaddock()} no paddock`; bt.textContent = 'PREPARAR CORRIDA'; }
   else if (fase === 'gravando') { txt.textContent = '● gravando a corrida…'; bt.textContent = 'GRAVANDO…'; bt.disabled = true; }
-  else if (fase === 'preparada') { txt.textContent = '✔ corrida gravada · cavalos na largada'; bt.textContent = 'SOLTAR CONTAGEM (3 s)'; }
+  else if (fase === 'preparada') {
+    // De verdade, cada tela baixa a corrida num segundo diferente (até 6 s): o SOLTAR espera todo mundo ter recebido.
+    const falta = MODO === 'app' ? Math.ceil(ESPERA_SOLTAR - (agoraBanco() - (seg(APP.sala?.corrida.gravada_em) ?? 0))) : 0;
+    txt.textContent = falta > 0 ? `✔ corrida gravada · chegando em todas as telas (${falta} s)` : '✔ corrida gravada · cavalos na largada';
+    bt.textContent = 'SOLTAR CONTAGEM (3 s)'; bt.disabled = falta > 0 || APP.soltando;
+  }
   else if (fase === 'festa') { txt.textContent = 'corrida encerrada'; bt.textContent = 'NOVA CORRIDA'; if (MODO === 'app') bt.classList.add('oculto'); }
   else { txt.textContent = 'reproduzindo a gravação para todo mundo'; bt.classList.add('oculto'); }
 }
@@ -2566,7 +2681,7 @@ function acaoOrg() {
   // De verdade: quem grava e larga é o sistema (`PalcoCavalos.tsx`, com as funções do super admin).
   if (MODO === 'app') {
     if (emPasto()) { esperarLargada(); avisarSistema({ tipo: 'org', acao: 'preparar' }); }
-    else if (fase === 'preparada') { $('#orgBt').disabled = true; avisarSistema({ tipo: 'org', acao: 'soltar' }); }
+    else if (fase === 'preparada' && !APP.soltando) { APP.soltando = true; $('#orgBt').disabled = true; avisarSistema({ tipo: 'org', acao: 'soltar' }); }
     return;
   }
   if (fase === 'preparada') soltar();
@@ -2609,7 +2724,7 @@ function preparar() {
   $('#apostas').classList.remove('on');
   if (!JAN.aberta) abrirJanela();
   const livres = embaralhar(G.cavalos.filter(c => !c.dono), Math.random);
-  if (ST.modo === 'corre' && !G.voce.cavalo) { const c = livres.pop(); c.dono = { nome: 'Você', voce: true, sorteado: true }; G.voce.cavalo = c; aviso(`O organizador preparou a corrida: você ficou com o #${c.num} (sorteado).`); }
+  if (ST.modo === 'corre' && !G.voce.cavalo) { const c = livres.pop(); c.dono = { nome: 'Você', voce: true, sorteado: true }; G.voce.cavalo = c; marcarCavalo(G.eu, c); aviso(`O organizador preparou a corrida: você ficou com o #${c.num} (sorteado).`); }
   for (const b of G.bots) if (!b.cav) { const c = livres.pop(); if (!c) break; b.cav = c; c.dono = { nome: b.nome, foto: b.foto ?? null, bot: true, sorteado: true }; }
   sentarTorcida();
   fase = 'gravando'; Som.musica(null); faixa(ADM() ? 'GRAVANDO A CORRIDA…' : 'O ORGANIZADOR ESTÁ PREPARANDO A LARGADA');
@@ -2765,7 +2880,8 @@ async function soltar() {
   if (fase !== 'preparada') return;
   const g = G; fase = 'largada'; F = {}; $('#faixa').innerHTML = ''; atualizarOrg();
   Som.musica('corrida');
-  for (const n of ['3', '2', '1']) { contagem(n); Som.tique(false); await espera(1000); if (g !== G) return; }
+  // (no teste, «Pular a contagem» e «Ir para a chegada» passam na frente: a contagem para)
+  for (const n of ['3', '2', '1']) { contagem(n); Som.tique(false); await espera(1000); if (g !== G || fase !== 'largada') return; }
   contagem('VAI!', true); Som.tique(true); Som.sino();
   fase = 'corrida'; F = { t0: performance.now(), prox: 0 }; atualizarOrg();
 }
@@ -2773,7 +2889,7 @@ function contagem(txt, vai) { $('#contagem').innerHTML = `<span class="${vai ? '
 function faixa(txt) { $('#faixa').innerHTML = `<span>${txt}</span>`; }
 function flash() { const f = $('#flash'); f.classList.remove('on'); void f.offsetWidth; f.classList.add('on'); }
 function iniciarReplay() {
-  fase = 'replay'; F = { t0: performance.now(), tA: Math.max(0.5, G.rec.tVenc - 2.4), prox: 0 };
+  fase = 'replay'; F = { t0: performance.now(), tA: marcos(G.rec).tA, prox: 0 };
   $('#palco').classList.add('replay'); $('#posicoes').innerHTML = ''; $('#meuLugar').innerHTML = ''; atualizarOrg();
 }
 function tirarFoto() {
@@ -2820,9 +2936,22 @@ function iniciarFesta() {
     + (acertei && !ADM() ? '<div class="ac-ok">Você acertou! 🎉</div>' : '')
     + (quem.length ? `<ul>${quem.slice(0, MAX).map(q => `<li class="${q.voce ? 'eu' : ''}">${cara(q, 22)}${esc(q.voce ? 'Você' : q.nome)}</li>`).join('')}</ul>${resto > 0 ? `<small>e mais ${resto}</small>` : ''}`
       : '<p>Ninguém apostou nele. Zebra! 🦓</p>');
-  $('#festa').classList.add('on'); encaixarFesta(); Petalas.start(); Som.musica(null); Som.fanfarra(); atualizarOrg();
-  // passada a fanfarra, entra o tema da festa: O Rei do Gado
-  const g = G; setTimeout(() => { if (g === G && fase === 'festa') Som.tema(true); }, 1100);
+  // O Rei do Gado já vem tocando desde a chegada (`tocarTema`); a fanfarra por cima embolaria.
+  $('#festa').classList.add('on'); encaixarFesta(); Petalas.start(); Som.musica(null); atualizarOrg();
+  tocarTema(marcos(rec).fimFoto - rec.tVenc);
+}
+/** Os segundos de cada parte depois da largada: a corrida (até 2,4 s depois da chegada), o replay em câmera lenta e a foto. */
+function marcos(rec) {
+  const fimCorrida = rec.tVenc + 2.4, tA = Math.max(0.5, rec.tVenc - 2.4), fimReplay = fimCorrida + (rec.tVenc - tA) / 0.3;
+  return { fimCorrida, tA, fimReplay, fimFoto: fimReplay + 5.6 };
+}
+/**
+ * O Rei do Gado: uma vez por corrida, do cruzar da linha até a música acabar.
+ * `desde` = segundos depois da chegada (quem entra atrasado ouve o mesmo trecho).
+ */
+function tocarTema(desde) {
+  if (!G || G.tema) return;
+  G.tema = true; Som.tema(true, desde);
 }
 function animarFesta(wall) {
   const c = $('#cvVenc'), x = c.getContext('2d'); x.imageSmoothingEnabled = false; x.clearRect(0, 0, 250, 185);
@@ -2955,8 +3084,9 @@ function aoMudarFase() {
   $('#reacoes').classList.toggle('oculto', fase !== 'lobby' || ADM());
   $('#btApostas').classList.toggle('oculto', fase !== 'lobby');
   $('#palco').classList.toggle('arq', ['gravando', 'preparada', 'largada', 'corrida', 'replay'].includes(fase));
-  if (fase !== 'lobby') { $('#apostas').classList.remove('on'); $('#btApostas').classList.remove('on'); }
+  if (fase !== 'lobby') { $('#apostas').classList.remove('on'); $('#btApostas').classList.remove('on'); fecharFicha(); }
   atualizarOrg();
+  atualizarTeste();
   atualizarStatus();
   const on = comPlacar();
   if (on && !$('#placar').classList.contains('on')) { $('#placar').classList.add('on'); montarPlacar(); }
@@ -2983,6 +3113,8 @@ let ultQ = 0, hudT = 0, ultFase = null, perfT = 0, perfSoma = 0, perfN = 0;
  * relógio, menos quadros não deixa a corrida mais lenta, só menos fluida.
  */
 const QUAL = { modo: 'auto', econ: false, media: 16, ruim: 0 };
+/** Onde a música do jogo começa a baixar: 700 px antes da linha, uns 7 s da reta final. */
+const FADE_PX = 700;
 function vigiarQuadro(intervalo) {
   if (QUAL.modo !== 'auto' || QUAL.econ || fase !== 'corrida') return;
   QUAL.media += (Math.min(intervalo, 100) - QUAL.media) * 0.1;
@@ -3025,7 +3157,11 @@ function laco(now) {
       F.bateu.add(i * 10 + o); Som.batida(1.3);
       if (JAN.aberta) feed(`<b>#${G.cavalos[i].num}</b> bateu na barreira!`, G.cavalos[i]);
     });
-    if (!F.cruzou && t >= rec.tVenc) { F.cruzou = true; flash(); Som.clique(); faixa(`#${G.cavalos[rec.vencedor].num} CRUZOU A LINHA!`); }
+    if (!F.cruzou && t >= rec.tVenc) {
+      F.cruzou = true; flash(); Som.clique(); faixa(`#${G.cavalos[rec.vencedor].num} CRUZOU A LINHA!`);
+      // cruzou: a música do jogo sai e o Rei do Gado entra já alto (pedido do Cleber, 22/10/2026)
+      Som.musica(null); tocarTema(t - rec.tVenc);
+    }
     // Replay e foto em TODA corrida (pedido do Cleber, 21/10/2026), não só na chegada apertada.
     if (!F.saiu && t >= rec.tVenc + 2.4) { F.saiu = true; faixa(rec.apertada ? 'CHEGADA APERTADA · REPLAY' : 'REPLAY DA CHEGADA'); iniciarReplay(); }
     t = Math.min(t, rec.dur);
@@ -3034,7 +3170,12 @@ function laco(now) {
     if (t >= rec.tVenc) { t = rec.tVenc; if (!F.fim) { F.fim = true; tirarFoto(); } }
   } else if (fase === 'foto') { t = rec.tVenc; zoom = true; ab = 1; }
   else if (fase === 'festa') { t = rec ? rec.dur : 0; ab = 1; excit = 0.5; }
-  if (rec && t > 0) { let lead = 0; for (let i = 0; i < G.n; i++) lead = Math.max(lead, xAt(i, t)); excit = fase === 'festa' ? 0.5 : (lead >= L ? 0.9 : 0.15 + 0.7 * clamp((lead - (L - 900)) / 900, 0, 1)); }
+  if (rec && t > 0) {
+    let lead = 0; for (let i = 0; i < G.n; i++) lead = Math.max(lead, xAt(i, t));
+    excit = fase === 'festa' ? 0.5 : (lead >= L ? 0.9 : 0.15 + 0.7 * clamp((lead - (L - 900)) / 900, 0, 1));
+    // a reta final: a música do jogo vai baixando até a chegada, onde entra o Rei do Gado
+    if (fase === 'corrida' && !F.cruzou) Som.volume(clamp((L - lead) / FADE_PX, 0.25, 1));
+  }
   const cam = rec && t > 0 ? camAt(t) : 0;
   // No zoom, o recorte segue o líder SUAVIZADO (quando a liderança trocava no pelotão, o quadro saltava),
   // e a câmera leva junto a fração do recorte: o cavalo é arredondado UMA vez, contra os dois somados.
@@ -3119,13 +3260,12 @@ $('#btApostas').addEventListener('click', alternarApostas);
 $('#apostas').addEventListener('click', e => { const i = e.target.closest('li.clica')?.dataset.i; if (i !== undefined) palpitar(G.cavalos[+i]); });
 $('#lPrep').addEventListener('click', () => { Som.init(); preparar(); });
 $('#lSoltar').addEventListener('click', () => { Som.init(); soltar(); });
-// No paddock dá para clicar nos cavalos: quem assiste palpita, quem corre vê de quem é.
+// No paddock, clicar no cavalo abre a ficha dele (de quem é, quem apostou); o palpite é nos cards de baixo.
 $('#palco').addEventListener('click', ev => {
+  if (ev.target.closest('#ficha')) { if (ev.target.closest('.fi-x')) fecharFicha(); return; }
   if (fase !== 'lobby') return;
-  const h = cavaloNoPonto(ev); if (!h) return;
-  const c = h.cav;
-  if (ST.modo !== 'corre') palpitar(c);
-  else aviso(c === G.voce.cavalo ? `Esse é o seu: #${c.num} · ${c.pel.nome}.` : `#${c.num} · ${c.pel.nome}${c.dono ? ` · de ${curto(c.dono.nome)}` : ' · ainda sem dono'}`);
+  const h = cavaloNoPonto(ev);
+  if (h && h.cav !== fichaCav) abrirFicha(h.cav); else fecharFicha();
 });
 let miraT = 0;
 $('#palco').addEventListener('mousemove', ev => {
@@ -3133,7 +3273,8 @@ $('#palco').addEventListener('mousemove', ev => {
   miraT = ev.timeStamp; $('#palco').classList.toggle('mira', !!cavaloNoPonto(ev));
 });
 $('#feNova').addEventListener('click', () => (MODO === 'teste' ? iniciarTeste() : ADM() ? abrirMontagem() : novaCorrida()));
-$('#feReplay').addEventListener('click', () => { Petalas.parar(); Som.tema(false); $('#festa').classList.remove('on'); iniciarReplay(); });
+// o Rei do Gado segue tocando no replay de novo: só acaba quando a música acaba
+$('#feReplay').addEventListener('click', () => { Petalas.parar(); $('#festa').classList.remove('on'); iniciarReplay(); });
 $('#som').addEventListener('click', () => {
   Som.init(); const mudo = Som.alternar(), b = $('#som');
   b.classList.toggle('desl', mudo); b.title = mudo ? 'Som desligado' : 'Som ligado'; b.setAttribute('aria-label', mudo ? 'Ligar o som' : 'Desligar o som');
@@ -3146,7 +3287,7 @@ $('#balaoX').addEventListener('click', () => esconderDica(true));
 $('#lDica').addEventListener('click', () => { JAN.dicaFechada = false; tamanho(false); if (JAN.aberta) mostrarDica(); else abrirJanela(); });
 addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
-  if (!$('#divulga').classList.contains('oculto')) fecharDivulgacao(); else if (JAN.grande) tamanho(false, true);
+  if (!$('#divulga').classList.contains('oculto')) fecharDivulgacao(); else if (fichaCav) fecharFicha(); else if (JAN.grande) tamanho(false, true);
 });
 $('#lDiv').addEventListener('click', () => mostrarDivulgacao({ ...DIV_PADRAO, premio: $('#mtPremio').value.trim() || 'R$ 30' }));
 $('#dvX').addEventListener('click', fecharDivulgacao); $('#dvOk').addEventListener('click', fecharDivulgacao);
@@ -3172,7 +3313,9 @@ $('#lNovo').addEventListener('click', reiniciar);
    relógio do banco (`inicia_em`), então quem entra atrasado cai no ponto
    certo, e todo mundo vê o mesmo segundo.
    ===================================================================== */
-const APP = { eu: null, adm: false, desvio: 0, sala: null, pool: null, porUsuario: new Map(), sentados: new Set(), contagem: null, escolhaRes: null };
+const APP = { eu: null, adm: false, desvio: 0, sala: null, pool: null, porUsuario: new Map(), sentados: new Set(), contagem: null, escolhaRes: null, recPendente: null, soltando: false };
+/** Segundos entre a gravação e o SOLTAR liberar: o tempo de toda tela baixar a corrida (`PalcoCavalos`, até 6 s). */
+const ESPERA_SOLTAR = 8;
 const agoraBanco = () => (Date.now() + APP.desvio) / 1000;
 const seg = iso => (iso ? Date.parse(iso) / 1000 : null);
 /** A semente dos 24 cavalos de uma corrida: a mesma em toda tela, na escolha e no palco. */
@@ -3190,7 +3333,7 @@ function ligarSistema() {
     else if (m.tipo === 'gravacao') receberGravacao(m.rec);
     else if (m.tipo === 'escolha-res') { const f = APP.escolhaRes; APP.escolhaRes = null; f?.(m); }
     else if (m.tipo === 'card') mostrarDivulgacao(m.card, () => avisarSistema({ tipo: 'card-fechar' }));
-    else if (m.tipo === 'org-erro') { aviso(m.texto); if (fase === 'gravando') voltarAoPaddock(); atualizarOrg(); }
+    else if (m.tipo === 'org-erro') { APP.soltando = false; aviso(m.texto); if (fase === 'gravando') voltarAoPaddock(); atualizarOrg(); }
   });
   if (MODO === 'app') setInterval(seguirCorrida, 200);
   avisarSistema({ tipo: 'pronto' });
@@ -3211,13 +3354,15 @@ function montarDaSala() {
   MAPA = construirMapa(mapaId, s);
   const [b1, b2, ac] = MAPA.ui, rs = document.documentElement.style; rs.setProperty('--bg1', b1); rs.setProperty('--bg2', b2); rs.setProperty('--acc', ac);
   G = { id: c.id, seed: s, n: 0, mapaId, cavalos: [], premio: c.premio || 'sem prêmio', rec: null, bots: [], torcida: [], voce: { cavalo: null, palpite: null }, eu: null, abre: performance.now(), pessoas: [], poofs: [], pasto: [] };
-  APP.porUsuario = new Map(); APP.sentados = new Set(); APP.contagem = null; poeira = []; F = {};
+  APP.porUsuario = new Map(); APP.sentados = new Set(); APP.contagem = null; APP.recPendente = null; poeira = []; F = {};
   if (MODO === 'escolha') {
     fase = 'escolha'; G.cavalos = APP.pool; G.n = APP.pool.length;
     montarEscolha(); $('#escolha').classList.remove('oculto');
     return;
   }
   fase = 'lobby'; Som.init(); Som.musica('lobby');
+  // O Rei do Gado (2,4 MB) desce no paddock, cada tela num segundo: na chegada ele só toca.
+  setTimeout(Som.baixarTema, Math.random() * 20_000);
   // O super admin assiste invisível: sem boneco, sem lugar na arquibancada.
   if (!ADM()) G.eu = criarPessoa({ nome: 'Você', tipo: ST.modo, voce: true, foto: eu?.foto || false });
   $('#lobby').classList.remove('oculto');
@@ -3228,9 +3373,18 @@ function sincronizarSala() {
   const { corrida: c, pessoas } = APP.sala;
   G.premio = c.premio || 'sem prêmio';
   for (const h of APP.pool) h.dono = null;
+  const dono = p => ({ nome: p.nome, foto: p.foto, setor: p.setor, usuario: p.usuario, voce: p.usuario === APP.eu, avulso: !!p.avulso });
   for (const p of pessoas) {
-    if (p.corre && p.escolha != null && APP.pool[p.escolha]) APP.pool[p.escolha].dono = { nome: p.nome, foto: p.foto, usuario: p.usuario, voce: p.usuario === APP.eu, avulso: !!p.avulso };
+    if (p.corre && p.escolha != null && APP.pool[p.escolha]) APP.pool[p.escolha].dono = dono(p);
   }
+  // Preparada, quem manda é a gravação: ela leva o cavalo de cada raia (`cavalos`). Quem
+  // ganhou cavalo no sorteio da preparação pode ainda estar sem ele nesta sala (a releitura
+  // vem uns segundos depois), e a largada não pode esperar por isso.
+  const grav = c.gravacao, raias = grav?.faixa && grav.cavalos?.length === grav.faixa.length ? grav.cavalos : null;
+  if (raias) grav.faixa.forEach((u, i) => {
+    const p = pessoas.find(x => x.usuario === u), h = APP.pool[raias[i]];
+    if (h) h.dono = p ? dono(p) : { nome: 'Alguém', foto: null, usuario: u, voce: u === APP.eu, avulso: false };
+  });
   const eu = pessoas.find(p => p.usuario === APP.eu);
   if (MODO === 'escolha') {
     G.voce.cavalo = eu?.escolha != null ? APP.pool[eu.escolha] : G.voce.cavalo;
@@ -3239,8 +3393,9 @@ function sincronizarSala() {
   }
   // A largada: preparada, vale a ordem da gravação (`faixa`); antes, a do número do cavalo.
   if (!G.rec) {
-    const faixa = c.gravacao?.faixa;
-    const cavs = faixa ? faixa.map(u => APP.pool[pessoas.find(x => x.usuario === u)?.escolha]).filter(Boolean) : APP.pool.filter(h => h.dono);
+    const faixa = grav?.faixa;
+    const cavs = raias ? raias.map(k => APP.pool[k]).filter(Boolean)
+      : faixa ? faixa.map(u => APP.pool[pessoas.find(x => x.usuario === u)?.escolha]).filter(Boolean) : APP.pool.filter(h => h.dono);
     trocarCavalos(cavs);
   }
   const cavDe = u => G.cavalos.find(h => h.dono?.usuario === u) ?? null;
@@ -3254,12 +3409,16 @@ function sincronizarSala() {
     APP.porUsuario.set(p.usuario, criarPessoa({ nome: p.nome, tipo: p.corre ? 'corre' : 'assiste', cav: p.corre ? cavDe(p.usuario) : null, foto: p.foto || false }));
     if (fase === 'lobby' && JAN.aberta) Som.chegou();
   }
+  for (const [u, b] of APP.porUsuario) if (b?.tipo === 'corre') marcarCavalo(b, cavDe(u));
+  if (G.eu && ST.modo === 'corre') marcarCavalo(G.eu, G.voce.cavalo);
   G.torcida = pessoas.filter(p => p.assiste && !p.corre && p.entrou_em && p.usuario !== APP.eu)
     .map(p => ({ nome: p.nome, foto: p.foto, chegou: true, quando: 0, cav: p.palpite ? cavDe(p.palpite) : null, usuario: p.usuario }));
   // com a arquibancada montada, quem chega depois senta na hora
   if (G.assentos) for (const b of G.torcida) if (!APP.sentados.has(b.usuario)) { APP.sentados.add(b.usuario); if (G.assentos.length < MAX_ARQ + 1) sentar({ nome: b.nome, foto: b.foto }); }
   if (fase === 'lobby') atualizarLobby(); else desenharApostas();
   atualizarOrg();
+  // a gravação que chegou antes da largada bater (ver `receberGravacao`) entra agora
+  if (APP.recPendente) receberGravacao(APP.recPendente);
 }
 /** Troca os cavalos da corrida (escolheu, trocou, saiu): o índice de cada um é a raia. */
 function trocarCavalos(cavs) {
@@ -3277,7 +3436,9 @@ function trocarCavalos(cavs) {
 /** A gravação chegou (as posições): os cavalos vão para a largada. */
 function receberGravacao(rec) {
   if (!G || MODO !== 'app') return;
-  if (rec.n !== G.cavalos.length) { console.error('[cavalos] a gravação não bate com a largada', rec.n, G.cavalos.length); return; }
+  // A largada desta tela ainda não bate com a gravação (a sala nova vem a caminho): espera por ela.
+  if (rec.n !== G.cavalos.length) { APP.recPendente = rec; console.warn('[cavalos] a gravação espera a largada', rec.n, G.cavalos.length); return; }
+  APP.recPendente = null;
   G.rec = rec;
   // os quadros do salto e da reta final saem agora, com a tela parada
   for (const c of G.cavalos) { const q = quadros(c); q.s; q.g; q.e1; q.e2; q.e3; }
@@ -3292,7 +3453,7 @@ function esperarLargada() {
 }
 /** A gravação foi descartada (ou não foi): todo mundo de volta ao paddock. */
 function voltarAoPaddock() {
-  fase = 'lobby'; G.rec = null; $('#faixa').innerHTML = ''; $('#lobby').classList.remove('oculto');
+  fase = 'lobby'; G.rec = null; APP.soltando = false; $('#faixa').innerHTML = ''; $('#lobby').classList.remove('oculto');
   Som.musica('lobby'); atualizarLobby(); atualizarOrg(); ajustar();
 }
 function posicionar() {
@@ -3305,16 +3466,15 @@ function seguirCorrida() {
   if (MODO !== 'app' || !G || !APP.sala) return;
   const c = APP.sala.corrida;
   if (c.estado === 'cancelada') { avisarSistema({ tipo: 'fechar' }); return; }
-  if (!c.gravada_em) { if (fase !== 'lobby' && fase !== 'gravando') voltarAoPaddock(); return; }
+  if (!c.gravada_em) { APP.recPendente = null; if (fase !== 'lobby' && fase !== 'gravando') voltarAoPaddock(); return; }
   if (!G.rec) { if (fase === 'lobby') esperarLargada(); return; }
   const ini = seg(c.inicia_em);
-  if (ini == null) { if (antes(fase, 'preparada')) posicionar(); return; }
+  if (ini == null) { if (antes(fase, 'preparada')) posicionar(); else if (ADM() && fase === 'preparada') atualizarOrg(); return; }
   seguirRelogio(agoraBanco() - ini);
 }
 function seguirRelogio(tb) {
-  const rec = G.rec, fimCorrida = rec.tVenc + 2.4, tA = Math.max(0.5, rec.tVenc - 2.4);
-  const fimReplay = fimCorrida + (rec.tVenc - tA) / 0.3, fimFoto = fimReplay + 5.6;
-  const quer = tb < 0 ? 'largada' : tb < fimCorrida ? 'corrida' : tb < fimReplay ? 'replay' : tb < fimFoto ? 'foto' : 'festa';
+  const rec = G.rec, { fimCorrida, fimReplay, fimFoto } = marcos(rec);
+  const quer =tb < 0 ? 'largada' : tb < fimCorrida ? 'corrida' : tb < fimReplay ? 'replay' : tb < fimFoto ? 'foto' : 'festa';
   if (antes(fase, 'preparada')) posicionar();
   if (quer === 'largada') {
     if (fase !== 'largada') { fase = 'largada'; F = {}; $('#faixa').innerHTML = ''; Som.musica('corrida'); atualizarOrg(); }
@@ -3323,6 +3483,8 @@ function seguirRelogio(tb) {
     return;
   }
   if (!antes(fase, quer)) return;   // o laço já está lá (ou adiante)
+  // Entrou depois da chegada: o Rei do Gado já está no trecho em que está para todo mundo.
+  if (quer !== 'corrida') { Som.musica(null); tocarTema(tb - rec.tVenc); }
   if (quer === 'corrida') {
     if (tb < 1) { contagem('VAI!', true); Som.tique(true); Som.sino(); } else $('#contagem').innerHTML = '';
     if (fase !== 'largada') { $('#faixa').innerHTML = ''; Som.musica('corrida'); }
@@ -3334,20 +3496,63 @@ function seguirRelogio(tb) {
   else { $('#contagem').innerHTML = ''; iniciarFesta(); }
 }
 
-/* ── Teste: uma corrida de mentira inteira, só na tela de quem abriu ── */
+/*
+ * Teste: uma corrida de mentira inteira, só na tela de quem abriu (o «Testar só
+ * na minha tela» do super admin). Nada anda sozinho além do pessoal de mentira
+ * chegando: a barra de cima comanda, como no teste dos bichinhos (22/10/2026).
+ * A visão é a de quem assiste ou a de quem corre — sem os controles do
+ * organizador, para ver exatamente o que o operador vê.
+ */
 function iniciarTeste() {
-  ST.modo = 'assiste'; ST.mapa = 'aleatorio'; ST.lobby = 16; ST.torcida = 'normal';
-  novaCorrida(); entrarNoPaddock(); Som.init();
-  const g = G;
-  setTimeout(() => { if (g === G && emPasto()) preparar(); }, 14_000);
-  const t = setInterval(() => {
-    if (g !== G) { clearInterval(t); return; }
-    if (fase === 'preparada') { clearInterval(t); setTimeout(() => { if (g === G && fase === 'preparada') soltar(); }, 2_500); }
-  }, 300);
+  ST.modo = $('#tVisao').value; ST.mapa = 'aleatorio'; ST.lobby = 30; ST.torcida = 'normal'; ST.apertada = $('#tAp').checked;
+  novaCorrida(); Som.init();
+  JAN.dicaFechada = true;   // o balão de tela cheia ficaria embaixo da barra do teste (a corrida nova o religa)
+  // quem corre começa escolhendo o cavalo, na tela inteira; quem assiste já entra no paddock
+  if (ST.modo === 'corre') telaDoTeste(true); else entrarNoPaddock();
+  atualizarTeste();
 }
+/** Vai direto para o segundo `t` da corrida (os tombos que já passaram não fazem barulho). */
+function irPara(t) {
+  const rec = G.rec, bateu = new Set();
+  if (rec.barreiras) for (let i = 0; i < G.n; i++) rec.barreiras.forEach((bx, o) => { if (xAt(i, t) >= bx + desvioRaia(i, G.n) + 12) bateu.add(i * 10 + o); });
+  fase = 'corrida'; F = { t0: performance.now() - t * 1000, prox: 0, bateu };
+  $('#faixa').innerHTML = ''; contagem('VAI!', true); setTimeout(() => { if (fase === 'corrida') $('#contagem').innerHTML = ''; }, 900);
+  Som.musica('corrida'); Som.sino(); atualizarOrg();
+}
+const ACOES_TESTE = {
+  zero: () => iniciarTeste(),
+  // todo mundo de mentira chega agora: quem corre pega cavalo, a torcida senta e palpita
+  encher: () => { G.abre = performance.now() - ST.lobby * 1000; tickLobby(); },
+  musica: () => Som.recomecar(),
+  gravar: () => { if (fase === 'escolha') entrarNoPaddock(); preparar(); },
+  largar: () => soltar(),
+  pular: () => irPara(0),
+  chegada: () => irPara(Math.max(0, G.rec.tVenc - 6)),
+};
+/** A escolha do cavalo (visão de quem corre) é da tela inteira; o paddock volta para o canto. */
+function telaDoTeste(inteira) {
+  avisarSistema({ tipo: 'tamanho', grande: inteira });
+  document.body.classList.toggle('jan-grande', inteira);
+}
+function atualizarTeste() {
+  if (MODO !== 'teste' || !G) return;
+  const pode = {
+    zero: true, musica: true, encher: emPasto(), gravar: emPasto(),
+    largar: fase === 'preparada', pular: fase === 'preparada' || fase === 'largada',
+    chegada: !!G.rec && ['preparada', 'largada', 'corrida'].includes(fase),
+  };
+  for (const b of $('#teste').querySelectorAll('button')) b.disabled = !pode[b.dataset.t];
+  $('#teste [data-t="gravar"]').textContent = fase === 'gravando' ? '● Gravando…' : '● Gravar';
+}
+$('#teste').addEventListener('click', e => {
+  const b = e.target.closest('button[data-t]'); if (!b || b.disabled || !G) return;
+  Som.init(); ACOES_TESTE[b.dataset.t](); atualizarTeste();
+});
+$('#tVisao').addEventListener('change', () => iniciarTeste());
+$('#tAp').addEventListener('change', e => { ST.apertada = e.target.checked; });
 
 if (MODO === 'lab') { setInterval(tickLobby, 200); prepararMontagem(); reiniciar(); }
-else if (MODO === 'teste') { setInterval(tickLobby, 200); iniciarTeste(); avisarSistema({ tipo: 'pronto' }); }
+else if (MODO === 'teste') { $('#teste').classList.remove('oculto'); setInterval(tickLobby, 200); iniciarTeste(); avisarSistema({ tipo: 'pronto' }); }
 else ligarSistema();
 // Os testes de tela (Playwright) mexem nas funções da página; só no `npm run dev`.
 if (import.meta.env.DEV) window.__cavalos = { get G() { return G; }, get MAPA() { return MAPA; }, get fase() { return fase; }, get F() { return F; }, ST, APP, JAN, DIV,

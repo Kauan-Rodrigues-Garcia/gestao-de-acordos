@@ -153,9 +153,26 @@ para refazer, simule muitas sementes e conte a chance de vitória por posição.
 - **Festa sem confete:** chuva de pétalas de rosa e brilhos dourados
   (`Petalas`), e o campeão com a manta de rosas no pescoço (`comManta`), como
   no Derby.
-- **O tema da festa:** «O Rei do Gado» (abertura), de
-  `public/sons/cavalos/rei-do-gado.mp3`, entra depois da fanfarra e sai devagar
-  no replay, na nova corrida ou na montagem. Respeita o botão de som.
+- **O tema da chegada (22/10/2026):** na reta final (os últimos 700 px) a
+  música do jogo vai baixando; no instante em que o vencedor cruza a linha entra
+  «O Rei do Gado» (`public/sons/cavalos/rei-do-gado.mp3`) **já alto**, e ele
+  segue pelo replay, pela foto e pela festa até a música acabar (o «Ver replay»
+  não o corta). Só uma corrida nova o tira. Quem entra atrasado ouve o mesmo
+  trecho que os outros (`tocarTema`, pelo relógio do banco). O arquivo desce no
+  paddock, cada tela num segundo diferente (até 20 s). Sem fanfarra na festa.
+  Respeita o botão de som.
+- **Ficha do cavalo (22/10/2026):** clicar no cavalo do paddock abre a ficha:
+  quem corre com ele (foto, nome, setor) e quem apostou nele. O palpite é só
+  nos cards de baixo, que mostram o dono de cada cavalo. O boneco de quem corre
+  leva o número do cavalo junto do nome.
+- **Teste do super admin (22/10/2026):** o «Testar só na minha tela» não anda
+  sozinho: barra com Lobby do zero, Encher o paddock, Música agora, Gravar,
+  Largar, Pular a contagem, Ir para a chegada, a visão (quem assiste / quem
+  corre) e a chegada apertada.
+- **Gravação leva o cavalo de cada raia (`cavalos`, 22/10/2026):** quem ganhou
+  cavalo no sorteio do PREPARAR entra na largada mesmo que a tela ainda não
+  tenha relido a sala. O SOLTAR do organizador só libera 8 s depois de gravar
+  (o tempo de toda tela baixar a corrida, espalhada em até 6 s).
 
 ## Leveza (o que não pode voltar)
 

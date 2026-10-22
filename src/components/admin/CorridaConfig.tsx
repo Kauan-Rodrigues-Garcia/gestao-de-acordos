@@ -149,9 +149,8 @@ export default function CorridaConfig() {
     try {
       let p: Painel | null;
       if (cavalos) {
-        // Cada raia é um corredor: quem ainda não tem cavalo ganha um livre antes de simular.
-        const pessoas = corrida.escolheram < corrida.corredores ? (await preencherEscolhas(corrida.id)).pessoas : pessoasDaCorrida;
-        p = await gravarCorridaCavalos(corrida, pessoas, (f, e) => setGravando({ f, etapa: e }), () => cancelarGravacao.current);
+        // Cada raia é um corredor: quem ainda não tem cavalo ganha um livre antes de simular (lá dentro).
+        p = await gravarCorridaCavalos(corrida, (f, e) => setGravando({ f, etapa: e }), () => cancelarGravacao.current);
         if (p) { setPainel(p); toast.success('Corrida gravada!', { description: 'Os cavalos estão na largada. Já dá para largar.' }); }
       } else {
         p = await gravarCorrida(corrida, pessoasDaCorrida, (f, e) => setGravando({ f, etapa: e }), () => cancelarGravacao.current);

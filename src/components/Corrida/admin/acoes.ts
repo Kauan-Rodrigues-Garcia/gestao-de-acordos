@@ -106,13 +106,23 @@ export async function gravarCorrida(corrida: CorridaJson, pessoas: PessoaJson[],
 /**
  * Grava a corrida de cavalos: simula (`cavalos/simulacao.js`), sobe as posições
  * e salva o resumo. Não tem vídeo: a festa é desenhada em cada tela. Cada raia
- * é um corredor, na ordem do número do cavalo (`faixa`); quem ainda não tinha
- * cavalo precisa ter sido sorteado antes (`preencherEscolhas`).
+ * é um corredor, na ordem do número do cavalo (`faixa`), e o cavalo de cada
+ * raia vai junto (`cavalos`): a tela de quem assiste não depende de já ter
+ * recebido o sorteio de quem não escolheu.
+ *
+ * A lista de quem corre sai do banco na hora (`preencherEscolhas`, que antes
+ * sorteia um cavalo livre para quem não escolheu): a da tela pode estar uns
+ * segundos atrasada, e um corredor sem cavalo nela tiraria uma raia da gravação.
  */
-export async function gravarCorridaCavalos(corrida: CorridaJson, pessoas: PessoaJson[], aoProgresso: (f: number, etapa: string) => void, cancelado: () => boolean): Promise<Painel | null> {
+export async function gravarCorridaCavalos(corrida: CorridaJson, aoProgresso: (f: number, etapa: string) => void, cancelado: () => boolean): Promise<Painel | null> {
+  aoProgresso(0.05, 'Sorteando cavalo para quem não escolheu');
+  const { pessoas } = await preencherEscolhas(corrida.id);
   const corredores = pessoas.filter(p => p.corre && p.escolha != null).sort((a, b) => (a.escolha ?? 0) - (b.escolha ?? 0));
   if (corredores.length < 2) throw new Error('A corrida precisa de pelo menos 2 cavalos com dono.');
   if (corredores.length !== pessoas.filter(p => p.corre).length) throw new Error('Ainda tem quem corre sem cavalo: preencha antes de gravar.');
+  // Um cavalo, um dono: o banco já garante (CAVALO_TEM_DONO); aqui é a última conferência antes de gravar.
+  if (new Set(corredores.map(p => p.escolha)).size !== corredores.length) throw new Error('Dois corredores com o mesmo cavalo: descarte e chame de novo.');
+  if (cancelado()) return null;
   aoProgresso(0.1, 'Simulando a corrida');
   const { simular } = await import('../cavalos/simulacao.js');
   const semente = crypto.getRandomValues(new Uint32Array(1))[0];
@@ -127,7 +137,7 @@ export async function gravarCorridaCavalos(corrida: CorridaJson, pessoas: Pessoa
     p_corrida: corrida.id,
     p_gravacao: {
       // O cenário sai do número da corrida, em cada tela (`corrida-cavalos.html`); a chave fica pelo contrato.
-      arquivo, mapa: 'da-corrida', semente, faixa: corredores.map(p => p.usuario), parada: 0,
+      arquivo, mapa: 'da-corrida', semente, faixa: corredores.map(p => p.usuario), cavalos: corredores.map(p => p.escolha), parada: 0,
       vencedor: corredores[rec.vencedor].usuario, dur_corrida: rec.dur, categoria: 'cavalos',
     },
   });

@@ -5,8 +5,10 @@
  * gravação (as posições) desce do bucket `corridas` e vai junto.
  *
  * O arquivo desce quando a corrida é gravada. Antes da largada, cada tela
- * espera um intervalo aleatório (até 12 s): 250 telas não pedem o mesmo
- * arquivo no mesmo segundo. Depois da largada, quem abre baixa na hora.
+ * espera um intervalo aleatório (até 6 s): 250 telas não pedem o mesmo
+ * arquivo no mesmo segundo. O SOLTAR do organizador só libera depois disso
+ * (`ESPERA_SOLTAR` na página), e o super admin baixa na hora. Depois da
+ * largada, quem abre baixa na hora.
  *
  * O super admin (assistindo pela Configuração) também comanda daqui: os botões
  * PREPARAR e SOLTAR em cima da janela chegam como mensagem e viram as mesmas
@@ -16,7 +18,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useAuthOpcional } from '@/hooks/useAuth';
 import { agoraBanco, assinarSala, baixarArquivo, conferirLobby, entrarNoLobby, mensagemDoErro, palpitar, useCorridaMinha } from '../banco';
-import { gravarCorridaCavalos, iniciarCorrida, preencherEscolhas } from '../admin/acoes';
+import { gravarCorridaCavalos, iniciarCorrida } from '../admin/acoes';
 import { desempacotarCavalos } from './gravacao';
 import type { CorridaCavalos } from './simulacao';
 import { JanelaCavalos, type EnviarCavalos, type MensagemCavalos } from './JanelaCavalos';
@@ -62,9 +64,9 @@ export default function PalcoCavalos({ corridaId, onFechar, adm = false }: Props
           await new Promise(r => setTimeout(r, 1500 * i));
         }
       }
-    }, largou ? 0 : Math.random() * 12_000);
+    }, largou || adm ? 0 : Math.random() * 6_000);
     return () => { vivo = false; window.clearTimeout(t); };
-    // `largou` só decide a espera do primeiro download.
+    // `largou` e `adm` só decidem a espera do primeiro download.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [arquivo]);
 
@@ -92,15 +94,13 @@ export default function PalcoCavalos({ corridaId, onFechar, adm = false }: Props
       const feito = () => { ocupado.current = false; };
       if (m.acao === 'preparar') {
         (async () => {
-          let pessoas = sala?.pessoas ?? [];
-          if (pessoas.some(p => p.corre && p.escolha == null)) pessoas = (await preencherEscolhas(corrida.id)).pessoas;
-          const p = await gravarCorridaCavalos(corrida, pessoas, () => undefined, () => false);
+          const p = await gravarCorridaCavalos(corrida, () => undefined, () => false);
           if (!p) throw new Error('A gravação parou no meio.');
         })().catch(erro).finally(feito);
       } else if (m.acao === 'soltar') iniciarCorrida(corrida.id).catch(erro).finally(feito);
       else feito();
     }
-  }, [corridaId, eu, adm, corrida, sala, onFechar]);
+  }, [corridaId, eu, adm, corrida, onFechar]);
 
   return <JanelaCavalos modo="app" onMensagem={aoReceber} conexao={conexao} />;
 }
