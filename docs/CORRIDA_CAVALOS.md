@@ -174,6 +174,36 @@ para refazer, simule muitas sementes e conte a chance de vitória por posição.
   tenha relido a sala. O SOLTAR do organizador só libera 8 s depois de gravar
   (o tempo de toda tela baixar a corrida, espalhada em até 6 s).
 
+## O locutor, o seu cavalo, a tremida e o zoom ao vivo (22/10/2026)
+
+Medido em 300 corridas de 10: um terço das chegadas é no focinho, mas a faixa
+ficava vazia por 24 s e só o tombo na barreira era anunciado. A emoção existia
+e ninguém contava. Nada disto mexe na física nem no banco.
+
+- **O locutor** (`montarLances`, `narrar`): os lances saem da própria gravação,
+  uma vez por corrida (`rec.lances`, < 1 ms), sem sortear nada. Toda tela narra
+  a mesma corrida no mesmo segundo, e quem entra atrasado começa do lance de
+  agora (`F.lc`). No feed: quem sai na frente, quem **assume a ponta** (só quem
+  segura 1 s, com a folga do placar) e quem **vem por fora** (subiu 3 posições
+  em 2 s, 2 com menos de 8 cavalos, e está entre os 4 primeiros), com o dono
+  entre parênteses. Na faixa, no alto da pista (`faixa(txt, true)`): **RETA
+  FINAL!** a 300 m, **#A E #B CABEÇA A CABEÇA!** (os dois da frente a até 5 px
+  por 0,5 s, depois da faixa da reta) e **FOTO À VISTA!** a 60 m com os dois a
+  até 6 px. Há um espaço mínimo entre lances (1,8 s no feed, 2,2 s na faixa). A
+  frase varia pelo quadro do lance (`FRASES`). São de 6 a 10 lances por corrida.
+- **O seu cavalo** (`atualizarHud`): o chip pula ao subir (▲, verde) e treme ao
+  cair (▼, vermelho), com um som curto (`Som.sobe`/`Som.desce`). Na frente vira
+  «VOCÊ NA PONTA!», mas só depois de 1,5 s, porque na largada todos estão
+  parelhos. Na janela pequena o chip some, e a sua linha do placar pisca.
+- **A tremida** (`tremer`): só CSS, nada a mais por quadro. A imagem treme e a
+  moldura fica. Acontece no «VAI!», no tombo na barreira e no cruzar da linha.
+- **O coração**: com os dois da frente a menos de 8 px nos últimos 260 px, um
+  tum-tum grave a cada 0,5 s (`Som.coracao`). Não é ruído contínuo.
+- **Zoom ao vivo** (`ZOOM_GAP`, `ZOOM_PX`, `ZOOM_RAMPA`): quando a chegada é
+  por uma cabeça ou menos (`gap` < 0,07 s, metade das corridas de 10), a câmera
+  fecha nos últimos 150 m até o mesmo recorte do replay. As fotos da
+  arquibancada saem enquanto vale o zoom.
+
 ## Leveza (o que não pode voltar)
 
 - **Paddock:** 30 quadros por segundo, e 15 atrás da tela de escolha. No

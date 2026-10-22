@@ -192,16 +192,31 @@ button{font:inherit;color:inherit}
 .chip i{display:block;width:calc(var(--s)*3px);height:calc(var(--s)*3px);border-radius:1px;box-shadow:0 0 0 1px #000}
 .chip.eu{background:var(--acc);color:#1b1b1b}
 .chip.pal{background:#7fe3ff;color:#0d2230}
+.chip s{text-decoration:none}
+.chip.sobe{animation:chipSobe .5s cubic-bezier(.2,1.6,.4,1) both}.chip.sobe s{color:#17803a}
+.chip.desce{animation:chipDesce .4s both}.chip.desce s{color:#c2321f}
+.chip.ponta{box-shadow:0 0 0 calc(var(--s)*.7px) #fff,0 0 calc(var(--s)*5px) #ffd24a}
+@keyframes chipSobe{0%{transform:scale(1.45)}100%{transform:none}}
+@keyframes chipDesce{0%{transform:translateY(calc(var(--s)*-2px))}100%{transform:none}}
+/* na janela pequena o chip some (a lista já destaca você): a sua linha pisca ao subir ou cair */
+.pl.eu.sobe,.pl.eu.desce,.pl.pal.sobe,.pl.pal.desce{animation:euPisca .6s}
+@keyframes euPisca{0%{filter:brightness(1.8)}100%{filter:none}}
 #contagem{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none;font-family:PS2P,Pixelify,monospace;color:#fff;font-size:calc(var(--s)*24px);text-shadow:0 calc(var(--s)*2px) 0 #000,0 0 calc(var(--s)*10px) #000a}
 #contagem span{animation:conta .8s cubic-bezier(.2,1.6,.4,1) both}
 #contagem span.vai{color:var(--acc);animation-duration:1.1s}
 @keyframes conta{0%{transform:scale(2.4);opacity:0}30%{transform:scale(1);opacity:1}78%{opacity:1}100%{transform:scale(.92);opacity:0}}
 #faixa{position:absolute;left:0;right:0;top:41%;display:flex;justify-content:center;pointer-events:none}
 #faixa span{font-family:PS2P,Pixelify,monospace;font-size:calc(var(--s)*5.4px);color:#fff;background:#000000d0;padding:calc(var(--s)*3px) calc(var(--s)*7px);border-top:calc(var(--s)*.8px) solid var(--acc);border-bottom:calc(var(--s)*.8px) solid var(--acc);animation:faixa 2.4s both;white-space:nowrap}
+#faixa.alto{top:13%}
 @keyframes faixa{0%{transform:scaleX(0)}12%{transform:scaleX(1)}85%{opacity:1}100%{opacity:0}}
 #flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none}
 #flash.on{animation:flash .7s ease-out}
 @keyframes flash{0%{opacity:.95}100%{opacity:0}}
+/* a tremida (largada, tombo, chegada): só a imagem treme, a moldura fica; o leve zoom esconde a borda.
+   A torcida treme junto, girando em torno do mesmo centro do palco (112,5 de 225 = 84,87% da faixa dela). */
+#torcidaCv{transform-origin:50% 84.87%}
+#palco.treme #cv,#palco.treme #torcidaCv{animation:treme var(--trd,.38s) linear}
+@keyframes treme{0%,100%{transform:none}10%{transform:translate(calc(var(--tr)*-1),calc(var(--tr)*.6)) scale(1.03)}25%{transform:translate(var(--tr),calc(var(--tr)*-.5)) scale(1.03)}40%{transform:translate(calc(var(--tr)*-.6),calc(var(--tr)*-.4)) scale(1.025)}60%{transform:translate(calc(var(--tr)*.4),calc(var(--tr)*.3)) scale(1.02)}80%{transform:translate(calc(var(--tr)*-.2),calc(var(--tr)*.1)) scale(1.01)}}
 #foto{position:absolute;inset:0;display:none;place-items:center;background:#0007}
 #foto.on{display:grid}
 .polaroid{background:#f4efe4;padding:calc(var(--s)*3px) calc(var(--s)*3px) calc(var(--s)*3.4px);box-shadow:0 calc(var(--s)*4px) calc(var(--s)*12px) #000b;animation:imprime 1s cubic-bezier(.2,.9,.25,1) both}
@@ -351,6 +366,7 @@ body.modo-teste .esc{padding-top:100px}
 #feed{position:absolute;left:10px;top:10px;z-index:7;display:flex;flex-direction:column;gap:6px;pointer-events:none}
 #feed div{display:flex;align-items:center;gap:8px;background:#000000c8;border-radius:10px;padding:7px 11px;font-size:14px;animation:feed 4s both;border-left:4px solid var(--c)}
 #feed b{font-weight:normal;color:var(--acc)}
+#feed i{font-style:normal;opacity:.7}
 @keyframes feed{0%{transform:translateX(-30px);opacity:0}8%{transform:none;opacity:1}85%{opacity:1}100%{opacity:0}}
 #toast{position:fixed;left:50%;top:70px;transform:translateX(-50%);z-index:60;background:#000000e0;border:2px solid var(--acc);border-radius:12px;padding:11px 16px;font-size:16px;display:none;max-width:calc(100% - 24px);text-align:center}
 #toast.on{display:block;animation:pop .3s both}
@@ -1690,6 +1706,13 @@ const Som = (() => {
     erro() { if (!ok()) return; const t = ac.currentTime; nota(196, t, 0.14, 'square', 0.06); nota(147, t + 0.13, 0.22, 'square', 0.06); },
     emoji() { if (!ok()) return; const t = ac.currentTime; nota(880, t, 0.06, 'triangle', 0.05); nota(1320, t + 0.05, 0.08, 'sine', 0.04); },
     chegou() { if (!ok()) return; const t = ac.currentTime; nota(523.25, t, 0.08, 'triangle', 0.035); nota(783.99, t + 0.07, 0.12, 'triangle', 0.03); },
+    // o seu cavalo (ou o palpite) ganhou ou perdeu uma posição
+    sobe() { if (!ok()) return; const t = ac.currentTime; nota(783.99, t, 0.07, 'square', 0.035); nota(1174.66, t + 0.06, 0.12, 'square', 0.035); },
+    desce() { if (!ok()) return; const t = ac.currentTime; nota(392, t, 0.08, 'triangle', 0.04); nota(311.13, t + 0.07, 0.14, 'triangle', 0.035); },
+    // cabeça a cabeça perto da linha: um tum-tum grave, sem ruído (o chiado não volta)
+    coracao() { if (!ok()) return; const t = ac.currentTime; nota(64, t, 0.16, 'sine', 0.32, 42, mestre, 0.004); nota(58, t + 0.17, 0.2, 'sine', 0.24, 40, mestre, 0.004); },
+    // a faixa do locutor: RETA FINAL, CABEÇA A CABEÇA, FOTO À VISTA
+    anuncio() { if (!ok()) return; const t = ac.currentTime + 0.02; [659.25, 880, 1174.66].forEach((f, k) => nota(f, t + k * 0.075, 0.12, 'square', 0.04)); },
   };
 })();
 /*
@@ -2911,12 +2934,92 @@ async function soltar() {
   Som.musica('corrida');
   // (no teste, «Pular a contagem» e «Ir para a chegada» passam na frente: a contagem para)
   for (const n of ['3', '2', '1']) { contagem(n); Som.tique(false); await espera(1000); if (g !== G || fase !== 'largada') return; }
-  contagem('VAI!', true); Som.tique(true); Som.sino();
+  vai();
   fase = 'corrida'; F = { t0: performance.now(), prox: 0 }; atualizarOrg();
 }
 function contagem(txt, vai) { $('#contagem').innerHTML = `<span class="${vai ? 'vai' : ''}">${txt}</span>`; }
-function faixa(txt) { $('#faixa').innerHTML = `<span>${txt}</span>`; }
+/** `alto`: a faixa do locutor fica no alto da pista, para não cobrir o pelotão. */
+function faixa(txt, alto = false) { $('#faixa').innerHTML = `<span>${txt}</span>`; $('#faixa').classList.toggle('alto', alto); }
 function flash() { const f = $('#flash'); f.classList.remove('on'); void f.offsetWidth; f.classList.add('on'); }
+/** A imagem treme (em pixels do jogo): na largada, no tombo e na chegada. Só CSS, nada a mais por quadro. */
+function tremer(forca, dur = 0.38) {
+  const p = $('#palco'); p.style.setProperty('--tr', (forca * ESCALA).toFixed(1) + 'px'); p.style.setProperty('--trd', dur + 's');
+  p.classList.remove('treme'); void p.offsetWidth; p.classList.add('treme');
+}
+function vai() { contagem('VAI!', true); Som.tique(true); Som.sino(); tremer(1.2); }
+
+/*
+ * O locutor (22/10/2026). A corrida tinha emoção (um terço das chegadas é no focinho), mas ninguém
+ * contava: a faixa ficava vazia por 24 s. Os lances saem da própria gravação, uma vez por corrida, e
+ * nada é sorteado aqui: toda tela narra a mesma corrida, no mesmo segundo, inclusive quem entra
+ * atrasado (os lances que já passaram não são narrados). No feed: quem sai na frente, quem assume a
+ * ponta, quem vem por fora. Na faixa: RETA FINAL, CABEÇA A CABEÇA e FOTO À VISTA.
+ */
+const RETA_PX = 600, FOTO_PX = 120, COLADO_PX = 5, FEED_ESPACO = 1.8, FAIXA_ESPACO = 2.2;
+function montarLances(rec) {
+  const n = rec.n, fim = Math.min(rec.frames - 1, Math.floor(rec.tVenc * FPS)), bruto = [];
+  const x = (f, i) => X0 + rec.X[f * n + i] / 4;
+  const ordem = f => [...Array(n).keys()].sort((a, b) => x(f, b) - x(f, a));
+  // a ponta com a mesma folga do placar: quem vem atrás só assume ao abrir FOLGA_PX
+  const ponta = new Int16Array(fim + 1); let lid = ordem(0)[0];
+  for (let f = 0; f <= fim; f++) {
+    let b = lid; for (let i = 0; i < n; i++) if (x(f, i) > x(f, b)) b = i;
+    if (b !== lid && x(f, b) > x(f, lid) + FOLGA_PX) lid = b;
+    ponta[f] = lid;
+  }
+  const f0 = Math.round(2.5 * FPS);
+  if (f0 <= fim) bruto.push({ t: f0 / FPS, tipo: 'sai', i: ponta[f0] });
+  // assume a ponta: só quem segura a ponta por 1 s (no pelotão colado ela vai e volta)
+  for (let f = f0 + 1; f <= fim; f++) if (ponta[f] !== ponta[f - 1] && ponta[Math.min(fim, f + FPS)] === ponta[f]) bruto.push({ t: f / FPS, tipo: 'ponta', i: ponta[f] });
+  // vem por fora: subiu 3 posições ou mais em 2 s (2, com menos de 8 cavalos) e já está entre os 4 primeiros (sem ser o líder)
+  const SOBE = n >= 8 ? 3 : 2, PASSO = 15, lugar = [], prox = new Float64Array(n);
+  for (let f = 0; f <= fim; f += PASSO) { const o = ordem(f), r = new Int16Array(n); o.forEach((i, k) => { r[i] = k; }); lugar.push(r); }
+  for (let k = 4; k < lugar.length; k++) {
+    const f = k * PASSO, prog = (x(f, ponta[f]) - X0) / DIST;
+    if (prog < 0.35 || prog > 0.95) continue;
+    for (let i = 0; i < n; i++) {
+      const agora = lugar[k][i];
+      if (agora >= 1 && agora <= 3 && lugar[k - 4][i] - agora >= SOBE && f / FPS >= prox[i]) { bruto.push({ t: f / FPS, tipo: 'fora', i }); prox[i] = f / FPS + 6; }
+    }
+  }
+  // a reta final, os dois da frente colados e a foto
+  // (os dois colados quase sempre já vêm colados na entrada da reta: o lance espera a faixa da reta sair)
+  let reta = -1, colados = 0, deuColados = false, foto = false;
+  for (let f = 0; f <= fim; f++) {
+    const lx = x(f, ponta[f]);
+    if (lx < L - RETA_PX) continue;
+    if (reta < 0) { reta = f / FPS; bruto.push({ t: reta, tipo: 'reta' }); }
+    const [a, b] = ordem(f), gap = x(f, a) - x(f, b);
+    colados = gap <= COLADO_PX ? colados + 1 : 0;
+    if (!deuColados && colados >= 15 && f / FPS >= reta + FAIXA_ESPACO) { deuColados = true; bruto.push({ t: f / FPS, tipo: 'colados', i: a, j: b }); }
+    if (!foto && lx >= L - FOTO_PX) { foto = true; if (gap <= 6) bruto.push({ t: f / FPS, tipo: 'foto' }); }
+  }
+  // espaço entre os lances, para dar tempo de ler; a FOTO À VISTA passa na frente da RETA FINAL
+  // (não do CABEÇA A CABEÇA, que já disse o mesmo)
+  bruto.sort((p, q) => p.t - q.t);
+  const lances = []; let ultFeed = -9, ultFaixa = -9, tipoFaixa = '';
+  for (const e of bruto) {
+    const naFaixa = e.tipo === 'reta' || e.tipo === 'colados' || e.tipo === 'foto';
+    if (naFaixa) { if (e.t - ultFaixa < FAIXA_ESPACO && !(e.tipo === 'foto' && tipoFaixa === 'reta')) continue; ultFaixa = e.t; tipoFaixa = e.tipo; }
+    else { if (e.t - ultFeed < FEED_ESPACO) continue; ultFeed = e.t; }
+    lances.push(e);
+  }
+  return lances;
+}
+// A frase varia pelo quadro do lance: a mesma em toda tela, sem sortear nada.
+const FRASES = {
+  sai: ['sai na frente!', 'larga melhor!'],
+  ponta: ['assume a ponta!', 'passa para a frente!', 'toma a liderança!'],
+  fora: ['vem por fora!', 'ganha terreno!', 'cresce na corrida!', 'vem voando!'],
+};
+function narrar(e) {
+  const cav = G.cavalos[e.i], quem = c => !c?.dono ? '' : ` <i>(${c.dono.voce ? 'você' : esc(curto(c.dono.nome))})</i>`;
+  const frases = FRASES[e.tipo];
+  if (frases) { if (cav) feed(`<b>#${cav.num}</b>${quem(cav)} ${frases[Math.round(e.t * FPS) % frases.length]}`, cav); return; }
+  if (e.tipo === 'colados') faixa(`#${G.cavalos[e.i].num} E #${G.cavalos[e.j].num} CABEÇA A CABEÇA!`, true);
+  else faixa(e.tipo === 'reta' ? 'RETA FINAL!' : 'FOTO À VISTA!', true);
+  Som.anuncio();
+}
 function iniciarReplay() {
   fase = 'replay'; F = { t0: performance.now(), tA: marcos(G.rec).tA, prox: 0 };
   $('#palco').classList.add('replay'); $('#posicoes').innerHTML = ''; $('#meuLugar').innerHTML = ''; atualizarOrg();
@@ -3104,7 +3207,17 @@ function atualizarHud(t) {
   if (comPlacar()) atualizarPlacar(t);
   if (fase !== 'corrida') { if ($('#meuLugar').innerHTML) $('#meuLugar').innerHTML = ''; return; }
   const meu = G.voce.cavalo || G.voce.palpite, l = meu && PLACAR.linhas[meu.i];
-  const html = l ? `<span class="chip ${G.voce.cavalo ? 'eu' : 'pal'}">${G.voce.cavalo ? 'VOCÊ' : 'PALPITE'} ${l.pos + 1}º</span>` : '';
+  if (!l) { if ($('#meuLugar').innerHTML) $('#meuLugar').innerHTML = ''; return; }
+  // Subiu ou caiu (com a folga do placar, então não pisca no pelotão): o chip pula e toca um som curto.
+  // Nos primeiros 1,5 s a ordem ainda se arruma na largada: lá fica calado.
+  if (F.meuPos !== undefined && l.pos !== F.meuPos && t > 1.5 && performance.now() >= (F.meuSom || 0)) {
+    if (l.pos < F.meuPos) Som.sobe(); else Som.desce();
+    F.meuSom = performance.now() + 700;
+  }
+  F.meuPos = l.pos;
+  const quem = G.voce.cavalo ? 'VOCÊ' : 'PALPITE', seta = l.mov === 'sobe' ? ' <s>▲</s>' : l.mov === 'desce' ? ' <s>▼</s>' : '';
+  const ponta = l.pos === 0 && t > 1.5;   // na largada todo mundo está parelho: ninguém está «na ponta»
+  const html = `<span class="chip ${G.voce.cavalo ? 'eu' : 'pal'} ${l.mov}${ponta ? ' ponta' : ''}">${ponta ? `${quem} NA PONTA!` : `${quem} ${l.pos + 1}º`}${seta}</span>`;
   if ($('#meuLugar').innerHTML !== html) $('#meuLugar').innerHTML = html;
 }
 /** Tudo o que depende da fase e não precisa rodar todo quadro. */
@@ -3144,6 +3257,10 @@ let ultQ = 0, hudT = 0, ultFase = null, perfT = 0, perfSoma = 0, perfN = 0;
 const QUAL = { modo: 'auto', econ: false, media: 16, ruim: 0 };
 /** Onde a música do jogo começa a baixar: 700 px antes da linha, uns 7 s da reta final. */
 const FADE_PX = 700;
+/** O zoom ao vivo: chegada de cabeça ou menos (`gap` < 0,07 s), começa a 300 px (150 m) da linha e fecha em 140 px. */
+const ZOOM_GAP = 0.07, ZOOM_PX = 300, ZOOM_RAMPA = 140;
+/** O coração dispara com os dois da frente a menos de 8 px um do outro nos últimos 260 px. */
+const CORACAO_PX = 260;
 function vigiarQuadro(intervalo) {
   if (QUAL.modo !== 'auto' || QUAL.econ || fase !== 'corrida') return;
   QUAL.media += (Math.min(intervalo, 100) - QUAL.media) * 0.1;
@@ -3184,10 +3301,14 @@ function laco(now) {
     if (rec.barreiras) for (let i = 0; i < G.n; i++) rec.barreiras.forEach((bx, o) => {
       if (!rec.bate[i][o] || (F.bateu ??= new Set()).has(i * 10 + o) || xAt(i, t) < bx + desvioRaia(i, G.n) + 12) return;   // a vara cai com o cavalo já em cima
       F.bateu.add(i * 10 + o); Som.batida(1.3);
-      if (JAN.aberta) feed(`<b>#${G.cavalos[i].num}</b> bateu na barreira!`, G.cavalos[i]);
+      if (JAN.aberta) { feed(`<b>#${G.cavalos[i].num}</b> bateu na barreira!`, G.cavalos[i]); tremer(1.5); }
     });
+    // o locutor: quem entra atrasado (ou pula no teste) começa do lance de agora, sem narrar o que passou
+    const lances = rec.lances ??= montarLances(rec);
+    if (F.lc === undefined) { F.lc = 0; while (F.lc < lances.length && lances[F.lc].t < t - 0.6) F.lc++; }
+    while (F.lc < lances.length && lances[F.lc].t <= t) { const e = lances[F.lc++]; if (JAN.aberta) narrar(e); }
     if (!F.cruzou && t >= rec.tVenc) {
-      F.cruzou = true; flash(); Som.clique(); faixa(`#${G.cavalos[rec.vencedor].num} CRUZOU A LINHA!`);
+      F.cruzou = true; flash(); Som.clique(); faixa(`#${G.cavalos[rec.vencedor].num} CRUZOU A LINHA!`); tremer(2.5, 0.6);
       // cruzou: a música do jogo sai e o Rei do Gado entra já alto (pedido do Cleber, 22/10/2026)
       Som.musica(null); tocarTema(t - rec.tVenc);
     }
@@ -3199,28 +3320,38 @@ function laco(now) {
     if (t >= rec.tVenc) { t = rec.tVenc; if (!F.fim) { F.fim = true; tirarFoto(); } }
   } else if (fase === 'foto') { t = rec.tVenc; zoom = true; ab = 1; }
   else if (fase === 'festa') { t = rec ? rec.dur : 0; ab = 1; excit = 0.5; }
+  let zk = zoom ? 1 : 0;   // o quanto do zoom está valendo: 1 no replay e na foto
   if (rec && t > 0) {
-    let lead = 0; for (let i = 0; i < G.n; i++) lead = Math.max(lead, xAt(i, t));
+    let lead = 0, vice = 0;
+    for (let i = 0; i < G.n; i++) { const x = xAt(i, t); if (x > lead) { vice = lead; lead = x; } else if (x > vice) vice = x; }
     excit = fase === 'festa' ? 0.5 : (lead >= L ? 0.9 : 0.15 + 0.7 * clamp((lead - (L - 900)) / 900, 0, 1));
-    // a reta final: a música do jogo vai baixando até a chegada, onde entra o Rei do Gado
-    if (fase === 'corrida' && !F.cruzou) Som.volume(clamp((L - lead) / FADE_PX, 0.25, 1));
+    if (fase === 'corrida') {
+      // a reta final: a música do jogo vai baixando até a chegada, onde entra o Rei do Gado
+      if (!F.cruzou) Som.volume(clamp((L - lead) / FADE_PX, 0.25, 1));
+      // os dois da frente colados perto da linha: o coração dispara
+      if (!F.cruzou && lead > L - CORACAO_PX && lead - vice < 8 && wall >= (F.coracao || 0)) { Som.coracao(); F.coracao = wall + 0.5; }
+      // Chegada de cabeça ou menos (metade das corridas de 10): a câmera fecha ao vivo nos últimos
+      // 150 m, como no replay. Sai da gravação e da posição, então é igual em toda tela.
+      if (rec.gap < ZOOM_GAP) zk = suave((lead - (L - ZOOM_PX)) / ZOOM_RAMPA);
+    }
   }
   const cam = rec && t > 0 ? camAt(t) : 0;
   // No zoom, o recorte segue o líder SUAVIZADO (quando a liderança trocava no pelotão, o quadro saltava),
   // e a câmera leva junto a fração do recorte: o cavalo é arredondado UMA vez, contra os dois somados.
   let camDesenho = cam, zx = 0;
-  if (zoom) {
+  if (zk > 0) {
     const alvo = clamp(xAt(classificar(t)[0], t) - cam - 140, 0, 200);
     F.zx = F.zx === undefined || fase === 'foto' ? alvo : F.zx + (alvo - F.zx) * Math.min(1, dt * 5);
-    zx = Math.round(F.zx); camDesenho = cam + (F.zx - zx);
+    zx = Math.round(F.zx); if (zk >= 1) camDesenho = cam + (F.zx - zx);
   }
   if (JAN.aberta) desenharCena(bctx, t, camDesenho, { wall, dt, ab, correndo: correndo && fase !== 'foto', lobby: false, marcar: fase !== 'foto', excit, lento: fase === 'replay' });
-  if (zoom) { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); ctx.drawImage(buf, zx, 100, 200, 112, 0, 0, W, 224); }
+  if (zk >= 1) { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); ctx.drawImage(buf, zx, 100, 200, 112, 0, 0, W, 224); }
+  else if (zk > 0) ctx.drawImage(buf, zx * zk, 100 * zk, W - 200 * zk, H - 113 * zk, 0, 0, W, H);   // fechando: do quadro inteiro ao recorte
   else ctx.drawImage(buf, 0, 0);
   if (JAN.aberta && G.assentos) {
     // a torcida grita mais perto da chegada
     if (fase === 'corrida' && wall >= (F.grito || 0)) { gritarTorcida(wall); F.grito = wall + 0.9 - excit * 0.6 + Math.random() * 0.4; }
-    desenharTorcida(zoom, zx, wall);
+    desenharTorcida(zk > 0, zx, wall);   // no zoom as fotos da arquibancada saem (o recorte é da pista)
   }
   if (fase === 'corrida') minimapa(ctx, t);
   if (now - hudT > 200) { hudT = now; atualizarHud(t); atualizarStatus(t); }
@@ -3515,7 +3646,7 @@ function seguirRelogio(tb) {
   // Entrou depois da chegada: o Rei do Gado já está no trecho em que está para todo mundo.
   if (quer !== 'corrida') { Som.musica(null); tocarTema(tb - rec.tVenc); }
   if (quer === 'corrida') {
-    if (tb < 1) { contagem('VAI!', true); Som.tique(true); Som.sino(); } else $('#contagem').innerHTML = '';
+    if (tb < 1) vai(); else $('#contagem').innerHTML = '';
     if (fase !== 'largada') { $('#faixa').innerHTML = ''; Som.musica('corrida'); }
     fase = 'corrida'; F = { t0: performance.now() - tb * 1000, prox: 0 }; atualizarOrg();
   } else if (quer === 'replay') {
