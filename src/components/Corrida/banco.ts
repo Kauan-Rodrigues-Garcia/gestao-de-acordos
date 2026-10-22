@@ -292,6 +292,39 @@ function aplicarPalpite(corridaId: number, usuario: string, palpite: string | nu
   publicar({ sala: { ...s, pessoas: s.pessoas.map(p => (p.usuario === usuario ? { ...p, palpite } : p)) } });
 }
 
+/**
+ * A torcida durante a corrida de cavalos (20261022190000). Não fica no estado: é
+ * um momento, e vai direto para quem está com o palco aberto (`ouvirTorcida`).
+ * O banco manda no máximo 1 sinal a cada 2 s, com o barulho somado por dono de
+ * cavalo e os emojis desde o último sinal.
+ */
+export interface SinalTorcida { barulho: { alvo: string; n: number }[]; gritos: { usuario: string; emoji: string }[] }
+const ouvintesTorcida = new Set<(corridaId: number, s: SinalTorcida) => void>();
+const torcidaVista = new Map<number, string>();
+export function ouvirTorcida(fn: (corridaId: number, s: SinalTorcida) => void): () => void {
+  ouvintesTorcida.add(fn);
+  return () => { ouvintesTorcida.delete(fn); };
+}
+/**
+ * Manda a torcida juntada pela tela (no máximo 1 vez a cada ~3 s). Sem a
+ * migration da torcida no banco, desliga em silêncio: a torcida continua só na
+ * própria tela, e a corrida segue igual.
+ */
+let torcidaSemBanco = false;
+export async function torcer(corridaId: number, barulho: number, emoji: string | null): Promise<void> {
+  if (torcidaSemBanco) return;
+  try {
+    await rpc('fn_corrida_torcer', { p_corrida: corridaId, p_barulho: barulho, p_emoji: emoji });
+  } catch (e) {
+    if (/fn_corrida_torcer|schema cache|does not exist/i.test(mensagemDoErro(e))) {
+      torcidaSemBanco = true;
+      console.warn('[corrida] a torcida compartilhada ainda não está no banco (20261022190000): fica só na própria tela');
+      return;
+    }
+    throw e;
+  }
+}
+
 /** O palpite: aparece na hora na própria tela; o banco avisa os outros. */
 export async function palpitar(corridaId: number, usuario: string, alvo: string): Promise<void> {
   const antes = estado.sala?.pessoas.find(p => p.usuario === usuario)?.palpite ?? null;
@@ -352,9 +385,17 @@ function ouvirSala(): void {
 /** Ouve a sala de uma corrida (o super_admin assistindo sem ter sido chamado também). Devolve a função que desliga. */
 export function assinarSala(id: number): () => void {
   return assinarTabela(
-    { topico: `corrida-sala:${id}`, escutas: [{ sinal: 'estado' }, { sinal: 'lobby' }, { sinal: 'escolha' }, { sinal: 'pessoas' }, { sinal: 'palpite' }] },
+    { topico: `corrida-sala:${id}`, escutas: [{ sinal: 'estado' }, { sinal: 'lobby' }, { sinal: 'escolha' }, { sinal: 'pessoas' }, { sinal: 'palpite' }, { sinal: 'torcida' }] },
     {
       onSinal: (payload, sinal) => {
+        // a sala é ouvida por dois lugares (`ligarCorrida` e o palco): o mesmo sinal chega duas vezes
+        if (sinal === 'torcida') {
+          const quando = String(payload.agora ?? '');
+          if (torcidaVista.get(id) === quando) return;
+          torcidaVista.set(id, quando);
+          for (const fn of ouvintesTorcida) fn(id, payload as unknown as SinalTorcida);
+          return;
+        }
         const p = payload as { agora?: string; corrida?: CorridaJson; entraram?: Array<{ usuario: string; entrou_em: string }>; usuario?: string; escolha?: number; palpite?: string | null };
         if (p.agora) ajustarRelogio(p.agora);
         if (sinal === 'lobby') { aplicarEntradas(id, p.entraram); return; }

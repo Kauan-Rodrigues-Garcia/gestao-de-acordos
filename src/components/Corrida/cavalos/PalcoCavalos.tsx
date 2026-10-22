@@ -17,7 +17,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useAuthOpcional } from '@/hooks/useAuth';
-import { agoraBanco, assinarSala, baixarArquivo, conferirLobby, entrarNoLobby, mensagemDoErro, palpitar, useCorridaMinha } from '../banco';
+import { agoraBanco, assinarSala, baixarArquivo, conferirLobby, entrarNoLobby, mensagemDoErro, ouvirTorcida, palpitar, torcer, useCorridaMinha } from '../banco';
 import { gravarCorridaCavalos, iniciarCorrida } from '../admin/acoes';
 import { desempacotarCavalos } from './gravacao';
 import type { CorridaCavalos } from './simulacao';
@@ -78,8 +78,11 @@ export default function PalcoCavalos({ corridaId, onFechar, adm = false }: Props
   useEffect(() => { mandarSala(); }, [mandarSala]);
   useEffect(() => { const id = window.setInterval(mandarSala, 15_000); return () => window.clearInterval(id); }, [mandarSala]);
   useEffect(() => { if (pronta && rec) conexao.current?.({ tipo: 'gravacao', rec }); }, [pronta, rec]);
+  // A torcida dos outros (o banco junta e manda no máximo 1 sinal a cada 2 s).
+  useEffect(() => ouvirTorcida((id, s) => { if (id === corridaId) conexao.current?.({ tipo: 'torcida', ...s }); }), [corridaId]);
 
   const ultimoPalpite = useRef(0);
+  const ultimaTorcida = useRef(0);
   const aoReceber = useCallback((m: MensagemCavalos) => {
     if (m.tipo === 'pronto') setPronta(true);
     else if (m.tipo === 'fechar') onFechar();
@@ -88,6 +91,12 @@ export default function PalcoCavalos({ corridaId, onFechar, adm = false }: Props
       if (Date.now() - ultimoPalpite.current < 1_000) return;
       ultimoPalpite.current = Date.now();
       palpitar(corridaId, eu, m.alvo).catch(e => toast.error('O palpite não foi', { description: mensagemDoErro(e) }));
+    } else if (m.tipo === 'torcida' && eu && !adm && typeof m.barulho === 'number') {
+      // A página já junta os cliques (1 envio a cada 3 s); aqui é a segunda trava. Falhar não avisa ninguém:
+      // a torcida é enfeite, e a própria tela já mostrou o que a pessoa fez.
+      if (Date.now() - ultimaTorcida.current < 2_500) return;
+      ultimaTorcida.current = Date.now();
+      torcer(corridaId, m.barulho, typeof m.emoji === 'string' ? m.emoji : null).catch(e => console.warn('[cavalos] a torcida não foi', e));
     } else if (m.tipo === 'org' && adm && corrida && !ocupado.current) {
       ocupado.current = true;
       const erro = (e: unknown) => conexao.current?.({ tipo: 'org-erro', texto: mensagemDoErro(e) });

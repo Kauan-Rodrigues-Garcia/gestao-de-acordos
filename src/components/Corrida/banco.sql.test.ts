@@ -25,6 +25,7 @@ const SQL_TEMA = readFileSync(resolve(__dirname, '../../../supabase/migrations/2
 const SQL_AVULSO = readFileSync(resolve(__dirname, '../../../supabase/migrations/20261021120000_corrida_corredor_sem_perfil.sql'), 'utf8');
 const SQL_CAVALOS = readFileSync(resolve(__dirname, '../../../supabase/migrations/20261022120000_corrida_cavalos.sql'), 'utf8');
 const SQL_ENQUETE = readFileSync(resolve(__dirname, '../../../supabase/migrations/20261022130000_corrida_enquete.sql'), 'utf8');
+const SQL_TORCIDA = readFileSync(resolve(__dirname, '../../../supabase/migrations/20261022190000_corrida_torcida.sql'), 'utf8');
 
 let db: PGlite;
 
@@ -91,6 +92,8 @@ beforeAll(async () => {
   await db.exec(SQL_CAVALOS);
   await db.exec(SQL_ENQUETE);
   await db.exec(SQL_ENQUETE);
+  await db.exec(SQL_TORCIDA);
+  await db.exec(SQL_TORCIDA);
 });
 
 beforeEach(async () => {
@@ -632,6 +635,87 @@ describe('20261022130000 — a votação da categoria', () => {
   it('as funções internas não ficam abertas', async () => {
     const r = await db.query<{ ok: boolean }>(`select has_function_privilege('authenticated', 'public.fn_corrida_enquete_avisar(bigint)', 'EXECUTE') ok`);
     expect(r.rows[0].ok).toBe(false);
+  });
+});
+
+describe('20261022190000 — a torcida durante a corrida', () => {
+  interface Torcida { barulho: { alvo: string; n: number }[]; gritos: { usuario: string; emoji: string }[] }
+  const torcer = (uid: string, id: number, n: number, emoji: string | null = null) =>
+    como<{ fora?: boolean; cedo?: boolean }>(uid, 'select public.fn_corrida_torcer($1, $2, $3) v', [id, n, emoji]);
+  const sinais = async () => (await avisos()).filter(a => a.event === 'torcida').map(a => ({ topic: a.topic, ...(a.payload as unknown as Torcida) }));
+  // Ana corre no 1, Bruno no 2, Dora assiste com palpite na Ana; a largada é dada.
+  async function largada(): Promise<number> {
+    const id = (await como<Painel>(ADMIN, 'select public.fn_corrida_criar($1, $2, $3, $4, $5, $6) v', ['', 'R$ 30', [ANA, BRUNO], [DORA], '[]', 'cavalos'])).corrida!.id;
+    await como(ANA, 'select public.fn_corrida_escolher($1, 1::smallint) v', [id]);
+    await como(BRUNO, 'select public.fn_corrida_escolher($1, 2::smallint) v', [id]);
+    await como(ADMIN, 'select public.fn_corrida_gravar($1, $2) v', [id, gravacao(ANA)]);
+    await como(ADMIN, 'select public.fn_corrida_abrir($1) v', [id]);
+    await como(DORA, 'select public.fn_corrida_palpitar($1, $2) v', [id, ANA]);
+    await como(ADMIN, 'select public.fn_corrida_iniciar($1) v', [id]);
+    await db.exec('truncate realtime.enviados');
+    return id;
+  }
+  /** O relógio não anda no teste: «passaram 2 s» é empurrar as marcas para trás. */
+  const passar = (id: number) => db.exec(`update public.corrida_torcida set torceu_em = torceu_em - interval '3 seconds', emoji_em = emoji_em - interval '3 seconds' where corrida_id = ${Number(id)};
+    update public.corrida_torcida_envio set enviado_em = enviado_em - interval '3 seconds' where corrida_id = ${Number(id)};`);
+
+  it('antes da largada não vale: nada é guardado nem mandado', async () => {
+    const id = (await como<Painel>(ADMIN, 'select public.fn_corrida_criar($1, $2, $3, $4, $5, $6) v', ['', null, [ANA, BRUNO], [DORA], '[]', 'cavalos'])).corrida!.id;
+    expect(await torcer(DORA, id, 5, '🔥')).toMatchObject({ fora: true });
+    expect((await db.query('select 1 from public.corrida_torcida')).rows).toHaveLength(0);
+    expect(await sinais()).toHaveLength(0);
+  });
+
+  it('só quem foi chamado torce', async () => {
+    const id = await largada();
+    await expect(torcer(CAIO, id, 5)).rejects.toThrow(/NAO_AUTORIZADO/);
+  });
+
+  it('quem corre torce para si; quem assiste, para o palpite; a sala recebe o barulho somado e os emojis', async () => {
+    const id = await largada();
+    await torcer(ANA, id, 4);
+    await passar(id);
+    await torcer(DORA, id, 6, '🔥');
+    const s = await sinais();
+    expect(s).toHaveLength(2);
+    expect(s.every(x => x.topic === `corrida-sala:${id}`)).toBe(true);
+    expect(s[1].barulho).toEqual([{ alvo: ANA, n: 10 }]);
+    expect(s[1].gritos).toEqual([{ usuario: DORA, emoji: '🔥' }]);
+  });
+
+  it('no máximo 1 por 2 s por pessoa, e 1 sinal a cada 2 s para a sala', async () => {
+    const id = await largada();
+    await torcer(ANA, id, 4, '👏');
+    expect(await torcer(ANA, id, 4)).toMatchObject({ cedo: true });
+    await torcer(BRUNO, id, 3, '😱');   // outra pessoa, mas a sala acabou de receber
+    const s = await sinais();
+    expect(s).toHaveLength(1);
+    const linhas = (await db.query<{ usuario: string; barulho: number }>('select usuario, barulho from public.corrida_torcida order by barulho')).rows;
+    expect(linhas).toEqual([{ usuario: BRUNO, barulho: 3 }, { usuario: ANA, barulho: 4 }]);
+    // passados 2 s, o próximo sinal leva o que ficou guardado (o emoji do Bruno), e não repete o da Ana
+    await passar(id);
+    await torcer(DORA, id, 1);
+    const [, seg] = await sinais();
+    expect(seg.gritos).toEqual([{ usuario: BRUNO, emoji: '😱' }]);
+    expect(seg.barulho.sort((a, b) => a.n - b.n)).toEqual([{ alvo: BRUNO, n: 3 }, { alvo: ANA, n: 5 }]);
+  });
+
+  it('barulho tem teto e não fica negativo; emoji fora da lista não vai', async () => {
+    const id = await largada();
+    await torcer(ANA, id, 5000, '<script>');
+    await passar(id);
+    await torcer(BRUNO, id, -10, '🔥');
+    const linhas = (await db.query<{ usuario: string; barulho: number; emoji: string | null }>('select usuario, barulho, emoji from public.corrida_torcida order by usuario')).rows;
+    expect(linhas).toEqual([{ usuario: ANA, barulho: 60, emoji: null }, { usuario: BRUNO, barulho: 0, emoji: '🔥' }]);
+  });
+
+  it('as tabelas só se leem pela função (RLS ligada), e a função é de quem está logado', async () => {
+    const r = await db.query<{ relname: string; relrowsecurity: boolean }>(
+      `select relname, relrowsecurity from pg_class where relname in ('corrida_torcida', 'corrida_torcida_envio') order by relname`);
+    expect(r.rows.every(x => x.relrowsecurity)).toBe(true);
+    const f = await db.query<{ a: boolean; b: boolean }>(`select has_function_privilege('authenticated', 'public.fn_corrida_torcer(bigint, integer, text)', 'EXECUTE') a,
+      has_function_privilege('anon', 'public.fn_corrida_torcer(bigint, integer, text)', 'EXECUTE') b`);
+    expect(f.rows[0]).toEqual({ a: true, b: false });
   });
 });
 

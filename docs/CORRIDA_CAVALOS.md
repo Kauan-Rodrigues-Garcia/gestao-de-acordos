@@ -235,6 +235,33 @@ duelo a correção era fraca: as ondas de ritmo (até ±18%) brigavam com ela, e
 terceiro cavalo passava pelos dois. Daí o `DUELO_KP` alto e o cansaço de quem
 se aproxima.
 
+## A torcida durante a corrida (22/10/2026)
+
+Da contagem até a chegada, quem corre ou assiste tem «📣 TORCER» e seis emojis
+(🔥 👏 😱 🐎 🍀 🏆). Na janela pequena eles ficam por fora, no lugar dos emojis
+do paddock; ampliada, numa fileira embaixo da pista (`ajustar` abre o espaço). O
+super admin não torce, porque é invisível.
+
+- **Na própria tela, na hora:** a palma (`Som.torcer`), o emoji voando do
+  botão, o grito no seu lugar da arquibancada e a arquibancada mais agitada.
+  No primeiro clique aparece o aviso «A torcida não muda o resultado: é só
+  barulho!».
+- **Para os outros, junto** (`enviarTorcida` → `PalcoCavalos` →
+  `fn_corrida_torcer`, migration 20261022190000):
+  - a tela soma os cliques e manda 1 vez a cada 3 s, até 60 cliques por remessa;
+  - o banco guarda por pessoa e manda à sala no máximo 1 sinal `torcida` a cada
+    2 s, com o barulho somado por dono de cavalo e os emojis desde o último sinal;
+  - cada emoji aparece na foto de quem mandou, espalhado nos 2 s seguintes.
+- **A barrinha do placar:** é o barulho de cada cavalo, comparado com o mais
+  barulhento. Quem corre torce para o próprio cavalo; quem assiste, para o
+  palpite.
+- **O custo:** mandar cada clique para cada tela daria centenas de milhares de
+  mensagens do Realtime por corrida. Assim são ~12 sinais por corrida, vezes
+  quem está na sala.
+- **Sem a migration no banco:** a RPC falha uma vez, a torcida compartilhada
+  desliga em silêncio (`torcidaSemBanco`) e a parte da própria tela continua.
+  No teste e no lab a torcida dos outros é de mentira (`torcidaDeMentira`).
+
 ## Leveza (o que não pode voltar)
 
 - **Paddock:** 30 quadros por segundo, e 15 atrás da tela de escolha. No
