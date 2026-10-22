@@ -80,9 +80,82 @@ O que produz isso: ondas de ritmo e surtos por cavalo, arrancada de quem fica
 para trás, cansaço de quem abre mais de 12 m, **largada parelha** (reação de
 0,05 a 0,17 s) e **fôlego guardado** (quem estava atrás aos 30% ganha até +3,5%
 na reta final). As barreiras são 3, com 7% de chance de bater em cada, igual
-para todos. Quem bate perde 18% de ritmo por 60 px. Os scripts de medida estão
-descritos no histórico; para refazer, simule muitas sementes e conte a chance
-de vitória por posição.
+para todos. Depois de pousar, todo cavalo perde até 16% de ritmo e volta a
+acelerar em 110 px (`RECUP`, `pouso`); quem bate ainda perde 18% por 60 px.
+Com a recuperação (22/10/2026), a vitória por raia ficou entre 9,3% e 10,8%
+em 2.000 corridas de 10. Os scripts de medida estão descritos no histórico;
+para refazer, simule muitas sementes e conte a chance de vitória por posição.
+
+## O obstáculo e o salto (22/10/2026)
+
+- **O obstáculo** copia a foto de hipismo que o Cleber mandou: asas roxas com
+  painel amarelo e um cavalinho branco empinado em cima, e três varas brancas
+  com o meio roxo e faixas amarelas. É um só por ponto da pista, atravessando
+  as raias em diagonal: a asa do fundo fica atrás da primeira raia e a da
+  frente fica na grama, na frente da última (`OB_K`, `OB_Y0`, `OB_Y1`). Cada
+  raia cruza as varas num ponto próprio (`desvioRaia(i, n)`), e a simulação
+  usa o mesmo ponto. As varas são desenhadas em fatias de profundidade entre
+  os cavalos (`varas`), para cada um passar na frente do que está atrás dele.
+  Um obstáculo por raia virava uma escada roxa: as raias ficam a 7,6 px uma
+  da outra.
+- **O salto** tem 16 quadros próprios (`pose.s`): decola empinado, com as
+  dianteiras dobradas e as traseiras empurrando; passa reto por cima das
+  varas, com as quatro pernas encolhidas; desce de focinho, esticando as
+  dianteiras; pousa levantando terra. O corpo é girado nos dados do quadro
+  (`girar`) e nunca passa do chão (`baixo`, `chao`). Quem bate sobe menos e
+  derruba a vara de cima, que fica no chão até o fim.
+- **Leveza:** os quadros do salto saem no «gravando a corrida» (~6 ms por
+  cavalo), e não no primeiro obstáculo, onde todos pulariam no mesmo quadro.
+
+## A reta final, a arquibancada e a festa (22/10/2026)
+
+- **Chegada de focinho, como no turfe:** quem decide é a ponta do nariz, e a
+  cabeça sobe quando as patas da frente saem do chão e desce quando pousam.
+  Nos últimos 240 px o cavalo estica o pescoço e baixa a cabeça, em três
+  níveis (`estica`, quadros `e1` a `e3`), e alonga a passada; passada a linha,
+  volta ao galope normal em 100 px. O corpo recua o que a cabeça avança, então
+  o focinho desenhado é sempre o da simulação (medido: +1 px, o contorno, em
+  todo quadro e nível). A foto da chegada continua batendo com o resultado.
+- **Arquibancada com quem assiste:** o bloco de fotos se repete a cada tela
+  (`G.arqP`), e não um lugar só ao longo de 1.600 px; com mais gente do que
+  cabe numa tela (150 por tela na arquibancada, 50 na praia), o bloco ocupa
+  mais telas. «Você» se repete a cada tela, sempre, e o lugar fica guardado
+  nas outras repetições. Os lugares que sobram são da torcida desenhada.
+- **Festa:** a foto de quem venceu ao lado do nome, e a foto do 2º e do 3º
+  no pódio (sem foto, as iniciais). A foto vai no `dono` do cavalo; a sua sai
+  de `G.eu`.
+- **Festa sem rolagem:** os raios girando têm 240vmax e criavam barra de
+  rolagem nos dois sentidos (`#festa` era `overflow:auto`). Agora a festa corta
+  o que passa da janela, fica em duas colunas (quem venceu | pódio, palpites e
+  botões) e `encaixarFesta` encolhe o conteúdo para caber na janela pequena,
+  sem nunca aumentar. Na Corrida da Sorte a festa é desenhada no canvas, por
+  isso lá nunca rolou.
+
+## Card de divulgação, plateia atrasada, rosas e o tema (22/10/2026)
+
+- **Card de divulgação:** o mesmo aviso da Corrida da Sorte
+  (`CardDivulgacao.tsx`), no tema do hipódromo. No alto, os cavalos do jogo
+  galopando e pulando o obstáculo (o mesmo salto e as mesmas `varas`, numa
+  pista menor: `DV`); embaixo, «Fica esperto!», o título em Rye, a mensagem,
+  o prêmio num bilhete de páreo com a roseta de campeão e «Oba! Vou ficar de
+  olho». Na montagem, a caixa «Card de divulgação» escreve, mostra («Ver como
+  fica»), escolhe quem recebe (o mesmo seletor), manda e lista os cards com
+  «X/Y viram» e «Tirar do ar». No lab, quem vira operador recebe o card que
+  está no ar, e o pessoal «fecha» sozinho aos poucos. **Para ligar ao
+  sistema:** dá para reaproveitar as divulgações da Corrida da Sorte
+  (`divulgar`, `fecharDivulgacao`, `tirarDivulgacao`), com um campo dizendo
+  de qual corrida é o card.
+- **Plateia com foto desde a largada:** os lugares eram distribuídos uma vez,
+  no PREPARAR, e só para quem já tinha chegado ao lobby; quem chegava depois
+  ficava sem lugar. Agora quem chega depois entra atrasado e senta na hora
+  (`chegarAtrasado`), sem apostar, e o bloco da arquibancada conta todos os
+  convidados.
+- **Festa sem confete:** chuva de pétalas de rosa e brilhos dourados
+  (`Petalas`), e o campeão com a manta de rosas no pescoço (`comManta`), como
+  no Derby.
+- **O tema da festa:** «O Rei do Gado» (abertura), de
+  `public/sons/cavalos/rei-do-gado.mp3`, entra depois da fanfarra e sai devagar
+  no replay, na nova corrida ou na montagem. Respeita o botão de som.
 
 ## Leveza (o que não pode voltar)
 

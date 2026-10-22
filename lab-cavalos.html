@@ -17,6 +17,7 @@
 <style>
 @font-face{font-family:PS2P;src:url(/fonts/press-start-2p.woff2) format('woff2');font-display:swap}
 @font-face{font-family:Pixelify;src:url(/fonts/pixelify-sans.woff2) format('woff2');font-display:swap}
+@font-face{font-family:Rye;src:url(/fonts/rye.woff2) format('woff2');font-display:swap}
 :root{--bg1:#0f2a1e;--bg2:#1f4a35;--acc:#ffd24a;--txt:#f6f2e8;--mut:#c2cbc4;--line:#ffffff24;--s:3}
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;overflow:hidden;color:var(--txt);font-family:Pixelify,system-ui,sans-serif}
@@ -325,18 +326,25 @@ body.adm #janela.dica #balao{bottom:calc(100% + 64px)}
 #toast.on{display:block;animation:pop .3s both}
 
 /* ---------- festa ---------- */
-#festa{position:absolute;inset:0;z-index:8;display:none;place-items:center;overflow:auto;background:radial-gradient(circle at 50% 38%,color-mix(in srgb,var(--bg2) 88%,transparent),color-mix(in srgb,var(--bg1) 97%,transparent))}
+/* Sem rolagem: os raios (240vmax) ficam cortados no palco, e o conteúdo encolhe para caber (`encaixarFesta`). */
+#festa{position:absolute;inset:0;z-index:8;display:none;place-items:center;overflow:hidden;background:radial-gradient(circle at 50% 38%,color-mix(in srgb,var(--bg2) 88%,transparent),color-mix(in srgb,var(--bg1) 97%,transparent))}
 #festa.on{display:grid}
 .raios{position:absolute;left:50%;top:38%;width:240vmax;height:240vmax;transform:translate(-50%,-50%);background:repeating-conic-gradient(from 0deg,#ffffff0d 0 7deg,#0000 7deg 18deg);animation:gira 40s linear infinite;pointer-events:none}
 @keyframes gira{to{transform:translate(-50%,-50%) rotate(360deg)}}
-.fe{position:relative;text-align:center;padding:24px 16px;max-width:620px;width:100%}
+/* Duas colunas, que a janela é larga: quem venceu à esquerda, o resto à direita. */
+.fe{position:relative;text-align:center;padding:18px 20px;display:grid;grid-template-columns:auto minmax(0,460px);column-gap:34px;align-items:center}
+.fe-dir{width:460px}
+.fe-dir .podio{flex-wrap:nowrap}
 .fe-tit{font-family:PS2P,Pixelify,monospace;font-size:clamp(20px,4.5vw,34px);color:var(--acc);text-shadow:0 4px 0 #0008;animation:pula 1.4s ease-in-out infinite}
 @keyframes pula{50%{transform:translateY(-6px)}}
 #cvVenc{width:250px;height:185px;image-rendering:pixelated;margin:10px auto 0;display:block}
 .fe-num{font-family:PS2P,Pixelify,monospace;font-size:16px;margin-top:6px}
-.fe-nome{font-size:30px;margin-top:6px}
+.fe-nome{font-size:30px}
+.fe-dono{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:10px}
+.fe-dono .cara{box-shadow:0 0 0 3px var(--acc),0 5px 0 3px #0007}
+.podio em{font-style:normal;display:flex;align-items:center;gap:6px}
 .fe-premio{display:inline-block;margin-top:12px;background:var(--acc);color:#1b1b1b;font-family:Pixelify,sans-serif;font-size:19px;padding:11px 14px;border-radius:10px}
-.podio{display:flex;justify-content:center;gap:10px;margin-top:20px;flex-wrap:wrap}
+.podio{display:flex;justify-content:center;gap:10px;flex-wrap:wrap}
 .podio div{background:#0005;border:2px solid var(--line);border-radius:13px;padding:7px 12px 7px 6px;display:flex;gap:8px;align-items:center;font-size:16px;text-align:left}
 .podio b{font-family:PS2P,Pixelify,monospace;font-size:10px;font-weight:normal;display:block;margin-bottom:3px}
 .podio canvas{width:75px;height:51px;image-rendering:pixelated}
@@ -344,7 +352,46 @@ body.adm #janela.dica #balao{bottom:calc(100% + 64px)}
 .fe-seu small{display:block;color:var(--mut);font-size:15px;margin-top:4px}
 .fe-bt{margin-top:20px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
 #confete{position:absolute;inset:0;pointer-events:none;z-index:9}
-#janela.pequena .fe{zoom:.66}
+
+/* ---------- card de divulgação (o da Corrida da Sorte, no tema do hipódromo) ---------- */
+#divulga{position:fixed;inset:0;z-index:75;display:grid;place-items:center;padding:16px;background:#04110bb8;backdrop-filter:blur(2px)}
+.dv-card{position:relative;width:min(440px,100%);border-radius:22px;overflow:hidden;text-align:center;color:var(--txt);
+  background:repeating-linear-gradient(90deg,#ffffff06 0 26px,#0000 26px 52px),linear-gradient(180deg,#184331,#0f2a1e 55%,#0a1d15);
+  border:2px solid #e8c15a;box-shadow:0 30px 80px #000a,0 0 0 6px #e8c15a1f,0 0 70px #ffd24a2e;animation:dvEntra .55s cubic-bezier(.2,1.35,.4,1) both}
+@keyframes dvEntra{from{opacity:0;transform:translateY(18px) scale(.92)}}
+#dvCena{display:block;width:100%;aspect-ratio:200/78;image-rendering:pixelated;border-bottom:2px solid #0007}
+.dv-x{position:absolute;top:10px;right:10px;z-index:2;width:30px;height:30px;border:0;border-radius:50%;background:#000a;color:#fff;font-size:19px;line-height:1;cursor:pointer}
+.dv-x:hover{background:#000d}
+.dv-corpo{padding:16px 26px 22px}
+.dv-kick{margin:0;font-family:PS2P,Pixelify,monospace;font-size:10px;letter-spacing:.14em;color:#ffd24a}
+.dv-tit{margin:9px 0 0;font-family:Rye,Georgia,serif;font-weight:normal;font-size:29px;line-height:1.12;color:#fff6e0;text-shadow:2px 2px 0 #b8322b,4px 4px 0 #0007}
+.dv-msg{margin:11px auto 0;max-width:36ch;font-size:15.5px;line-height:1.45;color:#d3e0d6;white-space:pre-line}
+/* o prêmio é um bilhete de páreo: a roseta de campeão à esquerda, picote, e o valor */
+.dv-bilhete{position:relative;display:flex;align-items:center;gap:14px;margin:18px auto 0;width:fit-content;max-width:100%;padding:10px 20px 10px 14px;border-radius:12px;background:linear-gradient(180deg,#fbf4df,#efe2bd);color:#2a1a08;text-align:left;box-shadow:0 6px 0 #0005}
+.dv-bilhete::before,.dv-bilhete::after{content:'';position:absolute;top:50%;width:16px;height:16px;margin-top:-8px;border-radius:50%;background:#112f22}
+.dv-bilhete::before{left:-8px}.dv-bilhete::after{right:-8px}
+.dv-bilhete>div{border-left:2px dashed #c9b88a;padding-left:14px}
+.dv-bilhete small{display:block;font-family:PS2P,Pixelify,monospace;font-size:7.5px;letter-spacing:.08em;color:#8a6414}
+.dv-bilhete b{display:block;margin-top:5px;font-family:Rye,Georgia,serif;font-weight:normal;font-size:23px;line-height:1}
+.dv-roseta{position:relative;flex:none;width:52px;height:52px;margin-bottom:8px}
+.dv-roseta::before,.dv-roseta::after{content:'';position:absolute;top:34px;z-index:0;width:13px;height:24px;background:linear-gradient(90deg,#a82820,#d8453a);clip-path:polygon(0 0,100% 0,100% 100%,50% 76%,0 100%)}
+.dv-roseta::before{left:10px;transform:rotate(18deg)}.dv-roseta::after{right:10px;transform:rotate(-18deg)}
+.dv-roseta span{position:relative;z-index:1;width:100%;height:100%;border-radius:50%;display:grid;place-items:center;font-family:PS2P,monospace;font-size:9px;color:#5a3a00;box-shadow:0 0 0 2px #8a6414,0 3px 0 2px #0004;
+  background:radial-gradient(circle,#fff3b8 0 12px,#8a6414 12.5px 14.5px,#0000 15px),repeating-conic-gradient(#ffd24a 0 9deg,#e0a92a 9deg 18deg)}
+.dv-chips{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin:16px 0 0;padding:0;list-style:none}
+.dv-chips li{background:#ffffff12;border:1px solid #ffffff24;border-radius:99px;padding:4px 10px;font-size:12.5px;color:#e6efe8}
+.dv-bt{margin-top:18px;font-family:PS2P,Pixelify,monospace;font-size:11px;padding:14px 20px;border-radius:12px;border:0;background:#c8322b;color:#fff;cursor:pointer;box-shadow:0 4px 0 #7a1c16,0 10px 30px #c8322b55;transition:transform .1s,background .15s}
+.dv-bt:hover{background:#dd3d34}.dv-bt:active{transform:translateY(2px);box-shadow:0 2px 0 #7a1c16}
+/* a caixa do card na montagem */
+.mt-dv-cab{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px}.mt-dv-cab h4{margin:0}
+.mt-dv{margin-top:10px;border:1px solid #e5e9f0;border-radius:12px;padding:12px;display:grid;gap:9px}
+.mt-dv textarea{border:1px solid #d5dbe6;border-radius:8px;padding:8px 10px;font:inherit;font-size:14px;color:#1d2433;resize:vertical}
+.mt-dv label{font-size:13px;display:flex;align-items:center;gap:6px}
+.mt-link{border:0;background:none;color:#b45309;font:600 13px system-ui,sans-serif;cursor:pointer;padding:6px 8px;border-radius:8px}.mt-link:hover{background:#fff7e0}
+.mt-fim{justify-content:flex-end}
+.mt-dvlista{list-style:none;margin:10px 0 0;padding:0;border:1px solid #e5e9f0;border-radius:12px;font-size:13px}
+.mt-dvlista li{display:flex;align-items:center;gap:10px;padding:7px 12px}.mt-dvlista li+li{border-top:1px solid #eef1f6}
+.mt-dvlista .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.mt-dvlista .n{color:#64748b;font-variant-numeric:tabular-nums}
 
 /* ---------- lab ---------- */
 #lab{position:fixed;right:12px;top:12px;z-index:70;font-size:14px;color:#fff}
@@ -426,9 +473,37 @@ body.adm #janela.dica #balao{bottom:calc(100% + 64px)}
       <datalist id="mtSetores"></datalist><div id="mtAvulsos" class="mt-chips"></div></div>
     <div class="mt-bloco"><h4>Quem assiste <small>(recebe o convite «Assistir»; quem corre já assiste)</small></h4><div id="mtAssiste"></div>
       <p class="mt-nota">👑 Super admins sempre assistem, sem aparecer na lista, no paddock ou nas contagens.</p></div>
+    <div class="mt-bloco">
+      <div class="mt-dv-cab"><h4>📣 Card de divulgação <small>(avise quem você quiser que vem aí uma corrida; aparece na tela da pessoa até ela fechar)</small></h4><button type="button" class="mt-sec" id="dvAbrir">Mandar um card</button></div>
+      <div id="dvForm" class="mt-dv oculto">
+        <input id="dvFTit" maxlength="80" aria-label="Título do card">
+        <textarea id="dvFMsg" maxlength="400" rows="3" aria-label="Mensagem do card"></textarea>
+        <div class="mt-linha"><input id="dvFPremio" maxlength="60" placeholder="Prêmio (opcional)" aria-label="Prêmio do card">
+          <label>Fica no ar por <select id="dvFDias"><option value="1">1 dia</option><option value="2">2 dias</option><option value="3" selected>3 dias</option><option value="5">5 dias</option><option value="7">7 dias</option></select></label>
+          <button type="button" class="mt-link" id="dvPrevia">👁 Ver como fica</button></div>
+        <div id="dvAlvos"></div>
+        <div class="mt-linha mt-fim"><button type="button" class="mt-link" id="dvVoltar">Voltar</button><button type="button" class="mt-bt" id="dvMandar">Mandar</button></div>
+      </div>
+      <ul id="dvLista" class="mt-dvlista oculto"></ul>
+    </div>
     <footer><span id="mtAviso"></span><button type="button" class="mt-sec oculto" id="mtSortear"></button><button type="button" class="mt-bt" id="mtCriar">Criar a corrida</button></footer>
   </div>
 </section>
+
+<div id="divulga" class="oculto" role="dialog" aria-modal="true" aria-labelledby="dvTit">
+  <div class="dv-card">
+    <button type="button" class="dv-x" id="dvX" aria-label="Fechar o aviso">×</button>
+    <canvas id="dvCena" width="200" height="78" aria-hidden="true"></canvas>
+    <div class="dv-corpo">
+      <p class="dv-kick">★ FICA ESPERTO! ★</p>
+      <h3 class="dv-tit" id="dvTit"></h3>
+      <p class="dv-msg" id="dvMsg"></p>
+      <div class="dv-bilhete" id="dvBilhete"><div class="dv-roseta" aria-hidden="true"><span>1º</span></div><div><small>PRÊMIO DE QUEM VENCER</small><b id="dvPremio"></b></div></div>
+      <ul class="dv-chips"><li>🐎 Um cavalo por pessoa</li><li>🚧 Obstáculos no caminho</li><li>🏁 Chegada de focinho</li></ul>
+      <button type="button" class="dv-bt" id="dvOk">Oba! Vou ficar de olho</button>
+    </div>
+  </div>
+</div>
 
 <div id="fundoGrande" class="oculto"></div>
 <div id="janela" class="pequena oculto">
@@ -481,15 +556,19 @@ body.adm #janela.dica #balao{bottom:calc(100% + 64px)}
       <section id="festa">
         <div class="raios"></div>
         <div class="fe">
-          <div class="fe-tit">VENCEDOR!</div>
-          <canvas id="cvVenc" width="250" height="185"></canvas>
-          <div class="fe-num" id="feNum"></div>
-          <div class="fe-nome" id="feNome"></div>
-          <div class="fe-premio" id="fePremio"></div>
-          <div class="podio" id="fePodio"></div>
-          <div class="fe-acred" id="feAcred"></div>
-          <div class="fe-seu" id="feSeu"></div>
-          <div class="fe-bt"><button class="bt sec" id="feReplay">Ver replay</button><button class="bt" id="feNova">Nova corrida</button></div>
+          <div class="fe-esq">
+            <div class="fe-tit">VENCEDOR!</div>
+            <canvas id="cvVenc" width="250" height="185"></canvas>
+            <div class="fe-num" id="feNum"></div>
+            <div class="fe-dono"><span id="feFoto"></span><div class="fe-nome" id="feNome"></div></div>
+            <div class="fe-premio" id="fePremio"></div>
+          </div>
+          <div class="fe-dir">
+            <div class="podio" id="fePodio"></div>
+            <div class="fe-acred" id="feAcred"></div>
+            <div class="fe-seu" id="feSeu"></div>
+            <div class="fe-bt"><button class="bt sec" id="feReplay">Ver replay</button><button class="bt" id="feNova">Nova corrida</button></div>
+          </div>
         </div>
       </section>
       <canvas id="confete"></canvas>
@@ -512,6 +591,7 @@ body.adm #janela.dica #balao{bottom:calc(100% + 64px)}
     <label><span>Chegada apertada (foto)</span><input type="checkbox" id="lAp" /></label>
     <label><span>Disputa no próximo clique</span><input type="checkbox" id="lDisp" /></label>
     <div class="linha"><button class="bt sec" id="lNovo">NOVO LOBBY</button><button class="bt sec" id="lDica">MOSTRAR A DICA</button></div>
+    <div class="linha"><button class="bt sec" id="lDiv">CARD DE DIVULGAÇÃO</button></div>
     <div id="lInfo"></div>
     <label>Qualidade da corrida <select id="lQual"><option value="auto">Automática</option><option value="econ">Econômica (30 q/s)</option><option value="max">Máxima (60 q/s)</option></select></label>
     <div id="lPerf"></div>
@@ -615,6 +695,18 @@ const PERNAS = [
 const PARADO = [[-0.05, -0.05], [0.12, -0.2], [0.08, 0.08], [-0.12, -0.38]];
 // O passo (andar no paddock) é de quatro tempos: cada perna na sua vez.
 const PASSO_OFF = [0.5, 0.25, 0.0, 0.75];
+// O salto em quadros-chave [s, coxa, canela] (ângulos a partir da vertical; + é para a frente).
+// Dianteiras: saem do chão, dobram bem por cima das varas e esticam para pousar.
+// Traseiras: empurram esticadas para trás, encolhem por cima das varas e voltam para debaixo do corpo.
+const SALTO_D = [[0, 0.9, -0.2], [0.18, 1.45, -0.35], [0.5, 1.35, -0.15], [0.7, 0.85, 0.55], [0.86, 0.4, 0.35], [1, 0.1, 0.05]];
+const SALTO_T = [[0, -0.55, -0.95], [0.2, -0.75, -1.25], [0.45, 0.2, -1.15], [0.7, 0.1, -1.3], [0.86, -0.3, -1.0], [1, 0.3, -0.3]];
+// A inclinação do corpo (radianos; − é focinho para cima): decola empinado, passa reto no alto, desce de focinho.
+const SALTO_INC = [[0, -0.42], [0.18, -0.3], [0.45, 0], [0.7, 0.26], [0.86, 0.3], [1, 0.08]];
+function chave(tab, s, k) {
+  let j = 1; while (j < tab.length - 1 && tab[j][0] < s) j++;
+  const [s0, ...a] = tab[j - 1], [s1, ...b] = tab[j], u = suave((s - s0) / (s1 - s0));
+  return a[k] + (b[k] - a[k]) * u;
+}
 
 /**
  * Um quadro do cavalo. pose = {g: fase do galope 0..1}, {a: fase do passo 0..1},
@@ -637,12 +729,20 @@ function construirQuadro(cav, pose) {
   };
   const traco = (x0, y0, x1, y1, r0, r1, c) => { const n = Math.max(2, Math.ceil(Math.hypot(x1 - x0, y1 - y0) * 2)); for (let i = 0; i <= n; i++) { const t = i / n; disco(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, r0 + (r1 - r0) * t, c); } };
 
-  const gal = pose.g !== undefined, anda = pose.a !== undefined, come = pose.c !== undefined;
+  const gal = pose.g !== undefined, anda = pose.a !== undefined, come = pose.c !== undefined, salta = pose.s !== undefined;
   const p = gal ? pose.g : anda ? pose.a : 0, k = pose.p ?? 0, mastiga = come ? pose.c : 0;
   const by = gal ? Math.round(-Math.sin(T2 * p) * 0.9) : 0;
-  const hy = gal ? (Math.sin(T2 * p + 1.2) > 0.25 ? 1 : 0) : anda ? (Math.sin(T2 * p * 2) > 0.2 ? 1 : 0) : come ? 0 : [0, 0, 1, 1][k];
+  // Reta final (`pose.e`, 0 a 1): o pescoço estica, a cabeça vai à frente (ex) e desce (ey), e a passada alonga.
+  // A cabeça continua subindo quando as patas da frente saem do chão e descendo quando pousam (hy).
+  const es = gal ? (pose.e ?? 0) : 0, ex = 2.4 * es, ey = Math.round(3 * es), amp = 1 + 0.12 * es;
+  const hy = ey + (salta ? (pose.s > 0.5 && pose.s < 0.92 ? 1 : 0) : gal ? (Math.sin(T2 * p + 1.2) > 0.25 ? 1 : 0) : anda ? (Math.sin(T2 * p * 2) > 0.2 ? 1 : 0) : come ? 0 : [0, 0, 1, 1][k]);
 
   const angulos = (P, i) => {
+    if (salta) {
+      // a perna do lado de lá vem um tiquinho atrasada: as duas não dobram juntas
+      const s = clamp(pose.s - (P.longe ? 0.05 : 0), 0, 1), tab = P.d ? SALTO_D : SALTO_T;
+      return [chave(tab, s, 0), chave(tab, s, 1)];
+    }
     if (anda) {
       const ph = T2 * (p - PASSO_OFF[i]), s = Math.sin(ph), co = Math.cos(ph);
       if (P.d) { const a1 = 0.3 * s; return [a1, co > 0 ? a1 - 0.85 * co : a1]; }
@@ -650,8 +750,8 @@ function construirQuadro(cav, pose) {
     }
     if (!gal) return PARADO[i];
     const ph = T2 * (p - P.off), s = Math.sin(ph), co = Math.cos(ph);
-    if (P.d) { const a1 = 0.6 * s + 0.05; return [a1, co > 0 ? a1 - 1.7 * co : a1]; }
-    const a1 = 0.55 * s - 0.05; return [a1, a1 - 0.35 - (co > 0 ? 0.9 * co : 0)];
+    if (P.d) { const a1 = 0.6 * amp * s + 0.05; return [a1, co > 0 ? a1 - 1.7 * co : a1]; }
+    const a1 = 0.55 * amp * s - 0.05; return [a1, a1 - 0.35 - (co > 0 ? 0.9 * co : 0)];
   };
   const perna = i => {
     const P = PERNAS[i], [a1, a2] = angulos(P, i);
@@ -667,7 +767,8 @@ function construirQuadro(cav, pose) {
   perna(0); perna(1);
   for (let j = 0; j <= 12; j++) { // rabo
     const t = j / 12; let x, y;
-    if (gal) { x = 10 - 11 * t; y = 12 + by + 1.5 * t + 2.5 * t * t + Math.sin(T2 * p - t * 3) * 1.6 * t; }
+    if (salta) { x = 10 - 11 * t; y = 12 - 1.5 * t + 1.5 * t * t + Math.sin(pose.s * 9 - t * 3) * 1.2 * t; }   // o rabo ao vento
+    else if (gal) { x = 10 - 11 * t; y = 12 + by + 1.5 * t + 2.5 * t * t + Math.sin(T2 * p - t * 3) * 1.6 * t; }
     else {
       const sw = anda ? Math.sin(T2 * p) * 1.0 : come ? Math.sin(Math.PI * mastiga) * 0.8 : Math.sin(T2 * k / 4) * 1.3;
       x = 10 - 3.5 * t - sw * t; y = 12 + 13 * t;
@@ -684,18 +785,18 @@ function construirQuadro(cav, pose) {
     pinta(33, 18 + cy, 1); pinta(34, 18 + cy, 1); pinta(33, 17 + cy, 1);
     m1x = 34.2; m1y = 18.2 + cy;
   } else {
-    traco(28, 14 + by, 33.5, 6.5 + hy, 3.8, 2.6, 1);
-    elipse(37.2, 5.6 + hy, 3.4, 2.4, 1); elipse(40.3, 7.8 + hy, 2.4, 2.0, 1);
-    pinta(34, 2 + hy, 1); pinta(35, 2 + hy, 1); pinta(34, 3 + hy, 1); pinta(35, 3 + hy, 1); pinta(34, 1 + hy, 1);
-    m1x = 33.3; m1y = 3.6 + hy;
+    traco(28, 14 + by, 33.5 + ex, 6.5 + hy, 3.8, 2.6, 1);
+    elipse(37.2 + ex, 5.6 + hy, 3.4, 2.4, 1); elipse(40.3 + ex, 7.8 + hy, 2.4, 2.0, 1);
+    pinta(34 + ex, 2 + hy, 1); pinta(35 + ex, 2 + hy, 1); pinta(34 + ex, 3 + hy, 1); pinta(35 + ex, 3 + hy, 1); pinta(34 + ex, 1 + hy, 1);
+    m1x = 33.3 + ex; m1y = 3.6 + hy;
   }
   // crina
   traco(m0x - 0.8, m0y - 0.6, m1x - 0.8, m1y - 0.4, 1.5, 1.1, 3);
   for (let j = 0; j < 5; j++) {
-    const t = j / 4, bx = m0x + (m1x - m0x) * t, byy = m0y + (m1y - m0y) * t, fl = gal ? 1.8 : 0.7;
-    disco(bx - 1.6 - fl + (gal ? Math.sin(T2 * p + j * 1.3) * 0.7 : 0), byy + 0.6, 1.1, 3);
+    const t = j / 4, bx = m0x + (m1x - m0x) * t, byy = m0y + (m1y - m0y) * t, fl = gal || salta ? 1.8 : 0.7;
+    disco(bx - 1.6 - fl + (gal ? Math.sin(T2 * p + j * 1.3) * 0.7 : salta ? Math.sin(pose.s * 9 + j * 1.3) * 0.5 : 0), byy + 0.6, 1.1, 3);
   }
-  if (come) disco(35.4, 20.4 + mastiga, 0.9, 3); else disco(35.6, 3.4 + hy, 0.9, 3);
+  if (come) disco(35.4, 20.4 + mastiga, 0.9, 3); else disco(35.6 + ex, 3.4 + hy, 0.9, 3);
   if (cav.pel.mancha) for (let y = 0; y < SH; y++) for (let x = 0; x < SW; x++) { const i = y * SW + x; if (g[i] === 1 && ruido2((x - PAD) / 5.5, (y - by) / 4.5, cav.sem) > 0.56) g[i] = 11; }
   perna(2); perna(3);
   // o pano com o número
@@ -714,9 +815,10 @@ function construirQuadro(cav, pose) {
     if (cav.focinho) for (let y = 26; y <= 29; y++) for (let x = 36; x <= 40; x++) { const i = (y + cy) * SW + x + PAD; if (g[i] === 1 || g[i] === 11) g[i] = 7; }
     pinta(38, 22 + cy, 8); pinta(39, 28 + cy, 8);
   } else {
-    if (cav.estrela) { pinta(38, 4 + hy, 7); pinta(39, 5 + hy, 7); pinta(40, 6 + hy, 7); }
-    if (cav.focinho) for (let y = 6; y <= 10; y++) for (let x = 41; x <= 43; x++) { const i = (y + hy) * SW + x + PAD; if (g[i] === 1 || g[i] === 11) g[i] = 7; }
-    pinta(37, 5 + hy, 8); pinta(41, 7 + hy, 8);
+    if (cav.estrela) { pinta(38 + ex, 4 + hy, 7); pinta(39 + ex, 5 + hy, 7); pinta(40 + ex, 6 + hy, 7); }
+    const fx0 = Math.round(41 + ex);
+    if (cav.focinho) for (let y = 6; y <= 10; y++) for (let x = fx0; x <= fx0 + 2 && x + PAD < SW; x++) { const i = (y + hy) * SW + x + PAD; if (g[i] === 1 || g[i] === 11) g[i] = 7; }
+    pinta(37 + ex, 5 + hy, 8); pinta(41 + ex, 7 + hy, 8);
   }
 
   const P = cav.pel, N = cav.pano;
@@ -745,6 +847,7 @@ function construirQuadro(cav, pose) {
     if (c) { const [r, gg, b] = hexRgb(c), o = (y * SW + x) * 4; d[o] = r; d[o + 1] = gg; d[o + 2] = b; d[o + 3] = 255; }
   }
   cx.putImageData(img, 0, 0);
+  cv.dados = img;   // para o salto girar sem ler o canvas de volta (`girar`)
   return cv;
 }
 function quadros(cav) {
@@ -752,15 +855,45 @@ function quadros(cav) {
   // galope, e montar os 22 quadros de 24 cavalos no mesmo quadro dava um tranco
   // visível em PC fraco.
   if (!cav.q) {
-    const poses = { g: i => ({ g: i / 8 }), p: i => ({ p: i }), a: i => ({ a: i / 8 }), c: i => ({ c: i }) };
-    const tam = { g: 8, p: 4, a: 8, c: 2 };
+    // e1..e3: o galope da reta final, com o pescoço cada vez mais esticado (ver ESTICA)
+    const poses = { g: i => ({ g: i / 8 }), p: i => ({ p: i }), a: i => ({ a: i / 8 }), c: i => ({ c: i }), s: i => ({ s: i / (SALTO_Q - 1) }),
+      e1: i => ({ g: i / 8, e: 1 / 3 }), e2: i => ({ g: i / 8, e: 2 / 3 }), e3: i => ({ g: i / 8, e: 1 }) };
+    const tam = { g: 8, p: 4, a: 8, c: 2, s: SALTO_Q, e1: 8, e2: 8, e3: 8 };
     cav.q = {};
     for (const k of Object.keys(poses)) Object.defineProperty(cav.q, k, {
-      get() { const v = Array.from({ length: tam[k] }, (_, i) => construirQuadro(cav, poses[k](i))); Object.defineProperty(this, k, { value: v }); return v; },
+      get() {
+        // o salto é girado (o corpo inclina): o quadro ganha SM px de folga em volta
+        const v = Array.from({ length: tam[k] }, (_, i) => k === 's' ? girar(construirQuadro(cav, poses.s(i)), chave(SALTO_INC, i / (SALTO_Q - 1), 0)) : construirQuadro(cav, poses[k](i)));
+        if (k === 's') v.chao = girar(construirQuadro(cav, { g: 0 }), 0).baixo - SM;   // o casco no galope
+        Object.defineProperty(this, k, { value: v }); return v;
+      },
       configurable: true,
     });
   }
   return cav.q;
+}
+const SM = 8;   // a folga do quadro girado do salto, em cada lado
+/** Gira um quadro em volta do meio do corpo, sem meio-tom: o pixel art continua de pixel inteiro. */
+// O giro é feito nos dados do quadro (`src.dados`), pixel a pixel: passar por um canvas e ler de volta
+// custava 28–38 ms por cavalo, e no primeiro obstáculo todos pedem o salto ao mesmo tempo.
+function girar(src, ang) {
+  const w = SW + 2 * SM, h = SH + 2 * SM, de = src.dados.data, [cv, cx] = tela(w, h), img = cx.createImageData(w, h), d = img.data;
+  const co = Math.cos(ang), si = Math.sin(ang), px = SM + PAD + 21, py = SM + 16;
+  for (let Y = 0; Y < h; Y++) for (let X = 0; X < w; X++) {
+    const dx = X + 0.5 - px, dy = Y + 0.5 - py;
+    const sx = Math.floor(co * dx + si * dy + PAD + 21), sy = Math.floor(-si * dx + co * dy + 16);
+    if (sx < 0 || sy < 0 || sx >= SW || sy >= SH) continue;
+    const o = (sy * SW + sx) * 4, a = (Y * w + X) * 4; if (!de[o + 3]) continue;
+    d[a] = de[o]; d[a + 1] = de[o + 1]; d[a + 2] = de[o + 2]; d[a + 3] = 255;
+  }
+  cx.putImageData(img, 0, 0);
+  cv.baixo = baixoDe(d, w, h);
+  return cv;
+}
+/** A última linha com pixel (o casco mais baixo), nos dados RGBA de um quadro w × h. */
+function baixoDe(d, w, h) {
+  for (let y = h - 1; y >= 0; y--) for (let x = 0; x < w; x++) if (d[(y * w + x) * 4 + 3]) return y;
+  return h - 1;
 }
 function criarCavalos(r, n) {
   const nums = embaralhar(Array.from({ length: 50 }, (_, i) => i + 1), r).slice(0, n);
@@ -1068,6 +1201,24 @@ function construirMapa(id, s) {
  * bater para todos, sorteada aqui, com o resto da corrida.
  */
 const BARREIRAS_EM = [0.28, 0.52, 0.76], CHANCE_BATER = 0.07, TOMBO = 0.18, TOMBO_PX = 60;
+// O obstáculo atravessa a pista em diagonal: a asa do fundo fica no chão OB_Y0 em x − OB_K, a da frente
+// no chão OB_Y1 em x + OB_K. Cada raia cruza as varas num ponto próprio (`desvioRaia`).
+const OB_K = 36, OB_Y0 = 125, OB_Y1 = 214, OB_GEO = { k: OB_K, y0: OB_Y0, y1: OB_Y1 };
+const desvioRaia = (i, n) => OB_K * (2 * (Math.round(129 + (i + 0.5) * (76 / n)) - OB_Y0) / (OB_Y1 - OB_Y0) - 1);
+// O salto, medido no focinho contra o ponto em que a raia cruza as varas: decola SALTO0 px antes e pousa
+// SALTO1 px depois. Quem bate sobe só SALTO_BATE e derruba a vara de cima. SALTO_Q quadros de pose (`quadros`).
+const SALTO0 = -12, SALTO1 = 50, SALTO_ALT = 19, SALTO_BATE = 10, SALTO_Q = 16;
+// O pouso: todo cavalo perde ritmo (RECUP no pior ponto) e volta a acelerar ao longo de RECUP_PX.
+// É igual para todos, nos mesmos pontos da pista: não mexe na justiça.
+const RECUP = 0.16, RECUP_PX = 110;
+const pouso = d => d <= 0 || d >= RECUP_PX ? 0 : d < 18 ? suave(d / 18) : 1 - suave((d - 18) / (RECUP_PX - 18));
+/*
+ * A reta final, como no turfe (22/10/2026): nos últimos 240 px o cavalo estica o pescoço e baixa a cabeça
+ * (níveis 1 a 3, `pose.e`), chega de focinho na linha e, passada a chegada, volta ao galope normal em 100 px.
+ * Quem decide é o focinho, e o focinho desenhado é sempre o da simulação.
+ */
+const ESTICA0 = 240, ESTICA_PX = 180;
+const estica = x => Math.round(3 * (x <= L ? clamp((x - (L - ESTICA0)) / ESTICA_PX, 0, 1) : clamp(1 - (x - L - 20) / 100, 0, 1)));
 function simular(seed, n) {
   const r = rng(seed ^ 0x9e3779b9);
   const tipo = ['normal', 'normal', 'pelotao', 'virada', 'disparada'][Math.floor(r() * 5)];
@@ -1127,8 +1278,12 @@ function simular(seed, n) {
         // (até +3,5%, proporcional ao atraso, com teto) — o «vem por fora» do turfe.
         if (p.gasto < 0 && prog >= 0.3) p.gasto = clamp(atras / 60, 0, 1);
         if (p.gasto > 0) m += 0.035 * p.gasto * suave((prog - 0.65) / 0.25);
-        // Bateu na barreira: perde ritmo por uns 60 px, e só.
-        for (let o = 0; o < barreiras.length; o++) if (p.bate[o]) { const d = xs[i] - barreiras[o]; if (d > 0 && d < TOMBO_PX) m -= TOMBO; }
+        // Depois do pouso todo mundo se recupera; quem bateu na vara ainda perde ritmo por uns 60 px.
+        for (let o = 0; o < barreiras.length; o++) {
+          const d = xs[i] - barreiras[o] - desvioRaia(i, n) - SALTO1;
+          m -= RECUP * pouso(d);
+          if (p.bate[o] && d > 0 && d < TOMBO_PX) m -= TOMBO;
+        }
         alvo = p.vmax * m;
       }
       const dv = alvo - vs[i]; vs[i] += dv > 0 ? Math.min(dv, p.acel * DT) : Math.max(dv, -70 * DT);
@@ -1204,14 +1359,18 @@ function desenharCena(c, t, cam, o) {
       c.drawImage(agit ? m.arqB : m.arqA, p * 32, 0, 32, 48, x + p * 32, 68, 32, 48);
     }
     // quem está assistindo, sentado no lugar dele: o corpo aqui, a foto por cima (`desenharTorcida`)
+    // o bloco se repete a cada G.arqP px: na emenda, a mesma pessoa pode estar nas duas pontas da tela
     for (const s of G.assentos ?? []) {
-      const sx = s.xw - off;
-      if (sx < -10 || sx > W + 10) { s.vis = false; continue; }
-      const pula = o.excit > 0.25 && Math.sin(o.wall * 9 + s.fase) > 0.15 ? 1 : 0;
-      // A foto ocupa o boneco inteiro (pedido do Cleber: mais destaque que só a cabeça): aqui só se
-      // apaga o torcedor genérico daquele lugar, e a foto entra no centro do corpo, pulando junto.
-      if (!m.praia) R(c, m.arq.fundo, sx - 1, 68 + s.py - 1, 8, 10);
-      s.vis = true; s.cx = sx + 3; s.cy = 68 + s.py + 4 - pula * 2;
+      const P = s.P || G.arqP || 1e9, base = (((s.xw - off) % P) + P) % P, pula = o.excit > 0.25 && Math.sin(o.wall * 9 + s.fase) > 0.15 ? 1 : 0;
+      s.copias.length = 0;
+      for (const sx of [base - P, base, base + P]) {
+        if (sx < -10 || sx > W + 10) continue;
+        // A foto ocupa o boneco inteiro (pedido do Cleber: mais destaque que só a cabeça): aqui só se
+        // apaga o torcedor genérico daquele lugar, e a foto entra no centro do corpo, pulando junto.
+        if (!m.praia) R(c, m.arq.fundo, sx - 1, 68 + s.py - 1, 8, 10);
+        s.copias.push(sx + 3);
+      }
+      s.vis = s.copias.length > 0; s.cx = s.copias[0]; s.cy = 68 + s.py + 4 - pula * 2;
     } }
   if (m.flashes) { const k = (Math.random() < 0.45 ? 1 : 0) + (o.excit > 0.5 ? 2 : 0); for (let i = 0; i < k; i++) { const x = Math.floor(Math.random() * W), y = 80 + Math.floor(Math.random() * 28); R(c, '#ffffff', x, y, 1, 1); R(c, 'rgba(255,255,255,.55)', x - 1, y, 3, 1); R(c, 'rgba(255,255,255,.55)', x, y - 1, 1, 3); } }
   azulejo(c, m.pistaC, cam, 112);
@@ -1234,26 +1393,46 @@ function desenharCena(c, t, cam, o) {
   const gx = X0 - 50 - cam, fx = X0 + 5 - cam;
   if (fx > -20) { const yT = laneY(0) - 40; R(c, '#2f6b4f', gx - 2, yT, fx - gx + 8, 4); R(c, '#58a07a', gx - 2, yT, fx - gx + 8, 1); R(c, '#1f4a37', gx - 2, yT + 4, fx - gx + 8, 1); }
 
+  // Os obstáculos na tela. A vara de cima cai quando alguém bate nela e fica no chão até o fim.
+  const obs = [];
+  if (G.rec?.barreiras) G.rec.barreiras.forEach((bx, b) => {
+    const cx = Math.round(bx - camF); if (cx < -OB_K - 30 || cx > W + OB_K + 30) return;
+    let caida = false; for (let j = 0; j < G.n; j++) if (G.rec.bate[j][b] && xAt(j, t) - bx - desvioRaia(j, G.n) > 12) caida = true;
+    obs.push({ cx, caida }); asa(c, cx - OB_K, OB_Y0); varas(c, cx, OB_Y0 - 1, laneY(0) - 1, caida);
+  });
   // cavalos, do fundo para a frente
   const marc = [];
   for (let i = 0; i < G.n; i++) {
     const cav = G.cavalos[i], x = xAt(i, t), ly = laneY(i);
     const v = (t > 0 && G.rec) ? (xAt(i, t + 1 / 30) - x) * 30 : 0;
     const q = quadros(cav);
-    const img = v < 12 ? q.p[Math.floor(o.wall * 2.2 + i * 1.7) % 4] : q.g[((Math.floor(((x - X0) / STRIDE + i * 0.37) * 8) % 8) + 8) % 8];
-    const sx = Math.round(x - camF - 43);
-    // as barreiras desta raia vêm antes do cavalo: ele passa por cima delas
-    let pulo = 0;
+    // Na reta final o pescoço estica: o corpo recua o que a cabeça avança, e o focinho fica onde a simulação diz.
+    const lv = v < 12 ? 0 : estica(x), gq = lv ? q['e' + lv] : q.g;
+    const img = v < 12 ? q.p[Math.floor(o.wall * 2.2 + i * 1.7) % 4] : gq[((Math.floor(((x - X0) / STRIDE + i * 0.37) * 8) % 8) + 8) % 8];
+    const sx = Math.round(x - camF - 43 - Math.round(2.4 * lv / 3));
+    // o pedaço das varas entre a raia de trás e esta vem antes do cavalo: o resto fica na frente dele
+    for (const ob of obs) varas(c, ob.cx, i ? laneY(i - 1) - 1 : laneY(0) - 1, ly - 1, ob.caida);
+    let pulo = 0, s = -1, bateuAqui = false;
     if (G.rec?.barreiras) G.rec.barreiras.forEach((bx, b) => {
-      const bateu = G.rec.bate[i][b], bs = Math.round(bx - camF), dx = x - bx;
-      if (bs > -14 && bs < W + 14) barreira(c, bs, ly, bateu && dx > 10);
-      if (dx > -6 && dx < 38) pulo = -Math.round(Math.sin(Math.PI * (dx + 6) / 44) * (bateu ? 4 : 9));
-      else if (bateu && dx >= 38 && dx < TOMBO_PX) pulo = (Math.floor(o.wall * 20) % 2);   // o tropeço
-      if (bateu && dx > 0 && dx < 16 && o.correndo && poeira.length < 520) for (let k = 0; k < 3; k++) poeira.push({ x: bx + Math.random() * 8, y: ly - 2 - Math.random() * 6, vx: -20 + Math.random() * 40, vy: -18 - Math.random() * 16, v: 0, max: 0.5 + Math.random() * 0.4 });
+      const bateu = G.rec.bate[i][b], bxi = bx + desvioRaia(i, G.n), dx = x - bxi;
+      if (dx > SALTO0 && dx < SALTO1) { s = (dx - SALTO0) / (SALTO1 - SALTO0); bateuAqui = bateu; }
+      else if (bateu && dx >= SALTO1 && dx < SALTO1 + TOMBO_PX) pulo = (Math.floor(o.wall * 20) % 2);   // o tropeço
+      if (bateu && dx > 10 && dx < 24 && o.correndo && poeira.length < 520) for (let k = 0; k < 3; k++) poeira.push({ x: bxi + Math.random() * 8, y: ly - 16 - Math.random() * 6, vx: -20 + Math.random() * 40, vy: -18 - Math.random() * 16, v: 0, max: 0.5 + Math.random() * 0.4 });
     });
     const sy = ly - 32 + pulo;
     if (fx > -20) R(c, '#2f6b4f', gx, ly - 36, 2, 34);
-    if (sx > -50 && sx < W + 10) {
+    if (sx > -50 && sx < W + 10 && s >= 0) {
+      // No ar: o quadro do salto, subindo num arco; nunca com o casco abaixo do chão (perto da decolagem e do
+      // pouso o corpo está inclinado e é o casco que encosta). A sombra fica no chão e encolhe com a altura.
+      const qs = q.s, im = qs[Math.round(s * (SALTO_Q - 1))], alt = (bateuAqui ? SALTO_BATE : SALTO_ALT) * Math.sin(Math.PI * s);
+      let y = ly - 32 - SM - alt; const chao = ly - 32 + qs.chao;
+      if (y + im.baixo > chao) y = chao - im.baixo;
+      const enc = Math.round(alt * 0.6);
+      R(c, m.sombra, sx + 9 + (enc >> 1), ly - 1, 28 - enc, 3);
+      c.globalAlpha = o.lobby && !cav.dono ? 0.33 : 1; c.drawImage(im, sx - PAD - SM, Math.round(y)); c.globalAlpha = 1;
+      // o pouso levanta terra nas patas da frente
+      if (o.correndo && s > 0.86 && Math.random() < (o.lento ? 0.3 : 0.8) && poeira.length < 520) for (let k = 0; k < 2; k++) poeira.push({ x: x - 12 + Math.random() * 8, y: ly - 1, vx: -30 + Math.random() * 50, vy: -14 - Math.random() * 14, v: 0, max: 0.4 + Math.random() * 0.4 });
+    } else if (sx > -50 && sx < W + 10) {
       R(c, m.sombra, sx + 9, ly - 1, 28, 3); R(c, m.sombra, sx + 12, ly + 2, 22, 1);
       c.globalAlpha = o.lobby && !cav.dono ? 0.33 : 1; c.drawImage(img, sx - PAD, sy); c.globalAlpha = 1;
       // em câmera lenta sai menos poeira por quadro: ela também dura 3× mais
@@ -1273,7 +1452,10 @@ function desenharCena(c, t, cam, o) {
   c.fillStyle = m.poeira;
   for (const p of poeira) { c.globalAlpha = 0.75 * (1 - p.v / p.max); const s = p.v < p.max * 0.5 ? 2 : 1; c.fillRect(Math.round(p.x - camF), Math.round(p.y), s, s); }
   c.globalAlpha = 1;
+  // as varas na frente da última raia e a asa da frente, por cima da grama
+  for (const ob of obs) varas(c, ob.cx, laneY(G.n - 1) - 1, 204, ob.caida);
   azulejo(c, m.frenteC, cam * 1.35, 205);
+  for (const ob of obs) { varas(c, ob.cx, 204, OB_Y1, ob.caida); asa(c, ob.cx + OB_K, OB_Y1); }
   if (fxs > -30 && fxs < W + 30) { R(c, '#1c1c1c', fxs - 1, 196, 4, 29); for (let y = 198; y < 225; y += 4) R(c, (y >> 2) % 2 ? '#ffffff' : '#d93a3a', fxs, y, 2, 4); }
   // neve
   if (m.flocos.length) for (const fl of m.flocos) {
@@ -1290,13 +1472,57 @@ function desenharCena(c, t, cam, o) {
     if (mk.eu) { R(c, cor, lx + 13, ay - 10, 1, 1); R(c, cor, lx + 12, ay - 9, 1, 1); R(c, cor, lx + 14, ay - 9, 1, 1); }
   }
 }
-/** Uma barreira: cerquinha de dois postes com a barra listrada; derrubada, a barra fica torta no chão. */
-function barreira(c, sx, ly, caida) {
-  R(c, "#2e8b3a", sx - 1, ly - 2, 12, 2); R(c, "#3fa84b", sx, ly - 3, 10, 1);   // o mato da base
-  R(c, "#f4efe6", sx, ly - 11, 2, 10); R(c, "#f4efe6", sx + 8, ly - 11, 2, 10); R(c, "#9a9284", sx + 1, ly - 11, 1, 10); R(c, "#9a9284", sx + 9, ly - 11, 1, 10);
-  if (caida) { for (let k = 0; k < 10; k++) R(c, (k >> 1) % 2 ? "#d93a3a" : "#ffffff", sx + k, ly - 2 - (k > 6 ? 1 : 0), 1, 2); return; }
-  for (let k = 0; k < 10; k++) R(c, (k >> 1) % 2 ? "#d93a3a" : "#ffffff", sx + k, ly - 11, 1, 2);   // a barra de cima
-  R(c, "#1c1c1c22", sx, ly - 9, 10, 1); R(c, "#ffffff", sx, ly - 6, 10, 1);   // sombra e a barra de baixo
+/*
+ * O obstáculo de hipismo (a foto que o Cleber mandou, 22/10/2026): duas asas roxas com o painel amarelo e
+ * o cavalinho branco empinado em cima, e três varas brancas com o meio roxo e as faixas amarelas. Um só
+ * por ponto da pista, atravessando todas as raias em diagonal (ver OB_K).
+ */
+const OB = { roxo: '#7d3fc4', roxoC: '#a46ae6', roxoE: '#4b2183', amar: '#f6d32b', amarE: '#d4ad12', amarC: '#fff09a', bra: '#f7f5ef', braC: '#ffffff', braE: '#bdb7aa', mad: '#b98a52', madE: '#7e5a30' };
+const VARAS_H = [5, 11, 17];   // a altura de cada vara acima do chão
+// o cavalinho empinado, virado para a direita
+const EMPINADO = [
+  '.......##...',
+  '......####..',
+  '......#####.',
+  '.....###.###',
+  '.....###....',
+  '....####.##.',
+  '...#####..#.',
+  '..######.##.',
+  '.#######....',
+  '##.#####....',
+  '#...####....',
+  '....#..#....',
+  '....#..#....',
+  '...##.##....',
+];
+/** Uma asa, de frente: dois postes roxos, o painel amarelo e o cavalinho em cima. `x` é o meio, `gy` o chão. */
+function asa(c, x, gy) {
+  R(c, 'rgba(0,0,0,.2)', x - 11, gy - 1, 23, 2);
+  for (const px of [x - 10, x + 6]) { R(c, OB.madE, px, gy - 2, 5, 2); R(c, OB.mad, px, gy - 2, 5, 1); }   // os pés de madeira
+  R(c, OB.roxoE, x - 9, gy - 25, 19, 23);
+  R(c, OB.amar, x - 6, gy - 21, 13, 16); R(c, OB.amarC, x - 6, gy - 21, 13, 1); R(c, OB.amarE, x - 6, gy - 6, 13, 1);
+  for (const px of [x - 8, x + 7]) { R(c, OB.roxo, px, gy - 25, 2, 23); R(c, OB.roxoC, px, gy - 25, 1, 23); }
+  R(c, OB.roxo, x - 8, gy - 25, 17, 3); R(c, OB.roxoC, x - 8, gy - 25, 17, 1); R(c, OB.roxo, x - 8, gy - 5, 17, 2);
+  const ex = x - 6, ey = gy - 25 - EMPINADO.length;
+  EMPINADO.forEach((l, y) => { for (let k = 0; k < l.length; k++) if (l[k] === '#') R(c, y === EMPINADO.length - 1 || l[k + 1] !== '#' ? OB.braE : OB.bra, ex + k, ey + y, 1, 1); });
+}
+/**
+ * O pedaço das três varas entre o chão g0 (exclusive) e g1 (inclusive), medido na profundidade da pista.
+ * A vara anda OB_K px para a direita a cada meia pista; as faixas seguem o comprimento dela.
+ */
+function varas(c, cx, g0, g1, caida, geo = OB_GEO) {
+  const { k: K, y0: Y0, y1: Y1 } = geo;
+  for (let g = Math.max(Math.floor(g0) + 1, Y0); g <= Math.min(g1, Y1); g++) {
+    const u = (g - Y0) / (Y1 - Y0), x = Math.round(cx + K * (2 * u - 1));
+    const f = u < 0.05 || u > 0.95 ? 0 : u < 0.13 || u > 0.87 ? 1 : u < 0.33 || u > 0.67 ? 0 : 2;
+    const [cl, cb, ce] = f === 1 ? [OB.amarC, OB.amar, OB.amarE] : f === 2 ? [OB.roxoC, OB.roxo, OB.roxoE] : [OB.braC, OB.bra, OB.braE];
+    R(c, 'rgba(0,0,0,.14)', x - 1, g, 4, 1);   // a sombra no chão
+    for (const h of VARAS_H) {
+      const y = h === VARAS_H[2] && caida ? g - 1 : g - h, dx = h === VARAS_H[2] && caida ? 5 : 0;
+      R(c, cl, x + dx, y, 1, 1); R(c, cb, x + dx + 1, y, 1, 1); R(c, ce, x + dx + 2, y, 1, 1);
+    }
+  }
 }
 function minimapa(c, t) {
   const x0 = 110, x1 = 290, y = 7;
@@ -1416,8 +1642,25 @@ const Som = (() => {
       faixa.n++; faixa.prox += sc;
     }
   }
+  // O tema da festa (pedido do Cleber, 22/10/2026): O Rei do Gado, o arquivo de verdade, e não sintetizado.
+  // Entra devagar depois da fanfarra e sai devagar quando a festa acaba (qualquer outra música o tira).
+  let tema = null;
+  const TEMA_VOL = 0.5;
+  function temaFesta(on) {
+    if (!on) {
+      if (!tema) return;
+      const a = tema; tema = null; clearInterval(a.rampa);
+      a.rampa = setInterval(() => { if (a.volume <= 0.05) { clearInterval(a.rampa); a.pause(); } else a.volume = Math.max(0, a.volume - 0.05); }, 60);
+      return;
+    }
+    temaFesta(false);
+    const a = tema = new Audio('/sons/cavalos/rei-do-gado.mp3');
+    a.muted = mudo; a.volume = 0; a.play().catch(() => {});
+    a.rampa = setInterval(() => { a.volume = Math.min(TEMA_VOL, a.volume + 0.03); if (a.volume >= TEMA_VOL) clearInterval(a.rampa); }, 80);
+  }
   /** Troca a música de fundo, com uma passagem curta. `null` = silêncio. */
   function musica(nome) {
+    temaFesta(false);
     desejada = nome; if (!ac) return;
     if (faixa && faixa.nome === nome) return;
     if (faixa) { const g = faixa.g; g.gain.cancelScheduledValues(ac.currentTime); g.gain.setTargetAtTime(0, ac.currentTime, 0.2); setTimeout(() => g.disconnect(), 1800); faixa = null; }
@@ -1426,8 +1669,8 @@ const Som = (() => {
     faixa = { nome, g, n: 0, prox: ac.currentTime + 0.06 };
   }
   return {
-    init, musica,
-    alternar() { mudo = !mudo; if (mestre) mestre.gain.value = mudo ? 0 : 0.55; return mudo; },
+    init, musica, tema: temaFesta,
+    alternar() { mudo = !mudo; if (mestre) mestre.gain.value = mudo ? 0 : 0.55; if (tema) tema.muted = mudo; return mudo; },
     trompete() { if (!ok()) return; let t = ac.currentTime + 0.05; for (const [f, d] of [[392, .16], [523.25, .16], [659.25, .16], [783.99, .32], [0, .08], [659.25, .16], [783.99, .62]]) { if (f) { nota(f, t, d * 0.95, 'square', 0.055); nota(f * 2, t, d * 0.9, 'triangle', 0.025); } t += d; } },
     sino() { if (!ok()) return; const t = ac.currentTime; for (let i = 0; i < 7; i++) { nota(1568, t + i * 0.085, 0.14, 'square', 0.03); nota(2093, t + i * 0.085, 0.12, 'sine', 0.05); } },
     tique(alto) { if (!ok()) return; nota(alto ? 988 : 659, ac.currentTime, 0.12, 'square', 0.07); },
@@ -1440,20 +1683,48 @@ const Som = (() => {
     chegou() { if (!ok()) return; const t = ac.currentTime; nota(523.25, t, 0.08, 'triangle', 0.035); nota(783.99, t + 0.07, 0.12, 'triangle', 0.03); },
   };
 })();
-const Confete = (() => {
-  const c = $('#confete'), x = c.getContext('2d'); let ps = [], ate = 0, vivo = false, ult = 0;
-  const CORES = ['#ffd24a', '#ff5a5a', '#5ad1ff', '#7dff8a', '#ff86d0', '#ffffff', '#b98aff'];
+/*
+ * A festa sem confete (pedido do Cleber, 22/10/2026): chuva de pétalas de rosa, como no Derby, onde o campeão
+ * ganha a manta de rosas (ela vai no pescoço do cavalo, em `animarFesta`). As pétalas caem balançando e
+ * girando, uma ou outra folha no meio, e uns brilhos dourados piscam no ar.
+ */
+const Petalas = (() => {
+  const c = $('#confete'), x = c.getContext('2d'); let ps = [], brilhos = [], ate = 0, vivo = false, ult = 0;
+  const ROSAS = [['#b5122b', '#d8334a'], ['#d0213a', '#f05a6c'], ['#9a0c22', '#c42a40'], ['#e3384c', '#ff7a8a']], FOLHA = ['#3f8a45', '#63b055'];
+  function petala(p) {
+    const w = Math.max(1.5, Math.abs(Math.cos(p.giro)) * p.s), h = p.s * 0.62;
+    x.save(); x.translate(p.x, p.y); x.rotate(p.r);
+    x.fillStyle = p.c[0]; x.beginPath(); x.ellipse(0, 0, w / 2, h / 2, 0, 0, T2); x.fill();
+    x.fillStyle = p.c[1]; x.beginPath(); x.ellipse(-w * 0.12, -h * 0.14, w * 0.26, h * 0.24, 0, 0, T2); x.fill();
+    x.restore();
+  }
+  function brilho(b, k) {
+    const a = Math.sin(Math.PI * k), r = b.s * (0.4 + 0.6 * a);
+    x.globalAlpha = a; x.fillStyle = '#ffe58a';
+    x.beginPath(); x.moveTo(b.x, b.y - r); x.lineTo(b.x + r * 0.22, b.y - r * 0.22); x.lineTo(b.x + r, b.y); x.lineTo(b.x + r * 0.22, b.y + r * 0.22);
+    x.lineTo(b.x, b.y + r); x.lineTo(b.x - r * 0.22, b.y + r * 0.22); x.lineTo(b.x - r, b.y); x.lineTo(b.x - r * 0.22, b.y - r * 0.22); x.fill();
+    x.globalAlpha = 1;
+  }
   function passo(now) {
-    if (!vivo) return; const dt = Math.min(0.05, (now - (ult || now)) / 1000); ult = now;
-    if (now < ate) for (let i = 0; i < 4; i++) ps.push({ x: Math.random() * c.width, y: -12, vx: (Math.random() - 0.5) * 70, vy: 70 + Math.random() * 90, r: Math.random() * T2, vr: (Math.random() - 0.5) * 9, s: 6 + Math.random() * 6, c: CORES[Math.floor(Math.random() * CORES.length)] });
+    if (!vivo) return; const dt = Math.min(0.05, (now - (ult || now)) / 1000), t = now / 1000; ult = now;
+    if (now < ate) {
+      for (let i = 0; i < 2; i++) {
+        const folha = Math.random() < 0.06;
+        ps.push({ x: Math.random() * c.width, y: -14, vy: 42 + Math.random() * 45, sw: 18 + Math.random() * 26, fase: Math.random() * T2, r: Math.random() * T2, vr: (Math.random() - 0.5) * 2.4,
+          giro: Math.random() * T2, vg: 2 + Math.random() * 4, s: (folha ? 11 : 12) + Math.random() * 7, c: folha ? FOLHA : ROSAS[Math.floor(Math.random() * ROSAS.length)] });
+      }
+      if (Math.random() < 0.12) brilhos.push({ x: Math.random() * c.width, y: Math.random() * c.height * 0.8, s: 5 + Math.random() * 7, t0: t, vida: 0.7 + Math.random() * 0.6 });
+    }
     x.clearRect(0, 0, c.width, c.height);
-    for (const p of ps) { p.x += p.vx * dt + Math.sin(now / 300 + p.r) * 0.6; p.y += p.vy * dt; p.r += p.vr * dt; const w = Math.abs(Math.cos(p.r)) * p.s; x.fillStyle = p.c; x.fillRect(Math.round(p.x - w / 2), Math.round(p.y), Math.max(2, Math.round(w)), Math.round(p.s * 0.6)); }
+    for (const p of ps) { p.y += p.vy * dt; p.x += Math.cos(t * 1.6 + p.fase) * p.sw * dt; p.r += p.vr * dt; p.giro += p.vg * dt; petala(p); }
+    brilhos = brilhos.filter(b => t - b.t0 < b.vida);
+    for (const b of brilhos) brilho(b, (t - b.t0) / b.vida);
     ps = ps.filter(p => p.y < c.height + 20);
-    if (ps.length || now < ate) requestAnimationFrame(passo); else vivo = false;
+    if (ps.length || brilhos.length || now < ate) requestAnimationFrame(passo); else vivo = false;
   }
   return {
-    start(ms = 6500) { c.width = $('#area').clientWidth; c.height = $('#area').clientHeight; ate = performance.now() + ms; ps = []; if (!vivo) { vivo = true; ult = 0; requestAnimationFrame(passo); } },
-    parar() { vivo = false; ps = []; x.clearRect(0, 0, c.width, c.height); },
+    start(ms = 9000) { c.width = $('#area').clientWidth; c.height = $('#area').clientHeight; ate = performance.now() + ms; ps = []; brilhos = []; if (!vivo) { vivo = true; ult = 0; requestAnimationFrame(passo); } },
+    parar() { vivo = false; ps = []; brilhos = []; x.clearRect(0, 0, c.width, c.height); },
   };
 })();
 
@@ -1897,6 +2168,159 @@ function criarSeletor(raiz, rotulo) {
   };
 }
 
+/* =====================================================================
+   Card de divulgação — o mesmo aviso da Corrida da Sorte («fica esperto, vem
+   aí uma corrida com prêmio»), no tema do hipódromo: no alto, os cavalos do
+   jogo galopando e pulando o obstáculo. O super admin escolhe quem recebe; a
+   pessoa fecha e, no sistema, fica anotado no banco (não volta em outro
+   computador). No lab, «você» recebe todo card que está no ar.
+   ===================================================================== */
+const DIV_PADRAO = {
+  titulo: 'Vem aí a Corrida de Cavalos!',
+  mensagem: 'Fica de olho: logo mais tem corrida de cavalos valendo prêmio, com obstáculo no caminho e chegada de focinho. Se o seu nome for chamado, você escolhe o seu cavalo na própria tela. Boa sorte!',
+};
+const DIV = { lista: [], sel: null, aoFechar: null, raf: 0, ult: 0, cena: null };
+// A cena do alto: 200 × 78 px de pixel art. O obstáculo cruza a pista em diagonal, como na corrida.
+const DV = { W: 200, H: 78, FX: 112, GY: 61, V: 82, P: 350, GEO: { k: 16, y0: 47, y1: 76 } };
+DV.XC = DV.FX + DV.GEO.k * (2 * (DV.GY - DV.GEO.y0) / (DV.GEO.y1 - DV.GEO.y0) - 1);   // onde a raia cruza as varas
+
+function mostrarDivulgacao(d, aoFechar) {
+  $('#dvTit').textContent = d.titulo; $('#dvMsg').textContent = d.mensagem;
+  $('#dvPremio').textContent = d.premio || ''; $('#dvBilhete').classList.toggle('oculto', !d.premio);
+  DIV.aoFechar = aoFechar ?? null;
+  const el = $('#divulga'), card = el.querySelector('.dv-card');
+  el.classList.remove('oculto'); card.style.animation = 'none'; void card.offsetWidth; card.style.animation = '';
+  cancelAnimationFrame(DIV.raf); DIV.ult = 0; DIV.raf = requestAnimationFrame(quadroDivulgacao);
+  $('#dvOk').focus();
+}
+function fecharDivulgacao() {
+  if ($('#divulga').classList.contains('oculto')) return;
+  $('#divulga').classList.add('oculto'); cancelAnimationFrame(DIV.raf);
+  const f = DIV.aoFechar; DIV.aoFechar = null; f?.();
+}
+/** O fundo da cena (céu, arquibancada, pista, o poste da chegada), montado uma vez. */
+function cenaDivulgacao() {
+  if (DIV.cena) return DIV.cena;
+  const { W: w, H: h } = DV, r = rng(0xc0ffee), [f, x] = tela(w, h);
+  const ceu = ['#4f9fe0', '#64abe6', '#7db9eb', '#9ac9ef', '#bcdaf0', '#e3e6d8', '#ffe2b0'];
+  for (let y = 0; y < 46; y++) R(x, ceu[Math.min(ceu.length - 1, Math.floor(y / 46 * ceu.length))], 0, y, w, 1);
+  bola(x, '#fff1b0', 168, 19, 10); bola(x, '#fff6cc', 168, 19, 8); bola(x, '#fffbe6', 168, 19, 5);
+  for (let X = 0; X < w; X++) {
+    const a = Math.round(31 + Math.sin(X / 23) * 3 + Math.sin(X / 9 + 1) * 1.2); R(x, '#9fd08a', X, a, 1, 46 - a);
+    const b = Math.round(37 + Math.sin(X / 17 + 2) * 2); R(x, '#78b866', X, b, 1, 46 - b);
+  }
+  for (let i = 0; i < 9; i++) { const tx = 6 + i * 23 + Math.floor(r() * 8), rr = 4 + Math.floor(r() * 3); bola(x, '#3f8a45', tx, 39 - rr, rr); bola(x, '#4f9f52', tx - 1, 38 - rr, rr - 1); }
+  // a arquibancada: o telhado listrado, a parede e a torcida
+  const AX = 126;
+  for (let X = 0; X < AX; X += 4) R(x, (X / 4) % 2 ? '#f4efe6' : '#d94a3a', X, 26, 4, 4);
+  R(x, '#a8322a', 0, 30, AX, 1); R(x, '#ece4d4', 0, 31, AX, 14); R(x, '#c8bca6', 0, 31, AX, 1);
+  for (const y of [33, 37, 41]) {
+    R(x, '#9aa3ad', 0, y + 3, AX, 1);
+    for (let X = 2; X < AX - 2; X += 3) if (hash(X, y) > 0.12) { R(x, GENTE[Math.floor(hash(X, y + 7) * GENTE.length)], X, y + 1, 2, 2); R(x, PELE[Math.floor(hash(X, y + 9) * PELE.length)], X, y, 2, 1); }
+  }
+  for (let X = 0; X <= AX; X += 31) R(x, '#f4efe6', X, 30, 1, 15);
+  // o trilho do fundo, a terra, o trilho da frente e a grama
+  R(x, '#ffffff', 0, 45, w, 1); for (let X = 2; X < w; X += 8) R(x, '#ffffff', X, 45, 1, 3); R(x, '#00000022', 0, 46, w, 1);
+  for (let y = 47; y < 69; y++) R(x, y < 49 ? '#b98a58' : '#c99862', 0, y, w, 1);
+  for (let i = 0; i < 260; i++) R(x, hash(i, 5) < 0.5 ? '#b07e52' : '#d8aa7a', Math.floor(hash(i, 3) * w), 48 + Math.floor(hash(i, 4) * 21), 1, 1);
+  R(x, '#4f9b43', 0, 69, w, h - 69);
+  for (let i = 0; i < 120; i++) R(x, hash(i, 8) < 0.5 ? '#63b055' : '#3f8637', Math.floor(hash(i, 9) * w), 71 + Math.floor(hash(i, 10) * 7), 1, 1);
+  R(x, '#ffffff', 0, 68, w, 2); R(x, '#cfd6dc', 0, 69, w, 1); for (let X = 4; X < w; X += 12) R(x, '#ffffff', X, 68, 1, 6);
+  // o poste da chegada, com o disco xadrez
+  const cx = 172; R(x, '#1c1c1c', cx - 1, 24, 4, 45); for (let y = 25; y < 68; y += 3) R(x, (y / 3 | 0) % 2 ? '#ffffff' : '#d93a3a', cx, y, 2, 3);
+  for (let y = -5; y <= 5; y++) for (let X = -5; X <= 5; X++) { const d = X * X + y * y; if (d > 25) continue; R(x, d > 17 ? '#d93a3a' : (((X + 6) >> 1) + ((y + 6) >> 1)) % 2 ? '#111111' : '#ffffff', cx + 1 + X, 19 + y, 1, 1); }
+  DIV.cena = { fundo: f, cavalos: criarCavalos(rng(2210), 3), nuvens: [nuvem(r, ['#ffffff', '#dcecf8']), nuvem(r, ['#ffffff', '#e6f0f8'])], poeira: [] };
+  return DIV.cena;
+}
+/** Um quadro da cena: três cavalos do jogo em fila, galopando e pulando o obstáculo (30 quadros/s bastam). */
+function quadroDivulgacao(ms) {
+  DIV.raf = requestAnimationFrame(quadroDivulgacao);
+  if (ms - DIV.ult < 30) return;
+  const dt = DIV.ult ? Math.min(0.1, (ms - DIV.ult) / 1000) : 0; DIV.ult = ms;
+  const c = $('#dvCena').getContext('2d'), S = cenaDivulgacao(), t = ms / 1000, { FX, GY, V, P, GEO, XC } = DV;
+  c.imageSmoothingEnabled = false;
+  c.drawImage(S.fundo, 0, 0);
+  S.nuvens.forEach((n, i) => { const per = DV.W + 80; c.drawImage(n, Math.round(((i * 120 + t * (3 + i * 2)) % per) - 70), 2 + i * 8); });
+  // as bandeirinhas, balançando no vento
+  for (let X = 0; X < DV.W; X++) R(c, '#6b5a48', X, Math.round(3 + 4 * Math.sin(Math.PI * X / DV.W)), 1, 1);
+  for (let i = 0, X = 3; X < DV.W - 4; X += 9, i++) {
+    const y = Math.round(4 + 4 * Math.sin(Math.PI * (X + 2) / DV.W)), cor = ['#c8322b', '#ffd24a', '#f6f2e8', '#2f62d6', '#2e9e52'][i % 5], b = Math.round(Math.sin(t * 5 + i * 1.3));
+    for (let j = 0; j < 5; j++) R(c, cor, X + (j >> 1) + (j > 2 ? b : 0), y + j, 5 - 2 * (j >> 1), 1);
+  }
+  // o obstáculo: a asa do fundo e as varas atrás da raia
+  asa(c, FX - GEO.k, GEO.y0); varas(c, FX, GEO.y0 - 1, GY - 1, false, GEO);
+  for (let k = 0; k < S.cavalos.length; k++) {
+    const q = quadros(S.cavalos[k]), d = t * V + k * P / 3, x = (d % P) - 50, dx = x - XC, sx = Math.round(x - 43);
+    if (dx > SALTO0 && dx < SALTO1) {
+      // o mesmo salto da corrida: quadro girado, arco, casco nunca abaixo do chão, sombra que encolhe
+      const s = (dx - SALTO0) / (SALTO1 - SALTO0), im = q.s[Math.round(s * (SALTO_Q - 1))], alt = SALTO_ALT * Math.sin(Math.PI * s);
+      let y = GY - 32 - SM - alt; const chao = GY - 32 + q.s.chao; if (y + im.baixo > chao) y = chao - im.baixo;
+      const enc = Math.round(alt * 0.6); R(c, 'rgba(40,20,0,.22)', sx + 9 + (enc >> 1), GY - 1, 28 - enc, 3);
+      c.drawImage(im, sx - PAD - SM, Math.round(y));
+      if (dt && s > 0.86) for (let j = 0; j < 2; j++) S.poeira.push({ x: x - 12 + Math.random() * 8, y: GY - 1, vx: -30 + Math.random() * 50, vy: -14 - Math.random() * 14, v: 0, max: 0.4 + Math.random() * 0.4 });
+    } else {
+      R(c, 'rgba(40,20,0,.22)', sx + 9, GY - 1, 28, 3);
+      c.drawImage(q.g[Math.floor(d / STRIDE * 8) % 8], sx - PAD, GY - 32);
+      if (dt && Math.random() < 0.5) S.poeira.push({ x: x - 32 + Math.random() * 6, y: GY - 1, vx: -10 - Math.random() * 25, vy: -6 - Math.random() * 10, v: 0, max: 0.35 + Math.random() * 0.35 });
+    }
+  }
+  for (const p of S.poeira) { p.v += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 22 * dt; }
+  S.poeira = S.poeira.filter(p => p.v < p.max).slice(-120);
+  c.fillStyle = '#e2c398';
+  for (const p of S.poeira) { c.globalAlpha = 0.75 * (1 - p.v / p.max); c.fillRect(Math.round(p.x), Math.round(p.y), p.v < p.max * 0.5 ? 2 : 1, p.v < p.max * 0.5 ? 2 : 1); }
+  c.globalAlpha = 1;
+  // as varas na frente da raia e a asa da frente, na grama
+  varas(c, FX, GY - 1, GEO.y1, false, GEO); asa(c, FX + GEO.k, GEO.y1);
+}
+/** A caixa do card na montagem: escrever, ver como fica, escolher quem recebe, mandar e acompanhar. */
+function prepararDivulgacao() {
+  DIV.sel = criarSeletor($('#dvAlvos'), n => (n === 1 ? 'pessoa recebe o card' : 'pessoas recebem o card'));
+  const ler = () => ({ titulo: $('#dvFTit').value.trim(), mensagem: $('#dvFMsg').value.trim(), premio: $('#dvFPremio').value.trim() });
+  const contar = () => {
+    const n = DIV.sel.marcados.size, d = ler(), bt = $('#dvMandar');
+    bt.disabled = !n || !d.titulo || !d.mensagem;
+    bt.textContent = !d.titulo || !d.mensagem ? 'Escreva o título e a mensagem' : n ? `📣 Mandar para ${n}` : 'Marque quem recebe';
+  };
+  $('#dvAlvos').addEventListener('mudou', contar);
+  for (const id of ['#dvFTit', '#dvFMsg']) $(id).addEventListener('input', contar);
+  $('#dvAbrir').addEventListener('click', () => {
+    $('#dvFTit').value = DIV_PADRAO.titulo; $('#dvFMsg').value = DIV_PADRAO.mensagem; $('#dvFPremio').value = $('#mtPremio').value.trim();
+    DIV.sel.manter([]); $('#dvForm').classList.remove('oculto'); $('#dvAbrir').classList.add('oculto'); contar();
+  });
+  $('#dvVoltar').addEventListener('click', () => { $('#dvForm').classList.add('oculto'); $('#dvAbrir').classList.remove('oculto'); });
+  $('#dvPrevia').addEventListener('click', () => mostrarDivulgacao(ler()));
+  $('#dvMandar').addEventListener('click', () => {
+    const d = { id: Date.now(), ...ler(), alvos: DIV.sel.marcados.size, fecharam: 0, expira: Date.now() + +$('#dvFDias').value * 864e5 };
+    if (!d.alvos || !d.titulo || !d.mensagem) return;
+    DIV.lista.unshift(d); $('#dvVoltar').click(); desenharListaDiv();
+    aviso(`Card mandado para ${d.alvos} ${d.alvos === 1 ? 'pessoa' : 'pessoas'}. No lab: troque a visão para operador e ele aparece.`);
+    // no lab, o pessoal vai fechando sozinho aos poucos (no sistema, a conta vem do banco)
+    d.timer = setInterval(() => {
+      if (d.expira <= Date.now() || d.fecharam >= d.alvos) { clearInterval(d.timer); return; }
+      if (Math.random() < 0.5) { d.fecharam++; desenharListaDiv(); }
+    }, 1500);
+  });
+  $('#dvLista').addEventListener('click', e => {
+    const id = +e.target.closest('button')?.dataset.tira, d = DIV.lista.find(x => x.id === id); if (!d) return;
+    d.expira = Date.now(); clearInterval(d.timer); desenharListaDiv(); aviso('Card tirado do ar.');
+  });
+  $('#dvX').addEventListener('click', fecharDivulgacao); $('#dvOk').addEventListener('click', fecharDivulgacao);
+  contar();
+}
+function desenharListaDiv() {
+  const ul = $('#dvLista'); ul.classList.toggle('oculto', !DIV.lista.length);
+  ul.innerHTML = DIV.lista.map(d => {
+    const noAr = d.expira > Date.now(), dias = Math.ceil((d.expira - Date.now()) / 864e5);
+    return `<li><span class="t">${esc(d.titulo)}</span><span class="n">${d.fecharam}/${d.alvos} viram</span>`
+      + (noAr ? `<span class="n">no ar · ${dias} ${dias === 1 ? 'dia' : 'dias'}</span><button type="button" class="mt-link" data-tira="${d.id}">Tirar do ar</button>` : '<span class="n">fora do ar</span>') + '</li>';
+  }).join('');
+}
+/** O card no ar que você ainda não fechou: aparece quando você entra como operador. */
+function chegouDivulgacao() {
+  const d = DIV.lista.find(x => x.expira > Date.now() && !x.voceFechou); if (!d) return;
+  mostrarDivulgacao(d, () => { d.voceFechou = true; if (d.fecharam < d.alvos) d.fecharam++; desenharListaDiv(); });
+}
+
 /* ── Montagem (só o super admin) ── */
 const PREMIOS = ['R$ 30', 'R$ 50', 'Uma folga', 'Vale-lanche'];
 const MT = { avulsos: [], corre: null, assiste: null };
@@ -1916,7 +2340,7 @@ function prepararMontagem() {
   $('#mtAvulsos').addEventListener('click', e => { const i = e.target.closest('button')?.dataset.i; if (i !== undefined) { MT.avulsos.splice(+i, 1); desenharAvulsos(); } });
   $('#mtCriar').addEventListener('click', criarDaMontagem);
   $('#mtSortear').addEventListener('click', sortearCorredores);
-  desenharAvulsos();
+  desenharAvulsos(); prepararDivulgacao();
 }
 function desenharAvulsos() {
   $('#mtAvulsos').innerHTML = MT.avulsos.length ? MT.avulsos.map((a, i) => `<button type="button" data-i="${i}" title="Tirar ${esc(a.nome)}">👤 ${esc(a.nome)} <small>· ${esc(a.setor)}</small> ×</button>`).join('') : '<small>Ninguém sem perfil ainda.</small>';
@@ -1947,7 +2371,7 @@ function sortearCorredores() {
 }
 /** Volta para a montagem: o paddock e a janela somem até a próxima corrida. */
 function abrirMontagem() {
-  G = null; fase = 'montagem'; Confete.parar(); Som.musica(null);
+  G = null; fase = 'montagem'; Petalas.parar(); Som.musica(null);
   JAN.aberta = false; tamanho(false); esconderDica(false);
   for (const id of ['#janela', '#voltar', '#escolha', '#convite', '#modal']) $(id).classList.add('oculto');
   document.body.append($('#org')); $('#org').classList.add('oculto');
@@ -1979,12 +2403,12 @@ function configDoLab() {
 /** Troca de visão ou «novo lobby» no lab: o super admin começa na montagem. */
 function reiniciar() {
   document.body.classList.toggle('adm', ADM());
-  if (ADM()) abrirMontagem(); else { $('#montagem').classList.add('oculto'); novaCorrida(); }
+  if (ADM()) abrirMontagem(); else { $('#montagem').classList.add('oculto'); novaCorrida(); chegouDivulgacao(); }
 }
 
 function novaCorrida(cfg = configDoLab()) {
   QUAL.econ = false; QUAL.media = 16; QUAL.ruim = 0;
-  Confete.parar(); Som.musica('lobby');
+  Petalas.parar(); Som.musica('lobby');
   JAN.aberta = false; JAN.dicaFechada = false; tamanho(false); esconderDica(false);
   $('#janela').classList.add('oculto'); $('#voltar').classList.add('oculto');
   document.body.append($('#org'));
@@ -2088,7 +2512,7 @@ async function confirmar() {
   setTimeout(() => { if (g === G && fase === 'escolha') entrarNoPaddock(); }, 650);
 }
 function atribuir(b, cav) {
-  b.cav = cav; cav.dono = { nome: b.nome, bot: true };
+  b.cav = cav; cav.dono = { nome: b.nome, foto: b.foto ?? null, bot: true };
   feed(`<b>${esc(curto(b.nome))}</b> escolheu o <b>#${cav.num}</b>`, cav);
   if (modalCav === cav) modalOcupado();
   criarPessoa({ nome: b.nome, tipo: 'corre', cav, foto: b.foto ?? false });
@@ -2211,7 +2635,8 @@ let avisoT = 0;
 function aviso(txt) { const t = $('#toast'); t.textContent = txt; t.classList.remove('on'); void t.offsetWidth; t.classList.add('on'); clearTimeout(avisoT); avisoT = setTimeout(() => t.classList.remove('on'), 2600); }
 
 function tickLobby() {
-  if (!G || !emPasto()) return;
+  if (!G) return;
+  if (!emPasto()) { chegarAtrasado(); return; }
   const agora = (performance.now() - G.abre) / 1000; let mudou = false;
   for (const b of G.bots) if (!b.cav && agora >= b.quando) { const livres = G.cavalos.filter(c => !c.dono); if (!livres.length) break; atribuir(b, livres[Math.floor(Math.random() * livres.length)]); mudou = true; }
   for (const b of G.torcida) if (!b.chegou && agora >= b.quando) {
@@ -2238,13 +2663,16 @@ function preparar() {
   if (!JAN.aberta) abrirJanela();
   const livres = embaralhar(G.cavalos.filter(c => !c.dono), Math.random);
   if (ST.modo === 'corre' && !G.voce.cavalo) { const c = livres.pop(); c.dono = { nome: 'Você', voce: true, sorteado: true }; G.voce.cavalo = c; aviso(`O organizador preparou a corrida: você ficou com o #${c.num} (sorteado).`); }
-  for (const b of G.bots) if (!b.cav) { const c = livres.pop(); if (!c) break; b.cav = c; c.dono = { nome: b.nome, bot: true, sorteado: true }; }
+  for (const b of G.bots) if (!b.cav) { const c = livres.pop(); if (!c) break; b.cav = c; c.dono = { nome: b.nome, foto: b.foto ?? null, bot: true, sorteado: true }; }
   sentarTorcida();
   fase = 'gravando'; Som.musica(null); faixa(ADM() ? 'GRAVANDO A CORRIDA…' : 'O ORGANIZADOR ESTÁ PREPARANDO A LARGADA');
   atualizarOrg(); ajustar();
   setTimeout(() => {
     if (g !== G) return;
     const t0 = performance.now(); G.rec = gravar(); G.msSim = performance.now() - t0; infoLab();
+    // Os quadros do salto saem agora, com a tela parada: no primeiro obstáculo todos pulariam juntos.
+    if (G.rec.barreiras) for (const c of G.cavalos) quadros(c).s;
+    for (const c of G.cavalos) { const q = quadros(c); q.g; q.e1; q.e2; q.e3; }   // e o galope da reta final
     fase = 'preparada'; Som.trompete(); faixa('CAVALOS POSICIONADOS · AGUARDANDO A LARGADA'); atualizarOrg();
   }, 1100);
 }
@@ -2263,24 +2691,46 @@ function sentarTorcida() {
   G.assentos = []; G.gritos = [];
   G.corDestaque = getComputedStyle(document.documentElement).getPropertyValue('--acc').trim() || '#ffd24a';  // lida uma vez, não por quadro
   const quem = G.torcida.filter(b => b.chegou).slice(0, MAX_ARQ).map(b => ({ nome: b.nome, foto: b.foto }));
-  const fim = Math.round((L - 300) * 0.55) + W - 12, linhas = MAPA.praia ? FILEIRA_PRAIA : FILEIRAS;
+  if (ST.modo === 'assiste' && G.eu) quem.unshift({ nome: 'Você', foto: G.eu.foto, voce: true });
+  // O bloco de quem assiste se repete a cada G.arqP px de arquibancada (uma tela, ou mais se não couber):
+  // assim todo mundo aparece o tempo todo, e não uma pessoa a cada tantas telas (pedido do Cleber, 22/10/2026).
+  // O tamanho conta TODO convidado, e não só quem já chegou: quem chega atrasado ainda tem lugar (`chegarAtrasado`).
+  const linhas = MAPA.praia ? FILEIRA_PRAIA : FILEIRAS, cabe = (W / ASSENTO) * linhas.length;
+  G.arqP = W * Math.max(1, Math.ceil(Math.min(MAX_ARQ, G.torcida.length + 1) / cabe));
   const lugares = [];
-  for (let xw = 1 + ASSENTO * 3; xw < fim; xw += ASSENTO) for (const py of linhas) lugares.push({ xw, py });
+  for (let xw = 1; xw < G.arqP; xw += ASSENTO) for (const py of linhas) lugares.push({ xw, py });
   embaralhar(lugares, Math.random);
-  // Você senta logo no começo da reta: aparece na largada.
-  if (ST.modo === 'assiste' && G.eu) {
-    const i = lugares.findIndex(l => l.xw > 90 && l.xw < 300);
+  // Você senta no meio da tela e se repete a cada tela, mesmo quando o bloco é maior: o mesmo lugar fica
+  // guardado nas outras telas, para ninguém sentar em cima.
+  if (quem[0]?.voce) {
+    const i = lugares.findIndex(l => l.xw > 140 && l.xw < 260);
     const [l] = lugares.splice(i < 0 ? 0 : i, 1);
-    lugares.unshift(l); quem.unshift({ nome: 'Você', foto: G.eu.foto, voce: true });
+    for (let j = lugares.length - 1; j >= 0; j--) if (lugares[j].py === l.py && lugares[j].xw % W === l.xw % W) lugares.splice(j, 1);
+    lugares.unshift({ ...l, P: W });
   }
-  const gente = MAPA.arq?.gente ?? GENTE, peles = MAPA.arq?.pele ?? PELE;
-  quem.forEach((q, i) => {
-    const l = lugares[i]; if (!l) return;
-    let img = null; if (q.foto) { img = new Image(); img.src = q.foto; }
-    const cor = gente[Math.floor(Math.random() * gente.length)];
-    G.assentos.push({ ...l, ...q, img, cor, claro: tom(cor, 1.18), escuro: tom(cor, 0.8), pele: peles[Math.floor(Math.random() * peles.length)], fase: Math.random() * T2, vis: false, bmp: null, bmpD: 0,
-      ini: q.nome.split(/\s+/).map(s => s[0]).slice(0, 2).join('').toUpperCase() });
-  });
+  G.arqLivres = lugares;
+  for (const q of quem) sentar(q);
+}
+/** Põe alguém no próximo lugar livre da arquibancada, com a foto (ou as iniciais). */
+function sentar(q) {
+  const l = G.arqLivres?.shift(); if (!l) return;
+  const gente = MAPA.arq?.gente ?? GENTE, peles = MAPA.arq?.pele ?? PELE, cor = gente[Math.floor(Math.random() * gente.length)];
+  let img = null; if (q.foto) { img = new Image(); img.src = q.foto; }
+  G.assentos.push({ ...l, ...q, img, cor, claro: tom(cor, 1.18), escuro: tom(cor, 0.8), pele: peles[Math.floor(Math.random() * peles.length)], fase: Math.random() * T2, vis: false, copias: [], bmp: null, bmpD: 0,
+    ini: q.nome.split(/\s+/).map(s => s[0]).slice(0, 2).join('').toUpperCase() });
+}
+/**
+ * Quem chega depois do PREPARAR (o paddock já fechou) entra atrasado e senta na arquibancada na hora, com a
+ * foto — mesmo com a corrida rolando. Antes ficava sem lugar: se o organizador preparava cedo, a corrida
+ * largava com a arquibancada quase sem foto nenhuma.
+ */
+function chegarAtrasado() {
+  if (!G.assentos) return;
+  const agora = (performance.now() - G.abre) / 1000;
+  for (const b of G.torcida) if (!b.chegou && agora >= b.quando) {
+    b.chegou = true; b.cav = null;   // chegou com a largada dada: assiste, mas não aposta mais
+    if (G.assentos.length < MAX_ARQ + 1) sentar({ nome: b.nome, foto: b.foto });
+  }
 }
 /** A foto (ou as iniciais) recortada em círculo, feita uma vez por tamanho. */
 function bolinha(s, d, acc) {
@@ -2332,12 +2782,14 @@ function desenharTorcida(zoom, zx, wall) {
   const dentro = (px, py) => px > -d && px < cv2.width + d && py > -d && py < cv2.height + d;
   for (const s of G.assentos) {
     if (!s.vis) continue;
-    const [px, py] = pos(s); if (!dentro(px, py)) continue;
     const b = bolinha(s, d, acc); if (!b) continue;
-    x.drawImage(b, Math.round(px - d / 2), Math.round(py - d / 2)); torcidaSuja = true;
-    if (s.voce) {
-      const fs = Math.round(Math.max(9, ESCALA * 3) * dpr), et = etiquetaVoce(fs, acc);
-      x.drawImage(et, Math.round(px - et.width / 2), Math.round(py - d / 2 - fs * 1.4));
+    for (const cx of s.copias) {
+      const [px, py] = pos({ cx, cy: s.cy }); if (!dentro(px, py)) continue;
+      x.drawImage(b, Math.round(px - d / 2), Math.round(py - d / 2)); torcidaSuja = true;
+      if (s.voce) {
+        const fs = Math.round(Math.max(9, ESCALA * 3) * dpr), et = etiquetaVoce(fs, acc);
+        x.drawImage(et, Math.round(px - et.width / 2), Math.round(py - d / 2 - fs * 1.4));
+      }
     }
   }
   // os gritos: sobem e somem em 1,8 s, presos ao lugar de quem gritou
@@ -2402,7 +2854,10 @@ function iniciarFesta() {
   fase = 'festa'; $('#palco').classList.remove('replay'); $('#foto').classList.remove('on'); $('#posicoes').innerHTML = ''; $('#meuLugar').innerHTML = '';
   const rec = G.rec, cvs = G.cavalos, v = cvs[rec.vencedor], nome = c => c.dono.voce ? 'Você' : c.dono.nome;
   $('#feNum').textContent = `#${v.num} · ${v.pel.nome}`; $('#feNome').textContent = nome(v); $('#fePremio').textContent = `Prêmio: ${G.premio}`;
-  $('#fePodio').innerHTML = [1, 2].map(k => { const c = cvs[rec.ordem[k]]; return `<div><canvas width="75" height="51" data-i="${c.i}"></canvas><span><b>${k + 1}º #${c.num}</b>${curto(nome(c))}</span></div>`; }).join('');
+  // A foto de quem corre (a sua, se o cavalo é seu); sem foto, as iniciais.
+  const caraDe = (c, tam) => cara({ nome: nome(c), foto: (c.dono.voce ? G.eu?.foto : c.dono.foto) ?? null }, tam);
+  $('#feFoto').innerHTML = caraDe(v, 68);
+  $('#fePodio').innerHTML = [1, 2].map(k => { const c = cvs[rec.ordem[k]]; return `<div><canvas width="75" height="51" data-i="${c.i}"></canvas><span><b>${k + 1}º #${c.num}</b><em>${caraDe(c, 24)}${esc(curto(nome(c)))}</em></span></div>`; }).join('');
   $('#fePodio').querySelectorAll('canvas').forEach(c => { const x = c.getContext('2d'); x.imageSmoothingEnabled = false; x.drawImage(quadros(cvs[+c.dataset.i]).p[0], 0, 0, 75, 51); });
   const lugar = c => rec.ordem.indexOf(c.i) + 1, lista = apostas(), total = lista.reduce((n, a) => n + a.quem.length, 0);
   const quem = lista.find(a => a.cav === v)?.quem ?? [], acertei = G.voce.palpite === v;
@@ -2418,16 +2873,35 @@ function iniciarFesta() {
     + (acertei && !ADM() ? '<div class="ac-ok">Você acertou! 🎉</div>' : '')
     + (quem.length ? `<ul>${quem.slice(0, MAX).map(q => `<li class="${q.voce ? 'eu' : ''}">${cara(q, 22)}${esc(q.voce ? 'Você' : q.nome)}</li>`).join('')}</ul>${resto > 0 ? `<small>e mais ${resto}</small>` : ''}`
       : '<p>Ninguém apostou nele. Zebra! 🦓</p>');
-  $('#festa').classList.add('on'); Confete.start(); Som.musica(null); Som.fanfarra(); atualizarOrg();
-  // passada a fanfarra, volta a musiquinha calma
-  const g = G; setTimeout(() => { if (g === G && fase === 'festa') Som.musica('lobby'); }, 2600);
+  $('#festa').classList.add('on'); encaixarFesta(); Petalas.start(); Som.musica(null); Som.fanfarra(); atualizarOrg();
+  // passada a fanfarra, entra o tema da festa: O Rei do Gado
+  const g = G; setTimeout(() => { if (g === G && fase === 'festa') Som.tema(true); }, 1100);
 }
 function animarFesta(wall) {
   const c = $('#cvVenc'), x = c.getContext('2d'); x.imageSmoothingEnabled = false; x.clearRect(0, 0, 250, 185);
-  const v = G.cavalos[G.rec.vencedor], q = quadros(v).g[Math.floor(wall * 11) % 8];
+  const v = G.cavalos[G.rec.vencedor], q = comManta(v, Math.floor(wall * 11) % 8);
   x.fillStyle = 'rgba(0,0,0,.25)'; x.fillRect(60, 168, 150, 8);
   for (let k = 0; k < 7; k++) { const xx = Math.round(((k * 40 - wall * 220) % 280 + 280) % 280) - 20; x.fillStyle = '#ffffff40'; x.fillRect(xx, 180, 18, 3); }
   x.drawImage(q, 0, 0, 250, 170);
+}
+// A manta de rosas do campeão (como no Derby), na base do pescoço: da cernelha até o peito, em quadros do corpo.
+const MANTA = [[25.5, 8.5], [26.5, 11], [27.8, 13.5], [29.2, 15.8], [30.8, 17.8], [32.6, 19.2], [34.4, 19.6]];
+/** O quadro `k` do galope com a manta de rosas, feito uma vez por cavalo e quadro. */
+function comManta(cav, k) {
+  cav.manta ??= [];
+  if (cav.manta[k]) return cav.manta[k];
+  const [cv, x] = tela(SW, SH), by = Math.round(-Math.sin(T2 * k / 8) * 0.9);
+  x.drawImage(quadros(cav).g[k], 0, 0);
+  const ponto = u => { const f = u * (MANTA.length - 1), i = Math.min(MANTA.length - 2, Math.floor(f)), a = f - i; return [MANTA[i][0] + (MANTA[i + 1][0] - MANTA[i][0]) * a + PAD, MANTA[i][1] + (MANTA[i + 1][1] - MANTA[i][1]) * a + by]; };
+  // as folhas por baixo, um tiquinho para fora da linha, e o contorno escuro
+  for (let i = 0; i <= 14; i++) { const [px, py] = ponto(i / 14); R(x, CONTORNO, Math.round(px) - 1, Math.round(py) - 1, 4, 4); }
+  for (let i = 0; i <= 14; i++) { const [px, py] = ponto(i / 14); R(x, i % 2 ? '#2e7d32' : '#43a047', Math.round(px) + (i % 2 ? 1 : -1), Math.round(py) + (i % 2 ? 0 : 1), 2, 2); }
+  // as rosas: miolo escuro, pétala clara em cima
+  for (let i = 0; i <= 6; i++) {
+    const [px, py] = ponto(i / 6), X = Math.round(px), Y = Math.round(py);
+    R(x, '#c62835', X, Y, 2, 2); R(x, '#ff6b78', X, Y, 1, 1); R(x, '#7f0d1d', X + 1, Y + 1, 1, 1);
+  }
+  return (cav.manta[k] = cv);
 }
 function animarCards(wall) {
   for (const cd of cards) {
@@ -2600,7 +3074,7 @@ function laco(now) {
   if (fase === 'corrida') {
     t = (now - F.t0) / 1000; correndo = true; ab = clamp(t / 0.3, 0, 1);
     if (rec.barreiras) for (let i = 0; i < G.n; i++) rec.barreiras.forEach((bx, o) => {
-      if (!rec.bate[i][o] || (F.bateu ??= new Set()).has(i * 10 + o) || xAt(i, t) < bx) return;
+      if (!rec.bate[i][o] || (F.bateu ??= new Set()).has(i * 10 + o) || xAt(i, t) < bx + desvioRaia(i, G.n) + 12) return;   // a vara cai com o cavalo já em cima
       F.bateu.add(i * 10 + o); Som.batida(1.3);
       if (JAN.aberta) feed(`<b>#${G.cavalos[i].num}</b> bateu na barreira!`, G.cavalos[i]);
     });
@@ -2652,6 +3126,14 @@ function laco(now) {
  * na corrida, abre espaço à direita para o placar. Tela estreita (celular): o
  * placar entra por cima da pista, só com posição e número.
  */
+/** A festa inteira no palco, sem rolagem: o conteúdo encolhe o que precisar para caber (nunca aumenta). */
+function encaixarFesta() {
+  const f = $('#festa'), fe = f.querySelector('.fe');
+  if (!f.classList.contains('on')) return;
+  fe.style.zoom = '1';
+  const z = Math.min(1, (f.clientWidth - 12) / fe.offsetWidth, (f.clientHeight - 12) / fe.offsetHeight);
+  fe.style.zoom = String(Math.floor(z * 100) / 100);
+}
 function ajustar() {
   const area = $('#area'), aw = area.clientWidth, ah = area.clientHeight;
   if (!aw || !ah) return;
@@ -2666,6 +3148,7 @@ function ajustar() {
   const tc = $('#torcidaCv'), dpr = devicePixelRatio || 1, tw = Math.round(pw * dpr), th = Math.round(ph * ARQ_H / H * dpr);
   if (tc.width !== tw || tc.height !== th) { tc.width = tw; tc.height = th; torcidaSuja = false; }
   for (const q of G?.pessoas ?? []) q.k = 0;  // a escala mudou: a foto e o nome se reposicionam
+  encaixarFesta();
   if (!comLista) return;
   const mini = !lado, n = PLACAR.linhas.length || 10;
   placar.classList.toggle('mini', mini);
@@ -2703,7 +3186,7 @@ $('#palco').addEventListener('mousemove', ev => {
   miraT = ev.timeStamp; $('#palco').classList.toggle('mira', !!cavaloNoPonto(ev));
 });
 $('#feNova').addEventListener('click', () => (ADM() ? abrirMontagem() : novaCorrida()));
-$('#feReplay').addEventListener('click', () => { Confete.parar(); $('#festa').classList.remove('on'); iniciarReplay(); });
+$('#feReplay').addEventListener('click', () => { Petalas.parar(); Som.tema(false); $('#festa').classList.remove('on'); iniciarReplay(); });
 $('#som').addEventListener('click', () => {
   Som.init(); const mudo = Som.alternar(), b = $('#som');
   b.classList.toggle('desl', mudo); b.title = mudo ? 'Som desligado' : 'Som ligado'; b.setAttribute('aria-label', mudo ? 'Ligar o som' : 'Desligar o som');
@@ -2714,7 +3197,11 @@ $('#fechar').addEventListener('click', fecharJanela);
 $('#voltar').addEventListener('click', () => { Som.init(); if (emPasto()) entrarNoPaddock(); else abrirJanela(); });
 $('#balaoX').addEventListener('click', () => esconderDica(true));
 $('#lDica').addEventListener('click', () => { JAN.dicaFechada = false; tamanho(false); if (JAN.aberta) mostrarDica(); else abrirJanela(); });
-addEventListener('keydown', e => { if (e.key === 'Escape' && JAN.grande) tamanho(false, true); });
+addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if (!$('#divulga').classList.contains('oculto')) fecharDivulgacao(); else if (JAN.grande) tamanho(false, true);
+});
+$('#lDiv').addEventListener('click', () => mostrarDivulgacao({ ...DIV_PADRAO, premio: $('#mtPremio').value.trim() || 'R$ 30' }));
 $('#labTog').addEventListener('click', () => $('#lab').classList.toggle('on'));
 $('#lModo').addEventListener('change', e => { ST.modo = e.target.value; reiniciar(); });
 $('#lN').addEventListener('input', e => { $('#lNv').textContent = e.target.value; });
