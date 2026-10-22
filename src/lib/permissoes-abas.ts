@@ -406,7 +406,6 @@ const SECOES_CONFIG: Record<string, string> = {
 const SECOES_ANALITICO: Record<string, string> = {
   analitico_sub_analitico: 'Abas principais',
   analitico_sub_recebimento_diario: 'Abas principais',
-  analitico_sub_colchao: 'Abas principais',
   analitico_sub_ranking_quitacao: 'Abas principais',
   analitico_sub_desafios: 'Abas principais',
   analitico_sub_por_operador: 'Dentro do relatório Analítico',

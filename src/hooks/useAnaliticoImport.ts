@@ -28,10 +28,6 @@ import {
   type ResultadoImportacao,
 } from '@/services/analitico/analitico.service';
 import {
-  importarLoteColchao,
-  revincularOrfaosColchao,
-} from '@/services/analitico/colchao.service';
-import {
   assinaturaDe,
   buscarAssinatura,
   compararAssinatura,
@@ -61,9 +57,13 @@ export interface PreviewImport {
   operadoresNaoEncontrados: string[];
   errosParse:       string[];
   linhas:           LinhaRelatorio[];
-  /** Colchão fora da meta, preservado linha a linha para a aba própria. */
+  /**
+   * Colchão fora da meta: lido do arquivo e descartado — não entra no
+   * Analítico. Desde 21/10/2026 também não é gravado em lugar nenhum (a aba
+   * Colchão foi para o arquivo morto); fica aqui para o aviso da prévia.
+   */
   linhasColchao:    LinhaColchao[];
-  /** Colchão excepcionalmente aceito no Analítico até 12/08/2026. */
+  /** Colchão excepcionalmente aceito no Analítico de 01 a 14/08/2026. */
   colchaoNaMeta:    { linhas: number; valor: number };
   operadoresMap:    OperadorResolvidoMap;
   matches:          Record<string, OperadorMatchDetalhe | null>;
@@ -88,10 +88,6 @@ export interface PreviewImport {
   assinatura: string[];
 }
 
-export interface ResultadoImportacaoCompleta extends ResultadoImportacao {
-  colchaoInseridos: number;
-  colchaoDuplicados: number;
-}
 
 /** Soma pagamentos/valores por operador de duas listas (inseridos + revinculados). */
 function mesclarNovosPorOperador(...listas: NovoPorOperador[][]): NovoPorOperador[] {
@@ -115,7 +111,7 @@ export function useAnaliticoImport() {
 
   const [estado,      setEstado]    = useState<EstadoImport>('idle');
   const [preview,     setPreview]   = useState<PreviewImport | null>(null);
-  const [resultado,   setResultado] = useState<ResultadoImportacaoCompleta | null>(null);
+  const [resultado,   setResultado] = useState<ResultadoImportacao | null>(null);
   const [erroGeral,   setErroGeral] = useState<string | null>(null);
 
   // Vínculos manuais definidos pelo usuário no preview: username_arquivo → perfil_id
@@ -379,18 +375,8 @@ export function useAnaliticoImport() {
       mapFinal[usuario] = perfilId;
     }
 
-    // O Colchão fora da meta vai primeiro para a tabela isolada. Se a migration
-    // ainda não estiver disponível, o erro fica visível no resultado e o fluxo
-    // normal continua — uma falha de acompanhamento não pode apagar o relatório.
-    const resColchao = await importarLoteColchao(
-      empresa.id,
-      perfil.id,
-      preview.loteId,
-      preview.linhasColchao,
-      mapFinal,
-      setorImportacao,
-    );
-
+    // O Colchão fora da meta não é gravado: a aba que o acompanhava saiu em
+    // 21/10/2026. A regra continua — o parser já o tirou de `preview.linhas`.
     const res = await importarLoteAnalitico(
       empresa.id,
       perfil.id,
@@ -429,7 +415,6 @@ export function useAnaliticoImport() {
     // Revincula linhas órfãs de operadores criados após uma importação anterior.
     // Sem isto, reimportar o mesmo relatório não atribui os dados ao novo usuário
     // (as linhas já existem e a dedupe as ignora, mantendo operador_id = null).
-    await revincularOrfaosColchao(empresa.id, mapFinal);
     const revinc = await revincularOrfaosAnalitico(empresa.id, mapFinal);
     if (revinc.revinculados > 0) {
       toast.success(
@@ -439,12 +424,7 @@ export function useAnaliticoImport() {
       );
     }
 
-    setResultado({
-      ...res,
-      erros: [...res.erros, ...resColchao.erros],
-      colchaoInseridos: resColchao.inseridos,
-      colchaoDuplicados: resColchao.duplicados,
-    });
+    setResultado(res);
 
     /*
      * O setor é sincronizado pelo 59.

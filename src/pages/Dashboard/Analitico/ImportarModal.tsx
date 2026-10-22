@@ -114,18 +114,6 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
                 <p className="text-xs text-muted-foreground">já existiam</p>
               </div>
             </div>
-            {(resultado.colchaoInseridos > 0 || resultado.colchaoDuplicados > 0) && (
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-lg border border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/20 p-3 text-center">
-                  <p className="text-2xl font-bold text-amber-600">{resultado.colchaoInseridos}</p>
-                  <p className="text-xs text-muted-foreground">Colchão fora da meta inserido</p>
-                </div>
-                <div className="rounded-lg border bg-muted p-3 text-center">
-                  <p className="text-2xl font-bold">{resultado.colchaoDuplicados}</p>
-                  <p className="text-xs text-muted-foreground">linhas do Colchão já existentes</p>
-                </div>
-              </div>
-            )}
             {resultado.erros.length > 0 && (
               <div className="rounded-lg border border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/20 p-3 space-y-1">
                 <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">Avisos:</p>
@@ -305,17 +293,21 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
 
             {(preview.colchaoNaMeta.linhas > 0 || preview.linhasColchao.length > 0) && (
               <div className="rounded-lg border border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/20 p-3 space-y-1">
-                <p className="text-xs text-amber-800 dark:text-amber-300">
-                  <strong>{preview.colchaoNaMeta.linhas}</strong>{' '}
-                  linha{preview.colchaoNaMeta.linhas !== 1 ? 's' : ''} do Colchão até 14/08/2026{' '}
-                  {preview.colchaoNaMeta.linhas !== 1 ? 'contam' : 'conta'} na meta
-                  {' '}({formatBRL(preview.colchaoNaMeta.valor)}).
-                </p>
-                <p className="text-xs text-amber-800 dark:text-amber-300">
-                  <strong>{preview.linhasColchao.length}</strong>{' '}
-                  linha{preview.linhasColchao.length !== 1 ? 's' : ''} fora da meta{' '}
-                  {preview.linhasColchao.length !== 1 ? 'serão enviadas' : 'será enviada'} somente para a aba Colchão e não entra na meta.
-                </p>
+                {preview.colchaoNaMeta.linhas > 0 && (
+                  <p className="text-xs text-amber-800 dark:text-amber-300">
+                    <strong>{preview.colchaoNaMeta.linhas}</strong>{' '}
+                    linha{preview.colchaoNaMeta.linhas !== 1 ? 's' : ''} do Colchão de 01 a 14/08/2026{' '}
+                    {preview.colchaoNaMeta.linhas !== 1 ? 'contam' : 'conta'} na meta
+                    {' '}({formatBRL(preview.colchaoNaMeta.valor)}).
+                  </p>
+                )}
+                {preview.linhasColchao.length > 0 && (
+                  <p className="text-xs text-amber-800 dark:text-amber-300">
+                    <strong>{preview.linhasColchao.length}</strong>{' '}
+                    linha{preview.linhasColchao.length !== 1 ? 's' : ''} do Colchão{' '}
+                    {preview.linhasColchao.length !== 1 ? 'ficam' : 'fica'} fora — não {preview.linhasColchao.length !== 1 ? 'entram' : 'entra'} na meta do setor.
+                  </p>
+                )}
               </div>
             )}
 

@@ -1498,11 +1498,6 @@ export const PERMISSOES: PermissaoMeta[] = [
     descricao: 'Abrir a aba interna do recebimento do dia',
     grupo: 'Analítico', padrao: TODOS,
   },
-  {
-    key: 'analitico_sub_colchao', label: 'Analítico: Colchão',
-    descricao: 'Abrir a aba interna do colchão, que nunca entra nos totais do Analítico',
-    grupo: 'Analítico', padrao: TODOS,
-  },
   /*
    * Ranking de quitação (06/10/2026) — os 6 que mais quitaram no mês.
    *

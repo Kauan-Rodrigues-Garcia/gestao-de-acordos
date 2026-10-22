@@ -45,3 +45,4 @@ alcançando a história dele.
 | [`pesquisa-experiencia/`](pesquisa-experiencia/README.md) | 15/10/2026 | A pesquisa já foi feita; o card só poluía a aba Geral |
 | [`comemoracoes-1.0/`](comemoracoes-1.0/README.md) | 15/10/2026 | A Comemorações 2.0 virou a versão oficial |
 | [`caca-zumbis-bruxas/`](caca-zumbis-bruxas/README.md) | 20/10/2026 | A Caça aos Zumbis e às Bruxas saiu; a gincana da vez é a Corrida da Sorte |
+| [`colchao-controle/`](colchao-controle/README.md) | 21/10/2026 | A aba Colchão do Analítico não era usada; a regra do colchão continua |

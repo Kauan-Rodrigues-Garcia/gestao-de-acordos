@@ -17,7 +17,6 @@
 import type { ReactNode } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { corDaForma } from '@/lib/formasPagamento';
 import { formatBRL } from '@/lib/money';
 import { cn } from '@/lib/utils';
 import { fatiaDoGrupo, posicoesNoGrupo, type LinhaOperadorPainel } from './linhaOperador';
@@ -123,24 +122,11 @@ export function ListaOperadores({
                         </p>
                         {seloDoNome?.(l)}
                       </div>
-                      {/* Quebra de linha, e cada forma inteira numa linha: com zoom
-                          alto as formas quebravam por dentro («BOLETO / NEGOCIAÇÃO»)
-                          e vazavam por cima da posição na equipe (19/10/2026). */}
-                      <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-                        <span className="max-w-full truncate font-mono text-[11px] text-muted-foreground">
-                          {l.usuario}
-                        </span>
-                        {l.porForma.map(f => (
-                          <span key={f.rotulo}
-                            title={`${f.rotulo}: ${formatBRL(f.valor)}`}
-                            className="inline-flex items-center gap-1 whitespace-nowrap text-[10px] text-muted-foreground"
-                          >
-                            <span className="inline-block h-1.5 w-1.5 rounded-full"
-                              style={{ backgroundColor: corDaForma(f.rotulo) }} />
-                            {f.rotulo}
-                          </span>
-                        ))}
-                      </div>
+                      {/* As formas de pagamento saíram da linha em 21/10/2026: não
+                          eram úteis aqui. Continuam na seção Formas de pagamento. */}
+                      <p className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">
+                        {l.usuario}
+                      </p>
                     </div>
 
                     {grupo.itens.length > 1 && (

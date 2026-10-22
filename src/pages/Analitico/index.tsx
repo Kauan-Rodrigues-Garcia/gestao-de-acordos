@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { BarChart2, User, Users, Building2, Layers3, Trophy, Medal } from 'lucide-react';
+import { BarChart2, User, Users, Building2, Trophy, Medal } from 'lucide-react';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -24,7 +24,6 @@ import {
   type DadosTabulacaoAnalitico,
   type RespostaTabulacaoAnalitico,
 } from '@/pages/Dashboard/Analitico/ModalTabularAnalitico';
-import { AbaColchao } from './Colchao';
 import { AbaDesafios } from './Desafios';
 import { AbaRankingQuitacao } from './RankingQuitacao';
 import { useSetoresDoRanking } from './RankingQuitacao/useSetoresDoRanking';
@@ -39,7 +38,8 @@ import { COLUNAS_SETOR_DO_FILTRO, setoresDosFiltros } from '@/lib/setoresDosFilt
 /** O `Select` do shadcn recusa `value=""`; o "todos" precisa de um valor. */
 const TODOS_SETORES = '__todos__';
 
-type AbaPrincipal = 'analitico' | 'colchao' | 'ranking_quitacao' | 'desafios';
+// A aba Colchão saiu em 21/10/2026 (arquivo-morto/colchao-controle).
+type AbaPrincipal = 'analitico' | 'ranking_quitacao' | 'desafios';
 
 const ABAS_DE_VISAO: AbaSegmentada<'individual' | 'geral'>[] = [
   { key: 'individual', label: 'Minha visão', Icon: User },
@@ -89,7 +89,7 @@ export default function PaginaAnalitico() {
   const [abaPrincipal,  setAbaPrincipal]  = useState<AbaPrincipal>(
     () => {
       const aba = searchParams.get('aba');
-      if (aba === 'colchao' || aba === 'ranking_quitacao' || aba === 'desafios') return aba;
+      if (aba === 'ranking_quitacao' || aba === 'desafios') return aba;
       return 'analitico';
     },
   );
@@ -124,21 +124,17 @@ export default function PaginaAnalitico() {
    * mexer nas outras — é o §2 do pedido, aplicado dentro da aba.
    *
    * `extra` é a condição que NÃO é permissão: existir para esta operação, ou
-   * haver algo para mostrar. Colchão é conceito da BookPlay — a PaguePlay não
-   * separa recebimento fora da meta —, então a aba não existe lá. O
-   * interruptor `analitico_sub_colchao` continua no painel de Permissões das
-   * duas operações; na PaguePlay ele não tem efeito.
+   * haver algo para mostrar.
    */
   const abasPrincipais = useMemo(() => ([
     { key: 'analitico', label: 'Analítico', Icon: BarChart2, permissao: 'analitico_sub_analitico', extra: true },
     // A aba "Recebimento diário" virou o recorte Dia da lente, logo abaixo. A
     // chave `analitico_sub_recebimento_diario` continua existindo e continua
     // querendo dizer a mesma coisa — ela agora libera o recorte, não uma aba.
-    { key: 'colchao',   label: 'Colchão',   Icon: Layers3,   permissao: 'analitico_sub_colchao', extra: !tenant.isPaguePlay },
     { key: 'ranking_quitacao', label: 'Ranking de quitação', Icon: Medal, permissao: 'analitico_sub_ranking_quitacao', extra: rankingNoMeuSetor },
     { key: 'desafios',  label: 'Desafios',  Icon: Trophy,    permissao: 'analitico_sub_desafios', extra: desafiosNoMeuSetor },
   ] as const).filter(a => a.extra && temPermissao(a.permissao)),
-  [temPermissao, desafiosNoMeuSetor, rankingNoMeuSetor, tenant.isPaguePlay]);
+  [temPermissao, desafiosNoMeuSetor, rankingNoMeuSetor]);
 
   /*
    * A aba que a tela realmente mostra.
@@ -229,7 +225,6 @@ export default function PaginaAnalitico() {
       return;
     }
     if (abaDaUrl === 'analitico') setAbaPrincipal('analitico');
-    if (abaDaUrl === 'colchao')   setAbaPrincipal('colchao');
     if (abaDaUrl === 'ranking_quitacao') setAbaPrincipal('ranking_quitacao');
     if (abaDaUrl === 'desafios')  setAbaPrincipal('desafios');
   }, [abaDaUrl, searchParams, setRecorte]);
@@ -452,7 +447,7 @@ export default function PaginaAnalitico() {
       {/* Barra de comando: a seção à esquerda, o recorte (lente + setor) à
           direita. Uma superfície só — antes eram três faixas soltas. */}
       <div className="flex flex-col gap-2 rounded-2xl border border-border bg-card/70 p-2 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-        {/* Abas internas: Analítico × Colchão × Ranking de quitação × Desafios */}
+        {/* Abas internas: Analítico × Ranking de quitação × Desafios */}
         <AbasSegmentadas
           abas={abasDaRegua}
           ativa={abaVisivel}
@@ -580,16 +575,6 @@ export default function PaginaAnalitico() {
         <div className="p-6 text-center text-sm text-muted-foreground border border-dashed border-border rounded-xl">
           Nenhum alcance de dados está liberado para o seu cargo no Analítico.
         </div>
-      )}
-
-      {/* Conteúdo isolado — nunca participa dos totais do Analítico */}
-      {abaVisivel === 'colchao' && (
-        <AbaColchao
-          empresaId={empresa.id}
-          mes={mesDaLente}
-          setorId={mostrarVisaoGeral ? (veTodosSetores ? filtroSetorId : setorProprio) : null}
-          operadorId={mostrarVisaoIndividual ? perfil.id : null}
-        />
       )}
 
       {abaVisivel === 'ranking_quitacao' && (

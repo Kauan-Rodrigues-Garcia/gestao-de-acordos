@@ -42,16 +42,8 @@ export function DetalheGrupoForma({
 
   return (
     <div>
-      {/* Legenda: a mesma cor dos cards, para a barra se ler sem procurar. */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-4 py-2">
-        {formas.map(rotulo => (
-          <span key={rotulo} className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            <span className="h-2 w-2 rounded-full" style={{ background: corDaForma(rotulo) }} />
-            {rotulo}
-          </span>
-        ))}
-      </div>
-
+      {/* A legenda das formas saiu em 21/10/2026: repetia os cards logo acima,
+          que já têm as mesmas cores, e a linha aberta diz forma a forma. */}
       <ul className="divide-y divide-border">
         {grupos.slice(0, visiveis).map(g => {
           const valor = somaDasFormas(g.porForma, selecao);
