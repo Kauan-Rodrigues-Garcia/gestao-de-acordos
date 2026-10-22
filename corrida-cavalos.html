@@ -1305,6 +1305,44 @@ const laneY = i => Math.round(129 + (i + 0.5) * (76 / G.n));
 
 function azulejo(c, img, off, y) { const w = img.width; off = Math.round(off); for (let x = -(((off % w) + w) % w); x < W; x += w) c.drawImage(img, x, y); }
 
+/** A câmera do último quadro da pista: as fotos da arquibancada se recortam por ela (`recortarFrente`). */
+const CENA = { cam: 0, camF: 0 };
+/** O que fica em pé na frente da arquibancada: as placas de distância, o poste da chegada e a trave da largada. */
+function postes(c, cam) {
+  for (const mt of [1000, 800, 600, 400, 200]) {
+    const sx = Math.round(L - mt * PXM - cam); if (sx < -20 || sx > W + 20) continue;
+    for (let y = 98; y < 121; y += 4) R(c, (y >> 2) % 2 ? '#ffffff' : '#d93a3a', sx, y, 2, 4);
+    const s = String(mt), w = largura(s) + 4; R(c, '#1c1c1c', sx - (w >> 1) - 1 + 1, 88, w + 2, 10); R(c, '#ffffff', sx - (w >> 1) + 1, 89, w, 8); texto(c, s, sx - (w >> 1) + 3, 90, '#1c1c1c');
+  }
+  // chegada (lado de lá)
+  const fxs = Math.round(L - cam);
+  if (fxs > -30 && fxs < W + 30) {
+    R(c, '#ffffff', fxs, 121, 2, 86); R(c, 'rgba(0,0,0,.14)', fxs + 2, 121, 1, 86);
+    R(c, '#1c1c1c', fxs - 1, 66, 4, 56); for (let y = 68; y < 121; y += 4) R(c, (y >> 2) % 2 ? '#ffffff' : '#d93a3a', fxs, y, 2, 4);
+    for (let y = -8; y <= 8; y++) for (let x = -8; x <= 8; x++) { const d = x * x + y * y; if (d > 64) continue; R(c, d > 49 ? '#d93a3a' : (((x + 8) >> 2) + ((y + 8) >> 2)) % 2 ? '#111111' : '#ffffff', fxs + 1 + x, 56 + y, 1, 1); }
+    R(c, '#2a2a30', fxs + 9, 40, 12, 9); R(c, '#4a4a55', fxs + 9, 40, 12, 1); R(c, '#111', fxs + 6, 43, 3, 3); R(c, '#7fd4ff', fxs + 7, 44, 1, 1); R(c, '#2a2a30', fxs + 14, 49, 2, 8);
+  }
+  // portão de largada (trave)
+  const gx = X0 - 50 - cam, fx = X0 + 5 - cam;
+  if (fx > -20) { const yT = laneY(0) - 40; R(c, '#2f6b4f', gx - 2, yT, fx - gx + 8, 4); R(c, '#58a07a', gx - 2, yT, fx - gx + 8, 1); R(c, '#1f4a37', gx - 2, yT + 4, fx - gx + 8, 1); }
+}
+/**
+ * As fotos da arquibancada ficam num canvas por cima da pista (`desenharTorcida`), e cobriam o que
+ * está em pé na frente delas: placas, o poste da chegada, a trave, a asa de trás do obstáculo
+ * (pedido do Cleber, 22/10/2026). Aqui esse canvas é furado no formato dessas coisas: por baixo
+ * aparece a pista, com o poste por cima da arquibancada. Furar, e não desenhar de novo, mantém a
+ * ordem certa com os cavalos (que estão na pista, embaixo do furo).
+ */
+function recortarFrente(x, k) {
+  x.save();
+  x.setTransform(k, 0, 0, k, 0, -ARQ_Y0 * k);
+  x.globalCompositeOperation = 'destination-out';
+  postes(x, CENA.cam);
+  const gx = X0 - 50 - CENA.cam, fx = X0 + 5 - CENA.cam;
+  if (fx > -20) for (let i = 0; i < G.n; i++) { const ly = laneY(i); if (ly - 36 > ARQ_Y0 + ARQ_H) break; R(x, '#000', gx, ly - 36, 2, 34); R(x, '#000', fx, ly - 36, 5, 34); }
+  if (G.rec?.barreiras) for (const bx of G.rec.barreiras) { const cx = Math.round(bx - CENA.camF); if (cx > -OB_K - 30 && cx < W + OB_K + 30) asa(x, cx - OB_K, OB_Y0); }
+  x.restore();
+}
 function desenharCena(c, t, cam, o) {
   // O cenário anda em pixel inteiro (`cam`); cavalo e poeira se medem contra a câmera SEM arredondar
   // (`camF`). Arredondar a câmera e depois o cavalo de novo fazia o cavalo pular 1 px para frente e para
@@ -1342,24 +1380,9 @@ function desenharCena(c, t, cam, o) {
     } }
   if (m.flashes) { const k = (Math.random() < 0.45 ? 1 : 0) + (o.excit > 0.5 ? 2 : 0); for (let i = 0; i < k; i++) { const x = Math.floor(Math.random() * W), y = 80 + Math.floor(Math.random() * 28); R(c, '#ffffff', x, y, 1, 1); R(c, 'rgba(255,255,255,.55)', x - 1, y, 3, 1); R(c, 'rgba(255,255,255,.55)', x, y - 1, 1, 3); } }
   azulejo(c, m.pistaC, cam, 112);
-
-  // placas de distância
-  for (const mt of [1000, 800, 600, 400, 200]) {
-    const sx = Math.round(L - mt * PXM - cam); if (sx < -20 || sx > W + 20) continue;
-    for (let y = 98; y < 121; y += 4) R(c, (y >> 2) % 2 ? '#ffffff' : '#d93a3a', sx, y, 2, 4);
-    const s = String(mt), w = largura(s) + 4; R(c, '#1c1c1c', sx - (w >> 1) - 1 + 1, 88, w + 2, 10); R(c, '#ffffff', sx - (w >> 1) + 1, 89, w, 8); texto(c, s, sx - (w >> 1) + 3, 90, '#1c1c1c');
-  }
-  // chegada (lado de lá)
-  const fxs = Math.round(L - cam);
-  if (fxs > -30 && fxs < W + 30) {
-    R(c, '#ffffff', fxs, 121, 2, 86); R(c, 'rgba(0,0,0,.14)', fxs + 2, 121, 1, 86);
-    R(c, '#1c1c1c', fxs - 1, 66, 4, 56); for (let y = 68; y < 121; y += 4) R(c, (y >> 2) % 2 ? '#ffffff' : '#d93a3a', fxs, y, 2, 4);
-    for (let y = -8; y <= 8; y++) for (let x = -8; x <= 8; x++) { const d = x * x + y * y; if (d > 64) continue; R(c, d > 49 ? '#d93a3a' : (((x + 8) >> 2) + ((y + 8) >> 2)) % 2 ? '#111111' : '#ffffff', fxs + 1 + x, 56 + y, 1, 1); }
-    R(c, '#2a2a30', fxs + 9, 40, 12, 9); R(c, '#4a4a55', fxs + 9, 40, 12, 1); R(c, '#111', fxs + 6, 43, 3, 3); R(c, '#7fd4ff', fxs + 7, 44, 1, 1); R(c, '#2a2a30', fxs + 14, 49, 2, 8);
-  }
-  // portão de largada (trave)
-  const gx = X0 - 50 - cam, fx = X0 + 5 - cam;
-  if (fx > -20) { const yT = laneY(0) - 40; R(c, '#2f6b4f', gx - 2, yT, fx - gx + 8, 4); R(c, '#58a07a', gx - 2, yT, fx - gx + 8, 1); R(c, '#1f4a37', gx - 2, yT + 4, fx - gx + 8, 1); }
+  postes(c, cam);
+  CENA.cam = cam; CENA.camF = camF;
+  const fxs = Math.round(L - cam), gx = X0 - 50 - cam, fx = X0 + 5 - cam;
 
   // Os obstáculos na tela. A vara de cima cai quando alguém bate nela e fica no chão até o fim.
   const obs = [];
@@ -1675,7 +1698,8 @@ const Som = (() => {
  * girando, uma ou outra folha no meio, e uns brilhos dourados piscam no ar.
  */
 const Petalas = (() => {
-  const c = $('#confete'), x = c.getContext('2d'); let ps = [], brilhos = [], ate = 0, vivo = false, ult = 0;
+  const c = $('#confete'), x = c.getContext('2d'); let ps = [], brilhos = [], ate = 0, vivo = false, ult = 0, acum = 0;
+  const PETALAS_POR_S = 14;
   const ROSAS = [['#b5122b', '#d8334a'], ['#d0213a', '#f05a6c'], ['#9a0c22', '#c42a40'], ['#e3384c', '#ff7a8a']], FOLHA = ['#3f8a45', '#63b055'];
   function petala(p) {
     const w = Math.max(1.5, Math.abs(Math.cos(p.giro)) * p.s), h = p.s * 0.62;
@@ -1694,12 +1718,15 @@ const Petalas = (() => {
   function passo(now) {
     if (!vivo) return; const dt = Math.min(0.05, (now - (ult || now)) / 1000), t = now / 1000; ult = now;
     if (now < ate) {
-      for (let i = 0; i < 2; i++) {
+      // Poucas de cada vez (pedido do Cleber, 22/10/2026: era pétala demais na tela). Antes eram 2 por
+      // quadro (~120 por segundo, centenas caindo juntas); agora PETALAS_POR_S, contadas no relógio.
+      acum += PETALAS_POR_S * dt;
+      for (; acum >= 1; acum--) {
         const folha = Math.random() < 0.06;
         ps.push({ x: Math.random() * c.width, y: -14, vy: 42 + Math.random() * 45, sw: 18 + Math.random() * 26, fase: Math.random() * T2, r: Math.random() * T2, vr: (Math.random() - 0.5) * 2.4,
           giro: Math.random() * T2, vg: 2 + Math.random() * 4, s: (folha ? 11 : 12) + Math.random() * 7, c: folha ? FOLHA : ROSAS[Math.floor(Math.random() * ROSAS.length)] });
       }
-      if (Math.random() < 0.12) brilhos.push({ x: Math.random() * c.width, y: Math.random() * c.height * 0.8, s: 5 + Math.random() * 7, t0: t, vida: 0.7 + Math.random() * 0.6 });
+      if (Math.random() < 2.5 * dt) brilhos.push({ x: Math.random() * c.width, y: Math.random() * c.height * 0.8, s: 5 + Math.random() * 7, t0: t, vida: 0.7 + Math.random() * 0.6 });
     }
     x.clearRect(0, 0, c.width, c.height);
     for (const p of ps) { p.y += p.vy * dt; p.x += Math.cos(t * 1.6 + p.fase) * p.sw * dt; p.r += p.vr * dt; p.giro += p.vg * dt; petala(p); }
@@ -2863,6 +2890,8 @@ function desenharTorcida(zoom, zx, wall) {
     x.globalAlpha = k < 0.15 ? k / 0.15 : k > 0.75 ? (1 - k) / 0.25 : 1;
     x.drawImage(em, Math.round(px - em.width / 2), Math.round(py - d / 2 - em.height - k * fs * 1.2)); x.globalAlpha = 1; torcidaSuja = true;
   }
+  // o que está em pé na frente da arquibancada passa por cima das fotos
+  if (torcidaSuja) recortarFrente(x, ESCALA * dpr);
 }
 /** De vez em quando alguém da arquibancada solta um grito. */
 function gritarTorcida(wall) {
