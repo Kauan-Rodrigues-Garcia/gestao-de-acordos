@@ -5,7 +5,7 @@
  * para o bucket `corridas` e o resumo vai para `fn_corrida_gravar`.
  */
 import { supabase } from '@/lib/supabase';
-import { BUCKET, rpc, type Categoria, type CorridaJson, type PessoaJson } from '../banco';
+import { BUCKET, rpc, type Categoria, type CorridaJson, type EnqueteJson, type PessoaJson } from '../banco';
 import { empacotarGravacao } from '../gravacao';
 import { empacotarCavalos } from '../cavalos/gravacao';
 import { bichinhoDe } from '../motor/bichinhos';
@@ -51,6 +51,13 @@ export const descartarGravacao = (id: number) => rpc<Painel>('fn_corrida_gravar'
 export const divulgar = (titulo: string, mensagem: string, premio: string, alvos: string[], dias: number, categoria: Categoria = 'bichinhos') =>
   rpc<Painel>('fn_corrida_divulgar', comCategoria({ p_titulo: titulo, p_mensagem: mensagem, p_premio: premio, p_alvos: alvos, p_dias: dias }, categoria));
 export const tirarDivulgacao = (id: number) => rpc<Painel>('fn_corrida_divulgacao_encerrar', { p_divulgacao: id });
+
+/** A votação de 30 s entre bichinhos e cavalos (20261022130000): o card vai para quem foi chamado. */
+export const abrirEnquete = (votantes: string[]) => rpc<{ agora: string; enquete: EnqueteJson }>('fn_corrida_enquete_abrir', { p_votantes: votantes });
+/** Depois da contagem: conta os votos (empate vai no sorteio) e avisa cada votante do resultado. */
+export const fecharEnquete = (id: number) => rpc<{ agora: string; enquete: EnqueteJson }>('fn_corrida_enquete_fechar', { p_enquete: id });
+/** O banco ainda não tem a votação (20261022130000). */
+export const faltaMigrationEnquete = (e: unknown): boolean => /fn_corrida_enquete|PGRST202|schema cache|could not find the function/i.test(String(e));
 
 async function subir(caminho: string, dados: Blob | Uint8Array, tipo: string): Promise<void> {
   const corpo = dados instanceof Blob ? dados : new Blob([dados as BlobPart], { type: tipo });

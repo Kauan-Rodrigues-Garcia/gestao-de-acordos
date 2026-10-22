@@ -107,6 +107,19 @@ export interface Sala {
   pessoas: PessoaJson[];
 }
 
+/** A votação de 30 s entre bichinhos e cavalos, antes de a corrida nascer (20261022130000). */
+export interface EnqueteJson {
+  id: number;
+  criada_em: string;
+  encerra_em: string;
+  fechada_em: string | null;
+  vencedora: Categoria | null;
+  votos: Record<Categoria, number> | null;
+  empate: boolean | null;
+  votantes: number;
+  meu_voto: Categoria | null;
+}
+
 // ── Cliente sem tipo ────────────────────────────────────────────────────────
 interface ErroRpc { message: string; code?: string }
 export async function rpc<T>(nome: string, args?: Record<string, unknown>): Promise<T> {
@@ -144,8 +157,8 @@ export const agoraBanco = (): number => (Date.now() + desvio) / 1000;
 export const segundos = (iso: string | null | undefined): number | null => (iso ? Date.parse(iso) / 1000 : null);
 
 // ── O estado de cada pessoa (store de módulo) ───────────────────────────────
-interface Estado { minha: Minha | null; sala: Sala | null; carregado: boolean }
-let estado: Estado = { minha: null, sala: null, carregado: false };
+interface Estado { minha: Minha | null; sala: Sala | null; enquete: EnqueteJson | null; carregado: boolean }
+let estado: Estado = { minha: null, sala: null, enquete: null, carregado: false };
 const ouvintes = new Set<() => void>();
 function publicar(novo: Partial<Estado>): void {
   estado = { ...estado, ...novo };
@@ -219,6 +232,39 @@ export async function fecharDivulgacao(id: number): Promise<void> {
   aceitarMinha(await rpc<Minha>('fn_corrida_divulgacao_fechar', { p_divulgacao: id }));
 }
 
+// ── A votação da categoria ──────────────────────────────────────────────────
+function aceitarEnquete(e: EnqueteJson | undefined): void {
+  if (!e) return;
+  const atual = estado.enquete;
+  // Um aviso atrasado da votação velha não apaga a nova.
+  if (atual && atual.id > e.id) return;
+  publicar({ enquete: e });
+}
+/** Some com o card da votação desta tela (a votação continua para os outros). */
+export const esconderEnquete = (): void => publicar({ enquete: null });
+
+/**
+ * Quem votou entra direto no lobby da corrida que nasce da votação; quem não
+ * votou recebe o convite «Assistir». A marca fica nesta aba: o id e a hora da
+ * votação, para reconhecer a corrida criada logo depois dela.
+ */
+const CHAVE_VOTEI = 'corrida-votei';
+export function lerVotei(): { enquete: number; criada_em: string } | null {
+  try { const v = sessionStorage.getItem(CHAVE_VOTEI); return v ? JSON.parse(v) : null; } catch { return null; }
+}
+/** A corrida nasceu da votação em que esta aba votou (criada até 10 min depois dela). */
+export function voteiNaCorrida(c: CorridaJson): boolean {
+  const v = lerVotei(); if (!v) return false;
+  const desde = Date.parse(v.criada_em), criada = Date.parse(c.criada_em);
+  return criada >= desde && criada - desde < 10 * 60_000;
+}
+
+export async function votarEnquete(enquete: EnqueteJson, categoria: Categoria): Promise<void> {
+  const r = await rpc<{ enquete: EnqueteJson }>('fn_corrida_enquete_votar', { p_enquete: enquete.id, p_categoria: categoria });
+  try { sessionStorage.setItem(CHAVE_VOTEI, JSON.stringify({ enquete: enquete.id, criada_em: enquete.criada_em })); } catch { /* aba sem sessionStorage */ }
+  aceitarEnquete(r.enquete);
+}
+
 /** A conferência de 30 s: quem entrou no lobby e o aviso não trouxe. */
 export async function conferirLobby(corridaId: number): Promise<void> {
   const s = estado.sala; if (!s || s.corrida.id !== corridaId) return;
@@ -271,14 +317,19 @@ let canalEu: (() => void) | null = null, canalSala: (() => void) | null = null, 
 export function ligarCorrida(usuario: string): () => void {
   if (usuarioAtual !== usuario) {
     usuarioAtual = usuario;
-    estado = { minha: null, sala: null, carregado: false };
+    estado = { minha: null, sala: null, enquete: null, carregado: false };
   }
   void lerMinha();
   canalEu?.();
   canalEu = assinarTabela(
-    { topico: `corrida-eu:${usuario}`, escutas: [{ sinal: 'corrida' }] },
+    { topico: `corrida-eu:${usuario}`, escutas: [{ sinal: 'corrida' }, { sinal: 'enquete' }] },
     {
-      onSinal: payload => aceitarMinha(payload as unknown as Minha),
+      onSinal: (payload, sinal) => {
+        if (sinal !== 'enquete') { aceitarMinha(payload as unknown as Minha); return; }
+        const p = payload as { agora?: string; enquete?: EnqueteJson };
+        if (p.agora) ajustarRelogio(p.agora);
+        aceitarEnquete(p.enquete);
+      },
       onReconectado: () => relerEspalhado(8_000),
     },
   );

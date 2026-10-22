@@ -24,6 +24,7 @@ const SQL_PREENCHER = readFileSync(resolve(__dirname, '../../../supabase/migrati
 const SQL_TEMA = readFileSync(resolve(__dirname, '../../../supabase/migrations/20261020210000_corrida_tema_e_palpite.sql'), 'utf8');
 const SQL_AVULSO = readFileSync(resolve(__dirname, '../../../supabase/migrations/20261021120000_corrida_corredor_sem_perfil.sql'), 'utf8');
 const SQL_CAVALOS = readFileSync(resolve(__dirname, '../../../supabase/migrations/20261022120000_corrida_cavalos.sql'), 'utf8');
+const SQL_ENQUETE = readFileSync(resolve(__dirname, '../../../supabase/migrations/20261022130000_corrida_enquete.sql'), 'utf8');
 
 let db: PGlite;
 
@@ -88,10 +89,12 @@ beforeAll(async () => {
   await db.exec(SQL_AVULSO);
   await db.exec(SQL_CAVALOS);
   await db.exec(SQL_CAVALOS);
+  await db.exec(SQL_ENQUETE);
+  await db.exec(SQL_ENQUETE);
 });
 
 beforeEach(async () => {
-  await db.exec('delete from public.corridas; delete from public.corrida_divulgacoes; truncate realtime.enviados;');
+  await db.exec('delete from public.corridas; delete from public.corrida_divulgacoes; delete from public.corrida_enquetes; truncate realtime.enviados;');
 });
 
 afterAll(async () => { await db.close(); });
@@ -563,6 +566,71 @@ describe('20261022120000 — a corrida de cavalos', () => {
 
   it('a função interna do sorteio não fica aberta', async () => {
     const r = await db.query<{ ok: boolean }>(`select has_function_privilege('authenticated', 'public.fn_corrida_cavalo_livre(bigint)', 'EXECUTE') ok`);
+    expect(r.rows[0].ok).toBe(false);
+  });
+});
+
+describe('20261022130000 — a votação da categoria', () => {
+  interface Enquete { id: number; encerra_em: string; fechada_em: string | null; vencedora: string | null; votos: { bichinhos: number; cavalos: number } | null; empate: boolean | null; meu_voto: string | null }
+  const abrir = (votantes: string[]) => como<{ enquete: Enquete }>(ADMIN, 'select public.fn_corrida_enquete_abrir($1) v', [votantes]);
+  const votar = (uid: string, id: number, cat: string) => como<{ enquete: Enquete }>(uid, 'select public.fn_corrida_enquete_votar($1, $2) v', [id, cat]);
+  const fechar = (id: number) => como<{ enquete: Enquete }>(ADMIN, 'select public.fn_corrida_enquete_fechar($1) v', [id]);
+  const vencer = (id: number) => db.query("update public.corrida_enquetes set encerra_em = clock_timestamp() - interval '1 second' where id = $1", [id]);
+
+  it('só o super_admin abre; o card chega só para quem foi chamado, no tópico de cada um', async () => {
+    await expect(como(ANA, 'select public.fn_corrida_enquete_abrir($1) v', [[ANA]])).rejects.toThrow(/NAO_AUTORIZADO/);
+    const { enquete } = await abrir([ANA, BRUNO, ANA]);
+    expect(enquete.vencedora).toBeNull();
+    const a = await avisos();
+    expect(a.map(x => x.topic).sort()).toEqual([`corrida-eu:${ANA}`, `corrida-eu:${BRUNO}`].sort());
+    expect(a.every(x => x.event === 'enquete')).toBe(true);
+  });
+
+  it('vota quem foi chamado, troca o voto, e não vota depois do tempo', async () => {
+    const { enquete } = await abrir([ANA, BRUNO]);
+    await expect(votar(DORA, enquete.id, 'cavalos')).rejects.toThrow(/NAO_AUTORIZADO/);
+    await expect(votar(ANA, enquete.id, 'tartarugas')).rejects.toThrow(/CATEGORIA_INVALIDA/);
+    expect((await votar(ANA, enquete.id, 'bichinhos')).enquete.meu_voto).toBe('bichinhos');
+    expect((await votar(ANA, enquete.id, 'cavalos')).enquete.meu_voto).toBe('cavalos');
+    await expect(fechar(enquete.id)).rejects.toThrow(/AINDA_VOTANDO/);
+    await vencer(enquete.id);
+    await expect(votar(BRUNO, enquete.id, 'bichinhos')).rejects.toThrow(/VOTACAO_ENCERRADA/);
+  });
+
+  it('vence quem tem mais votos e cada um recebe o resultado com o próprio voto', async () => {
+    const { enquete } = await abrir([ANA, BRUNO, DORA]);
+    await votar(ANA, enquete.id, 'cavalos');
+    await votar(BRUNO, enquete.id, 'cavalos');
+    await votar(DORA, enquete.id, 'bichinhos');
+    await vencer(enquete.id);
+    await db.exec('truncate realtime.enviados');
+    const r = await fechar(enquete.id);
+    expect(r.enquete).toMatchObject({ vencedora: 'cavalos', votos: { bichinhos: 1, cavalos: 2 }, empate: false });
+    const a = await avisos();
+    expect(a).toHaveLength(3);
+    const daDora = a.find(x => x.topic === `corrida-eu:${DORA}`)!.payload as { enquete: Enquete };
+    expect(daDora.enquete).toMatchObject({ vencedora: 'cavalos', meu_voto: 'bichinhos' });
+    // Fechar de novo devolve o mesmo, sem avisar outra vez.
+    expect((await fechar(enquete.id)).enquete.vencedora).toBe('cavalos');
+    expect(await avisos()).toHaveLength(3);
+  });
+
+  it('empate (até sem voto nenhum) vai para o sorteio', async () => {
+    const { enquete } = await abrir([ANA, BRUNO]);
+    await vencer(enquete.id);
+    const r = await fechar(enquete.id);
+    expect(r.enquete.empate).toBe(true);
+    expect(['bichinhos', 'cavalos']).toContain(r.enquete.vencedora);
+  });
+
+  it('não abre com corrida em andamento nem sem ninguém para votar', async () => {
+    await expect(abrir([])).rejects.toThrow(/SEM_VOTANTES/);
+    await criar([ANA, BRUNO], []);
+    await expect(abrir([ANA])).rejects.toThrow(/CORRIDA_EM_ANDAMENTO/);
+  });
+
+  it('as funções internas não ficam abertas', async () => {
+    const r = await db.query<{ ok: boolean }>(`select has_function_privilege('authenticated', 'public.fn_corrida_enquete_avisar(bigint)', 'EXECUTE') ok`);
     expect(r.rows[0].ok).toBe(false);
   });
 });

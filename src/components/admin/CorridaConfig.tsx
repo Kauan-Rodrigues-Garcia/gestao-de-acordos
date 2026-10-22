@@ -16,10 +16,17 @@
  * alto do card vale para a nova corrida, o «Testar» e o card de divulgação; com
  * uma corrida em andamento, fica a dela. O caminho é o mesmo; na de cavalos a
  * gravação são só as posições (sem vídeo) e não há cenário de lobby para escolher.
+ *
+ * A votação (22/10/2026): a nova corrida, montada, vai para quem foi chamado
+ * votar em 30 s entre bichinhos e cavalos (o card no alto da tela,
+ * `Corrida/CardEnquete`). Acabou a contagem, este painel fecha a votação, cria a
+ * corrida com a vencedora (empate: sorteio) e já abre: quem votou entra direto
+ * no lobby, quem não votou recebe o convite «Assistir». «Criar sem votar» usa a
+ * escolha do alto do card, como antes.
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { Ban, Eye, Flag, FlaskConical, Megaphone, PartyPopper, Play, RefreshCw, Send, Shuffle, Trophy, Video } from 'lucide-react';
+import { Ban, Eye, Flag, FlaskConical, Megaphone, PartyPopper, Play, RefreshCw, Send, Shuffle, Trophy, Video, Vote } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,9 +35,9 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { cn } from '@/lib/utils';
 import { SeletorPessoas } from '@/components/Corrida/admin/SeletorPessoas';
 import { lerPessoasDoCadastro, type PessoaDoCadastro } from '@/components/Corrida/admin/pessoas';
-import { abrirCorrida, ajustarCorrida, criarCorrida, definirTema, descartarGravacao, divulgar, encerrarCorrida, faltaMigrationCavalos, gravarCorrida, gravarCorridaCavalos, iniciarCorrida, lerPainel, preencherEscolhas, tirarDivulgacao, type CorredorSemPerfil, type Painel } from '@/components/Corrida/admin/acoes';
+import { abrirCorrida, abrirEnquete, ajustarCorrida, criarCorrida, definirTema, descartarGravacao, divulgar, encerrarCorrida, faltaMigrationCavalos, faltaMigrationEnquete, fecharEnquete, gravarCorrida, gravarCorridaCavalos, iniciarCorrida, lerPainel, preencherEscolhas, tirarDivulgacao, type CorredorSemPerfil, type Painel } from '@/components/Corrida/admin/acoes';
 import { CorredoresSemPerfil } from '@/components/Corrida/admin/CorredoresSemPerfil';
-import { agoraBanco, categoriaDe, mensagemDoErro, segundos, type Categoria } from '@/components/Corrida/banco';
+import { agoraBanco, categoriaDe, mensagemDoErro, segundos, type Categoria, type EnqueteJson } from '@/components/Corrida/banco';
 import { destravarAudio, NOME_CORRIDA } from '@/components/Corrida/nome';
 import { TEMAS, type TemaLobby } from '@/components/Corrida/lobbies/cena';
 
@@ -81,6 +88,9 @@ export default function CorridaConfig() {
   const [div, setDiv] = useState({ ...DIVULGACAO_PADRAO.bichinhos, premio: '', dias: 3, alvos: new Set<string>() });
   const [divAberta, setDivAberta] = useState(false);
   const [previa, setPrevia] = useState(false);
+  const [votacao, setVotacao] = useState<EnqueteJson | null>(null);
+  const [tique, tiqueVotacao] = useState(0);
+  const fechandoVotacao = useRef(false);
 
   const recarregar = useCallback(async () => {
     try { setPainel(await lerPainel()); setSemMigration(false); }
@@ -110,6 +120,8 @@ export default function CorridaConfig() {
   const pessoasDaCorrida = useMemo(() => painel?.pessoas ?? [], [painel]);
   const setoresDoCadastro = useMemo(() => [...new Set((pessoas ?? []).map(p => p.setor).filter(s => s !== 'Sem setor'))].sort((a, b) => a.localeCompare(b)), [pessoas]);
   const totalCorrendo = corredores.size + avulsos.length;
+  /** A montagem é de uma corrida nova (a categoria sai da votação), não o ajuste da em andamento. */
+  const novaCorrida = !(corrida && emAndamento);
   const vencedorSetor = corrida?.vencedor ? pessoasDaCorrida.find(p => p.usuario === corrida.vencedor)?.setor ?? null : null;
 
   const rodar = async (fn: () => Promise<Painel>, ok?: string) => {
@@ -132,15 +144,65 @@ export default function CorridaConfig() {
     } else { setCorredores(new Set()); setPlateia(new Set()); setAvulsos([]); setTema('f1'); }
     setMontando(true);
   };
-  const salvarMontagem = () => rodar(async () => {
-    let p = corrida && emAndamento
-      ? await ajustarCorrida(corrida.id, premio, [...corredores], [...plateia], avulsos)
-      : await criarCorrida(premio, [...corredores], [...plateia], avulsos, categoria);
+  /** Cria a corrida da montagem na categoria dada; depois da votação, já abre (quem votou entra direto no lobby). */
+  const montarCorrida = async (cat: Categoria, abrir: boolean) => {
+    let p = await criarCorrida(premio, [...corredores], [...plateia], avulsos, cat);
     // O cenário do lobby é coisa dos bichinhos; a de cavalos tem o paddock.
+    if (cat === 'bichinhos' && p.corrida && (p.corrida.tema ?? 'f1') !== tema) p = await definirTema(p.corrida.id, tema);
+    if (abrir && p.corrida) p = await abrirCorrida(p.corrida.id);
+    setEscolhida(cat);
+    setMontando(false);
+    return p;
+  };
+  const salvarMontagem = () => rodar(async () => {
+    if (!(corrida && emAndamento)) return montarCorrida(categoria, false);
+    let p = await ajustarCorrida(corrida.id, premio, [...corredores], [...plateia], avulsos);
     if (!cavalos && p.corrida && (p.corrida.tema ?? 'f1') !== tema) p = await definirTema(p.corrida.id, tema);
     setMontando(false);
     return p;
   }, corrida && emAndamento ? 'Corrida atualizada. Quem entrou ou saiu já foi avisado.' : `Corrida criada! Quem corre já recebeu o convite para escolher o ${bicho.um}.`);
+
+  // ── A votação da categoria (30 s, para quem foi chamado) ──
+  const votantes = [...new Set([...corredores, ...plateia])];
+  const cavalosCabem = totalCorrendo <= BICHO.cavalos.max;
+  const abrirVotacao = async () => {
+    // Mais de 24 correndo: cavalos não cabe, e a corrida sai de bichinhos sem votação.
+    if (!cavalosCabem) { void rodar(() => montarCorrida('bichinhos', false), 'Corrida de bichinhos criada (mais de 24 correndo: cavalos não cabe).'); return; }
+    setOcupado(true);
+    try { const r = await abrirEnquete(votantes); fechandoVotacao.current = false; setVotacao(r.enquete); }
+    catch (e) {
+      if (faltaMigrationEnquete(e)) toast.error('Falta a votação no banco', { description: 'Aplique a migration 20261022130000_corrida_enquete.sql. Até lá, use «Criar sem votar».' });
+      else toast.error('Não abriu a votação', { description: mensagemDoErro(e) });
+    } finally { setOcupado(false); }
+  };
+  const fimVotacao = votacao ? segundos(votacao.encerra_em) ?? 0 : 0;
+  const votacaoAcabou = !!votacao && !votacao.vencedora && agoraBanco() >= fimVotacao + 0.5;
+  useEffect(() => {
+    if (!votacaoAcabou || !votacao || fechandoVotacao.current) return;
+    fechandoVotacao.current = true;
+    void (async () => {
+      let r: { enquete: EnqueteJson };
+      try { r = await fecharEnquete(votacao.id); }
+      catch (e) {
+        // O relógio daqui adiantou: tenta de novo no próximo tique (250 ms).
+        if (/AINDA_VOTANDO/.test(String(e))) { fechandoVotacao.current = false; return; }
+        toast.error('Não fechou a votação', { description: mensagemDoErro(e) }); setVotacao(null); return;
+      }
+      setVotacao(r.enquete);
+      const v = r.enquete.vencedora ?? 'bichinhos', votos = r.enquete.votos ?? { bichinhos: 0, cavalos: 0 };
+      const placar = `${votos.bichinhos} × ${votos.cavalos}`;
+      await rodar(() => montarCorrida(v, true),
+        `${r.enquete.empate ? `Empate em ${placar}: o sorteio escolheu` : `Deu ${placar}:`} ${BICHO[v].uns}! A corrida abriu: quem votou já está no lobby.`);
+      setVotacao(null);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [votacaoAcabou, votacao?.id, tique]);
+  // O relógio da votação no painel.
+  useEffect(() => {
+    if (!votacao || votacao.vencedora) return;
+    const id = window.setInterval(() => tiqueVotacao(n => n + 1), 250);
+    return () => window.clearInterval(id);
+  }, [votacao]);
 
   const gravar = async () => {
     if (!corrida) return;
@@ -294,6 +356,8 @@ export default function CorridaConfig() {
 
         {montando && (
           <div className="space-y-3 rounded-lg border p-3">
+            {/* Com a votação no ar, a montagem fica travada: é ela que vira a corrida. */}
+            <fieldset disabled={!!votacao} className="space-y-3 disabled:opacity-60">
             <div className="space-y-1.5">
               <label htmlFor="cds-premio" className="text-xs font-semibold">Prêmio de quem vencer</label>
               <div className="flex flex-wrap items-center gap-1.5">
@@ -301,14 +365,14 @@ export default function CorridaConfig() {
                 {PREMIOS.map(p => <button key={p} type="button" onClick={() => setPremio(p)} className={cn('rounded-full border px-2.5 py-0.5 text-xs', premio === p ? 'border-amber-500 bg-amber-500/15' : 'hover:border-amber-500/60')}>{p}</button>)}
               </div>
             </div>
-            {!cavalos && (
+            {(novaCorrida || !cavalos) && (
               <div className="space-y-1.5">
-                <h4 className="text-xs font-semibold">Cenário do lobby</h4>
+                <h4 className="text-xs font-semibold">Cenário do lobby {novaCorrida && <span className="font-normal text-muted-foreground">(se der bichinhos)</span>}</h4>
                 <EscolhaCenario valor={tema} onChange={setTema} />
               </div>
             )}
             <div className="space-y-1.5">
-              <h4 className="text-xs font-semibold">Quem corre <span className="font-normal text-muted-foreground">({cavalos ? 'até 24: cada um escolhe um cavalo, e cada cavalo tem um dono só' : 'cada um escolhe um bichinho'}; ninguém mais fica sabendo nessa fase)</span></h4>
+              <h4 className="text-xs font-semibold">Quem corre <span className="font-normal text-muted-foreground">({novaCorrida ? 'cada um escolhe o bichinho ou o cavalo, conforme a votação; cavalos só com até 24' : cavalos ? 'até 24: cada um escolhe um cavalo, e cada cavalo tem um dono só' : 'cada um escolhe um bichinho'}; ninguém mais fica sabendo nessa fase)</span></h4>
               {pessoas ? <SeletorPessoas pessoas={pessoas} marcados={corredores} onChange={setCorredores} rotulo={n => (n === 1 ? 'pessoa correndo' : 'pessoas correndo')} /> : <p className="text-xs text-muted-foreground">Carregando as pessoas…</p>}
             </div>
             <div className="space-y-1.5">
@@ -319,13 +383,40 @@ export default function CorridaConfig() {
               <h4 className="text-xs font-semibold">Quem assiste <span className="font-normal text-muted-foreground">(recebe o card «Assistir» quando você abrir; quem corre já assiste)</span></h4>
               {pessoas ? <SeletorPessoas pessoas={pessoas} marcados={plateia} onChange={setPlateia} rotulo={n => (n === 1 ? 'pessoa assistindo' : 'pessoas assistindo')} /> : null}
             </div>
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              {totalCorrendo > bicho.max && <span className="mr-auto text-xs text-destructive">A corrida de cavalos tem 24 cavalos: tire {totalCorrendo - bicho.max} de quem corre.</span>}
-              <Button size="sm" variant="ghost" onClick={() => setMontando(false)}>Voltar</Button>
-              <Button size="sm" className="gap-1.5" disabled={ocupado || totalCorrendo < 2 || totalCorrendo > bicho.max} onClick={() => void salvarMontagem()}>
-                <Send className="h-3.5 w-3.5" /> {corrida && emAndamento ? 'Salvar e avisar quem mudou' : avulsos.length ? `Criar a corrida com ${totalCorrendo} correndo` : `Chamar ${corredores.size} para escolher o ${bicho.um}`}
-              </Button>
-            </div>
+            </fieldset>
+            {votacao ? (
+              <div className="space-y-1.5 rounded-lg border border-amber-500/60 bg-amber-500/10 p-3">
+                <div className="flex items-center justify-between gap-2 text-xs">
+                  <span className="flex items-center gap-1.5 font-semibold"><Vote className="h-3.5 w-3.5" />
+                    {votacaoAcabou || votacao.vencedora ? 'Contando os votos e abrindo a corrida…' : `Votação no ar: ${votacao.votantes} ${votacao.votantes === 1 ? 'pessoa escolhe' : 'pessoas escolhem'} entre bichinhos e cavalos`}
+                  </span>
+                  <span className="text-base font-bold tabular-nums">{Math.max(0, Math.ceil(fimVotacao - agoraBanco()))}s</span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-muted"><div className="h-full bg-amber-500 transition-[width] duration-200 ease-linear" style={{ width: `${Math.max(0, Math.min(1, (fimVotacao - agoraBanco()) / 30)) * 100}%` }} /></div>
+                <p className="text-[11px] text-muted-foreground">Acabou a contagem, a corrida nasce com a mais votada (empate vai no sorteio) e abre na hora: quem votou entra direto no lobby, quem não votou recebe o convite «Assistir». Não feche esta aba.</p>
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {!novaCorrida && totalCorrendo > bicho.max && <span className="mr-auto text-xs text-destructive">A corrida de cavalos tem 24 cavalos: tire {totalCorrendo - bicho.max} de quem corre.</span>}
+                {novaCorrida && !cavalosCabem && <span className="mr-auto text-xs text-muted-foreground">Mais de 24 correndo: cavalos não cabe, a corrida sai de bichinhos sem votação.</span>}
+                <Button size="sm" variant="ghost" onClick={() => setMontando(false)}>Voltar</Button>
+                {novaCorrida ? (
+                  <>
+                    <Button size="sm" variant="outline" disabled={ocupado || totalCorrendo < 2 || totalCorrendo > bicho.max} onClick={() => void salvarMontagem()}
+                      title={`Cria a corrida de ${bicho.uns} (a escolhida no alto do card), sem votação, e não abre`}>
+                      Criar sem votar ({cavalos ? '🐎' : '🐾'})
+                    </Button>
+                    <Button size="sm" className="gap-1.5" disabled={ocupado || totalCorrendo < 2 || totalCorrendo > BICHO.bichinhos.max || (cavalosCabem && !votantes.length)} onClick={() => void abrirVotacao()}>
+                      {cavalosCabem ? <><Vote className="h-3.5 w-3.5" /> Abrir a votação (30 s) para {votantes.length}</> : <><Send className="h-3.5 w-3.5" /> Criar de bichinhos com {totalCorrendo}</>}
+                    </Button>
+                  </>
+                ) : (
+                  <Button size="sm" className="gap-1.5" disabled={ocupado || totalCorrendo < 2 || totalCorrendo > bicho.max} onClick={() => void salvarMontagem()}>
+                    <Send className="h-3.5 w-3.5" /> Salvar e avisar quem mudou
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
         )}
 

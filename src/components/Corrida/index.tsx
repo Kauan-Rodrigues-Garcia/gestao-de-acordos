@@ -4,7 +4,9 @@
  *   <CorridaDaSorte />  decide, pelo estado da pessoa (`banco.ts`), o que
  *                       aparece: o card de divulgação, a escolha do bichinho
  *                       (só quem corre), o convite «Assistir» (só quem foi
- *                       chamado) e o palco.
+ *                       chamado) e o palco. Antes de a corrida nascer, a
+ *                       votação de 30 s da categoria (`CardEnquete`): quem
+ *                       votou entra direto no lobby quando ela abrir.
  *
  * Leve de propósito: o palco (o motor, os mapas, os vídeos) só desce quando a
  * pessoa foi chamada para uma corrida — e desce com a tela já assentada
@@ -15,8 +17,9 @@ import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { Flag, Trophy } from 'lucide-react';
 import { useAuthOpcional } from '@/hooks/useAuth';
 import { comNovaTentativa, precarregarQuandoOcioso } from '@/lib/sobDemanda';
-import { categoriaDe, ligarCorrida, useCorridaMinha, type CorridaJson, type PessoaJson } from './banco';
+import { categoriaDe, ligarCorrida, useCorridaMinha, voteiNaCorrida, type CorridaJson, type PessoaJson } from './banco';
 import { destravarAudio, nomeDaCorrida } from './nome';
+import { CardEnquete } from './CardEnquete';
 import './corrida.css';
 
 const carregarPalco = comNovaTentativa(() => import('./PalcoAoVivo'));
@@ -39,11 +42,12 @@ const gravarDispensa = (k: string) => { try { sessionStorage.setItem(k, '1'); } 
 export function CorridaDaSorte() {
   const auth = useAuthOpcional();
   const usuario = auth?.user?.id ?? null;
-  const { minha } = useCorridaMinha();
+  const { minha, enquete } = useCorridaMinha();
   const [palco, setPalco] = useState<number | null>(null);
   const [escolhaFechada, setEscolhaFechada] = useState<number | null>(null);
   const [trocar, setTrocar] = useState(false);
   const [, forcar] = useState(0);
+  const [entrouDireto, setEntrouDireto] = useState<number | null>(null);
 
   useEffect(() => (usuario ? ligarCorrida(usuario) : undefined), [usuario]);
 
@@ -68,15 +72,22 @@ export function CorridaDaSorte() {
   }, []);
   const fecharPalco = useCallback(() => setPalco(null), []);
 
-  if (!usuario) return null;
-
   const podeEscolher = !!corrida && !!eu?.corre && !corrida.gravada_em && (corrida.estado === 'preparando' || corrida.estado === 'aberta');
   const mostraEscolha = podeEscolher && ((eu!.escolha == null && escolhaFechada !== corrida!.id) || trocar);
+
+  // Votou na votação da categoria: entra direto no lobby (uma vez; fechou o palco, fica o botão de voltar).
+  // O som foi liberado no clique do voto.
+  const entraDireto = ativa && !palco && !mostraEscolha && entrouDireto !== corrida!.id && voteiNaCorrida(corrida!);
+  useEffect(() => { if (entraDireto && corrida) { setEntrouDireto(corrida.id); setPalco(corrida.id); } }, [entraDireto, corrida]);
+
+  if (!usuario) return null;
+
   const dispensado = corrida ? lerDispensa(chaveDispensa(corrida)) : false;
-  const mostraConvite = ativa && !palco && !mostraEscolha && !dispensado;
+  const mostraConvite = ativa && !palco && !mostraEscolha && !dispensado && !entraDireto;
 
   return (
     <>
+      {enquete && !palco && <CardEnquete enquete={enquete} />}
       {minha?.divulgacao && !palco && !mostraEscolha && !mostraConvite && (
         <Suspense fallback={null}>
           <CardDivulgacao divulgacao={minha.divulgacao} />
