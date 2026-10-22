@@ -5,8 +5,9 @@
  * para o bucket `corridas` e o resumo vai para `fn_corrida_gravar`.
  */
 import { supabase } from '@/lib/supabase';
-import { BUCKET, rpc, type CorridaJson, type PessoaJson } from '../banco';
+import { BUCKET, rpc, type Categoria, type CorridaJson, type PessoaJson } from '../banco';
 import { empacotarGravacao } from '../gravacao';
+import { empacotarCavalos } from '../cavalos/gravacao';
 import { bichinhoDe } from '../motor/bichinhos';
 import { SONS } from '../nome';
 
@@ -14,9 +15,17 @@ export interface Painel {
   agora: string;
   corrida: CorridaJson | null;
   pessoas: PessoaJson[];
-  historico: Array<{ id: number; nome: string; premio: string | null; estado: string; criada_em: string; vencedor_nome: string | null }>;
-  divulgacoes: Array<{ id: number; titulo: string; criada_em: string; expira_em: string; alvos: number; fecharam: number }>;
+  historico: Array<{ id: number; nome: string; premio: string | null; estado: string; criada_em: string; vencedor_nome: string | null; categoria?: Categoria }>;
+  divulgacoes: Array<{ id: number; titulo: string; criada_em: string; expira_em: string; alvos: number; fecharam: number; categoria?: Categoria }>;
 }
+
+/**
+ * A categoria só vai na chamada quando é «cavalos»: assim a corrida de bichinhos
+ * continua funcionando num banco que ainda não tem a migration 20261022120000.
+ */
+const comCategoria = (args: Record<string, unknown>, categoria: Categoria) => (categoria === 'cavalos' ? { ...args, p_categoria: categoria } : args);
+/** O banco ainda não tem a corrida de cavalos (a função com `p_categoria` não existe). */
+export const faltaMigrationCavalos = (e: unknown): boolean => /p_categoria|PGRST202|schema cache|could not find the function/i.test(String(e));
 
 /**
  * Corredor sem perfil no sistema (20261021120000). Sem `id` é novo; com o `id`
@@ -29,8 +38,8 @@ export interface CorredorSemPerfil {
 }
 
 export const lerPainel = () => rpc<Painel>('fn_corrida_painel');
-export const criarCorrida = (premio: string, corredores: string[], plateia: string[], avulsos: CorredorSemPerfil[]) =>
-  rpc<Painel>('fn_corrida_criar', { p_nome: 'Corrida da Sorte', p_premio: premio, p_corredores: corredores, p_plateia: plateia, p_avulsos: avulsos });
+export const criarCorrida = (premio: string, corredores: string[], plateia: string[], avulsos: CorredorSemPerfil[], categoria: Categoria = 'bichinhos') =>
+  rpc<Painel>('fn_corrida_criar', comCategoria({ p_nome: categoria === 'cavalos' ? 'Corrida de Cavalos' : 'Corrida da Sorte', p_premio: premio, p_corredores: corredores, p_plateia: plateia, p_avulsos: avulsos }, categoria));
 export const ajustarCorrida = (id: number, premio: string, corredores: string[], plateia: string[], avulsos: CorredorSemPerfil[]) =>
   rpc<Painel>('fn_corrida_ajustar', { p_corrida: id, p_premio: premio, p_corredores: corredores, p_plateia: plateia, p_avulsos: avulsos });
 export const abrirCorrida = (id: number) => rpc<Painel>('fn_corrida_abrir', { p_corrida: id });
@@ -39,8 +48,8 @@ export const preencherEscolhas = (id: number) => rpc<Painel>('fn_corrida_preench
 export const iniciarCorrida =(id: number) => rpc<Painel>('fn_corrida_iniciar', { p_corrida: id });
 export const encerrarCorrida = (id: number, cancelar: boolean) => rpc<Painel>('fn_corrida_encerrar', { p_corrida: id, p_cancelar: cancelar });
 export const descartarGravacao = (id: number) => rpc<Painel>('fn_corrida_gravar', { p_corrida: id, p_gravacao: null });
-export const divulgar = (titulo: string, mensagem: string, premio: string, alvos: string[], dias: number) =>
-  rpc<Painel>('fn_corrida_divulgar', { p_titulo: titulo, p_mensagem: mensagem, p_premio: premio, p_alvos: alvos, p_dias: dias });
+export const divulgar = (titulo: string, mensagem: string, premio: string, alvos: string[], dias: number, categoria: Categoria = 'bichinhos') =>
+  rpc<Painel>('fn_corrida_divulgar', comCategoria({ p_titulo: titulo, p_mensagem: mensagem, p_premio: premio, p_alvos: alvos, p_dias: dias }, categoria));
 export const tirarDivulgacao = (id: number) => rpc<Painel>('fn_corrida_divulgacao_encerrar', { p_divulgacao: id });
 
 async function subir(caminho: string, dados: Blob | Uint8Array, tipo: string): Promise<void> {
@@ -92,4 +101,36 @@ export async function gravarCorrida(corrida: CorridaJson, pessoas: PessoaJson[],
   } finally {
     motor.destruir();
   }
+}
+
+/**
+ * Grava a corrida de cavalos: simula (`cavalos/simulacao.js`), sobe as posições
+ * e salva o resumo. Não tem vídeo: a festa é desenhada em cada tela. Cada raia
+ * é um corredor, na ordem do número do cavalo (`faixa`); quem ainda não tinha
+ * cavalo precisa ter sido sorteado antes (`preencherEscolhas`).
+ */
+export async function gravarCorridaCavalos(corrida: CorridaJson, pessoas: PessoaJson[], aoProgresso: (f: number, etapa: string) => void, cancelado: () => boolean): Promise<Painel | null> {
+  const corredores = pessoas.filter(p => p.corre && p.escolha != null).sort((a, b) => (a.escolha ?? 0) - (b.escolha ?? 0));
+  if (corredores.length < 2) throw new Error('A corrida precisa de pelo menos 2 cavalos com dono.');
+  if (corredores.length !== pessoas.filter(p => p.corre).length) throw new Error('Ainda tem quem corre sem cavalo: preencha antes de gravar.');
+  aoProgresso(0.1, 'Simulando a corrida');
+  const { simular } = await import('../cavalos/simulacao.js');
+  const semente = crypto.getRandomValues(new Uint32Array(1))[0];
+  const rec = simular(semente, corredores.length);
+  if (cancelado()) return null;
+  aoProgresso(0.6, 'Enviando o arquivo');
+  const arquivo = `${corrida.id}/${Date.now().toString(36)}-cavalos.bin`;
+  await subir(arquivo, empacotarCavalos(rec), 'application/octet-stream');
+  if (cancelado()) return null;
+  aoProgresso(0.9, 'Salvando');
+  const painel = await rpc<Painel>('fn_corrida_gravar', {
+    p_corrida: corrida.id,
+    p_gravacao: {
+      // O cenário sai do número da corrida, em cada tela (`corrida-cavalos.html`); a chave fica pelo contrato.
+      arquivo, mapa: 'da-corrida', semente, faixa: corredores.map(p => p.usuario), parada: 0,
+      vencedor: corredores[rec.vencedor].usuario, dur_corrida: rec.dur, categoria: 'cavalos',
+    },
+  });
+  aoProgresso(1, 'Pronta');
+  return painel;
 }

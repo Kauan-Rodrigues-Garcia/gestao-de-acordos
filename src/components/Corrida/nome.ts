@@ -1,5 +1,9 @@
 /** O nome da gincana e os arquivos de som (servidos pelo próprio app, em public/sons/corrida). */
 export const NOME_CORRIDA = 'Corrida da Sorte';
+/** A segunda categoria (22/10/2026): `cavalos/` e `corrida-cavalos.html`. */
+export const NOME_CAVALOS = 'Corrida de Cavalos';
+/** O nome que a pessoa lê, pela categoria da corrida. */
+export const nomeDaCorrida = (categoria: 'bichinhos' | 'cavalos'): string => (categoria === 'cavalos' ? NOME_CAVALOS : NOME_CORRIDA);
 
 export const SONS = {
   /** «Tokyo Drift - Six Days», escolhida pelo Cleber em 21/10/2026: começa 15 s depois do lobby abrir, do 6º segundo da faixa. */

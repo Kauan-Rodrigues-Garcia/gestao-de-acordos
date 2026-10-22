@@ -23,6 +23,7 @@ const SQL = readFileSync(resolve(__dirname, '../../../supabase/migrations/202610
 const SQL_PREENCHER = readFileSync(resolve(__dirname, '../../../supabase/migrations/20261020200000_corrida_preencher_escolhas.sql'), 'utf8');
 const SQL_TEMA = readFileSync(resolve(__dirname, '../../../supabase/migrations/20261020210000_corrida_tema_e_palpite.sql'), 'utf8');
 const SQL_AVULSO = readFileSync(resolve(__dirname, '../../../supabase/migrations/20261021120000_corrida_corredor_sem_perfil.sql'), 'utf8');
+const SQL_CAVALOS = readFileSync(resolve(__dirname, '../../../supabase/migrations/20261022120000_corrida_cavalos.sql'), 'utf8');
 
 let db: PGlite;
 
@@ -85,6 +86,8 @@ beforeAll(async () => {
   await db.exec(SQL_TEMA);
   await db.exec(SQL_AVULSO);
   await db.exec(SQL_AVULSO);
+  await db.exec(SQL_CAVALOS);
+  await db.exec(SQL_CAVALOS);
 });
 
 beforeEach(async () => {
@@ -448,6 +451,118 @@ describe('20261021120000 — corredor sem perfil', () => {
 
   it('as funções internas novas não ficam abertas', async () => {
     const r = await db.query<{ ok: boolean }>(`select has_function_privilege('authenticated', 'public.fn_corrida_contar_avulsos(jsonb)', 'EXECUTE') ok`);
+    expect(r.rows[0].ok).toBe(false);
+  });
+});
+
+describe('20261022120000 — a corrida de cavalos', () => {
+  interface ComCategoria extends Corrida { categoria: string; nome: string }
+  const criarCavalos = (corredores: string[], plateia: string[], avulsos: unknown[] = []) =>
+    como<Painel>(ADMIN, 'select public.fn_corrida_criar($1, $2, $3, $4, $5, $6) v', ['', 'R$ 30', corredores, plateia, JSON.stringify(avulsos), 'cavalos']);
+  const escolher = (uid: string, id: number, cavalo: number) => como<Minha>(uid, 'select public.fn_corrida_escolher($1, $2::smallint) v', [id, cavalo]);
+  const escolhas = async () => (await como<Painel>(ADMIN, 'select public.fn_corrida_painel() v')).pessoas.filter(p => p.corre).map(p => p.escolha);
+
+  it('nasce de cavalos, com o nome certo; sem dizer nada, continua de bichinhos', async () => {
+    const p = await criarCavalos([ANA, BRUNO], [DORA]);
+    expect(p.corrida as ComCategoria).toMatchObject({ categoria: 'cavalos', nome: 'Corrida de Cavalos', corredores: 2 });
+    await como(ADMIN, 'select public.fn_corrida_encerrar($1, true) v', [p.corrida!.id]);
+    const b = await criar([ANA, BRUNO], []);
+    expect((b.corrida as ComCategoria).categoria).toBe('bichinhos');
+  });
+
+  it('categoria que não existe é recusada', async () => {
+    await expect(como(ADMIN, 'select public.fn_corrida_criar($1, $2, $3, $4, $5, $6) v', ['', null, [ANA, BRUNO], [], '[]', 'tartarugas']))
+      .rejects.toThrow(/CATEGORIA_INVALIDA/);
+  });
+
+  it('cavalo vai de 0 a 23; bichinho continua de 0 a 2', async () => {
+    const { corrida } = await criarCavalos([ANA, BRUNO], []);
+    await escolher(ANA, corrida!.id, 23);
+    await expect(escolher(BRUNO, corrida!.id, 24)).rejects.toThrow(/ESCOLHA_INVALIDA/);
+    await como(ADMIN, 'select public.fn_corrida_encerrar($1, true) v', [corrida!.id]);
+    const b = await criar([ANA, BRUNO], []);
+    await expect(como(ANA, 'select public.fn_corrida_escolher($1, 5::smallint) v', [b.corrida!.id])).rejects.toThrow(/ESCOLHA_INVALIDA/);
+  });
+
+  it('cada cavalo tem um dono só: quem chega depois escolhe outro', async () => {
+    const id = (await criarCavalos([ANA, BRUNO], [])).corrida!.id;
+    await escolher(ANA, id, 7);
+    await expect(escolher(BRUNO, id, 7)).rejects.toThrow(/CAVALO_TEM_DONO/);
+    // escolher o próprio cavalo de novo não é conflito; trocar solta o antigo
+    await escolher(ANA, id, 7);
+    await escolher(ANA, id, 8);
+    await escolher(BRUNO, id, 7);
+    expect((await escolhas()).sort()).toEqual([7, 8]);
+  });
+
+  it('no bichinho, os dois podem ter o mesmo', async () => {
+    const id = (await criar([ANA, BRUNO], [])).corrida!.id;
+    await como(ANA, 'select public.fn_corrida_escolher($1, 1::smallint) v', [id]);
+    await como(BRUNO, 'select public.fn_corrida_escolher($1, 1::smallint) v', [id]);
+    expect(await escolhas()).toEqual([1, 1]);
+  });
+
+  it('quem ainda está escolhendo fica sabendo na hora que o cavalo saiu', async () => {
+    const id = (await criarCavalos([ANA, BRUNO], [])).corrida!.id;
+    await db.exec('truncate realtime.enviados');
+    await escolher(ANA, id, 3);
+    const a = await avisos();
+    expect(a.some(x => x.topic === `corrida-sala:${id}` && x.event === 'escolha' && x.payload.escolha === 3)).toBe(true);
+  });
+
+  it('o sorteio de quem não escolheu dá cavalos diferentes e livres', async () => {
+    const id = (await criarCavalos([ANA, BRUNO, CAIO, DORA], [])).corrida!.id;
+    await escolher(ANA, id, 0);
+    await como(ADMIN, 'select public.fn_corrida_preencher($1) v', [id]);
+    const e = await escolhas();
+    expect(e.every(x => x != null && x >= 0 && x <= 23)).toBe(true);
+    expect(new Set(e).size).toBe(4);
+    expect(e).toContain(0);
+  });
+
+  it('o corredor sem perfil ganha um cavalo livre, diferente do de quem já escolheu', async () => {
+    const p = await criarCavalos([ANA], [], [{ nome: 'João', setor: 'Play 4' }, { nome: 'Lia', setor: 'Play 4' }]);
+    const e = p.pessoas.filter(x => x.corre).map(x => x.escolha);
+    const avulsos = e.filter(x => x != null);
+    expect(avulsos).toHaveLength(2);
+    expect(new Set(avulsos).size).toBe(2);
+  });
+
+  it('são 24 cavalos: mais de 24 correndo é recusado (criar e ajustar)', async () => {
+    const muitos = Array.from({ length: 25 }, (_, i) => ({ nome: `Pessoa ${i}`, setor: 'Play 4' }));
+    await expect(criarCavalos([], [], muitos)).rejects.toThrow(/GENTE_DEMAIS/);
+    const id = (await criarCavalos([ANA, BRUNO], [])).corrida!.id;
+    await expect(como(ADMIN, 'select public.fn_corrida_ajustar($1, $2, $3, $4, $5) v', [id, 'R$ 30', [ANA, BRUNO], [], JSON.stringify(muitos)]))
+      .rejects.toThrow(/GENTE_DEMAIS/);
+  });
+
+  it('quem corre nunca lê «grav» na corrida de cavalos', async () => {
+    const id = (await criarCavalos([ANA, BRUNO], [])).corrida!.id;
+    await escolher(ANA, id, 1);
+    await como(ADMIN, 'select public.fn_corrida_gravar($1, $2) v', [id, gravacao(ANA)]);
+    const erro = await escolher(BRUNO, id, 2).then(() => '', e => String(e));
+    expect(erro).toMatch(/ESCOLHA_FECHADA/);
+    expect(erro).not.toMatch(/grav/i);
+  });
+
+  it('o histórico do painel diz a categoria', async () => {
+    await criarCavalos([ANA, BRUNO], []);
+    const p = await como<Painel & { historico: { categoria: string }[] }>(ADMIN, 'select public.fn_corrida_painel() v');
+    expect(p.historico[0].categoria).toBe('cavalos');
+  });
+
+  it('o card de divulgação chega com a categoria (sem dizer, é de bichinhos)', async () => {
+    await como(ADMIN, 'select public.fn_corrida_divulgar($1, $2, $3, $4, $5, $6) v', ['Vem aí!', 'Corrida de cavalos', 'R$ 30', [ANA], 3, 'cavalos']);
+    const m = await minha(ANA) as Minha & { divulgacao: { categoria: string } };
+    expect(m.divulgacao.categoria).toBe('cavalos');
+    await como(ADMIN, 'select public.fn_corrida_divulgar($1, $2, $3, $4, $5) v', ['De novo', 'Bichinhos', null, [BRUNO], 3]);
+    const b = await minha(BRUNO) as Minha & { divulgacao: { categoria: string } };
+    expect(b.divulgacao.categoria).toBe('bichinhos');
+    await expect(como(ADMIN, 'select public.fn_corrida_divulgar($1, $2, $3, $4, $5, $6) v', ['x', 'y', null, [ANA], 3, 'tartarugas'])).rejects.toThrow(/CATEGORIA_INVALIDA/);
+  });
+
+  it('a função interna do sorteio não fica aberta', async () => {
+    const r = await db.query<{ ok: boolean }>(`select has_function_privilege('authenticated', 'public.fn_corrida_cavalo_livre(bigint)', 'EXECUTE') ok`);
     expect(r.rows[0].ok).toBe(false);
   });
 });

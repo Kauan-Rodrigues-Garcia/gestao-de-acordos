@@ -24,6 +24,9 @@ import { invalidarCache, lerComCache } from '@/lib/cacheCurto';
 
 // ── Tipos (as tabelas não estão em `database.types.ts`) ─────────────────────
 export type EstadoCorrida = 'preparando' | 'aberta' | 'correndo' | 'encerrada' | 'cancelada';
+/** Bichinhos (a de sempre) ou cavalos (20261022120000; sem a migration, não vem e vale bichinhos). */
+export type Categoria = 'bichinhos' | 'cavalos';
+export const categoriaDe = (x: { categoria?: Categoria | null } | null | undefined): Categoria => (x?.categoria === 'cavalos' ? 'cavalos' : 'bichinhos');
 
 export interface GravacaoResumo {
   arquivo: string;
@@ -48,6 +51,8 @@ export interface CorridaJson {
   versao: number;
   /** O cenário do lobby (20261020210000; sem a migration, não vem). */
   tema?: 'f1' | 'hipodromo' | 'tv' | 'atual';
+  /** Bichinhos ou cavalos (20261022120000). */
+  categoria?: Categoria;
   criada_em: string;
   aberta_em: string | null;
   gravada_em: string | null;
@@ -83,6 +88,8 @@ export interface DivulgacaoJson {
   mensagem: string;
   premio: string | null;
   criada_em: string;
+  /** O tema do card (20261022120000). */
+  categoria?: Categoria;
 }
 
 export interface Minha {

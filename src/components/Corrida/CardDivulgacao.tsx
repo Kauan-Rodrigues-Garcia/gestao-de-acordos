@@ -8,7 +8,8 @@ import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Trophy, X } from 'lucide-react';
 import { CALMO, desenhaBichinho, mulberry32, tresBichinhos, type Estilo } from './motor/bichinhos';
-import { fecharDivulgacao, mensagemDoErro, type DivulgacaoJson } from './banco';
+import { categoriaDe, fecharDivulgacao, mensagemDoErro, type DivulgacaoJson } from './banco';
+import CardCavalos from './cavalos/CardCavalos';
 
 interface Props { divulgacao: DivulgacaoJson; onFechou?: () => void; teste?: boolean }
 
@@ -20,6 +21,10 @@ export default function CardDivulgacao({ divulgacao, onFechou, teste }: Props) {
     try { await fecharDivulgacao(divulgacao.id); onFechou?.(); }
     catch (e) { toast.error('Não deu para fechar', { description: mensagemDoErro(e) }); setFechando(false); }
   };
+  // O card da corrida de cavalos tem o tema do hipódromo (a página da corrida, no modo «card»).
+  if (categoriaDe(divulgacao) === 'cavalos') {
+    return <CardCavalos titulo={divulgacao.titulo} mensagem={divulgacao.mensagem} premio={divulgacao.premio} onFechar={() => { if (!fechando) void fechar(); }} />;
+  }
   return (
     <div className="fixed inset-0 z-[84] grid place-items-center bg-[#04060d]/55 p-4 backdrop-blur-[2px]" role="dialog" aria-modal="true" aria-labelledby="cds-div-titulo">
       <div className="cds-palco cds-entra relative w-full max-w-[460px] overflow-hidden rounded-3xl border border-[#ffd678]/40 bg-gradient-to-b from-[#1d2a50] via-[#142040] to-[#0b1022] text-center text-[#e8eefc] shadow-[0_30px_80px_rgba(0,0,0,.6),0_0_70px_rgba(255,214,120,.18)]">

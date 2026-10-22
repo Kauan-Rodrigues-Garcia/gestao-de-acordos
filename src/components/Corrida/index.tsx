@@ -15,16 +15,21 @@ import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { Flag, Trophy } from 'lucide-react';
 import { useAuthOpcional } from '@/hooks/useAuth';
 import { comNovaTentativa, precarregarQuandoOcioso } from '@/lib/sobDemanda';
-import { ligarCorrida, useCorridaMinha, type CorridaJson, type PessoaJson } from './banco';
-import { NOME_CORRIDA, destravarAudio } from './nome';
+import { categoriaDe, ligarCorrida, useCorridaMinha, type CorridaJson, type PessoaJson } from './banco';
+import { destravarAudio, nomeDaCorrida } from './nome';
 import './corrida.css';
 
 const carregarPalco = comNovaTentativa(() => import('./PalcoAoVivo'));
 const carregarEscolha = comNovaTentativa(() => import('./EscolhaBichinho'));
 const carregarDivulgacao = comNovaTentativa(() => import('./CardDivulgacao'));
+// A corrida de cavalos (22/10/2026): a página da corrida num iframe; o que desce aqui é só a moldura.
+const carregarPalcoCavalos = comNovaTentativa(() => import('./cavalos/PalcoCavalos'));
+const carregarEscolhaCavalo = comNovaTentativa(() => import('./cavalos/EscolhaCavalo'));
 const PalcoAoVivo = lazy(carregarPalco);
 const EscolhaBichinho = lazy(carregarEscolha);
 const CardDivulgacao = lazy(carregarDivulgacao);
+const PalcoCavalos = lazy(carregarPalcoCavalos);
+const EscolhaCavalo = lazy(carregarEscolhaCavalo);
 
 /** «Agora não» vale para esta aba e esta fase da corrida: abriu ou largou, o convite volta. */
 const chaveDispensa = (c: CorridaJson) => `corrida-dispensa:${c.id}:${c.estado}`;
@@ -45,10 +50,13 @@ export function CorridaDaSorte() {
   const corrida = minha?.corrida ?? null;
   const eu = minha?.eu ?? null;
   const ativa = !!corrida && (corrida.estado === 'aberta' || corrida.estado === 'correndo');
+  const cavalos = categoriaDe(corrida) === 'cavalos';
 
   // Chamado para uma corrida: o palco desce com a tela assentada, antes de precisar dele.
   const corridaId = corrida?.id ?? 0, chamado = !!eu, divulgacaoId = minha?.divulgacao?.id ?? 0;
-  useEffect(() => (corridaId && chamado ? precarregarQuandoOcioso([carregarPalco, carregarEscolha], 10_000) : undefined), [corridaId, chamado]);
+  useEffect(() => (corridaId && chamado
+    ? precarregarQuandoOcioso(cavalos ? [carregarPalcoCavalos, carregarEscolhaCavalo] : [carregarPalco, carregarEscolha], 10_000)
+    : undefined), [corridaId, chamado, cavalos]);
   useEffect(() => (divulgacaoId ? precarregarQuandoOcioso([carregarDivulgacao], 3_000) : undefined), [divulgacaoId]);
 
   // A corrida acabou ou cancelaram: o palco fecha sozinho quando ela sai do estado da pessoa.
@@ -76,7 +84,9 @@ export function CorridaDaSorte() {
       )}
       {mostraEscolha && (
         <Suspense fallback={null}>
-          <EscolhaBichinho corrida={corrida!} usuario={usuario} escolhaAtual={eu!.escolha} onDepois={() => { setEscolhaFechada(corrida!.id); setTrocar(false); }} />
+          {cavalos
+            ? <EscolhaCavalo corrida={corrida!} usuario={usuario} onDepois={() => { setEscolhaFechada(corrida!.id); setTrocar(false); }} />
+            : <EscolhaBichinho corrida={corrida!} usuario={usuario} escolhaAtual={eu!.escolha} onDepois={() => { setEscolhaFechada(corrida!.id); setTrocar(false); }} />}
         </Suspense>
       )}
       {mostraConvite && (
@@ -87,12 +97,13 @@ export function CorridaDaSorte() {
       {ativa && !palco && !mostraConvite && !mostraEscolha && (
         <BotaoVoltar corrida={corrida!} onAssistir={() => assistir(corrida!.id)} />
       )}
-      {podeEscolher && !mostraEscolha && !palco && eu!.escolha != null && corrida!.estado === 'preparando' && (
+      {/* No cavalo não tem troca: cada cavalo tem um dono, e escolheu, ele é seu até a chegada. */}
+      {podeEscolher && !cavalos && !mostraEscolha && !palco && eu!.escolha != null && corrida!.estado === 'preparando' && (
         <BotaoTrocar onTrocar={() => setTrocar(true)} />
       )}
       {palco && (
         <Suspense fallback={null}>
-          <PalcoAoVivo corridaId={palco} onFechar={fecharPalco} />
+          {cavalos ? <PalcoCavalos corridaId={palco} onFechar={fecharPalco} /> : <PalcoAoVivo corridaId={palco} onFechar={fecharPalco} />}
         </Suspense>
       )}
     </>
@@ -101,6 +112,7 @@ export function CorridaDaSorte() {
 
 function ConviteCorrida({ corrida, eu, onAssistir, onDepois }: { corrida: CorridaJson; eu: PessoaJson; onAssistir: () => void; onDepois: () => void }) {
   const largou = corrida.estado === 'correndo';
+  const cavalos = categoriaDe(corrida) === 'cavalos', NOME_CORRIDA = nomeDaCorrida(categoriaDe(corrida));
   return (
     <div className="fixed inset-0 z-[84] grid place-items-center bg-[#04060d]/55 p-4 backdrop-blur-[2px]" role="dialog" aria-modal="true" aria-labelledby="cds-convite-titulo">
       <div className="relative w-full max-w-[440px] overflow-hidden rounded-[18px] border border-[#ffd678]/55 bg-gradient-to-b from-[#16203c] to-[#0b1022] px-6 pb-6 pt-9 text-center text-[#e8eefc] shadow-[0_30px_80px_rgba(0,0,0,.65),0_0_70px_rgba(255,77,94,.22)] cds-palco cds-entra">
@@ -112,8 +124,9 @@ function ConviteCorrida({ corrida, eu, onAssistir, onDepois }: { corrida: Corrid
           {largou ? `A ${NOME_CORRIDA} está rolando!` : `A ${NOME_CORRIDA} vai começar!`}
         </h3>
         <p className="mx-auto mt-3 max-w-[34ch] text-[15px] text-[#b8c4e0]">
-          {eu.corre ? 'Seu bichinho está no grid de largada. ' : ''}
-          {corrida.corredores} {corrida.corredores === 1 ? 'pessoa correndo' : 'pessoas correndo'}. Entre para ver o sorteio do mapa e a corrida ao vivo, junto com todo mundo.
+          {eu.corre ? (cavalos ? 'Seu cavalo está no paddock. ' : 'Seu bichinho está no grid de largada. ') : ''}
+          {corrida.corredores} {corrida.corredores === 1 ? 'pessoa correndo' : 'pessoas correndo'}.{' '}
+          {cavalos ? 'Entre no paddock, dê seu palpite e veja a corrida ao vivo, junto com todo mundo.' : 'Entre para ver o sorteio do mapa e a corrida ao vivo, junto com todo mundo.'}
         </p>
         {corrida.premio && (
           <p className="mx-auto mt-3 inline-flex items-center gap-1.5 rounded-full bg-gradient-to-b from-[#ffe68a] to-[#e0a92a] px-3 py-1 text-sm font-bold text-[#2a1a02]">
@@ -133,6 +146,7 @@ function ConviteCorrida({ corrida, eu, onAssistir, onDepois }: { corrida: Corrid
 }
 
 function BotaoVoltar({ corrida, onAssistir }: { corrida: CorridaJson; onAssistir: () => void }) {
+  const NOME_CORRIDA = nomeDaCorrida(categoriaDe(corrida));
   return (
     <button type="button" onClick={onAssistir}
       className="fixed bottom-4 left-4 z-[70] flex items-center gap-2 rounded-full border border-[#ffd678]/50 bg-[#0b1022] px-4 py-2 text-sm font-semibold text-[#fff6e6] shadow-xl hover:border-[#ffd84d]">
@@ -147,7 +161,7 @@ function BotaoTrocar({ onTrocar }: { onTrocar: () => void }) {
   return (
     <button type="button" onClick={onTrocar}
       className="fixed bottom-4 left-4 z-[70] flex items-center gap-2 rounded-full border border-[#ffd678]/50 bg-[#0b1022] px-4 py-2 text-sm font-semibold text-[#fff6e6] shadow-xl hover:border-[#ffd84d]">
-      <Flag className="h-4 w-4 text-[#ffd84d]" aria-hidden="true" /> {NOME_CORRIDA}: trocar o meu bichinho
+      <Flag className="h-4 w-4 text-[#ffd84d]" aria-hidden="true" /> {nomeDaCorrida('bichinhos')}: trocar o meu bichinho
     </button>
   );
 }

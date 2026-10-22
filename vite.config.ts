@@ -128,6 +128,13 @@ export default defineConfig(({ mode }) => {
       // (recharts, xlsx) que ficam em chunks vendor separados.
       chunkSizeWarningLimit: 600,
       rollupOptions: {
+        // Duas páginas: o app e a Corrida de Cavalos (22/10/2026), que o app abre
+        // num iframe (`src/components/Corrida/cavalos/JanelaCavalos.tsx`). O
+        // laboratório (`lab-cavalos.html`) fica fora: só existe no `npm run dev`.
+        input: {
+          main: path.resolve(__dirname, 'index.html'),
+          cavalos: path.resolve(__dirname, 'corrida-cavalos.html'),
+        },
         output: {
           // ── Vendor chunks manuais ────────────────────────────────────────
           // Separa libs pesadas em chunks dedicados para:
