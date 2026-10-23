@@ -216,7 +216,8 @@ const SEM_PERMISSAO = 'Seu cargo não tem permissão para alterar este campo.';
  * Os cargos oferecidos saem do cadastro (Configurações > Cargos): os ativos, na
  * ordem do cadastro. Super Admin só aparece para quem já é.
  */
-function opcoesDoCadastro(
+// eslint-disable-next-line react-refresh/only-export-components -- a janela de cadastro (DialogNovoUsuario) oferece os mesmos cargos.
+export function opcoesDoCadastro(
   cargos: readonly Cargo[],
 ): { valor: PerfilUsuario; rotulo: string; soSuperAdmin?: boolean; ativo: boolean }[] {
   return cargos.map(c => ({

@@ -18,6 +18,7 @@ import { AbasSegmentadas, type AbaSegmentada } from '@/components/AbasSegmentada
 import { ListaPessoas, ListaPessoasVazia, type GrupoDeSetor } from '@/components/admin/ListaPessoas';
 import { DialogTransferencia } from '@/components/admin/DialogTransferencia';
 import { DialogUsuario, type UserForm, type PodeNoUsuario } from '@/components/admin/DialogUsuario';
+import { DialogNovoUsuario } from '@/components/admin/DialogNovoUsuario';
 import { useSetorNucleo } from '@/hooks/useSetorNucleo';
 import { motivoCargoForaDoSetor } from '@/lib/cargoDoNucleo';
 import { HistoricoTransferencias } from '@/components/admin/HistoricoTransferencias';
@@ -618,7 +619,9 @@ export default function AdminUsuarios() {
       usuario: '',
       senha: '',
       perfil: 'operador',
-      setor_id: setores.find(s => s.empresa_id === (empresaAtual?.id ?? ''))?.id ?? '',
+      // O setor é escolha de quem cria (marca e setor, no DialogNovoUsuario):
+      // vir um preenchido era cadastrar no primeiro da lista sem ninguém ver.
+      setor_id: '',
       empresa_id: empresaAtual?.id ?? '',
       // Pessoa até que alguém diga o contrário. O prefixo `ia_` do login é
       // pista e nunca cadastro — quem marca é a caixa, não a string.
@@ -712,13 +715,27 @@ export default function AdminUsuarios() {
   }
 
   async function salvar() {
-    const empresaId = isSuperAdmin ? form.empresa_id : (empresaAtual?.id ?? form.empresa_id);
+    /*
+     * No cadastro a empresa é a do SETOR escolhido (23/10/2026): a janela lista
+     * os setores pela marca (cidade), e um setor de Marília pode morar em
+     * qualquer das duas empresas. A empresa da tela com o setor da outra, a FK
+     * composta recusa. Quem pode criar onde, o servidor confere.
+     */
+    const setorDoCadastro = !editando && !cargoEscopoEmpresa
+      ? setores.find(s => s.id === form.setor_id) ?? null
+      : null;
+    const empresaId = setorDoCadastro?.empresa_id
+      || (isSuperAdmin ? form.empresa_id : (empresaAtual?.id ?? form.empresa_id));
     if (!form.nome || (!form.email && !form.usuario)) { toast.error('Preencha nome e e-mail ou nome de usuário'); return; }
     if (!empresaId) { toast.error('Não foi possível identificar a empresa. Recarregue a página.'); return; }
     // Sair do diálogo mantendo o vazio devolveria a pessoa ao estado que zera o
     // Painel Líder e o Analítico dela — e a próxima pessoa a abrir a tela não
     // teria como saber que aquilo é um defeito. `setoresDoForm.length` evita
     // travar quem simplesmente não tem setor cadastrado na empresa.
+    if (!editando && !cargoEscopoEmpresa && !form.setor_id && setores.length > 0) {
+      toast.error('Escolha a marca e o setor onde a pessoa vai trabalhar.');
+      return;
+    }
     if (setorVazioParaPreencher && !form.setor_id && setoresDoForm.length > 0) {
       toast.error('Escolha o setor: este cargo pertence a um setor, e sem ele as telas analíticas ficam zeradas.');
       return;
@@ -1704,8 +1721,29 @@ export default function AdminUsuarios() {
           A janela saiu daqui em 06/09/2026 e virou `DialogUsuario`: ganhou
           seções com assunto próprio, cabeçalho com a ficha de quem está sendo
           editado, e uma chave de permissão por campo. Ver o cabeçalho de lá. */}
+      {/* O cadastro tem janela própria desde 23/10/2026: larga, em três passos, e
+          o setor escolhido pela marca (cidade). Ver DialogNovoUsuario. */}
+      <DialogNovoUsuario
+        aberto={dialogOpen && !editando}
+        onFechar={() => setDialogOpen(false)}
+        form={form}
+        setForm={setForm}
+        podeCargo={podeNoUsuario.cargo}
+        isSuperAdmin={isSuperAdmin}
+        setores={setores}
+        cidades={cidades}
+        empresas={empresas}
+        empresaAtualNome={empresaAtual?.nome}
+        setorDeQuemCria={perfilAtual?.setor_id ?? null}
+        mostrarRobo={mostrarRobo}
+        cargoEscopoEmpresa={cargoEscopoEmpresa}
+        setorNucleoId={setorNucleoId}
+        salvando={saving}
+        onSalvar={salvar}
+      />
+
       <DialogUsuario
-        aberto={dialogOpen}
+        aberto={dialogOpen && !!editando}
         onFechar={() => setDialogOpen(false)}
         editando={editando}
         form={form}
