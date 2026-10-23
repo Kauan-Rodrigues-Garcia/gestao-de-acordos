@@ -279,7 +279,7 @@ export function VariableChips({ onInsert, ocultar, texto, onRealcar }: {
     .filter((s) => s.grupos.length > 0);
   const temValor = grupos.some((g) => g.desconto !== undefined);
   return (
-    <div className="space-y-2">
+    <div className="@container space-y-2">
       {temValor && (
         <p className="flex items-center gap-3 text-[11px] text-muted-foreground">
           <span className="flex items-center gap-1.5">
@@ -290,19 +290,21 @@ export function VariableChips({ onInsert, ocultar, texto, onRealcar }: {
           </span>
         </p>
       )}
-      {/* Na janela larga, 3 blocos por linha: menos rolagem (21/10/2026). */}
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+      {/* Blocos por linha pela largura de ONDE os chips estão, não da tela
+          (23/10/2026): na coluna ao lado da mensagem cabem 2, na largura toda
+          3 — menos rolagem (21/10/2026). */}
+      <div className="grid gap-2 @lg:grid-cols-2 @4xl:grid-cols-3">
         {secoes.map((s) => (
           <section
             key={s.id}
             aria-label={s.titulo}
-            className={cn('min-w-0 rounded-lg border border-border bg-muted/20 p-2.5', s.largo && 'sm:col-span-2 lg:col-span-3')}
+            className={cn('min-w-0 rounded-lg border border-border bg-muted/20 p-2.5', s.largo && '@lg:col-span-2 @4xl:col-span-3')}
           >
             <div className="mb-2 border-b border-border/70 pb-1.5 text-[11px] leading-tight">
               <p className="truncate whitespace-nowrap font-bold uppercase tracking-wide text-foreground">{s.titulo}</p>
               <p className="truncate whitespace-nowrap text-muted-foreground" title={s.dica}>{s.dica}</p>
             </div>
-            <div className={cn('grid gap-2.5', s.largo && 'sm:grid-cols-2')}>
+            <div className={cn('grid gap-2.5', s.largo && '@lg:grid-cols-2')}>
               {s.grupos.map((g) => (
                 <GrupoDeChips key={g.itens[0][0]} grupo={g} usadas={usadas} onInsert={onInsert} onRealcar={onRealcar} />
               ))}

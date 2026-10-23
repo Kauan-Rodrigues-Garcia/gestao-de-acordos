@@ -23,7 +23,6 @@ import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import {
@@ -45,7 +44,7 @@ import { CampaignCore, type CampaignItem } from './lib/campaign-core';
 import { temPendenciaGrave, useCampanhaFacil, type StatusFilter, type WorkspaceState } from './useCampanhaFacil';
 import { SeletorOperadores } from './SeletorOperadores';
 import { MinhasCampanhas } from './HistoricoCampanhas';
-import { RealceDeVariavel, VariableChips, insertVariable } from './VariaveisMensagem';
+import { JanelaDaMensagem } from './JanelaDaMensagem';
 import { CampoPercentual } from './CampoPercentual';
 import { textoDoPercentual } from './percentual';
 
@@ -744,77 +743,62 @@ export default function CampanhaFacil() {
         </TabsContent>
       </Tabs>
 
-      {/* ══ Dialog: editar mensagem ═════════════════════════════════════════ */}
-      <Dialog open={editOpen} onOpenChange={(v) => { setEditOpen(v); setRealce(null); }}>
-        <DialogContent className="max-h-[92vh] max-w-5xl overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Editar mensagem</DialogTitle>
-            <DialogDescription>Use as variáveis para inserir dados e valores de cada cliente. O texto é preservado como digitado.</DialogDescription>
-          </DialogHeader>
-          <div className="relative">
-            <Textarea ref={editRef} rows={16} value={editValue} onChange={(e) => setEditValue(e.target.value)} className="font-mono text-xs" />
-            <RealceDeVariavel alvo={editRef} texto={editValue} variavel={realce} />
-          </div>
-          <div className="space-y-1.5">
-            <p className="text-xs font-medium text-muted-foreground">Inserir variável</p>
-            <VariableChips
-              texto={editValue}
-              onRealcar={setRealce}
-              onInsert={(v) => insertVariable(editRef, editValue, setEditValue, v)}
-            />
-          </div>
-          <DialogFooter className="sm:justify-between">
+      {/* ══ Janela: editar mensagem ═════════════════════════════════════════
+          A mensagem à esquerda e as variáveis ao lado — ver JanelaDaMensagem. */}
+      <JanelaDaMensagem
+        aberta={editOpen}
+        onOpenChange={(v) => { setEditOpen(v); setRealce(null); }}
+        titulo="Editar mensagem"
+        descricao="Use as variáveis para inserir dados e valores de cada cliente. O texto é preservado como digitado."
+        textoRef={editRef}
+        texto={editValue}
+        setTexto={setEditValue}
+        realce={realce}
+        setRealce={setRealce}
+        rodape={(
+          <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-between">
             <Button variant="ghost" onClick={() => { cf.resetTemplateBody(); setEditValue(cf.selectedTemplate.body); }}>Restaurar modelo</Button>
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setEditOpen(false)}>Cancelar</Button>
               <Button onClick={() => { cf.saveTemplateBody(editValue); setEditOpen(false); }}>Aplicar mensagem</Button>
             </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </div>
+        )}
+      />
 
-      {/* ══ Dialog: adicionar mensagem ══════════════════════════════════════ */}
-      <Dialog open={addOpen} onOpenChange={(v) => { setAddOpen(v); setRealce(null); }}>
-        <DialogContent className="max-h-[92vh] max-w-5xl overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Adicionar mensagem</DialogTitle>
-            <DialogDescription>O texto será salvo exatamente como for digitado e ficará disponível só para os líderes {doSetor}.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="text-xs font-medium">Título da mensagem</label>
-                <Input value={addTitulo} maxLength={100} onChange={(e) => setAddTitulo(e.target.value)} placeholder="Ex.: Campanha de negociação" />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium">Categoria</label>
-                <Input value={addCategoria} maxLength={40} onChange={(e) => setAddCategoria(e.target.value)} placeholder="Ex.: Cobrança" />
-              </div>
+      {/* ══ Janela: adicionar mensagem ══════════════════════════════════════ */}
+      <JanelaDaMensagem
+        aberta={addOpen}
+        onOpenChange={(v) => { setAddOpen(v); setRealce(null); }}
+        titulo="Adicionar mensagem"
+        descricao={`O texto será salvo exatamente como for digitado e ficará disponível só para os líderes ${doSetor}.`}
+        campos={(
+          <div className="grid gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+            <div className="space-y-1">
+              <label className="text-xs font-medium">Título da mensagem</label>
+              <Input value={addTitulo} maxLength={100} onChange={(e) => setAddTitulo(e.target.value)} placeholder="Ex.: Campanha de negociação" />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium">Texto da campanha</label>
-              <div className="relative">
-                <Textarea ref={addRef} rows={12} value={addCorpo} onChange={(e) => setAddCorpo(e.target.value)} className="font-mono text-xs" placeholder="Cole ou digite a mensagem sem alterar o conteúdo." />
-                <RealceDeVariavel alvo={addRef} texto={addCorpo} variavel={realce} />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <p className="text-xs font-medium text-muted-foreground">Inserir variável</p>
-              <VariableChips
-                texto={addCorpo}
-                onRealcar={setRealce}
-                onInsert={(v) => insertVariable(addRef, addCorpo, setAddCorpo, v)}
-              />
+              <label className="text-xs font-medium">Categoria</label>
+              <Input value={addCategoria} maxLength={40} onChange={(e) => setAddCategoria(e.target.value)} placeholder="Ex.: Cobrança" />
             </div>
           </div>
-          <DialogFooter>
+        )}
+        textoRef={addRef}
+        texto={addCorpo}
+        setTexto={setAddCorpo}
+        placeholder="Cole ou digite a mensagem sem alterar o conteúdo."
+        realce={realce}
+        setRealce={setRealce}
+        rodape={(
+          <>
             <Button variant="outline" onClick={() => setAddOpen(false)}>Cancelar</Button>
             <Button
               onClick={async () => { await cf.addMessage(addTitulo, addCategoria, addCorpo); if (addTitulo.trim() && addCorpo.trim()) setAddOpen(false); }}
             >Adicionar à lista</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </>
+        )}
+      />
 
       {/* ══ Dialog: excluir mensagem ════════════════════════════════════════ */}
       <AlertDialog open={deleteMsgOpen} onOpenChange={setDeleteMsgOpen}>
