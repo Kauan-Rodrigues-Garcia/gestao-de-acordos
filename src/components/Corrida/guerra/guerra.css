@@ -1,0 +1,42 @@
+/*
+ * O que o Cavalo da Guerra e os Quatro Cavaleiros fazem com o Gestão (23/10/2026).
+ * Só classes e atributos POR CIMA dos elementos (ver alvos.js): tirar a classe
+ * desfaz tudo. Nenhum `filter` na página inteira, só em peças pequenas.
+ */
+
+/* o texto por cima: o original fica transparente e o novo aparece no ::after */
+.gx-texto { position: relative; color: transparent !important; }
+.gx-texto::after { content: attr(data-gx-texto); position: absolute; left: 0; top: 0; white-space: nowrap; color: var(--gx-cor, #c4161c); }
+
+/* cabeçada */
+.gx-quebrado { transform: rotate(var(--gx-rot, 4deg)) translate(var(--gx-dx, 6px), var(--gx-dy, 10px)); box-shadow: 0 12px 26px #0003; transition: transform .25s cubic-bezier(.3, 1.8, .5, 1); }
+.gx-caiu { transform: translate(var(--gx-dx, 10px), var(--gx-dy, 70px)) rotate(var(--gx-rot, 25deg)); opacity: .7; transition: transform .7s cubic-bezier(.5, 0, .9, .5), opacity .7s; }
+.gx-pifou { --gx-cor: #c4161c; animation: gx-pifa .12s steps(2) infinite; }
+@keyframes gx-pifa { 50% { transform: translateX(3px); opacity: .6; } }
+.gx-conserta { transition: transform .9s ease, opacity .9s, filter .9s, background .9s, color .9s !important; }
+
+/* fogo */
+.gx-chamuscado { filter: sepia(.9) saturate(1.8) brightness(.5) contrast(1.25); transition: filter .3s; }
+tr.gx-queimando > td { color: #5a1500; animation: gx-queima .16s steps(2) infinite; }
+@keyframes gx-queima { 0% { background: #ffb347; } 50% { background: #ff6a1a; } }
+tr.gx-cinza > td { background: #2b2321; color: transparent; text-shadow: 0 0 5px #0009; transition: background .6s, color .6s; }
+tr.gx-cinza > td * { opacity: 0; }
+tr.gx-cinza > td:first-child::before { content: '🔥 acordo queimado '; color: #d8c4b8; text-shadow: none; font-size: 11.5px; }
+
+/* a Peste: a linha infecta, borbulha e ganha o símbolo */
+tr.gx-peste > td { background: repeating-linear-gradient(45deg, #d6f5c0 0 6px, #c0eca2 6px 12px); background-size: 17px 17px; color: #2c5a12; animation: gx-borbulha 1.1s linear infinite; transition: background .4s; }
+tr.gx-peste > td:first-child::before { content: '☣ '; color: #2e8a1a; font-weight: 700; }
+@keyframes gx-borbulha { to { background-position: 17px 0; } }
+
+/* a Fome: o dinheiro escorre até zero (o número novo vem no data-gx-texto) */
+.gx-fome { --gx-cor: #7a5a9a; }
+.gx-fome::after { text-decoration: line-through; text-decoration-color: #b05cd8; }
+
+/* a Morte: o acordo vira lápide */
+tr.gx-morte > td { background: #e8e8ea; color: #9a9aa0; text-decoration: line-through; transition: background .4s, color .4s; }
+tr.gx-morte > td:first-child::before { content: '☠ '; color: #4a4a52; display: inline-block; text-decoration: none; }
+tr.gx-morte .st { filter: grayscale(1); opacity: .6; }
+
+/* a página treme com a cabeçada (meio segundo; no modo leve, não) */
+.gx-treme { animation: gx-treme-pag .5s; }
+@keyframes gx-treme-pag { 15% { transform: translate(-10px, 5px); } 30% { transform: translate(9px, -6px); } 50% { transform: translate(-6px, 4px); } 70% { transform: translate(4px, -3px); } 85% { transform: translate(-2px, 1px); } }

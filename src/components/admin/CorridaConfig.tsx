@@ -37,6 +37,7 @@ import { SeletorPessoas } from '@/components/Corrida/admin/SeletorPessoas';
 import { lerPessoasDoCadastro, type PessoaDoCadastro } from '@/components/Corrida/admin/pessoas';
 import { abrirCorrida, abrirEnquete, ajustarCorrida, criarCorrida, definirTema, descartarGravacao, divulgar, encerrarCorrida, faltaMigrationCavalos, faltaMigrationEnquete, fecharEnquete, gravarCorrida, gravarCorridaCavalos, iniciarCorrida, lerPainel, preencherEscolhas, tirarDivulgacao, type CorredorSemPerfil, type Painel } from '@/components/Corrida/admin/acoes';
 import { CorredoresSemPerfil } from '@/components/Corrida/admin/CorredoresSemPerfil';
+import { InterruptorGuerra } from '@/components/Corrida/guerra/InterruptorGuerra';
 import { agoraBanco, categoriaDe, mensagemDoErro, segundos, type Categoria, type EnqueteJson } from '@/components/Corrida/banco';
 import { destravarAudio, NOME_CORRIDA } from '@/components/Corrida/nome';
 import { TEMAS, type TemaLobby } from '@/components/Corrida/lobbies/cena';
@@ -295,6 +296,9 @@ export default function CorridaConfig() {
             <EscolhaCenario valor={corrida.tema ?? 'f1'} desligado={ocupado} onChange={t => void rodar(() => definirTema(corrida.id, t), 'Cenário trocado. Quem está no lobby já vê o novo.')} />
           </div>
         )}
+
+        {/* A Guerra na Corrida (23/10/2026): só na de cavalos, e só antes da largada. */}
+        {corrida && emAndamento && cavalos && !corrida.inicia_em && <InterruptorGuerra corridaId={corrida.id} travado={montando} />}
 
         {gravando && (
           <div className="space-y-1.5 rounded-lg border p-3">

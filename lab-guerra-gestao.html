@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Guerra na Corrida · laboratório no Gestão</title>
+<!--
+  Laboratório da Guerra na Corrida (23/10/2026), só no `npm run dev`: um Gestão de
+  mentira (menu, valores do Analítico, abas e linhas de acordo com as mesmas
+  marcas do app de verdade) e, por cima, o «Testar só na minha tela» da corrida
+  de cavalos — o MESMO TesteCavalos do app, com o ensaio da guerra. Marque
+  «⚔ guerra» na barra do teste, largue e vá para a chegada.
+-->
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,sans-serif;background:#f4f6fa;color:#1d2433}
+  #root{display:flex;min-height:100vh}
+  aside{width:220px;background:#14213d;color:#dfe6f3;padding:16px 10px;display:flex;flex-direction:column;gap:4px}
+  aside a{display:flex;padding:9px 12px;border-radius:8px;color:inherit;text-decoration:none;font-size:14px}
+  aside a:hover{background:#ffffff14}
+  main{flex:1;padding:24px;display:flex;flex-direction:column;gap:18px}
+  .cards{display:flex;gap:14px;flex-wrap:wrap}
+  .card{background:#fff;border-radius:12px;padding:16px 18px;min-width:200px;box-shadow:0 1px 3px #0001;display:flex;flex-direction:column;gap:6px}
+  .card small{font-size:11px;text-transform:uppercase;color:#6b7385;letter-spacing:.05em}
+  .card span{font:700 22px ui-monospace,monospace;color:#0b8a5b}
+  .abas{display:flex;gap:6px}
+  .abas span{display:inline-block;padding:7px 14px;border-radius:999px;background:#fff;border:1px solid #d9deea;font-size:13px}
+  table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px #0001}
+  td{padding:9px 12px;border-bottom:1px solid #eef1f6;font-size:13px}
+  /* o pouco do Tailwind que a janela da corrida usa (o laboratório não carrega o CSS do app) */
+  .fixed{position:fixed}.bottom-0{bottom:0}.right-0{right:0}.inset-0{inset:0}.h-full{height:100%}.w-full{width:100%}.border-0{border:0}.bg-transparent{background:transparent}.z-[85]{z-index:85}
+  #abrir{align-self:flex-start;padding:10px 16px;border-radius:8px;border:0;background:#c4161c;color:#fff;font-weight:700;cursor:pointer}
+</style>
+</head>
+<body>
+<div id="root">
+  <aside data-chefona-livre="">
+    <b style="padding:6px 12px 14px">Gestão de Acordos</b>
+    <a href="#"><span data-alvo-feitico="aba">Dashboard</span></a>
+    <a href="#"><span data-alvo-feitico="aba">Acordos</span></a>
+    <a href="#"><span data-alvo-feitico="aba">Pix Automático</span></a>
+    <a href="#"><span data-alvo-feitico="aba">Painel Líder</span></a>
+    <a href="#"><span data-alvo-feitico="aba">Analítico</span></a>
+    <a href="#"><span data-alvo-feitico="aba">Metas</span></a>
+    <a href="#"><span data-alvo-feitico="aba">Configurações</span></a>
+  </aside>
+  <main>
+    <button id="abrir" type="button">🐎 Abrir o teste da corrida</button>
+    <div class="cards">
+      <div class="card"><small>Recebido</small><span data-alvo-feitico="valor" data-nome-feitico="Recebido">R$ 48.312,90</span></div>
+      <div class="card"><small>Projeção do mês</small><span data-alvo-feitico="valor" data-nome-feitico="Projeção do mês">R$ 91.004,17</span></div>
+    </div>
+    <div class="abas"><span data-alvo-feitico="aba">Todos</span><span data-alvo-feitico="aba">Hoje</span><span data-alvo-feitico="aba">Atrasados</span><span data-alvo-feitico="aba">Pagos</span></div>
+    <table><tbody id="linhas"></tbody></table>
+    <div id="app-react"></div>
+  </main>
+</div>
+<script type="module">
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import TesteCavalos from '/src/components/Corrida/cavalos/TesteCavalos.tsx';
+
+const nomes = ['Maria A. Souza', 'José Carlos Lima', 'Ana Beatriz Rocha', 'Paulo R. Mendes', 'Cláudia Ferreira', 'Roberto Alves', 'Luciana M. Prado', 'Fernando Dias', 'Patrícia Nunes', 'Marcelo T. Gomes', 'Juliana Castro', 'Ricardo Pires'];
+document.getElementById('linhas').innerHTML = nomes.map((n, i) => `<tr data-alvo-feitico="linha"><td>${n}</td><td>R$ ${(180 + i * 37.5).toFixed(2).replace('.', ',')}</td><td>${10 + i}/10</td><td>pendente</td></tr>`).join('');
+const raiz = createRoot(document.getElementById('app-react'));
+let aberto = false;
+const desenhar = () => raiz.render(aberto ? React.createElement(TesteCavalos, { onFechar: () => { aberto = false; desenhar(); } }) : null);
+document.getElementById('abrir').addEventListener('click', () => { aberto = true; desenhar(); });
+if (new URLSearchParams(location.search).has('abrir')) { aberto = true; desenhar(); }
+</script>
+</body>
+</html>

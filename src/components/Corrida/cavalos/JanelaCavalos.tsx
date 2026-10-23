@@ -25,10 +25,19 @@ interface Props {
   onMensagem: (m: MensagemCavalos) => void;
   /** Recebe a função de mandar mensagem para a página (nula enquanto o iframe não existe). */
   conexao: MutableRefObject<EnviarCavalos | null>;
+  /**
+   * Com o Cavalo da Guerra na página (`guerra/CenaGuerra.tsx`), a janela some (transparente, e não
+   * escondida: o navegador para o laço de um iframe escondido; sem desmontar: a
+   * corrida continua andando lá dentro e volta quando ele acaba).
+   */
+  escondida?: boolean;
+  /** O iframe, para a guerra ler a pista na hora em que a janela estoura. */
+  quadro?: MutableRefObject<HTMLIFrameElement | null>;
 }
 
-export function JanelaCavalos({ modo, onMensagem, conexao }: Props) {
+export function JanelaCavalos({ modo, onMensagem, conexao, escondida = false, quadro }: Props) {
   const ref = useRef<HTMLIFrameElement>(null);
+  useEffect(() => { if (quadro) quadro.current = ref.current; return () => { if (quadro) quadro.current = null; }; }, [quadro]);
   const [grande, setGrande] = useState(false);
   const aoReceber = useRef(onMensagem);
   aoReceber.current = onMensagem;
@@ -58,7 +67,7 @@ export function JanelaCavalos({ modo, onMensagem, conexao }: Props) {
       title="Corrida de Cavalos"
       allow="autoplay"
       // o fundo transparente só vale com o mesmo esquema de cor dos dois lados
-      style={{ colorScheme: 'normal', ...(telaInteira ? {} : { width: 'min(100vw, 906px)', height: 'min(100dvh, 580px)' }) }}
+      style={{ colorScheme: 'normal', ...(telaInteira ? {} : { width: 'min(100vw, 906px)', height: 'min(100dvh, 580px)' }), ...(escondida ? { opacity: 0, pointerEvents: 'none' } : {}) }}
       className={cn('fixed z-[85] border-0 bg-transparent', telaInteira ? 'inset-0 h-full w-full' : 'bottom-0 right-0')}
     />
   );

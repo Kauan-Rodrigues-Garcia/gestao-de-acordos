@@ -540,7 +540,8 @@ export function AnalyticsPanel({
               <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
                 {isPP ? 'H.O.' : 'Recebido'}
               </span>
-              <span className="font-bold text-emerald-600 dark:text-emerald-500 tabular-nums font-mono">
+              {/* `data-alvo-feitico`: a Fome do Cavalo da Guerra «come» o valor por uns segundos (só visual). */}
+              <span className="font-bold text-emerald-600 dark:text-emerald-500 tabular-nums font-mono" data-alvo-feitico="valor" data-nome-feitico={isPP ? 'H.O.' : 'Recebido'}>
                 {formatCurrency(valorPrincipal)}
               </span>
             </div>
@@ -744,7 +745,7 @@ export function AnalyticsPanel({
                       </span>
                       <Target className="w-3.5 h-3.5 text-amber-700 dark:text-amber-500" />
                     </div>
-                    <span className="text-xl font-bold tabular-nums font-mono text-amber-700 dark:text-amber-500 pl-1 leading-tight">
+                    <span className="text-xl font-bold tabular-nums font-mono text-amber-700 dark:text-amber-500 pl-1 leading-tight" data-alvo-feitico="valor" data-nome-feitico="Projeção do mês">
                       {formatCurrency(projecaoMes)}
                     </span>
                     <span className="text-[11px] text-muted-foreground pl-1">ritmo atual</span>

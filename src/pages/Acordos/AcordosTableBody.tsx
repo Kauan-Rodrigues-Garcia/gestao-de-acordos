@@ -213,6 +213,8 @@ const LinhaAcordo = memo(function LinhaAcordo({
     : null;
   return (
     <tr
+      // O Cavalo da Guerra queima a linha e a Peste a infecta por uns segundos (só visual, ver Corrida/guerra/alvos.js).
+      data-alvo-feitico="linha"
       className={cn(
         ALTURA_LINHA,
         'border-b border-border/50 hover:bg-accent/40 transition-colors cursor-pointer',

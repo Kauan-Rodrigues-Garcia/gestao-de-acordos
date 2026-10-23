@@ -394,8 +394,11 @@ body.modo-teste .esc{padding-top:100px}
 #festa.on{display:grid}
 .raios{position:absolute;left:50%;top:38%;width:240vmax;height:240vmax;transform:translate(-50%,-50%);background:repeating-conic-gradient(from 0deg,#ffffff0d 0 7deg,#0000 7deg 18deg);animation:gira 40s linear infinite;pointer-events:none}
 @keyframes gira{to{transform:translate(-50%,-50%) rotate(360deg)}}
-/* Duas colunas, que a janela é larga: quem venceu à esquerda, o resto à direita. */
-.fe{position:relative;text-align:center;padding:18px 20px;display:grid;grid-template-columns:auto minmax(0,460px);column-gap:34px;align-items:center}
+/* Duas colunas, que a janela é larga: quem venceu à esquerda, o resto à direita.
+   `max-content`: na janela do canto a grade espremia a coluna da direita e a
+   `.fe-dir` (460px) vazava; `encaixarFesta` media a caixa espremida, encolhia
+   pouco e o pódio saía cortado à direita. Agora mede o tamanho de verdade. */
+.fe{position:relative;text-align:center;padding:18px 20px;display:grid;grid-template-columns:auto minmax(0,460px);column-gap:34px;align-items:center;width:max-content}
 .fe-dir{width:460px}
 .fe-dir .podio{flex-wrap:nowrap}
 .fe-tit{font-family:PS2P,Pixelify,monospace;font-size:clamp(20px,4.5vw,34px);color:var(--acc);text-shadow:0 4px 0 #0008;animation:pula 1.4s ease-in-out infinite}
@@ -513,6 +516,7 @@ body.modo-escolha #escolha{z-index:20}
   <button type="button" data-t="chegada">🏁 Ir para a chegada</button>
   <label>Visão <select id="tVisao"><option value="assiste">quem assiste</option><option value="corre">quem corre</option></select></label>
   <label><input type="checkbox" id="tAp"> chegada apertada</label>
+  <label title="A Guerra na Corrida: o botão de atacar, as mortes, o filme e o Cavalo da Guerra na página"><input type="checkbox" id="tGuerra"> ⚔ guerra</label>
 </div>
 
 <div id="convite" class="oculto">
@@ -695,6 +699,8 @@ import {
   BARREIRAS_EM, CHANCE_BATER, TOMBO, TOMBO_PX, OB_K, OB_Y0, OB_Y1, OB_GEO, desvioRaia,
   SALTO0, SALTO1, SALTO_ALT, SALTO_BATE, SALTO_Q, RECUP, RECUP_PX, pouso, simular,
 } from '/src/components/Corrida/cavalos/simulacao.js';
+// A Guerra na Corrida (23/10/2026): opcional por corrida, ver o cabeçalho de lá.
+import { criarGuerraNaCorrida } from '/src/components/Corrida/guerra/naCorrida.js';
 /* =====================================================================
    Os modos da página (22/10/2026)
      lab      o laboratório: gente de mentira, o painel LAB e a montagem. Só no
@@ -834,7 +840,8 @@ function construirQuadro(cav, pose) {
   };
   const traco = (x0, y0, x1, y1, r0, r1, c) => { const n = Math.max(2, Math.ceil(Math.hypot(x1 - x0, y1 - y0) * 2)); for (let i = 0; i <= n; i++) { const t = i / n; disco(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, r0 + (r1 - r0) * t, c); } };
 
-  const gal = pose.g !== undefined, anda = pose.a !== undefined, come = pose.c !== undefined, salta = pose.s !== undefined;
+  // `pose.m`: caído de lado, as pernas esticadas (a Guerra na Corrida, 23/10/2026)
+  const gal = pose.g !== undefined, anda = pose.a !== undefined, come = pose.c !== undefined, salta = pose.s !== undefined, morto = pose.m !== undefined;
   const p = gal ? pose.g : anda ? pose.a : 0, k = pose.p ?? 0, mastiga = come ? pose.c : 0;
   const by = gal ? Math.round(-Math.sin(T2 * p) * 0.9) : 0;
   // Reta final (`pose.e`, 0 a 1): o pescoço estica, a cabeça vai à frente (ex) e desce (ey), e a passada alonga.
@@ -843,6 +850,7 @@ function construirQuadro(cav, pose) {
   const hy = ey + (salta ? (pose.s > 0.5 && pose.s < 0.92 ? 1 : 0) : gal ? (Math.sin(T2 * p + 1.2) > 0.25 ? 1 : 0) : anda ? (Math.sin(T2 * p * 2) > 0.2 ? 1 : 0) : come ? 0 : [0, 0, 1, 1][k]);
 
   const angulos = (P, i) => {
+    if (morto) return P.d ? [1.2 - (P.longe ? 0.25 : 0), 1.35 - (P.longe ? 0.2 : 0)] : [-1.15 + (P.longe ? 0.25 : 0), -1.3 + (P.longe ? 0.2 : 0)];
     if (salta) {
       // a perna do lado de lá vem um tiquinho atrasada: as duas não dobram juntas
       const s = clamp(pose.s - (P.longe ? 0.05 : 0), 0, 1), tab = P.d ? SALTO_D : SALTO_T;
@@ -872,7 +880,8 @@ function construirQuadro(cav, pose) {
   perna(0); perna(1);
   for (let j = 0; j <= 12; j++) { // rabo
     const t = j / 12; let x, y;
-    if (salta) { x = 10 - 11 * t; y = 12 - 1.5 * t + 1.5 * t * t + Math.sin(pose.s * 9 - t * 3) * 1.2 * t; }   // o rabo ao vento
+    if (morto) { x = 10 - 12 * t; y = 15 + 3 * t; }
+    else if (salta) { x = 10 - 11 * t; y = 12 - 1.5 * t + 1.5 * t * t + Math.sin(pose.s * 9 - t * 3) * 1.2 * t; }   // o rabo ao vento
     else if (gal) { x = 10 - 11 * t; y = 12 + by + 1.5 * t + 2.5 * t * t + Math.sin(T2 * p - t * 3) * 1.6 * t; }
     else {
       const sw = anda ? Math.sin(T2 * p) * 1.0 : come ? Math.sin(Math.PI * mastiga) * 0.8 : Math.sin(T2 * k / 4) * 1.3;
@@ -882,7 +891,11 @@ function construirQuadro(cav, pose) {
   }
   elipse(21, 15.5 + by, 11.5, 5.4, 1); disco(29.5, 16 + by, 4.8, 1); disco(12.5, 14.8 + by, 5.2, 1);
   let m0x = 27.5, m0y = 11 + by, m1x, m1y;
-  if (come) {
+  if (morto) {
+    traco(28, 14, 36, 17.5, 3.6, 2.4, 1);
+    elipse(39.5, 18.5, 3.2, 2.3, 1); elipse(42.8, 19.6, 2.3, 1.9, 1);
+    m1x = 35; m1y = 15.5;
+  } else if (come) {
     // Pastando: o pescoço desce e a cabeça fica de pé, com a boca no chão.
     const cy = mastiga;
     traco(28, 14, 34.6, 19.5 + cy, 3.8, 2.4, 1);
@@ -901,7 +914,7 @@ function construirQuadro(cav, pose) {
     const t = j / 4, bx = m0x + (m1x - m0x) * t, byy = m0y + (m1y - m0y) * t, fl = gal || salta ? 1.8 : 0.7;
     disco(bx - 1.6 - fl + (gal ? Math.sin(T2 * p + j * 1.3) * 0.7 : salta ? Math.sin(pose.s * 9 + j * 1.3) * 0.5 : 0), byy + 0.6, 1.1, 3);
   }
-  if (come) disco(35.4, 20.4 + mastiga, 0.9, 3); else disco(35.6 + ex, 3.4 + hy, 0.9, 3);
+  if (morto) disco(36.5, 15.5, 0.9, 3); else if (come) disco(35.4, 20.4 + mastiga, 0.9, 3); else disco(35.6 + ex, 3.4 + hy, 0.9, 3);
   if (cav.pel.mancha) for (let y = 0; y < SH; y++) for (let x = 0; x < SW; x++) { const i = y * SW + x; if (g[i] === 1 && ruido2((x - PAD) / 5.5, (y - by) / 4.5, cav.sem) > 0.56) g[i] = 11; }
   perna(2); perna(3);
   // o pano com o número
@@ -913,8 +926,9 @@ function construirQuadro(cav, pose) {
   }
   const s = String(cav.num); let nx = Math.round(20.5 - largura(s) / 2); const ny = 12 + by;
   for (const ch of s) { const b = FONTE[ch]; for (let i = 0; i < 15; i++) if (b[i] === '1') pinta(nx + i % 3, ny + (i / 3 | 0), 12); nx += 4; }
-  // rosto
-  if (come) {
+  // rosto (o do caído é desenhado por cima, com os olhos em X: `guerra/naCorrida.js`)
+  if (morto) { if (cav.estrela) { pinta(41, 17, 7); pinta(42, 18, 7); } }
+  else if (come) {
     const cy = mastiga;
     if (cav.estrela) { pinta(36, 21 + cy, 7); pinta(36, 22 + cy, 7); pinta(37, 23 + cy, 7); }
     if (cav.focinho) for (let y = 26; y <= 29; y++) for (let x = 36; x <= 40; x++) { const i = (y + cy) * SW + x + PAD; if (g[i] === 1 || g[i] === 11) g[i] = 7; }
@@ -962,8 +976,8 @@ function quadros(cav) {
   if (!cav.q) {
     // e1..e3: o galope da reta final, com o pescoço cada vez mais esticado (ver ESTICA)
     const poses = { g: i => ({ g: i / 8 }), p: i => ({ p: i }), a: i => ({ a: i / 8 }), c: i => ({ c: i }), s: i => ({ s: i / (SALTO_Q - 1) }),
-      e1: i => ({ g: i / 8, e: 1 / 3 }), e2: i => ({ g: i / 8, e: 2 / 3 }), e3: i => ({ g: i / 8, e: 1 }) };
-    const tam = { g: 8, p: 4, a: 8, c: 2, s: SALTO_Q, e1: 8, e2: 8, e3: 8 };
+      e1: i => ({ g: i / 8, e: 1 / 3 }), e2: i => ({ g: i / 8, e: 2 / 3 }), e3: i => ({ g: i / 8, e: 1 }), m: i => ({ m: i }) };
+    const tam = { g: 8, p: 4, a: 8, c: 2, s: SALTO_Q, e1: 8, e2: 8, e3: 8, m: 1 };
     cav.q = {};
     for (const k of Object.keys(poses)) Object.defineProperty(cav.q, k, {
       get() {
@@ -1303,7 +1317,10 @@ function construirMapa(id, s) {
  */
 const ESTICA0 = 240, ESTICA_PX = 180;
 const estica = x => Math.round(3 * (x <= L ? clamp((x - (L - ESTICA0)) / ESTICA_PX, 0, 1) : clamp(1 - (x - L - 20) / 100, 0, 1)));
-function xAt(i, t) {
+/** Onde o focinho do cavalo está: o da gravação, menos na guerra (ver `naCorrida.js`). */
+let GX = null;
+function xAt(i, t) { return GX ? GX.xAt(i, t) : xRec(i, t); }
+function xRec(i, t) {
   const r = G.rec; if (!r || t <= 0) return X0;
   const f = Math.min(t * FPS, r.frames - 1.0001), f0 = Math.floor(f), a = f - f0, n = r.n;
   return X0 + (r.X[f0 * n + i] * (1 - a) + r.X[(f0 + 1) * n + i] * a) / 4;
@@ -1415,6 +1432,7 @@ function desenharCena(c, t, cam, o) {
   if (m.flashes) { const k = (Math.random() < 0.45 ? 1 : 0) + (o.excit > 0.5 ? 2 : 0); for (let i = 0; i < k; i++) { const x = Math.floor(Math.random() * W), y = 80 + Math.floor(Math.random() * 28); R(c, '#ffffff', x, y, 1, 1); R(c, 'rgba(255,255,255,.55)', x - 1, y, 3, 1); R(c, 'rgba(255,255,255,.55)', x, y - 1, 1, 3); } }
   azulejo(c, m.pistaC, cam, 112);
   postes(c, cam);
+  GX?.ganchos.fundo(c, cam, camF);
   CENA.cam = cam; CENA.camF = camF;
   const fxs = Math.round(L - cam), gx = X0 - 50 - cam, fx = X0 + 5 - cam;
 
@@ -1437,6 +1455,7 @@ function desenharCena(c, t, cam, o) {
     const sx = Math.round(x - camF - 43 - Math.round(2.4 * lv / 3));
     // o pedaço das varas entre a raia de trás e esta vem antes do cavalo: o resto fica na frente dele
     for (const ob of obs) varas(c, ob.cx, i ? laneY(i - 1) - 1 : laneY(0) - 1, ly - 1, ob.caida);
+    if (GX?.ganchos.cavalo(c, i, camF)) continue;   // na guerra, quem desenha os cavalos é ela
     let pulo = 0, s = -1, bateuAqui = false;
     if (G.rec?.barreiras) G.rec.barreiras.forEach((bx, b) => {
       const bateu = G.rec.bate[i][b], bxi = bx + desvioRaia(i, G.n), dx = x - bxi;
@@ -1480,6 +1499,7 @@ function desenharCena(c, t, cam, o) {
   // as varas na frente da última raia e a asa da frente, por cima da grama
   for (const ob of obs) varas(c, ob.cx, laneY(G.n - 1) - 1, 204, ob.caida);
   azulejo(c, m.frenteC, cam * 1.35, 205);
+  GX?.ganchos.frente(c, cam);
   for (const ob of obs) { varas(c, ob.cx, 204, OB_Y1, ob.caida); asa(c, ob.cx + OB_K, OB_Y1); }
   if (fxs > -30 && fxs < W + 30) { R(c, '#1c1c1c', fxs - 1, 196, 4, 29); for (let y = 198; y < 225; y += 4) R(c, (y >> 2) % 2 ? '#ffffff' : '#d93a3a', fxs, y, 2, 4); }
   // neve
@@ -1496,6 +1516,7 @@ function desenharCena(c, t, cam, o) {
     R(c, '#000000c0', lx - 2, ay - 9, w + 4, 8); texto(c, s, lx, ay - 8, cor);
     if (mk.eu) { R(c, cor, lx + 13, ay - 10, 1, 1); R(c, cor, lx + 12, ay - 9, 1, 1); R(c, cor, lx + 14, ay - 9, 1, 1); }
   }
+  GX?.ganchos.depois(c, camF);
 }
 /*
  * O obstáculo de hipismo (a foto que o Cleber mandou, 22/10/2026): duas asas roxas com o painel amarelo e
@@ -3034,7 +3055,13 @@ async function soltar() {
   // (no teste, «Pular a contagem» e «Ir para a chegada» passam na frente: a contagem para)
   for (const n of ['3', '2', '1']) { contagem(n); Som.tique(false); await espera(1000); if (g !== G || fase !== 'largada') return; }
   vai();
-  fase = 'corrida'; F = { t0: performance.now(), prox: 0 }; atualizarOrg();
+  fase = 'corrida'; F = { t0: performance.now(), prox: 0 }; atualizarOrg(); guerraDoTeste();
+}
+/** No teste, a guerra é do ensaio do sistema (`TesteCavalos`): cada largada começa uma do zero. */
+function guerraDoTeste() {
+  if (MODO !== 'teste' || !GX) return;
+  GX.limpar();
+  avisarSistema({ tipo: 'guerra-teste', ligar: $('#tGuerra').checked, cavalos: G.n, presentes: 1 + (G.torcida?.length ?? 0) });
 }
 function contagem(txt, vai) { $('#contagem').innerHTML = `<span class="${vai ? 'vai' : ''}">${txt}</span>`; }
 /** `alto`: a faixa do locutor fica no alto da pista, para não cobrir o pelotão. */
@@ -3401,15 +3428,18 @@ function laco(now) {
   const rec = G.rec; let t = 0, zoom = false, correndo = false, ab = 0, excit = 0.08;
   if (fase === 'corrida') {
     t = (now - F.t0) / 1000; correndo = true; ab = clamp(t / 0.3, 0, 1);
+    if (GX) { GX.passo(t, dt); t = GX.tempo(t); }
     if (rec.barreiras) for (let i = 0; i < G.n; i++) rec.barreiras.forEach((bx, o) => {
       if (!rec.bate[i][o] || (F.bateu ??= new Set()).has(i * 10 + o) || xAt(i, t) < bx + desvioRaia(i, G.n) + 12) return;   // a vara cai com o cavalo já em cima
-      F.bateu.add(i * 10 + o); Som.batida(1.3);
+      F.bateu.add(i * 10 + o);
+      if (GX?.pausada() || GX?.morto(i) || xAt(i, t) > bx + desvioRaia(i, G.n) + 60) return;   // na guerra (ou passado na volta dela), quieto
+      Som.batida(1.3);
       if (JAN.aberta) { feed(`<b>#${G.cavalos[i].num}</b> bateu na barreira!`, G.cavalos[i]); tremer(1.5); }
     });
     // o locutor: quem entra atrasado (ou pula no teste) começa do lance de agora, sem narrar o que passou
     const lances = rec.lances ??= montarLances(rec);
     if (F.lc === undefined) { F.lc = 0; while (F.lc < lances.length && lances[F.lc].t < t - 0.6) F.lc++; }
-    while (F.lc < lances.length && lances[F.lc].t <= t) { const e = lances[F.lc++]; if (JAN.aberta) narrar(e); }
+    while (F.lc < lances.length && lances[F.lc].t <= t) { const e = lances[F.lc++]; if (JAN.aberta && e.t > t - 0.6) narrar(e); }   // a volta da guerra pula o que passou
     if (!F.cruzou && t >= rec.tVenc) {
       F.cruzou = true; flash(); Som.clique(); faixa(`#${G.cavalos[rec.vencedor].num} CRUZOU A LINHA!`); tremer(2.5, 0.6);
       // cruzou: a música do jogo sai e o Rei do Gado entra já alto (pedido do Cleber, 22/10/2026)
@@ -3439,7 +3469,7 @@ function laco(now) {
       if (rec.gap < ZOOM_GAP) zk = suave((lead - (L - ZOOM_PX)) / ZOOM_RAMPA);
     }
   }
-  const cam = rec && t > 0 ? camAt(t) : 0;
+  const cam = rec && t > 0 ? (GX ? GX.cam(t, camAt) : camAt(t)) : 0;
   // No zoom, o recorte segue o líder SUAVIZADO (quando a liderança trocava no pelotão, o quadro saltava),
   // e a câmera leva junto a fração do recorte: o cavalo é arredondado UMA vez, contra os dois somados.
   let camDesenho = cam, zx = 0;
@@ -3448,10 +3478,10 @@ function laco(now) {
     F.zx = F.zx === undefined || fase === 'foto' ? alvo : F.zx + (alvo - F.zx) * Math.min(1, dt * 5);
     zx = Math.round(F.zx); if (zk >= 1) camDesenho = cam + (F.zx - zx);
   }
-  if (JAN.aberta) desenharCena(bctx, t, camDesenho, { wall, dt, ab, correndo: correndo && fase !== 'foto', lobby: false, marcar: fase !== 'foto', excit, lento: fase === 'replay' });
+  if (JAN.aberta && !GX?.escondida()) desenharCena(bctx, t, camDesenho, { wall, dt, ab, correndo: correndo && fase !== 'foto', lobby: false, marcar: fase !== 'foto', excit, lento: fase === 'replay' });
   if (zk >= 1) { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); ctx.drawImage(buf, zx, 100, 200, 112, 0, 0, W, 224); }
   else if (zk > 0) ctx.drawImage(buf, zx * zk, 100 * zk, W - 200 * zk, H - 113 * zk, 0, 0, W, H);   // fechando: do quadro inteiro ao recorte
-  else ctx.drawImage(buf, 0, 0);
+  else { const tr = GX?.tremor(); ctx.drawImage(buf, tr ? tr[0] : 0, tr ? tr[1] : 0); }
   if (JAN.aberta && G.assentos) {
     // a torcida grita mais perto da chegada
     if (fase === 'corrida' && wall >= (F.grito || 0)) { gritarTorcida(wall); F.grito = wall + 0.9 - excit * 0.6 + Math.random() * 0.4; }
@@ -3736,9 +3766,11 @@ function seguirCorrida() {
   if (!G.rec) { if (fase === 'lobby') esperarLargada(); return; }
   const ini = seg(c.inicia_em);
   if (ini == null) { if (antes(fase, 'preparada')) posicionar(); else if (ADM() && fase === 'preparada') atualizarOrg(); return; }
+  if (GX && !GX.sabe()) return;   // a guerra muda o relógio: espera saber se esta corrida tem
   seguirRelogio(agoraBanco() - ini);
 }
-function seguirRelogio(tb) {
+function seguirRelogio(tbBruto) {
+  const tb = GX ? GX.tempo(tbBruto) : tbBruto;
   const rec = G.rec, { fimCorrida, fimReplay, fimFoto } = marcos(rec);
   const quer =tb < 0 ? 'largada' : tb < fimCorrida ? 'corrida' : tb < fimReplay ? 'replay' : tb < fimFoto ? 'foto' : 'festa';
   if (antes(fase, 'preparada')) posicionar();
@@ -3754,7 +3786,7 @@ function seguirRelogio(tb) {
   if (quer === 'corrida') {
     if (tb < 1) vai(); else $('#contagem').innerHTML = '';
     if (fase !== 'largada') { $('#faixa').innerHTML = ''; Som.musica('corrida'); }
-    fase = 'corrida'; F = { t0: performance.now() - tb * 1000, prox: 0 }; atualizarOrg();
+    fase = 'corrida'; F = { t0: performance.now() - tbBruto * 1000, prox: 0 }; atualizarOrg();
   } else if (quer === 'replay') {
     $('#contagem').innerHTML = ''; $('#faixa').innerHTML = '';
     iniciarReplay(); F.t0 = performance.now() - (tb - fimCorrida) * 1000;
@@ -3783,7 +3815,7 @@ function irPara(t) {
   if (rec.barreiras) for (let i = 0; i < G.n; i++) rec.barreiras.forEach((bx, o) => { if (xAt(i, t) >= bx + desvioRaia(i, G.n) + 12) bateu.add(i * 10 + o); });
   fase = 'corrida'; F = { t0: performance.now() - t * 1000, prox: 0, bateu };
   $('#faixa').innerHTML = ''; contagem('VAI!', true); setTimeout(() => { if (fase === 'corrida') $('#contagem').innerHTML = ''; }, 900);
-  Som.musica('corrida'); Som.sino(); atualizarOrg();
+  Som.musica('corrida'); Som.sino(); atualizarOrg(); guerraDoTeste();
 }
 const ACOES_TESTE = {
   zero: () => iniciarTeste(),
@@ -3817,6 +3849,21 @@ $('#teste').addEventListener('click', e => {
 $('#tVisao').addEventListener('change', () => iniciarTeste());
 $('#tAp').addEventListener('change', e => { ST.apertada = e.target.checked; });
 
+if (MODO === 'app' || MODO === 'teste') GX = criarGuerraNaCorrida({
+  W, H, X0, L, PAD, SW, SH, G: () => G, laneY, quadros, xRec,
+  agora: () => Date.now() + APP.desvio,
+  enviar: avisarSistema, palco: $('#palco'),
+  feed: (html, cav) => feed(html, cav ?? { pano: { pano: '#c4161c' } }), faixa: txt => faixa(txt), flash, tremer, abrir: abrirJanela,
+  musicaCorrida: nome => Som.musica(nome),
+  somLigado: () => !$('#som').classList.contains('desl'), volume: () => 1,
+  leve: () => QUAL.modo === 'econ' || (QUAL.modo === 'auto' && QUAL.econ),
+  retangulo: () => cv.getBoundingClientRect(),
+});
+// O estado da guerra vem do sistema nos dois modos (no teste, é o ensaio do `TesteCavalos`).
+if (GX) addEventListener('message', ev => {
+  if (ev.origin !== location.origin || ev.source !== window.parent || ev.data?.corridaCavalos !== true || ev.data.tipo !== 'guerra') return;
+  GX.estado(ev.data.guerra);
+});
 if (MODO === 'lab') { setInterval(tickLobby, 200); prepararMontagem(); reiniciar(); }
 else if (MODO === 'teste') { $('#teste').classList.remove('oculto'); setInterval(tickLobby, 200); iniciarTeste(); avisarSistema({ tipo: 'pronto' }); }
 else ligarSistema();

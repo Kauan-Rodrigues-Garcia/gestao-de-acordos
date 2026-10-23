@@ -97,7 +97,8 @@ export function AcordosFilters({
                 : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border',
             )}
           >
-            <span>{tab.label}</span>
+            {/* `data-alvo-feitico`: o Cavalo da Guerra derruba a aba com a cabeçada (só visual, ver Corrida/guerra/alvos.js). */}
+            <span data-alvo-feitico="aba">{tab.label}</span>
           </button>
         ))}
 

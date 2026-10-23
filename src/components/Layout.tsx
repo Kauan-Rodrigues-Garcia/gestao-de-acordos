@@ -607,7 +607,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <item.icon className="w-4 h-4 flex-shrink-0" />
             <AnimatePresence>
               {(sidebarOpen || mobileOpen) && (
-                <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 truncate">
+                // `data-alvo-feitico`: a cabeçada do Cavalo da Guerra derruba o nome (só visual, ver Corrida/guerra/alvos.js).
+                <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 truncate" data-alvo-feitico="aba">
                   {item.label}
                 </motion.span>
               )}
@@ -772,8 +773,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           e ele só acende quando a busca passa de 320 ms. */}
       <BarraAtualizacao />
 
-      {/* Desktop Sidebar */}
+      {/* Desktop Sidebar. `data-chefona-livre`: com o Cavalo da Guerra na tela, o
+          clique na barra lateral continua sendo clique (e não tiro). */}
       <motion.aside
+        data-chefona-livre=""
         animate={{ width: sidebarOpen ? 240 : 64 }}
         transition={{ duration: 0.2, ease: 'easeInOut' }}
         className="hidden md:flex flex-col bg-sidebar border-r border-sidebar-border overflow-hidden flex-shrink-0"
@@ -789,7 +792,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setMobileOpen(false)} />
-            <motion.aside initial={{ x: -280 }} animate={{ x: 0 }} exit={{ x: -280 }}
+            <motion.aside data-chefona-livre="" initial={{ x: -280 }} animate={{ x: 0 }} exit={{ x: -280 }}
               transition={{ type: 'spring', damping: 30, stiffness: 300 }}
               className="fixed left-0 top-0 bottom-0 w-64 bg-sidebar border-r border-sidebar-border z-50 md:hidden">
               {sidebarContent}

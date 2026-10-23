@@ -325,6 +325,16 @@ export async function torcer(corridaId: number, barulho: number, emoji: string |
   }
 }
 
+/**
+ * A Guerra na Corrida (20261023150000): o sinal `guerra` da sala leva o estado
+ * inteiro dela. Quem guarda e mostra é `guerra/banco.ts`; aqui só passa adiante.
+ */
+const ouvintesGuerra = new Set<(corridaId: number, estado: unknown) => void>();
+export function ouvirSinalGuerra(fn: (corridaId: number, estado: unknown) => void): () => void {
+  ouvintesGuerra.add(fn);
+  return () => { ouvintesGuerra.delete(fn); };
+}
+
 /** O palpite: aparece na hora na própria tela; o banco avisa os outros. */
 export async function palpitar(corridaId: number, usuario: string, alvo: string): Promise<void> {
   const antes = estado.sala?.pessoas.find(p => p.usuario === usuario)?.palpite ?? null;
@@ -385,7 +395,7 @@ function ouvirSala(): void {
 /** Ouve a sala de uma corrida (o super_admin assistindo sem ter sido chamado também). Devolve a função que desliga. */
 export function assinarSala(id: number): () => void {
   return assinarTabela(
-    { topico: `corrida-sala:${id}`, escutas: [{ sinal: 'estado' }, { sinal: 'lobby' }, { sinal: 'escolha' }, { sinal: 'pessoas' }, { sinal: 'palpite' }, { sinal: 'torcida' }] },
+    { topico: `corrida-sala:${id}`, escutas: [{ sinal: 'estado' }, { sinal: 'lobby' }, { sinal: 'escolha' }, { sinal: 'pessoas' }, { sinal: 'palpite' }, { sinal: 'torcida' }, { sinal: 'guerra' }] },
     {
       onSinal: (payload, sinal) => {
         // a sala é ouvida por dois lugares (`ligarCorrida` e o palco): o mesmo sinal chega duas vezes
@@ -396,6 +406,7 @@ export function assinarSala(id: number): () => void {
           for (const fn of ouvintesTorcida) fn(id, payload as unknown as SinalTorcida);
           return;
         }
+        if (sinal === 'guerra') { for (const fn of ouvintesGuerra) fn(id, (payload as { guerra?: unknown }).guerra); return; }
         const p = payload as { agora?: string; corrida?: CorridaJson; entraram?: Array<{ usuario: string; entrou_em: string }>; usuario?: string; escolha?: number; palpite?: string | null };
         if (p.agora) ajustarRelogio(p.agora);
         if (sinal === 'lobby') { aplicarEntradas(id, p.entraram); return; }
