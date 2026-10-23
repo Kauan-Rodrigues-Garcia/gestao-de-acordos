@@ -59,6 +59,7 @@ import { CorridaDaSorte } from './Corrida';
 import { useDesafioEmCartaz } from '@/hooks/useDesafios';
 import { AvisoNotificacaoHeader } from './AvisoNotificacaoHeader';
 import { BotaoSomAmbiente } from './Halloween/SomAmbiente/BotaoSomAmbiente';
+import { PlayerSeFoi } from './Halloween/SomAmbiente/PlayerSeFoi';
 import { BarraAtualizacao } from './BarraAtualizacao';
 import { AutorizacaoDock } from './AutorizacaoDock';
 import { BolhaChat } from '@/components/Chat/BolhaChat';
@@ -73,6 +74,7 @@ import { useEasterEggCriadores, DURACAO_ESCURECIMENTO_MS } from '@/hooks/useEast
 // O overlay continua no Layout: a comemoração explode em QUALQUER página, não
 // só onde ela é criada. Só a aba de criação mudou de lugar.
 import { ComemoracaoOverlay } from './comemoracao/ComemoracaoOverlay';
+import { JumpscareOverlay } from './Jumpscare/JumpscareOverlay';
 import { useTermoUso } from '@/hooks/useTermoUso';
 import { useMarcarAtrasados } from '@/hooks/useMarcarAtrasados';
 import { ChatplayOnboardingModal } from './ChatplayOnboardingModal';
@@ -895,7 +897,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 playlists e com volume até 50%. O motor vive fora
                 do React — trocar de página não para a música. Ver
                 `components/Halloween/SomAmbiente/motor.ts`. */}
-            {hw.disponivel && <BotaoSomAmbiente perfilId={perfil?.id} completo={userRole === 'super_admin'} />}
+            {/* 23/10/2026: player desligado para todos menos super_admin —
+                o botão fica e abre a lápide (`PlayerSeFoi`), sem motor. */}
+            {hw.disponivel && (userRole === 'super_admin'
+              ? <BotaoSomAmbiente perfilId={perfil?.id} completo />
+              : <PlayerSeFoi />)}
             {/* Sino — indica novas sem abrir o painel.
                 O sino BALANÇA e o número PULSA quando chega notificação: o
                 badge sozinho, num canto de 16 px, passava despercebido em quem
@@ -1144,6 +1150,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* Comemoração de meta — explode no topo, em qualquer página, para quem
           for do setor dos homenageados. Não bloqueia cliques. */}
       <ComemoracaoOverlay />
+
+      {/* Jumpscare — a imagem agendada em Configurações > Geral: tela cheia
+          para todos por ≈0,3 s. Não pega clique e some sozinha sempre. */}
+      <JumpscareOverlay />
 
       {/* Troca de senha 1x */}
       {perfil?.id && (
