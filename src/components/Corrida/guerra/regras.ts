@@ -21,7 +21,8 @@
  * 3. **O chefe**: o Cavalo da Guerra quebra a janela e briga na página. A vida
  *    é dividida por todos, com o diretor de ritmo da Bruxa do Pântano
  *    (`ritmo.ts` dela, 16/10/2026): a luta dura perto de `alvoS` com 1 ou com
- *    100 pessoas. Bem à frente da linha, um anjo desce e ele o devora — é a
+ *    100 pessoas (entre `RITMO.minS` e uns 5 s depois do `alvoS`: ver
+ *    `duracao.test.ts`, que simula de 1 a 100 pessoas, fracas e fortes). Bem à frente da linha, um anjo desce e ele o devora — é a
  *    cura (`curaDoRitmo`), a mesma conta para todo mundo, decidida no banco.
  */
 
@@ -32,9 +33,12 @@ export const GUERRA = {
   alvoPorMorteBase: 14,
   alvoPorMortePorPessoa: 7,
   maxPresentes: 40,
-  /** A guerra dura entre `minS` e `maxS` segundos, clique o quanto clicar (com os cavalos correndo o tempo todo). */
-  minS: 30,
-  maxS: 75,
+  /**
+   * A guerra dura entre `minS` e `maxS` segundos, clique o quanto clicar e com quanta gente for (com os
+   * cavalos correndo o tempo todo): muito clique esbarra no `minS`, nenhum anda sozinho até o `maxS`.
+   */
+  minS: 40,
+  maxS: 50,
   /** Os cliques vão juntos: no máximo tantos por envio, um envio a cada tanto por pessoa. */
   maxCliquesPorEnvio: 40,
   envioMs: 2_500,
@@ -113,23 +117,26 @@ export function parteDoFilme(s: number): ParteDoFilme {
  * O diretor de ritmo (o da Bruxa, com os tempos desta luta). A vida tem uma
  * LINHA IDEAL que cai reta até zero em `alvoS`; o dano de cada lote é
  * multiplicado pela distância até ela (à frente vale menos, atrás vale mais e,
- * passado o `alvoS`, o teto sobe a cada segundo). Antes de `minS` a vida não
- * desce do `piso`. O multiplicador é o mesmo para todos naquele instante: o
+ * passado o `alvoS`, o multiplicador e o teto sobem a cada segundo). Antes de
+ * `minS` a vida não desce do `piso`. Rápido demais, a luta fica mais difícil (o
+ * tiro vale menos e o anjo cura); devagar demais, mais fácil (o tiro vale mais). O multiplicador é o mesmo para todos naquele instante: o
  * ranking soma o dano ANTES dele, então continua justo.
  */
 export const RITMO = {
-  alvoS: 90,
-  minS: 50,
-  forca: 7,
-  multMin: 0.25,
-  multMax: 5,
+  alvoS: 86,
+  minS: 80,
+  forca: 12,
+  multMin: 0.04,
+  multMax: 6,
   misericordiaPorS: 1,
+  /** Passado o `alvoS`, o tiro vale pelo menos 1 + isto por segundo de atraso. */
+  empurraoPorS: 0.5,
   piso: 0.05,
-  /** O anjo: bem à frente da linha, no máximo a cada tanto, até tanto da luta. */
-  curaAFrente: 0.15,
-  curaIntervaloS: 10,
-  curaMax: 0.25,
-  curaAteS: 110,
+  /** O anjo: bem à frente da linha, no máximo a cada tanto, até tanto da luta. Ele devolve a vida até a linha. */
+  curaAFrente: 0.12,
+  curaIntervaloS: 18,
+  curaMax: 0.3,
+  curaAteS: 106,
 } as const;
 
 export function alvoDaVida(t: number): number {
@@ -137,15 +144,17 @@ export function alvoDaVida(t: number): number {
 }
 export function ritmoDaLuta(t: number, fracao: number): number {
   if (!(t >= 0)) return 1;
-  const teto = RITMO.multMax + Math.max(0, t - RITMO.alvoS) * RITMO.misericordiaPorS;
-  return Math.min(teto, Math.max(RITMO.multMin, Math.exp(RITMO.forca * (fracao - alvoDaVida(t)))));
+  const passou = Math.max(0, t - RITMO.alvoS);
+  const teto = RITMO.multMax + passou * RITMO.misericordiaPorS;
+  const chao = passou > 0 ? 1 + passou * RITMO.empurraoPorS : RITMO.multMin;
+  return Math.min(teto, Math.max(chao, Math.exp(RITMO.forca * (fracao - alvoDaVida(t)))));
 }
 /** Quanto o anjo devolve (fração da vida máxima), ou 0. */
 export function curaDoRitmo(t: number, fracao: number, desdeAUltimaS: number): number {
   if (t < 0 || t >= RITMO.curaAteS || desdeAUltimaS < RITMO.curaIntervaloS) return 0;
   const aFrente = alvoDaVida(t) - fracao;
   if (aFrente < RITMO.curaAFrente) return 0;
-  return Math.min(RITMO.curaMax, aFrente - 0.05);
+  return Math.min(RITMO.curaMax, aFrente);
 }
 
 /** Um lote de tiros, como a tela manda. */

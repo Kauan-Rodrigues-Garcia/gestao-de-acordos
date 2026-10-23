@@ -21,8 +21,9 @@ export interface OpcoesPalcoGuerra {
   /** Só no ensaio: os tiros da gente de mentira. */
   aoGolpearSim?: (quem: string, l: LoteDeGolpes) => void;
   aoFim?: (venceu: boolean) => void;
-  /** 0 a 1 (operador 0.12, super_admin 1). */
+  /** 0 a 1 (operador 0.12, super_admin 1), já com a barrinha de volume da janela. */
   volume?: number;
+  /** O modo leve do app: a qualidade automática começa (e fica) no leve. */
   leve?: boolean;
   /** Quantas pessoas de mentira atiram junto (só no ensaio). */
   sims?: number;
@@ -45,6 +46,10 @@ export interface PalcoGuerra {
   forcar(tipo: AtaqueDoChefe): void;
   /** O teste do chefe: quantos robôs atiram junto. */
   simular(n: number): void;
+  /** O volume (0 a 1) agora: a barrinha da janela da corrida. */
+  volume(v: number): void;
+  /** O nível da qualidade automática agora: 0 leve, 1 normal, 2 forte. */
+  readonly qualidade: 0 | 1 | 2;
   destruir(): void;
 }
 

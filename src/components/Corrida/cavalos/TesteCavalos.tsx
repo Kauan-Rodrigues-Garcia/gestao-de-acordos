@@ -26,7 +26,7 @@ export default function TesteCavalos({ onFechar }: { onFechar: () => void }) {
   const quadro = useRef<HTMLIFrameElement | null>(null);
   const ensaio = useRef<EnsaioGuerra | null>(null);
   const [estado, setEstado] = useState<EstadoGuerra | null>(null);
-  const { chefe, tratar } = useJanelaDaGuerra(quadro, estado, agoraMs);
+  const { chefe, tratar, volume } = useJanelaDaGuerra(quadro, estado, agoraMs);
 
   const mandar = useCallback((e: EstadoGuerra) => { setEstado(e); conexao.current?.({ tipo: 'guerra', guerra: e }); }, []);
   // O relógio do ensaio: a conta a cada meio segundo, e a gente de mentira clicando depois que a guerra começa.
@@ -60,7 +60,7 @@ export default function TesteCavalos({ onFechar }: { onFechar: () => void }) {
       {chefe && estado?.ligada && (
         <Suspense fallback={null}>
           <CenaGuerra estado={estado} agora={agoraMs} numero={chefe.numero} dono={chefe.dono} eu="Você"
-            janela={{ rect: chefe.rect, canvas: chefe.canvas }} aoGolpear={golpear} aoGolpearSim={golpearSim} volume={1} sims={SIMS} escudo={false} />
+            janela={{ rect: chefe.rect, canvas: chefe.canvas }} aoGolpear={golpear} aoGolpearSim={golpearSim} volume={volume} sims={SIMS} escudo={false} />
         </Suspense>
       )}
     </>

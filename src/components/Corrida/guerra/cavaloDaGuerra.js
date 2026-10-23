@@ -16,9 +16,13 @@
  *  - filete de ouro onde a armadura encosta no pelo;
  *  - crina, rabo e cascos são FOGO (a paleta de fogo.js), não cabelo.
  *
- * Grade de 170×140, casco na linha CCHAO, olhando para a direita. A grade de
- * códigos (dest.g) é o que o tiro consulta (tipoDoAcerto): olho, cara,
- * armadura, fogo ou corpo.
+ * O desenho é feito num modelo de 170×140 (casco na linha 132, olhando para a
+ * direita); a GRADE tem uma margem a mais em cima e atrás (`MARGEM_ALTO`,
+ * `MARGEM_TRAS`) para o fogo da crina e do rabo, que passava da borda e saía
+ * cortado. Tudo o que sai daqui (`CW`, `CH`, `CCHAO`, `CMEIO`, `cabecaDo`,
+ * `noCavalo`, `naGrade`, as feridas) está na grade. A grade de códigos
+ * (dest.g) é o que o tiro consulta (tipoDoAcerto): olho, cara, armadura, fogo
+ * ou corpo.
  */
 import { T2, clamp, hash, ruido2, corFogo } from './fogo.js';
 
@@ -28,7 +32,17 @@ const bezD = (a, b, c, t) => [2 * (1 - t) * (b[0] - a[0]) + 2 * t * (c[0] - b[0]
 const hexRgb = h => { const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; };
 const rampa = l => l.map(hexRgb);
 
-export const CW = 170, CH = 140, CCHAO = 132, CPIV = 52 - CW / 2;   // CPIV: o casco de trás, onde ele gira para empinar
+/** O modelo (onde as formas são pensadas) e a margem que a grade tem a mais para o fogo não sair cortado. */
+const MW = 170, MH = 140, MEIO = MW / 2;
+export const MARGEM_ALTO = 30, MARGEM_TRAS = 30;
+/** A grade: `CMEIO` é o x do meio do cavalo (onde ele espelha), `CCHAO` a linha do casco e `CPIV` o casco de trás, onde ele gira para empinar. */
+export const CW = MW + MARGEM_TRAS, CH = MH + MARGEM_ALTO, CCHAO = 132 + MARGEM_ALTO, CMEIO = MEIO + MARGEM_TRAS, CPIV = 52 - MEIO;
+/**
+ * Até onde ele vai, em px da grade a partir do meio e do casco, em qualquer pose e com a fúria no
+ * máximo (`cavaloDaGuerra.test.ts` mede): o rabo para trás, a cabeça para a frente e a crina para cima,
+ * já contando o empinar. Quem põe ele na tela usa isto para ele nunca sair cortado.
+ */
+export const EXTENSAO = { tras: 136, frente: 104, alto: 160 };
 export const MAT = { PELO: 1, PELO_LONGE: 2, CRINA: 3, RABO: 4, CASCO: 6, ARMAD: 7, OLHO: 8, OURO: 9, COURO: 10, LAMINA: 11, PUNHO: 12, OSSO: 13, BOCA: 14, DENTE: 15, CARA: 16, FERIDA: 17, LAVA: 18, CORRENTE: 19, PANO: 20, NUMERO: 21, CHIFRE: 22, FOGO_PE: 23 };
 const { PELO, PELO_LONGE, CRINA, RABO, CASCO, ARMAD, OLHO, OURO, COURO, LAMINA, PUNHO, OSSO, BOCA, DENTE, CARA, FERIDA, LAVA, CORRENTE, PANO, NUMERO, CHIFRE, FOGO_PE } = MAT;
 const FOGO = k => k === CRINA || k === RABO || k === FOGO_PE;
@@ -88,18 +102,23 @@ export function criarDestino() {
   const cx = cv.getContext('2d');
   return { cv, cx, img: cx.createImageData(CW, CH), g: new Uint8Array(CW * CH), d: new Uint8Array(CW * CH), I: new Float32Array(CW * CH) };
 }
-/** O pescoço e a cabeça. `cab` 0 = cabeça erguida, 1 = abaixada para a cabeçada (a testa vai na frente). */
-export function cabecaDo(o) {
+/** O pescoço e a cabeça, no modelo. `cab` 0 = cabeça erguida, 1 = abaixada para a cabeçada (a testa vai na frente). */
+function cabecaNoModelo(o) {
   const cab = o.cab ?? 0, by = o.by ?? 0;
   const B0 = [112, 64 + by], C = [lerp(117, 138, cab), lerp(32, 48, cab) + by], N = [lerp(133, 150, cab), lerp(23, 58, cab) + by];
   const ang = 0.55 + 0.75 * cab, co = Math.cos(ang), si = Math.sin(ang);
   return { B0, C, N, ang, pt: (u, v) => [N[0] + u * co - v * si, N[1] + u * si + v * co] };
 }
+/** O pescoço e a cabeça, na grade (`pt(u, v)`: um ponto da cabeça, para quem desenha ou atira em volta). */
+export function cabecaDo(o) {
+  const h = cabecaNoModelo(o);
+  return { ...h, pt: (u, v) => { const [x, y] = h.pt(u, v); return [x + MARGEM_TRAS, y + MARGEM_ALTO]; } };
+}
 /** O ponto que bate na cabeçada: o focinho com a cabeça erguida, a testa com ela abaixada. */
 export const pontaDaCabeca = cab => cabecaDo({ cab }).pt(23 - 18 * cab, 1 - 9 * cab);
 /** Um ponto da grade (gx, gy), no canvas onde o cavalo está desenhado em B.x, B.y, B.dir, B.rot, escala k. */
 export function noCavalo(B, gx, gy, k = 1) {
-  let lx = gx - CW / 2, ly = gy - CCHAO;
+  let lx = gx - CMEIO, ly = gy - CCHAO;
   const rx = lx - CPIV, co = Math.cos(B.rot), si = Math.sin(B.rot);
   lx = CPIV + rx * co - ly * si; ly = rx * si + ly * co;
   return [B.x + lx * B.dir * k, B.y + ly * k];
@@ -108,7 +127,7 @@ export function naGrade(B, px, py, k = 1) {
   let lx = (px - B.x) * B.dir / k, ly = (py - B.y) / k;
   const rx = lx - CPIV, co = Math.cos(-B.rot), si = Math.sin(-B.rot);
   lx = CPIV + rx * co - ly * si; ly = rx * si + ly * co;
-  return [Math.floor(lx + CW / 2), Math.floor(ly + CCHAO)];
+  return [Math.floor(lx + CMEIO), Math.floor(ly + CCHAO)];
 }
 
 const PB = [
@@ -128,16 +147,18 @@ const CAVEIRA = ['.XXXXX.', 'XXXXXXX', 'XooXooX', 'XXXXXXX', '.XoXoX.', '.X.X.X.
  */
 export function construirCavalo(o, cav, dest) {
   const { g, d, I, img } = dest; g.fill(0); I.fill(0);
+  // As formas pensam no modelo; o pixel vai para a grade, com a margem.
   const dentro = (x, y) => x >= 0 && y >= 0 && x < CW && y < CH;
-  const pinta = (x, y, k) => { x = Math.round(x); y = Math.round(y); if (dentro(x, y)) g[y * CW + x] = k; };
-  const sobre = de => (x, y, k) => { x = Math.round(x); y = Math.round(y); if (dentro(x, y)) { const i = y * CW + x; if (de.includes(g[i])) g[i] = k; } };
+  const naGradeI = (x, y) => { x = Math.round(x) + MARGEM_TRAS; y = Math.round(y) + MARGEM_ALTO; return dentro(x, y) ? y * CW + x : -1; };
+  const pinta = (x, y, k) => { const i = naGradeI(x, y); if (i >= 0) g[i] = k; };
+  const sobre = de => (x, y, k) => { const i = naGradeI(x, y); if (i >= 0 && de.includes(g[i])) g[i] = k; };
   const disco = (cx, cy, r, k, f = pinta) => { for (let y = Math.floor(cy - r); y <= Math.ceil(cy + r); y++) for (let x = Math.floor(cx - r); x <= Math.ceil(cx + r); x++) { const dx = x - cx, dy = y - cy; if (dx * dx + dy * dy <= r * r + 0.3) f(x, y, k); } };
   const elipse = (cx, cy, rx, ry, k, f = pinta) => { for (let y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y++) for (let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x++) { const dx = (x - cx) / rx, dy = (y - cy) / ry; if (dx * dx + dy * dy <= 1.05) f(x, y, k); } };
   const elipseR = (cx, cy, rx, ry, a, k, f = pinta) => { const r = Math.max(rx, ry) + 1, co = Math.cos(a), si = Math.sin(a); for (let y = Math.floor(cy - r); y <= Math.ceil(cy + r); y++) for (let x = Math.floor(cx - r); x <= Math.ceil(cx + r); x++) { const dx = x - cx, dy = y - cy, lx = (dx * co + dy * si) / rx, ly = (-dx * si + dy * co) / ry; if (lx * lx + ly * ly <= 1.05) f(x, y, k); } };
   const traco = (x0, y0, x1, y1, r0, r1, k, f = pinta) => { const n = Math.max(2, Math.ceil(Math.hypot(x1 - x0, y1 - y0) * 1.5)); for (let i = 0; i <= n; i++) { const u = i / n; disco(x0 + (x1 - x0) * u, y0 + (y1 - y0) * u, r0 + (r1 - r0) * u, k, f); } };
   const fio = (pts, k, f = pinta, salto = 0) => { let n = 0; for (let j = 0; j < pts.length - 1; j++) { const [x0, y0] = pts[j], [x1, y1] = pts[j + 1], m = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0))); for (let i = 0; i <= m; i++, n++) if (!salto || n % salto !== salto - 1) f(x0 + (x1 - x0) * i / m, y0 + (y1 - y0) * i / m, k); } };
   // o fogo só ocupa o vazio (fica por trás do corpo); a intensidade vai para I
-  const fogoEm = (x, y, v, k) => { x = Math.round(x); y = Math.round(y); if (!dentro(x, y)) return; const i = y * CW + x, at = g[i]; if (at && !FOGO(at)) return; if (v > I[i]) { I[i] = v; g[i] = k; } };
+  const fogoEm = (x, y, v, k) => { const i = naGradeI(x, y); if (i < 0) return; const at = g[i]; if (at && !FOGO(at)) return; if (v > I[i]) { I[i] = v; g[i] = k; } };
   const lingua = (x0, y0, ang, L, w0, fase, k, quente = 0) => {
     const dx = Math.cos(ang), dy = Math.sin(ang), px = -dy, py = dx;
     for (let s = 0; s <= L; s += 0.6) {
@@ -170,7 +191,7 @@ export function construirCavalo(o, cav, dest) {
 
   // ---- o corpo, o pescoço e a cabeça (pelo)
   elipse(82, 70 + by, 36, 19, PELO); disco(52, 66 + by, 21, PELO); elipse(50, 76 + by, 17, 14, PELO); disco(111, 70 + by, 18, PELO); elipse(84, 80 + by, 28, 9, PELO);
-  const Hc = cabecaDo({ cab: o.cab, by });
+  const Hc = cabecaNoModelo({ cab: o.cab, by });
   const ptN = u => bez(Hc.B0, Hc.C, Hc.N, u), raio = u => lerp(17, 9.5, u);
   for (let i = 0; i <= 44; i++) { const u = i / 44, [x, y] = ptN(u); disco(x, y, raio(u), PELO); }
   const er = (u, v, rx, ry, k, da = 0, f = pinta) => { const [x, y] = Hc.pt(u, v); elipseR(x, y, rx, ry, Hc.ang + da, k, f); };
@@ -194,12 +215,12 @@ export function construirCavalo(o, cav, dest) {
   { const [a, b] = Hc.pt(15, 5); disco(a, b, 1.3, OURO); }   // a argola do freio
   elipse(115, 70 + by, 12, 14, ARMAD, sobre([PELO]));
   CAVEIRA.forEach((l, j) => [...l].forEach((ch, i) => { if (ch !== '.') pinta(117 + i, 65 + j + by, ch === 'X' ? OSSO : BOCA); }));
-  for (let y = 40; y <= 62; y++) for (let x = 30; x <= 66; x++) { const yy = y + by; if (yy < 0 || yy >= CH) continue; const i = yy * CW + x; if (g[i] !== PELO) continue; const dx = x - 51, dy = y - 60; if (dx * dx / 324 + dy * dy / 260 <= 1) g[i] = ARMAD; }
-  for (const sx of [38, 47, 56]) { let ty = 0; while (ty < CH && g[ty * CW + sx] !== ARMAD) ty++; for (let k = 1; k <= 5; k++) { const half = (6 - k) * 0.35; for (let xx = Math.round(sx - half); xx <= Math.round(sx + half); xx++) pinta(xx, ty - k, CHIFRE); } }
+  for (let y = 40; y <= 62; y++) for (let x = 30; x <= 66; x++) { const i = naGradeI(x, y + by); if (i < 0 || g[i] !== PELO) continue; const dx = x - 51, dy = y - 60; if (dx * dx / 324 + dy * dy / 260 <= 1) g[i] = ARMAD; }
+  for (const sx of [38, 47, 56]) { let ty = 0; while (ty < MH && g[naGradeI(sx, ty)] !== ARMAD) ty++; for (let k = 1; k <= 5; k++) { const half = (6 - k) * 0.35; for (let xx = Math.round(sx - half); xx <= Math.round(sx + half); xx++) pinta(xx, ty - k, CHIFRE); } }
 
   // ---- a gualdrapa rasgada com o número do cavalo da corrida, a sela, e o que o cavaleiro deixou
   for (let y = 52; y <= 86; y++) for (let x = 64; x <= 98; x++) {
-    const yy = y + by; if (yy >= CH) continue; const i = yy * CW + x; if (g[i] !== PELO) continue;
+    const i = naGradeI(x, y + by); if (i < 0 || g[i] !== PELO) continue;
     const barra = 77 + 3 * Math.sin(x * 0.9) + (hash(x, 3) < 0.25 ? -3 : 0); if (y > barra) continue;
     g[i] = (x <= 65 || x >= 97 || y <= 53 || y > barra - 1.5) ? OURO : PANO;
   }
@@ -225,7 +246,7 @@ export function construirCavalo(o, cav, dest) {
   // ---- corrente, veias de lava, feridas, as pernas do lado de cá e a rédea
   { const pts = []; for (let i = 0; i <= 40; i++) { const u = i / 40; pts.push([lerp(101, 66, u), lerp(81, 78, u) + by + 28 * u * (1 - u)]); } fio(pts, CORRENTE, pinta, 3); }
   for (const v of VEIAS) fio(v.map(([x, y]) => [x, y + by]), LAVA, sobre([PELO]));
-  for (const f of o.feridas ?? []) disco(f.x, f.y + by, f.r, FERIDA, sobre([PELO, CARA]));
+  for (const f of o.feridas ?? []) disco(f.x - MARGEM_TRAS, f.y - MARGEM_ALTO + by, f.r, FERIDA, sobre([PELO, CARA]));   // a ferida vem do tiro: na grade
   perna(PB[2]); perna(PB[3]);
   { const [a, b] = Hc.pt(14, 4); fio([[a, b], [lerp(a, 96, 0.5), lerp(b, 46 + by, 0.5) + 6], [96, 46 + by]], COURO); }
   // o filete de ouro: onde a armadura encosta no pelo ou no pano
@@ -279,7 +300,7 @@ export function construirCavalo(o, cav, dest) {
     const gx = D(i + 1) - D(i - 1), gy = D(i + CW) - D(i - CW), len = Math.hypot(gx, gy) || 1;
     const lam = -(gx * Lx + gy * Ly) / len, borda = 1 - Math.min(d[i] - 1, 4) / 4, gr = grupo(k);
     let v = 0.5 + 0.42 * lam * borda + 0.1 * (1 - borda) + (DESLOC[k] ?? 0);
-    if (gr === 1 || k === PELO_LONGE) { v -= 0.2 * clamp((y - 66) / 60, 0, 1); const cima = g[i - CW]; if (grupo(cima) === 3 || cima === PANO || cima === COURO) v -= 0.25; }
+    if (gr === 1 || k === PELO_LONGE) { v -= 0.2 * clamp((y - MARGEM_ALTO - 66) / 60, 0, 1); const cima = g[i - CW]; if (grupo(cima) === 3 || cima === PANO || cima === COURO) v -= 0.25; }
     if (gr === 20 && grupo(g[i - CW]) === 3) v -= 0.2;
     const r = RAMPA[k] ?? cav.armad;
     let idx = clamp(Math.round(v * (r.length - 1)), 0, r.length - 1);

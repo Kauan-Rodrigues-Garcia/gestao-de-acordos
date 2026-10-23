@@ -25,7 +25,7 @@ export interface PropsCenaGuerra {
   janela?: { rect: DOMRect; canvas?: HTMLCanvasElement | null } | null;
   aoGolpear?: (l: LoteDeGolpes) => Promise<boolean>;
   aoGolpearSim?: (quem: string, l: LoteDeGolpes) => void;
-  /** 0 a 1: o operador ouve a 12%, o super_admin inteiro. */
+  /** 0 a 1: o operador ouve a 12%, o super_admin inteiro (vezes a barrinha de volume da janela). Muda ao vivo. */
   volume: number;
   /** Gente de mentira atirando junto (só o ensaio). */
   sims?: number;
@@ -69,5 +69,6 @@ export default function CenaGuerra(p: PropsCenaGuerra): null {
   }, []);
 
   useEffect(() => { palco.current?.atualizar(p.estado); }, [p.estado]);
+  useEffect(() => { palco.current?.volume(p.volume); }, [p.volume]);
   return null;
 }

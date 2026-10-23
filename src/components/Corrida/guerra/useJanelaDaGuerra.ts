@@ -7,6 +7,9 @@
  * avisa `guerra-chefe` quando a janela estoura e `guerra-volta` quando o chefe
  * acabou. Por garantia, se o `guerra-volta` não vier (a aba dormiu, o iframe
  * travou), o chefe sai sozinho um pouco depois da hora pelo estado do banco.
+ *
+ * A barrinha de volume da janela também chega aqui (`volume`, de 0 a 1, já com
+ * o mudo): quem monta o chefe multiplica pelo volume do cargo.
  */
 import { useCallback, useEffect, useState, type MutableRefObject } from 'react';
 import type { MensagemCavalos } from '../cavalos/JanelaCavalos';
@@ -25,6 +28,7 @@ export interface ChefeNaTela {
 
 export function useJanelaDaGuerra(quadro: MutableRefObject<HTMLIFrameElement | null>, estado: EstadoGuerra | null, agoraMs: () => number) {
   const [chefe, setChefe] = useState<ChefeNaTela | null>(null);
+  const [volume, setVolume] = useState(1);
 
   /** Trata as mensagens da guerra; devolve se era uma delas. */
   const tratar = useCallback((m: MensagemCavalos): boolean => {
@@ -38,6 +42,7 @@ export function useJanelaDaGuerra(quadro: MutableRefObject<HTMLIFrameElement | n
       return true;
     }
     if (m.tipo === 'guerra-volta') { setChefe(null); return true; }
+    if (m.tipo === 'volume') { const v = Number(m.volume); if (Number.isFinite(v)) setVolume(Math.max(0, Math.min(1, v))); return true; }
     return false;
   }, [quadro]);
 
@@ -49,5 +54,5 @@ export function useJanelaDaGuerra(quadro: MutableRefObject<HTMLIFrameElement | n
     return () => window.clearTimeout(id);
   }, [chefe, fim, agoraMs]);
 
-  return { chefe, tratar };
+  return { chefe, tratar, volume };
 }

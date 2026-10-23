@@ -23,6 +23,13 @@
  * corrida com a vencedora (empate: sorteio) e já abre: quem votou entra direto
  * no lobby, quem não votou recebe o convite «Assistir». «Criar sem votar» usa a
  * escolha do alto do card, como antes.
+ *
+ * A surpresa (23/10/2026): «Surpresa: os cavalos ganham a votação» deixa a
+ * votação acontecer normal, mas fecha com os cavalos vencendo por um voto
+ * (20261023180000) e, se pedir, já liga a Guerra na Corrida na corrida que nasce.
+ *
+ * O «Assistir» e o «Testar só na minha tela» abrem no Layout
+ * (`admin/PalcoDoOrganizador`): trocar de aba não fecha a corrida nem o teste.
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -32,22 +39,21 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { SeletorPessoas } from '@/components/Corrida/admin/SeletorPessoas';
 import { lerPessoasDoCadastro, type PessoaDoCadastro } from '@/components/Corrida/admin/pessoas';
 import { abrirCorrida, abrirEnquete, ajustarCorrida, criarCorrida, definirTema, descartarGravacao, divulgar, encerrarCorrida, faltaMigrationCavalos, faltaMigrationEnquete, fecharEnquete, gravarCorrida, gravarCorridaCavalos, iniciarCorrida, lerPainel, preencherEscolhas, tirarDivulgacao, type CorredorSemPerfil, type Painel } from '@/components/Corrida/admin/acoes';
 import { CorredoresSemPerfil } from '@/components/Corrida/admin/CorredoresSemPerfil';
 import { InterruptorGuerra } from '@/components/Corrida/guerra/InterruptorGuerra';
+import { faltaMigrationGuerra, ligarGuerra } from '@/components/Corrida/guerra/banco';
+import { assistirComoOrganizador, testarComoOrganizador } from '@/components/Corrida/admin/palcosSoltos';
 import { TesteDoChefe } from '@/components/Corrida/guerra/TesteDoChefe';
 import { agoraBanco, categoriaDe, mensagemDoErro, segundos, type Categoria, type EnqueteJson } from '@/components/Corrida/banco';
 import { destravarAudio, NOME_CORRIDA } from '@/components/Corrida/nome';
 import { TEMAS, type TemaLobby } from '@/components/Corrida/lobbies/cena';
 
-const PalcoAoVivo = lazy(() => import('@/components/Corrida/PalcoAoVivo'));
-const TesteCorrida = lazy(() => import('@/components/Corrida/TesteCorrida'));
 const CardDivulgacao = lazy(() => import('@/components/Corrida/CardDivulgacao'));
-const PalcoCavalos = lazy(() => import('@/components/Corrida/cavalos/PalcoCavalos'));
-const TesteCavalos = lazy(() => import('@/components/Corrida/cavalos/TesteCavalos'));
 
 const PREMIOS = ['R$ 20', 'R$ 30', 'R$ 50', 'Vale-lanche', 'Um dia de folga'];
 const DIVULGACAO_PADRAO: Record<Categoria, { titulo: string; mensagem: string }> = {
@@ -84,8 +90,6 @@ export default function CorridaConfig() {
   const [gravando, setGravando] = useState<{ f: number; etapa: string } | null>(null);
   const cancelarGravacao = useRef(false);
   const [confirmar, setConfirmar] = useState<Confirmacao>(null);
-  const [assistindo, setAssistindo] = useState(false);
-  const [testando, setTestando] = useState(false);
   const [escolhida, setEscolhida] = useState<Categoria>('bichinhos');
   const [div, setDiv] = useState({ ...DIVULGACAO_PADRAO.bichinhos, premio: '', dias: 3, alvos: new Set<string>() });
   const [divAberta, setDivAberta] = useState(false);
@@ -93,6 +97,12 @@ export default function CorridaConfig() {
   const [votacao, setVotacao] = useState<EnqueteJson | null>(null);
   const [tique, tiqueVotacao] = useState(0);
   const fechandoVotacao = useRef(false);
+  // A surpresa: a votação fecha com os cavalos vencendo (e, se pedir, a guerra já ligada). Vale o que
+  // estiver marcado no fim da contagem.
+  const [surpresa, setSurpresa] = useState(false);
+  const [guerraJunto, setGuerraJunto] = useState(true);
+  const surpresaAgora = useRef({ surpresa, guerraJunto });
+  surpresaAgora.current = { surpresa, guerraJunto };
 
   const recarregar = useCallback(async () => {
     try { setPainel(await lerPainel()); setSemMigration(false); }
@@ -183,18 +193,30 @@ export default function CorridaConfig() {
     if (!votacaoAcabou || !votacao || fechandoVotacao.current) return;
     fechandoVotacao.current = true;
     void (async () => {
-      let r: { enquete: EnqueteJson };
-      try { r = await fecharEnquete(votacao.id); }
+      const { surpresa: mentir, guerraJunto: comGuerra } = surpresaAgora.current;
+      let r: Awaited<ReturnType<typeof fecharEnquete>>;
+      try { r = await fecharEnquete(votacao.id, mentir ? 'cavalos' : null); }
       catch (e) {
         // O relógio daqui adiantou: tenta de novo no próximo tique (250 ms).
         if (/AINDA_VOTANDO/.test(String(e))) { fechandoVotacao.current = false; return; }
-        toast.error('Não fechou a votação', { description: mensagemDoErro(e) }); setVotacao(null); return;
+        // Sem a migration da surpresa, a votação fecha normal (a corrida não fica presa).
+        if (mentir && faltaMigrationEnquete(e)) {
+          toast.error('Falta a votação de surpresa no banco', { description: 'Aplique a migration 20261023180000_corrida_enquete_surpresa.sql. Esta votação fechou normal.' });
+          try { r = await fecharEnquete(votacao.id); } catch (e2) { toast.error('Não fechou a votação', { description: mensagemDoErro(e2) }); setVotacao(null); return; }
+        } else { toast.error('Não fechou a votação', { description: mensagemDoErro(e) }); setVotacao(null); return; }
       }
       setVotacao(r.enquete);
       const v = r.enquete.vencedora ?? 'bichinhos', votos = r.enquete.votos ?? { bichinhos: 0, cavalos: 0 };
       const placar = `${votos.bichinhos} × ${votos.cavalos}`;
-      await rodar(() => montarCorrida(v, true),
-        `${r.enquete.empate ? `Empate em ${placar}: o sorteio escolheu` : `Deu ${placar}:`} ${BICHO[v].uns}! A corrida abriu: quem votou já está no lobby.`);
+      const reais = r.enquete.forcada && r.enquete.votos_reais ? ` (de verdade: ${r.enquete.votos_reais.bichinhos} × ${r.enquete.votos_reais.cavalos}; só você vê)` : '';
+      await rodar(async () => {
+        const p = await montarCorrida(v, true);
+        if (r.enquete.forcada === 'cavalos' && comGuerra && v === 'cavalos' && p.corrida) {
+          try { await ligarGuerra(p.corrida.id, true); toast.success('A Guerra na Corrida está ligada', { description: 'Ninguém sabe: no meio da prova a corrida vira guerra, e o último cavalo de pé leva o prêmio.' }); }
+          catch (e) { toast.error('A corrida abriu, mas a guerra não ligou', { description: faltaMigrationGuerra(e) ? 'Aplique a migration 20261023150000_corrida_guerra.sql e ligue no interruptor do card.' : `${mensagemDoErro(e)} Ligue no interruptor do card.` }); }
+        }
+        return p;
+      }, `${r.enquete.empate ? `Empate em ${placar}: o sorteio escolheu` : `Deu ${placar}:`} ${BICHO[v].uns}!${reais} A corrida abriu: quem votou já está no lobby.`);
       setVotacao(null);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -252,7 +274,7 @@ export default function CorridaConfig() {
             <CardTitle className="flex items-center gap-2 text-base"><Flag className="h-4 w-4 text-amber-500" /> {NOME_CORRIDA}</CardTitle>
             <p className="mt-1 text-xs text-muted-foreground">O sorteio em forma de corrida: cada pessoa escolhida corre com um {bicho.um}, quem cruzar primeiro leva o prêmio. Todo mundo assiste junto, no mesmo segundo.</p>
           </div>
-          <Button size="sm" variant="outline" className="gap-1.5" onClick={() => { destravarAudio(); setTestando(true); }}>
+          <Button size="sm" variant="outline" className="gap-1.5" onClick={() => { destravarAudio(); testarComoOrganizador({ cavalos, premio: premio || corrida?.premio || 'R$ 30', tema: montando ? tema : corrida?.tema ?? tema }); }}>
             <FlaskConical className="h-3.5 w-3.5" /> Testar só na minha tela
           </Button>
         </div>
@@ -338,7 +360,7 @@ export default function CorridaConfig() {
                 </Button>
               )}
               {corrida.estado !== 'preparando' && (
-                <Button size="sm" variant="outline" className="gap-1.5" onClick={() => { destravarAudio(); setAssistindo(true); }}><Eye className="h-3.5 w-3.5" /> Assistir</Button>
+                <Button size="sm" variant="outline" className="gap-1.5" onClick={() => { destravarAudio(); assistirComoOrganizador(corrida.id, cavalos); }}><Eye className="h-3.5 w-3.5" /> Assistir</Button>
               )}
               {!gravada && corrida.estado !== 'correndo' && !montando && (
                 <Button size="sm" variant="outline" className="gap-1.5" disabled={ocupado || !!gravando} onClick={() => comecarMontagem(true)}>Mudar pessoas ou prêmio</Button>
@@ -391,6 +413,23 @@ export default function CorridaConfig() {
               {pessoas ? <SeletorPessoas pessoas={pessoas} marcados={plateia} onChange={setPlateia} rotulo={n => (n === 1 ? 'pessoa assistindo' : 'pessoas assistindo')} /> : null}
             </div>
             </fieldset>
+            {/* A surpresa: fora do fieldset, dá para mudar até o fim da contagem. */}
+            {novaCorrida && cavalosCabem && (
+              <div className="space-y-1.5 rounded-lg border border-dashed px-3 py-2 text-xs">
+                <label className="flex flex-wrap items-center gap-2">
+                  <Switch checked={surpresa} onCheckedChange={setSurpresa} aria-label="Surpresa: os cavalos ganham a votação" />
+                  <span className="font-semibold">🤫 Surpresa: os cavalos ganham a votação</span>
+                  <span className="text-muted-foreground">A votação acontece normal, mas fecha com os cavalos vencendo por um voto no placar. Ninguém vê quem votou em quê; a contagem de verdade, só você.</span>
+                </label>
+                {surpresa && (
+                  <label className="flex flex-wrap items-center gap-2">
+                    <Switch checked={guerraJunto} onCheckedChange={setGuerraJunto} aria-label="E já ligar a Guerra na Corrida" />
+                    <span className="font-semibold">⚔ e já ligar a Guerra na Corrida</span>
+                    <span className="text-muted-foreground">No meio da prova ela vira guerra; o cavalo que sobrar é o vencedor e leva o prêmio.</span>
+                  </label>
+                )}
+              </div>
+            )}
             {votacao ? (
               <div className="space-y-1.5 rounded-lg border border-amber-500/60 bg-amber-500/10 p-3">
                 <div className="flex items-center justify-between gap-2 text-xs">
@@ -400,7 +439,9 @@ export default function CorridaConfig() {
                   <span className="text-base font-bold tabular-nums">{Math.max(0, Math.ceil(fimVotacao - agoraBanco()))}s</span>
                 </div>
                 <div className="h-2 overflow-hidden rounded-full bg-muted"><div className="h-full bg-amber-500 transition-[width] duration-200 ease-linear" style={{ width: `${Math.max(0, Math.min(1, (fimVotacao - agoraBanco()) / 30)) * 100}%` }} /></div>
-                <p className="text-[11px] text-muted-foreground">Acabou a contagem, a corrida nasce com a mais votada (empate vai no sorteio) e abre na hora: quem votou entra direto no lobby, quem não votou recebe o convite «Assistir». Não feche esta aba.</p>
+                <p className="text-[11px] text-muted-foreground">{surpresa
+                  ? `Surpresa ligada: acabou a contagem, a corrida nasce de cavalos (um voto a mais no placar)${guerraJunto ? ', já com a Guerra ligada,' : ''} e abre na hora. Não feche esta aba.`
+                  : 'Acabou a contagem, a corrida nasce com a mais votada (empate vai no sorteio) e abre na hora: quem votou entra direto no lobby, quem não votou recebe o convite «Assistir». Não feche esta aba.'}</p>
               </div>
             ) : (
               <div className="flex flex-wrap items-center justify-end gap-2">
@@ -507,12 +548,6 @@ export default function CorridaConfig() {
       </AlertDialog>
 
       <Suspense fallback={null}>
-        {assistindo && corrida && (categoriaDe(corrida) === 'cavalos'
-          ? <PalcoCavalos corridaId={corrida.id} adm onFechar={() => setAssistindo(false)} />
-          : <PalcoAoVivo corridaId={corrida.id} onFechar={() => setAssistindo(false)} />)}
-        {testando && (cavalos
-          ? <TesteCavalos onFechar={() => setTestando(false)} />
-          : <TesteCorrida premio={premio || corrida?.premio || 'R$ 30'} onFechar={() => setTestando(false)} tema={montando ? tema : corrida?.tema ?? tema} palpiteDemo />)}
         {previa && <CardDivulgacao teste divulgacao={{ id: 0, titulo: div.titulo, mensagem: div.mensagem, premio: div.premio || null, criada_em: new Date().toISOString(), categoria }} onFechou={() => setPrevia(false)} />}
       </Suspense>
     </Card>

@@ -51,7 +51,7 @@ export default function PalcoCavalos({ corridaId, onFechar, adm = false }: Props
   const ocupado = useRef(false);
   const quadro = useRef<HTMLIFrameElement | null>(null);
   const guerra = useGuerra(corridaId);
-  const { chefe, tratar: tratarGuerra } = useJanelaDaGuerra(quadro, guerra, agoraMs);
+  const { chefe, tratar: tratarGuerra, volume: volumeJanela } = useJanelaDaGuerra(quadro, guerra, agoraMs);
 
   // Entra no lobby (marca a entrada e lê a sala inteira).
   useEffect(() => {
@@ -160,7 +160,7 @@ export default function PalcoCavalos({ corridaId, onFechar, adm = false }: Props
       {chefe && guerra?.ligada && (
         <Suspense fallback={null}>
           <CenaGuerra estado={guerra} agora={agoraMs} numero={chefe.numero} dono={chefe.dono} eu={eu}
-            janela={{ rect: chefe.rect, canvas: chefe.canvas }} aoGolpear={golpear} volume={volumeChefe} escudo={!(souSuperAdmin || adm)} />
+            janela={{ rect: chefe.rect, canvas: chefe.canvas }} aoGolpear={golpear} volume={volumeChefe * volumeJanela} escudo={!(souSuperAdmin || adm)} />
         </Suspense>
       )}
     </>

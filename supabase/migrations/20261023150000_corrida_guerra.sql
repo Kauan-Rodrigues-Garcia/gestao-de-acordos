@@ -8,13 +8,14 @@
 --      «ATACAR A CORRIDA!». Cada tela junta os cliques e chama
 --      `fn_corrida_guerra_atacar` no máximo 1 vez a cada ~2,5 s (aqui: 1,5 s por
 --      pessoa). A PRESSÃO é a soma dos cliques de todos; a guerra também anda
---      sozinha (acaba em 75 s sem clique nenhum) e não acaba antes de 30 s. Cada
+--      sozinha (acaba em 50 s sem clique nenhum) e não acaba antes de 40 s. Cada
 --      tela derruba os cavalos pela pressão, numa ordem que sai da semente da
 --      corrida. O vencedor da gravação é sempre o último: o resultado não muda.
 --   2. O filme (21 s, a partir de `sobrou_em`): luto, raiva, transformação.
 --   3. O chefe, o Cavalo da Guerra: uma vida para todo mundo, tiros em lote
 --      (`fn_corrida_guerra_golpear`, 0,6 s por pessoa), o diretor de ritmo da
---      Bruxa (a luta dura ~90 s com 1 ou 100 pessoas) e o anjo: bem à frente da
+--      Bruxa (a luta dura de 80 a ~90 s com 1 ou 100 pessoas: rápido demais, o
+--      tiro vale menos; devagar demais, vale mais) e o anjo: bem à frente da
 --      linha, o banco cura e cada tela mostra ele devorando um anjo.
 --
 -- Por que cada pessoa tem a SUA linha (`corrida_guerra_golpes`): com 250 pessoas
@@ -90,8 +91,9 @@ IMMUTABLE
 SET search_path TO ''
 AS $function$
   SELECT CASE WHEN p_t IS NULL OR p_t < 0 THEN 1::numeric ELSE
-    LEAST(5 + GREATEST(0, p_t - 90) * 1,
-          GREATEST(0.25, exp(LEAST(50, 7 * (p_fracao - LEAST(1, GREATEST(0, 1 - p_t / 90)))))))
+    LEAST(6 + GREATEST(0, p_t - 86) * 1,
+          GREATEST(CASE WHEN p_t > 86 THEN 1 + (p_t - 86) * 0.5 ELSE 0.04 END,
+                   exp(LEAST(50, 12 * (p_fracao - LEAST(1, GREATEST(0, 1 - p_t / 86)))))))
   END;
 $function$;
 
@@ -102,9 +104,9 @@ IMMUTABLE
 SET search_path TO ''
 AS $function$
   SELECT CASE
-    WHEN p_t < 0 OR p_t >= 110 OR p_desde < 10 THEN 0::numeric
-    WHEN LEAST(1, GREATEST(0, 1 - p_t / 90)) - p_fracao < 0.15 THEN 0::numeric
-    ELSE LEAST(0.25, LEAST(1, GREATEST(0, 1 - p_t / 90)) - p_fracao - 0.05)
+    WHEN p_t < 0 OR p_t >= 106 OR p_desde < 18 THEN 0::numeric
+    WHEN LEAST(1, GREATEST(0, 1 - p_t / 86)) - p_fracao < 0.12 THEN 0::numeric
+    ELSE LEAST(0.3, LEAST(1, GREATEST(0, 1 - p_t / 86)) - p_fracao)
   END;
 $function$;
 
@@ -162,7 +164,7 @@ BEGIN
   IF v_g.comecou_em IS NOT NULL AND v_g.sobrou_em IS NULL AND v_g.alvo > 0 THEN
     SELECT COALESCE(sum(cliques), 0) INTO v_g.pressao FROM public.corrida_guerra_golpes WHERE corrida_id = p_corrida;
     v_s  := extract(epoch FROM v_agora - v_g.comecou_em);
-    v_ef := LEAST(v_g.alvo, v_g.pressao + v_g.alvo * v_s / 75, v_g.alvo * v_s / 30);
+    v_ef := LEAST(v_g.alvo, v_g.pressao + v_g.alvo * v_s / 50, v_g.alvo * v_s / 40);
     IF v_ef >= v_g.alvo THEN
       SELECT LEAST(60, GREATEST(1, count(*))) INTO v_g.pessoas FROM public.corrida_guerra_golpes WHERE corrida_id = p_corrida AND cliques > 0;
       v_g.sobrou_em := v_agora;
@@ -180,8 +182,8 @@ BEGIN
     SELECT COALESCE(sum(efetivo), 0) INTO v_soma FROM public.corrida_guerra_golpes WHERE corrida_id = p_corrida;
     v_t := extract(epoch FROM v_agora - v_g.solta_em);
     v_vida := v_g.vida_max + v_g.cura_total - v_soma;
-    -- antes de 50 s ela não desce do piso (5%): a diferença entra calada nas curas
-    IF v_t < 50 AND v_vida < 0.05 * v_g.vida_max THEN
+    -- antes de 80 s ela não desce do piso (5%): a diferença entra calada nas curas
+    IF v_t < 80 AND v_vida < 0.05 * v_g.vida_max THEN
       v_g.cura_total := v_g.cura_total + (0.05 * v_g.vida_max - v_vida);
       v_vida := 0.05 * v_g.vida_max;
     END IF;

@@ -10,6 +10,10 @@
   marcas do app de verdade) e, por cima, o «Testar só na minha tela» da corrida
   de cavalos — o MESMO TesteCavalos do app, com o ensaio da guerra. Marque
   «⚔ guerra» na barra do teste, largue e vá para a chegada.
+
+  O teste abre pelo mesmo `PalcoDoOrganizador` do Layout, fora da página: os
+  links do menu trocam a página (como trocar de aba no app) e a corrida, o
+  teste e o Cavalo da Guerra continuam.
 -->
 <style>
   *{box-sizing:border-box}
@@ -38,44 +42,49 @@
 <div id="root">
   <aside data-chefona-livre="">
     <b style="padding:6px 12px 14px">Gestão de Acordos</b>
-    <a href="#"><span data-alvo-feitico="aba">Dashboard</span></a>
-    <a href="#"><span data-alvo-feitico="aba">Acordos</span></a>
-    <a href="#"><span data-alvo-feitico="aba">Pix Automático</span></a>
-    <a href="#"><span data-alvo-feitico="aba">Painel Líder</span></a>
-    <a href="#"><span data-alvo-feitico="aba">Analítico</span></a>
-    <a href="#"><span data-alvo-feitico="aba">Metas</span></a>
-    <a href="#"><span data-alvo-feitico="aba">Configurações</span></a>
+    <a href="#" data-pagina="0"><span data-alvo-feitico="aba">Dashboard</span></a>
+    <a href="#" data-pagina="1"><span data-alvo-feitico="aba">Acordos</span></a>
+    <a href="#" data-pagina="2"><span data-alvo-feitico="aba">Pix Automático</span></a>
+    <a href="#" data-pagina="0"><span data-alvo-feitico="aba">Painel Líder</span></a>
+    <a href="#" data-pagina="1"><span data-alvo-feitico="aba">Analítico</span></a>
+    <a href="#" data-pagina="2"><span data-alvo-feitico="aba">Metas</span></a>
+    <a href="#" data-pagina="0"><span data-alvo-feitico="aba">Configurações</span></a>
   </aside>
   <main>
     <button id="abrir" type="button">🐎 Abrir o teste da corrida</button>
-    <div class="cards">
-      <div class="card"><small>Recebido</small><span data-alvo-feitico="valor" data-nome-feitico="Recebido">R$ 48.312,90</span></div>
-      <div class="card"><small>Projeção do mês</small><span data-alvo-feitico="valor" data-nome-feitico="Projeção do mês">R$ 91.004,17</span></div>
-    </div>
-    <div class="abas"><span data-alvo-feitico="aba">Todos</span><span data-alvo-feitico="aba">Hoje</span><span data-alvo-feitico="aba">Atrasados</span><span data-alvo-feitico="aba">Pagos</span></div>
-    <table><tbody id="linhas"></tbody></table>
-    <div id="app-react"></div>
+    <div id="pagina"></div>
+    <div id="painel-chefe"></div>
   </main>
 </div>
+<div id="app-react"></div>
 <script type="module">
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import TesteCavalos from '/src/components/Corrida/cavalos/TesteCavalos.tsx';
 import { TesteDoChefe } from '/src/components/Corrida/guerra/TesteDoChefe.tsx';
 import { ChefeDeTeste } from '/src/components/Corrida/guerra/ChefeDeTeste.tsx';
+import { PalcoDoOrganizador } from '/src/components/Corrida/admin/PalcoDoOrganizador.tsx';
+import { testarComoOrganizador } from '/src/components/Corrida/admin/palcosSoltos.ts';
 
+// As «páginas» do Gestão de mentira: trocar no menu é como trocar de aba no app (o Layout fica).
 const nomes = ['Maria A. Souza', 'José Carlos Lima', 'Ana Beatriz Rocha', 'Paulo R. Mendes', 'Cláudia Ferreira', 'Roberto Alves', 'Luciana M. Prado', 'Fernando Dias', 'Patrícia Nunes', 'Marcelo T. Gomes', 'Juliana Castro', 'Ricardo Pires'];
-document.getElementById('linhas').innerHTML = nomes.map((n, i) => `<tr data-alvo-feitico="linha"><td>${n}</td><td>R$ ${(180 + i * 37.5).toFixed(2).replace('.', ',')}</td><td>${10 + i}/10</td><td>pendente</td></tr>`).join('');
-const raiz = createRoot(document.getElementById('app-react'));
-let aberto = false;
-// o painel do «Testar o Cavalo da Guerra» (o mesmo do card da Corrida) e o chefe dele, como no Layout
-const desenhar = () => raiz.render(React.createElement(React.Fragment, null,
-  React.createElement('div', { id: 'painel-chefe' }, React.createElement(TesteDoChefe)),
-  React.createElement(ChefeDeTeste),
-  aberto ? React.createElement(TesteCavalos, { onFechar: () => { aberto = false; desenhar(); } }) : null));
-desenhar();
-document.getElementById('abrir').addEventListener('click', () => { aberto = true; desenhar(); });
-if (new URLSearchParams(location.search).has('abrir')) { aberto = true; desenhar(); }
+const linhas = (de, ate) => nomes.slice(de, ate).map((n, i) => `<tr data-alvo-feitico="linha"><td>${n}</td><td>R$ ${(180 + i * 37.5).toFixed(2).replace('.', ',')}</td><td>${10 + i}/10</td><td>pendente</td></tr>`).join('');
+const PAGINAS = [
+  `<div class="cards"><div class="card"><small>Recebido</small><span data-alvo-feitico="valor" data-nome-feitico="Recebido">R$ 48.312,90</span></div><div class="card"><small>Projeção do mês</small><span data-alvo-feitico="valor" data-nome-feitico="Projeção do mês">R$ 91.004,17</span></div></div>
+   <div class="abas"><span data-alvo-feitico="aba">Todos</span><span data-alvo-feitico="aba">Hoje</span><span data-alvo-feitico="aba">Atrasados</span><span data-alvo-feitico="aba">Pagos</span></div>
+   <table><tbody>${linhas(0, 12)}</tbody></table>`,
+  `<h2 id="titulo-pagina">Acordos</h2><div class="abas"><span data-alvo-feitico="aba">Novos</span><span data-alvo-feitico="aba">Quebrados</span></div><table><tbody>${linhas(3, 12)}</tbody></table>`,
+  `<h2 id="titulo-pagina">Pix Automático</h2><div class="cards"><div class="card"><small>Pix do dia</small><span data-alvo-feitico="valor" data-nome-feitico="Pix do dia">R$ 7.420,00</span></div></div>`,
+];
+const irPara = k => { document.getElementById('pagina').innerHTML = PAGINAS[k]; };
+irPara(0);
+for (const a of document.querySelectorAll('aside a')) a.addEventListener('click', e => { e.preventDefault(); irPara(Number(a.dataset.pagina)); });
+createRoot(document.getElementById('painel-chefe')).render(React.createElement(TesteDoChefe));
+// o que mora no Layout: o chefe do teste e o «Testar só na minha tela» da corrida
+createRoot(document.getElementById('app-react')).render(React.createElement(React.Fragment, null, React.createElement(ChefeDeTeste), React.createElement(PalcoDoOrganizador)));
+const abrir = () => testarComoOrganizador({ cavalos: true, premio: 'R$ 30', tema: 'f1' });
+document.getElementById('abrir').addEventListener('click', abrir);
+if (new URLSearchParams(location.search).has('abrir')) abrir();
 </script>
 </body>
 </html>

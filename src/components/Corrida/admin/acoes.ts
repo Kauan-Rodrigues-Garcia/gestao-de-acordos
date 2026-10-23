@@ -54,8 +54,15 @@ export const tirarDivulgacao = (id: number) => rpc<Painel>('fn_corrida_divulgaca
 
 /** A votação de 30 s entre bichinhos e cavalos (20261022130000): o card vai para quem foi chamado. */
 export const abrirEnquete = (votantes: string[]) => rpc<{ agora: string; enquete: EnqueteJson }>('fn_corrida_enquete_abrir', { p_votantes: votantes });
-/** Depois da contagem: conta os votos (empate vai no sorteio) e avisa cada votante do resultado. */
-export const fecharEnquete = (id: number) => rpc<{ agora: string; enquete: EnqueteJson }>('fn_corrida_enquete_fechar', { p_enquete: id });
+/**
+ * Depois da contagem: conta os votos (empate vai no sorteio) e avisa cada votante do resultado.
+ * `forcar`: a votação de surpresa (20261023180000) — essa categoria vence, com um voto a mais no
+ * placar que todo mundo vê; a contagem de verdade volta só aqui (`votos_reais`). Sem ela, a
+ * chamada é a de sempre (funciona também sem a migration nova).
+ */
+export const fecharEnquete = (id: number, forcar: Categoria | null = null) =>
+  rpc<{ agora: string; enquete: EnqueteJson & { forcada?: Categoria | null; votos_reais?: Record<Categoria, number> | null } }>(
+    'fn_corrida_enquete_fechar', forcar ? { p_enquete: id, p_forcar: forcar } : { p_enquete: id });
 /** O banco ainda não tem a votação (20261022130000). */
 export const faltaMigrationEnquete = (e: unknown): boolean => /fn_corrida_enquete|PGRST202|schema cache|could not find the function/i.test(String(e));
 

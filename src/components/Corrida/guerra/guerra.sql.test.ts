@@ -6,14 +6,14 @@
  *
  * O que importa provar: só o super_admin liga, só antes da largada e só na de
  * cavalos; só quem foi chamado ataca e atira; os tetos e os freios seguram; a
- * guerra acaba entre minS e maxS (30 e 75 s); a vida do chefe sai de quem atacou; o diretor
+ * guerra acaba entre minS e maxS (40 e 50 s); a vida do chefe sai de quem atacou; o diretor
  * de ritmo e o anjo são os mesmos de `regras.ts`; e o aviso vai para a sala.
  */
 import { PGlite } from '@electric-sql/pglite';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { alvoDaGuerra, curaDoRitmo, GUERRA, ritmoDaLuta, vidaDoChefe } from './regras';
+import { alvoDaGuerra, curaDoRitmo, GUERRA, RITMO, ritmoDaLuta, vidaDoChefe } from './regras';
 
 const ADMIN = '00000000-0000-4000-8000-0000000000a1';
 const ANA   = '00000000-0000-4000-8000-0000000000c1';
@@ -212,7 +212,7 @@ describe('20261023150000 — o chefe', () => {
     expect(g.ranking.map(x => [x.nome, x.dano])).toEqual([['Bruno Lima', 50], ['Ana Paula', 30]]);
   });
 
-  it('antes de 50 s a vida não desce dos 5%; depois, cai', async () => {
+  it('antes de RITMO.minS a vida não desce dos 5%; depois, cai', async () => {
     const id = await comChefe(); await recuar(id, 'solta_em', 20);
     await db.query('update public.corrida_guerra_golpes set efetivo = 1e6 where corrida_id = $1 and usuario = $2', [id, ANA]);
     await forcar(id);
@@ -220,8 +220,8 @@ describe('20261023150000 — o chefe', () => {
     // parou no piso (e, bem atrás da linha, ainda comeu um anjo)
     expect(Number(g.vida)).toBeGreaterThanOrEqual(0.05 * Number(g.vida_max) - 0.1);
     expect(g.caiu_em).toBeNull();
-    // o que passou do piso antes dos 50 s não volta: depois deles, é preciso bater de novo
-    await recuar(id, 'solta_em', 55);
+    // o que passou do piso antes do RITMO.minS não volta: depois dele, é preciso bater de novo
+    await recuar(id, 'solta_em', RITMO.minS + 5);
     await db.query('update public.corrida_guerra_golpes set efetivo = efetivo + 1e7 where corrida_id = $1 and usuario = $2', [id, ANA]);
     await forcar(id);
     g = await estado(ANA, id);
@@ -242,7 +242,7 @@ describe('20261023150000 — o chefe', () => {
     expect(g.curas).toBe(1);
     expect(Number(g.cura_vida)).toBeCloseTo(cura * vmax, 0);
     expect(Number(g.vida)).toBeCloseTo((0.3 + cura) * vmax, 0);
-    // e não come outro antes de 10 s
+    // e não come outro antes do intervalo
     await forcar(id);
     expect((await estado(ANA, id)).curas).toBe(1);
   });

@@ -1,23 +1,49 @@
 /*
- * O som da Guerra na Corrida (23/10/2026): tudo sintetizado, nenhum arquivo.
- * O mesmo para a janela da corrida (`naCorrida.js`) e para a página
+ * O som da Guerra na Corrida (23/10/2026): os efeitos e as músicas de jogo são
+ * sintetizados; o violino da guerra é arquivo (`arquivo`), passando pelo mesmo
+ * volume. O mesmo para a janela da corrida (`naCorrida.js`) e para a página
  * (`palcoGuerra.js`). `volume` de 0 a 1: o operador ouve a 12%, o super_admin
- * inteiro (a mesma regra da Bruxa).
+ * inteiro (a mesma regra da Bruxa), vezes a barrinha de volume da janela.
+ *
+ * Tudo sai por um `geral` (o volume) e um medidor (`barras`): as barrinhas que
+ * pulam ao lado do botão de som, na janela da corrida.
  *
  * As músicas tocam por agendamento (40 ms à frente, como a da corrida): o
  * relógio é o do AudioContext, então não atrasa quando a aba engasga.
  */
 const mf = m => 440 * 2 ** ((m - 69) / 12);
 const entre = (a, b) => a + Math.random() * (b - a);
+const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+
+/**
+ * As barrinhas de um medidor (AnalyserNode): `n` faixas de 0 a 1, dos graves aos agudos.
+ * `buf` é reaproveitado (o laço chama a cada quadro).
+ */
+export function lerBarras(medidor, n, buf) {
+  const saida = new Array(n).fill(0);
+  if (!medidor) return saida;
+  medidor.getByteFrequencyData(buf);
+  const usar = Math.max(n, Math.floor(buf.length * 0.7));   // o fim do espectro quase não tem nada
+  for (let k = 0; k < n; k++) {
+    const a = Math.floor(Math.pow(k / n, 1.6) * usar), b = Math.max(a + 1, Math.floor(Math.pow((k + 1) / n, 1.6) * usar));
+    let m = 0; for (let i = a; i < b; i++) m = Math.max(m, buf[i]);
+    saida[k] = m / 255;
+  }
+  return saida;
+}
 
 export function criarSomGuerra(volume = 1) {
-  let ac = null, mestre = null, musG = null, ruidoB = null, dist = null, idSeq = 0, vol = volume;
+  let ac = null, geral = null, medidor = null, buf = null, mestre = null, musG = null, ruidoB = null, dist = null, idSeq = 0, vol = volume;
+  const arquivos = new Set();
   const ultimo = {}, seq = { nome: null, prox: 0, i: 0 };
   const pode = (k, ms) => { const n = performance.now(); if (n - (ultimo[k] || 0) < ms) return false; ultimo[k] = n; return true; };
   function init() {
     if (ac) { if (ac.state === 'suspended') ac.resume().catch(() => {}); return; }
     try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch { ac = null; return; }
-    mestre = ac.createGain(); mestre.gain.value = 0.5 * vol; mestre.connect(ac.destination);
+    geral = ac.createGain(); geral.gain.value = vol;
+    medidor = ac.createAnalyser(); medidor.fftSize = 64; medidor.smoothingTimeConstant = 0.72; buf = new Uint8Array(medidor.frequencyBinCount);
+    geral.connect(medidor); medidor.connect(ac.destination);
+    mestre = ac.createGain(); mestre.gain.value = 0.5; mestre.connect(geral);
     musG = ac.createGain(); musG.gain.value = 0.6; musG.connect(mestre);
     ruidoB = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate); const d = ruidoB.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
     dist = ac.createWaveShaper(); const cur = new Float32Array(256); for (let i = 0; i < 256; i++) cur[i] = Math.tanh((i / 128 - 1) * 4); dist.curve = cur; dist.connect(mestre);
@@ -70,10 +96,44 @@ export function criarSomGuerra(volume = 1) {
   }
   const ok = () => !!ac && vol > 0;
   const T = () => ac.currentTime;
+  /**
+   * Uma música de arquivo (o violino da guerra). Passa pelo `geral` (o volume e as barrinhas)
+   * quando o som da página já está liberado; antes disso, toca direto, no volume do elemento.
+   */
+  function arquivo(url) {
+    const el = typeof Audio === 'undefined' ? null : Object.assign(new Audio(url), { preload: 'auto' });
+    let g = null, alvo = 0, rampa = 0;
+    const ligar = () => {
+      if (g || !el || !ac || ac.state !== 'running') return;
+      try { g = ac.createGain(); g.gain.value = alvo; ac.createMediaElementSource(el).connect(g).connect(geral); el.volume = 1; } catch { g = null; }
+    };
+    const aplicar = (suave = 0.25) => {
+      if (!el) return;
+      if (g) { g.gain.cancelScheduledValues(ac.currentTime); g.gain.setTargetAtTime(alvo, ac.currentTime, suave); } else el.volume = clamp(alvo * vol, 0, 1);
+    };
+    const a = {
+      /** Começa do início, em `nivel` (0 a 1 do volume). */
+      tocar(nivel) { if (!el) return; clearInterval(rampa); alvo = nivel; ligar(); aplicar(0.05); if (el.paused) { try { el.currentTime = 0; } catch { /* sem metadados ainda */ } void el.play().catch(() => {}); } },
+      /** Muda o nível (devagar). */
+      nivel(nivel) { if (Math.abs(nivel - alvo) < 0.004) return; alvo = nivel; aplicar(); },
+      /** Some em `seg` segundos. */
+      parar(seg = 1.5) {
+        if (!el || el.paused) return; alvo = 0; clearInterval(rampa);
+        if (g) { aplicar(seg / 3); rampa = setTimeout(() => el.pause(), seg * 1000); return; }
+        rampa = setInterval(() => { if (el.volume <= 0.02) { clearInterval(rampa); el.pause(); } else el.volume = Math.max(0, el.volume - 0.02); }, Math.max(16, seg * 1000 / 50));
+      },
+      aplicar,
+      fechar() { clearInterval(rampa); try { el?.pause(); } catch { /* já parou */ } arquivos.delete(a); },
+    };
+    arquivos.add(a);
+    return a;
+  }
   return {
-    init,
-    fechar() { seq.nome = null; clearInterval(idSeq); try { ac?.close(); } catch { /* já fechado */ } ac = null; },
-    volume(v) { vol = v; if (mestre) mestre.gain.value = 0.5 * vol; },
+    init, arquivo,
+    fechar() { seq.nome = null; clearInterval(idSeq); for (const a of [...arquivos]) a.fechar(); try { ac?.close(); } catch { /* já fechado */ } ac = null; },
+    volume(v) { if (v === vol) return; vol = v; if (geral) geral.gain.value = vol; for (const a of arquivos) a.aplicar(); },
+    /** As barrinhas do que está tocando agora (`n` faixas de 0 a 1). */
+    barras: n => lerBarras(medidor, n, buf),
     /** 'guerra' | 'luto' | 'chefao' | null */
     musica(nome) { if (seq.nome === nome) return; seq.nome = nome; seq.i = 0; if (ac) seq.prox = ac.currentTime + 0.05; },
     tiro(v = 1) { if (!ok() || !pode('tiro', 55)) return; const t = T(); ruido(t, 0.09, { f0: 2600, f1: 500, tipo: 'bandpass', v: 0.2 * v, q: 0.7 }); nota(t, 180, 0.05, { f1: 60, v: 0.05 * v }); },

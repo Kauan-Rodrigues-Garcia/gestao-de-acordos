@@ -26,6 +26,7 @@ const SQL_AVULSO = readFileSync(resolve(__dirname, '../../../supabase/migrations
 const SQL_CAVALOS = readFileSync(resolve(__dirname, '../../../supabase/migrations/20261022120000_corrida_cavalos.sql'), 'utf8');
 const SQL_ENQUETE = readFileSync(resolve(__dirname, '../../../supabase/migrations/20261022130000_corrida_enquete.sql'), 'utf8');
 const SQL_TORCIDA = readFileSync(resolve(__dirname, '../../../supabase/migrations/20261022190000_corrida_torcida.sql'), 'utf8');
+const SQL_SURPRESA = readFileSync(resolve(__dirname, '../../../supabase/migrations/20261023180000_corrida_enquete_surpresa.sql'), 'utf8');
 
 let db: PGlite;
 
@@ -94,6 +95,8 @@ beforeAll(async () => {
   await db.exec(SQL_ENQUETE);
   await db.exec(SQL_TORCIDA);
   await db.exec(SQL_TORCIDA);
+  await db.exec(SQL_SURPRESA);
+  await db.exec(SQL_SURPRESA);
 });
 
 beforeEach(async () => {
@@ -635,6 +638,60 @@ describe('20261022130000 — a votação da categoria', () => {
   it('as funções internas não ficam abertas', async () => {
     const r = await db.query<{ ok: boolean }>(`select has_function_privilege('authenticated', 'public.fn_corrida_enquete_avisar(bigint)', 'EXECUTE') ok`);
     expect(r.rows[0].ok).toBe(false);
+  });
+});
+
+describe('20261023180000 — a votação de surpresa', () => {
+  interface Enquete { id: number; vencedora: string | null; votos: { bichinhos: number; cavalos: number } | null; empate: boolean | null; meu_voto: string | null; forcada?: string | null; votos_reais?: { bichinhos: number; cavalos: number } | null }
+  const abrir = (votantes: string[]) => como<{ enquete: Enquete }>(ADMIN, 'select public.fn_corrida_enquete_abrir($1) v', [votantes]);
+  const votar = (uid: string, id: number, cat: string) => como<{ enquete: Enquete }>(uid, 'select public.fn_corrida_enquete_votar($1, $2) v', [id, cat]);
+  const fechar = (id: number, forcar: string | null) => como<{ enquete: Enquete }>(ADMIN, 'select public.fn_corrida_enquete_fechar($1, $2) v', [id, forcar]);
+  const vencer = (id: number) => db.query("update public.corrida_enquetes set encerra_em = clock_timestamp() - interval '1 second' where id = $1", [id]);
+
+  it('perdendo de verdade, os cavalos ganham com UM voto a mais; ninguém vê a contagem real, só o super_admin', async () => {
+    const { enquete } = await abrir([ANA, BRUNO, DORA]);
+    await votar(ANA, enquete.id, 'bichinhos'); await votar(BRUNO, enquete.id, 'bichinhos'); await votar(DORA, enquete.id, 'cavalos');
+    await vencer(enquete.id);
+    await db.exec('truncate realtime.enviados');
+    const r = await fechar(enquete.id, 'cavalos');
+    // 3 chamados: o placar não passa de 3 votos (1 × 2), e vence a forçada
+    expect(r.enquete).toMatchObject({ vencedora: 'cavalos', votos: { bichinhos: 1, cavalos: 2 }, empate: false, forcada: 'cavalos', votos_reais: { bichinhos: 2, cavalos: 1 } });
+    const a = await avisos();
+    expect(a).toHaveLength(3);
+    for (const x of a) {
+      const e = (x.payload as { enquete: Enquete }).enquete;
+      expect(e).toMatchObject({ vencedora: 'cavalos', votos: { bichinhos: 1, cavalos: 2 } });
+      expect(e.votos_reais).toBeUndefined();
+      expect(e.forcada).toBeUndefined();
+    }
+    // fechar de novo devolve o mesmo
+    expect((await fechar(enquete.id, 'cavalos')).enquete).toMatchObject({ vencedora: 'cavalos', votos: { bichinhos: 1, cavalos: 2 } });
+  });
+
+  it('com gente de sobra, é o voto da outra mais um; empate também vira um a mais', async () => {
+    const { enquete } = await abrir([ANA, BRUNO, CAIO, DORA, ADMIN]);
+    await votar(ANA, enquete.id, 'bichinhos'); await votar(BRUNO, enquete.id, 'cavalos');
+    await vencer(enquete.id);
+    expect((await fechar(enquete.id, 'cavalos')).enquete).toMatchObject({ vencedora: 'cavalos', votos: { bichinhos: 1, cavalos: 2 }, empate: false });
+  });
+
+  it('se os cavalos já ganhavam, o placar é o de verdade; sem voto nenhum, 1 × 0', async () => {
+    let { enquete } = await abrir([ANA, BRUNO, DORA]);
+    await votar(ANA, enquete.id, 'cavalos'); await votar(BRUNO, enquete.id, 'cavalos');
+    await vencer(enquete.id);
+    expect((await fechar(enquete.id, 'cavalos')).enquete).toMatchObject({ vencedora: 'cavalos', votos: { bichinhos: 0, cavalos: 2 } });
+    ({ enquete } = await abrir([ANA, BRUNO]));
+    await vencer(enquete.id);
+    expect((await fechar(enquete.id, 'cavalos')).enquete).toMatchObject({ vencedora: 'cavalos', votos: { bichinhos: 0, cavalos: 1 }, empate: false });
+  });
+
+  it('sem forçar, é a votação de sempre; só o super_admin fecha, e só com uma das duas', async () => {
+    const { enquete } = await abrir([ANA, BRUNO, DORA]);
+    await votar(ANA, enquete.id, 'bichinhos'); await votar(BRUNO, enquete.id, 'bichinhos');
+    await vencer(enquete.id);
+    await expect(como(ANA, 'select public.fn_corrida_enquete_fechar($1, $2) v', [enquete.id, 'cavalos'])).rejects.toThrow(/NAO_AUTORIZADO/);
+    await expect(fechar(enquete.id, 'tartarugas')).rejects.toThrow(/CATEGORIA_INVALIDA/);
+    expect((await fechar(enquete.id, null)).enquete).toMatchObject({ vencedora: 'bichinhos', votos: { bichinhos: 2, cavalos: 0 }, votos_reais: null });
   });
 });
 

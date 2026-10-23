@@ -18,8 +18,15 @@
  * CIMA dos alvos marcados com `data-alvo-feitico` (valor | aba | linha), e
  * tudo volta sozinho. O clique é um tiro em qualquer lugar MENOS no que estiver
  * dentro de `data-chefona-livre` (o menu lateral): quem precisa sair para
- * atender, sai. Modo leve (`leve`): sem halos, menos partículas, a página não
- * treme, e o chefe é redesenhado a no máximo 12 quadros por segundo.
+ * atender, sai. A qualidade é automática (`qualidade.js`): PC forte ganha um
+ * pouco mais (brasas no ar, o chão aceso embaixo dele, o brilho do anjo); PC que
+ * começa a travar desce para o leve sozinho — sem halos, menos partículas, a
+ * página não treme, o chefe redesenhado ~10 vezes por segundo e a cena a 30
+ * quadros. O modo leve do app já começa no leve.
+ *
+ * Ele nunca sai cortado da tela (`EXTENSAO`, medida em `cavaloDaGuerra.test.ts`):
+ * a cabeça de um lado, o rabo de fogo do outro, a crina em cima — nem na
+ * investida, nem quando a janela do navegador encolhe.
  *
  * ## O anjo
  *
@@ -32,11 +39,12 @@
  */
 import './guerra.css';
 import { assarFogo, sprites, chama as chamaF, luz as luzF, tremula as tremulaF, particula as particulaF, explosaoFogo, poda, ESCUDO } from './fogo.js';
-import { CW, CH, CCHAO, CPIV, MAT, CAVALEIROS, criarDestino, construirCavalo, cabecaDo, pontaDaCabeca, noCavalo, naGrade, tipoDoAcerto } from './cavaloDaGuerra.js';
+import { CW, CH, CCHAO, CMEIO, CPIV, EXTENSAO, MARGEM_ALTO, MARGEM_TRAS, MAT, CAVALEIROS, criarDestino, construirCavalo, cabecaDo, pontaDaCabeca, noCavalo, naGrade, tipoDoAcerto } from './cavaloDaGuerra.js';
 import { ATRIBUTO_ALVO, alvos, blocoDe, nomeDe, criarEfeitos } from './alvos.js';
 import { cavalosDeFogo } from './cavaloDeFogo.js';
 import { DANO, GUERRA } from './regras';
 import { criarSomGuerra } from './som.js';
+import { criarQualidade } from './qualidade.js';
 
 const PX = 3, T2 = Math.PI * 2;
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -122,9 +130,11 @@ const INFO_CAV = {
   fome: { nome: 'FOME', icone: '⚖', cor: '#cf9cff', chegou: 'A Fome comeu o dinheiro do Gestão!', banido: 'A Fome foi banida!' },
   morte: { nome: 'MORTE', icone: '☠', cor: '#8ff6ec', chegou: 'A Morte levou os acordos!', banido: 'A Morte foi banida!' },
 };
-const K_CAV = 0.5;
-/** O chefe fica sempre inteiro na tela: o meio dele não chega mais perto da borda do que isto (px da arena). */
-const MARGEM_X = 70;   // os cavaleiros vêm na metade do tamanho (metade exata: o pixel art não deforma)
+const K_CAV = 0.5;   // os cavaleiros vêm na metade do tamanho (metade exata: o pixel art não deforma)
+/** O chefe inteiro na tela: do meio dele até a borda, no lado da cabeça, no do rabo e em cima (px da arena). */
+const FRENTE = EXTENSAO.frente + 4, TRAS = EXTENSAO.tras + 4, ALTO = EXTENSAO.alto + 2;
+/** Um ponto do desenho do cavalo (o modelo de 170×140) na grade dele, que tem margem para o fogo. */
+const doModelo = (x, y) => [x + MARGEM_TRAS, y + MARGEM_ALTO];
 const NOMES_SIM = ['Ana Paula', 'João Marcos', 'Bia Santos', 'Carlos Eduardo', 'Duda Lima', 'Fernanda Reis', 'Gabriel Costa', 'Helena Rocha', 'Igor Nunes', 'Júlia Mendes', 'Larissa Prado', 'Marcos Vinícius'];
 
 /**
@@ -133,14 +143,16 @@ const NOMES_SIM = ['Ana Paula', 'João Marcos', 'Bia Santos', 'Carlos Eduardo', 
  */
 export function criarPalcoGuerra(o) {
   assarFogo();
-  const leve = !!o.leve;
+  const Q = criarQualidade({ leve: !!o.leve });
+  let leve = Q.nivel === 0, forte = Q.nivel === 2;
   const pagina = o.pagina ?? document.body;
   const ALVOS = alvos(pagina);
   let vivo = true, raf = 0, antes = performance.now(), rel = 0;
   const timers = new Set();
   const depois = (msx, fn) => { const id = setTimeout(() => { timers.delete(id); if (vivo) fn(); }, msx); timers.add(id); };
   const EF = criarEfeitos((fn, msx) => depois(msx, fn));
-  const Som = criarSomGuerra(o.volume ?? 1); Som.init();
+  let volAtual = clamp(o.volume ?? 1, 0, 1);
+  const Som = criarSomGuerra(volAtual); Som.init();
 
   // ---- a tela
   if (!document.getElementById('gx-estilo')) { const st = document.createElement('style'); st.id = 'gx-estilo'; st.textContent = ESTILO; document.head.appendChild(st); }
@@ -158,11 +170,13 @@ export function criarPalcoGuerra(o) {
     DPR = devicePixelRatio || 1; trincas.width = Math.round(innerWidth * DPR); trincas.height = Math.round(innerHeight * DPR);
   }
   medir();
-  const yMinChefe = () => clamp(Math.round(AH * 0.5), 112, AH - 6);
+  const yMinChefe = () => Math.min(AH - 6, Math.max(ALTO, Math.round(AH * 0.5)));
+  /** Onde o meio dele pode ficar, virado para `d`: a cabeça e o rabo cabem inteiros (tela estreita demais: no meio). */
+  const limitesX = (d = B.dir) => { const esq = d > 0 ? TRAS : FRENTE, dir = d > 0 ? FRENTE : TRAS; return AW >= esq + dir ? [esq, AW - dir] : [AW / 2, AW / 2]; };
   const naArena = el => { const r = el.getBoundingClientRect(); return { x: r.left / PX, y: r.top / PX, w: r.width / PX, h: r.height / PX }; };
   const legenda = (txt, msx = 0) => { const l = $('.gx-legenda'); clearTimeout(legenda.t); if (!txt) { l.classList.remove('on'); return; } l.textContent = txt; l.classList.add('on'); if (msx) legenda.t = setTimeout(() => l.classList.remove('on'), msx); };
   const feed = txt => { const box = $('.gx-feed'), el = document.createElement('div'); el.textContent = txt; box.prepend(el); while (box.children.length > 4) box.lastChild.remove(); depois(4200, () => el.classList.add('sai')); depois(5300, () => el.remove()); };
-  const numero = (xA, yA, txt, cls = '') => { const box = $('.gx-nums'); if (box.children.length > 50) box.firstChild.remove(); const el = document.createElement('span'); el.className = 'gx-num ' + cls; el.textContent = txt; el.style.left = xA * PX + 'px'; el.style.top = yA * PX + 'px'; box.appendChild(el); depois(820, () => el.remove()); };
+  const numero = (xA, yA, txt, cls = '') => { const box = $('.gx-nums'); while (box.children.length > (leve ? 20 : 50)) box.firstChild.remove(); const el = document.createElement('span'); el.className = 'gx-num ' + cls; el.textContent = txt; el.style.left = xA * PX + 'px'; el.style.top = yA * PX + 'px'; box.appendChild(el); depois(820, () => el.remove()); };
   const flashPag = (a = 1) => { const f = $('.gx-flash'); f.style.transition = 'none'; f.style.opacity = leve ? a * 0.5 : a; void f.offsetWidth; f.style.transition = 'opacity .5s'; f.style.opacity = 0; };
   const tremerPagina = () => { if (leve) return; pagina.classList.remove('gx-treme'); void pagina.offsetWidth; pagina.classList.add('gx-treme'); depois(520, () => pagina.classList.remove('gx-treme')); P.shake = Math.max(P.shake, 5); };
   const HUD_ANT = {};
@@ -188,13 +202,13 @@ export function criarPalcoGuerra(o) {
     const tq = Math.floor(rel * 12) / 12, pq = Math.floor(B.p * 8) / 8, fq = Math.round(B.flash * 4) / 4;
     const k = B.modo + '|' + pq + '|' + tq + '|' + Math.round(B.jaw * 8) + '|' + Math.round(B.cab * 12) + '|' + Math.round(B.by) + '|' + (B.furia > 0.4 ? 1 : 0) + '|' + fq + '|' + B.feridas.length + '|' + B.dir;
     const agora = performance.now();
-    if (k !== chaveChefe && (agora - ultChefe > (leve ? 80 : 32) || !chaveChefe)) { chaveChefe = k; ultChefe = agora; construirCavalo({ t: tq, by: B.by, p: pq, modo: B.modo, jaw: B.jaw, cab: B.cab, feridas: B.feridas, furia: B.furia, flash: fq, num: o.numero ?? '', espelho: B.dir < 0 }, CAVALEIROS.guerra, DEST); }
+    if (k !== chaveChefe && (agora - ultChefe > [100, 45, 33][Q.nivel] || !chaveChefe)) { chaveChefe = k; ultChefe = agora; construirCavalo({ t: tq, by: B.by, p: pq, modo: B.modo, jaw: B.jaw, cab: B.cab, feridas: B.feridas, furia: B.furia, flash: fq, num: o.numero ?? '', espelho: B.dir < 0 }, CAVALEIROS.guerra, DEST); }
     return DEST.cv;
   }
   function desenharChefe() {
     const img = imagemChefe();
     ax.save(); ax.translate(Math.round(B.x), Math.round(B.y)); ax.scale(B.dir, 1); ax.translate(CPIV, 0); ax.rotate(B.rot); ax.translate(-CPIV, 0);
-    ax.drawImage(img, 0, 0, CW, CH, -CW / 2, -CCHAO, CW, CH); ax.restore();
+    ax.drawImage(img, 0, 0, CW, CH, -CMEIO, -CCHAO, CW, CH); ax.restore();
   }
   const noChefe = (gx, gy) => noCavalo(B, gx, gy);
   const QUADROS_CAV = { peste: [], fome: [], morte: [] };
@@ -240,7 +254,7 @@ export function criarPalcoGuerra(o) {
     for (let r = 1; r <= 3; r++) for (let k = 0; k < raios; k++) { const A = pontas[k], Bp = pontas[(k + 1) % raios]; if (A.length > r && Bp.length > r && Math.random() < 0.75) segs.push([...A[r], ...Bp[r], 0.9]); }
     P.marcas.push({ tipo: 'trinca', segs, x, y, t: 0, vida: 14 }); P.marcasMudou = true;
   }
-  const marcarFuro = (x, y) => { P.marcas.push({ tipo: 'furo', x, y, t: 0, vida: 7 }); if (P.marcas.length > 160) P.marcas.shift(); P.marcasMudou = true; };
+  const marcarFuro = (x, y) => { P.marcas.push({ tipo: 'furo', x, y, t: 0, vida: 7 }); while (P.marcas.length > (leve ? 60 : 160)) P.marcas.shift(); P.marcasMudou = true; };
   let marcasNaTela = false, marcasAcc = 0;
   function desenharMarcas(dt) {
     const L = P.marcas; for (const m of L) m.t += dt; poda(L, m => m.t < m.vida); marcasAcc += dt;
@@ -254,7 +268,7 @@ export function criarPalcoGuerra(o) {
       tx.lineCap = 'round';
       for (const [x0, y0, x1, y1, w] of m.segs) { tx.strokeStyle = `rgba(0,0,0,${0.45 * a})`; tx.lineWidth = w + 1.6; tx.beginPath(); tx.moveTo(x0 + 1, y0 + 1); tx.lineTo(x1 + 1, y1 + 1); tx.stroke(); }
       for (const [x0, y0, x1, y1, w] of m.segs) { tx.strokeStyle = `rgba(255,255,255,${0.95 * a})`; tx.lineWidth = w; tx.beginPath(); tx.moveTo(x0, y0); tx.lineTo(x1, y1); tx.stroke(); }
-      const g = tx.createRadialGradient(m.x, m.y, 0, m.x, m.y, 22); g.addColorStop(0, `rgba(255,255,255,${0.85 * a})`); g.addColorStop(1, 'rgba(255,255,255,0)'); tx.fillStyle = g; tx.beginPath(); tx.arc(m.x, m.y, 22, 0, T2); tx.fill();
+      if (!leve) { const g = tx.createRadialGradient(m.x, m.y, 0, m.x, m.y, 22); g.addColorStop(0, `rgba(255,255,255,${0.85 * a})`); g.addColorStop(1, 'rgba(255,255,255,0)'); tx.fillStyle = g; tx.beginPath(); tx.arc(m.x, m.y, 22, 0, T2); tx.fill(); }
     }
   }
 
@@ -296,7 +310,7 @@ export function criarPalcoGuerra(o) {
   function invocarCavalosFogo() {
     const n = clamp(4 + Math.round((o.sims ?? 6) / 3), 4, leve ? 6 : 10);
     for (let k = 0; k < n; k++) {
-      const x = entre(40, AW - 40), y = entre(Math.max(50, AH * 0.25), AH - 6);
+      const x = entre(50, AW - 50), y = entre(Math.max(50, AH * 0.25), AH - 6);
       P.cavalosFogo.push({ x, y, dir: sorteio([-1, 1]), v: entre(60, 95), fg: Math.random(), vida: 22, nasce: 0.5 + k * 0.12, alvoY: y, morto: false, sobe: 0, off: Math.random() * 6, passo: 0, pe: 1 });
     }
     B.escudo = true; Som.escudo();
@@ -307,7 +321,7 @@ export function criarPalcoGuerra(o) {
     if (f.morto) return; f.morto = true;
     explosaoFogo(P.parts, f.x, f.y - 12, leve ? 0.7 : 1.2); P.luzes.push({ x: f.x, y: f.y - 16, k: 3, t: 0, dur: 0.45 });
     Som.estouro();
-    if (quem && fase === 'luta') { const [bx, by2] = noChefe(108, 72); P.bolas.push({ x0: f.x, y0: f.y - 16, x1: bx, y1: by2, t: 0, dur: entre(0.5, 0.75), quem, tipo: 'bola' }); }
+    if (quem && fase === 'luta') { const [bx, by2] = noChefe(...doModelo(108, 72)); P.bolas.push({ x0: f.x, y0: f.y - 16, x1: bx, y1: by2, t: 0, dur: entre(0.5, 0.75), quem, tipo: 'bola' }); }
   }
   function quebrarEscudo() {
     B.escudo = false; B.atordoado = 4.5;
@@ -342,7 +356,7 @@ export function criarPalcoGuerra(o) {
     c2.fim = true; const info = INFO_CAV[c2.nome];
     explosaoFogo(P.parts, c2.x, c2.y - 30, leve ? 0.8 : 1.6, c2.nome); P.luzes.push({ x: c2.x, y: c2.y - 30, k: 4, t: 0, dur: 0.6, pal: c2.nome });
     Som.banido(); legenda(`${info.icone} ${info.banido}`, 2500); feed(`${info.icone} ${info.banido} (último tiro: ${quem === 'Você' ? 'você' : curto(quem)})`);
-    if (fase === 'luta') { const [bx, by2] = noChefe(108, 72); P.bolas.push({ x0: c2.x, y0: c2.y - 30, x1: bx, y1: by2, t: 0, dur: 0.8, quem, tipo: 'banido', pal: c2.nome }); }
+    if (fase === 'luta') { const [bx, by2] = noChefe(...doModelo(108, 72)); P.bolas.push({ x0: c2.x, y0: c2.y - 30, x1: bx, y1: by2, t: 0, dur: 0.8, quem, tipo: 'banido', pal: c2.nome }); }
     c2.el.classList.add('banido'); const el = c2.el; depois(900, () => el.remove());
   }
   function maldicao(nome) {
@@ -361,7 +375,7 @@ export function criarPalcoGuerra(o) {
   // A música do anjo (Música Celestial): toca enquanto ele desce e para na mordida.
   const DESCIDA_S = 3;
   const musicaAnjo = typeof Audio === 'undefined' ? null : Object.assign(new Audio(o.musicaAnjo ?? '/sons/guerra/anjo-celestial.mp3'), { preload: 'auto' });
-  function tocarMusicaAnjo() { if (!musicaAnjo) return; try { musicaAnjo.currentTime = 0; musicaAnjo.volume = clamp(o.volume ?? 1, 0, 1); void musicaAnjo.play().catch(() => {}); } catch { /* sem áudio: segue sem a música */ } }
+  function tocarMusicaAnjo() { if (!musicaAnjo) return; try { musicaAnjo.currentTime = 0; musicaAnjo.volume = volAtual; void musicaAnjo.play().catch(() => {}); } catch { /* sem áudio: segue sem a música */ } }
   function pararMusicaAnjo() { try { musicaAnjo?.pause(); } catch { /* já parou */ } }
   function chamarAnjo(vidaAntes) {
     const ladoX = B.x + B.dir * 70;
@@ -406,12 +420,14 @@ export function criarPalcoGuerra(o) {
   }
   function iniciarAcao(tipo) {
     if (tipo === 'cabecada') {
-      const cand = [...ALVOS.valores(), ...ALVOS.abas()].filter(el => !EF.tem(blocoDe(el), 'gx-quebrado') && !EF.tem(el, 'gx-caiu'));
+      // Só o que a cabeça alcança com ele inteiro na tela (a crina não pode passar do alto da página).
+      const alcance = yMinChefe() - 92;
+      const cand = [...ALVOS.valores(), ...ALVOS.abas()].filter(el => { if (EF.tem(blocoDe(el), 'gx-quebrado') || EF.tem(el, 'gx-caiu')) return false; const r = naArena(blocoDe(el)); return r.y + r.h / 2 >= alcance; });
       if (!cand.length) tipo = 'investida';
       else {
         const el = sorteio(cand), r = naArena(blocoDe(el)), T = { x: r.x + r.w / 2, y: r.y + r.h / 2 }, dir = T.x >= B.x ? 1 : -1;
-        const yp = clamp(T.y + 84, 100, AH - 4), cab = clamp((96 - (yp - T.y)) / 25, 0, 1), [gx] = pontaDaCabeca(cab);
-        B.acao = { tipo, t: 0, f: 'prepara', feito: {}, el, T, dir, cab, px: T.x - dir * (gx - CW / 2), py: yp };
+        const yp = clamp(T.y + 84, yMinChefe(), AH - 6), cab = clamp((96 - (yp - T.y)) / 25, 0, 1), [gx] = pontaDaCabeca(cab);
+        B.acao = { tipo, t: 0, f: 'prepara', feito: {}, el, T, dir, cab, px: T.x - dir * (gx - CMEIO), py: yp };
         return;
       }
     }
@@ -420,7 +436,7 @@ export function criarPalcoGuerra(o) {
       if (!ls.length) tipo = 'investida';
       else {
         const r0 = naArena(ls[0]), r1 = naArena(ls[ls.length - 1]), tb = { x: r0.x, y: r0.y, w: r0.w, h: r1.y + r1.h - r0.y };
-        const lado = B.x < tb.x + tb.w / 2 ? -1 : 1, px = lado < 0 ? Math.max(70, tb.x + 30) : Math.min(AW - 70, tb.x + tb.w - 30);
+        const lado = B.x < tb.x + tb.w / 2 ? -1 : 1, [xa, xb] = limitesX(-lado), px = lado < 0 ? Math.max(xa, tb.x + 30) : Math.min(xb, tb.x + tb.w - 30);
         B.acao = { tipo, t: 0, f: 'prepara', feito: {}, dir: -lado, px, py: clamp(tb.y + tb.h * 0.55 + 92, yMinChefe(), AH - 6) };
         return;
       }
@@ -458,8 +474,9 @@ export function criarPalcoGuerra(o) {
         B.modo = 'galope'; B.p += dt * 3.6; B.dir = a.dir; B.jaw = 0.5; const v = 250;
         B.x += a.dir * v * dt; B.y += clamp(a.yl - B.y, -70 * dt, 70 * dt); B.by = Math.round(-Math.sin(B.p * T2) * 1.6);
         rastro(v * dt, true); if (!leve) P.shake = Math.max(P.shake, 1.5);
-        // Ele nunca sai da tela: na borda, vira e atravessa de novo (o rastro fica dos dois lados).
-        const borda = a.dir > 0 ? AW - MARGEM_X : MARGEM_X;
+        // Ele nunca sai da tela: vira antes da borda (onde cabem a cabeça E o rabo, que troca de lado
+        // na virada) e atravessa de novo; o rastro de fogo fica dos dois lados.
+        const M = Math.min(Math.max(TRAS, FRENTE), AW / 2 - 1), borda = a.dir > 0 ? AW - M : M;
         if (a.dir > 0 ? B.x >= borda : B.x <= borda) {
           B.x = borda; a.voltas = (a.voltas ?? 0) + 1;
           if (a.voltas >= 2) { a.f = 'freia'; a.t = 0; } else { a.dir = -a.dir; a.yl = entre(yMinChefe(), AH - 6); Som.relinchoChefe(0.6); }
@@ -498,7 +515,12 @@ export function criarPalcoGuerra(o) {
       if (t > 2) fimAcao();
     } else if (a.tipo === 'anjo') {
       // 1. o anjo desce num raio de luz; 2. ele vira, empina e abre a boca; 3. o bote; 4. mastiga; 5. o arroto
-      if (a.f === 'desce') { B.modo = 'parado'; B.dir = Math.sign(a.ax - B.x) || B.dir; a.ay = lerp(a.ay0, a.ay1, suave(t / DESCIDA_S)); if (t > DESCIDA_S) { a.f = 'mira'; a.t = 0; } }
+      if (a.f === 'desce') {
+        B.modo = 'parado'; B.dir = Math.sign(a.ax - B.x) || B.dir; a.ay = lerp(a.ay0, a.ay1, suave(t / DESCIDA_S));
+        // PC forte: o brilho caindo dele enquanto desce
+        if (forte && Math.random() < dt * 24) P.parts.push({ x: a.ax + entre(-16, 16), y: a.ay + entre(-12, 12), vx: entre(-8, 8), vy: entre(10, 30), g: 0, vida: 0.9, max: 0.9, cor: Math.random() < 0.5 ? '#fff3b0' : '#ffffff', tam: 1 });
+        if (t > DESCIDA_S) { a.f = 'mira'; a.t = 0; }
+      }
       else if (a.f === 'mira') { B.modo = 'empina'; B.rot = -0.18 * suave(t / 0.35); B.jaw = suave(t / 0.35); a.ay = a.ay1 + Math.sin(rel * 3) * 2; if (t > 0.4) { a.f = 'bote'; a.t = 0; } }
       else if (a.f === 'bote') {
         B.modo = 'parado'; B.rot = lerp(-0.18, 0, suave(t / 0.2)); B.cab = 0.55 * suave(t / 0.2);
@@ -611,15 +633,23 @@ export function criarPalcoGuerra(o) {
     const vidaNova = Number(e.vida ?? e.vida_max ?? 1), vidaVelha = Number(antes.vida ?? antes.vida_max ?? 1);
     // o que os outros tiraram desde o último estado: faíscas no corpo dele
     const dosOutros = Math.max(0, vidaVelha - vidaNova - minhaParte); minhaParte = 0;
-    if (fase === 'luta' && dosOutros > 0) for (let k = 0; k < Math.min(leve ? 8 : 24, Math.ceil(dosOutros / 4)); k++) depois(Math.random() * 900, () => { const gx = Math.floor(entre(30, 150)), gy = Math.floor(entre(20, 120)); if (bG[gy * CW + gx]) { const [x, y] = noChefe(gx, gy); faisca(x, y, false); } });
+    if (fase === 'luta' && dosOutros > 0) for (let k = 0; k < Math.min(leve ? 8 : 24, Math.ceil(dosOutros / 4)); k++) depois(Math.random() * 900, () => { const [gx, gy] = doModelo(Math.floor(entre(30, 150)), Math.floor(entre(20, 120))); if (bG[gy * CW + gx]) { const [x, y] = noChefe(gx, gy); faisca(x, y, false); } });
     if ((e.curas ?? 0) > curasVistas && fase === 'luta') { curasVistas = e.curas; chamarAnjo(vidaTela); }
     curasVistas = Math.max(curasVistas, e.curas ?? 0);
     vidaTela = vidaNova;
   }
 
-  /** Ele nunca fica fora da tela (nem quando a janela do navegador encolhe). */
-  function prenderNaTela() { B.x = clamp(B.x, MARGEM_X, Math.max(MARGEM_X, AW - MARGEM_X)); B.y = clamp(B.y, yMinChefe(), AH - 6); }
-  const aoRedimensionar = () => { medir(); prenderNaTela(); };
+  /**
+   * Ele nunca fica fora da tela (nem quando a janela do navegador encolhe). A cabeça e o rabo têm
+   * tamanhos diferentes: quando ele vira perto da borda, volta para dentro deslizando, sem pulo.
+   */
+  function prenderNaTela(dt = 1) {
+    const [a, b] = limitesX(), m = Math.min(TRAS, FRENTE);
+    B.x += (clamp(B.x, a, b) - B.x) * Math.min(1, dt * 10);
+    B.x = clamp(B.x, Math.min(m, AW / 2), Math.max(AW - m, AW / 2));
+    B.y = clamp(B.y, yMinChefe(), AH - 6);
+  }
+  const aoRedimensionar = () => { medir(); prenderNaTela(1); };
   addEventListener('resize', aoRedimensionar);
 
   /* ---------- o laço ---------- */
@@ -644,7 +674,7 @@ export function criarPalcoGuerra(o) {
       if (B.escudo && !P.cavalosFogo.some(f => !f.morto)) quebrarEscudo();
       if (B.atordoado > 0 && !B.acao) { B.modo = 'parado'; B.jaw = 0.3; B.cab = 0.3 + 0.1 * Math.sin(rel * 3); B.rot = 0.04 * Math.sin(rel * 5); }
       else if (!B.acao) {
-        if (!B.alvo || Math.hypot(B.alvo.x - B.x, B.alvo.y - B.y) < 4) B.alvo = { x: entre(70, AW - 70), y: entre(yMinChefe(), AH - 6) };
+        if (!B.alvo || Math.hypot(B.alvo.x - B.x, B.alvo.y - B.y) < 4) { const [xa, xb] = limitesX(); B.alvo = { x: entre(xa, xb), y: entre(yMinChefe(), AH - 6) }; }
         const dx = B.alvo.x - B.x, dy = B.alvo.y - B.y, d = Math.hypot(dx, dy) || 1, v = 26 * (1 + B.furia * 0.8);
         B.x += dx / d * Math.min(d, v * dt); B.y += dy / d * Math.min(d, v * dt); if (Math.abs(dx) > 6) B.dir = Math.sign(dx);
         B.modo = 'anda'; B.p += dt * 0.85 * (1 + B.furia * 0.6); B.jaw = Math.max(0, B.jaw - dt * 2); B.rot *= 0.85; B.cab = Math.max(0, B.cab - dt * 2);
@@ -652,16 +682,18 @@ export function criarPalcoGuerra(o) {
         B.prox -= dt;
         if (B.prox <= 0) escolherAcao(frac);
       } else acaoChefe(dt);
-      if (B.furia > 0.3) for (let r = 0; r < (leve ? 1 : 3); r++) if (Math.random() < dt * 30) { for (let k = 0; k < 10; k++) { const gx = Math.floor(entre(20, 160)), gy = Math.floor(entre(0, 110)), cd = bG[gy * CW + gx]; if (cd === MAT.CRINA || cd === MAT.RABO) { const [x, y] = noChefe(gx, gy); P.parts.push({ x, y: y + 2, vx: entre(-8, 8), vy: entre(-46, -22), g: 0, vida: entre(0.3, 0.55), max: 0.55, cor: 'chama', tier: sorteio([1, 1, 2, 2, 3]), off: Math.random() * 8, v: Math.random() < 0.5 ? 1 : 0 }); break; } } }
-      if (Math.random() < dt * 3) { const [gx, gy] = cabecaDo(B).pt(22, 1.5), [x, y] = noChefe(gx, gy); P.parts.push({ x, y, vx: B.dir * entre(6, 16), vy: entre(-8, -2), g: -5, vida: 0.9, max: 0.9, cor: 'fumaca', tam: 1 }); }
-      prenderNaTela();
+      if (B.furia > 0.3) for (let r = 0; r < (leve ? 1 : 3); r++) if (Math.random() < dt * 30) { for (let k = 0; k < 14; k++) { const gx = Math.floor(Math.random() * CW), gy = Math.floor(Math.random() * (CH - 30)), cd = bG[gy * CW + gx]; if (cd === MAT.CRINA || cd === MAT.RABO) { const [x, y] = noChefe(gx, gy); P.parts.push({ x, y: y + 2, vx: entre(-8, 8), vy: entre(-46, -22), g: 0, vida: entre(0.3, 0.55), max: 0.55, cor: 'chama', tier: sorteio([1, 1, 2, 2, 3]), off: Math.random() * 8, v: Math.random() < 0.5 ? 1 : 0 }); break; } } }
+      if (Math.random() < dt * (forte ? 6 : 3)) { const [gx, gy] = cabecaDo(B).pt(22, 1.5), [x, y] = noChefe(gx, gy); P.parts.push({ x, y, vx: B.dir * entre(6, 16), vy: entre(-8, -2), g: -5, vida: 0.9, max: 0.9, cor: 'fumaca', tam: 1 }); }
+      // PC forte: brasas subindo do chão da página o tempo todo
+      if (forte && Math.random() < dt * 9) P.parts.push({ x: entre(0, AW), y: AH + 2, vx: entre(-10, 10), vy: entre(-60, -25), g: -4, vida: entre(1.6, 3), max: 3, cor: 'brasa', tam: 1 });
+      prenderNaTela(dt);
       if (E.caiu_em) { fase = 'queda'; faseT = 0; sair(); Som.relinchoChefe(2.4); }
       else if (agora >= expira) { fase = 'fuga'; faseT = 0; sair(); Som.relinchoChefe(2); legenda('Ele escapou.', 3000); }
     } else if (fase === 'queda') {
       const t = faseT;
       if (t < 1.8) { B.acao = null; B.modo = 'parado'; B.jaw = 1; B.furia = Math.max(0, B.furia - dt); B.rot = Math.min(0.32, B.rot + dt * 0.18); B.flash = (Math.floor(t * 12) % 2) * 0.7; if (!leve) P.shake = Math.max(P.shake, 2 + t * 2); }
       if (t >= 1.8 && B.visivel) {
-        prenderNaTela(); flashPag(1); tremerPagina(); Som.explosao(2); Som.vidro(); Som.vitoria();
+        prenderNaTela(1); flashPag(1); tremerPagina(); Som.explosao(2); Som.vidro(); Som.vitoria();
         for (let k = 0; k < (leve ? 80 : 220); k++) { const gx = Math.floor(Math.random() * CW), gy = Math.floor(Math.random() * CH), cd = bG[gy * CW + gx]; if (!cd) continue; const [x, y] = noChefe(gx, gy), tp = tipoDoAcerto(cd); P.parts.push({ x, y, vx: entre(-170, 170), vy: entre(-220, -40), g: 280, vida: entre(0.8, 1.8), max: 1.8, cor: tp === 'fogo' ? sorteio(['#ff7a1c', '#ffc83e']) : tp === 'armadura' ? sorteio(['#25232e', '#3b3848', '#c88a22']) : sorteio(['#661316', '#93201d', '#bd3524']), tam: 2 }); }
         explosaoFogo(P.parts, B.x, B.y - 60, leve ? 1.5 : 3); P.luzes.push({ x: B.x, y: B.y - 60, k: 5, t: 0, dur: 1 });
         P.espada = { x: B.x - B.dir * 8, y: B.y - 2, rot: B.dir * 0.18, cai: 0, vida: 9 };
@@ -681,7 +713,7 @@ export function criarPalcoGuerra(o) {
   }
   let placarVenceu = false;
   function sair() {
-    $('.gx-hud').classList.remove('on', 'furia', 'escudo', 'cura'); document.documentElement.classList.remove('gx-mira'); Som.musica(null); legenda('');
+    $('.gx-hud').classList.remove('on', 'furia', 'escudo', 'cura'); document.documentElement.classList.remove('gx-mira'); Som.musica(null); pararMusicaAnjo(); legenda('');
     $('.gx-sombra').classList.remove('on', 'apocalipse');
     for (const f of P.cavalosFogo) estourarCavaloFogo(f, null);
     for (const c2 of P.cavaleiros) { c2.fim = true; c2.el.remove(); }
@@ -694,11 +726,11 @@ export function criarPalcoGuerra(o) {
     box.classList.add('on');
   }
   function efeitos(dt) {
-    const cap = leve ? 320 : 900;
+    const cap = [320, 900, 1100][Q.nivel], capChamas = [120, 260, 320][Q.nivel];
     for (const p of P.parts) { p.vida -= dt; p.vy += p.g * dt; p.x += p.vx * dt; p.y += p.vy * dt; if (p.cor === 'fumaca' || p.cor === 'vapor') p.tam += dt * 3; }
     poda(P.parts, p => p.vida > 0); if (P.parts.length > cap) P.parts.splice(0, P.parts.length - cap);
     for (const f of P.chamas) { f.vida -= dt; if (!leve && f.tier > 0 && Math.random() < dt * 3) P.parts.push({ x: f.x + entre(-2, 2), y: f.y - 8 - f.tier * 4, vx: entre(-3, 3), vy: entre(-26, -12), g: 0, vida: 0.9, max: 0.9, cor: Math.random() < 0.55 ? 'brasa' : 'fumaca', tam: 1.5 }); }
-    poda(P.chamas, f => f.vida > 0); if (P.chamas.length > (leve ? 120 : 260)) P.chamas.splice(0, P.chamas.length - (leve ? 120 : 260));
+    poda(P.chamas, f => f.vida > 0); if (P.chamas.length > capChamas) P.chamas.splice(0, P.chamas.length - capChamas);
     for (const s of P.cacos) { s.vida -= dt; s.vy += 260 * dt; s.x += s.vx * dt; s.y += s.vy * dt; s.rot += s.vr * dt; }
     poda(P.cacos, s => s.vida > 0);
     for (const f of P.flashes) f.t += dt; poda(P.flashes, f => f.t < 0.09);
@@ -728,7 +760,7 @@ export function criarPalcoGuerra(o) {
       f.vida -= dt; f.fg += dt * f.v / 30; f.x += f.dir * f.v * dt * f.sobe;
       if (Math.random() < dt * 0.6) f.alvoY = entre(Math.max(50, AH * 0.25), AH - 6);
       f.y += clamp(f.alvoY - f.y, -30 * dt, 30 * dt);
-      if (f.x < 20) f.dir = 1; if (f.x > AW - 20) f.dir = -1;
+      if (f.x < 34) f.dir = 1; if (f.x > AW - 34) f.dir = -1;   // o cavalo de fogo também não sai cortado
       if (Math.random() < dt * (leve ? 5 : 16)) P.parts.push({ x: f.x - f.dir * entre(-6, 20), y: f.y - entre(12, 30), vx: -f.dir * entre(8, 30), vy: entre(-40, -14), g: 0, vida: entre(0.4, 0.8), max: 0.8, cor: 'brasa', tam: 1 });
       if (!leve && Math.random() < dt * 2.5) P.parts.push({ x: f.x - f.dir * 14, y: f.y - 30, vx: -f.dir * 6, vy: -14, g: -2, vida: 1.2, max: 1.2, cor: 'fumaca', tam: 1 });
       f.passo -= dt;
@@ -770,7 +802,7 @@ export function criarPalcoGuerra(o) {
   }
   function quadroCavNaTela(nome, q, x, y, dir, cor, a = 0.75) {
     let img = quadroCavaleiro(nome, q); if (cor) img = tingidoFixo(img, cor, a);
-    ax.save(); ax.translate(Math.round(x), Math.round(y)); ax.scale(dir * K_CAV, K_CAV); ax.drawImage(img, 0, 0, CW, CH, -CW / 2, -CCHAO, CW, CH); ax.restore();
+    ax.save(); ax.translate(Math.round(x), Math.round(y)); ax.scale(dir * K_CAV, K_CAV); ax.drawImage(img, 0, 0, CW, CH, -CMEIO, -CCHAO, CW, CH); ax.restore();
   }
   function desenharEspada() {
     const e = P.espada; if (!e) return;
@@ -798,6 +830,7 @@ export function criarPalcoGuerra(o) {
     if (anjo && !leve) { ax.globalAlpha = 0.2; R(ax, '#fff7c8', Math.round(a.ax) - 18, 0, 37, Math.round(a.ay) + 10); R(ax, '#ffffff', Math.round(a.ax) - 7, 0, 15, Math.round(a.ay) + 10); ax.globalAlpha = 1; }   // o raio de luz
     if (B.visivel) {
       elip(ax, 'rgba(20,0,10,.16)', B.x + B.dir * 6, B.y + 1, 50, 3);
+      if (forte) luz(ax, B.x, B.y - 4, 4, (0.25 + 0.25 * B.furia) * tremula(7));   // o chão aceso embaixo dele
       if (B.furia > 0.05) luz(ax, B.x, B.y - 70, 5, 0.45 * B.furia * tremula(3));
       const cy = B.y - 64;
       if (B.escudo && ESCUDO) { ax.globalAlpha = 0.75 + 0.25 * Math.sin(rel * 5); ax.drawImage(ESCUDO, Math.round(B.x - ESCUDO.width / 2), Math.round(cy - ESCUDO.height / 2)); ax.globalAlpha = 1; anelEscudo(cy, false); }
@@ -823,10 +856,14 @@ export function criarPalcoGuerra(o) {
     if (!vivo) return;
     // o próximo quadro sai antes: um erro num quadro não congela o chefe
     raf = requestAnimationFrame(quadro);
+    const passou = agoraT - antes;
+    if (Q.nivel === 0 && passou < 31) return;   // no leve, 30 quadros por segundo
     // o carimbo do rAF pode vir de antes do performance.now() da montagem: nada de tempo negativo
-    const real = clamp((agoraT - antes) / 1000, 0, 0.05); antes = Math.max(antes, agoraT);
+    const real = clamp(passou / 1000, 0, 0.05); antes = Math.max(antes, agoraT);
+    const t0 = performance.now();
     try { passo(real); desenhar(); desenharMarcas(real); }
     catch (e) { if (!avisou) { avisou = true; console.error('[guerra] um quadro do chefe falhou', e); } }
+    Q.quadro(passou, performance.now() - t0); leve = Q.nivel === 0; forte = Q.nivel === 2;
   }
 
   // Quem chega depois da hora não vê a janela estourar: ele já está na página.
@@ -839,6 +876,10 @@ export function criarPalcoGuerra(o) {
     forcar(tipo) { if (fase !== 'luta' || B.acao?.tipo === 'anjo') return; B.acao = null; B.rot = 0; iniciarAcao(tipo); },
     /** O teste do chefe: quantos robôs atiram junto. */
     simular,
+    /** O volume (0 a 1): a barrinha da janela da corrida. */
+    volume(v) { volAtual = clamp(Number(v) || 0, 0, 1); Som.volume(volAtual); if (musicaAnjo) musicaAnjo.volume = volAtual; },
+    /** O nível da qualidade agora (0 leve, 1 normal, 2 forte): o teste e o laboratório mostram. */
+    get qualidade() { return Q.nivel; },
     destruir() {
       vivo = false; cancelAnimationFrame(raf); clearInterval(idLote); for (const id of timers) clearTimeout(id); timers.clear();
       document.removeEventListener('pointerdown', aoApertar, true); document.removeEventListener('click', aoClicar, true); removeEventListener('resize', aoRedimensionar); pararMusicaAnjo();

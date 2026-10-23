@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { alvoDaGuerra, curaDoRitmo, danoBruto, FILME, GUERRA, mortesPela, ordemDasMortes, parteDoFilme, pressaoEfetiva, ritmoDaLuta, RITMO, vidaDoChefe } from './regras';
+import { alvoDaGuerra, alvoDaVida, curaDoRitmo, danoBruto, FILME, GUERRA, mortesPela, ordemDasMortes, parteDoFilme, pressaoEfetiva, ritmoDaLuta, RITMO, vidaDoChefe } from './regras';
 
 describe('a ordem das mortes', () => {
   it('é a mesma em toda tela (sai da semente) e nunca leva o vencedor', () => {
@@ -61,9 +61,14 @@ describe('o diretor de ritmo e o anjo', () => {
   it('caindo devagar o dano vale mais; caindo rápido, menos', () => {
     expect(ritmoDaLuta(45, 0.9)).toBeGreaterThan(1);
     expect(ritmoDaLuta(45, 0.1)).toBeLessThan(1);
-    expect(ritmoDaLuta(45, 0.5)).toBeCloseTo(1, 1);
+    expect(ritmoDaLuta(45, alvoDaVida(45))).toBeCloseTo(1, 6);
     expect(ritmoDaLuta(-1, 0.5)).toBe(1);
     expect(ritmoDaLuta(0, 0)).toBe(RITMO.multMin);
+  });
+  it('passado o alvoS, o tiro vale cada vez mais, mesmo com a vida à frente', () => {
+    expect(ritmoDaLuta(RITMO.alvoS + 4, 0)).toBeCloseTo(1 + 4 * RITMO.empurraoPorS, 6);
+    expect(ritmoDaLuta(RITMO.alvoS + 10, 0)).toBeGreaterThan(ritmoDaLuta(RITMO.alvoS + 4, 0));
+    expect(ritmoDaLuta(RITMO.alvoS + 2, 0.9)).toBeLessThanOrEqual(RITMO.multMax + 2 * RITMO.misericordiaPorS);
   });
   it('o anjo só desce bem à frente da linha, com intervalo, e até curaAteS', () => {
     expect(curaDoRitmo(30, 0.3, 30)).toBeGreaterThan(0);

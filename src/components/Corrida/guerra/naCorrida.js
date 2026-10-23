@@ -20,6 +20,13 @@
  * pela semente da corrida (`ordemDasMortes`); como (rajada, bomba, soldado,
  * avião, tanque), de cada tela. O filme é contado do `sobrou_em` do banco.
  *
+ * ## A surpresa e o som
+ *
+ * Nada avisa antes: a corrida é normal até as explosões ao longe (a transição),
+ * e só aí a tela cheia abre sozinha. No primeiro cavalo que cai entra o violino
+ * da guerra (`VIOLINO`), a 10% do volume, subindo até 25% junto com a guerra;
+ * no cessar-fogo ele sai. Tudo passa pela barrinha de volume da janela.
+ *
  * ## A página manda
  *
  *   { tipo: 'guerra-atacar', cliques }     a cada `GUERRA.envioMs` na guerra (0 também: o relógio anda)
@@ -29,7 +36,7 @@
  * e o sistema manda `{ tipo: 'guerra', guerra }` (o estado do banco, ou do ensaio).
  */
 import { assarFogo, chama as chamaF, luz as luzF, tremula as tremulaF, particula as particulaF, explosaoFogo, poda, hash, ruido2 } from './fogo.js';
-import { CW, CH, CCHAO, CPIV, CAVALEIROS, criarDestino, construirCavalo } from './cavaloDaGuerra.js';
+import { CW, CH, CCHAO, CMEIO, CPIV, CAVALEIROS, criarDestino, construirCavalo } from './cavaloDaGuerra.js';
 import { pePanoCaido, PE_PANO_CHAO } from './pePano.js';
 import { criarSomGuerra } from './som.js';
 import { GUERRA, alvoDaGuerra, pressaoEfetiva, mortesPela, ordemDasMortes, parteDoFilme } from './regras';
@@ -62,6 +69,8 @@ const CHEGADA_NA_TELA = 352, VOLTA_NA_TELA = 150;
 const TRANSICAO_FRACAO = 0.47;
 /** O quanto o cenário já mudou quando o botão aparece. */
 const W_ATAQUE = 0.65;
+/** O violino da guerra (Shape of Lies, Eternal Eclipse): do primeiro cavalo caído ao cessar-fogo, de 10% a 25% do volume. */
+const VIOLINO = { url: '/sons/guerra/violino-da-guerra.mp3', de: 0.1, ate: 0.25, saiS: 2.5 };
 
 /* ---------- o cenário da guerra (entra por cima do mapa, com a opacidade `w`) ---------- */
 const GENTE = ['#e74c3c', '#3498db', '#f1c40f', '#2ecc71', '#9b59b6', '#e67e22', '#ecf0f1', '#34495e', '#ff7eb6', '#1abc9c', '#c0392b', '#2c3e50'];
@@ -206,8 +215,11 @@ export function criarGuerraNaCorrida(o) {
   const etqs = document.createElement('div'); etqs.className = 'gxc-etqs';
   o.palco.append(etqs, leg, caixa);
   const $ = s => caixa.querySelector(s);
-  let Som = null;
+  let Som = null, violino = null;
   const som = () => { if (!Som) { Som = criarSomGuerra(o.volume()); Som.init(); } Som.volume(o.somLigado() ? o.volume() : 0); return Som; };
+  /** O violino desce antes de precisar (a guerra está ligada nesta corrida); a primeira morte só dá o play. */
+  const oViolino = () => (violino ??= som().arquivo(VIOLINO.url));
+  function pararViolino(seg = VIOLINO.saiS) { violino?.parar(seg); }
 
   let E = null, rel = 0, recebeuEm = 0;
   let desde = performance.now();
@@ -227,6 +239,8 @@ export function criarGuerraNaCorrida(o) {
   const uma = (k, fn) => { if (S.feitos.has(k)) return; S.feitos.add(k); fn(); };
   const legenda = txt => { if (!txt) { leg.classList.remove('on'); return; } leg.textContent = txt; leg.classList.add('on'); };
   const leve = () => !!o.leve();
+  /** PC folgado (a página diz): um pouco mais de cinza, brasa e destroço. */
+  const forte = () => !leve() && !!o.forte?.();
   const chama = (c, x, y, tier, off = 0, v = 0, pal = 'fogo') => chamaF(c, x, y, tier, rel, off, v, pal);
   const tremula = s => tremulaF(rel, s);
   const luz = (c, x, y, k, a, somar = false) => { if (!leve()) luzF(c, x, y, k, a, somar); };
@@ -372,7 +386,7 @@ export function criarGuerraNaCorrida(o) {
     S.expl.push({ x, y, r, t: 0, dur: 0.75 + 0.3 * r });
     S.shake = Math.max(S.shake, 3 * r); som().explosao(0.6 + r * 0.6);
     if (y > 128) S.crateras.push({ x, y: y + 1, r: 5 + 5 * r });
-    for (let k = 0; k < (leve() ? 5 : 12) * r; k++) S.parts.push({ x, y: y - 3, vx: entre(-60, 60) * r, vy: entre(-120, -40) * r, g: 260, vida: entre(0.5, 1), max: 1, cor: sorteio(['#5a3a24', '#3a2618', '#7e5a3e']), tam: Math.random() < 0.3 ? 2 : 1 });
+    for (let k = 0; k < (leve() ? 5 : forte() ? 16 : 12) * r; k++) S.parts.push({ x, y: y - 3, vx: entre(-60, 60) * r, vy: entre(-120, -40) * r, g: 260, vida: entre(0.5, 1), max: 1, cor: sorteio(['#5a3a24', '#3a2618', '#7e5a3e']), tam: Math.random() < 0.3 ? 2 : 1 });
     explosaoFogo(S.parts, x, y, r * (leve() ? 0.5 : 0.8));
     if (Math.random() < 0.5) S.fogos.push({ x: x + entre(-4, 4), y: y + 1, vida: entre(3, 6) });
     for (const v of vivos()) if (!v.morte && Math.abs(v.x + 23 - x) < 30) { v.ly = sorteio(S.lanes); v.pulo = 1; }
@@ -425,6 +439,7 @@ export function criarGuerraNaCorrida(o) {
       if (ja > 2) for (; S.mortas < ja - 1; S.mortas++) { const h = S.cav[S.ordem[S.mortas]]; virarCorpo(h, Math.random() < 0.3, true); }
     }
     if (f === 'filme') { caixa.classList.remove('on'); }
+    if (f === 'ataque' && S.mortas > 0) tocarViolino();
   }
   function alvoDeMortes() {
     if (E?.sobrou_em) return S.n - 1;
@@ -444,6 +459,13 @@ export function criarGuerraNaCorrida(o) {
     for (const e of S.etiquetas) e.el.remove(); S.etiquetas = [];
     const s = S.sob; s.x = base + 300; s.y = 184; s.dir = -1; s.v = 0; s.pose = 'a'; s.morte = null; s.manchas = true; s.vivo = true;
     for (const h of S.cav) if (h !== s) h.vivo = false;
+  }
+  /** O violino: entra no primeiro cavalo caído e sobe com a guerra (o tempo dela ou as mortes, o que andou mais). */
+  function tocarViolino() { uma('violino', () => { som().musica(null); oViolino().tocar(VIOLINO.de); }); }
+  function subirViolino() {
+    if (!S.feitos.has('violino') || !violino) return;
+    const u = clamp(Math.max((o.agora() - comecou()) / 1000 / GUERRA.maxS, S.mortas / Math.max(1, S.n - 1)), 0, 1);
+    violino.nivel(lerp(VIOLINO.de, VIOLINO.ate, u));
   }
   /** A volta é perto da linha de chegada: a câmera vai para lá e leva junto o que estava no chão. */
   function irParaAChegada() {
@@ -471,7 +493,7 @@ export function criarGuerraNaCorrida(o) {
     if (!preparar()) return;
     rel += dt; S.faseT += dt;
     if (S.on === false) return;
-    if (ligada()) uma('ampliar', () => o.ampliar?.());
+    if (ligada()) oViolino();
     if (S.on == null) {
       if (bruto < S.tT) return;
       // desligada de verdade só com o estado na mão (ou depois de esperar por ele)
@@ -481,7 +503,8 @@ export function criarGuerraNaCorrida(o) {
     if (S.ini == null && bruto >= S.tG) S.ini = agora / 1000 - bruto;
     // a transição: o cenário muda aos poucos, com a corrida ainda andando
     if (S.fase === 'paz') {
-      S.on = true;
+      // a surpresa: até aqui a corrida era normal; a tela cheia abre sozinha com as explosões ao longe
+      S.on = true; uma('ampliar', () => o.ampliar?.());
       if (bruto < S.tG) S.fase = 'transicao'; else entrar(agora);
     }
     if (S.fase === 'transicao') {
@@ -505,12 +528,12 @@ export function criarGuerraNaCorrida(o) {
       // as mortes: quantas pela pressão (igual em toda tela), quem pela semente
       const alvoM = alvoDeMortes(), atraso = alvoM - S.mortas > 2 ? 0.45 : 1.1;
       if (S.mortas < alvoM && rel >= S.proxMorte) {
-        const h = S.cav[S.ordem[S.mortas]]; S.mortas++; S.proxMorte = rel + atraso;
+        const h = S.cav[S.ordem[S.mortas]]; S.mortas++; S.proxMorte = rel + atraso; tocarViolino();
         const tipos = S.I >= 0.45 ? ['tiro', 'morteiro', 'soldado', 'aviao', ...(S.tanque ? ['tanque', 'tanque'] : [])] : ['tiro', 'soldado', 'tiro', 'morteiro'];
         matar(h, sorteio(tipos));
       }
       for (const h of vivos()) if (h.condenado && !h.morte && rel - h.condT > 3) morrer(h, 'rajada');
-      medidor();
+      medidor(); subirViolino();
       // o banco disse que sobrou um: o filme começa
       const sobrou = ms(E?.sobrou_em);
       if (sobrou != null && agora >= sobrou) {
@@ -520,7 +543,7 @@ export function criarGuerraNaCorrida(o) {
       } else if ((agora - comecou()) / 1000 > GUERRA.maxS + 12 && !S.abortou) {
         // o banco sumiu: a corrida não fica parada para sempre
         S.abortou = true; for (const h of S.cav) if (h.i !== S.rec.vencedor && h.vivo) virarCorpo(h, false, true);
-        S.sob = S.cav[S.rec.vencedor]; S.camFixa = S.camG ?? S.camAgora; S.fimMs = agora + (PARADO_S + CAMINHA_S) * 1000; S.fase = 'final'; S.faseT = 0; caixa.classList.remove('on'); som().musica(null);
+        S.sob = S.cav[S.rec.vencedor]; S.camFixa = S.camG ?? S.camAgora; S.fimMs = agora + (PARADO_S + CAMINHA_S) * 1000; S.fase = 'final'; S.faseT = 0; caixa.classList.remove('on'); som().musica(null); pararViolino();
         irParaAChegada(); S.sob.x = S.camFixa + VOLTA_NA_TELA; S.sob.y = 192; S.sob.dir = 1; S.sob.pose = 'p';
         legenda('Cessar-fogo.');
       }
@@ -571,13 +594,13 @@ export function criarGuerraNaCorrida(o) {
     const quietos = () => { for (const h of S.cav) if (h.i !== S.rec.vencedor && h.vivo) virarCorpo(h, Math.random() < 0.3, true); S.mortas = S.n - 1; S.sob = S.cav[S.rec.vencedor]; S.camFixa = S.camAgora; };
     if (fim != null && agora >= fim) { quietos(); S.fase = 'depois'; S.faseT = 0; S.camVolta = 1; S.w = 0.3; S.xSob = null; return; }
     if (solta != null && agora >= solta) { quietos(); montarLuto(); for (const k of ['cessar', 'luto', 'l2', 'l3', 'raiva', 'r1', 'transforma', 'revela']) S.feitos.add(k); S.fase = 'filme'; chefe(); return; }
-    if (sobrou != null && agora >= sobrou) { quietos(); S.feitos.add('cessar'); S.fase = 'filme'; S.faseT = 0; o.abrir(); o.musicaCorrida(null); return; }
+    if (sobrou != null && agora >= sobrou) { quietos(); S.feitos.add('cessar'); S.fase = 'filme'; S.faseT = 0; o.abrir(); o.musicaCorrida(null); uma('ampliar', () => o.ampliar?.()); return; }
     mudar('ataque');
   }
   function filme(agora, dt) {
     const sf = (agora - ms(E.sobrou_em)) / 1000, parte = parteDoFilme(sf), s = S.sob;
     if (parte === 'cessar') {
-      uma('cessar', () => { som().musica(null); legenda('Cessar-fogo.'); S.soldados.forEach(x => { x.sai = true; }); });
+      uma('cessar', () => { som().musica(null); pararViolino(); legenda('Cessar-fogo.'); S.soldados.forEach(x => { x.sai = true; }); });
       // os que ainda estavam caindo terminam; quem sobrou para
       for (const h of S.cav) if (h !== s && h.vivo && !h.morte && rel - h.condT > 1.2) morrer(h, 'rajada');
     }
@@ -685,7 +708,7 @@ export function criarGuerraNaCorrida(o) {
       else if (T.cool <= 0 && S.cps > 0.3) { T.cool = entre(1.6, 2.6); T.recuo = 3; const vv = vivos().filter(h => !h.morte); if (vv.length) { const h = sorteio(vv); explodir(h.x + 23 + sorteio([-1, 1]) * entre(18, 40), clamp(h.y + entre(-10, 10), 134, 202), 0.9); } }
       if (T.x < -55 && S.fase !== 'ataque') S.tanque = null;
     }
-    const querCinza = Math.round((leve() ? 30 : 80) * S.w);
+    const querCinza = Math.round((leve() ? 30 : forte() ? 120 : 80) * S.w);
     while (S.cinzas.length < querCinza) S.cinzas.push({ x: Math.random() * W, y: Math.random() * H, vx: entre(-14, -4), vy: entre(6, 16), brasa: Math.random() < 0.25, f: Math.random() * T2 });
     if (S.cinzas.length > querCinza) S.cinzas.length = querCinza;
     for (const a of S.cinzas) { a.x += (a.vx + Math.sin(rel * 2 + a.f) * 4) * dt; a.y += (a.brasa ? -a.vy * 0.6 : a.vy) * dt; if (a.x < -2) a.x = W + 1; if (a.y > H) a.y = -1; if (a.y < -2) a.y = H; }
@@ -792,7 +815,7 @@ export function criarGuerraNaCorrida(o) {
     if (kk !== chaveChefe) { chaveChefe = kk; construirCavalo({ t: tq, by: 0, p: pq, modo: B.modo, jaw: B.jaw, cab: 0, feridas: [], furia: 0, flash: 0, num: S.sob?.cav.num ?? '', espelho: B.dir < 0 }, CAVALEIROS.guerra, DEST); }
     let img = DEST.cv; if (op.cor) img = tingido(img, op.cor, op.a ?? 1);
     c.save(); c.translate(Math.round(x), Math.round(y)); c.scale(B.dir * k, k); c.translate(CPIV, 0); c.rotate(B.rot); c.translate(-CPIV, 0);
-    c.drawImage(img, 0, 0, CW, CH, -CW / 2, -CCHAO, CW, CH); c.restore();
+    c.drawImage(img, 0, 0, CW, CH, -CMEIO, -CCHAO, CW, CH); c.restore();
   }
   const ativa = () => !!S && S.on === true && S.fase !== 'paz';
   const camada = (c, desenha) => { if (S.w <= 0) return; c.globalAlpha = S.w; desenha(); c.globalAlpha = 1; };
@@ -900,8 +923,10 @@ export function criarGuerraNaCorrida(o) {
     /** A gravação está parada pela guerra (a página não narra nem derruba vara). */
     pausada: () => !!S && S.on === true && ['ataque', 'filme', 'chefe', 'final'].includes(S.fase),
     ganchos: { fundo, cavalo, frente, depois },
+    /** As barrinhas do som da guerra agora (`n` faixas de 0 a 1): a página junta com as dela. */
+    barras: n => (Som ? Som.barras(n) : new Array(n).fill(0)),
     /** Uma largada nova do teste: esquece o estado e a guerra de antes. */
-    limpar() { E = null; desde = performance.now(); if (S) { for (const e of S.etiquetas) e.el.remove(); caixa.classList.remove('on'); leg.classList.remove('on'); } S = null; Som?.musica(null); },
-    fechar() { Som?.fechar(); Som = null; },
+    limpar() { E = null; desde = performance.now(); if (S) { for (const e of S.etiquetas) e.el.remove(); caixa.classList.remove('on'); leg.classList.remove('on'); } S = null; Som?.musica(null); pararViolino(0.4); },
+    fechar() { Som?.fechar(); Som = null; violino = null; },
   };
 }

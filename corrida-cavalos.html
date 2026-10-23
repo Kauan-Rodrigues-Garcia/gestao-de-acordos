@@ -54,6 +54,16 @@ body{background:#eef1f6}
 .ic:hover{background:#ffffff26;color:#fff}
 .ic svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 #som .mudo,#som.desl .onda{display:none}#som.desl .mudo{display:inline}
+/* O volume (23/10/2026): a barrinha ao lado do som e as barras que pulam com o que está tocando. */
+.jan-vol{display:flex;align-items:center;gap:1px}
+#eq{display:flex;align-items:flex-end;gap:2px;width:17px;height:13px;margin:0 2px 0 4px}
+#eq i{flex:1;height:100%;border-radius:1px;background:#ffd84d;transform-origin:50% 100%;transform:scaleY(.12);opacity:.9}
+.jan-vol.mudo #eq i{background:#ffffff55}
+#vol{-webkit-appearance:none;appearance:none;width:64px;height:4px;margin:0 6px 0 0;border-radius:2px;background:linear-gradient(90deg,#ffd84d var(--v,100%),#ffffff38 var(--v,100%));cursor:pointer}
+.jan-vol.mudo #vol{background:linear-gradient(90deg,#ffffff66 var(--v,100%),#ffffff24 var(--v,100%))}
+#vol::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:#fff;box-shadow:0 0 0 2px #0007}
+#vol::-moz-range-thumb{width:12px;height:12px;border:0;border-radius:50%;background:#fff;box-shadow:0 0 0 2px #0007}
+#vol:focus-visible{outline:2px solid #ffd84d;outline-offset:4px}
 #ampliar .menos,#janela.grande #ampliar .mais{display:none}#janela.grande #ampliar .menos{display:inline}
 #janela.dica #ampliar{color:#1b1405;background:#ffd84d;animation:chamaBt 1.6s ease-in-out infinite}
 @keyframes chamaBt{0%,100%{box-shadow:0 0 0 0 #ffd84daa}50%{box-shadow:0 0 0 7px #ffd84d00}}
@@ -612,9 +622,13 @@ body.modo-escolha #escolha{z-index:20}
       <span id="janStatus"></span>
       <span class="jan-bts">
         <button id="btApostas" class="bt-ap oculto" type="button" aria-pressed="false" title="Quem apostou em quem">🪙 Apostas <span id="btApostasN"></span></button>
-        <button id="som" class="ic" type="button" title="Som ligado" aria-label="Desligar o som">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path class="onda" d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/><path class="mudo" d="m22 9-6 6m0-6 6 6"/></svg>
-        </button>
+        <span id="janVol" class="jan-vol">
+          <span id="eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+          <button id="som" class="ic" type="button" title="Som ligado" aria-label="Desligar o som">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path class="onda" d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/><path class="mudo" d="m22 9-6 6m0-6 6 6"/></svg>
+          </button>
+          <input id="vol" type="range" min="0" max="100" step="1" value="100" aria-label="Volume" title="Volume">
+        </span>
         <button id="ampliar" class="ic" type="button" title="Tela cheia" aria-label="Assistir em tela cheia">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path class="mais" d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/><path class="menos" d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></svg>
         </button>
@@ -701,6 +715,8 @@ import {
 } from '/src/components/Corrida/cavalos/simulacao.js';
 // A Guerra na Corrida (23/10/2026): opcional por corrida, ver o cabeçalho de lá.
 import { criarGuerraNaCorrida } from '/src/components/Corrida/guerra/naCorrida.js';
+import { lerBarras } from '/src/components/Corrida/guerra/som.js';
+import { nivelDoAparelho } from '/src/components/Corrida/guerra/qualidade.js';
 /* =====================================================================
    Os modos da página (22/10/2026)
      lab      o laboratório: gente de mentira, o painel LAB e a montagem. Só no
@@ -1632,11 +1648,14 @@ const MUSICAS = {
 const hz = m => 440 * 2 ** ((m - 69) / 12);
 
 const Som = (() => {
-  let ac = null, mestre, ruido, mudo = false, faixa = null, desejada = null;
+  let ac = null, mestre, ruido, mudo = false, faixa = null, desejada = null, vol = 1, medidor = null, bufM = null;
+  // O volume da barrinha (0 a 1) vale para tudo que sai daqui; o medidor alimenta as barras que pulam.
+  const ganho = () => (mudo ? 0 : 0.55 * vol);
   function init() {
     if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
     try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch { return; }
-    mestre = ac.createGain(); mestre.gain.value = mudo ? 0 : 0.55; mestre.connect(ac.destination);
+    medidor = ac.createAnalyser(); medidor.fftSize = 64; medidor.smoothingTimeConstant = 0.72; bufM = new Uint8Array(medidor.frequencyBinCount); medidor.connect(ac.destination);
+    mestre = ac.createGain(); mestre.gain.value = ganho(); mestre.connect(medidor);
     const n = ac.sampleRate * 2; ruido = ac.createBuffer(1, n, ac.sampleRate); const d = ruido.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
     setInterval(agendar, 60);
     if (desejada) musica(desejada);
@@ -1693,8 +1712,14 @@ const Som = (() => {
   // final, ver `volume`) e segue pelo replay, pela foto e pela festa até a música acabar. Só uma
   // música de jogo nova (a do paddock de outra corrida) o tira. O arquivo desce antes (`baixarTema`):
   // na chegada ele só toca, sem esperar a rede.
-  let tema = null, temaEl = null;
+  let tema = null, temaEl = null, temaG = null;
   const TEMA_VOL = 0.5;
+  // O tema passa pelo medidor (as barras pulam com ele) quando o som já está liberado; o volume vai no ganho.
+  function rotearTema(a) {
+    if (temaG || !ac || ac.state !== 'running') return;
+    try { temaG = ac.createGain(); temaG.gain.value = mudo ? 0 : vol; ac.createMediaElementSource(a).connect(temaG).connect(medidor); } catch { temaG = null; }
+  }
+  const volumeDoTema = () => (temaG ? TEMA_VOL : TEMA_VOL * vol);
   function baixarTema() {
     if (!temaEl) { temaEl = new Audio('/sons/cavalos/rei-do-gado.mp3'); temaEl.preload = 'auto'; }
     return temaEl;
@@ -1708,9 +1733,9 @@ const Som = (() => {
       return;
     }
     if (tema) return;
-    const a = tema = baixarTema(); clearInterval(a.rampa);
+    const a = tema = baixarTema(); clearInterval(a.rampa); a.rampa = 0;
     a.onended = () => { if (tema === a) tema = null; };
-    a.muted = mudo; a.volume = TEMA_VOL;
+    rotearTema(a); a.muted = mudo; a.volume = volumeDoTema();
     try { a.currentTime = Math.max(0, desde); } catch { /* sem os metadados ainda: começa do início */ }
     a.play().catch(() => {});
   }
@@ -1724,6 +1749,11 @@ const Som = (() => {
     const g = ac.createGain(); g.gain.setValueAtTime(0, ac.currentTime); g.gain.linearRampToValueAtTime(MUSICAS[nome].vol, ac.currentTime + 0.5); g.connect(mestre);
     faixa = { nome, g, n: 0, prox: ac.currentTime + 0.06, k: 1 };
   }
+  function aplicar() {
+    if (mestre) mestre.gain.value = ganho();
+    if (temaG) temaG.gain.value = mudo ? 0 : vol;
+    if (tema) { tema.muted = mudo; if (!tema.rampa) tema.volume = volumeDoTema(); }
+  }
   /** O volume da música de jogo, de 0 a 1 do normal: na reta final ela vai baixando. */
   function volume(k) {
     if (!ac || !faixa || Math.abs(faixa.k - k) < 0.02) return;
@@ -1734,7 +1764,13 @@ const Som = (() => {
     init, musica, volume, baixarTema, tema: temaFesta,
     /** Toca de novo, do começo, a música que está valendo (o «Música agora» do teste). */
     recomecar() { const n = desejada; if (!n) return; musica(null); musica(n); },
-    alternar() { mudo = !mudo; if (mestre) mestre.gain.value = mudo ? 0 : 0.55; if (tema) tema.muted = mudo; return mudo; },
+    alternar() { mudo = !mudo; aplicar(); return mudo; },
+    get mudo() { return mudo; },
+    get volumeAtual() { return vol; },
+    /** A barrinha de volume (0 a 1). */
+    definirVolume(v) { vol = clamp(v, 0, 1); aplicar(); },
+    /** As barras do que está tocando (`n` faixas de 0 a 1). */
+    barras: n => lerBarras(medidor, n, bufM),
     trompete() { if (!ok()) return; let t = ac.currentTime + 0.05; for (const [f, d] of [[392, .16], [523.25, .16], [659.25, .16], [783.99, .32], [0, .08], [659.25, .16], [783.99, .62]]) { if (f) { nota(f, t, d * 0.95, 'square', 0.055); nota(f * 2, t, d * 0.9, 'triangle', 0.025); } t += d; } },
     sino() { if (!ok()) return; const t = ac.currentTime; for (let i = 0; i < 7; i++) { nota(1568, t + i * 0.085, 0.14, 'square', 0.03); nota(2093, t + i * 0.085, 0.12, 'sine', 0.05); } },
     tique(alto) { if (!ok()) return; nota(alto ? 988 : 659, ac.currentTime, 0.12, 'square', 0.07); },
@@ -2496,7 +2532,7 @@ function reiniciar() {
 }
 
 function novaCorrida(cfg = configDoLab()) {
-  QUAL.econ = false; QUAL.media = 16; QUAL.ruim = 0;
+  QUAL.econ = false; QUAL.media = 16; QUAL.ruim = 0; QUAL.forte = nivelDoAparelho() === 2;
   Petalas.parar(); Som.musica('lobby'); Som.baixarTema();
   JAN.aberta = false; JAN.dicaFechada = false; tamanho(false); esconderDica(false);
   $('#janela').classList.add('oculto'); $('#voltar').classList.add('oculto');
@@ -3384,7 +3420,7 @@ let ultQ = 0, hudT = 0, ultFase = null, perfT = 0, perfSoma = 0, perfN = 0;
  * corrida — subir e descer de novo daria um tranco visível. Como tudo anda no
  * relógio, menos quadros não deixa a corrida mais lenta, só menos fluida.
  */
-const QUAL = { modo: 'auto', econ: false, media: 16, ruim: 0 };
+const QUAL = { modo: 'auto', econ: false, media: 16, ruim: 0, forte: nivelDoAparelho() === 2 };
 /** Onde a música do jogo começa a baixar: 700 px antes da linha, uns 7 s da reta final. */
 const FADE_PX = 700;
 /** O zoom ao vivo: chegada de cabeça ou menos (`gap` < 0,07 s), começa a 300 px (150 m) da linha e fecha em 140 px. */
@@ -3394,6 +3430,7 @@ const CORACAO_PX = 260;
 function vigiarQuadro(intervalo) {
   if (QUAL.modo !== 'auto' || QUAL.econ || fase !== 'corrida') return;
   QUAL.media += (Math.min(intervalo, 100) - QUAL.media) * 0.1;
+  if (QUAL.media > 19) QUAL.forte = false;   // o «um pouco mais» da guerra sai antes de qualquer engasgo
   QUAL.ruim = QUAL.media > 24 ? QUAL.ruim + intervalo : 0;
   if (QUAL.ruim > 1500) QUAL.econ = true;
 }
@@ -3404,8 +3441,16 @@ function medir(t0, now) {
   $('#lPerf').textContent = `quadro: ${(perfSoma / perfN).toFixed(2)} ms de trabalho · ${perfN} q/s · ${G.pessoas.length} bonecos · corrida a ${alvoCorrida() > 20 ? '30' : '60'} q/s${QUAL.modo === 'auto' && QUAL.econ ? ' (caiu sozinha)' : ''}`;
   perfSoma = perfN = 0; perfT = now;
 }
+let eqT = 0;
+const EQ = [...document.querySelectorAll('#eq i')];
+/** As barras ao lado do som: o que a página e a guerra estão tocando agora. */
+function atualizarEq() {
+  const a = Som.barras(EQ.length), b = GX ? GX.barras(EQ.length) : null;
+  EQ.forEach((el, k) => { const s = (0.12 + 0.88 * Math.min(1, Math.max(a[k], b ? b[k] : 0) * 1.15)).toFixed(2); if (el.dataset.s !== s) { el.dataset.s = s; el.style.transform = `scaleY(${s})`; } });
+}
 function laco(now) {
   requestAnimationFrame(laco);
+  if (JAN.aberta && now - eqT > 50) { eqT = now; atualizarEq(); }
   if (!G || !MAPA) return;
   const pasto = emPasto(), alvo = fase === 'escolha' ? 66 : pasto ? 33 : alvoCorrida();
   if (now - ultQ < alvo - 2) return;
@@ -3574,10 +3619,26 @@ $('#palco').addEventListener('mousemove', ev => {
 $('#feNova').addEventListener('click', () => (MODO === 'teste' ? iniciarTeste() : ADM() ? abrirMontagem() : novaCorrida()));
 // o Rei do Gado segue tocando no replay de novo: só acaba quando a música acaba
 $('#feReplay').addEventListener('click', () => { Petalas.parar(); $('#festa').classList.remove('on'); iniciarReplay(); });
-$('#som').addEventListener('click', () => {
-  Som.init(); const mudo = Som.alternar(), b = $('#som');
+/*
+ * O volume (23/10/2026): o botão liga e desliga, a barrinha diz a altura. Vale para a música, os
+ * efeitos, a guerra e o chefe na página (o sistema recebe e aplica), e fica guardado neste navegador.
+ */
+const CHAVE_VOLUME = 'corrida-cavalos-volume';
+function mostrarSom() {
+  const mudo = Som.mudo, v = Math.round(Som.volumeAtual * 100), b = $('#som');
   b.classList.toggle('desl', mudo); b.title = mudo ? 'Som desligado' : 'Som ligado'; b.setAttribute('aria-label', mudo ? 'Ligar o som' : 'Desligar o som');
+  $('#janVol').classList.toggle('mudo', mudo);
+  const r = $('#vol'); r.value = String(v); r.style.setProperty('--v', `${v}%`); r.setAttribute('aria-valuetext', mudo ? 'sem som' : `${v}%`);
+  avisarSistema({ tipo: 'volume', volume: mudo ? 0 : Som.volumeAtual });
+}
+$('#som').addEventListener('click', () => { Som.init(); Som.alternar(); mostrarSom(); });
+$('#vol').addEventListener('input', e => {
+  Som.init(); const v = Number(e.target.value) / 100;
+  Som.definirVolume(v); if (Som.mudo && v > 0) Som.alternar();
+  try { localStorage.setItem(CHAVE_VOLUME, String(v)); } catch { /* sem armazenamento: vale só agora */ }
+  mostrarSom();
 });
+{ let v = 1; try { const s = localStorage.getItem(CHAVE_VOLUME); if (s !== null && Number.isFinite(Number(s))) v = clamp(Number(s), 0, 1); } catch { /* sem armazenamento */ } Som.definirVolume(v); }
 $('#ampliar').addEventListener('click', () => tamanho(!JAN.grande, true));
 $('#fundoGrande').addEventListener('click', () => tamanho(false, true));
 $('#fechar').addEventListener('click', fecharJanela);
@@ -3860,8 +3921,9 @@ if (MODO === 'app' || MODO === 'teste') GX = criarGuerraNaCorrida({
   feed: (html, cav) => feed(html, cav ?? { pano: { pano: '#c4161c' } }), faixa: txt => faixa(txt), flash, tremer, abrir: abrirJanela,
   ampliar: () => { if (!JAN.grande) tamanho(true, true); },
   musicaCorrida: nome => Som.musica(nome),
-  somLigado: () => !$('#som').classList.contains('desl'), volume: () => 1,
+  somLigado: () => !Som.mudo, volume: () => Som.volumeAtual,
   leve: () => QUAL.modo === 'econ' || (QUAL.modo === 'auto' && QUAL.econ),
+  forte: () => QUAL.modo === 'auto' && QUAL.forte,
   retangulo: () => cv.getBoundingClientRect(),
 });
 // O estado da guerra vem do sistema nos dois modos (no teste, é o ensaio do `TesteCavalos`).
@@ -3872,6 +3934,7 @@ if (GX) addEventListener('message', ev => {
 if (MODO === 'lab') { setInterval(tickLobby, 200); prepararMontagem(); reiniciar(); }
 else if (MODO === 'teste') { $('#teste').classList.remove('oculto'); setInterval(tickLobby, 200); iniciarTeste(); avisarSistema({ tipo: 'pronto' }); }
 else ligarSistema();
+mostrarSom();   // a barrinha guardada, e o sistema já sabe o volume
 // Os testes de tela (Playwright) mexem nas funções da página; só no `npm run dev`.
 if (import.meta.env.DEV) window.__cavalos = { get G() { return G; }, get MAPA() { return MAPA; }, get fase() { return fase; }, get F() { return F; }, ST, APP, JAN, DIV,
   novaCorrida, entrarNoPaddock, preparar, soltar, gravar, simular, xAt, camAt, desenharCena, quadros, tela, laneY, desvioRaia, iniciarFesta, iniciarReplay, tamanho, abrirJanela,
