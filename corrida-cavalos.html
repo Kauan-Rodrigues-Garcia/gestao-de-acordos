@@ -1438,7 +1438,7 @@ function desenharCena(c, t, cam, o) {
 
   // Os obstáculos na tela. A vara de cima cai quando alguém bate nela e fica no chão até o fim.
   const obs = [];
-  if (G.rec?.barreiras) G.rec.barreiras.forEach((bx, b) => {
+  if (G.rec?.barreiras && !GX?.semChegada()) G.rec.barreiras.forEach((bx, b) => {
     const cx = Math.round(bx - camF); if (cx < -OB_K - 30 || cx > W + OB_K + 30) return;
     let caida = false; for (let j = 0; j < G.n; j++) if (G.rec.bate[j][b] && xAt(j, t) - bx - desvioRaia(j, G.n) > 12) caida = true;
     obs.push({ cx, caida }); asa(c, cx - OB_K, OB_Y0); varas(c, cx, OB_Y0 - 1, laneY(0) - 1, caida);
@@ -1501,7 +1501,7 @@ function desenharCena(c, t, cam, o) {
   azulejo(c, m.frenteC, cam * 1.35, 205);
   GX?.ganchos.frente(c, cam);
   for (const ob of obs) { varas(c, ob.cx, 204, OB_Y1, ob.caida); asa(c, ob.cx + OB_K, OB_Y1); }
-  if (fxs > -30 && fxs < W + 30) { R(c, '#1c1c1c', fxs - 1, 196, 4, 29); for (let y = 198; y < 225; y += 4) R(c, (y >> 2) % 2 ? '#ffffff' : '#d93a3a', fxs, y, 2, 4); }
+  if (fxs > -30 && fxs < W + 30 && !GX?.semChegada()) { R(c, '#1c1c1c', fxs - 1, 196, 4, 29); for (let y = 198; y < 225; y += 4) R(c, (y >> 2) % 2 ? '#ffffff' : '#d93a3a', fxs, y, 2, 4); }
   // neve
   if (m.flocos.length) for (const fl of m.flocos) {
     fl.y += (8 + fl.p * 18) * o.dt * (o.lento ? 0.3 : 1); if (fl.y > H) { fl.y = -2; fl.x = Math.random() * W; }
@@ -3458,7 +3458,7 @@ function laco(now) {
     let lead = 0, vice = 0;
     for (let i = 0; i < G.n; i++) { const x = xAt(i, t); if (x > lead) { vice = lead; lead = x; } else if (x > vice) vice = x; }
     excit = fase === 'festa' ? 0.5 : (lead >= L ? 0.9 : 0.15 + 0.7 * clamp((lead - (L - 900)) / 900, 0, 1));
-    if (fase === 'corrida') {
+    if (fase === 'corrida' && !GX?.pausada()) {
       if (F.torcidaAte > wall) excit = Math.max(excit, 0.6);   // alguém está torcendo: a arquibancada pula
       // a reta final: a música do jogo vai baixando até a chegada, onde entra o Rei do Gado
       if (!F.cruzou) Som.volume(clamp((L - lead) / FADE_PX, 0.25, 1));
@@ -3488,7 +3488,11 @@ function laco(now) {
     desenharTorcida(zk > 0, zx, wall);   // no zoom as fotos da arquibancada saem (o recorte é da pista)
   }
   if (fase === 'corrida') minimapa(ctx, t);
-  if (now - hudT > 200) { hudT = now; atualizarHud(t); atualizarStatus(t); }
+  if (now - hudT > 200) {
+    hudT = now; atualizarHud(t); atualizarStatus(t);
+    // na guerra as posições não valem (eles estão caindo): o placar some até a volta
+    const pl = $('#placar'), quer = GX?.pausada() ? 'hidden' : ''; if (pl.style.visibility !== quer) pl.style.visibility = quer;
+  }
   animarPlacar(dt);
   // som do galope
   if (correndo && fase !== 'foto') {
@@ -3854,6 +3858,7 @@ if (MODO === 'app' || MODO === 'teste') GX = criarGuerraNaCorrida({
   agora: () => Date.now() + APP.desvio,
   enviar: avisarSistema, palco: $('#palco'),
   feed: (html, cav) => feed(html, cav ?? { pano: { pano: '#c4161c' } }), faixa: txt => faixa(txt), flash, tremer, abrir: abrirJanela,
+  ampliar: () => { if (!JAN.grande) tamanho(true, true); },
   musicaCorrida: nome => Som.musica(nome),
   somLigado: () => !$('#som').classList.contains('desl'), volume: () => 1,
   leve: () => QUAL.modo === 'econ' || (QUAL.modo === 'auto' && QUAL.econ),

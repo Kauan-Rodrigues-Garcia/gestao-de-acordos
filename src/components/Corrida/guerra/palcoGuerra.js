@@ -122,7 +122,9 @@ const INFO_CAV = {
   fome: { nome: 'FOME', icone: '⚖', cor: '#cf9cff', chegou: 'A Fome comeu o dinheiro do Gestão!', banido: 'A Fome foi banida!' },
   morte: { nome: 'MORTE', icone: '☠', cor: '#8ff6ec', chegou: 'A Morte levou os acordos!', banido: 'A Morte foi banida!' },
 };
-const K_CAV = 0.5;   // os cavaleiros vêm na metade do tamanho (metade exata: o pixel art não deforma)
+const K_CAV = 0.5;
+/** O chefe fica sempre inteiro na tela: o meio dele não chega mais perto da borda do que isto (px da arena). */
+const MARGEM_X = 70;   // os cavaleiros vêm na metade do tamanho (metade exata: o pixel art não deforma)
 const NOMES_SIM = ['Ana Paula', 'João Marcos', 'Bia Santos', 'Carlos Eduardo', 'Duda Lima', 'Fernanda Reis', 'Gabriel Costa', 'Helena Rocha', 'Igor Nunes', 'Júlia Mendes', 'Larissa Prado', 'Marcos Vinícius'];
 
 /**
@@ -155,7 +157,7 @@ export function criarPalcoGuerra(o) {
     arena.width = AW; arena.height = AH; arena.style.width = AW * PX + 'px'; arena.style.height = AH * PX + 'px'; ax.imageSmoothingEnabled = false;
     DPR = devicePixelRatio || 1; trincas.width = Math.round(innerWidth * DPR); trincas.height = Math.round(innerHeight * DPR);
   }
-  medir(); addEventListener('resize', medir);
+  medir();
   const yMinChefe = () => clamp(Math.round(AH * 0.5), 112, AH - 6);
   const naArena = el => { const r = el.getBoundingClientRect(); return { x: r.left / PX, y: r.top / PX, w: r.width / PX, h: r.height / PX }; };
   const legenda = (txt, msx = 0) => { const l = $('.gx-legenda'); clearTimeout(legenda.t); if (!txt) { l.classList.remove('on'); return; } l.textContent = txt; l.classList.add('on'); if (msx) legenda.t = setTimeout(() => l.classList.remove('on'), msx); };
@@ -356,11 +358,16 @@ export function criarPalcoGuerra(o) {
   }
 
   /* ---------- o anjo: desce, ele dá o bote e come (a cura do banco) ---------- */
+  // A música do anjo (Música Celestial): toca enquanto ele desce e para na mordida.
+  const DESCIDA_S = 3;
+  const musicaAnjo = typeof Audio === 'undefined' ? null : Object.assign(new Audio(o.musicaAnjo ?? '/sons/guerra/anjo-celestial.mp3'), { preload: 'auto' });
+  function tocarMusicaAnjo() { if (!musicaAnjo) return; try { musicaAnjo.currentTime = 0; musicaAnjo.volume = clamp(o.volume ?? 1, 0, 1); void musicaAnjo.play().catch(() => {}); } catch { /* sem áudio: segue sem a música */ } }
+  function pararMusicaAnjo() { try { musicaAnjo?.pause(); } catch { /* já parou */ } }
   function chamarAnjo(vidaAntes) {
     const ladoX = B.x + B.dir * 70;
     B.acao = { tipo: 'anjo', t: 0, f: 'desce', feito: {}, ax: clamp(ladoX, 30, AW - 30), ay0: -40, ay1: B.y - 92, vidaAntes };
     vidaSegura = vidaAntes;   // a barra fica parada até ele engolir
-    Som.coro(); legenda('😇 Um anjo desceu… e ele está com fome.', 3200);
+    tocarMusicaAnjo(); legenda('😇 Um anjo desceu… e ele está com fome.', 3600);
   }
   /** O anjo em pixel art: túnica branca, cabelo dourado, auréola e as asas batendo. */
   function desenharAnjo(x, y, t, inteiro = 1) {
@@ -451,9 +458,13 @@ export function criarPalcoGuerra(o) {
         B.modo = 'galope'; B.p += dt * 3.6; B.dir = a.dir; B.jaw = 0.5; const v = 250;
         B.x += a.dir * v * dt; B.y += clamp(a.yl - B.y, -70 * dt, 70 * dt); B.by = Math.round(-Math.sin(B.p * T2) * 1.6);
         rastro(v * dt, true); if (!leve) P.shake = Math.max(P.shake, 1.5);
-        if (B.x < -90 || B.x > AW + 90) { a.f = 'fora'; a.t = 0; }
-      } else if (a.f === 'fora') { if (t > 0.6) { a.f = 'volta'; a.t = 0; B.dir = -a.dir; B.y = entre(yMinChefe(), AH - 6); } }
-      else { if (galopar(a.dir > 0 ? AW - 100 : 100, B.y, 170) || t > 2.5) fimAcao(); }
+        // Ele nunca sai da tela: na borda, vira e atravessa de novo (o rastro fica dos dois lados).
+        const borda = a.dir > 0 ? AW - MARGEM_X : MARGEM_X;
+        if (a.dir > 0 ? B.x >= borda : B.x <= borda) {
+          B.x = borda; a.voltas = (a.voltas ?? 0) + 1;
+          if (a.voltas >= 2) { a.f = 'freia'; a.t = 0; } else { a.dir = -a.dir; a.yl = entre(yMinChefe(), AH - 6); Som.relinchoChefe(0.6); }
+        }
+      } else { B.modo = 'parado'; B.jaw = Math.max(0, B.jaw - dt * 2); B.rot = 0.12 * Math.sin(Math.min(1, t / 0.5) * Math.PI); if (!leve) P.shake = Math.max(P.shake, 1); if (t > 0.6) fimAcao(); }
     } else if (a.tipo === 'sopro') {
       if (a.f === 'prepara') { if (galopar(a.px, a.py, 200) || t > 3) { a.f = 'mira'; a.t = 0; B.dir = a.dir; B.modo = 'parado'; } }
       else if (a.f === 'mira') { B.cab = Math.min(0.15, B.cab + dt); B.jaw = Math.min(1, t * 3); B.rot = -0.08 * Math.min(1, t / 0.3); if (uma('r')) Som.relinchoChefe(0.8); if (t > 0.45) { a.f = 'sopra'; a.t = 0; Som.fogo(1.9); legenda('🔥 Ele está queimando os acordos!', 2200); } }
@@ -487,13 +498,13 @@ export function criarPalcoGuerra(o) {
       if (t > 2) fimAcao();
     } else if (a.tipo === 'anjo') {
       // 1. o anjo desce num raio de luz; 2. ele vira, empina e abre a boca; 3. o bote; 4. mastiga; 5. o arroto
-      if (a.f === 'desce') { B.modo = 'parado'; B.dir = Math.sign(a.ax - B.x) || B.dir; a.ay = lerp(a.ay0, a.ay1, suave(t / 1.7)); if (t > 1.7) { a.f = 'mira'; a.t = 0; } }
+      if (a.f === 'desce') { B.modo = 'parado'; B.dir = Math.sign(a.ax - B.x) || B.dir; a.ay = lerp(a.ay0, a.ay1, suave(t / DESCIDA_S)); if (t > DESCIDA_S) { a.f = 'mira'; a.t = 0; } }
       else if (a.f === 'mira') { B.modo = 'empina'; B.rot = -0.18 * suave(t / 0.35); B.jaw = suave(t / 0.35); a.ay = a.ay1 + Math.sin(rel * 3) * 2; if (t > 0.4) { a.f = 'bote'; a.t = 0; } }
       else if (a.f === 'bote') {
         B.modo = 'parado'; B.rot = lerp(-0.18, 0, suave(t / 0.2)); B.cab = 0.55 * suave(t / 0.2);
         const [gx, gy] = cabecaDo(B).pt(18, 4), [bx, by2] = noChefe(gx, gy); a.ax = lerp(a.ax, bx, 0.5); a.ay = lerp(a.ay, by2, 0.5);
         if (t > 0.2 && uma('engole')) {
-          a.comido = true; Som.mastiga(); flashPag(0.2);
+          a.comido = true; pararMusicaAnjo(); Som.mastiga(); flashPag(0.2);
           for (let k = 0; k < (leve ? 14 : 34); k++) P.parts.push({ x: bx, y: by2, vx: entre(-90, 90), vy: entre(-110, 10), g: 50, vida: entre(0.8, 1.6), max: 1.6, cor: sorteio(['#ffffff', '#eef2ff', '#fff3b0']), tam: Math.random() < 0.3 ? 2 : 1 });
           P.aureola = { x: bx, y: by2 - 4, vx: B.dir * 40, vy: -90, vida: 2.2, rot: 0 };
         }
@@ -547,7 +558,9 @@ export function criarPalcoGuerra(o) {
     marcarFuro(px * PX, py * PX); numero(px, py, 'errou', 'erra');
   }
   // A gente de mentira (só no ensaio): atira com a mira ruim, nos cavaleiros, nos cavalos de fogo e nele.
-  const sims = Array.from({ length: o.sims ?? 0 }, (_, k) => ({ nome: NOMES_SIM[k % NOMES_SIM.length], mira: entre(0.7, 1.5) }));
+  const sims = [];
+  function simular(n) { sims.length = 0; for (let k = 0; k < n; k++) sims.push({ nome: NOMES_SIM[k % NOMES_SIM.length], mira: entre(0.7, 1.5) }); }
+  simular(o.sims ?? 0);
   function tiroSimulado(s) {
     const cavs = P.cavaleiros.filter(c2 => !c2.fim && c2.x > 0 && c2.x < AW);
     if (cavs.length && Math.random() < 0.55) { const c2 = sorteio(cavs); faisca(c2.x + entre(-30, 30), c2.y - entre(0, 60), true); if (Math.random() < 0.45 * s.mira) acertarCavaleiro(c2, s.nome, true); return; }
@@ -560,9 +573,25 @@ export function criarPalcoGuerra(o) {
   }
   // Na briga, todo clique na página é um tiro e não chega no Gestão — menos no menu lateral (`o.livre`).
   const livre = o.livre ?? '[data-chefona-livre]';
+  // Sem escudo (o super_admin, como na Bruxa), o clique só vira tiro em cima de um alvo; no resto, é clique no Gestão.
+  const escudo = o.escudo !== false;
   const naBriga = e => fase === 'luta' && !(e.target instanceof Element && e.target.closest(livre));
-  const aoApertar = e => { if (!naBriga(e)) return; e.preventDefault(); e.stopPropagation(); atirar(e.clientX / PX, e.clientY / PX); };
-  const aoClicar = e => { if (naBriga(e)) { e.preventDefault(); e.stopPropagation(); } };
+  function acertaAlgo(px, py) {
+    if (P.cavaleiros.some(c2 => !c2.fim && Math.abs(px - c2.x) < 40 && py > c2.y - 66 && py < c2.y + 3)) return true;
+    if (P.cavalosFogo.some(f => !f.morto && f.nasce <= 0 && Math.abs(px - f.x) < 24 && py > f.y - 32 && py < f.y + 3)) return true;
+    const [gx, gy] = naGrade(B, px, py);
+    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) { const x = gx + dx, y = gy + dy; if (x >= 0 && y >= 0 && x < CW && y < CH && bG[y * CW + x]) return true; }
+    return false;
+  }
+  let foiTiro = false;
+  const aoApertar = e => {
+    foiTiro = false;
+    if (!naBriga(e)) return;
+    const px = e.clientX / PX, py = e.clientY / PX;
+    if (!escudo && !acertaAlgo(px, py)) return;
+    foiTiro = true; e.preventDefault(); e.stopPropagation(); atirar(px, py);
+  };
+  const aoClicar = e => { if (foiTiro && naBriga(e)) { e.preventDefault(); e.stopPropagation(); } foiTiro = false; };
   document.addEventListener('pointerdown', aoApertar, true);
   document.addEventListener('click', aoClicar, true);
   // O lote: a cada segundo, os tiros somados desta tela. Freado (cedo demais), volta para o próximo.
@@ -587,6 +616,11 @@ export function criarPalcoGuerra(o) {
     curasVistas = Math.max(curasVistas, e.curas ?? 0);
     vidaTela = vidaNova;
   }
+
+  /** Ele nunca fica fora da tela (nem quando a janela do navegador encolhe). */
+  function prenderNaTela() { B.x = clamp(B.x, MARGEM_X, Math.max(MARGEM_X, AW - MARGEM_X)); B.y = clamp(B.y, yMinChefe(), AH - 6); }
+  const aoRedimensionar = () => { medir(); prenderNaTela(); };
+  addEventListener('resize', aoRedimensionar);
 
   /* ---------- o laço ---------- */
   function passo(dt) {
@@ -620,13 +654,14 @@ export function criarPalcoGuerra(o) {
       } else acaoChefe(dt);
       if (B.furia > 0.3) for (let r = 0; r < (leve ? 1 : 3); r++) if (Math.random() < dt * 30) { for (let k = 0; k < 10; k++) { const gx = Math.floor(entre(20, 160)), gy = Math.floor(entre(0, 110)), cd = bG[gy * CW + gx]; if (cd === MAT.CRINA || cd === MAT.RABO) { const [x, y] = noChefe(gx, gy); P.parts.push({ x, y: y + 2, vx: entre(-8, 8), vy: entre(-46, -22), g: 0, vida: entre(0.3, 0.55), max: 0.55, cor: 'chama', tier: sorteio([1, 1, 2, 2, 3]), off: Math.random() * 8, v: Math.random() < 0.5 ? 1 : 0 }); break; } } }
       if (Math.random() < dt * 3) { const [gx, gy] = cabecaDo(B).pt(22, 1.5), [x, y] = noChefe(gx, gy); P.parts.push({ x, y, vx: B.dir * entre(6, 16), vy: entre(-8, -2), g: -5, vida: 0.9, max: 0.9, cor: 'fumaca', tam: 1 }); }
+      prenderNaTela();
       if (E.caiu_em) { fase = 'queda'; faseT = 0; sair(); Som.relinchoChefe(2.4); }
       else if (agora >= expira) { fase = 'fuga'; faseT = 0; sair(); Som.relinchoChefe(2); legenda('Ele escapou.', 3000); }
     } else if (fase === 'queda') {
       const t = faseT;
       if (t < 1.8) { B.acao = null; B.modo = 'parado'; B.jaw = 1; B.furia = Math.max(0, B.furia - dt); B.rot = Math.min(0.32, B.rot + dt * 0.18); B.flash = (Math.floor(t * 12) % 2) * 0.7; if (!leve) P.shake = Math.max(P.shake, 2 + t * 2); }
       if (t >= 1.8 && B.visivel) {
-        flashPag(1); tremerPagina(); Som.explosao(2); Som.vidro();
+        prenderNaTela(); flashPag(1); tremerPagina(); Som.explosao(2); Som.vidro(); Som.vitoria();
         for (let k = 0; k < (leve ? 80 : 220); k++) { const gx = Math.floor(Math.random() * CW), gy = Math.floor(Math.random() * CH), cd = bG[gy * CW + gx]; if (!cd) continue; const [x, y] = noChefe(gx, gy), tp = tipoDoAcerto(cd); P.parts.push({ x, y, vx: entre(-170, 170), vy: entre(-220, -40), g: 280, vida: entre(0.8, 1.8), max: 1.8, cor: tp === 'fogo' ? sorteio(['#ff7a1c', '#ffc83e']) : tp === 'armadura' ? sorteio(['#25232e', '#3b3848', '#c88a22']) : sorteio(['#661316', '#93201d', '#bd3524']), tam: 2 }); }
         explosaoFogo(P.parts, B.x, B.y - 60, leve ? 1.5 : 3); P.luzes.push({ x: B.x, y: B.y - 60, k: 5, t: 0, dur: 1 });
         P.espada = { x: B.x - B.dir * 8, y: B.y - 2, rot: B.dir * 0.18, cai: 0, vida: 9 };
@@ -800,9 +835,13 @@ export function criarPalcoGuerra(o) {
 
   return {
     atualizar,
+    /** O teste do chefe: um ataque agora ('cabecada' | 'investida' | 'sopro' | 'invocar' | 'cavaleiros'). */
+    forcar(tipo) { if (fase !== 'luta' || B.acao?.tipo === 'anjo') return; B.acao = null; B.rot = 0; iniciarAcao(tipo); },
+    /** O teste do chefe: quantos robôs atiram junto. */
+    simular,
     destruir() {
       vivo = false; cancelAnimationFrame(raf); clearInterval(idLote); for (const id of timers) clearTimeout(id); timers.clear();
-      document.removeEventListener('pointerdown', aoApertar, true); document.removeEventListener('click', aoClicar, true); removeEventListener('resize', medir);
+      document.removeEventListener('pointerdown', aoApertar, true); document.removeEventListener('click', aoClicar, true); removeEventListener('resize', aoRedimensionar); pararMusicaAnjo();
       document.documentElement.classList.remove('gx-mira'); pagina.classList.remove('gx-treme');
       EF.desfazerTudo(false); Som.fechar(); raiz.innerHTML = ''; raiz.classList.remove('gx-palco');
     },

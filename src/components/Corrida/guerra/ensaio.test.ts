@@ -70,4 +70,25 @@ describe('o ensaio da guerra (a mesma conta do banco)', () => {
     g.atacar('ana', 5);
     for (let k = 0; k < 30; k++) { andar(1); const e = g.atacar('ana', 3); expect(e.versao!).toBeGreaterThanOrEqual(v); v = e.versao!; }
   });
+
+  it('o teste do chefe: solta direto, o anjo cura, tirar vida, finalizar e fugir', () => {
+    const { g, andar } = ensaio();
+    let e = g.chefeAgora(10, 3);
+    expect(e.vida_max).toBe(vidaDoChefe(10));
+    expect(Date.parse(e.solta_em!) - Date.parse(e.agora!)).toBe(3000);
+    andar(4); e = g.arrancar(0.3);
+    expect(e.vida).toBeCloseTo(0.7 * e.vida_max!, 0);
+    e = g.curarAgora();
+    expect(e.curas).toBe(1);
+    expect(e.vida).toBeCloseTo(Math.min(e.vida_max!, 0.7 * e.vida_max! + RITMO.curaMax * e.vida_max!), 0);
+    e = g.curarAgora();   // de vida cheia o anjo vem e não devolve nada
+    expect(e.vida!).toBeLessThanOrEqual(e.vida_max!);
+    e = g.fugir();
+    expect(Date.parse(e.expira_em!)).toBeLessThanOrEqual(Date.parse(e.agora!));
+    const { g: g2, andar: andar2 } = ensaio();
+    g2.chefeAgora(1, 0); andar2(1);
+    e = g2.finalizar();
+    expect(e.caiu_em).not.toBeNull(); expect(e.vida).toBe(0);
+    expect(g2.curarAgora().curas).toBe(0);   // caído não cura
+  });
 });

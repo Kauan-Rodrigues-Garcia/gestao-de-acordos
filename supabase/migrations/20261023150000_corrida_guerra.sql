@@ -8,7 +8,7 @@
 --      «ATACAR A CORRIDA!». Cada tela junta os cliques e chama
 --      `fn_corrida_guerra_atacar` no máximo 1 vez a cada ~2,5 s (aqui: 1,5 s por
 --      pessoa). A PRESSÃO é a soma dos cliques de todos; a guerra também anda
---      sozinha (acaba em 60 s sem clique nenhum) e não acaba antes de 20 s. Cada
+--      sozinha (acaba em 75 s sem clique nenhum) e não acaba antes de 30 s. Cada
 --      tela derruba os cavalos pela pressão, numa ordem que sai da semente da
 --      corrida. O vencedor da gravação é sempre o último: o resultado não muda.
 --   2. O filme (21 s, a partir de `sobrou_em`): luto, raiva, transformação.
@@ -162,7 +162,7 @@ BEGIN
   IF v_g.comecou_em IS NOT NULL AND v_g.sobrou_em IS NULL AND v_g.alvo > 0 THEN
     SELECT COALESCE(sum(cliques), 0) INTO v_g.pressao FROM public.corrida_guerra_golpes WHERE corrida_id = p_corrida;
     v_s  := extract(epoch FROM v_agora - v_g.comecou_em);
-    v_ef := LEAST(v_g.alvo, v_g.pressao + v_g.alvo * v_s / 60, v_g.alvo * v_s / 20);
+    v_ef := LEAST(v_g.alvo, v_g.pressao + v_g.alvo * v_s / 75, v_g.alvo * v_s / 30);
     IF v_ef >= v_g.alvo THEN
       SELECT LEAST(60, GREATEST(1, count(*))) INTO v_g.pessoas FROM public.corrida_guerra_golpes WHERE corrida_id = p_corrida AND cliques > 0;
       v_g.sobrou_em := v_agora;

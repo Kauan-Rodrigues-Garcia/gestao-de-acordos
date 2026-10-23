@@ -29,6 +29,8 @@
   td{padding:9px 12px;border-bottom:1px solid #eef1f6;font-size:13px}
   /* o pouco do Tailwind que a janela da corrida usa (o laboratório não carrega o CSS do app) */
   .fixed{position:fixed}.bottom-0{bottom:0}.right-0{right:0}.inset-0{inset:0}.h-full{height:100%}.w-full{width:100%}.border-0{border:0}.bg-transparent{background:transparent}.z-[85]{z-index:85}
+  #painel-chefe{background:#fff;border-radius:12px;padding:12px 16px;box-shadow:0 1px 3px #0001;font-size:13px}
+  #painel-chefe button{margin:2px;padding:5px 10px;border:1px solid #d9deea;border-radius:6px;background:#fff;cursor:pointer}
   #abrir{align-self:flex-start;padding:10px 16px;border-radius:8px;border:0;background:#c4161c;color:#fff;font-weight:700;cursor:pointer}
 </style>
 </head>
@@ -59,12 +61,19 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import TesteCavalos from '/src/components/Corrida/cavalos/TesteCavalos.tsx';
+import { TesteDoChefe } from '/src/components/Corrida/guerra/TesteDoChefe.tsx';
+import { ChefeDeTeste } from '/src/components/Corrida/guerra/ChefeDeTeste.tsx';
 
 const nomes = ['Maria A. Souza', 'José Carlos Lima', 'Ana Beatriz Rocha', 'Paulo R. Mendes', 'Cláudia Ferreira', 'Roberto Alves', 'Luciana M. Prado', 'Fernando Dias', 'Patrícia Nunes', 'Marcelo T. Gomes', 'Juliana Castro', 'Ricardo Pires'];
 document.getElementById('linhas').innerHTML = nomes.map((n, i) => `<tr data-alvo-feitico="linha"><td>${n}</td><td>R$ ${(180 + i * 37.5).toFixed(2).replace('.', ',')}</td><td>${10 + i}/10</td><td>pendente</td></tr>`).join('');
 const raiz = createRoot(document.getElementById('app-react'));
 let aberto = false;
-const desenhar = () => raiz.render(aberto ? React.createElement(TesteCavalos, { onFechar: () => { aberto = false; desenhar(); } }) : null);
+// o painel do «Testar o Cavalo da Guerra» (o mesmo do card da Corrida) e o chefe dele, como no Layout
+const desenhar = () => raiz.render(React.createElement(React.Fragment, null,
+  React.createElement('div', { id: 'painel-chefe' }, React.createElement(TesteDoChefe)),
+  React.createElement(ChefeDeTeste),
+  aberto ? React.createElement(TesteCavalos, { onFechar: () => { aberto = false; desenhar(); } }) : null));
+desenhar();
 document.getElementById('abrir').addEventListener('click', () => { aberto = true; desenhar(); });
 if (new URLSearchParams(location.search).has('abrir')) { aberto = true; desenhar(); }
 </script>

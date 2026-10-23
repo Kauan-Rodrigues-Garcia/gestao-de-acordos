@@ -38,6 +38,7 @@ import { lerPessoasDoCadastro, type PessoaDoCadastro } from '@/components/Corrid
 import { abrirCorrida, abrirEnquete, ajustarCorrida, criarCorrida, definirTema, descartarGravacao, divulgar, encerrarCorrida, faltaMigrationCavalos, faltaMigrationEnquete, fecharEnquete, gravarCorrida, gravarCorridaCavalos, iniciarCorrida, lerPainel, preencherEscolhas, tirarDivulgacao, type CorredorSemPerfil, type Painel } from '@/components/Corrida/admin/acoes';
 import { CorredoresSemPerfil } from '@/components/Corrida/admin/CorredoresSemPerfil';
 import { InterruptorGuerra } from '@/components/Corrida/guerra/InterruptorGuerra';
+import { TesteDoChefe } from '@/components/Corrida/guerra/TesteDoChefe';
 import { agoraBanco, categoriaDe, mensagemDoErro, segundos, type Categoria, type EnqueteJson } from '@/components/Corrida/banco';
 import { destravarAudio, NOME_CORRIDA } from '@/components/Corrida/nome';
 import { TEMAS, type TemaLobby } from '@/components/Corrida/lobbies/cena';
@@ -299,6 +300,8 @@ export default function CorridaConfig() {
 
         {/* A Guerra na Corrida (23/10/2026): só na de cavalos, e só antes da largada. */}
         {corrida && emAndamento && cavalos && !corrida.inicia_em && <InterruptorGuerra corridaId={corrida.id} travado={montando} />}
+        {/* O chefe da guerra sozinho, sem corrida e sem banco (como o teste da chefona da Bruxa). */}
+        {cavalos && <TesteDoChefe />}
 
         {gravando && (
           <div className="space-y-1.5 rounded-lg border p-3">

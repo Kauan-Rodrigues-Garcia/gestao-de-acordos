@@ -29,6 +29,12 @@ export interface PropsCenaGuerra {
   volume: number;
   /** Gente de mentira atirando junto (só o ensaio). */
   sims?: number;
+  /** Falso para o super_admin: o clique dele no Gestão continua sendo clique (só vira tiro em cima de um alvo). */
+  escudo?: boolean;
+  /** O placar acabou (o teste do chefe desmonta aqui). */
+  aoFim?: (venceu: boolean) => void;
+  /** O palco montado (o teste do chefe usa para forçar ataques e ligar os robôs). */
+  aoMontar?: (palco: PalcoGuerra | null) => void;
 }
 
 export default function CenaGuerra(p: PropsCenaGuerra): null {
@@ -55,8 +61,11 @@ export default function CenaGuerra(p: PropsCenaGuerra): null {
       volume: q.volume,
       leve: modoLeveLigado(),
       sims: q.sims ?? 0,
+      escudo: q.escudo,
+      aoFim: venceu => ultimas.current.aoFim?.(venceu),
     });
-    return () => { palco.current?.destruir(); palco.current = null; raiz.remove(); };
+    q.aoMontar?.(palco.current);
+    return () => { ultimas.current.aoMontar?.(null); palco.current?.destruir(); palco.current = null; raiz.remove(); };
   }, []);
 
   useEffect(() => { palco.current?.atualizar(p.estado); }, [p.estado]);

@@ -69,6 +69,43 @@ export class EnsaioGuerra {
     }
     return this.estado();
   }
+  // ── Os botões do teste do chefe (o «Testar só na minha tela», como o da Bruxa) ──
+  /** Pula a corrida inteira: o chefe solto daqui a `esperaS`, com a vida de `pessoas` atacando. */
+  chefeAgora(pessoas: number, esperaS = 3): EstadoGuerra {
+    const agora = this.agora();
+    this.sobrou = agora - (GUERRA.filmeS - esperaS) * 1000; this.comecou = this.sobrou - GUERRA.minS * 1000;
+    this.alvo = alvoDaGuerra(this.cavalos, this.presentes);
+    this.pessoas = Math.min(GUERRA.maxPessoas, Math.max(1, Math.floor(pessoas)));
+    this.vidaMax = vidaDoChefe(this.pessoas); this.vida = this.vidaMax;
+    this.curaTotal = 0; this.curas = 0; this.curaEm = null; this.caiu = null; this.golpes.clear();
+    this.versao++;
+    return this.recalcular();
+  }
+  /** Um anjo agora: a cura cheia (`RITMO.curaMax`), sem esperar o diretor de ritmo. */
+  curarAgora(): EstadoGuerra {
+    if (!this.vidaMax || this.caiu != null) return this.estado();
+    const cura = Math.max(0, Math.min(RITMO.curaMax * this.vidaMax, this.vidaMax - this.vida));   // com a vida cheia, o anjo vem e não devolve nada
+    this.curaTotal += cura; this.curas++; this.curaEm = this.agora(); this.curaVida = Math.round(cura);
+    this.vida = Math.min(this.vidaMax, this.vida + cura); this.versao++;
+    return this.estado();
+  }
+  /** Tira uma fração da vida (sem o ritmo e sem o piso: é teste). */
+  arrancar(fracao: number): EstadoGuerra {
+    if (!this.vidaMax || this.caiu != null) return this.estado();
+    const g = this.de('Teste'); g.dano += fracao * this.vidaMax; g.efetivo += fracao * this.vidaMax;
+    this.vida = Math.max(0, this.vida - fracao * this.vidaMax);
+    if (this.vida <= 0) this.caiu = this.agora();
+    this.versao++;
+    return this.estado();
+  }
+  /** Finaliza: ele cai agora. */
+  finalizar(): EstadoGuerra { if (this.vidaMax && this.caiu == null) { this.vida = 0; this.caiu = this.agora(); this.versao++; } return this.estado(); }
+  /** O prazo acaba agora: ele foge. */
+  fugir(): EstadoGuerra {
+    if (!this.vidaMax || this.caiu != null) return this.estado();
+    this.sobrou = this.agora() - (GUERRA.filmeS + GUERRA.prazoS) * 1000; this.versao++;
+    return this.estado();
+  }
   estado(): EstadoGuerra {
     const iso = (ms: number | null) => (ms == null ? null : new Date(ms).toISOString());
     const solta = this.soltaEm();

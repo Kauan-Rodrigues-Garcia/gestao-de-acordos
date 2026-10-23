@@ -28,10 +28,23 @@ export interface OpcoesPalcoGuerra {
   sims?: number;
   /** O que não vira tiro (padrão: `[data-chefona-livre]`, o menu). */
   livre?: string;
+  /**
+   * O escudo (padrão: ligado): todo clique na página é tiro. Desligado (o super_admin, como na
+   * Bruxa), só vira tiro o clique em cima de um alvo; o resto chega no Gestão.
+   */
+  escudo?: boolean;
+  /** A música do anjo descendo (padrão: `/sons/guerra/anjo-celestial.mp3`). */
+  musicaAnjo?: string;
 }
+
+export type AtaqueDoChefe = 'cabecada' | 'investida' | 'sopro' | 'invocar' | 'cavaleiros';
 
 export interface PalcoGuerra {
   atualizar(e: EstadoGuerra): void;
+  /** O teste do chefe: um ataque agora. */
+  forcar(tipo: AtaqueDoChefe): void;
+  /** O teste do chefe: quantos robôs atiram junto. */
+  simular(n: number): void;
   destruir(): void;
 }
 

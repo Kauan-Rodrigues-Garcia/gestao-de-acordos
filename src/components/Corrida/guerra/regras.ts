@@ -32,9 +32,9 @@ export const GUERRA = {
   alvoPorMorteBase: 14,
   alvoPorMortePorPessoa: 7,
   maxPresentes: 40,
-  /** A guerra dura entre `minS` e `maxS` segundos, clique o quanto clicar. */
-  minS: 20,
-  maxS: 60,
+  /** A guerra dura entre `minS` e `maxS` segundos, clique o quanto clicar (com os cavalos correndo o tempo todo). */
+  minS: 30,
+  maxS: 75,
   /** Os cliques vão juntos: no máximo tantos por envio, um envio a cada tanto por pessoa. */
   maxCliquesPorEnvio: 40,
   envioMs: 2_500,

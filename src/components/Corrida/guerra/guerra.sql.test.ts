@@ -6,7 +6,7 @@
  *
  * O que importa provar: só o super_admin liga, só antes da largada e só na de
  * cavalos; só quem foi chamado ataca e atira; os tetos e os freios seguram; a
- * guerra acaba entre 20 e 60 s; a vida do chefe sai de quem atacou; o diretor
+ * guerra acaba entre minS e maxS (30 e 75 s); a vida do chefe sai de quem atacou; o diretor
  * de ritmo e o anjo são os mesmos de `regras.ts`; e o aviso vai para a sala.
  */
 import { PGlite } from '@electric-sql/pglite';
@@ -155,13 +155,13 @@ describe('20261023150000 — o ataque', () => {
     expect(r.rows).toEqual([{ usuario: ANA, cliques: GUERRA.maxCliquesPorEnvio }, { usuario: BRUNO, cliques: 7 }]);
   });
 
-  it('com clique de sobra, não acaba antes de 20 s; passado o alvo, sobra um e o chefe nasce', async () => {
+  it('com clique de sobra, não acaba antes de minS; passado o alvo, sobra um e o chefe nasce', async () => {
     const id = await emGuerra();
     await atacar(ANA, id, 0);
     await db.query('update public.corrida_guerra_golpes set cliques = 99999 where corrida_id = $1', [id]);
-    await recuar(id, 'comecou_em', 5); await forcar(id);
+    await recuar(id, 'comecou_em', GUERRA.minS - 5); await forcar(id);
     expect((await estado(ANA, id)).sobrou_em).toBeNull();
-    await recuar(id, 'comecou_em', 21); await forcar(id);
+    await recuar(id, 'comecou_em', GUERRA.minS + 1); await forcar(id);
     const g = await estado(ANA, id);
     expect(g.sobrou_em).not.toBeNull();
     expect(g.pessoas).toBe(1);
@@ -171,12 +171,12 @@ describe('20261023150000 — o ataque', () => {
     expect((await avisos()).some(a => a.event === 'guerra' && a.payload.guerra?.sobrou_em)).toBe(true);
   });
 
-  it('sem clique nenhum, acaba sozinha em 60 s', async () => {
+  it('sem clique nenhum, acaba sozinha em maxS', async () => {
     const id = await emGuerra();
     await atacar(ANA, id, 0);
-    await recuar(id, 'comecou_em', 50); await forcar(id);
+    await recuar(id, 'comecou_em', GUERRA.maxS - 10); await forcar(id);
     expect((await estado(ANA, id)).sobrou_em).toBeNull();
-    await recuar(id, 'comecou_em', 61); await forcar(id);
+    await recuar(id, 'comecou_em', GUERRA.maxS + 1); await forcar(id);
     expect((await estado(ANA, id)).sobrou_em).not.toBeNull();
   });
 });
@@ -184,7 +184,7 @@ describe('20261023150000 — o ataque', () => {
 async function comChefe(): Promise<number> {
   const id = await emGuerra();
   await atacar(ANA, id, 3); await atacar(BRUNO, id, 5);
-  await recuar(id, 'comecou_em', 61); await forcar(id);
+  await recuar(id, 'comecou_em', GUERRA.maxS + 1); await forcar(id);
   return id;
 }
 

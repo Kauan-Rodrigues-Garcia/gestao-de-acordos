@@ -60,7 +60,7 @@ export default function TesteCavalos({ onFechar }: { onFechar: () => void }) {
       {chefe && estado?.ligada && (
         <Suspense fallback={null}>
           <CenaGuerra estado={estado} agora={agoraMs} numero={chefe.numero} dono={chefe.dono} eu="Você"
-            janela={{ rect: chefe.rect, canvas: chefe.canvas }} aoGolpear={golpear} aoGolpearSim={golpearSim} volume={1} sims={SIMS} />
+            janela={{ rect: chefe.rect, canvas: chefe.canvas }} aoGolpear={golpear} aoGolpearSim={golpearSim} volume={1} sims={SIMS} escudo={false} />
         </Suspense>
       )}
     </>

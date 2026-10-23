@@ -40,8 +40,10 @@ interface Props { corridaId: number; onFechar: () => void; adm?: boolean }
 export default function PalcoCavalos({ corridaId, onFechar, adm = false }: Props) {
   const auth = useAuthOpcional();
   const eu = auth?.user?.id ?? null;
-  // O operador ouve o chefe baixinho, como a Bruxa (12%); quem organiza (assistindo pela Configuração), inteiro.
-  const volumeChefe = adm ? 1 : 0.12;
+  // Como na Bruxa: o super_admin ouve o chefe inteiro e fica sem escudo (o clique dele no Gestão continua
+  // sendo clique); o operador ouve a 12% e, na briga, todo clique é tiro.
+  const souSuperAdmin = auth?.perfil?.perfil === 'super_admin';
+  const volumeChefe = souSuperAdmin || adm ? 1 : 0.12;
   const { sala } = useCorridaMinha();
   const conexao = useRef<EnviarCavalos | null>(null);
   const [pronta, setPronta] = useState(false);
@@ -158,7 +160,7 @@ export default function PalcoCavalos({ corridaId, onFechar, adm = false }: Props
       {chefe && guerra?.ligada && (
         <Suspense fallback={null}>
           <CenaGuerra estado={guerra} agora={agoraMs} numero={chefe.numero} dono={chefe.dono} eu={eu}
-            janela={{ rect: chefe.rect, canvas: chefe.canvas }} aoGolpear={golpear} volume={volumeChefe} />
+            janela={{ rect: chefe.rect, canvas: chefe.canvas }} aoGolpear={golpear} volume={volumeChefe} escudo={!(souSuperAdmin || adm)} />
         </Suspense>
       )}
     </>

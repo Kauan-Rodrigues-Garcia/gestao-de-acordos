@@ -130,6 +130,12 @@ const EXCECOES: Record<string, Excecao> = {
     linhas: 1, familia: 'chave-mestra',
     motivo: 'o editor do menu lateral configura o que os outros cargos veem — quem edita o painel não pode ser configurável por ele.',
   },
+  'components/Corrida/cavalos/PalcoCavalos.tsx': {
+    linhas: 1, familia: 'chave-mestra',
+    motivo: 'o Cavalo da Guerra (Guerra na Corrida, 23/10/2026) faz com o super_admin o que a Bruxa do Pântano fazia: '
+      + 'ouve o chefe a 100% (operador a 12%) e fica sem escudo — o clique dele no Gestão continua sendo clique, só vira '
+      + 'tiro em cima de um alvo. Não libera tela nem dado: quem decide são as RPCs fn_corrida_guerra_*.',
+  },
   'components/Halloween/preferencia.ts': {
     linhas: 1, familia: 'chave-mestra',
     motivo: 'pré-estreia do tema de Halloween: até `HALLOWEEN_LIBERADO` ser ligado, só o super_admin vê os enfeites e a mensagem de outubro. Não libera tela nem dado — é decoração, e o cargo deixa de decidir quando o tema for aberto a todos.',

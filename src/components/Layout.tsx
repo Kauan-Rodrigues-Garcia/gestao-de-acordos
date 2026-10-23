@@ -56,6 +56,7 @@ import { OnboardingTour } from './OnboardingTour';
 import { DesafioMenu } from './DesafioMenu';
 import { BarraDesafioDoDia } from './DesafioDoDia/BarraDesafioDoDia';
 import { CorridaDaSorte } from './Corrida';
+import { ChefeDeTeste } from './Corrida/guerra/ChefeDeTeste';
 import { useDesafioEmCartaz } from '@/hooks/useDesafios';
 import { AvisoNotificacaoHeader } from './AvisoNotificacaoHeader';
 import { BotaoSomAmbiente } from './Halloween/SomAmbiente/BotaoSomAmbiente';
@@ -1058,6 +1059,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             palco aparecem por cima de tudo, só para quem foi chamado. Leve: o
             palco só desce quando a pessoa está numa corrida. Ver `Corrida/index.tsx`. */}
         <CorridaDaSorte />
+        {/* O «Testar o Cavalo da Guerra só na minha tela» do card da Corrida (só monta com o teste solto). */}
+        <ChefeDeTeste />
 
         {/* Expand toggle */}
         <button

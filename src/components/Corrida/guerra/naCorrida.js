@@ -51,8 +51,13 @@ const tom = (h, f) => '#' + hexRgb(h).map(v => clamp(Math.round(v * f), 0, 255).
 const curto = nome => { const p = String(nome || '').trim().split(/\s+/); return p.length > 1 ? `${p[0]} ${p[1][0]}.` : p[0] || 'alguém'; };
 const esc = s => String(s ?? '').replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
 
-/** Do chefe caído (ou fugido) até a corrida voltar: o placar da página (~9,5 s) e a cena da volta. */
-export const FIM_S = 13, VOLTA_S = 9.5;
+/**
+ * Do chefe caído (ou fugido) até a corrida voltar: o placar da página (~9,5 s) e a volta — ele parado
+ * um instante (`PARADO_S`) e depois indo devagar até a linha (`CAMINHA_S`), como no laboratório.
+ */
+export const VOLTA_S = 9.5, PARADO_S = 1.5, CAMINHA_S = 5, FIM_S = VOLTA_S + PARADO_S + CAMINHA_S;
+/** A cena da volta: a câmera deixa a linha de chegada neste x da tela, e ele começa neste. */
+const CHEGADA_NA_TELA = 352, VOLTA_NA_TELA = 150;
 /** Onde o cenário começa a mudar (fração da prova do líder): um pouco antes do botão. */
 const TRANSICAO_FRACAO = 0.47;
 /** O quanto o cenário já mudou quando o botão aparece. */
@@ -214,7 +219,7 @@ export function criarGuerraNaCorrida(o) {
       cav: [], ordem: null, mortas: 0, proxMorte: 0, sob: null, corpos: [], caidos: [], pePano: null,
       parts: [], expl: [], tracos: [], crateras: [], fogos: [], soldados: [], corredores: [], avioes: [], bombas: [], tanque: null, cinzas: [], claroes: [], rachas: [], rachaJ: null, etiquetas: [],
       buffer: 0, voando: 0, cliques: [], envio: 0, comecouLocal: null, I: 0, cps: 0, evAcc: 0, pressaoAnt: null, cpsFora: 0,
-      camAgora: 0, shake: 0, flash: 0, preto: 0, lento: 0, ultLento: -9, feitos: new Set(), B: null, camFixa: null, camVolta: 0,
+      camAgora: 0, camG: null, shake: 0, flash: 0, preto: 0, lento: 0, ultLento: -9, feitos: new Set(), B: null, camFixa: null, camVolta: 0,
       fimMs: null, retomada: null, avisouChefe: false, avisouVolta: false, abortou: false, xSob: null,
     };
     leg.classList.remove('on'); caixa.classList.remove('on');
@@ -259,14 +264,7 @@ export function criarGuerraNaCorrida(o) {
     return null;
   }
   /** O segundo da gravação em que o sobrevivente está onde a guerra o deixou. */
-  function retomada() {
-    if (S.retomada != null) return S.retomada;
-    const v = S.rec.vencedor, alvo = S.xSob ?? o.xRec(v, S.tG);
-    let a = S.tG, b = S.rec.tVenc;
-    if (o.xRec(v, a) >= alvo) return (S.retomada = a);
-    for (let k = 0; k < 30; k++) { const m = (a + b) / 2; if (o.xRec(v, m) < alvo) a = m; else b = m; }
-    return (S.retomada = b);
-  }
+  function retomada() { return S.rec.tVenc; }
 
   /* ---------- os cavalos na guerra (x é o da anca, como no laboratório: o focinho é x + 43) ---------- */
   function iniciarCavalos() {
@@ -290,7 +288,8 @@ export function criarGuerraNaCorrida(o) {
   function cam(t, daPagina) {
     let c = null;
     if (S?.cav.length) {
-      if (S.fase === 'filme' || S.fase === 'chefe' || S.fase === 'final') c = S.camFixa;
+      if (S.fase === 'ataque' || (S.fase === 'filme' && !S.feitos.has('luto'))) c = S.camG;
+      else if (S.fase === 'filme' || S.fase === 'chefe' || S.fase === 'final') c = S.camFixa;
       else if (S.fase === 'depois') { const alvo = clamp(o.xRec(S.rec.vencedor, t) - 248, 0, L - 300), u = suave(S.camVolta); c = lerp(S.camFixa ?? alvo, alvo, u); }
     }
     if (c == null) c = daPagina(t);
@@ -446,6 +445,13 @@ export function criarGuerraNaCorrida(o) {
     const s = S.sob; s.x = base + 300; s.y = 184; s.dir = -1; s.v = 0; s.pose = 'a'; s.morte = null; s.manchas = true; s.vivo = true;
     for (const h of S.cav) if (h !== s) h.vivo = false;
   }
+  /** A volta é perto da linha de chegada: a câmera vai para lá e leva junto o que estava no chão. */
+  function irParaAChegada() {
+    const nova = L - CHEGADA_NA_TELA, d = nova - (S.camFixa ?? nova);
+    for (const lista of [S.corpos, S.crateras, S.fogos]) for (const k of lista) k.x += d;
+    if (S.pePano) S.pePano.x += d;
+    S.camFixa = nova;
+  }
   function criarRachas() {
     const s = S.sob; S.rachas = [];
     for (let k = 0; k < 7; k++) {
@@ -465,6 +471,7 @@ export function criarGuerraNaCorrida(o) {
     if (!preparar()) return;
     rel += dt; S.faseT += dt;
     if (S.on === false) return;
+    if (ligada()) uma('ampliar', () => o.ampliar?.());
     if (S.on == null) {
       if (bruto < S.tT) return;
       // desligada de verdade só com o estado na mão (ou depois de esperar por ele)
@@ -508,12 +515,13 @@ export function criarGuerraNaCorrida(o) {
       const sobrou = ms(E?.sobrou_em);
       if (sobrou != null && agora >= sobrou) {
         for (const h of S.cav) if (h.i !== S.rec.vencedor && h.vivo && !h.condenado) matar(h, 'tiro');
-        S.sob = S.cav[S.rec.vencedor]; S.camFixa = S.camAgora;
+        S.sob = S.cav[S.rec.vencedor]; S.camFixa = S.camG ?? S.camAgora;
         mudar('filme'); o.feed(`☠ Só o <b>#${S.sob.cav.num}</b> ficou de pé.`, S.sob.cav);
       } else if ((agora - comecou()) / 1000 > GUERRA.maxS + 12 && !S.abortou) {
         // o banco sumiu: a corrida não fica parada para sempre
         S.abortou = true; for (const h of S.cav) if (h.i !== S.rec.vencedor && h.vivo) virarCorpo(h, false, true);
-        S.sob = S.cav[S.rec.vencedor]; S.camFixa = S.camAgora; S.fimMs = agora + 2500; S.fase = 'final'; S.faseT = 0; caixa.classList.remove('on'); som().musica(null);
+        S.sob = S.cav[S.rec.vencedor]; S.camFixa = S.camG ?? S.camAgora; S.fimMs = agora + (PARADO_S + CAMINHA_S) * 1000; S.fase = 'final'; S.faseT = 0; caixa.classList.remove('on'); som().musica(null);
+        irParaAChegada(); S.sob.x = S.camFixa + VOLTA_NA_TELA; S.sob.y = 192; S.sob.dir = 1; S.sob.pose = 'p';
         legenda('Cessar-fogo.');
       }
     }
@@ -523,22 +531,35 @@ export function criarGuerraNaCorrida(o) {
       if (fim != null && agora >= fim + VOLTA_S * 1000) {
         S.fimMs = fim + FIM_S * 1000; S.fase = 'final'; S.faseT = 0;
         uma('volta', () => o.enviar({ tipo: 'guerra-volta' }));
-        const s = S.sob; s.x = S.camFixa + 150; s.y = 192; s.dir = 1; s.pose = 'p'; s.verm = 0; s.tremor = 0; s.manchas = true; s.vivo = true; S.w = 0.75; S.rachaJ = null; S.rachas = []; S.B = null;
+        irParaAChegada();
+        const s = S.sob; s.x = S.camFixa + VOLTA_NA_TELA; s.y = 192; s.dir = 1; s.pose = 'p'; s.verm = 0; s.tremor = 0; s.manchas = true; s.vivo = true; S.w = 0.75; S.rachaJ = null; S.rachas = []; S.B = null;
         legenda(E?.caiu_em ? 'A maldição se quebrou.' : 'Ele voltou a ser cavalo… por enquanto.');
         som().musica(null);
       }
     }
     if (S.fase === 'final') {
       S.preto = Math.max(0, 1 - S.faseT / 0.6);
+      // parado um instante, e depois devagar até a linha: chega nela no segundo exato da volta (igual em toda tela)
+      const s = S.sob, u = clamp((S.faseT - PARADO_S) / CAMINHA_S, 0, 1), x0 = S.camFixa + VOLTA_NA_TELA, x1 = L - 43;
+      if (u > 0) { const x = lerp(x0, x1, u); s.fg += Math.max(0, x - s.x) / 14; s.x = x; s.pose = u < 1 ? 'a' : 'p'; uma('cruza', () => legenda(`O #${s.cav.num} vai até a linha. Sozinho.`)); }
+      S.w = Math.max(0.3, S.w - dt * 0.08);
       if (S.fimMs != null && agora >= S.fimMs) {
-        S.xSob = S.sob.x + 43; S.retomada = null; retomada();
         S.fase = 'depois'; S.faseT = 0; S.camVolta = 0; legenda('');
         o.musicaCorrida('corrida'); o.faixa(`#${S.sob.cav.num} VOLTA A CORRER!`);
       }
     }
     if (S.fase === 'depois') { S.camVolta = Math.min(1, S.camVolta + dt); S.w = Math.max(0, S.w - dt * 0.25); if (S.w <= 0 && S.faseT > 6) Som?.musica(null); }
     andar(dt);
+    seguirComCamera(dt);
     efeitos(dt);
+  }
+  /** Na guerra a câmera vai com o pelotão (sem o fim da pista); no cessar-fogo, com quem sobrou. */
+  function seguirComCamera(dt) {
+    if (!(S.fase === 'ataque' || (S.fase === 'filme' && !S.feitos.has('luto')))) return;
+    const vv = S.cav.filter(h => h.vivo && !h.morte);
+    if (!vv.length) return;
+    const alvo = S.fase === 'ataque' ? vv.reduce((s, h) => s + h.x, 0) / vv.length - 180 : (S.sob ?? vv[0]).x - 220;
+    S.camG = S.camG == null ? S.camAgora : S.camG + (alvo - S.camG) * Math.min(1, dt * 2.5);
   }
   /**
    * A guerra começa nesta tela. Quem chega com ela andando entra no ponto dela: no
@@ -560,7 +581,7 @@ export function criarGuerraNaCorrida(o) {
       // os que ainda estavam caindo terminam; quem sobrou para
       for (const h of S.cav) if (h !== s && h.vivo && !h.morte && rel - h.condT > 1.2) morrer(h, 'rajada');
     }
-    if (sf >= 3.1) uma('luto', () => { for (const h of S.cav) if (h !== s && h.vivo) virarCorpo(h, false, true); montarLuto(); som().musica('luto'); legenda(`Só o #${s.cav.num} ficou de pé.`); });
+    if (sf >= 3.1) uma('luto', () => { for (const h of S.cav) if (h !== s && h.vivo) virarCorpo(h, false, true); S.camFixa = S.camG ?? S.camAgora; montarLuto(); som().musica('luto'); legenda(`Só o #${s.cav.num} ficou de pé.`); });
     if (parte === 'luto') {
       const t = sf - 3.1, base = Math.round(S.camFixa); S.preto = Math.max(0, 1 - t / 0.8);
       if (t < 3) { s.pose = 'a'; const alvo = base + 190; if (s.x > alvo) { s.x -= 34 * dt; s.fg += dt * 30 / 14; } }
@@ -603,10 +624,11 @@ export function criarGuerraNaCorrida(o) {
       if (h.morte) { animarMorte(h, dt); continue; }
       if (F === 'filme' && S.feitos.has('luto')) { if (h.pose === 'a') h.fg += 0; continue; }
       let alvo;
-      if (F === 'ataque') alvo = 9 + 14 * Math.sin(rel * 1.3 + h.ritmo);
-      else alvo = h === S.sob ? Math.max(0, 30 - S.faseT * 20) : 0;
+      // Na guerra eles continuam correndo (o mapa não acaba: a linha de chegada some até a volta).
+      if (F === 'ataque') alvo = 55 + 18 * Math.sin(rel * 1.3 + h.ritmo);
+      else alvo = h === S.sob ? Math.max(0, 55 - S.faseT * 30) : 0;
       h.v += clamp(alvo - h.v, -90 * dt, 90 * dt);
-      h.x = Math.min(L - 380, h.x + h.v * dt);
+      h.x += h.v * dt;
       if (F === 'ataque') { if (Math.random() < dt * 0.5) h.ly = sorteio(S.lanes) + entre(-2, 2); h.y += clamp(h.ly - h.y, -22 * dt, 22 * dt); }
       if (h.pulo > 0) h.pulo = Math.max(0, h.pulo - dt * 4);
       if (Math.abs(h.v) > 22) { h.pose = 'g'; h.fg += dt * Math.abs(h.v) / 22; } else if (Math.abs(h.v) > 3) { h.pose = 'a'; h.fg += dt * Math.abs(h.v) / 14; } else h.pose = 'p';
@@ -873,6 +895,8 @@ export function criarGuerraNaCorrida(o) {
     /** A janela está escondida (o chefe está na página): a página não precisa desenhar. */
     escondida: () => !!S && S.fase === 'chefe',
     morto: i => !!S?.cav[i] && S.on === true && !S.cav[i].vivo,
+    /** A pista não tem fim na guerra: sem a linha de chegada e sem as barreiras (eles correm por cima). */
+    semChegada: () => !!S && S.on === true && (S.fase === 'ataque' || S.fase === 'filme' || S.fase === 'chefe'),
     /** A gravação está parada pela guerra (a página não narra nem derruba vara). */
     pausada: () => !!S && S.on === true && ['ataque', 'filme', 'chefe', 'final'].includes(S.fase),
     ganchos: { fundo, cavalo, frente, depois },
