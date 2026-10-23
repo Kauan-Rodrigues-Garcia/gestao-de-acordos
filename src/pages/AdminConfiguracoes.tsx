@@ -30,6 +30,7 @@ import AdminDocumentacoes from '@/pages/AdminDocumentacoes';
 import AdminCargos from '@/components/admin/AdminCargos';
 import ImportarAcordosCard from '@/components/admin/ImportarAcordosCard';
 import RankingQuitacaoConfig from '@/components/admin/RankingQuitacaoConfig';
+import JumpscareConfig from '@/components/admin/JumpscareConfig';
 
 const MIGRATION_SQL = `ALTER TABLE public.acordos
   ADD COLUMN IF NOT EXISTS instituicao TEXT;
@@ -300,6 +301,10 @@ export default function AdminConfiguracoes() {
           {/* ── Corrida da Sorte: o sorteio em forma de corrida (20/10/2026). Só
               super_admin — as funções `fn_corrida_*` conferem de novo no banco. */}
           {ehSuperAdmin && <CorridaConfig />}
+
+          {/* ── Jumpscare: imagem em tela cheia para todos num horário (23/10/2026).
+              Só super_admin — as funções `fn_jumpscare_*` conferem de novo no banco. */}
+          {ehSuperAdmin && <JumpscareConfig />}
 
           {ehSuperAdmin && <LiberacaoChat />}
 
