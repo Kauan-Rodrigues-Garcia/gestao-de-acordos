@@ -137,6 +137,9 @@ export const RITMO = {
   curaIntervaloS: 18,
   curaMax: 0.3,
   curaAteS: 106,
+  /** O anjo garantido: toda luta tem pelo menos um. Se até aqui nenhum desceu, desce um que devolve pelo menos isto. */
+  anjoGarantidoS: 35,
+  anjoGarantido: 0.08,
 } as const;
 
 export function alvoDaVida(t: number): number {
@@ -155,6 +158,15 @@ export function curaDoRitmo(t: number, fracao: number, desdeAUltimaS: number): n
   const aFrente = alvoDaVida(t) - fracao;
   if (aFrente < RITMO.curaAFrente) return 0;
   return Math.min(RITMO.curaMax, aFrente);
+}
+
+/**
+ * O anjo garantido (fração da vida máxima), ou 0: sem nenhum anjo até `anjoGarantidoS`, desce
+ * um — o que o ritmo daria, e pelo menos `anjoGarantido` (nunca passando da vida cheia).
+ */
+export function curaGarantida(t: number, fracao: number, curas: number): number {
+  if (curas > 0 || t < RITMO.anjoGarantidoS || t >= RITMO.curaAteS) return 0;
+  return Math.max(0, Math.min(1 - fracao, Math.max(RITMO.anjoGarantido, Math.min(RITMO.curaMax, alvoDaVida(t) - fracao))));
 }
 
 /** Um lote de tiros, como a tela manda. */

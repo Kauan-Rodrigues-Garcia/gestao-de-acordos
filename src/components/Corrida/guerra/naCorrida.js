@@ -914,6 +914,8 @@ export function criarGuerraNaCorrida(o) {
     /** Já sabe se esta corrida tem guerra (o sistema mandou o estado, ou passou o tempo de esperar). */
     sabe: () => E != null || performance.now() - desde > 4000,
     ligada,
+    /** Esta corrida teve guerra (sobrou um): o fim é só o vencedor, escuro, sem replay e sem o Rei do Gado. */
+    houve: () => !!E?.ligada && !!E?.sobrou_em,
     tempo, passo, xAt, cam, tremor,
     /** A janela está escondida (o chefe está na página): a página não precisa desenhar. */
     escondida: () => !!S && S.fase === 'chefe',

@@ -6,7 +6,7 @@
  *
  * O relógio é injetado (`agora`, em ms): o teste anda o tempo que quiser.
  */
-import { alvoDaGuerra, curaDoRitmo, danoBruto, GUERRA, pressaoEfetiva, RITMO, ritmoDaLuta, vidaDoChefe, type LoteDeGolpes } from './regras';
+import { alvoDaGuerra, curaDoRitmo, curaGarantida, danoBruto, GUERRA, pressaoEfetiva, RITMO, ritmoDaLuta, vidaDoChefe, type LoteDeGolpes } from './regras';
 import type { EstadoGuerra } from './tipos';
 
 interface Golpes { cliques: number; dano: number; efetivo: number }
@@ -62,7 +62,7 @@ export class EnsaioGuerra {
       let vida = this.vidaMax + this.curaTotal - soma;
       if (t < RITMO.minS && vida < RITMO.piso * this.vidaMax) { this.curaTotal += RITMO.piso * this.vidaMax - vida; vida = RITMO.piso * this.vidaMax; }
       let fracao = Math.max(0, vida) / this.vidaMax;
-      const cura = curaDoRitmo(t, fracao, (agora - (this.curaEm ?? solta)) / 1000);
+      const cura = curaDoRitmo(t, fracao, (agora - (this.curaEm ?? solta)) / 1000) || curaGarantida(t, fracao, this.curas);
       if (cura > 0 && vida > 0) { this.curaTotal += cura * this.vidaMax; this.curas++; this.curaEm = agora; this.curaVida = Math.round(cura * this.vidaMax); vida += cura * this.vidaMax; fracao = vida / this.vidaMax; }
       if (vida <= 0) { vida = 0; this.caiu = agora; }
       this.vida = Math.round(vida * 10) / 10; this.ritmo = ritmoDaLuta(t, fracao); this.versao++;

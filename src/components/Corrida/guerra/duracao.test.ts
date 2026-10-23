@@ -60,10 +60,13 @@ describe('a duração não depende de quantos atacam', () => {
     }
     expect(Math.max(...lutas) - Math.min(...lutas)).toBeLessThanOrEqual(11);
   });
-  it('o anjo só desce para quem está batendo rápido demais, e não vira enxurrada', () => {
-    for (const c of CASOS) expect(c.anjos, `${c.p} pessoas, ${c.dps}/s`).toBeLessThanOrEqual(Math.ceil(RITMO.curaAteS / RITMO.curaIntervaloS));
-    // os fortes ganham anjo; quem quase não clica, nunca
-    expect(CASOS.filter(c => c.dps === 25).every(c => c.anjos >= 1)).toBe(true);
-    expect(CASOS.filter(c => c.dps === 3).every(c => c.anjos === 0)).toBe(true);
+  it('toda luta tem pelo menos um anjo, e ele não vira enxurrada', () => {
+    for (const c of CASOS) {
+      expect(c.anjos, `${c.p} pessoas, ${c.dps}/s`).toBeGreaterThanOrEqual(1);
+      expect(c.anjos, `${c.p} pessoas, ${c.dps}/s`).toBeLessThanOrEqual(Math.ceil(RITMO.curaAteS / RITMO.curaIntervaloS));
+    }
+    // quem bate rápido demais ganha mais de um; quem quase não clica, só o garantido
+    expect(CASOS.filter(c => c.dps === 25).some(c => c.anjos >= 2)).toBe(true);
+    expect(CASOS.filter(c => c.dps === 3).every(c => c.anjos === 1)).toBe(true);
   });
 });

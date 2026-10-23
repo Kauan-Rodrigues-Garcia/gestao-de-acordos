@@ -13,7 +13,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { alvoDaGuerra, curaDoRitmo, GUERRA, RITMO, ritmoDaLuta, vidaDoChefe } from './regras';
+import { alvoDaGuerra, alvoDaVida, curaDoRitmo, curaGarantida, GUERRA, RITMO, ritmoDaLuta, vidaDoChefe } from './regras';
 
 const ADMIN = '00000000-0000-4000-8000-0000000000a1';
 const ANA   = '00000000-0000-4000-8000-0000000000c1';
@@ -245,6 +245,22 @@ describe('20261023150000 — o chefe', () => {
     // e não come outro antes do intervalo
     await forcar(id);
     expect((await estado(ANA, id)).curas).toBe(1);
+  });
+
+  it('o anjo garantido: sem nenhum até anjoGarantidoS, desce um mesmo com a vida na linha', async () => {
+    const id = await comChefe(); await recuar(id, 'solta_em', RITMO.anjoGarantidoS - 5);
+    const vmax = vidaDoChefe(2), t = RITMO.anjoGarantidoS + 1, f = alvoDaVida(t);
+    await db.query('update public.corrida_guerra_golpes set efetivo = $3 where corrida_id = $1 and usuario = $2', [id, ANA, (1 - alvoDaVida(RITMO.anjoGarantidoS - 5)) * vmax]);
+    await forcar(id);
+    expect((await estado(ANA, id)).curas).toBe(0);   // antes da hora, na linha: nenhum
+    await recuar(id, 'solta_em', t);
+    await db.query('update public.corrida_guerra_golpes set efetivo = $3 where corrida_id = $1 and usuario = $2', [id, ANA, (1 - f) * vmax]);
+    await forcar(id);
+    const g = await estado(ANA, id);
+    expect(curaDoRitmo(t, f, 99)).toBe(0);
+    expect(g.curas).toBe(1);
+    expect(Number(g.cura_vida)).toBeCloseTo(curaGarantida(t, f, 0) * vmax, 0);
+    expect(curaGarantida(t, f, 1)).toBe(0);   // só o primeiro
   });
 
   it('o ritmo e o anjo do banco são as contas de regras.ts', async () => {

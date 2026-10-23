@@ -190,6 +190,10 @@ BEGIN
     v_fracao := GREATEST(0, v_vida) / v_g.vida_max;
     -- o anjo
     v_cura := public.fn_corrida_guerra_cura(v_t, v_fracao, extract(epoch FROM v_agora - COALESCE(v_g.cura_em, v_g.solta_em)));
+    -- o anjo garantido: toda luta tem pelo menos um (a curaGarantida de regras.ts)
+    IF v_cura = 0 AND v_g.curas = 0 AND v_t >= 35 AND v_t < 106 THEN
+      v_cura := GREATEST(0, LEAST(1 - v_fracao, GREATEST(0.08, LEAST(0.3, LEAST(1, GREATEST(0, 1 - v_t / 86)) - v_fracao))));
+    END IF;
     IF v_cura > 0 AND v_vida > 0 THEN
       v_g.cura_total := v_g.cura_total + v_cura * v_g.vida_max;
       v_g.curas      := v_g.curas + 1;

@@ -402,6 +402,12 @@ body.modo-teste .esc{padding-top:100px}
 /* Sem rolagem: os raios (240vmax) ficam cortados no palco, e o conteúdo encolhe para caber (`encaixarFesta`). */
 #festa{position:absolute;inset:0;z-index:8;display:none;place-items:center;overflow:hidden;background:radial-gradient(circle at 50% 38%,color-mix(in srgb,var(--bg2) 88%,transparent),color-mix(in srgb,var(--bg1) 97%,transparent))}
 #festa.on{display:grid}
+/* A festa da corrida que virou guerra (23/10/2026): só quem sobrou, escuro, sem pétala, sem replay e sem o Rei do Gado. */
+#festa.guerra{background:radial-gradient(circle at 50% 38%,#2b0c0cf2,#070304fa)}
+#festa.guerra .raios,#festa.guerra .fe-dir .podio,#festa.guerra .fe-acred,#festa.guerra #feReplay{display:none}
+#festa.guerra .fe-tit{color:#ff5a3a;animation:none;text-shadow:0 4px 0 #000,0 0 22px #c4161c99}
+#festa.guerra .fe-premio{background:#c4161c;color:#fff}
+#festa.guerra .fe-dono .cara{box-shadow:0 0 0 3px #c4161c,0 5px 0 3px #0009}
 .raios{position:absolute;left:50%;top:38%;width:240vmax;height:240vmax;transform:translate(-50%,-50%);background:repeating-conic-gradient(from 0deg,#ffffff0d 0 7deg,#0000 7deg 18deg);animation:gira 40s linear infinite;pointer-events:none}
 @keyframes gira{to{transform:translate(-50%,-50%) rotate(360deg)}}
 /* Duas colunas, que a janela é larga: quem venceu à esquerda, o resto à direita.
@@ -3211,7 +3217,8 @@ function tirarFoto() {
 }
 function iniciarFesta() {
   fase = 'festa'; $('#palco').classList.remove('replay'); $('#foto').classList.remove('on'); $('#posicoes').innerHTML = ''; $('#meuLugar').innerHTML = '';
-  const rec = G.rec, cvs = G.cavalos, v = cvs[rec.vencedor], nome = c => c.dono.voce ? 'Você' : c.dono.nome;
+  const rec = G.rec, cvs = G.cavalos, v = cvs[rec.vencedor], nome = c => c.dono.voce ? 'Você' : c.dono.nome, guerra = !!GX?.houve();
+  $('#festa').classList.toggle('guerra', guerra);
   $('#feNum').textContent = `#${v.num} · ${v.pel.nome}`; $('#feNome').textContent = nome(v); $('#fePremio').textContent = `Prêmio: ${G.premio}`;
   // A foto de quem corre (a sua, se o cavalo é seu); sem foto, as iniciais.
   const caraDe = (c, tam) => cara({ nome: nome(c), foto: (c.dono.voce ? G.eu?.foto : c.dono.foto) ?? null }, tam);
@@ -3226,6 +3233,12 @@ function iniciarFesta() {
   else if (!G.voce.palpite) msg = 'Você assistiu sem palpite.';
   else msg = acertei ? `Na mosca! Seu palpite #${v.num} venceu — você estava com sorte 🍀` : `Seu palpite #${G.voce.palpite.num} chegou em ${lugar(G.voce.palpite)}º. Fica pra próxima!`;
   $('#feSeu').innerHTML = `${msg}<small>${quem.length} de ${total} palpite${total === 1 ? '' : 's'} ${quem.length <= 1 ? 'acertou' : 'acertaram'} o vencedor${ST.modo === 'assiste' ? ' · palpite de quem assiste é só pela sorte, sem prêmio' : ''}.</small>`;
+  // Na guerra os outros caíram: não tem colocação, só quem sobrou.
+  if (guerra) {
+    const seu = ST.modo === 'corre' ? (G.voce.cavalo === v ? 'Seu cavalo foi o último de pé! O prêmio é seu.' : `Seu cavalo #${G.voce.cavalo.num} caiu na guerra.`)
+      : ADM() ? 'Você assistiu como organizador.' : !G.voce.palpite ? 'Você assistiu sem palpite.' : acertei ? `Na mosca! Seu palpite #${v.num} sobreviveu 🍀` : `Seu palpite #${G.voce.palpite.num} caiu na guerra.`;
+    $('#feSeu').innerHTML = `${seu}<small>O #${v.num} foi o único que sobrou.</small>`;
+  }
   // Quem acreditou em quem venceu — como no fim da Corrida da Sorte (`Acreditaram`).
   const MAX = 10, resto = quem.length - MAX;
   $('#feAcred').innerHTML = `<div class="ac-tit">🪙 Acreditaram no #${v.num} · ${esc(v.dono.voce ? 'você' : v.dono.nome.split(' ')[0])}</div>`
@@ -3233,8 +3246,9 @@ function iniciarFesta() {
     + (quem.length ? `<ul>${quem.slice(0, MAX).map(q => `<li class="${q.voce ? 'eu' : ''}">${cara(q, 22)}${esc(q.voce ? 'Você' : q.nome)}</li>`).join('')}</ul>${resto > 0 ? `<small>e mais ${resto}</small>` : ''}`
       : '<p>Ninguém apostou nele. Zebra! 🦓</p>');
   // O Rei do Gado já vem tocando desde a chegada (`tocarTema`); a fanfarra por cima embolaria.
-  $('#festa').classList.add('on'); encaixarFesta(); Petalas.start(); Som.musica(null); atualizarOrg();
-  tocarTema(marcos(rec).fimFoto - rec.tVenc);
+  $('#festa').classList.add('on'); encaixarFesta(); Som.musica(null); atualizarOrg();
+  if (guerra) return;
+  Petalas.start(); tocarTema(marcos(rec).fimFoto - rec.tVenc);
 }
 /** Os segundos de cada parte depois da largada: a corrida (até 2,4 s depois da chegada), o replay em câmera lenta e a foto. */
 function marcos(rec) {
@@ -3487,11 +3501,11 @@ function laco(now) {
     while (F.lc < lances.length && lances[F.lc].t <= t) { const e = lances[F.lc++]; if (JAN.aberta && e.t > t - 0.6) narrar(e); }   // a volta da guerra pula o que passou
     if (!F.cruzou && t >= rec.tVenc) {
       F.cruzou = true; flash(); Som.clique(); faixa(`#${G.cavalos[rec.vencedor].num} CRUZOU A LINHA!`); tremer(2.5, 0.6);
-      // cruzou: a música do jogo sai e o Rei do Gado entra já alto (pedido do Cleber, 22/10/2026)
-      Som.musica(null); tocarTema(t - rec.tVenc);
+      // cruzou: a música do jogo sai e o Rei do Gado entra já alto (pedido do Cleber, 22/10/2026); na guerra, silêncio
+      Som.musica(null); if (!GX?.houve()) tocarTema(t - rec.tVenc);
     }
-    // Replay e foto em TODA corrida (pedido do Cleber, 21/10/2026), não só na chegada apertada.
-    if (!F.saiu && t >= rec.tVenc + 2.4) { F.saiu = true; faixa(rec.apertada ? 'CHEGADA APERTADA · REPLAY' : 'REPLAY DA CHEGADA'); iniciarReplay(); }
+    // Replay e foto em TODA corrida (pedido do Cleber, 21/10/2026), não só na chegada apertada. Na guerra, direto o vencedor.
+    if (!F.saiu && t >= rec.tVenc + 2.4) { F.saiu = true; if (GX?.houve()) iniciarFesta(); else { faixa(rec.apertada ? 'CHEGADA APERTADA · REPLAY' : 'REPLAY DA CHEGADA'); iniciarReplay(); } }
     t = Math.min(t, rec.dur);
   } else if (fase === 'replay') {
     t = F.tA + (now - F.t0) / 1000 * 0.3; zoom = true; correndo = true; ab = 1;
@@ -3837,7 +3851,8 @@ function seguirCorrida() {
 function seguirRelogio(tbBruto) {
   const tb = GX ? GX.tempo(tbBruto) : tbBruto;
   const rec = G.rec, { fimCorrida, fimReplay, fimFoto } = marcos(rec);
-  const quer =tb < 0 ? 'largada' : tb < fimCorrida ? 'corrida' : tb < fimReplay ? 'replay' : tb < fimFoto ? 'foto' : 'festa';
+  const guerra = !!GX?.houve();
+  const quer = tb < 0 ? 'largada' : tb < fimCorrida ? 'corrida' : guerra ? 'festa' : tb < fimReplay ? 'replay' : tb < fimFoto ? 'foto' : 'festa';
   if (antes(fase, 'preparada')) posicionar();
   if (quer === 'largada') {
     if (fase !== 'largada') { fase = 'largada'; F = {}; $('#faixa').innerHTML = ''; Som.musica('corrida'); atualizarOrg(); }
@@ -3847,7 +3862,7 @@ function seguirRelogio(tbBruto) {
   }
   if (!antes(fase, quer)) return;   // o laço já está lá (ou adiante)
   // Entrou depois da chegada: o Rei do Gado já está no trecho em que está para todo mundo.
-  if (quer !== 'corrida') { Som.musica(null); tocarTema(tb - rec.tVenc); }
+  if (quer !== 'corrida') { Som.musica(null); if (!guerra) tocarTema(tb - rec.tVenc); }
   if (quer === 'corrida') {
     if (tb < 1) vai(); else $('#contagem').innerHTML = '';
     if (fase !== 'largada') { $('#faixa').innerHTML = ''; Som.musica('corrida'); }
