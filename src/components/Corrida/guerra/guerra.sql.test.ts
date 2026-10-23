@@ -28,6 +28,7 @@ const MIGRATIONS = [
   '20261022190000_corrida_torcida.sql',
 ].map(mig);
 const SQL_GUERRA = mig('20261023150000_corrida_guerra.sql');
+const SQL_RANKING = mig('20261023200000_corrida_guerra_ranking_e_insignia.sql');
 
 let db: PGlite;
 
@@ -94,6 +95,8 @@ beforeAll(async () => {
   for (const sql of MIGRATIONS) await db.exec(sql);
   await db.exec(SQL_GUERRA);
   await db.exec(SQL_GUERRA);   // reexecutável
+  await db.exec(SQL_RANKING);
+  await db.exec(SQL_RANKING);
 });
 beforeEach(async () => { await db.exec('delete from public.corridas; truncate realtime.enviados;'); });
 afterAll(async () => { await db.close(); });
@@ -261,6 +264,37 @@ describe('20261023150000 — o chefe', () => {
     expect(g.curas).toBe(1);
     expect(Number(g.cura_vida)).toBeCloseTo(curaGarantida(t, f, 0) * vmax, 0);
     expect(curaGarantida(t, f, 1)).toBe(0);   // só o primeiro
+  });
+
+  it('o ranking: na luta, os 8 primeiros; caído, todo mundo que acertou, em ordem', async () => {
+    const id = await comChefe(); await recuar(id, 'solta_em', 10);
+    // 10 de mentira na corrida, cada um com um dano
+    const gente = Array.from({ length: 10 }, (_, k) => `00000000-0000-4000-8000-0000000001${String(k).padStart(2, '0')}`);
+    for (const [k, u] of gente.entries()) {
+      await db.query("insert into public.corrida_pessoas (corrida_id, usuario, corre, assiste, nome) values ($1, $2, false, true, $3)", [id, u, `Pessoa ${k}`]);
+      await db.query('insert into public.corrida_guerra_golpes (corrida_id, usuario, dano, efetivo) values ($1, $2, $3, 0)', [id, u, 10 + k]);
+    }
+    await forcar(id);
+    let g = await estado(ANA, id) as Guerra & { atiradores: number };
+    expect(g.ranking).toHaveLength(8);
+    expect(g.atiradores).toBe(10);
+    await db.query("update public.corrida_guerra set caiu_em = clock_timestamp() where corrida_id = $1", [id]);
+    g = await estado(ANA, id) as Guerra & { atiradores: number };
+    expect(g.ranking.map(r => r.dano)).toEqual([19, 18, 17, 16, 15, 14, 13, 12, 11, 10]);
+  });
+
+  it('a insígnia: cada um lê a sua; a de todo mundo, só o super_admin; só de luta em que ele caiu', async () => {
+    const id = await comChefe(); await recuar(id, 'solta_em', 10);
+    await golpear(ANA, id, 30, 10);
+    const minhas = (uid: string, de: string | null) => db.query('select set_config($1, $2, false)', ['teste.uid', uid])
+      .then(() => db.query("select set_config('teste.super', $1, false)", [uid === ADMIN ? 'sim' : '']))
+      .then(() => db.query<{ usuario: string; dano: string }>('select usuario, dano from public.fn_corrida_guerra_insignias($1)', [de]));
+    expect((await minhas(ANA, ANA)).rows).toHaveLength(0);   // ainda não caiu
+    await db.query("update public.corrida_guerra set caiu_em = clock_timestamp() where corrida_id = $1", [id]);
+    expect((await minhas(ANA, ANA)).rows.map(r => [r.usuario, Number(r.dano)])).toEqual([[ANA, 30]]);
+    await expect(minhas(BRUNO, ANA)).rejects.toThrow(/NAO_AUTORIZADO/);
+    await expect(minhas(BRUNO, null)).rejects.toThrow(/NAO_AUTORIZADO/);
+    expect((await minhas(ADMIN, null)).rows.map(r => r.usuario)).toEqual([ANA]);
   });
 
   it('o ritmo e o anjo do banco são as contas de regras.ts', async () => {

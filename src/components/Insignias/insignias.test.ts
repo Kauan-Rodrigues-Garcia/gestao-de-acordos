@@ -14,9 +14,19 @@ const golpe = (p: Partial<LinhaGolpe>): LinhaGolpe => ({
 });
 
 describe('álbum de insígnias', () => {
-  it('são quatro, uma por gincana', () => {
-    expect(TOTAL_INSIGNIAS).toBe(4);
-    expect(INSIGNIAS.map(i => i.id)).toEqual(['zumbi', 'reiDoPop', 'bruxas', 'pantano']);
+  it('são cinco: as quatro das gincanas e a do Cavalo da Guerra', () => {
+    expect(TOTAL_INSIGNIAS).toBe(5);
+    expect(INSIGNIAS.map(i => i.id)).toEqual(['zumbi', 'reiDoPop', 'bruxas', 'pantano', 'guerra']);
+  });
+
+  it('o Cavalo da Guerra conta como os chefes: dano numa luta em que ele caiu', () => {
+    const a = montarAlbuns([], [], [], [
+      golpe({ rodada_id: 7, dano: 340, derrotado_em: '2026-10-23T18:00:00Z' }),
+      golpe({ rodada_id: 9, dano: 90, derrotado_em: '2026-10-24T18:00:00Z' }),
+      golpe({ rodada_id: 11, dano: 50, derrotado_em: null }),   // fugiu: não conta
+    ]).get('ana')!;
+    expect(a.conquistas.guerra).toMatchObject({ vezes: 2, maiorDano: 340, primeiraEm: '2026-10-23T18:00:00Z' });
+    expect(quantas(a)).toBe(1);
   });
 
   it('zumbi conta só com o desenho (a abóbora de antes de 07/10 não)', () => {

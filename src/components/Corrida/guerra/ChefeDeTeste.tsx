@@ -17,7 +17,7 @@ export function ChefeDeTeste() {
   return (
     <Suspense fallback={null}>
       {/* Quem testa é o super_admin: sem escudo, o clique dele fora do chefe continua sendo clique no Gestão. */}
-      <CenaGuerra key={teste.numero} estado={teste.estado} agora={agora} numero={teste.numero} dono="teste" eu="Você" volume={1} escudo={false}
+      <CenaGuerra key={teste.numero} estado={teste.estado} agora={agora} numero={teste.numero} dono="teste" eu="Você" volume={1} escudo={false} medalha="teste"
         aoGolpear={meus} aoGolpearSim={golpearNoTeste} aoFim={limparChefeDeTeste} aoMontar={registrarPalcoDeTeste} />
     </Suspense>
   );

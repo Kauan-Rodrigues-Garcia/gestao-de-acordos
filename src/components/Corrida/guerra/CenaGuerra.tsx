@@ -35,6 +35,8 @@ export interface PropsCenaGuerra {
   aoFim?: (venceu: boolean) => void;
   /** O palco montado (o teste do chefe usa para forçar ataques e ligar os robôs). */
   aoMontar?: (palco: PalcoGuerra | null) => void;
+  /** A medalha que sai dele quando cai (ver `palcoGuerra.d.ts`). */
+  medalha?: 'real' | 'teste';
 }
 
 export default function CenaGuerra(p: PropsCenaGuerra): null {
@@ -62,6 +64,7 @@ export default function CenaGuerra(p: PropsCenaGuerra): null {
       leve: modoLeveLigado(),
       sims: q.sims ?? 0,
       escudo: q.escudo,
+      medalha: q.medalha,
       aoFim: venceu => ultimas.current.aoFim?.(venceu),
     });
     q.aoMontar?.(palco.current);

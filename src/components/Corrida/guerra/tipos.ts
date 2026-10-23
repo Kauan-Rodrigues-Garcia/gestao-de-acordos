@@ -25,6 +25,8 @@ export interface EstadoGuerra {
   caiu_em?: string | null;
   /** Quem clicou nos últimos 5 s. */
   atacando?: number;
+  /** Quantos acertaram o chefe (o ranking vem inteiro só depois que ele cai; antes, os 8 primeiros). */
+  atiradores?: number;
   ranking?: RankingGuerra[];
   /** A chamada chegou fora da hora, ou cedo demais (o lote volta para o próximo). */
   fora?: boolean;

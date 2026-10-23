@@ -23,6 +23,10 @@
  * ao vivo (pegou o zumbi, o chefe caiu) saiu junto com a Caça.
  *
  * O super_admin tem ainda o botão do pessoal: as insígnias de todo mundo.
+ *
+ * O Cavalo da Guerra (23/10/2026): quando ele cai, a medalha sai dele e voa até
+ * aqui (`Corrida/guerra/palcoGuerra.js`, evento `insignia-ganha`). Ela já
+ * aparece, nova (pulsando), e a leitura do banco confirma logo depois.
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Users } from 'lucide-react';
@@ -32,7 +36,7 @@ import {
   INSIGNIAS, albumGuardado, guardarAlbum, insigniasVistas, marcarInsigniasVistas, novasInsignias,
   type Album, type IdInsignia,
 } from './insignias';
-import { lerMeuAlbum } from './banco';
+import { esquecerAlbuns, lerMeuAlbum } from './banco';
 import './insignias.css';
 
 const carregarEstante = comNovaTentativa(() => import('./Estante'));
@@ -75,6 +79,25 @@ function useMeuAlbum(perfilId: string | null | undefined) {
     return ler(guardado
       ? ATUALIZAR_DE_MS + Math.random() * ATUALIZAR_ESPALHADO_MS
       : Math.random() * PRIMEIRA_LEITURA_MS);
+  }, [perfilId, ler]);
+
+  // A medalha chegou voando (o chefe caiu nesta tela): aparece já; o banco confirma em seguida.
+  useEffect(() => {
+    if (!perfilId) return;
+    let desligar = () => {};
+    const aoGanhar = (ev: Event) => {
+      const id = (ev as CustomEvent<{ id?: IdInsignia }>).detail?.id;
+      if (!id || !INSIGNIAS.some(i => i.id === id)) return;
+      const agora = new Date().toISOString();
+      setAlbum(a => {
+        const base: Album = a ?? { usuario: perfilId, nome: '', foto: null, setor: null, conquistas: {} };
+        if (base.conquistas[id]) return base;
+        return { ...base, conquistas: { ...base.conquistas, [id]: { vezes: 1, primeiraEm: agora, ultimaEm: agora, desenho: null, headshots: 0, melhorMs: null, golpeFinal: false, maiorDano: 0 } } };
+      });
+      esquecerAlbuns(); desligar(); desligar = ler(4_000);
+    };
+    window.addEventListener('insignia-ganha', aoGanhar);
+    return () => { window.removeEventListener('insignia-ganha', aoGanhar); desligar(); };
   }, [perfilId, ler]);
 
   return album;

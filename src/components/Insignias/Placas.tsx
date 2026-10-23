@@ -10,6 +10,8 @@
  *             e a bruxa voando
  *   pantano   a MESMA placa de conquista do Minecraft que sobe quando a
  *             chefona cai (`conquista.ts`): «Quem Mandou Jogar Poção?»
+ *   guerra    o letreiro da guerra (vermelho-sangue, brasa, letra de
+ *             fliperama) e o Cavalo da Guerra andando em fúria
  *
  * Sem a insígnia, a placa aparece apagada, com o desenho em silhueta e o que
  * falta fazer.
@@ -27,6 +29,7 @@ import { DROPS, comContorno } from './desenhos/bruxas/chefona/arte';
 import { CONQUISTA, desenharPlaca, type TextosDaPlaca } from './desenhos/bruxas/chefona/conquista';
 import type { Conquista, IdInsignia, Insignia } from './insignias';
 import { nomeDoDesenho } from './arte';
+import { SpriteCavaloDaGuerra } from '@/components/Corrida/guerra/SpriteCavaloDaGuerra';
 
 carregarFontesPixel();
 carregarFonte();
@@ -95,6 +98,19 @@ function oLetreiro(id: Exclude<IdInsignia, 'pantano'>, ins: Insignia, c: Conquis
             ]
           : [ins.como],
         arte: <SpriteZumbi zumbi={CHEFAO} escala={2} animado={!!c} />,
+      };
+    case 'guerra':
+      return {
+        selo: c ? 'O CAVALO CAIU' : 'BLOQUEADA',
+        nome: ins.nome,
+        linhas: c
+          ? [
+              `Ajudou a derrubar ${c.vezes === 1 ? '1 vez' : `${c.vezes} vezes`}`,
+              `Maior dano: ${c.maiorDano.toLocaleString('pt-BR')}`,
+              desde ?? '',
+            ].filter(Boolean)
+          : [ins.como],
+        arte: <SpriteCavaloDaGuerra escala={0.45} animado={!!c} />,
       };
   }
 }

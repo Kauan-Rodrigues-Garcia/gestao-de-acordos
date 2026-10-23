@@ -126,12 +126,15 @@ AS $function$
     'ritmo', g.ritmo, 'caiu_em', g.caiu_em,
     'atacando', (SELECT count(*) FROM public.corrida_guerra_golpes x
                   WHERE x.corrida_id = g.corrida_id AND x.atacou_em > clock_timestamp() - interval '5 seconds'),
-    'ranking', COALESCE((SELECT jsonb_agg(jsonb_build_object('usuario', r.usuario, 'nome', r.nome, 'foto', r.foto, 'dano', r.dano) ORDER BY r.dano DESC)
-                           FROM (SELECT x.usuario, COALESCE(p.nome, 'Alguém') AS nome, p.foto, round(x.dano)::int AS dano
+    'atiradores', (SELECT count(*) FROM public.corrida_guerra_golpes x WHERE x.corrida_id = g.corrida_id AND x.dano > 0),
+    -- na luta, os 8 primeiros; caído (ou fugido), todo mundo que acertou
+    'ranking', COALESCE((SELECT jsonb_agg(jsonb_build_object('usuario', r.usuario, 'nome', r.nome, 'foto', r.foto, 'dano', r.dano) ORDER BY r.pos)
+                           FROM (SELECT x.usuario, COALESCE(p.nome, 'Alguém') AS nome, p.foto, round(x.dano)::int AS dano,
+                                        row_number() OVER (ORDER BY x.dano DESC, x.usuario) AS pos
                                    FROM public.corrida_guerra_golpes x
                                    LEFT JOIN public.corrida_pessoas p ON p.corrida_id = x.corrida_id AND p.usuario = x.usuario
-                                  WHERE x.corrida_id = g.corrida_id AND x.dano > 0
-                                  ORDER BY x.dano DESC LIMIT 8) r), '[]'::jsonb))
+                                  WHERE x.corrida_id = g.corrida_id AND x.dano > 0) r
+                          WHERE r.pos <= CASE WHEN g.caiu_em IS NOT NULL OR g.expira_em <= clock_timestamp() THEN 500 ELSE 8 END), '[]'::jsonb))
     FROM public.corrida_guerra g WHERE g.corrida_id = p_corrida;
 $function$;
 

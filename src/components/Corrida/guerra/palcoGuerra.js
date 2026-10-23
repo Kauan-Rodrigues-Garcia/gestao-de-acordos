@@ -28,6 +28,13 @@
  * a cabeça de um lado, o rabo de fogo do outro, a crina em cima — nem na
  * investida, nem quando a janela do navegador encolhe.
  *
+ * ## O placar e a medalha
+ *
+ * Caído, o placar mostra TODO mundo que acertou (o banco manda a lista inteira
+ * quando ele cai). E a medalha do álbum de insígnias sai dele: gira no ar, com
+ * os raios dourados, e voa até a fileira de medalhas do topo do app (`medalha`:
+ * 'real' só para quem atirou; 'teste' no teste, que não mexe no álbum).
+ *
  * ## O anjo
  *
  * Quando o banco cura (o diretor de ritmo achou que a vida caiu rápido demais),
@@ -38,6 +45,8 @@
  * opções estão em `palcoGuerra.d.ts`.
  */
 import './guerra.css';
+import '../../Insignias/insignias.css';
+import { retratoUrl } from './retrato.js';
 import { assarFogo, sprites, chama as chamaF, luz as luzF, tremula as tremulaF, particula as particulaF, explosaoFogo, poda, ESCUDO } from './fogo.js';
 import { CW, CH, CCHAO, CMEIO, CPIV, EXTENSAO, MARGEM_ALTO, MARGEM_TRAS, MAT, CAVALEIROS, criarDestino, construirCavalo, cabecaDo, pontaDaCabeca, noCavalo, naGrade, tipoDoAcerto } from './cavaloDaGuerra.js';
 import { ATRIBUTO_ALVO, alvos, blocoDe, nomeDe, criarEfeitos } from './alvos.js';
@@ -115,7 +124,23 @@ const ESTILO = `
 .gx-rotulo s{display:block;height:100%;width:100%;background:var(--c);transition:width .12s}
 .gx-rotulo.banido{animation:gx-sobe-some .9s forwards}
 @keyframes gx-sobe-some{to{transform:translate(-50%,-190%);opacity:0}}
-.gx-placar{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);min-width:320px;background:#120818f0;border:1px solid #e3161b88;border-radius:14px;padding:16px 20px;color:#fff;font-family:GxPixelify,system-ui,sans-serif;box-shadow:0 20px 60px #000a;opacity:0;transition:opacity .5s}
+.gx-placar{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);min-width:340px;max-width:min(460px,92vw);background:#120818f0;border:1px solid #e3161b88;border-radius:14px;padding:16px 20px;color:#fff;font-family:GxPixelify,system-ui,sans-serif;box-shadow:0 20px 60px #000a;opacity:0;transition:opacity .5s;pointer-events:auto}
+.gx-placar small{display:block;text-align:center;margin:-4px 0 10px;color:#ffffffa0;font-size:14px}
+.gx-placar ol{max-height:min(52vh,430px);overflow-y:auto;scrollbar-width:thin;scrollbar-color:#e3161b66 transparent}
+.gx-placar li span:first-child{display:flex;align-items:center;gap:8px;min-width:0}
+.gx-placar li i{font-style:normal;width:30px;text-align:right;color:#ffffffa0;flex-shrink:0}
+.gx-placar li em{font-style:normal;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gx-medalha{position:absolute;transform:translate(-50%,-50%);z-index:3;transition:transform .95s cubic-bezier(.6,0,.35,1),opacity .95s}
+.gx-medalha.voa{transform:translate(calc(-50% + var(--dx)),calc(-50% + var(--dy))) scale(.27);opacity:.9}
+.gx-medalha-pop{display:flex;flex-direction:column;align-items:center;gap:6px;animation:gx-medalha-sai 1.1s cubic-bezier(.2,1.6,.4,1) both}
+.gx-medalha .ins-medalha{filter:drop-shadow(0 0 14px #ffd24a) drop-shadow(0 6px 0 #0007);animation:gx-medalha-gira 1.2s ease-out both}
+.gx-medalha b{font-family:GxPS2P,monospace;font-size:12px;color:#ffd24a;text-shadow:0 2px 0 #000,0 0 10px #c4161c;white-space:nowrap}
+.gx-medalha span{font-family:GxPixelify,system-ui,sans-serif;font-size:17px;color:#fff;text-shadow:0 2px 0 #000;white-space:nowrap}
+.gx-medalha.voa b,.gx-medalha.voa span,.gx-medalha.voa .gx-medalha-raios{opacity:0;transition:opacity .25s}
+.gx-medalha-raios{position:absolute;left:50%;top:62px;width:280px;height:280px;margin:-140px 0 0 -140px;border-radius:50%;background:repeating-conic-gradient(#ffd24a66 0 9deg,transparent 9deg 22deg);-webkit-mask:radial-gradient(circle,#000 18%,transparent 68%);mask:radial-gradient(circle,#000 18%,transparent 68%);animation:gx-raios 7s linear infinite;z-index:-1;pointer-events:none}
+@keyframes gx-medalha-sai{0%{transform:translateY(60px) scale(.1);opacity:0}55%{opacity:1}100%{transform:none}}
+@keyframes gx-medalha-gira{from{transform:rotateY(0)}to{transform:rotateY(720deg)}}
+@keyframes gx-raios{to{transform:rotate(360deg)}}
 .gx-placar.on{opacity:1}
 .gx-placar h2{margin:0 0 10px;font-family:GxPS2P,monospace;font-size:16px;color:#ffd24a;text-align:center}
 .gx-placar ol{list-style:none;margin:0;padding:0}
@@ -543,8 +568,33 @@ export function criarPalcoGuerra(o) {
     }
   }
 
+  /* ---------- a medalha: sai dele quando cai e voa até a fileira do topo ---------- */
+  let atirei = false, medalhaSolta = false;
+  function soltarMedalha() {
+    if (medalhaSolta || !o.medalha || (o.medalha === 'real' && !atirei)) return;
+    medalhaSolta = true;
+    const r = retratoUrl(), tam = 88, x = B.x * PX, y = clamp((B.y - 74) * PX, 140, innerHeight - 140);
+    const k = r ? (tam * 0.8) / Math.max(r.largura, r.altura) : 1;
+    const el = document.createElement('div'); el.className = 'gx-medalha'; el.style.left = `${x}px`; el.style.top = `${y}px`;
+    el.innerHTML = `<div class="gx-medalha-pop"><i class="gx-medalha-raios"></i><div class="ins-medalha" style="--tam:${tam}px;--fita:#8e1016"><div class="ins-fita"></div><div class="ins-disco">${r ? `<img src="${r.url}" width="${Math.round(r.largura * k)}" height="${Math.round(r.altura * k)}" alt="">` : ''}</div></div><b>NOVA INSÍGNIA</b><span>Cavalo da Guerra</span></div>`;
+    raiz.appendChild(el);
+    Som.brilho(1.4);
+    const ax2 = x / PX, ay2 = y / PX;
+    for (let n = 0; n < (leve ? 16 : 44); n++) { const an = n / (leve ? 16 : 44) * T2, v = entre(40, 130); P.parts.push({ x: ax2, y: ay2, vx: Math.cos(an) * v, vy: Math.sin(an) * v - 30, g: 70, vida: entre(0.6, 1.3), max: 1.3, cor: sorteio(['#ffd24a', '#fff3b0', '#f0c75e', '#ffffff']), tam: Math.random() < 0.4 ? 2 : 1 }); }
+    // ela voa para onde a medalha nova vai aparecer: antes das «?» do topo
+    depois(2700, () => {
+      const alvo = document.querySelector('.ins-fileira .ins-misterio') ?? document.querySelector('.ins-fileira');
+      const ar = alvo?.getBoundingClientRect();
+      el.style.setProperty('--dx', `${(ar ? ar.left + ar.width / 2 : innerWidth / 2) - x}px`);
+      el.style.setProperty('--dy', `${(ar ? ar.top + ar.height * 0.62 : 12) - y}px`);
+      el.classList.add('voa'); Som.tink();
+      depois(1000, () => { el.remove(); if (o.medalha === 'real') window.dispatchEvent(new CustomEvent('insignia-ganha', { detail: { id: 'guerra' } })); });
+    });
+  }
+
   /* ---------- os tiros ---------- */
   function contarNoLote(dano, tipo) {
+    atirei = true;
     if (tipo === 'bola') lote.bolas++; else if (tipo === 'banido') lote.banidos++; else { lote.dano += dano; lote.acertos++; }
   }
   /** O dano já sai da barra desta tela (o ritmo do banco é aplicado na estimativa); o estado novo acerta a conta. */
@@ -700,6 +750,7 @@ export function criarPalcoGuerra(o) {
         B.visivel = false; legenda('O Cavalo da Guerra caiu. A espada dele ficou cravada no Gestão.', 3000);
         EF.desfazerTudo(true);
       }
+      if (t >= 2.3) soltarMedalha();
       if (t >= 3.4) mostrarPlacar(true);
     } else if (fase === 'fuga') {
       const t = faseT;
@@ -720,10 +771,15 @@ export function criarPalcoGuerra(o) {
   }
   function mostrarPlacar(venceu) {
     fase = 'placar'; faseT = 0; placarVenceu = venceu;
-    const box = $('.gx-placar'), lista = E.ranking ?? [];
-    box.querySelector('h2').textContent = venceu ? '⚔ QUEM MAIS ACERTOU' : '☠ ELE ESCAPOU';
-    box.querySelector('ol').innerHTML = lista.slice(0, 6).map((r, i) => `<li class="${r.usuario === o.eu ? 'eu' : ''}"><span><b>${i + 1}º</b> ${String(r.nome).replace(/[<>&]/g, '')}</span><span>${Number(r.dano).toLocaleString('pt-BR')}</span></li>`).join('') || '<li><span>Ninguém acertou.</span></li>';
+    // Todo mundo que acertou (caído, o banco manda a lista inteira), com o pódio e você marcado.
+    const box = $('.gx-placar'), lista = E.ranking ?? [], total = Math.max(Number(E.atiradores ?? 0), lista.length);
+    box.querySelector('h2').textContent = venceu ? '⚔ QUEM DERRUBOU O CAVALO' : '☠ ELE ESCAPOU';
+    let sub = box.querySelector('small'); if (!sub) { sub = document.createElement('small'); box.querySelector('h2').after(sub); }
+    sub.textContent = total ? `${total} ${total === 1 ? 'pessoa acertou' : 'pessoas acertaram'} · o dano de cada um` : '';
+    const PODIO = ['🥇', '🥈', '🥉'];
+    box.querySelector('ol').innerHTML = lista.map((r, i) => `<li class="${r.usuario === o.eu ? 'eu' : ''}"><span><i>${PODIO[i] ?? `${i + 1}º`}</i><em>${String(r.nome).replace(/[<>&]/g, '')}</em></span><span>${Number(r.dano).toLocaleString('pt-BR')}</span></li>`).join('') || '<li><span>Ninguém acertou.</span></li>';
     box.classList.add('on');
+    box.querySelector('li.eu')?.scrollIntoView({ block: 'nearest' });
   }
   function efeitos(dt) {
     const cap = [320, 900, 1100][Q.nivel], capChamas = [120, 260, 320][Q.nivel];

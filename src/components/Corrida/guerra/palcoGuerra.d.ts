@@ -36,6 +36,11 @@ export interface OpcoesPalcoGuerra {
   escudo?: boolean;
   /** A música do anjo descendo (padrão: `/sons/guerra/anjo-celestial.mp3`). */
   musicaAnjo?: string;
+  /**
+   * A medalha que sai dele quando cai e voa para o álbum do topo: 'real' (só se esta tela atirou; avisa o
+   * álbum com o evento `insignia-ganha`), 'teste' (só a animação) ou nada (quem assiste como organizador).
+   */
+  medalha?: 'real' | 'teste';
 }
 
 export type AtaqueDoChefe = 'cabecada' | 'investida' | 'sopro' | 'invocar' | 'cavaleiros';

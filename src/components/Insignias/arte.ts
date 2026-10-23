@@ -1,7 +1,7 @@
 /**
  * arte.ts — o rosto de cada insígnia, com os desenhos das próprias gincanas:
  * a cabeça do zumbi que a pessoa pegou, a do Rei do Pop com o chapéu, a da
- * bruxa que ela derrubou e a da Bruxa do Pântano.
+ * bruxa que ela derrubou, a da Bruxa do Pântano e a do Cavalo da Guerra.
  *
  * Vira uma imagem (`data:` PNG) recortada no desenho, guardada: a lista do
  * pessoal mostra centenas de medalhas, e `<img>` com a mesma URL é mais barato
@@ -13,6 +13,7 @@ import { CHEFAO } from './desenhos/chefaoArte';
 import { BRUXAS } from './desenhos/bruxas/arte';
 import { cabecaDaBruxa, canvasDaImagem } from './desenhos/bruxas/pixels';
 import { cabecaMC } from './desenhos/bruxas/chefona/arte';
+import { retratoDoCavaloDaGuerra } from '@/components/Corrida/guerra/retrato.js';
 import type { IdInsignia } from './insignias';
 
 export interface Rosto {
@@ -57,6 +58,7 @@ function desenhar(id: IdInsignia, desenho: number): HTMLCanvasElement {
     case 'reiDoPop': return canvasDoImageData(cabecaDoZumbi(CHEFAO, false));
     case 'bruxas':   return cabecaDaBruxa(BRUXAS[desenho] ?? BRUXAS[0], false);
     case 'pantano':  return canvasDaImagem(cabecaMC(), false);
+    case 'guerra':   return retratoDoCavaloDaGuerra();
   }
 }
 

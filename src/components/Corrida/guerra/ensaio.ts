@@ -117,7 +117,8 @@ export class EnsaioGuerra {
       pessoas: this.pessoas, vida_max: this.vidaMax || null, vida: this.vidaMax ? this.vida : null,
       curas: this.curas, cura_em: iso(this.curaEm), cura_vida: this.curaVida, ritmo: this.ritmo, caiu_em: iso(this.caiu),
       atacando: [...this.golpes.values()].filter(g => g.cliques > 0).length,
-      ranking: [...this.golpes.entries()].filter(([, g]) => g.dano > 0).sort((a, b) => b[1].dano - a[1].dano).slice(0, 8)
+      atiradores: [...this.golpes.values()].filter(g => g.dano > 0).length,
+      ranking: [...this.golpes.entries()].filter(([, g]) => g.dano > 0).sort((a, b) => b[1].dano - a[1].dano).slice(0, this.caiu != null ? 500 : 8)
         .map(([quem, g]) => ({ usuario: quem, nome: quem, foto: null as string | null, dano: Math.round(g.dano) })),
     };
   }

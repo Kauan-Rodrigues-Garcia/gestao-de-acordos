@@ -271,6 +271,22 @@
 }
 .ins-placa-bruxas .ins-placa-nome { text-shadow: 2px 2px 0 #6a3a08; }
 
+/* Cavalo da Guerra: o céu da guerra — vermelho-sangue, brasas subindo, borda de fogo. */
+.ins-placa-guerra {
+  --p-fundo: #1c0607;
+  --p-fundo-2: #26090a;
+  --p-borda: #c4161c;
+  --p-texto: #f6e2dc;
+  --p-selo: #ff7a3a;
+  --p-nome: #ffd24a;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='32' shape-rendering='crispEdges'%3E%3Cg fill='%23ff7a1c'%3E%3Crect x='5' y='24' width='1' height='1'/%3E%3Crect x='17' y='9' width='1' height='1' fill='%23ffc83e'/%3E%3Crect x='31' y='19' width='1' height='1'/%3E%3Crect x='24' y='29' width='1' height='1' fill='%23ffc83e'/%3E%3Crect x='10' y='4' width='1' height='1'/%3E%3C/g%3E%3C/svg%3E") 0 0 / 40px 32px repeat,
+    linear-gradient(0deg, var(--p-borda) 0 3px, transparent 3px),
+    repeating-linear-gradient(90deg, var(--p-fundo) 0 4px, var(--p-fundo-2) 4px 8px);
+}
+.ins-placa-guerra .ins-placa-nome { text-shadow: 2px 2px 0 #5e080c; }
+.ins-placa-guerra .ins-placa-selo { text-shadow: 0 0 6px #c4161c; }
+
 /* A da próxima gincana: noite com «?» espalhados. */
 .ins-placa-misterio {
   --p-fundo: #121018;

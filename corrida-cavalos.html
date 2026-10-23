@@ -408,6 +408,16 @@ body.modo-teste .esc{padding-top:100px}
 #festa.guerra .fe-tit{color:#ff5a3a;animation:none;text-shadow:0 4px 0 #000,0 0 22px #c4161c99}
 #festa.guerra .fe-premio{background:#c4161c;color:#fff}
 #festa.guerra .fe-dono .cara{box-shadow:0 0 0 3px #c4161c,0 5px 0 3px #0009}
+/* O ranking de quem derrubou o Cavalo da Guerra: todo mundo que acertou. */
+.fe-rank{display:none}
+#festa.guerra .fe-rank{display:block;max-width:420px;margin:0 auto;background:#00000066;border:2px solid #c4161c88;border-radius:14px;padding:10px 12px;text-align:left}
+.fe-rank .rk-tit{font-family:PS2P,Pixelify,monospace;font-size:10px;color:#ff7a3a;margin-bottom:8px}
+.fe-rank ol{list-style:none;margin:0;padding:0 4px 0 0;max-height:min(34vh,230px);overflow-y:auto;scrollbar-width:thin;scrollbar-color:#c4161c88 transparent}
+.fe-rank li{display:flex;align-items:center;gap:8px;padding:3px 6px;border-radius:8px;font-size:14px}
+.fe-rank li.eu{background:#ffd24a26;outline:1px solid #ffd24a;color:#ffd24a}
+.fe-rank li i{font-style:normal;width:28px;text-align:right;color:var(--mut);flex-shrink:0}
+.fe-rank li em{font-style:normal;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fe-rank li b{font-weight:600;font-variant-numeric:tabular-nums}
 .raios{position:absolute;left:50%;top:38%;width:240vmax;height:240vmax;transform:translate(-50%,-50%);background:repeating-conic-gradient(from 0deg,#ffffff0d 0 7deg,#0000 7deg 18deg);animation:gira 40s linear infinite;pointer-events:none}
 @keyframes gira{to{transform:translate(-50%,-50%) rotate(360deg)}}
 /* Duas colunas, que a janela é larga: quem venceu à esquerda, o resto à direita.
@@ -679,6 +689,7 @@ body.modo-escolha #escolha{z-index:20}
           <div class="fe-dir">
             <div class="podio" id="fePodio"></div>
             <div class="fe-acred" id="feAcred"></div>
+            <div class="fe-rank" id="feRank"></div>
             <div class="fe-seu" id="feSeu"></div>
             <div class="fe-bt"><button class="bt sec" id="feReplay">Ver replay</button><button class="bt" id="feNova">Nova corrida</button></div>
           </div>
@@ -3238,6 +3249,12 @@ function iniciarFesta() {
     const seu = ST.modo === 'corre' ? (G.voce.cavalo === v ? 'Seu cavalo foi o último de pé! O prêmio é seu.' : `Seu cavalo #${G.voce.cavalo.num} caiu na guerra.`)
       : ADM() ? 'Você assistiu como organizador.' : !G.voce.palpite ? 'Você assistiu sem palpite.' : acertei ? `Na mosca! Seu palpite #${v.num} sobreviveu 🍀` : `Seu palpite #${G.voce.palpite.num} caiu na guerra.`;
     $('#feSeu').innerHTML = `${seu}<small>O #${v.num} foi o único que sobrou.</small>`;
+    // Quem derrubou o Cavalo da Guerra: todo mundo que acertou (o banco manda a lista inteira quando ele cai).
+    const rk = GX.ranking(), PODIO = ['🥇', '🥈', '🥉'], ehEu = u => u === APP.eu || u === 'Você';
+    $('#feRank').innerHTML = `<div class="rk-tit">⚔ Quem derrubou o Cavalo da Guerra · ${rk.length}</div>`
+      + (rk.length ? `<ol>${rk.map((r, i) => `<li class="${ehEu(r.usuario) ? 'eu' : ''}"><i>${PODIO[i] ?? `${i + 1}º`}</i>${cara({ nome: r.nome, foto: r.foto ?? null }, 22)}<em>${esc(ehEu(r.usuario) ? 'Você' : r.nome)}</em><b>${Number(r.dano).toLocaleString('pt-BR')}</b></li>`).join('')}</ol>`
+        : '<p>Ninguém acertou: ele escapou sozinho.</p>');
+    $('#feRank li.eu')?.scrollIntoView({ block: 'nearest' });
   }
   // Quem acreditou em quem venceu — como no fim da Corrida da Sorte (`Acreditaram`).
   const MAX = 10, resto = quem.length - MAX;

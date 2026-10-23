@@ -9,6 +9,10 @@
  *     as abas já derrubaram o banco (15/10/2026, a gargalhada da bruxa).
  *   - `lerAlbunsDoPessoal()`: o álbum de todo mundo, só no clique do
  *     super_admin. As gincanas são uma só para todas as empresas.
+ *
+ * O Cavalo da Guerra (23/10/2026) vem por `fn_corrida_guerra_insignias`
+ * (20261023200000): as tabelas da guerra não têm leitura direta. Sem a
+ * migration, a insígnia dele só não aparece.
  */
 import { supabase } from '@/lib/supabase';
 import { invalidarCache, lerComCache } from '@/lib/cacheCurto';
@@ -78,9 +82,22 @@ async function lerGolpes(chefe: Chefe, eu?: string): Promise<LinhaGolpe[]> {
   }));
 }
 
+/** Quem deu dano numa luta em que o Cavalo da Guerra caiu (o seu, ou o de todo mundo para o super_admin). */
+async function lerGuerra(eu?: string): Promise<LinhaGolpe[]> {
+  try {
+    const chamar = supabase.rpc as unknown as (n: string, a: Record<string, unknown>) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
+    const { data, error } = await chamar.call(supabase, 'fn_corrida_guerra_insignias', eu ? { p_usuario: eu } : {});
+    if (error) return [];
+    const linhas = data as { usuario: string; nome: string | null; foto: string | null; dano: number; corrida_id: number; caiu_em: string | null }[] | null;
+    return (linhas ?? []).map(l => ({ usuario: l.usuario, nome: l.nome, foto: l.foto, dano: Number(l.dano), rodada_id: l.corrida_id, derrotado_em: l.caiu_em, golpe_final_por: null as string | null }));
+  } catch {
+    return []; // sem a migration (ou sem guerra ainda): a insígnia só não aparece
+  }
+}
+
 async function lerAlbuns(eu?: string): Promise<Map<string, Album>> {
-  const [caca, rei, pantano] = await Promise.all([lerCaca(eu), lerGolpes('chefao', eu), lerGolpes('chefona', eu)]);
-  return montarAlbuns(caca, rei, pantano);
+  const [caca, rei, pantano, guerra] = await Promise.all([lerCaca(eu), lerGolpes('chefao', eu), lerGolpes('chefona', eu), lerGuerra(eu)]);
+  return montarAlbuns(caca, rei, pantano, guerra);
 }
 
 /** O álbum de quem está logado (sem nada = ainda nenhuma insígnia). */

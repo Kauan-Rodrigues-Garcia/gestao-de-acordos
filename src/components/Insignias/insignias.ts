@@ -12,6 +12,8 @@
  *             foi DERROTADO — se ele fugiu, ninguém completou a gincana)
  *   bruxas    derrubou uma bruxa na Caça às Bruxas
  *   pantano   ajudou a derrubar a Bruxa do Pântano (a mesma regra do Rei)
+ *   guerra    ajudou a derrubar o Cavalo da Guerra, na Guerra na Corrida
+ *             (23/10/2026; a mesma regra: deu dano numa luta em que ele CAIU)
  *
  * ## De onde vem (nada novo no banco)
  *
@@ -29,7 +31,7 @@
  * conferem a contagem sem rede.
  */
 
-export type IdInsignia = 'zumbi' | 'reiDoPop' | 'bruxas' | 'pantano';
+export type IdInsignia = 'zumbi' | 'reiDoPop' | 'bruxas' | 'pantano' | 'guerra';
 
 export interface Insignia {
   id: IdInsignia;
@@ -46,6 +48,7 @@ export const INSIGNIAS: readonly Insignia[] = [
   { id: 'reiDoPop', nome: 'Rei do Pop',        como: 'Ajude a derrubar o Rei do Pop zumbi até o fim.',      fita: '#c8202a' },
   { id: 'bruxas',   nome: 'Caçador de Bruxas', como: 'Derrube uma bruxa na Caça às Bruxas.',               fita: '#d9661a' },
   { id: 'pantano',  nome: 'Bruxa do Pântano',  como: 'Ajude a derrubar a Bruxa do Pântano até o fim.',      fita: '#2f6f6a' },
+  { id: 'guerra',   nome: 'Cavalo da Guerra',  como: 'Ajude a derrubar o Cavalo da Guerra na Guerra na Corrida.', fita: '#8e1016' },
 ];
 
 export const TOTAL_INSIGNIAS = INSIGNIAS.length;
@@ -151,6 +154,7 @@ export function montarAlbuns(
   caca: readonly LinhaCaca[],
   rei: readonly LinhaGolpe[],
   pantano: readonly LinhaGolpe[],
+  guerra: readonly LinhaGolpe[] = [],
 ): Map<string, Album> {
   const albuns = new Map<string, Album>();
   const visto = new Map<string, string>(); // usuario -> quando o nome/foto foi gravado
@@ -181,7 +185,7 @@ export function montarAlbuns(
     });
   }
 
-  const chefes: [IdInsignia, readonly LinhaGolpe[]][] = [['reiDoPop', rei], ['pantano', pantano]];
+  const chefes: [IdInsignia, readonly LinhaGolpe[]][] = [['reiDoPop', rei], ['pantano', pantano], ['guerra', guerra]];
   for (const [id, linhas] of chefes) {
     for (const l of linhas) {
       if (!l.usuario || !(l.dano > 0) || !l.derrotado_em) continue;

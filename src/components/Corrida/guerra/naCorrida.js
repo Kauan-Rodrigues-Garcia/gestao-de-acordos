@@ -916,6 +916,8 @@ export function criarGuerraNaCorrida(o) {
     ligada,
     /** Esta corrida teve guerra (sobrou um): o fim é só o vencedor, escuro, sem replay e sem o Rei do Gado. */
     houve: () => !!E?.ligada && !!E?.sobrou_em,
+    /** Quem acertou o chefe, do maior dano para o menor (depois que ele cai, todo mundo). */
+    ranking: () => (Array.isArray(E?.ranking) ? E.ranking : []),
     tempo, passo, xAt, cam, tremor,
     /** A janela está escondida (o chefe está na página): a página não precisa desenhar. */
     escondida: () => !!S && S.fase === 'chefe',

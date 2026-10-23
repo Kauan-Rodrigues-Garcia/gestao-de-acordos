@@ -160,7 +160,8 @@ export default function PalcoCavalos({ corridaId, onFechar, adm = false }: Props
       {chefe && guerra?.ligada && (
         <Suspense fallback={null}>
           <CenaGuerra estado={guerra} agora={agoraMs} numero={chefe.numero} dono={chefe.dono} eu={eu}
-            janela={{ rect: chefe.rect, canvas: chefe.canvas }} aoGolpear={golpear} volume={volumeChefe * volumeJanela} escudo={!(souSuperAdmin || adm)} />
+            janela={{ rect: chefe.rect, canvas: chefe.canvas }} aoGolpear={golpear} volume={volumeChefe * volumeJanela} escudo={!(souSuperAdmin || adm)}
+            medalha={adm || !eu ? undefined : 'real'} />
         </Suspense>
       )}
     </>
