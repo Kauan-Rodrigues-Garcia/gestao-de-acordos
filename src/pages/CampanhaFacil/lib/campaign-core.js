@@ -90,12 +90,12 @@ Olá *{{primeiro_nome}}*, *protocolo {{protocolo}}*.
 
 A *{{empresa}}* liberou DESCONTOS especiais nas suas parcelas.
 
-1️⃣ *Pagamento da parcela em atraso: {{parcela_desconto}}*
-2️⃣ *Pagamento da junção (atrasada + próxima): {{juncao}}*
+1️⃣ *Pagamento do valor em atraso: {{parcela_desconto}}*
+2️⃣ *Pagamento da junção (em atraso + próxima): {{juncao}}*
 3️⃣ *Quitação via Pix: {{quitacao}}*
 4️⃣ *Quitação em 12x no cartão: {{cartao_quitacao}} (sem juros, podendo ser de terceiros)*
 5️⃣ *Plano anual em 12x no cartão: {{cartao_anual}}*
-6️⃣ *PIX AUTOMÁTICO no valor de R$ 00,00 por parcela*
+6️⃣ *PIX AUTOMÁTICO em 21x de {{pix_automatico_desconto_21x}}*
 
 💬 *Estamos à disposição! Qual opção de pagamento você escolhe?*
 📞 Atendimento: {{atendimento}}`,
@@ -111,20 +111,20 @@ A *{{empresa}}* liberou DESCONTOS especiais nas suas parcelas.
 
 Você foi selecionada para uma condição especial em seu contrato com a *{{empresa}}* com benefícios exclusivos:
 
-🟢 20% de desconto na quitação total
+🟢 {{pct_quitacao}} de desconto na quitação total
 🎁 + 6 meses de acesso gratuitos
 
 ou
 
 🔁 PIX automático nas parcelas
-💳 10% de desconto em cada pagamento
+💳 {{pct_pix_automatico}} de desconto em cada pagamento
 
 ⏰ *Prazo final: HOJE às 23:59 (improrrogável)*
 
 👇 Escolha uma opção para continuar:
 
-1️⃣ *Quitar com 20% de desconto*
-2️⃣ *Ativar PIX automático (10% OFF)*
+1️⃣ *Quitar com {{pct_quitacao}} de desconto*
+2️⃣ *Ativar PIX automático ({{pct_pix_automatico}} OFF)*
 3️⃣ *Falar com atendimento*
 
 👉 Responda com o número da opção 😉
@@ -146,7 +146,7 @@ Olá *{{nome}}*, tudo bem? Estou entrando em contato hoje para te auxiliar com o
 Para facilitar, caso ainda não tenha realizado o pagamento posso encaminhar o link PIX?
 
 1️⃣ *Preciso do link PIX para pagamento da minha parcela*
-2️⃣ *Ativar PIX automático (10% OFF)*
+2️⃣ *Ativar PIX automático ({{pct_pix_automatico}} OFF)*
 3️⃣ *Quero quitar meu contrato com desconto EXCLUSIVO*
 4️⃣ *Já realizei o pagamento e enviarei o comprovante*
 
@@ -214,8 +214,8 @@ O seu contrato (*{{contrato}}*) foi selecionado para pagamento com um *DESCONTO 
 
 1️⃣ Quitação total de ~{{valor_com_juros}}~ no PIX por *{{quitacao}}*
 2️⃣ Quitação pelo cartão de crédito em 12x de *{{cartao_quitacao}}* (podendo ser de terceiros)
-3️⃣ Junção com *10% OFF* por *{{juncao}}*
-4️⃣ Parcela em atraso com *JUROS OFF* no PIX por *{{parcela_desconto}}*
+3️⃣ Junção com *{{pct_juncao}} OFF* por *{{juncao}}*
+4️⃣ Valor em atraso com *JUROS OFF* no PIX por *{{parcela_desconto}}*
 
 *Qual opção de desconto você deseja?*
 📞 Atendimento: {{atendimento}}`,
@@ -232,9 +232,9 @@ O seu contrato (*{{contrato}}*) foi selecionado para pagamento com um *DESCONTO 
 
 *Para te ajudar a regularizar sem juros e sem dor de cabeça, liberamos essas condições especiais:*
 
-1️⃣ *Parcela em atraso SEM JUROS via PIX – {{parcela_desconto}}*
-2️⃣ *Junção (parcela em atraso + a vencer) com 15% OFF – {{juncao}}*
-3️⃣ *Quitação total com 30% OFF via PIX – {{quitacao}}*
+1️⃣ *Valor em atraso SEM JUROS via PIX – {{parcela_desconto}}*
+2️⃣ *Junção (em atraso + próxima a vencer) com {{pct_juncao}} OFF – {{juncao}}*
+3️⃣ *Quitação total com {{pct_quitacao}} OFF via PIX – {{quitacao}}*
 4️⃣ *Quitação total no cartão de crédito em 12x de {{cartao_quitacao}} (inclusive de terceiros)*
 
 💬 *Estamos aqui para te ajudar!*
@@ -253,10 +253,10 @@ Olá *{{primeiro_nome}}*, tudo bem?
 
 Aproveite o desconto via PIX Automático HOJE:
 
-1️⃣ *PIX Automático: {{parcela_desconto}} (5% OFF)*
-2️⃣ *Quitação à vista: {{quitacao}} ou 12x de {{cartao_quitacao}} (25% OFF)*
-3️⃣ *Junção (atrasada + a vencer): {{juncao}} (15% OFF)*
-4️⃣ *Parcela em atraso: {{parcela_desconto}}*
+1️⃣ *PIX Automático em 21x de {{pix_automatico_desconto_21x}} ({{pct_pix_automatico}} OFF)*
+2️⃣ *Quitação à vista: {{quitacao}} ou 12x de {{cartao_quitacao}} ({{pct_quitacao}} OFF)*
+3️⃣ *Junção (em atraso + a vencer): {{juncao}} ({{pct_juncao}} OFF)*
+4️⃣ *Valor em atraso: {{parcela_desconto}}*
 
 ⚠️ *Confirma hoje? Após isso, perde o desconto!*
 📞 Atendimento: {{atendimento}}`,
@@ -308,11 +308,11 @@ Com o PIX automático da *{{empresa}}*, você não precisa mais se preocupar com
 
 *Confira suas condições especiais no contrato {{contrato}}:*
 
-1️⃣ Quitar tudo com 25% OFF: *{{quitacao}}*
-2️⃣ Pagar a parcela em atraso (sem juros): *{{parcela_desconto}}*
+1️⃣ Quitar tudo com {{pct_quitacao}} OFF: *{{quitacao}}*
+2️⃣ Pagar o valor em atraso (sem juros): *{{parcela_desconto}}*
 3️⃣ Quitar no cartão: *12x de {{cartao_quitacao}}* (podendo ser de terceiros)
 4️⃣ Regularizar a junção: *{{juncao}}*
-5️⃣ *Migrar pro PIX automático com desconto: {{parcela_desconto}}*
+5️⃣ *Migrar pro PIX automático com {{pct_pix_automatico}} OFF: 21x de {{pix_automatico_desconto_21x}}*
 
 *Escolha a opção que faz mais sentido pra você e me chama aqui! Vamos ativar sua condição especial ainda hoje!*
 💬*Estamos aqui para lhe ajudar,*
@@ -330,9 +330,9 @@ Com o PIX automático da *{{empresa}}*, você não precisa mais se preocupar com
 
 *Estamos oferecendo uma oportunidade com desconto exclusivo para você regularizar com facilidade e segurança — direto no cartão!*
 
-1️⃣ *Parcela em atraso SEM JUROS via PIX – {{parcela_desconto}}*
-2️⃣ *Junção (parcela em atraso + a vencer) com 15% OFF – {{juncao}}*
-3️⃣ *Quitação total com 30% OFF via PIX – {{quitacao}}*
+1️⃣ *Valor em atraso SEM JUROS via PIX – {{parcela_desconto}}*
+2️⃣ *Junção (em atraso + próxima a vencer) com {{pct_juncao}} OFF – {{juncao}}*
+3️⃣ *Quitação total com {{pct_quitacao}} OFF via PIX – {{quitacao}}*
 4️⃣ *Quitação total no cartão de crédito em 12x de {{cartao_quitacao}} (inclusive de terceiros)*
 
 💬 *Estamos aqui para te ajudar!*
@@ -351,9 +351,9 @@ Olá *{{primeiro_nome}}*, tudo bem?
 
 Aproveite o desconto e evite maiores transtornos em seu CPF:
 
-1️⃣ Parcela em atraso: *{{parcela_desconto}}*
-2️⃣ Quitação à vista: *{{quitacao}} ou 12x de {{cartao_quitacao}} (25% OFF)*
-3️⃣ Junção (atrasada + a vencer): *{{juncao}} (10% OFF)*
+1️⃣ Valor em atraso: *{{parcela_desconto}}*
+2️⃣ Quitação à vista: *{{quitacao}} ou 12x de {{cartao_quitacao}} ({{pct_quitacao}} OFF)*
+3️⃣ Junção (em atraso + a vencer): *{{juncao}} ({{pct_juncao}} OFF)*
 
 ⚠️ *Confirma hoje? Após isso, perde o desconto e o processo de negativação segue automaticamente.*
 📞 Atendimento: {{atendimento}}`,
@@ -371,9 +371,9 @@ Oi, *{{primeiro_nome}}*!
 Devido à falta de pagamento do contrato *{{contrato}}*, seu CPF foi encaminhado para o SPC/SERASA para ser negativado.
 Sabemos que imprevistos acontecem. Queremos te ajudar a resolver o quanto antes:
 
-1️⃣ Parcela vencida via PIX: *{{parcela_desconto}}*
-2️⃣ Junção das parcelas vencida + à vencer com *10% OFF*: *{{juncao}}*
-3️⃣ Quitação total com *25% OFF*: *{{quitacao}}*
+1️⃣ Valor vencido via PIX: *{{parcela_desconto}}*
+2️⃣ Junção das parcelas vencidas + à vencer com *{{pct_juncao}} OFF*: *{{juncao}}*
+3️⃣ Quitação total com *{{pct_quitacao}} OFF*: *{{quitacao}}*
 4️⃣ Parcelamento no cartão: *12x de {{cartao_quitacao}}* (podendo ser de terceiros)
 
 _Assim que o pagamento for confirmado, damos início à baixa da restrição junto aos órgãos de proteção ao crédito._
@@ -394,9 +394,9 @@ Bom dia *{{nome}}*,
 
 Como última oportunidade de negociação, conforme a Lei 13.140/15, temos as seguintes opções para que você regularize sua situação:
 
-1️⃣ PIX da parcela vencida com ISENÇÃO DE JUROS: {{parcela_desconto}}
-2️⃣ PIX da junção (parcela vencida + próxima parcela) com 10% DE DESCONTO: {{juncao}}
-3️⃣ Quitação à vista via PIX com 25% DE DESCONTO: {{quitacao}}
+1️⃣ PIX do valor vencido com ISENÇÃO DE JUROS: {{parcela_desconto}}
+2️⃣ PIX da junção (valor vencido + próxima parcela) com {{pct_juncao}} DE DESCONTO: {{juncao}}
+3️⃣ Quitação à vista via PIX com {{pct_quitacao}} DE DESCONTO: {{quitacao}}
 4️⃣ Parcelamento total no cartão: 12x de {{cartao_quitacao}} sem juros (pode ser em cartão de terceiros)
 
 💬 Estamos aqui para ajudar.
@@ -414,11 +414,11 @@ Como última oportunidade de negociação, conforme a Lei 13.140/15, temos as se
 *Reconhecemos seu papel na saúde e oferecemos condições exclusivas para regularizar sua situação com tranquilidade.*
 *Matrícula: {{contrato}}*
 
-1️⃣ *Parcela em atraso com isenção de juros 💰 Valor: {{parcela_desconto}}*
+1️⃣ *Valor em atraso com isenção de juros 💰 Valor: {{parcela_desconto}}*
 
-2️⃣ *Junção das parcelas em atraso + a vencer com 15% de desconto 💰 Valor: {{juncao}}*
+2️⃣ *Junção das parcelas em atraso + a vencer com {{pct_juncao}} de desconto 💰 Valor: {{juncao}}*
 
-3️⃣ *Quitação total via PIX com 30% de desconto 💰 Valor: de {{valor_com_juros}} por {{quitacao}}*
+3️⃣ *Quitação total via PIX com {{pct_quitacao}} de desconto 💰 Valor: de {{valor_com_juros}} por {{quitacao}}*
 
 4️⃣ *Parcelamento total em até 12x no cartão (inclusive de terceiros) 💳 12x de {{cartao_quitacao}}*
 
@@ -436,9 +436,9 @@ Olá, *{{nome}}*.
 
 Identificamos uma pendência no contrato Nº *{{contrato}}*. Para evitar que isso gere bloqueios em seu histórico acadêmico ou profissional, disponibilizamos as seguintes formas de regularização:
 
-1️⃣ Parcela em atraso com *ISENÇÃO DE JUROS* – *{{parcela_desconto}}*
-2️⃣ Junção das parcelas em atraso + à vencer com *10% OFF* – *{{juncao}}*
-3️⃣ Quitação total com *25% OFF* no PIX – *{{quitacao}}*
+1️⃣ Valor em atraso com *ISENÇÃO DE JUROS* – *{{parcela_desconto}}*
+2️⃣ Junção das parcelas em atraso + à vencer com *{{pct_juncao}} OFF* – *{{juncao}}*
+3️⃣ Quitação total com *{{pct_quitacao}} OFF* no PIX – *{{quitacao}}*
 4️⃣ Parcelamento total da quitação em *12x de {{cartao_quitacao}}* no cartão (podendo ser de terceiros)
 5️⃣ Parcelamento plano anual em *12x de {{cartao_anual}}* no cartão.
 
@@ -482,8 +482,7 @@ Não fique de fora dessa, tempo limitado!
 
 1️⃣ - Quero parcelar em 12x no cartão de Crédito valor de {{cartao_quitacao}} (podendo ser de terceiros)
 2️⃣ - Irei regularizar a Junção (em atraso + a que vai vencer) por {{juncao}}
-3️⃣ - Quero pagar somente a parcela em atraso por {{parcela_desconto}}
-4️⃣ - Irei regularizar parcela em atraso por {{parcela_desconto}}
+3️⃣ - Quero pagar somente o valor em atraso por {{parcela_desconto}}
 
 💬*Estamos aqui para lhe ajudar,*
 ⚡*Qual melhor opção de pagamento para hoje?*
@@ -500,9 +499,9 @@ Olá *{{primeiro_nome}}*, protocolo *{{protocolo}}*.
 
 A *{{empresa}}* liberou DESCONTOS EXCLUSIVOS nas suas parcelas para você aproveitar o Esquenta da Black!
 
-1️⃣ *Pagamento da parcela em atraso: {{parcela_desconto}}*
-2️⃣ *Pagamento da junção (atrasada + próxima): {{juncao}}*
-3️⃣ *Quitação via Pix com 25% OFF: {{quitacao}}*
+1️⃣ *Pagamento do valor em atraso: {{parcela_desconto}}*
+2️⃣ *Pagamento da junção (em atraso + próxima): {{juncao}}*
+3️⃣ *Quitação via Pix com {{pct_quitacao}} OFF: {{quitacao}}*
 4️⃣ *Quitação em 12x no cartão: {{cartao_quitacao}} (sem juros, podendo ser de terceiros)*
 5️⃣ *Plano anual em 12x no cartão: {{cartao_anual}}*
 6️⃣ *Já efetuei o pagamento, vou enviar o comprovante*
@@ -524,8 +523,8 @@ Contrato: *{{contrato}}*
 ✅ *Descontos exclusivos*
 
 1️⃣ *Parcelar em 12x no cartão: {{cartao_quitacao}} (pode ser de terceiros)*
-2️⃣ *Regularizar parcelas (em atraso + a vencer)15% OFF: {{juncao}}*
-3️⃣ *Pagar somente as parcelas em atraso com 5% OFF: {{parcela_desconto}}*
+2️⃣ *Regularizar parcelas (em atraso + a vencer) com {{pct_juncao}} OFF: {{juncao}}*
+3️⃣ *Pagar somente as parcelas em atraso com {{pct_atraso}} OFF: {{parcela_desconto}}*
 
 📲 Responda com a melhor opção ou fale conosco. Só hoje!
 📞 Atendimento: {{atendimento}}`,
@@ -1099,16 +1098,25 @@ Contrato: *{{contrato}}*
     return Number.isFinite(value) && value > 0 ? Math.ceil(value - Number.EPSILON) : 0;
   }
 
+  // O Tp. Venda (normalizado) → a empresa que a mensagem cita.
+  const EMPRESA_DO_TIPO_VENDA = new Map([
+    ["PRO", "Bookplay"], ["TEC", "Bookplay"], ["BOOKPLAY", "Bookplay"],
+    ["PEC", "Faculdade Bookplay"], ["FACULDADEBOOKPLAY", "Faculdade Bookplay"],
+    ["COLECAO", "Mundial Editora"], ["OUTROS", "Mundial Editora"], ["EDITBRASIL", "Mundial Editora"],
+    ["MUNDIALEDITORA", "Mundial Editora"],
+    ["PAGUEPLAY", "Pagueplay"],
+  ]);
+
   function mapCompany(saleType) {
-    const normalized = normalizeHeader(saleType);
-    if (["PRO", "TEC"].includes(normalized)) return "Bookplay";
-    if (normalized === "PEC") return "Faculdade Bookplay";
-    if (["COLECAO", "OUTROS", "EDITBRASIL"].includes(normalized)) return "Mundial Editora";
-    if (normalized === "BOOKPLAY") return "Bookplay";
-    if (normalized === "FACULDADEBOOKPLAY") return "Faculdade Bookplay";
-    if (normalized === "MUNDIALEDITORA") return "Mundial Editora";
-    if (normalized === "PAGUEPLAY") return "Pagueplay";
-    return cleanValue(saleType) || "Bookplay";
+    return EMPRESA_DO_TIPO_VENDA.get(normalizeHeader(saleType)) ?? (cleanValue(saleType) || "Bookplay");
+  }
+
+  /**
+   * O Tp. Venda é um dos códigos conhecidos? Código desconhecido sai cru na
+   * mensagem («A *BOOK* liberou…») e com o 0800 da Bookplay (25/10/2026).
+   */
+  function companyRecognized(saleType) {
+    return EMPRESA_DO_TIPO_VENDA.has(normalizeHeader(saleType));
   }
 
   // O 0800 de atendimento é o da empresa do cliente. Empresa fora desta lista
@@ -1298,11 +1306,17 @@ Contrato: *{{contrato}}*
     const pixAutoDiscount = financialDataAvailable
       ? roundUp((pixAutoBase * (1 - rates.pix_automatico)) / PIX_AUTO_PARCELAS)
       : null;
-    // Pix Automático só na parcela (20/10/2026): UMA parcela (valor em atraso ÷
-    // parcelas em atraso) com o desconto da parcela — não o do Pix. Sem
-    // parcela em atraso, zero, como a junção e o anual.
-    const pixAutoParcela = financialDataAvailable
+    // UMA parcela em atraso com o desconto da parcela (25/10/2026). O
+    // {{parcela_desconto}} é a soma de TODAS as atrasadas; este é o de uma só.
+    // Sem parcela em atraso, zero, como a junção e o anual.
+    const overdueOneDiscounted = financialDataAvailable
       ? (overdueCount > 0 ? roundUp(installmentValue * (1 - rates.overdue)) : 0)
+      : null;
+    // Pix Automático só na parcela (20/10/2026): UMA parcela (valor em atraso ÷
+    // parcelas em atraso) com o desconto do Pix Automático (25/10/2026; antes,
+    // o da parcela — quem mudava o % Pix não via efeito nela).
+    const pixAutoParcela = financialDataAvailable
+      ? (overdueCount > 0 ? roundUp(installmentValue * (1 - rates.pix_automatico)) : 0)
       : null;
     // As outras quantidades de parcelas (16/10/2026), na mesma conta: o total
     // da modalidade ÷ n, arredondado para cima. Chave = n de parcelas.
@@ -1367,6 +1381,7 @@ Contrato: *{{contrato}}*
       openValueTotal: openValueFile,
       updatedValue,
       overdueDiscounted,
+      overdueOneDiscounted,
       settlement,
       valueWithInterest,
       bundle,
@@ -1407,6 +1422,7 @@ Contrato: *{{contrato}}*
       atendimento: supportPhoneFor(item.company),
       telefone: item.phone,
       parcela_desconto: formatCurrency(item.overdueDiscounted),
+      uma_parcela_desconto: formatCurrency(item.overdueOneDiscounted),
       quitacao: formatCurrency(item.settlement),
       valor_com_juros: formatCurrency(item.valueWithInterest),
       juncao: formatCurrency(item.bundle),
@@ -1445,7 +1461,7 @@ Contrato: *{{contrato}}*
   }
 
   function templateRequiresFinancialData(template) {
-    return /{{\s*(?:parcela_desconto|quitacao|valor_com_juros|juncao(?:_(?:6|12)x)?|anual|cartao_quitacao(?:_2[01]x)?|cartao_anual(?:_2[01]x)?|pix_automatico(?:_desconto)?_(?:12|20|21)x|pix_automatico_parcela)\s*}}/i
+    return /{{\s*(?:parcela_desconto|uma_parcela_desconto|quitacao|valor_com_juros|juncao(?:_(?:6|12)x)?|anual|cartao_quitacao(?:_2[01]x)?|cartao_anual(?:_2[01]x)?|pix_automatico(?:_desconto)?_(?:12|20|21)x|pix_automatico_parcela)\s*}}/i
       .test(String(template ?? ""));
   }
 
@@ -1453,6 +1469,11 @@ Contrato: *{{contrato}}*
   function mailingFieldsInTemplate(template) {
     const text = String(template ?? "");
     return MAILING_FIELDS.filter((field) => new RegExp(`{{\\s*${field.key}\\s*}}`, "i").test(text));
+  }
+
+  /** A mensagem cita esta variável? (`{{ x }}` vale, como em `renderTemplate`) */
+  function templateUsesVariable(template, key) {
+    return new RegExp(`{{\\s*${key}\\s*}}`, "i").test(String(template ?? ""));
   }
 
   function templateWithoutForwarder(template) {
@@ -1476,6 +1497,9 @@ Contrato: *{{contrato}}*
     const template = templateWithoutForwarder(options.template || TEMPLATES[0].body);
     const requiresFinancialData = templateRequiresFinancialData(template);
     const mailingFieldsUsed = mailingFieldsInTemplate(template);
+    const usesCompany = templateUsesVariable(template, "empresa") || templateUsesVariable(template, "atendimento");
+    const usesLink = templateUsesVariable(template, "link");
+    const usesCpf = templateUsesVariable(template, "cpf");
 
     const items = records.map((record, index) => {
       const item = deriveRecord(record, discounts);
@@ -1493,6 +1517,19 @@ Contrato: *{{contrato}}*
         item.issues.push(`${field.header} ausente no mailing`);
         item.status = "Revisar";
       });
+      // O mesmo para o que a mensagem cita e sairia errado ou em branco
+      // (25/10/2026). Também não trava.
+      const revisar = (issue) => {
+        if (!item.issues.includes(issue)) item.issues.push(issue);
+        item.status = "Revisar";
+      };
+      if (usesCompany && item.saleType && !companyRecognized(item.saleType)) {
+        revisar(`Tp. Venda «${item.saleType}» não reconhecido: a empresa sai «${item.company}» e o 0800 da Bookplay`);
+      }
+      if (usesLink && !item.shortLink) revisar("Link curto ausente no mailing");
+      if (usesCpf && !item.cpf) {
+        revisar(item.sourceType === "report-245" ? "CPF ausente: o relatório 245 não traz CPF" : "CPF ausente no mailing");
+      }
       item.sender = senders.length ? senders[index % senders.length] : "";
       if (!item.sender) {
         item.issues.push("Quem encaminhará não informado");
@@ -1583,6 +1620,7 @@ Contrato: *{{contrato}}*
     parseNumberStrict,
     percentToRate,
     mapCompany,
+    companyRecognized,
     supportPhoneFor,
     withCompanySupportPhone,
     formatOperator,

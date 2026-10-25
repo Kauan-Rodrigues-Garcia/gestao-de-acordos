@@ -13,9 +13,12 @@
  * O botão da variável que já está na mensagem fica preenchido, e passar o
  * mouse nele realça na caixa onde ela foi usada (20/10/2026) — só visual.
  */
-import { useLayoutEffect, useMemo, useRef, type RefObject } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { flushSync } from 'react-dom';
+import { Info, Search, X } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+import { DETALHE_DA_VARIAVEL, valorCurto, type ExemploDaMensagem } from './detalheDasVariaveis';
 
 /** Um bloco por forma de pagamento (21/10/2026), mais os dados do cliente e os percentuais. */
 export type SecaoDeVariaveis = 'cliente' | 'pix_automatico' | 'quitacao' | 'atraso' | 'anual' | 'juros' | 'percentuais';
@@ -80,8 +83,9 @@ export const VARIABLE_GROUPS: GrupoDeVariaveis[] = [
     itens: [['pix_automatico_desconto_12x', '12x'], ['pix_automatico_desconto_20x', '20x'], ['pix_automatico_desconto_21x', '21x']],
   },
   {
-    // Só a parcela (20/10/2026): UMA parcela em atraso, com o % da parcela.
-    titulo: 'Só a parcela', dica: '1 parcela em atraso − % parcela', secao: 'pix_automatico', ...COM_DESCONTO,
+    // Só a parcela (20/10/2026): UMA parcela em atraso, com o % do Pix
+    // Automático (25/10/2026; antes, o da parcela).
+    titulo: 'Só a parcela', dica: '1 parcela em atraso − % Pix Aut.', secao: 'pix_automatico', ...COM_DESCONTO,
     itens: [['pix_automatico_parcela', '1 parcela']],
   },
   // ── Quitação
@@ -94,10 +98,10 @@ export const VARIABLE_GROUPS: GrupoDeVariaveis[] = [
     itens: [['cartao_quitacao', '12x'], ['cartao_quitacao_20x', '20x'], ['cartao_quitacao_21x', '21x']],
   },
   // ── Parcelas em atraso e junção. {{parcela_desconto}} é a soma de TODAS as
-  // atrasadas, não uma parcela.
+  // atrasadas; {{uma_parcela_desconto}}, uma só (25/10/2026).
   {
-    titulo: 'Atrasadas', dica: 'Todas as atrasadas − % parcela', secao: 'atraso', ...COM_DESCONTO,
-    itens: [['parcela_desconto', 'Todas']],
+    titulo: 'Atrasadas', dica: 'Atrasadas − % parcela', secao: 'atraso', ...COM_DESCONTO,
+    itens: [['parcela_desconto', 'Todas'], ['uma_parcela_desconto', '1 parcela']],
   },
   {
     // A junção em 6x ou 12x (20/10/2026): sai só a parcela.
@@ -262,34 +266,103 @@ export function RealceDeVariavel({ alvo, texto, variavel }: {
   );
 }
 
-export function VariableChips({ onInsert, ocultar, texto, onRealcar }: {
+/** Sem acento e minúsculo: a busca acha «quitacao» digitando «quitação». */
+function semAcento(s: string): string {
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+}
+
+const TITULO_DA_SECAO: Record<SecaoDeVariaveis, string> = Object.fromEntries(
+  SECOES.map((s) => [s.id, s.titulo]),
+) as Record<SecaoDeVariaveis, string>;
+
+const GRUPO_DA_VARIAVEL: Record<string, GrupoDeVariaveis> = Object.fromEntries(
+  VARIABLE_GROUPS.flatMap((g) => g.itens.map(([variable]) => [variable, g])),
+);
+
+/**
+ * Os botões das variáveis (25/10/2026: «mais fácil de entender e escolher»):
+ * uma busca, a ficha da variável sob o mouse (o que é, de onde vem e o valor
+ * que dá) e, com `exemplo`, o valor de cada uma escrito no próprio botão.
+ */
+export function VariableChips({ onInsert, ocultar, texto, onRealcar, exemplo }: {
   onInsert: (variable: string) => void;
   ocultar?: readonly string[];
   /** O texto da mensagem: o botão da variável já usada fica preenchido. */
   texto?: string;
   /** Mouse em cima de um botão (ou `null` ao sair): a caixa realça a variável. */
   onRealcar?: (variable: string | null) => void;
+  /** O cliente da prévia: os botões e a ficha mostram o valor de cada variável. */
+  exemplo?: ExemploDaMensagem;
 }) {
   const usadas = useMemo(() => variaveisUsadas(texto ?? ''), [texto]);
+  const [busca, setBusca] = useState('');
+  // A ficha mostra a última variável sob o mouse (ou o foco do teclado) e
+  // fica nela ao sair, para dar tempo de ler.
+  const [ficha, setFicha] = useState<string | null>(null);
+  const realcar = (variable: string | null) => {
+    if (variable) setFicha(variable);
+    onRealcar?.(variable);
+  };
+
+  const agulha = semAcento(busca.trim());
+  const combina = (variable: string, label: string, g: GrupoDeVariaveis) => {
+    if (!agulha) return true;
+    const detalhe = DETALHE_DA_VARIAVEL[variable];
+    return semAcento([variable, label, g.titulo, TITULO_DA_SECAO[g.secao], detalhe?.oQue, detalhe?.origem].join(' '))
+      .includes(agulha);
+  };
   const grupos = VARIABLE_GROUPS
-    .map((g) => ({ ...g, itens: g.itens.filter(([variable]) => !ocultar?.includes(variable)) }))
+    .map((g) => ({ ...g, itens: g.itens.filter(([variable, label]) => !ocultar?.includes(variable) && combina(variable, label, g)) }))
     .filter((g) => g.itens.length > 0);
   const secoes = SECOES
     .map((s) => ({ ...s, grupos: grupos.filter((g) => g.secao === s.id) }))
     .filter((s) => s.grupos.length > 0);
   const temValor = grupos.some((g) => g.desconto !== undefined);
+  const achadas = grupos.reduce((n, g) => n + g.itens.length, 0);
+
   return (
-    <div className="@container space-y-2">
+    <div className="@container space-y-2.5">
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />
+        <Input
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          placeholder="Buscar variável: quitação, 21x, cidade…"
+          aria-label="Buscar variável"
+          className="h-8 pl-8 pr-8 text-xs"
+        />
+        {busca && (
+          <button
+            type="button"
+            onClick={() => setBusca('')}
+            aria-label="Limpar a busca"
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:text-foreground"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+
+      <FichaDaVariavel variavel={ficha} usada={!!ficha && usadas.has(ficha)} exemplo={exemplo} />
+
       {temValor && (
-        <p className="flex items-center gap-3 text-[11px] text-muted-foreground">
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
           <span className="flex items-center gap-1.5">
             <span className={cn('h-2 w-2 rounded-full', TONS.rosa.bolinha)} aria-hidden /> Sem desconto
           </span>
           <span className="flex items-center gap-1.5">
             <span className={cn('h-2 w-2 rounded-full', TONS.verde.bolinha)} aria-hidden /> Com desconto
           </span>
+          {agulha && <span className="ml-auto">{achadas} {achadas === 1 ? 'variável' : 'variáveis'}</span>}
         </p>
       )}
+
+      {secoes.length === 0 && (
+        <p className="rounded-lg border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
+          Nenhuma variável com «{busca.trim()}».
+        </p>
+      )}
+
       {/* Blocos por linha pela largura de ONDE os chips estão, não da tela
           (23/10/2026): na coluna ao lado da mensagem cabem 2, na largura toda
           3 — menos rolagem (21/10/2026). */}
@@ -306,7 +379,14 @@ export function VariableChips({ onInsert, ocultar, texto, onRealcar }: {
             </div>
             <div className={cn('grid gap-2.5', s.largo && '@lg:grid-cols-2')}>
               {s.grupos.map((g) => (
-                <GrupoDeChips key={g.itens[0][0]} grupo={g} usadas={usadas} onInsert={onInsert} onRealcar={onRealcar} />
+                <GrupoDeChips
+                  key={g.itens[0][0]}
+                  grupo={g}
+                  usadas={usadas}
+                  onInsert={onInsert}
+                  onRealcar={realcar}
+                  valores={exemplo?.variaveis}
+                />
               ))}
             </div>
           </section>
@@ -316,12 +396,62 @@ export function VariableChips({ onInsert, ocultar, texto, onRealcar }: {
   );
 }
 
+/** O que a variável sob o mouse é, de onde vem e quanto dá para o cliente da prévia. */
+function FichaDaVariavel({ variavel, usada, exemplo }: {
+  variavel: string | null;
+  usada: boolean;
+  exemplo?: ExemploDaMensagem;
+}) {
+  const detalhe = variavel ? DETALHE_DA_VARIAVEL[variavel] : undefined;
+  const grupo = variavel ? GRUPO_DA_VARIAVEL[variavel] : undefined;
+  if (!variavel || !detalhe || !grupo) {
+    return (
+      <div className="flex min-h-[88px] items-center gap-2.5 rounded-lg border border-dashed border-border bg-background/60 p-3 text-xs text-muted-foreground">
+        <Info className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+        <p>
+          Passe o mouse numa variável para ver o que ela escreve, de onde vem a informação
+          {exemplo ? ' e o valor que ela dá para o cliente da prévia' : ''}. Clique para inserir onde está o cursor.
+        </p>
+      </div>
+    );
+  }
+  const valor = exemplo?.variaveis[variavel];
+  return (
+    <div className="min-h-[88px] space-y-1.5 rounded-lg border border-border bg-background p-3" aria-live="polite">
+      <div className="flex flex-wrap items-center gap-2">
+        <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs font-semibold text-foreground">{`{{${variavel}}}`}</code>
+        <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <span className={cn('h-1.5 w-1.5 rounded-full', TONS[grupo.tom].bolinha)} aria-hidden />
+          {TITULO_DA_SECAO[grupo.secao]} · {grupo.titulo}
+        </span>
+        {usada && (
+          <span className="ml-auto rounded bg-primary/10 px-1.5 text-[10px] font-medium text-primary">na mensagem</span>
+        )}
+      </div>
+      <p className="text-xs text-foreground">{detalhe.oQue}</p>
+      <p className="text-[11px] text-muted-foreground">
+        <span className="font-medium text-foreground/80">De onde vem:</span> {detalhe.origem}
+      </p>
+      {exemplo && (
+        <p className="text-[11px] text-muted-foreground">
+          <span className="font-medium text-foreground/80">{exemplo.real ? 'Neste cliente' : 'No exemplo'}:</span>{' '}
+          {valor
+            ? <span className="font-semibold tabular-nums text-foreground">{valor}</span>
+            : <span className="font-medium text-destructive">vazio — sai em branco</span>}
+        </p>
+      )}
+    </div>
+  );
+}
+
 /** Um grupo: o título com a conta (base e desconto) e os botões dele. */
-function GrupoDeChips({ grupo: g, usadas, onInsert, onRealcar }: {
+function GrupoDeChips({ grupo: g, usadas, onInsert, onRealcar, valores }: {
   grupo: GrupoDeVariaveis;
   usadas: Set<string>;
   onInsert: (variable: string) => void;
   onRealcar?: (variable: string | null) => void;
+  /** As variáveis do cliente da prévia: o valor sai embaixo do nome do botão. */
+  valores?: Record<string, string>;
 }) {
   // Grupo de valor: botões em 3 colunas iguais, para o 12x / 20x / 21x de um
   // grupo ficar embaixo do 12x / 20x / 21x do outro. Botão sozinho fica com a
@@ -357,15 +487,27 @@ function GrupoDeChips({ grupo: g, usadas, onInsert, onRealcar }: {
               onClick={() => onInsert(variable)}
               onMouseEnter={() => onRealcar?.(variable)}
               onMouseLeave={() => onRealcar?.(null)}
+              onFocus={() => onRealcar?.(variable)}
+              onBlur={() => onRealcar?.(null)}
               className={cn(
-                'whitespace-nowrap rounded-md border px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground',
-                deValor && 'truncate text-center',
+                'min-w-0 whitespace-nowrap rounded-md border px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                deValor && 'text-center',
                 deValor && g.itens.length === 1 && 'col-span-3 min-w-[calc((100%_-_0.75rem)/3)] justify-self-start',
                 TONS[g.tom].chip,
                 usada && TONS[g.tom].usado,
               )}
             >
-              {label}
+              <span className="block truncate">{label}</span>
+              {valores && (
+                <span className={cn(
+                  'block truncate text-[10px] font-normal tabular-nums',
+                  !deValor && 'max-w-[18ch]',
+                  valores[variable] ? 'opacity-75' : 'italic opacity-50',
+                )}
+                >
+                  {valorCurto(valores[variable]) || 'vazio'}
+                </span>
+              )}
             </button>
           );
         })}

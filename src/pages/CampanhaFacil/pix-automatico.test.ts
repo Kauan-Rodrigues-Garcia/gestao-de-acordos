@@ -69,17 +69,17 @@ describe('Pix Automático 21x', () => {
   });
 });
 
-describe('Pix Automático só na parcela (20/10/2026)', () => {
+describe('Pix Automático só na parcela (20/10/2026; % do Pix desde 25/10/2026)', () => {
   // O registro de teste: 3 parcelas em atraso somando R$ 300 → parcela de R$ 100.
-  it('uma parcela com o desconto da parcela, não o do Pix', () => {
+  it('uma parcela com o desconto do Pix Automático, não o da parcela', () => {
     const item = CampaignCore.deriveRecord(registro('2100'), CampaignCore.DEFAULT_DISCOUNTS);
-    expect(item.pixAutoParcela).toBe(93);     // 100 × (1 − 7%)
+    expect(item.pixAutoParcela).toBe(95);     // 100 × (1 − 5%)
     const v = CampaignCore.variablesFor(item, CampaignCore.DEFAULT_DISCOUNTS);
-    expect(v.pix_automatico_parcela).toBe(CampaignCore.formatCurrency(93));
+    expect(v.pix_automatico_parcela).toBe(CampaignCore.formatCurrency(95));
   });
 
-  it('o % do Pix não mexe nela; o da parcela, sim — e arredonda para cima', () => {
-    const descontos = { ...CampaignCore.DEFAULT_DISCOUNTS, overdue: 12.5, pix_automatico: 40 };
+  it('o % da parcela não mexe nela; o do Pix, sim — e arredonda para cima', () => {
+    const descontos = { ...CampaignCore.DEFAULT_DISCOUNTS, overdue: 40, pix_automatico: 12.5 };
     expect(CampaignCore.deriveRecord(registro('2100'), descontos).pixAutoParcela).toBe(88); // 87,5 → 88
   });
 

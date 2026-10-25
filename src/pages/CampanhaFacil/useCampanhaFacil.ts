@@ -702,7 +702,7 @@ export function useCampanhaFacil() {
     templatesBloqueados, mensagemBloqueada,
     // config
     sendersList, envios,
-    discountsInput, setDiscount, discountPresets, selectedDiscountPresetId,
+    discountsInput, discountsApplied, setDiscount, discountPresets, selectedDiscountPresetId,
     // ações
     processFile, removeMailing, downloadExcluded,
     saveTemplateBody, resetTemplateBody, addMessage, deleteSelectedMessage, restoreDefaults,

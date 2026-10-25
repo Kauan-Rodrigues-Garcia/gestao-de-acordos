@@ -8,18 +8,28 @@
  * era rolar a janela para longe da mensagem.
  *
  * No celular as colunas viram uma fila: mensagem em cima, variáveis embaixo.
+ *
+ * Desde 25/10/2026, embaixo do texto vem a prévia da mensagem montada para um
+ * cliente, e os botões das variáveis mostram o valor de cada uma. O texto
+ * avisa a variável que não existe e o «R$»/«,00» escrito em volta de uma
+ * variável que já sai em reais (com o botão que corrige).
  */
 import { useMemo, type ReactNode, type RefObject } from 'react';
-import { Braces, MessageSquare } from 'lucide-react';
+import { AlertTriangle, Braces, MessageSquare } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { RealceDeVariavel, VariableChips, insertVariable, variaveisUsadas } from './VariaveisMensagem';
+import {
+  corrigirReaisDuplicados, reaisDuplicados, variaveisDesconhecidas, type ExemploDaMensagem,
+} from './detalheDasVariaveis';
+import { PreviaDaMensagem } from './PreviaDaMensagem';
 
 export function JanelaDaMensagem({
   aberta, onOpenChange, titulo, descricao, campos, textoRef, texto, setTexto, placeholder,
-  realce, setRealce, rodape,
+  realce, setRealce, rodape, exemplo,
 }: {
   aberta: boolean;
   onOpenChange: (aberta: boolean) => void;
@@ -34,8 +44,12 @@ export function JanelaDaMensagem({
   realce: string | null;
   setRealce: (v: string | null) => void;
   rodape: ReactNode;
+  /** O cliente da prévia (o selecionado no mailing ou o fictício). */
+  exemplo: ExemploDaMensagem;
 }) {
   const usadas = useMemo(() => variaveisUsadas(texto).size, [texto]);
+  const desconhecidas = useMemo(() => variaveisDesconhecidas(texto), [texto]);
+  const emReais = useMemo(() => reaisDuplicados(texto), [texto]);
   return (
     <Dialog open={aberta} onOpenChange={onOpenChange}>
       <DialogContent className="flex h-[min(92vh,920px)] w-[96vw] max-w-[1400px] flex-col gap-0 overflow-hidden p-0">
@@ -47,8 +61,8 @@ export function JanelaDaMensagem({
         </DialogHeader>
 
         <div className="grid min-h-0 flex-1 overflow-y-auto lg:grid-cols-[minmax(0,1fr)_minmax(460px,46%)] lg:overflow-hidden">
-          {/* ── A mensagem ── */}
-          <div className="flex min-h-0 flex-col gap-3 p-5">
+          {/* ── A mensagem e, embaixo, a prévia ── */}
+          <div className="flex min-h-0 flex-col gap-3 p-5 lg:overflow-y-auto">
             {campos}
             <div className="flex min-h-0 flex-1 flex-col gap-1">
               <div className="flex items-baseline justify-between gap-2">
@@ -57,20 +71,47 @@ export function JanelaDaMensagem({
                   {texto.length.toLocaleString('pt-BR')} caracteres
                 </span>
               </div>
-              <div className="relative flex min-h-[320px] flex-1 flex-col">
+              <div className="relative flex min-h-[220px] flex-1 flex-col">
                 <Textarea
                   ref={textoRef}
                   value={texto}
                   onChange={(e) => setTexto(e.target.value)}
                   placeholder={placeholder}
-                  className="min-h-[320px] flex-1 resize-none font-mono text-xs leading-relaxed"
+                  className="min-h-[220px] flex-1 resize-none font-mono text-xs leading-relaxed"
                 />
                 <RealceDeVariavel alvo={textoRef} texto={texto} variavel={realce} />
               </div>
-              <p className="text-[11px] text-muted-foreground">
-                Clique numa variável ao lado para inseri-la onde está o cursor.
-              </p>
+              {desconhecidas.length > 0 && (
+                <p className="flex items-start gap-1.5 text-[11px] font-medium text-amber-700 dark:text-amber-400" role="alert">
+                  <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden />
+                  {desconhecidas.map((v) => `{{${v}}}`).join(', ')}{' '}
+                  {desconhecidas.length === 1 ? 'não existe e sairia' : 'não existem e sairiam'} em branco. Confira a escrita ou use os botões ao lado.
+                </p>
+              )}
+              {emReais.length > 0 && (
+                <div className="flex items-start gap-1.5 text-[11px] font-medium text-amber-700 dark:text-amber-400" role="alert">
+                  <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden />
+                  <p className="flex-1">
+                    {emReais.map((v) => `{{${v}}}`).join(', ')}{' '}
+                    {emReais.length === 1 ? 'já sai' : 'já saem'} com «R$» e centavos. Com «R$» antes ou «,00» depois,
+                    o cliente recebe «R$R$ 1.400,00,00».
+                  </p>
+                  <Button
+                    type="button" size="sm" variant="outline"
+                    className="h-6 shrink-0 px-2 text-[11px]"
+                    onClick={() => setTexto(corrigirReaisDuplicados(texto))}
+                  >
+                    Corrigir
+                  </Button>
+                </div>
+              )}
+              {desconhecidas.length === 0 && emReais.length === 0 && (
+                <p className="text-[11px] text-muted-foreground">
+                  Clique numa variável ao lado para inseri-la onde está o cursor.
+                </p>
+              )}
             </div>
+            <PreviaDaMensagem texto={texto} exemplo={exemplo} />
           </div>
 
           {/* ── As variáveis, ao lado ── */}
@@ -86,6 +127,7 @@ export function JanelaDaMensagem({
             <div className="min-h-0 flex-1 p-3 lg:overflow-y-auto">
               <VariableChips
                 texto={texto}
+                exemplo={exemplo}
                 onRealcar={setRealce}
                 onInsert={(v) => insertVariable(textoRef, texto, setTexto, v)}
               />

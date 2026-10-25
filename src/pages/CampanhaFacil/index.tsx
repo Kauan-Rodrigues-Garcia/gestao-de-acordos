@@ -11,7 +11,7 @@
  * do próprio painel. Mensagens, excluídas e descontos são do SETOR da
  * campanha (20261016210000): o do líder, ou o que a gerência escolhe no topo.
  */
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Upload, FileText, Trash2, Plus, Pencil, Copy, Download, Search,
@@ -45,6 +45,7 @@ import { temPendenciaGrave, useCampanhaFacil, type StatusFilter, type WorkspaceS
 import { SeletorOperadores } from './SeletorOperadores';
 import { MinhasCampanhas } from './HistoricoCampanhas';
 import { JanelaDaMensagem } from './JanelaDaMensagem';
+import { exemploDaMensagem } from './detalheDasVariaveis';
 import { CampoPercentual } from './CampoPercentual';
 import { textoDoPercentual } from './percentual';
 
@@ -55,7 +56,7 @@ const DISCOUNT_FIELDS: [keyof typeof CampaignCore.DEFAULT_DISCOUNTS, string, str
   ['interest', 'Juros', 'Saldo com juros'],
   ['bundle', 'Junção', 'À vista, 6x e 12x'],
   ['annual', 'Anual', 'À vista e cartão'],
-  ['pix_automatico', 'Pix Automático', 'Só o com desconto'],
+  ['pix_automatico', 'Pix Automático', 'Com desconto e só a parcela'],
 ];
 
 export default function CampanhaFacil() {
@@ -82,6 +83,11 @@ export default function CampanhaFacil() {
   const addRef = useRef<HTMLTextAreaElement>(null);
   /** A variável com o mouse em cima, realçada na mensagem (editar ou adicionar). */
   const [realce, setRealce] = useState<string | null>(null);
+  /** O cliente da prévia nas janelas da mensagem: o selecionado, ou o fictício. */
+  const exemplo = useMemo(
+    () => exemploDaMensagem(cf.selectedItem, cf.discountsApplied),
+    [cf.selectedItem, cf.discountsApplied],
+  );
   const [dragging, setDragging] = useState(false);
 
   // Dialogs
@@ -753,6 +759,7 @@ export default function CampanhaFacil() {
         textoRef={editRef}
         texto={editValue}
         setTexto={setEditValue}
+        exemplo={exemplo}
         realce={realce}
         setRealce={setRealce}
         rodape={(
@@ -787,6 +794,7 @@ export default function CampanhaFacil() {
         textoRef={addRef}
         texto={addCorpo}
         setTexto={setAddCorpo}
+        exemplo={exemplo}
         placeholder="Cole ou digite a mensagem sem alterar o conteúdo."
         realce={realce}
         setRealce={setRealce}

@@ -101,7 +101,10 @@ export interface CampaignItem {
   /** Soma de `openValueFile` do mesmo contrato na campanha — a coluna VALOR EM ABERTO. */
   openValueTotal: number | null;
   updatedValue: number | null;
+  /** Todas as atrasadas com o % da parcela — o {{parcela_desconto}}. */
   overdueDiscounted: number | null;
+  /** UMA parcela em atraso com o % da parcela (25/10/2026). 0 sem parcela em atraso. */
+  overdueOneDiscounted: number | null;
   settlement: number | null;
   valueWithInterest: number | null;
   bundle: number | null;
@@ -114,7 +117,8 @@ export interface CampaignItem {
   pixAutoDiscount: number | null;
   /**
    * Pix Automático só na parcela (20/10/2026): uma parcela (valor ÷ parcelas
-   * em atraso) com o desconto da parcela. 0 sem parcela em atraso.
+   * em atraso) com o desconto do Pix Automático (25/10/2026). 0 sem parcela
+   * em atraso.
    */
   pixAutoParcela: number | null;
   /**
@@ -167,6 +171,8 @@ export interface CampaignCoreApi {
   parseNumber(value: unknown): number;
   percentToRate(value: unknown): number;
   mapCompany(saleType: unknown): string;
+  /** O Tp. Venda é um código conhecido de `mapCompany`? */
+  companyRecognized(saleType: unknown): boolean;
   /** O 0800 de atendimento da empresa (nome de `mapCompany`). */
   supportPhoneFor(company: string): string;
   /** Troca os 0800 conhecidos escritos no texto por {{atendimento}}. */
