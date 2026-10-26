@@ -15,7 +15,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import {
-  faixasDeRetirada, formatarPreco, linhasForaDaJanela,
+  faixasDeRetirada, formatarPreco, fotoDoItem, linhasForaDaJanela,
   type AcaoCarrinho, type ConfigCantina, type LinhaCarrinho,
 } from '@/lib/cantina';
 import { ImagemItem } from './visual';
@@ -76,7 +76,7 @@ export function ConteudoCarrinho({
               className="rounded-xl border bg-background p-2"
             >
               <div className="flex items-center gap-2.5">
-                <ImagemItem categoria={l.item.categoria} foto={l.item.foto_url} nome={l.item.nome}
+                <ImagemItem categoria={l.item.categoria} foto={fotoDoItem(l.item)} nome={l.item.nome}
                   className="w-11 h-11 rounded-lg shrink-0" tamanhoIcone="w-5 h-5" />
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold leading-tight truncate">{l.item.nome}</p>

@@ -3,11 +3,14 @@ import { Video } from './Video';
 import { TOTAL_FRAMES } from './linhaDoTempo';
 import { FPS } from './movimento';
 import { TOTAL_AUTORIZACOES, VideoAutorizacoes } from './autorizacoes/VideoAutorizacoes';
+import { TOTAL_CANTINA, VideoCantina } from './cantina/VideoCantina';
 
 export const Root: React.FC = () => (
   <>
     <Composition id="Operador" component={Video} durationInFrames={TOTAL_FRAMES} fps={FPS} width={1920} height={1080} defaultProps={{ medir: false }} />
     {/* 15/10/2026: as autorizações saíram do botão do canto e foram para o chat. */}
     <Composition id="Autorizacoes" component={VideoAutorizacoes} durationInFrames={TOTAL_AUTORIZACOES} fps={FPS} width={1920} height={1080} />
+    {/* 26/10/2026: a aba Cantina e o painel da cantina, para apresentar à cantina. */}
+    <Composition id="Cantina" component={VideoCantina} durationInFrames={TOTAL_CANTINA} fps={FPS} width={1920} height={1080} />
   </>
 );

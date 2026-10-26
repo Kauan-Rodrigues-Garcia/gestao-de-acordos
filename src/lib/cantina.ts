@@ -317,6 +317,25 @@ export function resumoDeProducao(
     .sort((a, b) => b.quantidade - a.quantidade || a.nome.localeCompare(b.nome));
 }
 
+/**
+ * Fotos genéricas de amostra (26/10/2026), por código do cardápio, só para a
+ * apresentação à cantina. Valem enquanto o item não tem `foto_url` próprio;
+ * quando a cantina cadastrar a foto de verdade, ela ganha. Arquivos em
+ * public/images/cantina (Unsplash).
+ */
+const FOTO_AMOSTRA: Record<number, string> = {
+  50: 'xsalada', 51: 'xfrango', 53: 'xsaladinha', 59: 'xegg', 58: 'xcalabresa',
+  52: 'hotdog', 57: 'hotduplo',
+  8: 'refri', 9: 'coca', 13: 'agua', 14: 'guarana', 15: 'guarana',
+};
+
+/** A foto do item: a cadastrada, ou a de amostra, ou nenhuma (ilustração). */
+export function fotoDoItem(item: Pick<ItemCantina, 'codigo' | 'foto_url'>): string | null {
+  if (item.foto_url) return item.foto_url;
+  const arquivo = FOTO_AMOSTRA[item.codigo];
+  return arquivo ? `/images/cantina/${arquivo}.jpg` : null;
+}
+
 /** O que conta no dia: entregue, não retirado e o que ainda está na fila. */
 export function totalDoDia(pedidos: PedidoCantina[]): { pedidos: number; valor: number } {
   return pedidos.reduce(

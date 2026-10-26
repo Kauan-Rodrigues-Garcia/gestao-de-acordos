@@ -10,7 +10,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Lock, Minus, Plus } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
-import { formatarPreco, type ItemCantina, type JanelaItem } from '@/lib/cantina';
+import { formatarPreco, fotoDoItem, type ItemCantina, type JanelaItem } from '@/lib/cantina';
 import { ImagemItem } from './visual';
 
 const MAX_INGREDIENTES = 4;
@@ -54,6 +54,7 @@ export const CardItem = memo(function CardItem({
 
   return (
     <motion.article
+      id={`item-${item.id}`}
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       whileHover={disponivel ? { y: -2 } : undefined}
@@ -65,7 +66,7 @@ export const CardItem = memo(function CardItem({
       )}
     >
       <div className="relative aspect-[16/10]">
-        <ImagemItem categoria={item.categoria} foto={item.foto_url} nome={item.nome} className="absolute inset-0 w-full h-full" />
+        <ImagemItem categoria={item.categoria} foto={fotoDoItem(item)} nome={item.nome} className="absolute inset-0 w-full h-full" />
         <span className="absolute top-2 left-2 rounded-full bg-black/55 text-white text-[11px] font-semibold px-2 py-0.5 backdrop-blur-sm">
           #{item.codigo}
         </span>

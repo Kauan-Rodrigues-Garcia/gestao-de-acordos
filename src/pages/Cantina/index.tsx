@@ -6,16 +6,16 @@
  *
  * O link das notificações (`/cantina?pedido=<id>`) abre o pedido direto.
  */
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Clock, Loader2, Search, ShoppingBasket, Store, UtensilsCrossed } from 'lucide-react';
+import { Loader2, Search, ShoppingBasket, Store, UtensilsCrossed } from 'lucide-react';
 import { toast } from 'sonner';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
 import {
-  CATEGORIAS, formatarPreco, janelaDoItem, quantidadeDoItem,
+  CATEGORIAS, formatarPreco, fotoDoItem, janelaDoItem, quantidadeDoItem,
   type CategoriaCantina, type ItemCantina,
 } from '@/lib/cantina';
 import { useCantina } from './useCantina';
@@ -23,11 +23,19 @@ import { CardItem } from './CardItem';
 import { ConteudoCarrinho } from './Carrinho';
 import { DetalhePedido, Historico, PedidosDeHoje } from './MeusPedidos';
 import { IconeDaCategoria } from './visual';
+import { type SlideVitrine } from './Vitrine';
+import { CabecalhoCantina } from './Cabecalho';
 
 function saudacao(minutos: number): string {
   if (minutos < 12 * 60) return 'Bom dia';
   if (minutos < 18 * 60) return 'Boa tarde';
   return 'Boa noite';
+}
+
+/** Disponíveis agora primeiro; o resto (com cadeado) depois, na ordem do cardápio. */
+function ordenadosPorJanela(itens: ItemCantina[], agoraMin: number): ItemCantina[] {
+  return [...itens].sort((a, b) =>
+    Number(janelaDoItem(a, agoraMin).estado !== 'aberta') - Number(janelaDoItem(b, agoraMin).estado !== 'aberta'));
 }
 
 function normalizar(v: string): string {
@@ -67,12 +75,43 @@ export default function PaginaCantina() {
       && (!termo || normalizar(`${i.codigo} ${i.nome} ${i.descricao ?? ''} ${i.ingredientes.join(' ')}`).includes(termo)));
   }, [itens, categoria, busca]);
 
-  // Disponíveis agora primeiro; o resto (com cadeado) depois, na ordem do cardápio.
-  const ordenados = useMemo(() => {
-    const min = c.relogio.minutos;
-    return [...filtrados].sort((a, b) =>
-      Number(janelaDoItem(a, min).estado !== 'aberta') - Number(janelaDoItem(b, min).estado !== 'aberta'));
-  }, [filtrados, c.relogio.minutos]);
+  const ordenados = useMemo(() => ordenadosPorJanela(filtrados, c.relogio.minutos), [filtrados, c.relogio.minutos]);
+
+  // Vitrine do cabeçalho: um slide por foto (os dois Guaranás dividem uma),
+  // o que dá para pedir agora primeiro.
+  const vitrine = useMemo<SlideVitrine[]>(() => {
+    const vistas = new Set<string>();
+    const slides: SlideVitrine[] = [];
+    for (const item of ordenadosPorJanela(itens, c.relogio.minutos)) {
+      const foto = fotoDoItem(item);
+      if (!foto || vistas.has(foto)) continue;
+      vistas.add(foto);
+      const janela = janelaDoItem(item, c.relogio.minutos);
+      slides.push({
+        id: item.id, foto, nome: item.nome, preco: item.preco,
+        bloqueio: janela.estado === 'antes' ? `a partir das ${janela.abre}`
+          : janela.estado === 'encerrada' ? `encerrado às ${janela.fechou}` : null,
+      });
+    }
+    return slides;
+  }, [itens, c.relogio.minutos]);
+  const disponiveisAgora = useMemo(
+    () => itens.filter(i => janelaDoItem(i, c.relogio.minutos).estado === 'aberta').length,
+    [itens, c.relogio.minutos],
+  );
+
+  const refCardapio = useRef<HTMLDivElement>(null);
+  const irParaCardapio = useCallback(() => {
+    refCardapio.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
+  const irParaItem = useCallback((id: string) => {
+    setCategoria('tudo');
+    setBusca('');
+    // Depois do filtro limpo o card existe na tela.
+    requestAnimationFrame(() => {
+      document.getElementById(`item-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  }, []);
 
   const historico = useMemo(() => c.pedidos.filter(p => p.dia !== c.relogio.dia), [c.pedidos, c.relogio.dia]);
   const pedidoSelecionado = c.pedidos.find(p => p.id === pedidoAberto) ?? null;
@@ -112,47 +151,22 @@ export default function PaginaCantina() {
 
   return (
     <div className="mx-auto w-full max-w-[1400px] px-4 sm:px-6 py-5 pb-28 lg:pb-8">
-      {/* Cabeçalho com o aviso do dia */}
-      <motion.header
-        initial={{ opacity: 0, y: -8 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-orange-500 via-amber-500 to-yellow-400 text-white shadow-lg"
-      >
-        <div className="absolute -right-10 -top-10 w-56 h-56 rounded-full bg-white/15 blur-2xl" aria-hidden />
-        <div className="absolute right-6 bottom-0 opacity-20 hidden sm:block" aria-hidden>
-          <UtensilsCrossed className="w-40 h-40 -mb-8" strokeWidth={1.2} />
-        </div>
-        <div className="relative p-5 sm:p-7 space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className={cn(
-              'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold backdrop-blur',
-              config!.aberta ? 'bg-white/25' : 'bg-black/25',
-            )}>
-              <span className={cn('w-2 h-2 rounded-full', config!.aberta ? 'bg-emerald-300 animate-pulse' : 'bg-rose-300')} />
-              {config!.aberta ? 'Aberta para pedidos' : 'Fechada no momento'}
-            </span>
-            <span className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-1 text-xs font-medium">
-              <Clock className="w-3.5 h-3.5" /> retiradas das {config!.abre_as} às {config!.fecha_as}
-            </span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-black tracking-tight drop-shadow-sm">
-            {saudacao(c.relogio.minutos)}{primeiroNome ? `, ${primeiroNome}` : ''}! O que vai ser hoje?
-          </h1>
-          {(config!.aviso_titulo || config!.aviso_texto) && (
-            <div className="max-w-2xl text-sm text-white/95">
-              {config!.aviso_titulo && <p className="font-semibold">{config!.aviso_titulo}</p>}
-              {config!.aviso_texto && <p className="opacity-90">{config!.aviso_texto}</p>}
-            </div>
-          )}
-        </div>
-      </motion.header>
+      <CabecalhoCantina
+        saudacao={saudacao(c.relogio.minutos)}
+        primeiroNome={primeiroNome}
+        config={config!}
+        vitrine={vitrine}
+        disponiveisAgora={disponiveisAgora}
+        onVerCardapio={irParaCardapio}
+        onEscolher={irParaItem}
+      />
 
       <div className="mt-5 grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="min-w-0 space-y-5">
           <PedidosDeHoje pedidos={c.hoje} onAbrir={abrirPedido} />
 
           {/* Filtros */}
-          <div className="sticky top-0 z-10 -mx-1 px-1 py-2 bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70 space-y-2">
+          <div ref={refCardapio} className="sticky top-0 z-10 scroll-mt-4 -mx-1 px-1 py-2 bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70 space-y-2">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <input

@@ -14,6 +14,7 @@ desta pasta. Todos os dados que aparecem na tela são fictícios.
 |---|---|---|---|---|---|
 | Apresentação do sistema | operador (regra Nosso produto) | ~82 s, com narração | `Operador` | `npm run render` | `prontos/apresentacao-operador.mp4` |
 | Autorizações no chat (atualização de permissões) | líderes | ~21 s, sem voz | `Autorizacoes` | `npm run render:autorizacoes` | `prontos/autorizacoes-no-chat.mp4` |
+| A cantina no sistema (aba Cantina + painel da cantina) | o pessoal da cantina | ~54 s, sem voz | `Cantina` | `npm run render:cantina` | `prontos/cantina.mp4` |
 
 Os `.mp4` de `prontos/` ficam **só no computador** (estão no `.gitignore`):
 cada versão tem dezenas de MB e incharia o repositório para sempre. O código de
@@ -26,6 +27,7 @@ npm install                    # uma vez
 npm run estudio                # abre o editor no navegador, com a linha do tempo de cada vídeo
 npm run render                 # gera prontos/apresentacao-operador.mp4
 npm run render:autorizacoes    # gera prontos/autorizacoes-no-chat.mp4
+npm run render:cantina         # gera prontos/cantina.mp4
 npm run medir                  # depois de mexer no desenho de uma tela: reposiciona cursor e câmera
 ```
 
@@ -64,6 +66,7 @@ abaixa enquanto a voz fala. Sem o arquivo, o vídeo sai só com voz e efeitos.
 | `src/cenas/` | abertura (pergunta + logos), app, fechamento, manchetes |
 | `src/app/` | as telas do app (mesmas classes do sistema), roteiro do cursor e da câmera, `alvos.json` |
 | `src/autorizacoes/` | o vídeo das autorizações no chat |
+| `src/cantina/` | o vídeo da cantina (fotos de exemplo em `public/cantina/`) |
 | `src/estilo/` | Tailwind + o CSS copiado do app (`npm run css-do-app`) |
 | `src/Trilha.tsx` | voz, efeitos sonoros e música |
 | `scripts/sons.mjs` | gera os efeitos sonoros (`public/sons/`) |

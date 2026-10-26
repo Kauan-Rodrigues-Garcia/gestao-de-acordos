@@ -828,15 +828,22 @@
     @apply bg-primary/20 text-primary;
   }
 
+  /* A barra de rolagem: era 6 px a 20% — no PC quase ninguém via que havia
+     mais conteúdo de lado (19/10/2026). A de lado ganhou altura para dar de
+     pegar com o mouse; a de pé continua fina. */
   ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+    width: 8px;
+    height: 10px;
   }
   ::-webkit-scrollbar-track {
     @apply bg-transparent;
   }
   ::-webkit-scrollbar-thumb {
-    @apply bg-muted-foreground/20 rounded-full hover:bg-muted-foreground/40;
+    @apply bg-muted-foreground/35 rounded-full hover:bg-muted-foreground/55;
+  }
+  /* A barra de lado: um trilho de leve, para ela ser vista como barra. */
+  ::-webkit-scrollbar-track:horizontal {
+    @apply bg-muted/60 rounded-full;
   }
 }
 
@@ -1147,18 +1154,10 @@
    O desfoque de fundo sai: o navegador reamostra tudo o que está atrás dele a
    cada quadro, e é justamente o que máquina sem placa de vídeo não aguenta.
 
-   A Caça aos Zumbis (classes `zb-*`) fica de fora: é gincana da empresa
-   inteira e tem que funcionar igual para todo mundo (Cleber, 08/10/2026). Sem
-   a exceção, o recado «você matou» e o HEADSHOT! sumiam em 1 ms (as animações
-   terminam invisíveis) e a faixa do topo parava no meio do nome. Custa pouco:
-   um zumbi por vez, que já pausa com a aba escondida.
-
-   As bruxas (classes `bx-*`, 14/10/2026) ficam de fora pelo mesmo motivo: sem
-   elas a faixa parava e o HEADSHOT!, o «2x!» e o FINALIZADA! sumiam na hora.
    ─────────────────────────────────────────────────────────────────────────── */
-html[data-leve] *:not([class^="zb-"], [class*=" zb-"], [class^="bx-"], [class*=" bx-"]),
-html[data-leve] *:not([class^="zb-"], [class*=" zb-"], [class^="bx-"], [class*=" bx-"])::before,
-html[data-leve] *:not([class^="zb-"], [class*=" zb-"], [class^="bx-"], [class*=" bx-"])::after {
+html[data-leve] *,
+html[data-leve] *::before,
+html[data-leve] *::after {
   animation-duration: 1ms !important;
   animation-delay: 0ms !important;
   animation-iteration-count: 1 !important;
@@ -1172,3 +1171,50 @@ html[data-leve] .animate-spin {
   animation-duration: 1s !important;
   animation-iteration-count: infinite !important;
 }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   ROLAGEM DE LADO (19/10/2026) — `components/BarraRolagemLateral.tsx` e
+   `lib/rolagemLateral.ts`
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* A barra que fica presa no pé da área de conteúdo enquanto o rodapé da
+   tabela larga está fora da tela. */
+.barra-rolagem-lateral {
+  position: fixed;
+  z-index: 30;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: color-mix(in oklch, var(--card) 88%, transparent);
+  border-top: 1px solid var(--border);
+  backdrop-filter: blur(4px);
+  box-shadow: 0 -4px 12px rgb(0 0 0 / 0.08);
+}
+.barra-rolagem-lateral::-webkit-scrollbar { height: 12px; }
+.barra-rolagem-lateral::-webkit-scrollbar-thumb {
+  background: color-mix(in oklch, var(--muted-foreground) 55%, transparent);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.barra-rolagem-lateral::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in oklch, var(--muted-foreground) 75%, transparent);
+}
+
+/* Arrastando uma fileira de abas: nada de selecionar texto no caminho. */
+html.rolagem-arrastando,
+html.rolagem-arrastando * {
+  user-select: none !important;
+  cursor: grabbing !important;
+}
+
+/* Fileira de abas que rola por dentro (`TabsList`, `AbasSegmentadas`): sem
+   barra — numa fileira de 40 px ela cortaria as abas — e a ponta apagada onde
+   há mais escondido (`data-mais`, marcado por `observarPontas`). Roda e
+   arrasto do mouse: `lib/rolagemLateral.ts`. */
+.fileira-rola { scrollbar-width: none; }
+.fileira-rola::-webkit-scrollbar { display: none; }
+.fileira-rola[data-mais='direita'] { mask-image: linear-gradient(90deg, #000 calc(100% - 32px), transparent); }
+.fileira-rola[data-mais='esquerda'] { mask-image: linear-gradient(90deg, transparent, #000 32px); }
+.fileira-rola[data-mais='os-dois'] { mask-image: linear-gradient(90deg, transparent, #000 32px, #000 calc(100% - 32px), transparent); }
+.fileira-rola[data-arrastando] { cursor: grabbing; }
+.fileira-rola[data-arrastando] > * { pointer-events: none; }

@@ -9,6 +9,7 @@
     "prerender": "node scripts/css-do-app.mjs",
     "render": "remotion render src/index.ts Operador prontos/apresentacao-operador.mp4",
     "render:autorizacoes": "remotion render src/index.ts Autorizacoes prontos/autorizacoes-no-chat.mp4",
+    "render:cantina": "remotion render src/index.ts Cantina prontos/cantina.mp4",
     "transcrever": "node scripts/transcrever.mjs",
     "medir": "node scripts/css-do-app.mjs && node scripts/medir.mjs"
   },
