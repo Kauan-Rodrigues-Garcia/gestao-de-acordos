@@ -26,6 +26,7 @@ import AcessoMultiempresa from '@/components/admin/AcessoMultiempresa';
 import CorridaConfig from '@/components/admin/CorridaConfig';
 import LiberacaoChat from '@/components/admin/LiberacaoChat';
 import LiberacaoHalloween from '@/components/admin/LiberacaoHalloween';
+import CrachaPedidoConfig from '@/components/admin/CrachaPedidoConfig';
 import AdminDocumentacoes from '@/pages/AdminDocumentacoes';
 import AdminCargos from '@/components/admin/AdminCargos';
 import ImportarAcordosCard from '@/components/admin/ImportarAcordosCard';
@@ -293,6 +294,11 @@ export default function AdminConfiguracoes() {
               segura até o administrador, e o painel de Cargos só passa a
               mandar depois que ela abre. Só super_admin vira — a policy
               `chat_config_update` confere de novo no banco. */}
+          {/* ── Pedido do crachá (26/10/2026): liga/desliga o cartão e mostra quem
+              respondeu, por setor. Ligar é do super_admin; ler é de quem abre
+              esta aba — `fn_cracha_pedido_painel` cobra `config_sub_geral`. */}
+          <CrachaPedidoConfig />
+
           {/* ── Halloween: o botão temporário que libera o tema para todos.
               Some sozinho depois de liberado. Só super_admin — a função
               `fn_halloween_liberar` confere de novo no banco. */}

@@ -7,14 +7,21 @@
  *   - Espera 1 min de uso e sai da frente do termo, do tutorial e da carta de
  *     Halloween (`liberado`, que o Layout calcula). Impersonação e super_admin
  *     não veem; `?previa-cracha` na URL abre a prévia, que não grava nada.
- *   - Não tem «agora não»: uma vez na tela, fica até a pessoa preencher.
+ *   - Não tem «agora não»: uma vez na tela, fica até a pessoa preencher — ou
+ *     até o super_admin desligar o pedido em Configurações → Geral. Quem está
+ *     on-line sente a troca em até 5 min.
  */
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { getImpersonacaoAtiva } from '@/services/impersonacao.service';
 import { ehSuperAdmin } from '@/lib/mobile/preferencia';
-import { ESPERA_ANTES_DE_PEDIR_MS, lerTemCracha, pediuPreviaCrachaNaUrl } from './cracha';
+import {
+  ESPERA_ANTES_DE_PEDIR_MS, EVENTO_PREVIA_CRACHA, lerEstadoCracha, pediuPreviaCrachaNaUrl,
+} from './cracha';
+
+/** De quanto em quanto tempo quem ainda não preencheu confere se o pedido mudou. */
+const RELER_ESTADO_MS = 5 * 60_000;
 
 // O cartão só desce para quem vai ver o pedido.
 const CartaoCracha = lazy(() => import('./CartaoCracha').then(m => ({ default: m.CartaoCracha })));
@@ -28,15 +35,17 @@ export function CrachaPendente({ liberado, esquerda }: { liberado: boolean; esqu
   const podePedir = !!perfil?.id && !impersonando && !ehSuperAdmin(perfil?.perfil);
 
   const [resolvido, setResolvido] = useState(false);
-  const { data: temCracha } = useQuery({
+  const { data: estado } = useQuery({
     queryKey: [...CHAVE_TEM_CRACHA, perfil?.id],
-    queryFn: lerTemCracha,
+    queryFn: lerEstadoCracha,
     enabled: podePedir && !resolvido,
-    staleTime: Infinity,
+    staleTime: RELER_ESTADO_MS,
+    // Quem já tem crachá não precisa reler: o cartão não volta para ele.
+    refetchInterval: q => (q.state.data?.temCracha ? false : RELER_ESTADO_MS),
     // Sem a migration, ou fora do ar: simplesmente não pede.
     retry: false,
   });
-  const pendente = temCracha === false && !resolvido;
+  const pendente = !!estado && estado.ligado && !estado.temCracha && !resolvido;
 
   const [esperou, setEsperou] = useState(false);
   useEffect(() => {
@@ -50,13 +59,22 @@ export function CrachaPendente({ liberado, esquerda }: { liberado: boolean; esqu
   useEffect(() => {
     if (pendente && esperou && liberado) setAberto(true);
   }, [pendente, esperou, liberado]);
+  // Desligado em Configurações: o cartão sai da tela de quem ainda não respondeu.
+  useEffect(() => {
+    if (estado && !estado.ligado) setAberto(false);
+  }, [estado]);
 
   const [previa, setPrevia] = useState(() => pediuPreviaCrachaNaUrl());
+  useEffect(() => {
+    const abrir = () => setPrevia(true);
+    window.addEventListener(EVENTO_PREVIA_CRACHA, abrir);
+    return () => window.removeEventListener(EVENTO_PREVIA_CRACHA, abrir);
+  }, []);
 
   const aoSalvar = useCallback(() => {
     setAberto(false);
     setResolvido(true);
-    queryClient.setQueryData([...CHAVE_TEM_CRACHA, perfil?.id], true);
+    queryClient.setQueryData([...CHAVE_TEM_CRACHA, perfil?.id], { ligado: true, temCracha: true });
   }, [queryClient, perfil?.id]);
   const fecharPrevia = useCallback(() => setPrevia(false), []);
 
