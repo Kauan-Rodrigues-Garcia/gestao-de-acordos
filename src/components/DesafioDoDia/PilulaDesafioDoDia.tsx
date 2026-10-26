@@ -185,7 +185,9 @@ export function PilulaDesafioDoDia({
   }, [andamento, desafio.id]);
 
   if (!placar || !placar.suportado) return null;
-  if (!placar.participo && !placar.acompanho && !previa) return null;
+  // Só quem está no desafio vê a pílula (e a prévia de quem configura). Quem
+  // só criou acompanha pela aba Desafios — 26/10/2026.
+  if (!placar.participo && !previa) return null;
 
   const entrada = entradas.length && situacao !== 'agendado'
     ? { id: loteId, texto: textoDaEntrada(entradas, !!andamento?.porQuantidade) }

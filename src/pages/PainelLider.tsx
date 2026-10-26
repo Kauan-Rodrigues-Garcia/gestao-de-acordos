@@ -34,7 +34,7 @@ import { useTenant } from '@/lib/tenant-config';
 import { cn } from '@/lib/utils';
 import {
   buscarEquipesComOperadores, buscarResumoOperadoresAnalitico, buscarSetoresDoRetrato, buscarAlternativosDoRetrato,
-  buscarTotalOrfaosPorSetor, buscarTotalPorSetor, buscarCreditosDeOrigem,
+  buscarTotalOrfaosPorSetor, buscarTotalPorSetor, buscarCreditosDeOrigem, buscarAjustesComoLinhasDia,
   mapaSetorDaEquipe, operadoresDoSetor, operadoresDaEquipe,
   type EquipeAnalitico, type OperadorEquipeInfo, type ResumoOperadorAnalitico,
 } from '@/services/analitico/analitico.service';
@@ -286,6 +286,25 @@ export default function PainelLider() {
     },
     [operadores, liderancaAjuste, equipesInfo],
   );
+  /*
+   * Equipes e setores que o Ajuste de recebimento oferece (26/10/2026): os do
+   * recorte do painel. Quem lança para a equipe conta na equipe e no setor;
+   * para o setor, só no setor. A RLS repete o alcance.
+   */
+  const equipesParaAjuste = useMemo(
+    () => (equipesInfo?.equipes ?? [])
+      .filter(e => !setoresAbas.length || (e.setor_id != null && setoresAbas.includes(e.setor_id)))
+      .map(e => ({ id: e.id, nome: e.nome, setorId: e.setor_id }))
+      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')),
+    [equipesInfo, setoresAbas],
+  );
+  const setoresParaAjuste = useMemo(
+    () => setoresDoFiltro
+      .filter(s => (setoresAbas.length ? setoresAbas.includes(s.id) : (escopoAbas.podeFiltrarSetor || s.id === perfil?.setor_id)))
+      .map(s => ({ id: s.id, nome: s.nome }))
+      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')),
+    [setoresDoFiltro, setoresAbas, escopoAbas.podeFiltrarSetor, perfil?.setor_id],
+  );
   const nomeSetorTravado = useMemo(
     () => (escopoAbas.podeFiltrarSetor || !escopoAbas.setorUnico
       ? null
@@ -369,9 +388,15 @@ export default function PainelLider() {
     if (!isPP || !empresa?.id) return;
     let cancel = false;
     setLoadingDiario(true);
-    void buscarResumoMensalDiario(empresa.id, mesStr).then(res => {
+    // O gráfico da regra Cofen lê o diário; o ajuste de recebimento (que não
+    // está no diário) vem junto, cada um no dia em que foi lançado — a mesma
+    // composição de `carregarGraficoEquipe` no celular.
+    void Promise.all([
+      buscarResumoMensalDiario(empresa.id, mesStr),
+      buscarAjustesComoLinhasDia(empresa.id, mesStr),
+    ]).then(([res, ajustes]) => {
       if (cancel) return;
-      setResumoDiario(res);
+      setResumoDiario({ ...res, linhasDia: [...res.linhasDia, ...ajustes] });
       setLoadingDiario(false);
     });
     return () => { cancel = true; };
@@ -791,7 +816,8 @@ export default function PainelLider() {
       {/* ── Aba: Ajuste de recebimento (correção temporária) ──────────────── */}
       {(abasVisitadas.has('ajuste') || abaVisivel === 'ajuste') && (
         <div className={cn(abaVisivel !== 'ajuste' && 'hidden')}>
-          <AjusteRecebimento mes={mesStr} operadores={operadoresParaAjuste} />
+          <AjusteRecebimento mes={mesStr} operadores={operadoresParaAjuste}
+            equipes={equipesParaAjuste} setores={setoresParaAjuste} />
         </div>
       )}
 

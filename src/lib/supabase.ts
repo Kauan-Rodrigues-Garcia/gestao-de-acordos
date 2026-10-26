@@ -584,6 +584,11 @@ export interface AnaliticoDashboardLinha {
   contribuicao?: boolean;
   /** Só na contribuição: o setor de quem cobrou. */
   contribuicao_de_setor_id?: string | null;
+  /**
+   * Ajuste de recebimento lançado para uma EQUIPE (26/10/2026): a linha não tem
+   * operador e conta nesta equipe e no setor dela — ver `linhaNoEscopo`.
+   */
+  ajuste_equipe_id?: string | null;
   total: number;
   total_ho: number;
   qtd: number;

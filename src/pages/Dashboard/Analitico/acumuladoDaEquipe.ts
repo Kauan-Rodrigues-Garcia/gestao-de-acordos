@@ -12,7 +12,9 @@
  *   • e também em cada equipe em que ele é CLONE (sem contar duas vezes quando
  *     o clone é na própria equipe);
  *   • quem saiu por transferência de setor deixa na equipe de origem só o que
- *     recebeu no setor de origem (`creditosDeOrigem`).
+ *     recebeu no setor de origem (`creditosDeOrigem`);
+ *   • o ajuste de recebimento lançado para a EQUIPE vem pelo mesmo caminho
+ *     (`ajuste: true`), e soma também na parte «lançada à mão».
  *
  * `ajuste` viaja junto com o acumulado: ele já está DENTRO de `total_recebido`,
  * e a pergunta que responde é «quanto deste número foi lançado à mão».
@@ -56,6 +58,7 @@ export function somarPorEquipe(entrada: EntradaSomaPorEquipe): Record<string, So
     if (!porEquipe[c.equipeId]) porEquipe[c.equipeId] = { bruto: 0, ho: 0, ajuste: 0 };
     porEquipe[c.equipeId].bruto += c.bruto;
     porEquipe[c.equipeId].ho    += c.ho;
+    if (c.ajuste) porEquipe[c.equipeId].ajuste += c.bruto;
   }
   return porEquipe;
 }

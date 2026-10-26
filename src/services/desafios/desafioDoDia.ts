@@ -263,9 +263,11 @@ export interface ParteDoSetor { total: number; qtd: number }
 /** As duas linhas do placar que não são pessoas. Os ids não colidem com UUID. */
 export const ID_RECEPTIVO = 'setor:receptivo';
 export const ID_SEM_OPERADOR = 'setor:sem-operador';
+/** Ajuste de recebimento lançado para a equipe ou o setor (26/10/2026). */
+export const ID_AJUSTE = 'setor:ajuste';
 
 export function ehLinhaDoSetor(id: string): boolean {
-  return id === ID_RECEPTIVO || id === ID_SEM_OPERADOR;
+  return id === ID_RECEPTIVO || id === ID_SEM_OPERADOR || id === ID_AJUSTE;
 }
 
 /**
@@ -273,7 +275,7 @@ export function ehLinhaDoSetor(id: string): boolean {
  * quando houver. É com elas que o «Entrou agora» compara as leituras — sem
  * isto, a contribuição do Receptivo subia o total sem ninguém aparecer.
  */
-export function linhasDoPlacar(p: Pick<PlacarDoDia, 'contribuintes' | 'contribuicaoReceptivo' | 'semOperador'>): Contribuinte[] {
+export function linhasDoPlacar(p: Pick<PlacarDoDia, 'contribuintes' | 'contribuicaoReceptivo' | 'semOperador'> & Partial<Pick<PlacarDoDia, 'ajuste'>>): Contribuinte[] {
   const doSetor: Contribuinte[] = [];
   const parte = (id: string, nome: string, v: ParteDoSetor) => {
     if (v.total > 0.004 || v.qtd > 0) {
@@ -282,6 +284,7 @@ export function linhasDoPlacar(p: Pick<PlacarDoDia, 'contribuintes' | 'contribui
   };
   parte(ID_RECEPTIVO, 'Receptivo', p.contribuicaoReceptivo);
   parte(ID_SEM_OPERADOR, 'Sem operador', p.semOperador);
+  if (p.ajuste) parte(ID_AJUSTE, 'Ajuste de recebimento', p.ajuste);
   return [...p.contribuintes, ...doSetor];
 }
 
@@ -302,6 +305,12 @@ export interface PlacarDoDia {
    */
   contribuicaoReceptivo: ParteDoSetor;
   semOperador: ParteDoSetor;
+  /**
+   * Ajuste de recebimento lançado no dia para o setor (e as equipes dele) ou
+   * para a equipe do desafio — JÁ DENTRO de `total` (migration 20261026170000).
+   * O ajuste de uma pessoa entra na linha dela.
+   */
+  ajuste: ParteDoSetor;
   ultimaChegada: string | null;
   metaMes: number | null;
   feriados: string[];

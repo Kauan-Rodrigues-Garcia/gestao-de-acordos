@@ -29,11 +29,11 @@ import { equipesLideradasPorPessoa, equipesDaPessoa } from '@/services/equipes/e
 import { buscarEquipeMembros } from '@/services/equipes/equipeMembros';
 import { liderNaoContaEmEquipeDeAlternativo } from './liderEmAlternativo';
 // Ajuste manual não vem de relatório: o H.O. dele sai do percentual configurado.
-import { paraHO } from '@/lib/hoPercentual';
+import { ROTULO_AJUSTE } from '@/lib/formasPagamento';
 import { getConfiguredTenantSlug } from '@/lib/tenant';
 import { isPaguePlay } from '@/lib/index';
 import {
-  somasPorOperador, ajustesComoLinhas, ajustesComoRecebimentos,
+  somasPorOperador, ajustesComoLinhas, ajustesComoRecebimentos, ajustesDoMes, ajustesSemPessoa,
 } from './ajusteManual.service';
 import { primeiroDiaDoMes, ultimoDiaDoMes, ehMesAtual } from '@/lib/mesReferencia';
 import { ROTA_ANALITICO } from '@/lib/notificacoes-rota';
@@ -1133,26 +1133,20 @@ export async function buscarResumoOperadoresAnalitico(
   ));
 
   /*
-   * O ajuste manual é por COMPETÊNCIA — `mes_referencia`, sem dia. Somá-lo
-   * inteiro num recorte de cinco dias inflaria o número sem que nada avisasse,
-   * e não há como reparti-lo: a informação do dia não existe na linha.
-   *
-   * Então ele entra só quando a janela é o mês. É a leitura conservadora: o
-   * período mostra o que o relatório traz, e o mês continua mostrando tudo.
+   * Desde 26/10/2026 o ajuste tem dia: cada alteração do card entra no dia em
+   * que foi lançada (`fn_ajustes_recebimento`). O período (lente Período) leva
+   * só o que foi lançado nele; o mês, tudo.
    */
-  if (periodo) return { data: linhas, error: null };
-
-  const ajustes = await somasPorOperador(empresaId, mes);
+  const ajustes = await somasPorOperador(empresaId, mes, periodo);
   if (ajustes.size === 0) return { data: linhas, error: null };
 
-  const pp = ehPaguePlay();
   const porId = new Map(linhas.map(l => [l.operador_id, { ...l }]));
 
   for (const [operadorId, info] of ajustes) {
     const atual = porId.get(operadorId);
     if (atual) {
       atual.total_recebido = (Number(atual.total_recebido) || 0) + info.valor;
-      atual.total_ho = (Number(atual.total_ho) || 0) + (pp ? paraHO(info.valor) : 0);
+      atual.total_ho = (Number(atual.total_ho) || 0) + info.valorHo;
       atual.ajuste_manual = (Number(atual.ajuste_manual) || 0) + info.valor;
     } else {
       porId.set(operadorId, {
@@ -1160,7 +1154,7 @@ export async function buscarResumoOperadoresAnalitico(
         operador_usuario: '',
         operador_nome:    retrato?.get(operadorId)?.nome ?? null,
         total_recebido:   info.valor,
-        total_ho:         pp ? paraHO(info.valor) : 0,
+        total_ho:         info.valorHo,
         total_pagamentos: 0,
         ajuste_manual:    info.valor,
       });
@@ -1292,9 +1286,9 @@ async function buscarAnaliticoDashboardMesPaginado(
 /**
  * Acrescenta as linhas sintéticas da correção manual às do relatório.
  *
- * O SEGUNDO — e último — ponto por onde o ajuste entra. Daqui ele sobe sozinho
- * para operador, equipe e setor: `escopoAnalitico` recorta por `operador_id` e
- * por `setor_id`, e a linha sintética carrega os dois.
+ * O SEGUNDO ponto por onde o ajuste entra. Daqui ele sobe sozinho para
+ * operador, equipe e setor: `escopoAnalitico` recorta por `operador_id`, por
+ * `setor_id` e — no ajuste lançado para a equipe — por `ajuste_equipe_id`.
  *
  * Falha em silêncio de propósito. A tabela pode não existir ainda (a Vercel
  * publica no push, antes de a migration ser aplicada), e um relatório sem a
@@ -1306,9 +1300,9 @@ async function comAjustesManuais(
   mes: string,
 ): Promise<AnaliticoDashboardLinha[]> {
   try {
-    const somas = await somasPorOperador(empresaId, mes);
-    if (somas.size === 0) return linhas;
-    return [...linhas, ...ajustesComoLinhas(somas, mes, ehPaguePlay())];
+    const ajustes = await ajustesDoMes(empresaId, mes);
+    if (ajustes.length === 0) return linhas;
+    return [...linhas, ...ajustesComoLinhas(ajustes)];
   } catch {
     return linhas;
   }
@@ -1435,7 +1429,7 @@ export async function buscarAnalitico(
 
     return {
       data: [
-        ...ajustesComoRecebimentos(doFiltro, filtros.empresaId, filtros.mes, ehPaguePlay()),
+        ...ajustesComoRecebimentos(doFiltro, filtros.empresaId, filtros.mes),
         ...resultado.data,
       ],
       error: null,
@@ -1823,6 +1817,8 @@ interface LinhaMesAnalitico {
   procedencia?:     string;
   /** Só na contribuição: o setor de quem cobrou. É a origem da linha. */
   contribuicao_de_setor_id?: string | null;
+  /** Ajuste lançado para uma EQUIPE: sem operador, conta nela e no setor. */
+  ajuste_equipe_id?: string | null;
 }
 
 /** A 2ª perna do Integral, gravada pelo 59 no setor que recebeu. */
@@ -1940,8 +1936,10 @@ async function lerMesAnalitico(empresaId: string, mes: string): Promise<MesCarre
  * As linhas sintéticas entram aqui, uma vez, e as três agregações que derivam
  * desta leitura passam a enxergá-las juntas.
  *
- *   • `buscarTotalOrfaosPorSetor` ignora sozinha: ela pula toda linha COM
- *     operador, e o ajuste sempre tem um;
+ *   • o ajuste de PESSOA tem operador, e `buscarTotalOrfaosPorSetor` o pula; o
+ *     de equipe e de setor (26/10/2026) não tem, e entra nela de propósito: é
+ *     dinheiro do setor sem pessoa — é por essa soma que o setor alternativo e
+ *     a Cofen o enxergam;
  *   • `qtd: 0` mantém o ticket médio honesto — ajuste é dinheiro, não pagamento;
  *   • o setor é o CARIMBADO no lançamento, com o setor atual da pessoa como
  *     reserva. Carimbo primeiro porque mover alguém de setor em setembro não
@@ -1955,24 +1953,24 @@ async function linhasDeAjusteDoMes(
   setorDoPerfil: Map<string, string | null>,
 ): Promise<LinhaMesAnalitico[]> {
   try {
-    const somas = await somasPorOperador(empresaId, mes);
-    if (somas.size === 0) return [];
-
-    const dia = `${mes.slice(0, 7)}-01`;
-    const pp = ehPaguePlay();
     const linhas: LinhaMesAnalitico[] = [];
-
-    for (const [operadorId, info] of somas) {
-      if (!info.valor) continue;
+    for (const a of await ajustesDoMes(empresaId, mes)) {
+      if (!a.valor) continue;
+      const operador = a.alvo === 'operador' ? a.operadorId : null;
+      const setor = a.setorId ?? (operador ? setorDoPerfil.get(operador) ?? null : null);
       linhas.push({
-        operador_id:      operadorId,
-        setor_id:         info.setorId ?? setorDoPerfil.get(operadorId) ?? null,
+        operador_id:      operador,
+        setor_id:         setor,
         importado_por_id: null,
-        valor_recebido:   info.valor,
-        total_ho:         pp ? paraHO(info.valor) : 0,
-        data_pagamento:   dia,
+        valor_recebido:   a.valor,
+        total_ho:         a.valorHo,
+        data_pagamento:   a.dia,
         qtd:              0,
         ajuste:           true,
+        // Equipe e setor: dinheiro do PRÓPRIO setor. A origem dele no
+        // acumulado é o setor dono, e não «sem operador».
+        ...(operador ? {} : { contribuicao_de_setor_id: setor }),
+        ...(a.alvo === 'equipe' ? { ajuste_equipe_id: a.equipeId } : {}),
       });
     }
     return linhas;
@@ -2045,7 +2043,7 @@ export async function buscarTotalOrfaosPorSetor(
     if (!sid) continue;
     const acc = porSetor[sid] ?? (porSetor[sid] = { total: 0, qtd: 0 });
     acc.total += Number(l.valor_recebido) || 0;
-    acc.qtd   += 1;
+    acc.qtd   += l.qtd ?? 1;   // ajuste de equipe/setor: dinheiro, não pagamento
   }
   return porSetor;
 }
@@ -2144,6 +2142,8 @@ export interface LinhaRecebidaDia {
   /** Contribuição Receptivo: conta no setor, não na empresa — `linhaNoEscopo`. */
   contribuicao?: boolean;
   contribuicao_de_setor_id?: string | null;
+  /** Ajuste lançado para uma EQUIPE — `linhaNoEscopo`. */
+  ajuste_equipe_id?: string | null;
 }
 
 /**
@@ -2167,6 +2167,7 @@ export async function buscarRecebidoPorDia(
       data_pagamento:   l.data_pagamento,
       contribuicao:     ehContribuicao(l),
       contribuicao_de_setor_id: l.contribuicao_de_setor_id ?? null,
+      ajuste_equipe_id: l.ajuste_equipe_id ?? null,
     })),
     error: null,
   };
@@ -2233,30 +2234,28 @@ export async function buscarRecebidoPorDiaDosOperadores(
  * e por isso não passava pela varredura onde o ajuste é injetado. O resultado
  * era um gráfico contradizendo os cards da mesma tela.
  *
- * A aba Recebimento Diário em si continua intacta — ela é conferência dia a dia
- * contra o ERP, e o ajuste não tem dia. Aqui ele entra no dia 1º, que é a
- * consequência honesta de um lançamento de competência.
+ * Cada pedaço no dia em que o card foi alterado (26/10/2026); o de equipe e o
+ * de setor vêm sem operador, com o setor (e a equipe) do lançamento.
  */
 export async function buscarAjustesComoLinhasDia(
   empresaId: string,
   mes: string,
 ): Promise<LinhaRecebidaDia[]> {
   try {
-    const somas = await somasPorOperador(empresaId, mes);
-    if (somas.size === 0) return [];
-    const dia = `${mes.slice(0, 7)}-01`;
-    const linhas: LinhaRecebidaDia[] = [];
-    for (const [operadorId, info] of somas) {
-      if (!info.valor) continue;
-      linhas.push({
-        operador_id:      operadorId,
-        setor_id:         info.setorId,
-        importado_por_id: null,
-        valor_recebido:   info.valor,
-        data_pagamento:   dia,
+    return (await ajustesDoMes(empresaId, mes))
+      .filter(a => a.valor)
+      .map((a): LinhaRecebidaDia => {
+        const operador = a.alvo === 'operador' ? a.operadorId : null;
+        return {
+          operador_id:      operador,
+          setor_id:         a.setorId,
+          importado_por_id: null,
+          valor_recebido:   a.valor,
+          data_pagamento:   a.dia,
+          ...(operador ? {} : { contribuicao_de_setor_id: a.setorId }),
+          ...(a.alvo === 'equipe' ? { ajuste_equipe_id: a.equipeId } : {}),
+        };
       });
-    }
-    return linhas;
   } catch {
     return [];
   }
@@ -2835,6 +2834,16 @@ export async function buscarCreditosDeOrigem(
   empresaId: string, mes: string,
   periodo?: { inicio: string; fim: string } | null,
 ): Promise<CreditoDeOrigem[]> {
+  const [fantasmas, ajustes] = await Promise.all([
+    creditosDeFantasmas(empresaId, mes, periodo),
+    creditosDeAjusteDeEquipe(empresaId, mes, periodo),
+  ]);
+  return [...fantasmas, ...ajustes];
+}
+
+async function creditosDeFantasmas(
+  empresaId: string, mes: string, periodo?: { inicio: string; fim: string } | null,
+): Promise<CreditoDeOrigem[]> {
   if (ehPaguePlay()) return [];
   const fantasmas = (await buscarFantasmasDoMes(empresaId, mes)).filter(f => f.tipo === 'setor');
   if (!fantasmas.length) return [];
@@ -2847,6 +2856,33 @@ export async function buscarCreditosDeOrigem(
   // Migration 20260929211916 pendente: sem crédito, e o resto da tela segue.
   if (error || !data) return [];
   return creditosDeOrigem(fantasmas, data);
+}
+
+/**
+ * Ajuste de recebimento lançado para uma EQUIPE (26/10/2026): conta na equipe
+ * e em ninguém dela — o mesmo caminho do crédito do fantasma, que também é
+ * dinheiro da equipe sem membro. O setor o recebe pelas linhas do mês
+ * (`linhasDeAjusteDoMes`), não por aqui. Vale nas duas regras.
+ */
+async function creditosDeAjusteDeEquipe(
+  empresaId: string, mes: string, periodo?: { inicio: string; fim: string } | null,
+): Promise<CreditoDeOrigem[]> {
+  try {
+    const porEquipe = new Map<string, CreditoDeOrigem>();
+    for (const a of await ajustesSemPessoa(empresaId, mes, periodo)) {
+      if (a.alvo !== 'equipe' || !a.equipeId) continue;
+      const atual = porEquipe.get(a.equipeId) ?? {
+        perfilId: '', nome: ROTULO_AJUSTE, equipeId: a.equipeId, setorId: a.setorId,
+        bruto: 0, ho: 0, ajuste: true,
+      };
+      atual.bruto += a.valor;
+      atual.ho    += a.valorHo;
+      porEquipe.set(a.equipeId, atual);
+    }
+    return [...porEquipe.values()];
+  } catch {
+    return [];
+  }
 }
 
 /**

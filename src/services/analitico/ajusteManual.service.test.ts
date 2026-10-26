@@ -17,16 +17,20 @@ import {
   ajustesComoLinhas, ajustesComoRecebimentos, ehLinhaDeAjuste,
   primeiroDiaDaCompetencia, LOTE_AJUSTE_MANUAL, ROTULO_AJUSTE, traduzir,
 } from './ajusteManual.service';
-import { getHoPercentual } from '@/lib/hoPercentual';
+import type { AjusteDoDia, SomaAjusteOperador } from './ajusteManual.service';
 
-type Somas = Map<string, { valor: number; setorId: string | null; equipeId: string | null }>;
+type Somas = Map<string, SomaAjusteOperador>;
 
-function somas(entradas: [string, number, string | null][]): Somas {
+function somas(entradas: [string, number, string | null, number?][]): Somas {
   const m: Somas = new Map();
-  for (const [id, valor, setorId] of entradas) {
-    m.set(id, { valor, setorId, equipeId: null });
+  for (const [id, valor, setorId, valorHo = 0] of entradas) {
+    m.set(id, { valor, valorHo, setorId, equipeId: null });
   }
   return m;
+}
+
+function ajuste(p: Partial<AjusteDoDia> & Pick<AjusteDoDia, 'valor'>): AjusteDoDia {
+  return { alvo: 'operador', operadorId: 'op-1', equipeId: null, setorId: null, dia: '2026-08-10', valorHo: 0, ...p };
 }
 
 describe('primeiroDiaDaCompetencia', () => {
@@ -37,68 +41,55 @@ describe('primeiroDiaDaCompetencia', () => {
 });
 
 describe('ajustesComoLinhas', () => {
-  it('devolve uma linha por operador, com o valor no total', () => {
-    const linhas = ajustesComoLinhas(somas([['op-1', 10_000, 'setor-a']]), '2026-08', true);
+  it('uma linha por ajuste e dia, com o valor no total e o setor carimbado', () => {
+    const linhas = ajustesComoLinhas([ajuste({ valor: 10_000, setorId: 'setor-a' })]);
     expect(linhas).toHaveLength(1);
-    expect(linhas[0].operador_id).toBe('op-1');
-    expect(linhas[0].total).toBe(10_000);
-    expect(linhas[0].setor_id).toBe('setor-a');
+    expect(linhas[0]).toMatchObject({ operador_id: 'op-1', total: 10_000, setor_id: 'setor-a' });
+  });
+
+  it('entra no dia em que foi lançado, e não mais no dia 1', () => {
+    const linhas = ajustesComoLinhas([ajuste({ valor: 100, dia: '2026-08-20' })]);
+    expect(linhas[0].dia).toBe('2026-08-20');
   });
 
   it('preserva o sinal negativo — tirar é tirar', () => {
-    const linhas = ajustesComoLinhas(somas([['op-1', -2_500, null]]), '2026-08', true);
-    expect(linhas[0].total).toBe(-2_500);
+    expect(ajustesComoLinhas([ajuste({ valor: -2_500 })])[0].total).toBe(-2_500);
   });
 
   it('NÃO é Pix e NÃO é cartão: o rótulo é próprio', () => {
-    const linhas = ajustesComoLinhas(somas([['op-1', 100, null]]), '2026-08', true);
+    const linhas = ajustesComoLinhas([ajuste({ valor: 100 })]);
     expect(linhas[0].forma_detalhe).toBe(ROTULO_AJUSTE);
     expect(linhas[0].forma_detalhe).not.toMatch(/pix|cart/i);
   });
 
   it('qtd é zero — o ajuste não é um pagamento', () => {
-    const linhas = ajustesComoLinhas(somas([['op-1', 5_000, null]]), '2026-08', true);
-    expect(linhas[0].qtd).toBe(0);
+    expect(ajustesComoLinhas([ajuste({ valor: 5_000 })])[0].qtd).toBe(0);
   });
 
-  it('calcula H.O. na PaguePlay pelo percentual configurado — ajuste não vem de relatório', () => {
-    const linhas = ajustesComoLinhas(somas([['op-1', 1_000, null]]), '2026-08', true);
-    expect(linhas[0].total_ho).toBeCloseTo(1_000 * getHoPercentual(), 6);
-  });
-
-  it('H.O. é zero na BookPlay — lá nenhuma linha do relatório tem H.O.', () => {
-    const linhas = ajustesComoLinhas(somas([['op-1', 1_000, null]]), '2026-08', false);
-    expect(linhas[0].total_ho).toBe(0);
-  });
-
-  it('entra no dia 1: o ajuste é de competência, não tem data de pagamento', () => {
-    const linhas = ajustesComoLinhas(somas([['op-1', 100, null]]), '2026-08', true);
-    expect(linhas[0].dia).toBe('2026-08-01');
+  it('o H.O. vem do banco, pela regra do setor', () => {
+    expect(ajustesComoLinhas([ajuste({ valor: 1_000, valorHo: 249.6 })])[0].total_ho).toBe(249.6);
+    expect(ajustesComoLinhas([ajuste({ valor: 1_000 })])[0].total_ho).toBe(0);
   });
 
   it('marca como tabulado — o ajuste tem dono e motivo', () => {
-    const linhas = ajustesComoLinhas(somas([['op-1', 100, null]]), '2026-08', true);
     // 'nao_tabulado' o jogaria no aviso de "recebimento sem acordo", que é
     // outra conversa e assustaria quem lê o painel.
-    expect(linhas[0].status_tabulacao).toBe('tabulado');
+    expect(ajustesComoLinhas([ajuste({ valor: 100 })])[0].status_tabulacao).toBe('tabulado');
   });
 
-  it('operador com saldo zero não vira linha', () => {
-    const linhas = ajustesComoLinhas(somas([['op-1', 0, null]]), '2026-08', true);
-    expect(linhas).toEqual([]);
+  it('o de EQUIPE sai sem operador, com o setor e a equipe', () => {
+    const [l] = ajustesComoLinhas([ajuste({ alvo: 'equipe', operadorId: null, equipeId: 'eq-1', setorId: 'setor-a', valor: 500 })]);
+    expect(l).toMatchObject({ operador_id: null, setor_id: 'setor-a', ajuste_equipe_id: 'eq-1', total: 500 });
   });
 
-  it('sem ajuste nenhum, não inventa linha', () => {
-    expect(ajustesComoLinhas(new Map(), '2026-08', true)).toEqual([]);
+  it('o de SETOR sai sem operador e sem equipe', () => {
+    const [l] = ajustesComoLinhas([ajuste({ alvo: 'setor', operadorId: null, setorId: 'setor-a', valor: 200 })]);
+    expect(l).toMatchObject({ operador_id: null, setor_id: 'setor-a', ajuste_equipe_id: null });
   });
 
-  it('vários operadores viram várias linhas', () => {
-    const linhas = ajustesComoLinhas(
-      somas([['op-1', 100, 'a'], ['op-2', -50, 'b'], ['op-3', 25, 'a']]),
-      '2026-08', true,
-    );
-    expect(linhas.map(l => l.operador_id).sort()).toEqual(['op-1', 'op-2', 'op-3']);
-    expect(linhas.reduce((s, l) => s + l.total, 0)).toBe(75);
+  it('valor zero não vira linha, e sem ajuste não inventa linha', () => {
+    expect(ajustesComoLinhas([ajuste({ valor: 0 })])).toEqual([]);
+    expect(ajustesComoLinhas([])).toEqual([]);
   });
 });
 
@@ -110,8 +101,8 @@ describe('ajustesComoLinhas', () => {
  * «Total recebido» em «Meus recebimentos» e outro no ranking da aba ao lado.
  */
 describe('ajustesComoRecebimentos', () => {
-  const linhaDe = (valor: number, pp = true) =>
-    ajustesComoRecebimentos(somas([['op-1', valor, 'setor-a']]), 'emp-1', '2026-08', pp)[0];
+  const linhaDe = (valor: number, valorHo = 0) =>
+    ajustesComoRecebimentos(somas([['op-1', valor, 'setor-a', valorHo]]), 'emp-1', '2026-08')[0];
 
   it('a linha carrega o valor, a competência e o setor carimbado', () => {
     const l = linhaDe(10_000);
@@ -142,9 +133,9 @@ describe('ajustesComoRecebimentos', () => {
     expect(l.visto).toBe(true);
   });
 
-  it('H.O. só na PaguePlay — na BookPlay toda linha do relatório é zero', () => {
-    expect(linhaDe(1_000, true).total_ho).toBeCloseTo(1_000 * getHoPercentual(), 2);
-    expect(linhaDe(1_000, false).total_ho).toBe(0);
+  it('o H.O. é o que o banco calculou pela regra do setor', () => {
+    expect(linhaDe(1_000, 249.6).total_ho).toBe(249.6);
+    expect(linhaDe(1_000).total_ho).toBe(0);
   });
 
   it('valor negativo vira linha negativa, e não some', () => {
@@ -154,8 +145,8 @@ describe('ajustesComoRecebimentos', () => {
   });
 
   it('operador sem ajuste não gera linha', () => {
-    expect(ajustesComoRecebimentos(somas([]), 'emp-1', '2026-08', true)).toEqual([]);
-    expect(ajustesComoRecebimentos(somas([['op-1', 0, null]]), 'emp-1', '2026-08', true)).toEqual([]);
+    expect(ajustesComoRecebimentos(somas([]), 'emp-1', '2026-08')).toEqual([]);
+    expect(ajustesComoRecebimentos(somas([['op-1', 0, null]]), 'emp-1', '2026-08')).toEqual([]);
   });
 });
 
@@ -185,6 +176,11 @@ describe('traduzir', () => {
       .toContain('diferente de zero');
     expect(traduzir('violates check constraint "ajuste_motivo_preenchido"'))
       .toContain('motivo');
+  });
+
+  it('equipe e setor têm a própria frase do card único', () => {
+    expect(traduzir('duplicate key value violates unique constraint "ux_ajuste_card_por_equipe_mes"')).toContain('Esta equipe');
+    expect(traduzir('duplicate key value violates unique constraint "ux_ajuste_card_por_setor_mes"')).toContain('Este setor');
   });
 
   it('deixa passar o que não sabe traduzir', () => {

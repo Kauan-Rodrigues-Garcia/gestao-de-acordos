@@ -1281,6 +1281,37 @@ O total do setor depende da flag `alternativo` — ver seção 4.1. A meta usa o
 > indireto** no analítico. Ao comparar as duas telas, essa é a diferença
 > esperada.
 
+### 10.4 Ajuste de recebimento (recebido por fora)
+
+Aba **Ajuste de recebimento** do Painel Líder, tabela
+`analitico_ajustes_manuais`. É recebimento feito fora do ERP e conta como
+recebimento em **todo** total — decisão do Cleber, 26/10/2026.
+
+| Alvo (`alvo`) | Conta em |
+|---|---|
+| `operador` | a pessoa, a equipe dela e o setor |
+| `equipe` | a equipe e o setor dela — em ninguém da equipe |
+| `setor` | só o setor |
+
+- **Um card por alvo e mês** (índices `ux_ajuste_card_por_{operador,equipe,setor}_mes`).
+  O líder digita o total; o gatilho grava cada alteração em
+  `analitico_ajustes_eventos` com o `delta`.
+- **Dia:** cada alteração entra no dia em que foi lançada, preso ao mês de
+  competência. A soma do mês é o valor do card; o «hoje» e o desafio do dia
+  levam só o que foi lançado no dia.
+- **Leitura única:** `fn_ajustes_recebimento(empresas, ini, fim[, de, ate])`
+  (migration `20261026170000`). Invocadora: na tela a RLS recorta; dentro das
+  funções do banco enxerga tudo. H.O. só em setor da regra Cofen.
+- **Onde entra:** Analítico, Dashboard, Painel Líder (cards, equipes, gráfico,
+  inclusive o da regra Cofen, que lê o diário), Painel Diretoria (visão geral,
+  cidades, dia, setor, equipe e alternativos, pela view
+  `private.mestre_recebimentos_com_ajuste`, forma «AJUSTE MANUAL» na carteira
+  do setor), Painel Diretoria Cofen, app, desafios (mensal e do dia), push e TV.
+  As funções de **conferência** com o ERP (comparar 58×59, divergências,
+  sincronizar) continuam no 59 puro.
+- **Não é pagamento:** soma no dinheiro e fica fora da quantidade de pagamentos
+  e do ticket médio.
+
 ---
 
 ## 11. Recebimento diário
@@ -1290,17 +1321,32 @@ acordos tabulados — é uma lista informativa por operador.
 
 ### 11.1 O relatório
 
-Colunas relevantes: `Data`, `Id.Baixa`, `Cód.Cliente`, `Profissional`,
-`Cód.Acordo`, `Parcela`, `Forma Pgto`, `Valor Recebido`, `Operador`,
-`Próx. Contato`, `Tabulação`.
+Na regra **Cofen** o diário vem do **relatório 945** (Id.Baixa, UF Coren,
+Split, Coren, Cofen, Pague Play, Dt.Baixa, Horário, Operador…). Desde
+26/10/2026 ele é importado pelo fluxo único (`fn_relatorio_945`, migration
+`20261026150000`): a mesma confirmação grava `diario_recebimentos` e o
+Relatório de pagamento da diretoria (`pp_relatorio_pagamentos`). Detalhes em
+`docs/RELATORIO-PAGUEPLAY-DIRETORIA.md`.
 
-**Dedupe entre importações do dia:** `Id.Baixa` quando existe; senão a chave
-composta `codigo|acordo|forma|valor|data`.
+- **Relatório errado é recusado pelo cabeçalho** (`relatorio945/identificar.ts`):
+  o 58 no recorte Dia, o 945 no recorte Mês. Até 26/10 o 58 passava no diário
+  por ter «Operador» e «Recebido», e sem coluna de data tudo caía no dia da
+  importação (R$ 2,07 mi em 06, 08 e 22/10/2026).
+- **Chave:** `Id.Baixa`, única por empresa (`idx_diario_id_baixa`). Baixa já
+  salva é reconciliada em qualquer dia — valor, data, operador, código, próximo
+  contato e tabulação seguem o arquivo mais novo. Antes só o valor era
+  corrigido e o operador ficava congelado no primeiro import (R$ 110.959,47
+  com operador errado em 01–22/10). Vínculo manual sobrevive enquanto o login
+  do arquivo for o mesmo; quem passa a ser dono da linha a vê como nova.
+- **Linhas sem Operador** entram com operador vazio (sem vínculo) e somam no
+  consolidado do setor. Rodapé é conferido contra a soma das linhas e
+  descartado; estorno de cartão (par Estornado/Estorno) vira uma linha líquida.
+- **Janela:** o diário guarda do 1º dia do mês anterior em diante, mesmo que o
+  arquivo venha desde janeiro.
 
-**Linhas sem Operador** são descartadas — exceto em `[PP]`, onde entram com
-operador vazio (sem vínculo) e somam no consolidado do setor. O **rodapé de
-totais** do relatório é sempre descartado: identificado por não ter operador
-**nem** nenhuma identificação (cliente, código, acordo, forma ou data).
+Na regra **Nosso produto** o diário sai do relatório mensal, na importação do
+analítico (`useAnaliticoImport`), com a chave composta
+`codigo|acordo|forma|valor|data` quando não há `Id.Baixa`.
 
 ### 11.2 Cód.Cliente substituiu o CPF
 
@@ -1338,19 +1384,24 @@ data em que alguém tabulou.
 fora dos totais e das listas. A leitura é: se já existe um próximo contato
 marcado para antes ou no próprio dia do pagamento, aquele acordo não fechou.
 
-### 11.5 Regra do relatório mensal
+### 11.5 Cobertura: de onde o próximo arquivo começa
 
-`diarioMensalGuard.ts`. O ERP exporta o diário com o mês inteiro **ou** só com o
-dia, à escolha de quem exporta. Para nenhum valor quebrado passar despercebido:
+Substituiu, em 26/10/2026, a marca «mensal importado hoje» do `localStorage`
+(que não sabia da virada do mês: 633 baixas de 30/09 ficaram de fora) e a
+trava «ontem e hoje» da diretoria (que na segunda não pedia a sexta).
 
-- o **primeiro** relatório importado a cada dia precisa ser o **mensal**
-  (multi-dia) — a reconciliação realinha os dias anteriores;
-- depois disso, relatórios de 1 dia ficam liberados até o dia seguinte;
-- **"Limpar dia"** e **"Limpar tudo"** derrubam a marca: a próxima importação
-  volta a exigir o mensal.
+Cada importação guarda o **corte** do arquivo — a maior `Dt.Baixa` +
+`Horário` — e `private.r945_cobertura` guarda o maior corte por dia. Um dia é
+**completo** quando o corte passou do fim dele e **consolidado** quando passou
+7 dias (baixa retroativa: Data anterior à Dt.Baixa, até 5 dias no medido).
 
-A marca fica no `localStorage`, por empresa + dia. Outro navegador ou usuário
-não a herda e **também** exigirá o mensal — bloqueio a mais, nunca a menos.
+O arquivo precisa começar no **dia mais antigo dos últimos 35 que não está
+consolidado nem foi coberto por um arquivo hoje**. A tela mostra a data pronta
+(«exporte o 945 com data inicial 23/10/2026 (sex) até hoje») numa faixa com os
+últimos 14 dias; o banco recusa de novo na gravação. Depois do primeiro arquivo
+do dia, os seguintes podem ser de qualquer período. «Limpar dia» e «Limpar mês»
+devolvem os dias à exigência. A faixa também marca, com anel vermelho, dia em
+que diário e Relatório de pagamento têm quantidades diferentes.
 
 ### 11.6 Visões
 

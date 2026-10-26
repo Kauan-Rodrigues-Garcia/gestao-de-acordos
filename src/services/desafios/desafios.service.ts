@@ -679,6 +679,7 @@ export async function buscarPlacarDoDia(desafioId: string): Promise<RespostaPlac
       // fica como antes (o total já contava; só não mostrava a parte).
       contribuicaoReceptivo: parteDoSetor(data.contribuicao_receptivo),
       semOperador:   parteDoSetor(data.sem_operador),
+      ajuste:        parteDoSetor(data.ajuste),
       ultimaChegada: (data.ultima_chegada as string | null) ?? null,
       metaMes:       data.meta_mes === null || data.meta_mes === undefined ? null : Number(data.meta_mes) || null,
       feriados:      listaDeTextos(config.feriados),

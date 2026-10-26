@@ -13,8 +13,8 @@ function MiniGrafico({ equipe, linhas, mes, hojeISO }: {
   equipe: EquipeNaTela; linhas: LinhaRecebidaDia[]; mes: string; hojeISO: string;
 }) {
   const g = useMemo(() => montarGraficoDoMes({
-    linhas, mes, hojeISO, escopo: { tipo: 'equipe', operadores: new Set(equipe.operadorIds) },
-  }), [linhas, mes, hojeISO, equipe.operadorIds]);
+    linhas, mes, hojeISO, escopo: { tipo: 'equipe', operadores: new Set(equipe.operadorIds), equipeId: equipe.id },
+  }), [linhas, mes, hojeISO, equipe.operadorIds, equipe.id]);
   const maior = g.melhor?.valor ?? 0;
   const n = g.dias.length;
   return (

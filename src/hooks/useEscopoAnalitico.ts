@@ -185,7 +185,7 @@ export function useEscopoAnalitico(params: ParametrosEscopo): ResultadoEscopo {
     if (!fontes) return null;
     if (equipeId) {
       const operadores = operadoresDaEquipe(equipeId, fontes);
-      if (!precisaRegra) return { tipo: 'equipe', operadores };
+      if (!precisaRegra) return { tipo: 'equipe', operadores, equipeId };
       // Com linhas na tela e a regra ainda a caminho, segura: mostrar o número
       // com as linhas de fora e corrigi-lo meio segundo depois é a divergência
       // que isto veio tirar. Erro na leitura devolve regra vazia — nunca trava.
@@ -193,6 +193,7 @@ export function useEscopoAnalitico(params: ParametrosEscopo): ResultadoEscopo {
       return {
         tipo: 'equipe',
         operadores,
+        equipeId,
         foraDoSetor: regraDoMes?.foraDoSetor,
         creditos:    regraDoMes?.creditosPorEquipe[equipeId],
       };

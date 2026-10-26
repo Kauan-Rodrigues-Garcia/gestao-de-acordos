@@ -8,10 +8,12 @@
  * separada (migrations `20260823150000` e `20260825120000`) e é somado na
  * LEITURA.
  *
- * ## Um card por operador
+ * ## Um card por alvo
  *
  * Desde `20260825120000` existe no máximo UMA linha ativa por operador por mês,
- * garantida por índice único. O líder informa o valor TOTAL da pessoa; o
+ * garantida por índice único. Desde `20261026170000` o alvo pode ser também uma
+ * EQUIPE (conta na equipe e no setor, em ninguém) ou um SETOR (conta só no
+ * setor) — `alvo`, com um card por alvo e mês. O líder informa o valor TOTAL da pessoa; o
  * histórico de cada alteração mora em `analitico_ajustes_eventos`, escrito por
  * gatilho.
  *
@@ -25,10 +27,17 @@
  * precisa ser desfeito, nenhuma reimportação é necessária, e a trilha de quem
  * lançou o quê continua inteira para auditoria.
  *
+ * ## Em que dia o valor entra (26/10/2026)
+ *
+ * Cada alteração do card (evento, com `delta`) entra no dia em que foi
+ * lançada, dentro do mês de competência — `fn_ajustes_recebimento`, a MESMA
+ * leitura que as funções do banco (Painel Diretoria, app, desafios, TV) usam.
+ * O líder que lança R$ 1.000 hoje vê os R$ 1.000 no «hoje»; a soma do mês
+ * continua sendo o valor do card.
+ *
  * ## Onde o valor entra
  *
- * Em dois lugares, e só dois — os dois caminhos por onde o recebimento do
- * analítico chega às telas:
+ * Nos caminhos por onde o recebimento do analítico chega às telas:
  *
  *   1. `buscarAnaliticoDashboardMes` → linhas do dashboard e do Painel Metas;
  *   2. `buscarResumoOperadoresAnalitico` → o resumo por operador da aba Quartis.
@@ -51,8 +60,8 @@
  */
 import { supabase } from '@/lib/supabase';
 import type { AnaliticoDashboardLinha, AnaliticoRecebimento } from '@/lib/supabase';
-// O ajuste manual não vem de relatório: H.O. no percentual configurado.
-import { paraHO } from '@/lib/hoPercentual';
+import { rpcSemTipo } from '@/lib/supabaseSemTipo';
+import { primeiroDiaDoMes, ultimoDiaDoMes } from '@/lib/mesReferencia';
 import { invalidarCache, lerComCache } from '@/lib/cacheCurto';
 import { ROTULO_AJUSTE } from '@/lib/formasPagamento';
 
@@ -105,13 +114,20 @@ export function ehLinhaDeAjuste(linha: { lote_id?: string | null }): boolean {
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 
+/** A quem o ajuste foi lançado. */
+export type AlvoAjuste = 'operador' | 'equipe' | 'setor';
+
 export interface AjusteManual {
   id: string;
   empresaId: string;
-  operadorId: string;
+  alvo: AlvoAjuste;
+  /** `null` quando o alvo é equipe ou setor. */
+  operadorId: string | null;
   operadorNome: string | null;
   setorId: string | null;
+  setorNome: string | null;
   equipeId: string | null;
+  equipeNome: string | null;
   /** Primeiro dia do mês de competência, `yyyy-MM-dd`. */
   mesReferencia: string;
   /** Positivo soma, negativo tira. */
@@ -150,6 +166,29 @@ export interface EventoAjuste {
   criadoEm: string;
 }
 
+/**
+ * Um pedaço do ajuste num dia: o que `fn_ajustes_recebimento` devolve.
+ * `valorHo` já vem calculado pela regra do setor (Cofen tem H.O.).
+ */
+export interface AjusteDoDia {
+  alvo: AlvoAjuste;
+  operadorId: string | null;
+  equipeId: string | null;
+  setorId: string | null;
+  /** `yyyy-MM-dd` — o dia em que a alteração do card foi lançada. */
+  dia: string;
+  valor: number;
+  valorHo: number;
+}
+
+/** A soma do período de um operador. */
+export interface SomaAjusteOperador {
+  valor: number;
+  valorHo: number;
+  setorId: string | null;
+  equipeId: string | null;
+}
+
 /** `2026-08` → `2026-08-01`. A competência é sempre o dia 1. */
 export function primeiroDiaDaCompetencia(mes: string): string {
   return `${mes.slice(0, 7)}-01`;
@@ -174,7 +213,8 @@ export async function listarAjustes(
   empresaId: string, mes: string,
 ): Promise<AjusteManual[]> {
   const { data, error } = await db('analitico_ajustes_manuais')
-    .select('*, perfis!analitico_ajustes_manuais_operador_id_fkey(nome)')
+    .select('*, perfis!analitico_ajustes_manuais_operador_id_fkey(nome), '
+      + 'equipes!analitico_ajustes_manuais_equipe_id_fkey(nome), setores!analitico_ajustes_manuais_setor_id_fkey(nome)')
     .eq('empresa_id', empresaId)
     .eq('mes_referencia', primeiroDiaDaCompetencia(mes))
     .order('criado_em', { ascending: false });
@@ -189,103 +229,130 @@ export async function listarAjustes(
 }
 
 /**
- * Só o que SOMA: do mês, da empresa, não cancelado.
+ * Os ajustes do mês, dia a dia — a leitura que tudo o mais usa.
  *
- * Separado de `listarAjustes` de propósito — esta é a consulta que roda em toda
- * abertura do Dashboard, e ela não precisa do `join` de nome nem dos cancelados.
+ * `fn_ajustes_recebimento` é invocadora: a RLS da tabela recorta o que a pessoa
+ * enxerga, como antes. Guardada por `VALIDADE_SOMAS_AJUSTE_MS` (17/09/2026):
+ * cinco agregações do analítico pedem isto na MESMA releitura do painel.
+ *
+ * Banco sem a migration 20261026170000: cai na leitura antiga (o card inteiro
+ * no dia 1, só operador), para a tela não quebrar entre o deploy e a migration.
  */
-export async function somasPorOperador(
-  empresaId: string, mes: string,
-): Promise<Map<string, { valor: number; setorId: string | null; equipeId: string | null }>> {
-  const mapa = new Map<string, { valor: number; setorId: string | null; equipeId: string | null }>();
-
-  /*
-   * Guardada por `VALIDADE_SOMAS_AJUSTE_MS` (17/09/2026): cinco agregações do
-   * analítico pedem isto na MESMA releitura do painel — 21 mil leituras por dia
-   * em produção. Guarda-se a LINHA crua, e o `Map` é montado a cada chamada:
-   * quem recebe pode mexer nele sem estragar a resposta dos outros.
-   *
-   * Erro não é guardado (a leitura devolve `null` e o `guardarSe` recusa).
-   */
-  const data = await lerComCache(
+export async function ajustesDoMes(empresaId: string, mes: string): Promise<AjusteDoDia[]> {
+  const linhas = await lerComCache(
     `${PREFIXO_SOMAS_AJUSTE}${empresaId}:${mes}`,
     VALIDADE_SOMAS_AJUSTE_MS,
-    async () => {
-      const r = await db('analitico_ajustes_manuais')
-        .select('operador_id, setor_id, equipe_id, valor, cancelado')
-        .eq('empresa_id', empresaId)
-        .eq('mes_referencia', primeiroDiaDaCompetencia(mes));
-      return r.error || !r.data ? null : (r.data as Record<string, unknown>[]);
-    },
-    { guardarSe: linhas => linhas !== null },
-  );
-
-  if (!data) return mapa;
-
-  for (const linha of data) {
-    if (linha.cancelado === true) continue;
-    const id = String(linha.operador_id);
-    const atual = mapa.get(id);
-    const valor = Number(linha.valor) || 0;
-    if (atual) {
-      atual.valor += valor;
-    } else {
-      mapa.set(id, {
-        valor,
-        setorId:  (linha.setor_id as string | null) ?? null,
-        equipeId: (linha.equipe_id as string | null) ?? null,
+    async (): Promise<AjusteDoDia[] | null> => {
+      const { data, error } = await rpcSemTipo<Record<string, unknown>[]>('fn_ajustes_recebimento', {
+        p_empresas: [empresaId],
+        p_ini:      primeiroDiaDoMes(mes),
+        p_fim:      ultimoDiaDoMes(mes),
       });
-    }
+      if (!error && data) return data.map(paraAjusteDoDia);
+      if (error && !/function|does not exist|schema cache/i.test(error.message)) return null;
+      return ajustesDoMesLegado(empresaId, mes);
+    },
+    { guardarSe: l => l !== null },
+  );
+  return linhas ?? [];
+}
+
+/** O mês só até o período pedido (lente Período), inclusivo. */
+export async function ajustesDoPeriodo(
+  empresaId: string, mes: string, periodo?: { inicio: string; fim: string } | null,
+): Promise<AjusteDoDia[]> {
+  const todos = await ajustesDoMes(empresaId, mes);
+  return periodo ? todos.filter(a => a.dia >= periodo.inicio && a.dia <= periodo.fim) : todos;
+}
+
+/**
+ * Só os de OPERADOR, somados por pessoa. Os de equipe e setor não têm pessoa:
+ * entram por `ajustesSemPessoa`.
+ */
+export async function somasPorOperador(
+  empresaId: string, mes: string, periodo?: { inicio: string; fim: string } | null,
+): Promise<Map<string, SomaAjusteOperador>> {
+  const mapa = new Map<string, SomaAjusteOperador>();
+  for (const a of await ajustesDoPeriodo(empresaId, mes, periodo)) {
+    if (a.alvo !== 'operador' || !a.operadorId) continue;
+    const atual = mapa.get(a.operadorId);
+    if (atual) { atual.valor += a.valor; atual.valorHo += a.valorHo; }
+    else mapa.set(a.operadorId, { valor: a.valor, valorHo: a.valorHo, setorId: a.setorId, equipeId: a.equipeId });
   }
   return mapa;
 }
 
+/** Os de equipe e setor — dinheiro do grupo, de ninguém em particular. */
+export async function ajustesSemPessoa(
+  empresaId: string, mes: string, periodo?: { inicio: string; fim: string } | null,
+): Promise<AjusteDoDia[]> {
+  return (await ajustesDoPeriodo(empresaId, mes, periodo)).filter(a => a.alvo !== 'operador');
+}
+
+function paraAjusteDoDia(l: Record<string, unknown>): AjusteDoDia {
+  return {
+    alvo:       (l.alvo as AlvoAjuste) ?? 'operador',
+    operadorId: (l.operador_id as string | null) ?? null,
+    equipeId:   (l.equipe_id as string | null) ?? null,
+    setorId:    (l.setor_id as string | null) ?? null,
+    dia:        String(l.dia).slice(0, 10),
+    valor:      Number(l.valor) || 0,
+    valorHo:    Number(l.valor_ho) || 0,
+  };
+}
+
+/** Antes da migration 20261026170000: o card inteiro no dia 1, só operador. */
+async function ajustesDoMesLegado(empresaId: string, mes: string): Promise<AjusteDoDia[] | null> {
+  const r = await db('analitico_ajustes_manuais')
+    .select('operador_id, setor_id, equipe_id, valor, cancelado')
+    .eq('empresa_id', empresaId)
+    .eq('mes_referencia', primeiroDiaDaCompetencia(mes));
+  if (r.error || !r.data) return r.error && migrationPendente(r.error.message) ? [] : null;
+  return (r.data as Record<string, unknown>[])
+    .filter(l => l.cancelado !== true && l.operador_id)
+    .map(l => ({
+      alvo: 'operador' as const,
+      operadorId: String(l.operador_id),
+      equipeId: (l.equipe_id as string | null) ?? null,
+      setorId: (l.setor_id as string | null) ?? null,
+      dia: primeiroDiaDaCompetencia(mes),
+      valor: Number(l.valor) || 0,
+      valorHo: 0,
+    }));
+}
+
 /**
- * As somas viram linhas do relatório.
+ * Os ajustes viram linhas do relatório.
  *
  * É esta função que faz o ajuste chegar ao Dashboard, ao Painel Metas, ao
  * escopo de equipe e ao de setor sem nenhuma delas saber que ele existe.
  *
- * ## O dia da linha
+ * Uma linha por alvo e DIA: o dia em que a alteração foi lançada. O de
+ * operador leva o operador e o setor carimbado; o de equipe leva só o setor e
+ * `ajuste_equipe_id` (o escopo de equipe o reconhece por ele); o de setor, só o
+ * setor. Sem operador, nenhum dos dois cai na conta de pessoa nenhuma.
  *
- * O ajuste é de COMPETÊNCIA, não de data — ninguém informa "em que dia" o erro
- * do ERP aconteceu. Ele entra no dia 1 do mês, e a consequência honesta é que a
- * coluna do dia 1 no gráfico de evolução cresce. A alternativa (espalhar pelos
- * dias) inventaria um histórico que não existe.
- *
- * ## O H.O.
- *
- * Calculado com a mesma constante do resto do sistema, e só na PaguePlay — na
- * BookPlay `total_ho` é zero em toda linha do relatório, e um valor aqui faria
- * o ajuste ser o único registro com H.O. na operação inteira.
+ * O H.O. vem do banco, pela regra do setor: Cofen tem, Nosso produto não.
  */
-export function ajustesComoLinhas(
-  somas: Map<string, { valor: number; setorId: string | null; equipeId: string | null }>,
-  mes: string,
-  isPaguePlay: boolean,
-): AnaliticoDashboardLinha[] {
-  const dia = primeiroDiaDaCompetencia(mes);
-  const linhas: AnaliticoDashboardLinha[] = [];
-
-  for (const [operadorId, info] of somas) {
-    if (!info.valor) continue;
-    linhas.push({
-      dia,
-      operador_id: operadorId,
-      setor_id: info.setorId,
-      forma_pagamento: 'boleto_pix',
+export function ajustesComoLinhas(ajustes: readonly AjusteDoDia[]): AnaliticoDashboardLinha[] {
+  return ajustes
+    .filter(a => a.valor)
+    .map(a => ({
+      dia: a.dia,
+      operador_id: a.alvo === 'operador' ? a.operadorId : null,
+      setor_id: a.setorId,
+      ajuste_equipe_id: a.alvo === 'equipe' ? a.equipeId : null,
+      forma_pagamento: 'boleto_pix' as const,
       forma_detalhe: ROTULO_AJUSTE,
       // Tabulado: o ajuste tem dono e motivo. Marcá-lo como não tabulado o
       // jogaria no aviso de "recebimento sem acordo", que é outra conversa.
-      status_tabulacao: 'tabulado',
-      total: info.valor,
-      total_ho: isPaguePlay ? paraHO(info.valor) : 0,
+      status_tabulacao: 'tabulado' as const,
+      total: a.valor,
+      total_ho: a.valorHo,
       // Zero pagamentos: o ajuste não é um pagamento, e contá-lo estragaria o
       // ticket médio — que é `recebido ÷ pagamentos`.
       qtd: 0,
-    });
-  }
-  return linhas;
+    }));
 }
 
 /**
@@ -303,10 +370,9 @@ export function ajustesComoLinhas(
  * recebimento, que é onde alguém vai procurá-lo.
  */
 export function ajustesComoRecebimentos(
-  somas: Map<string, { valor: number; setorId: string | null; equipeId: string | null }>,
+  somas: Map<string, SomaAjusteOperador>,
   empresaId: string,
   mes: string,
-  isPaguePlay: boolean,
 ): AnaliticoRecebimentoSintetico[] {
   const dia = primeiroDiaDaCompetencia(mes);
   const linhas: AnaliticoRecebimentoSintetico[] = [];
@@ -325,7 +391,7 @@ export function ajustesComoRecebimentos(
       forma_pagamento:   'boleto_pix',
       forma_detalhe:     ROTULO_AJUSTE,
       valor_recebido:    info.valor,
-      total_ho:          isPaguePlay ? paraHO(info.valor) : 0,
+      total_ho:          info.valorHo,
       data_pagamento:    dia,
       mes_referencia:    dia,
       acordo_id:         null,
@@ -382,7 +448,9 @@ export function invalidarSomasDeAjuste(): void {
 
 export async function lancarAjuste(params: {
   empresaId: string;
-  operadorId: string;
+  /** Padrão `operador`. Equipe exige `equipeId`; setor exige `setorId`. */
+  alvo?: AlvoAjuste;
+  operadorId: string | null;
   setorId: string | null;
   equipeId: string | null;
   mes: string;
@@ -392,9 +460,13 @@ export async function lancarAjuste(params: {
   criadoPor: string;
   criadoPorNome: string;
 }): Promise<{ erro: string | null }> {
+  const alvo = params.alvo ?? 'operador';
   const { error } = await db('analitico_ajustes_manuais').insert({
     empresa_id:      params.empresaId,
-    operador_id:     params.operadorId,
+    // `alvo` só vai quando não é o padrão: banco sem a migration 20261026170000
+    // continua aceitando o ajuste de operador.
+    ...(alvo !== 'operador' ? { alvo } : {}),
+    operador_id:     alvo === 'operador' ? params.operadorId : null,
     setor_id:        params.setorId,
     equipe_id:       params.equipeId,
     mes_referencia:  primeiroDiaDaCompetencia(params.mes),
@@ -471,13 +543,18 @@ export async function cancelarAjuste(params: {
 
 function paraAjuste(l: Record<string, unknown>): AjusteManual {
   const perfil = l.perfis as { nome?: string } | null;
+  const equipe = l.equipes as { nome?: string } | null;
+  const setor = l.setores as { nome?: string } | null;
   return {
     id:                 String(l.id),
     empresaId:          String(l.empresa_id),
-    operadorId:         String(l.operador_id),
+    alvo:               (l.alvo as AlvoAjuste | undefined) ?? 'operador',
+    operadorId:         (l.operador_id as string | null) ?? null,
     operadorNome:       perfil?.nome ?? null,
     setorId:            (l.setor_id as string | null) ?? null,
+    setorNome:          setor?.nome ?? null,
     equipeId:           (l.equipe_id as string | null) ?? null,
+    equipeNome:         equipe?.nome ?? null,
     mesReferencia:      String(l.mes_referencia),
     valor:              Number(l.valor) || 0,
     motivo:             String(l.motivo ?? ''),
@@ -520,8 +597,17 @@ export function traduzir(mensagem: string): string {
   // A trava do card único. Ela dispara quando duas pessoas criam o card do
   // mesmo operador ao mesmo tempo — e a mensagem precisa dizer o que fazer, não
   // nomear o índice: quem está na tela não sabe o que é `ux_ajuste_card…`.
+  if (/ux_ajuste_card_por_equipe_mes/i.test(mensagem)) {
+    return 'Esta equipe já tem um card neste mês. Recarregue a aba e edite o card existente.';
+  }
+  if (/ux_ajuste_card_por_setor_mes/i.test(mensagem)) {
+    return 'Este setor já tem um card neste mês. Recarregue a aba e edite o card existente.';
+  }
   if (/ux_ajuste_card_por_operador_mes|duplicate key/i.test(mensagem)) {
     return 'Esta pessoa já tem um card neste mês. Recarregue a aba e edite o card existente.';
+  }
+  if (/ajuste_alvo/i.test(mensagem)) {
+    return 'Escolha a quem o ajuste vai: a pessoa, a equipe ou o setor.';
   }
   if (/ajuste_valor_nao_zero/i.test(mensagem)) {
     return 'O valor precisa ser diferente de zero.';

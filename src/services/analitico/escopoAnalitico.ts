@@ -53,6 +53,11 @@ export interface LinhaEscopavel {
   /** O setor de quem cobrou a contribuição. É a origem da linha. */
   contribuicao_de_setor_id?: string | null;
   /**
+   * Ajuste de recebimento lançado para uma EQUIPE (26/10/2026): sem operador,
+   * conta na equipe que o recebeu e no setor dela (pelo carimbo).
+   */
+  ajuste_equipe_id?: string | null;
+  /**
    * Setor carimbado na importação.
    *
    * `undefined` = a origem não informou a coluna (RPC antiga, antes da
@@ -68,6 +73,11 @@ export type EscopoAnalitico =
   | {
       tipo: 'equipe';
       operadores: ReadonlySet<string>;
+      /**
+       * A equipe do recorte. Só serve ao ajuste de recebimento lançado para a
+       * EQUIPE (`ajuste_equipe_id`), que não tem operador para casar.
+       */
+      equipeId?: string;
       /**
        * Pares `pessoa|setor` cujo recebimento NÃO conta para a pessoa onde ela
        * está — a linha caiu num setor que não é o dela no mês (Nosso produto,
@@ -204,8 +214,11 @@ export function linhaNoEscopo(linha: LinhaEscopavel, escopo: EscopoAnalitico): b
 
     case 'equipe': {
       // Órfã não tem equipe — ficaria sempre de fora de qualquer equipe, então
-      // somá-la aqui seria atribuir a alguém o recebimento de ninguém.
-      if (linha.operador_id === null) return false;
+      // somá-la aqui seria atribuir a alguém o recebimento de ninguém. A
+      // exceção é o ajuste lançado PARA a equipe: ele diz de quem é.
+      if (linha.operador_id === null) {
+        return !!linha.ajuste_equipe_id && linha.ajuste_equipe_id === escopo.equipeId;
+      }
       // Linha sem carimbo não tem setor a comparar: conta, como no
       // `fn_analitico_resumo_por_operador` (`li.setor IS NULL`).
       const par = linha.setor_id ? chavePessoaSetor(linha.operador_id, linha.setor_id) : null;

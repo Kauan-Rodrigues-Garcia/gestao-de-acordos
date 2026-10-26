@@ -36,7 +36,15 @@
  * nenhum caminho de escrita consegue pular.
  *
  * Esconder botão é conforto; quem recusa é o banco. A RLS repete a mesma regra
- * de alcance (`fn_ajuste_no_meu_alcance`).
+ * de alcance (`fn_ajuste_alvo_no_meu_alcance`).
+ *
+ * ## Pessoa, equipe ou setor (26/10/2026)
+ *
+ * O card pode ser de uma PESSOA (conta nela, na equipe e no setor), de uma
+ * EQUIPE (conta na equipe e no setor, em ninguém dela) ou do SETOR (conta só no
+ * setor). Um card por alvo e mês. O valor entra no dia em que foi lançado, em
+ * todo lugar que mostra recebido — Painel Líder, Dashboard, Analítico, Painel
+ * Diretoria, app, desafios e TV.
  */
 import { CadeadoMes } from '@/components/CadeadoMes';
 import { useFechamentoMes } from '@/hooks/useFechamentoMes';
@@ -68,7 +76,7 @@ import { topicoDoSinal } from '@/lib/sinais';
 import { valorDigitadoParaNumero } from './ajusteValor';
 import {
   listarAjustes, listarEventos, lancarAjuste, editarAjuste, cancelarAjuste,
-  type AjusteManual, type EventoAjuste,
+  type AjusteManual, type AlvoAjuste, type EventoAjuste,
 } from '@/services/analitico/ajusteManual.service';
 
 export interface AjusteRecebimentoProps {
@@ -76,9 +84,31 @@ export interface AjusteRecebimentoProps {
   mes: string;
   /** Operadores do recorte atual do painel — a lista do seletor. */
   operadores: { id: string; nome: string; setorId: string | null; equipeId: string | null }[];
+  /** Equipes do recorte, para o card de equipe. */
+  equipes?: { id: string; nome: string; setorId: string | null }[];
+  /** Setores do recorte, para o card de setor. */
+  setores?: { id: string; nome: string }[];
 }
 
-export default function AjusteRecebimento({ mes, operadores }: AjusteRecebimentoProps) {
+const ROTULO_ALVO: Record<AlvoAjuste, string> = { operador: 'Pessoa', equipe: 'Equipe', setor: 'Setor' };
+const SEM_EQUIPES: NonNullable<AjusteRecebimentoProps['equipes']> = [];
+const SEM_SETORES: NonNullable<AjusteRecebimentoProps['setores']> = [];
+
+/** O nome que o card mostra: a pessoa, a equipe ou o setor. */
+function nomeDoAlvo(a: Pick<AjusteManual, 'alvo' | 'operadorNome' | 'equipeNome' | 'setorNome'>): string {
+  if (a.alvo === 'equipe') return a.equipeNome ?? 'Equipe';
+  if (a.alvo === 'setor') return a.setorNome ?? 'Setor';
+  return a.operadorNome ?? 'Operador';
+}
+
+/** A chave do índice único do card: quem já tem card não é oferecido de novo. */
+function chaveDoAlvo(a: AjusteManual): string | null {
+  return a.alvo === 'equipe' ? a.equipeId : a.alvo === 'setor' ? a.setorId : a.operadorId;
+}
+
+export default function AjusteRecebimento({
+  mes, operadores, equipes = SEM_EQUIPES, setores = SEM_SETORES,
+}: AjusteRecebimentoProps) {
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
@@ -124,7 +154,7 @@ export default function AjusteRecebimento({ mes, operadores }: AjusteRecebimento
 
   const cards = useMemo(
     () => ajustes.filter(a => !a.cancelado)
-      .sort((a, b) => (a.operadorNome ?? '').localeCompare(b.operadorNome ?? '', 'pt-BR')),
+      .sort((a, b) => nomeDoAlvo(a).localeCompare(nomeDoAlvo(b), 'pt-BR')),
     [ajustes],
   );
 
@@ -146,11 +176,19 @@ export default function AjusteRecebimento({ mes, operadores }: AjusteRecebimento
    * card só levaria ao erro de chave duplicada. Quem já tem aparece na lista de
    * baixo, para ser editado.
    */
-  const comCard = useMemo(() => new Set(cards.map(a => a.operadorId)), [cards]);
-  const disponiveis = useMemo(
-    () => operadores.filter(o => !comCard.has(o.id)),
-    [operadores, comCard],
+  const [alvoNovo, setAlvoNovo] = useState<AlvoAjuste>('operador');
+  const comCard = useMemo(
+    () => new Set(cards.filter(a => a.alvo === alvoNovo).map(chaveDoAlvo)),
+    [cards, alvoNovo],
   );
+  const disponiveis = useMemo(() => {
+    const opcoes = alvoNovo === 'equipe'
+      ? equipes.map(e => ({ id: e.id, nome: e.nome, setorId: e.setorId, equipeId: e.id }))
+      : alvoNovo === 'setor'
+        ? setores.map(s => ({ id: s.id, nome: s.nome, setorId: s.id as string | null, equipeId: null as string | null }))
+        : operadores;
+    return opcoes.filter(o => !comCard.has(o.id));
+  }, [alvoNovo, operadores, equipes, setores, comCard]);
 
   // ── Formulário do card novo ───────────────────────────────────────────────
 
@@ -176,9 +214,10 @@ export default function AjusteRecebimento({ mes, operadores }: AjusteRecebimento
     try {
       const r = await lancarAjuste({
         empresaId,
-        operadorId: operadorEscolhido.id,
+        alvo: alvoNovo,
+        operadorId: alvoNovo === 'operador' ? operadorEscolhido.id : null,
         setorId:  operadorEscolhido.setorId,
-        equipeId: operadorEscolhido.equipeId,
+        equipeId: alvoNovo === 'setor' ? null : operadorEscolhido.equipeId,
         mes,
         valor: valorNumerico * sinal,
         motivo,
@@ -213,13 +252,14 @@ export default function AjusteRecebimento({ mes, operadores }: AjusteRecebimento
       <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl border border-amber-500/40 bg-amber-500/10">
         <AlertTriangle className="w-4 h-4 text-amber-700 dark:text-amber-500 shrink-0 mt-0.5" />
         <div className="text-xs leading-relaxed">
-          <p className="font-semibold text-foreground">Correção temporária do relatório</p>
+          <p className="font-semibold text-foreground">Recebimento por fora</p>
           <p className="text-muted-foreground">
-            O valor de cada card soma no recebimento do operador — e, por
-            consequência, no da equipe e no do setor. Entra como <strong>Ajuste
-            manual</strong>, não como Pix nem cartão. O relatório importado não é
-            alterado: o valor é somado na leitura, e some no dia em que esta aba
-            for desligada.
+            Card de <strong>pessoa</strong> soma nela, na equipe e no setor; de{' '}
+            <strong>equipe</strong>, na equipe e no setor, em ninguém dela; de{' '}
+            <strong>setor</strong>, só no setor. O valor entra no dia em que foi
+            lançado e aparece em todo total de recebido — Painel Líder, Dashboard,
+            Analítico, Painel Diretoria, app e desafios — como <strong>Ajuste
+            manual</strong>, não como Pix nem cartão. O relatório importado não é alterado.
           </p>
         </div>
       </div>
@@ -234,12 +274,33 @@ export default function AjusteRecebimento({ mes, operadores }: AjusteRecebimento
       {/* ── Card novo — só para quem ainda não tem ────────────────────────── */}
       {podeLancar && (
         <div className="rounded-xl border border-border bg-card p-3 space-y-3">
-          <p className="text-xs font-semibold flex items-center gap-1.5">
-            <Plus className="w-3.5 h-3.5" /> Novo card
-            <span className="font-normal text-muted-foreground">
-              — quem já tem card aparece na lista abaixo, para editar
-            </span>
-          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-xs font-semibold flex items-center gap-1.5">
+              <Plus className="w-3.5 h-3.5" /> Novo card
+              <span className="font-normal text-muted-foreground">
+                — quem já tem card aparece na lista abaixo, para editar
+              </span>
+            </p>
+            {/* Para quem é o card. Trocar limpa a escolha: um id de pessoa não
+                vale como equipe. */}
+            <div className="ml-auto flex rounded-md border border-input overflow-hidden" role="radiogroup" aria-label="Para quem é o card">
+              {(['operador', 'equipe', 'setor'] as const).map(alvo => (
+                <button
+                  key={alvo}
+                  type="button"
+                  role="radio"
+                  aria-checked={alvoNovo === alvo}
+                  onClick={() => { setAlvoNovo(alvo); setOperadorId(null); }}
+                  className={cn(
+                    'px-3 py-1 text-xs font-medium transition-colors',
+                    alvoNovo === alvo ? 'bg-primary text-primary-foreground' : 'hover:bg-accent',
+                  )}
+                >
+                  {ROTULO_ALVO[alvo]}
+                </button>
+              ))}
+            </div>
+          </div>
 
           <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_10rem]">
             <Popover open={seletorAberto} onOpenChange={setSeletorAberto}>
@@ -254,7 +315,9 @@ export default function AjusteRecebimento({ mes, operadores }: AjusteRecebimento
                 >
                   <Search className="w-3.5 h-3.5 shrink-0 opacity-60" />
                   <span className="truncate">
-                    {operadorEscolhido?.nome ?? 'Escolha o operador — digite para buscar'}
+                    {operadorEscolhido?.nome ?? (alvoNovo === 'equipe'
+                      ? 'Escolha a equipe — digite para buscar'
+                      : alvoNovo === 'setor' ? 'Escolha o setor' : 'Escolha o operador — digite para buscar')}
                   </span>
                 </button>
               </PopoverTrigger>
@@ -264,8 +327,8 @@ export default function AjusteRecebimento({ mes, operadores }: AjusteRecebimento
                   <CommandList>
                     <CommandEmpty>
                       {disponiveis.length === 0
-                        ? 'Todo mundo deste recorte já tem card.'
-                        : 'Ninguém com esse nome neste recorte.'}
+                        ? `Todo${alvoNovo === 'operador' ? ' mundo' : 's'} deste recorte já tem card.`
+                        : 'Nada com esse nome neste recorte.'}
                     </CommandEmpty>
                     <CommandGroup>
                       {disponiveis.map(o => (
@@ -342,7 +405,11 @@ export default function AjusteRecebimento({ mes, operadores }: AjusteRecebimento
                   </strong>.
                 </>
               ) : (
-                'Escolha a pessoa, o valor total e escreva o motivo.'
+                alvoNovo === 'equipe'
+                  ? 'Escolha a equipe, o valor total e o motivo. Conta na equipe e no setor, em ninguém dela.'
+                  : alvoNovo === 'setor'
+                    ? 'Escolha o setor, o valor total e o motivo. Conta só no setor.'
+                    : 'Escolha a pessoa, o valor total e escreva o motivo.'
               )}
             </p>
             <Button size="sm" disabled={!podeEnviar} onClick={criarCard}>
@@ -359,7 +426,7 @@ export default function AjusteRecebimento({ mes, operadores }: AjusteRecebimento
             <Users className="w-3.5 h-3.5" />
             Cards do mês
             <span className="font-normal text-muted-foreground">
-              ({cards.length} {cards.length === 1 ? 'pessoa' : 'pessoas'})
+              ({cards.length} {cards.length === 1 ? 'card' : 'cards'})
             </span>
           </p>
           <span className={cn(
@@ -414,7 +481,7 @@ export default function AjusteRecebimento({ mes, operadores }: AjusteRecebimento
                       <span className="font-mono tabular-nums line-through text-muted-foreground">
                         {formatBRL(a.valor)}
                       </span>
-                      <span className="font-medium">{a.operadorNome ?? 'Operador'}</span>
+                      <span className="font-medium">{nomeDoAlvo(a)}</span>
                       <span className="ml-auto text-[11px] text-muted-foreground">
                         apagado por {a.canceladoPorNome ?? 'alguém'} · {quando(a.canceladoEm ?? a.atualizadoEm)}
                       </span>
@@ -447,7 +514,7 @@ export default function AjusteRecebimento({ mes, operadores }: AjusteRecebimento
           toast.success(
             delta === 0
               ? 'Card salvo.'
-              : `Total de ${alvoEdicao.operadorNome ?? 'operador'} agora é ${formatBRL(valor)} `
+              : `Total de ${nomeDoAlvo(alvoEdicao)} agora é ${formatBRL(valor)} `
                 + `(${delta > 0 ? '+' : ''}${formatBRL(delta)}).`,
           );
           setAlvoEdicao(null);
@@ -465,7 +532,7 @@ export default function AjusteRecebimento({ mes, operadores }: AjusteRecebimento
             canceladoPor: perfil.id, canceladoPorNome: meuNome,
           });
           if (r.erro) { toast.error(r.erro); return; }
-          toast.success(`Card de ${alvoRemocao.operadorNome ?? 'operador'} apagado.`);
+          toast.success(`Card de ${nomeDoAlvo(alvoRemocao)} apagado.`);
           setAlvoRemocao(null);
           await recarregar();
         }}
@@ -517,7 +584,12 @@ function CardOperador({
         )}>
           {ajuste.valor > 0 ? '+' : ''}{formatBRL(ajuste.valor)}
         </span>
-        <span className="font-medium">{ajuste.operadorNome ?? 'Operador'}</span>
+        <span className="font-medium">{nomeDoAlvo(ajuste)}</span>
+        {ajuste.alvo !== 'operador' && (
+          <span className="rounded border border-border px-1 text-[10px] uppercase text-muted-foreground">
+            {ROTULO_ALVO[ajuste.alvo]}
+          </span>
+        )}
 
         <span className="ml-auto text-[11px] text-muted-foreground">
           {ajuste.editadoPorNome
@@ -632,7 +704,7 @@ function DialogoNovoTotal({
         <DialogHeader>
           <DialogTitle>Atualizar total</DialogTitle>
           <DialogDescription>
-            {alvo?.operadorNome ?? 'Operador'} · hoje está em{' '}
+            {alvo ? nomeDoAlvo(alvo) : 'Operador'} · hoje está em{' '}
             <strong>{formatBRL(alvo?.valor ?? 0)}</strong>
           </DialogDescription>
         </DialogHeader>
@@ -718,7 +790,7 @@ function DialogoApagar({
         <DialogHeader>
           <DialogTitle>Apagar o card</DialogTitle>
           <DialogDescription>
-            {alvo?.operadorNome ?? 'Operador'} perde {formatBRL(alvo?.valor ?? 0)} do
+            {alvo ? nomeDoAlvo(alvo) : 'Operador'} perde {formatBRL(alvo?.valor ?? 0)} do
             recebimento, na hora. O card fica guardado no histórico da aba, com
             quem apagou — e a pessoa pode receber um card novo depois.
           </DialogDescription>

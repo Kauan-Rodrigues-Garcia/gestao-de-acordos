@@ -16,7 +16,7 @@
  * ## Ao vivo só para quem participa (19/10/2026)
  *
  * O tempo real (o sinal e a releitura de 5 min) fica ligado só para quem está
- * no desafio (`participo`), para quem o criou (`acompanho`) e na prévia — é
+ * no desafio (`participo`) e na prévia — é
  * para eles que a pílula aparece. Quem só ENXERGA o desafio pela RLS (o gerente
  * que vê o desafio de outro setor) lê uma vez, ao abrir. Antes, cada pessoa da
  * empresa com a aba Desafios relia o placar a cada lote do 59, mesmo com a
@@ -82,9 +82,13 @@ export interface UsoPlacarDoDia {
   lidoEm: number | null;
 }
 
-/** Quem acompanha ao vivo: quem está no desafio ou quem o criou. */
+/**
+ * Quem acompanha ao vivo: quem está no desafio. Quem só o CRIOU não entra mais
+ * (26/10/2026): o gerente que cria o desafio do Playmix não é do Playmix, e a
+ * pílula na barra dele não tinha razão de existir — ele acompanha pela aba.
+ */
 function acompanhaAoVivo(resposta: RespostaPlacarDoDia | undefined): boolean {
-  return resposta?.estado === 'ok' && (resposta.placar.participo || resposta.placar.acompanho);
+  return resposta?.estado === 'ok' && resposta.placar.participo;
 }
 
 export function usePlacarDoDia(

@@ -178,7 +178,7 @@ function TelaDaEquipe() {
             )}
             {aba === 'quartis' && <AbaQuartis equipe={equipe} mes={tela.mes} />}
             {aba === 'grafico' && (
-              <AbaGrafico escopo={{ tipo: 'equipe', operadores: new Set(equipe.operadorIds) }}
+              <AbaGrafico escopo={{ tipo: 'equipe', operadores: new Set(equipe.operadorIds), equipeId: equipe.id }}
                 mes={tela.mes} hojeISO={tela.hojeISO}
                 linhas={linhasNaUnidade} carregando={grafico.isLoading} erro={grafico.isError}
                 isPaguePlay={tela.isPaguePlay} emHO={tela.emHO} />

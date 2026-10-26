@@ -167,6 +167,11 @@ export interface CreditoDeOrigem {
   setorId: string | null;
   bruto: number;
   ho: number;
+  /**
+   * Ajuste de recebimento lançado para a EQUIPE (26/10/2026), e não o que um
+   * transferido deixou: `perfilId` vem vazio e o valor conta como ajuste.
+   */
+  ajuste?: boolean;
 }
 
 /** Uma linha de `fn_analitico_recebido_fora_do_setor`. */
