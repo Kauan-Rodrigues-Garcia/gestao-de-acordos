@@ -11,6 +11,7 @@ import { calcularParcelas, formatBRL } from '@/lib/money';
 import { cn } from '@/lib/utils';
 import { TagsSelector } from '@/components/TagsSelector';
 import { BotaoCapturaErpPP } from '@/components/pagueplay/BotaoCapturaErpPP';
+import { gruposDeNumeros, propsSoNumeros, soNumeros } from '@/lib/soNumeros';
 import { TIPOS_PAGUEPLAY, PARCELAS_PP } from './constants';
 import { DatePickerField } from './DatePickerField';
 import { ModalAutorizacaoNR } from './ModalAutorizacaoNR';
@@ -54,7 +55,8 @@ export function FormPP({ state }: { state: SharedFormState }) {
               <div className="flex items-center gap-1">
                 <BotaoCapturaErpPP
                   onDados={(d) => {
-                    if (d.instituicao) setInstituicao(d.instituicao);
+                    // Só se a captura trouxe UM número: juntar dois daria um Código que não existe.
+                    if (d.instituicao && gruposDeNumeros(d.instituicao) === 1) setInstituicao(soNumeros(d.instituicao));
                     if (d.tipo) handleChangeTipo(d.tipo === 'boleto' ? 'boleto_pix' : 'cartao');
                     if (d.tipo === 'boleto' && d.parcelas) setParcelasStr(d.parcelas);
                     if (d.vencimento) setVencimento(d.vencimento);
@@ -77,7 +79,7 @@ export function FormPP({ state }: { state: SharedFormState }) {
                 <div className="space-y-1">
                   <Label className="text-xs">Código *</Label>
                   <div className="relative">
-                    <Input value={instituicao} onChange={(e) => setInstituicao(e.target.value)} placeholder="Código" className="h-8 text-xs pr-7" />
+                    <Input value={instituicao} {...propsSoNumeros(setInstituicao, 'Código')} placeholder="Código" className="h-8 text-xs pr-7" />
                     {profissionalLoading && (
                       <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground animate-spin" />
                     )}

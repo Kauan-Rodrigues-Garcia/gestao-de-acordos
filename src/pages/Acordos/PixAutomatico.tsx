@@ -73,6 +73,7 @@ import { formatCurrency, parseCurrencyInput, getTodayISO } from '@/lib/index';
 import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { cn } from '@/lib/utils';
 import { copiarTexto } from '@/lib/clipboard';
+import { ehSoNumeros, gruposDeNumeros, propsSoNumeros, soNumeros } from '@/lib/soNumeros';
 import {
   ehMesAtual, mesAtual, partesDoMes, primeiroDiaDoMes, rotuloDoMes, ultimoDiaDoMes,
 } from '@/lib/mesReferencia';
@@ -1594,6 +1595,7 @@ export function PixAutomatico() {
     const nr = nrNovo.trim();
     const valor = parseCurrencyInput(valorNovo);
     if (!nr) { toast.error('Informe o NR do acordo'); return; }
+    if (!ehSoNumeros(nr)) { toast.error('O NR só aceita números'); return; }
     if (isNaN(valor) || valor <= 0) { toast.error('Valor inválido'); return; }
     /*
      * NR já registrado: dois caminhos, e a diferença é de QUEM ele é.
@@ -1767,6 +1769,8 @@ export function PixAutomatico() {
     const nr = editNr.trim();
     const valor = parseCurrencyInput(editValor);
     if (!nr) { toast.error('Informe o NR do acordo'); return; }
+    // Só quando mudou: o registro antigo com NR sujo ainda pode ter o valor editado.
+    if (nr !== item.nr_cliente.trim() && !ehSoNumeros(nr)) { toast.error('O NR só aceita números'); return; }
     if (isNaN(valor) || valor <= 0) { toast.error('Valor inválido'); return; }
     // NR novo já usado por OUTRO acordo: o registro histórico do próprio acordo
     // fica na lista de bloqueados, então trocar por ele mesmo não é conflito.
@@ -2301,7 +2305,10 @@ export function PixAutomatico() {
       const rows = xlsxUtils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' });
 
       const linhas: LinhaPixLote[] = rows.map(row => {
-        const nr = String(pegarCampo(row, ['nr', 'nr do acordo', 'nr_cliente']) ?? '').trim();
+        // Só número (26/10/2026): «12748027_» vira 12748027; com mais de um
+        // número na célula, fica vazio e a linha entra nos inválidos ignorados.
+        const nrBruto = String(pegarCampo(row, ['nr', 'nr do acordo', 'nr_cliente']) ?? '').trim();
+        const nr = gruposDeNumeros(nrBruto) === 1 ? soNumeros(nrBruto) : '';
         const valor = parseCurrencyInput(String(pegarCampo(row, ['valor', 'valor total', 'valor do acordo']) ?? ''));
         const opNome = String(pegarCampo(row, ['operador', 'operador_nome', 'nome']) ?? '').trim();
 
@@ -2574,8 +2581,8 @@ export function PixAutomatico() {
           <div className="flex flex-col sm:flex-row sm:items-end gap-3 flex-wrap">
             <div className="space-y-1 flex-1 max-w-[220px]">
               <Label className="text-xs font-medium flex items-center gap-1"><Hash className="w-3 h-3" /> NR do acordo *</Label>
-              <Input value={nrNovo} onChange={e => setNrNovo(e.target.value)}
-                placeholder="NR" className="h-9 text-sm font-mono" />
+              <Input value={nrNovo} {...propsSoNumeros(setNrNovo, 'NR')}
+                placeholder="Só números" className="h-9 text-sm font-mono" />
             </div>
             <div className="space-y-1 flex-1 max-w-[220px]">
               <Label className="text-xs font-medium flex items-center gap-1"><DollarSign className="w-3 h-3" /> Valor total do acordo *</Label>
@@ -3093,7 +3100,7 @@ export function PixAutomatico() {
                         )}
                         <td className="px-4 py-3 font-mono font-bold text-foreground">
                           {emEdicao ? (
-                            <Input value={editNr} onChange={e => setEditNr(e.target.value)}
+                            <Input value={editNr} {...propsSoNumeros(setEditNr, 'NR')}
                               className="h-8 w-28 text-xs font-mono" aria-label="NR do acordo"
                               onKeyDown={e => {
                                 if (e.key === 'Enter')  salvarEdicao(item);

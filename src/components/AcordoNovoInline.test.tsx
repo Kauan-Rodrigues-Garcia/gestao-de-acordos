@@ -734,7 +734,7 @@ describe('AcordoNovoInline — fluxo salvar() (mesmo operador)', () => {
     });
     // Mesmo com o acordo carregável, PP não deve abrir o modal.
     routes.acordosMaybeSingle = {
-      data: { id: 'a-meu', instituicao: 'INS-1', operador_id: 'me-1', empresa_id: 'emp-1' } as Acordo,
+      data: { id: 'a-meu', instituicao: '1', operador_id: 'me-1', empresa_id: 'emp-1' } as Acordo,
       error: null,
     };
 
@@ -743,7 +743,7 @@ describe('AcordoNovoInline — fluxo salvar() (mesmo operador)', () => {
     const nomeCampo = screen.getByPlaceholderText(/Nome do profissional/i);
     fireEvent.change(nomeCampo, { target: { value: 'Profissional X' } });
     const codigo = screen.getByPlaceholderText(/^Código$/);
-    fireEvent.change(codigo, { target: { value: 'INS-1' } });
+    fireEvent.change(codigo, { target: { value: '1' } });
     fireEvent.click(screen.getByTestId('pick-date'));
     fireEvent.change(screen.getByPlaceholderText('0,00'), { target: { value: '100' } });
 
@@ -983,7 +983,7 @@ describe('AcordoNovoInline — fluxo analítico PP (parcela 4/12)', () => {
     verificarNrRegistroMock.mockResolvedValue(null);
     routes.insertAcordo = {
       data: {
-        id: 'a1', nome_cliente: 'Cliente X', nr_cliente: '', instituicao: 'INS-9',
+        id: 'a1', nome_cliente: 'Cliente X', nr_cliente: '', instituicao: '9',
         operador_id: 'me-1', empresa_id: 'emp-1', acordo_grupo_id: 'g1',
         tipo: 'boleto', parcelas: 12, valor_total: 2988, numero_parcela: 4,
       } as Acordo,
@@ -991,7 +991,7 @@ describe('AcordoNovoInline — fluxo analítico PP (parcela 4/12)', () => {
     };
     // Draft montado pelo ModalTabularAnalitico (valor TOTAL já calculado)
     sessionStorage.setItem('acordo-inline-draft::emp-1::me-1::pp', JSON.stringify({
-      instituicao: 'INS-9', nomeCliente: 'Cliente X', tipo: 'boleto_pix',
+      instituicao: '9', nomeCliente: 'Cliente X', tipo: 'boleto_pix',
       valorStr: '2988,00', vencimento: '2026-07-05', estadoSel: 'SP',
       status: 'pago', parcelasStr: '12', parcelaAtualStr: '4',
       quarentaPct: '', analitico: '1',
@@ -1007,7 +1007,7 @@ describe('AcordoNovoInline — fluxo analítico PP (parcela 4/12)', () => {
 
     // Parcela atual: 4ª de 12, valor da parcela (2988/12), paga no dia do analítico
     expect(inserts[0].payload).toMatchObject({
-      instituicao: 'INS-9', numero_parcela: 4, parcelas: 12,
+      instituicao: '9', numero_parcela: 4, parcelas: 12,
       valor: 249, valor_total: 2988, status: 'pago',
       vencimento: '2026-07-05', data_pagamento: '2026-07-05',
     });
@@ -1031,7 +1031,7 @@ describe('AcordoNovoInline — fluxo analítico PP (parcela 4/12)', () => {
 
     renderInline({ onSaved, isPaguePlay: true });   // sem semearEstadoPP()
     fireEvent.change(screen.getByPlaceholderText(/Nome do profissional/i), { target: { value: 'Prof Z' } });
-    fireEvent.change(screen.getByPlaceholderText(/^Código$/), { target: { value: 'INS-3' } });
+    fireEvent.change(screen.getByPlaceholderText(/^Código$/), { target: { value: '3' } });
     fireEvent.click(screen.getByTestId('pick-date'));
     fireEvent.change(screen.getByPlaceholderText('0,00'), { target: { value: '500' } });
 
@@ -1119,7 +1119,7 @@ describe('AcordoNovoInline — fluxo analítico PP (parcela 4/12)', () => {
     const nomeCampo = screen.getByPlaceholderText(/Nome do profissional/i);
     fireEvent.change(nomeCampo, { target: { value: 'Prof Y' } });
     const codigo = screen.getByPlaceholderText(/^Código$/);
-    fireEvent.change(codigo, { target: { value: 'INS-2' } });
+    fireEvent.change(codigo, { target: { value: '2' } });
     fireEvent.click(screen.getByTestId('pick-date'));
     fireEvent.change(screen.getByPlaceholderText('0,00'), { target: { value: '1200' } });
 

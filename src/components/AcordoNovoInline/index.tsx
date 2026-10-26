@@ -21,6 +21,7 @@ import {
 } from '@/lib/index';
 import { calcularParcelas, totalComEntrada, formatBRL } from '@/lib/money';
 import { camposComCpf, ERRO_CPF_NO_CODIGO } from '@/lib/cpf';
+import { ehSoNumeros } from '@/lib/soNumeros';
 import {
   estadoFechamentoDaData, mensagemFechamento, mesDaData,
 } from '@/lib/fechamentoMes';
@@ -298,6 +299,9 @@ export function AcordoNovoInline({
     }
     if (isPaguePlay && !instituicao.trim()) return 'Código é obrigatório';
     if (!isPaguePlay && !nrCliente.trim())  return 'NR é obrigatório';
+    // Só número (26/10/2026): o campo já filtra, isto pega o que chegar por fora.
+    if (isPaguePlay && !ehSoNumeros(instituicao)) return 'O Código só aceita números';
+    if (!isPaguePlay && !ehSoNumeros(nrCliente))  return 'O NR só aceita números';
     // CPF em qualquer campo de texto: dado pessoal entrando pela porta de trás
     // (achado em 03/08/2026 no campo de código). O gatilho
     // `trg_acordos_recusa_cpf` recusa no banco nas duas empresas; aqui o

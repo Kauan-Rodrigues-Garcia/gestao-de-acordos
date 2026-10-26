@@ -230,6 +230,9 @@ function montarRegistro(
   const chave = nr_cliente || instituicao;
   const erros: string[] = [];
   if (!chave)         erros.push('NR/Inscrição ausente');
+  // NR só com número (26/10/2026). A Instituição fica de fora: em Nosso
+  // produto ela é texto (BOOKPLAY, MUNDIAL EDITORA…).
+  if (nr_cliente && !/^\d+$/.test(nr_cliente)) erros.push('NR só aceita números');
   if (valor === null) erros.push('Valor inválido');
   if (!vencimento)    erros.push('Vencimento inválido');
 

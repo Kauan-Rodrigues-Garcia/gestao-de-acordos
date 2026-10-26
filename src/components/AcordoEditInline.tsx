@@ -48,6 +48,7 @@ import {
 import { useRegistrarPixAoPagar } from '@/hooks/useRegistrarPixAoPagar';
 import { abrirChatplay } from '@/lib/chatplay';
 import { camposComCpf, ERRO_CPF_NO_CODIGO } from '@/lib/cpf';
+import { ehSoNumeros, propsSoNumeros } from '@/lib/soNumeros';
 import {
   estadoFechamentoDaData, mensagemFechamento, mesDaData,
 } from '@/lib/fechamentoMes';
@@ -324,6 +325,14 @@ export function AcordoEditInline({
       // Valor da entrada editado sem mexer na quantidade: o total do acordo
       // muda junto e precisa cair em todas as linhas do grupo.
       planoQuantidade = { acao: 'contador', novoTotal: parcelasNum };
+    }
+
+    // Código só com número (26/10/2026). Só quando MUDOU: o acordo antigo com
+    // Código sujo ainda pode ser editado em outros campos sem travar.
+    if (isPaguePlay && instituicao.trim() && instituicao.trim() !== (acordo.instituicao ?? '').trim()
+        && !ehSoNumeros(instituicao)) {
+      toast.error('O Código só aceita números');
+      return;
     }
 
     // ─── Conflito de NR/Código na edição ──────────────────────────────────
@@ -849,7 +858,7 @@ export function AcordoEditInline({
                       <Building2 className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
                       <Input
                         value={instituicao}
-                        onChange={e => setInstituicao(e.target.value)}
+                        {...propsSoNumeros(setInstituicao, 'Código')}
                         placeholder="Código (opcional)"
                         className="h-8 text-xs pl-6"
                       />

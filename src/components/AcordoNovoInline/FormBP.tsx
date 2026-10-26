@@ -13,6 +13,7 @@ import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { DropzoneImagensAcordo } from '@/components/acordo-visao/DropzoneImagensAcordo';
 import { TagsSelector } from '@/components/TagsSelector';
 import { nomeDaFormaRecorrente } from '@/lib/formasRecorrentes';
+import { gruposDeNumeros, propsSoNumeros, soNumeros } from '@/lib/soNumeros';
 import { TIPOS_BOOKPLAY, STATUS_OPTIONS } from './constants';
 import { DatePickerField } from './DatePickerField';
 import { ModalAutorizacaoNR } from './ModalAutorizacaoNR';
@@ -72,7 +73,8 @@ export function FormBP({ state }: { state: SharedFormState }) {
             <DropzoneImagensAcordo
               disabled={salvando}
               onDados={(d) => {
-                if (d.nr_cliente)   setNrCliente(d.nr_cliente);
+                // Só se a imagem trouxe UM número: juntar dois daria um NR que não existe.
+                if (d.nr_cliente && gruposDeNumeros(d.nr_cliente) === 1) setNrCliente(soNumeros(d.nr_cliente));
                 if (d.vencimento)   setVencimento(d.vencimento);
                 if (d.valor)        setValorStr(d.valor);
                 if (d.tipo)         handleChangeTipo(d.tipo);
@@ -92,7 +94,7 @@ export function FormBP({ state }: { state: SharedFormState }) {
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                 <div className="space-y-1">
                   <Label className="text-xs">NR *</Label>
-                  <Input value={nrCliente} onChange={(e) => setNrCliente(e.target.value)} placeholder="Código do acordo" className="h-8 text-xs font-mono" />
+                  <Input value={nrCliente} {...propsSoNumeros(setNrCliente, 'NR')} placeholder="Código do acordo" className="h-8 text-xs font-mono" />
                 </div>
                 <DatePickerField
                   label="Vencimento" required

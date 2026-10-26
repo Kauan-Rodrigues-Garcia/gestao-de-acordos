@@ -270,7 +270,7 @@ describe('AcordoEditInline — bloqueio NR/Inscrição duplicado', () => {
     // `estado_uf` preenchido de propósito: desde a 20260802c a PaguePlay não
     // salva sem UF, e essa checagem roda ANTES da consulta de NR duplicado.
     // Sem isso o teste passaria a medir a validação errada.
-    const acordo = makeAcordo({ instituicao: 'INS-100', nr_cliente: '', estado_uf: 'SP' });
+    const acordo = makeAcordo({ instituicao: '100', nr_cliente: '', estado_uf: 'SP' });
     const onSaved = vi.fn();
     verificarNrRegistroMock.mockResolvedValue({
       registroId: 'r1', acordoId: 'outro', operadorId: 'op2', operadorNome: 'Ana',
@@ -291,13 +291,13 @@ describe('AcordoEditInline — bloqueio NR/Inscrição duplicado', () => {
 
     // No modo PaguePlay, o campo Código é o "instituicao".
     const inscInput = screen.getByPlaceholderText(/Código \(opcional\)/i) as HTMLInputElement;
-    fireEvent.change(inscInput, { target: { value: 'INS-200' } });
+    fireEvent.change(inscInput, { target: { value: '200' } });
 
     clickSalvar();
 
     await waitFor(() => expect(verificarNrRegistroMock).toHaveBeenCalledTimes(1));
     expect(verificarNrRegistroMock).toHaveBeenCalledWith(
-      'INS-200', 'emp-1', 'instituicao', 'acordo-1',
+      '200', 'emp-1', 'instituicao', 'acordo-1',
     );
     // Ninguém tem a lógica Direto/Extra → CASO C: pede o líder, não salva.
     // Desde 18/08/2026 nao se digita a senha do lider: pede-se autorizacao.
@@ -313,11 +313,11 @@ describe('AcordoEditInline — bloqueio NR/Inscrição duplicado', () => {
 
   /** Prepara um acordo PaguePlay em conflito e devolve o input do Código. */
   function renderConflitoPP(onSaved: () => void) {
-    const acordo = makeAcordo({ instituicao: 'INS-100', nr_cliente: '', estado_uf: 'SP' });
+    const acordo = makeAcordo({ instituicao: '100', nr_cliente: '', estado_uf: 'SP' });
     verificarNrRegistroMock.mockResolvedValue({
       registroId: 'r1', acordoId: 'acordo-da-maria', operadorId: 'op2', operadorNome: 'Maria Valeria',
     });
-    nextSingleResult = { data: { ...acordo, instituicao: 'INS-200' }, error: null };
+    nextSingleResult = { data: { ...acordo, instituicao: '200' }, error: null };
 
     renderInline(
       <AcordoEditInline acordo={acordo} isPaguePlay onSaved={onSaved} onCancel={vi.fn()} />,
@@ -336,7 +336,7 @@ describe('AcordoEditInline — bloqueio NR/Inscrição duplicado', () => {
     ];
 
     const input = renderConflitoPP(onSaved);
-    fireEvent.change(input, { target: { value: 'INS-200' } });
+    fireEvent.change(input, { target: { value: '200' } });
     clickSalvar();
 
     await screen.findByText(/Vínculo detectado/i);
@@ -357,7 +357,7 @@ describe('AcordoEditInline — bloqueio NR/Inscrição duplicado', () => {
     ];
 
     const input = renderConflitoPP(onSaved);
-    fireEvent.change(input, { target: { value: 'INS-200' } });
+    fireEvent.change(input, { target: { value: '200' } });
     clickSalvar();
 
     fireEvent.click(await screen.findByText(/Tabular como Direto/i));
@@ -378,7 +378,7 @@ describe('AcordoEditInline — bloqueio NR/Inscrição duplicado', () => {
     ];
 
     const input = renderConflitoPP(onSaved);
-    fireEvent.change(input, { target: { value: 'INS-200' } });
+    fireEvent.change(input, { target: { value: '200' } });
     clickSalvar();
 
     // CASO A grava direto, sem modal: quem tem a lógica ativa não passa por
@@ -399,7 +399,7 @@ describe('AcordoEditInline — bloqueio NR/Inscrição duplicado', () => {
     ];
 
     const input = renderConflitoPP(onSaved);
-    fireEvent.change(input, { target: { value: 'INS-200' } });
+    fireEvent.change(input, { target: { value: '200' } });
     clickSalvar();
 
     // Tirar o lugar de um terceiro passa por líder — a lógica não dispensa.
@@ -411,7 +411,7 @@ describe('AcordoEditInline — bloqueio NR/Inscrição duplicado', () => {
   });
 
   it('(b2) PaguePlay: editar sem estado (UF) é recusado antes de consultar o NR', async () => {
-    const acordo = makeAcordo({ instituicao: 'INS-100', nr_cliente: '', estado_uf: null });
+    const acordo = makeAcordo({ instituicao: '100', nr_cliente: '', estado_uf: null });
     const onSaved = vi.fn();
 
     renderInline(
@@ -454,14 +454,26 @@ describe('AcordoEditInline — campo Instituição/Código', () => {
     expect(screen.getByText('Bookplya')).toBeTruthy();
   });
 
-  it('PaguePlay: continua texto livre — ali é o código do acordo', async () => {
-    const acordo = makeAcordo({ instituicao: 'INS-100', nr_cliente: '', estado_uf: 'SP' });
+  it('PaguePlay: mostra o Código como está gravado — ali é o código do acordo', async () => {
+    const acordo = makeAcordo({ instituicao: '100', nr_cliente: '', estado_uf: 'SP' });
     renderInline(
       <AcordoEditInline acordo={acordo} isPaguePlay onSaved={vi.fn()} onCancel={vi.fn()} />,
     );
 
     const input = screen.getByPlaceholderText(/Código \(opcional\)/i) as HTMLInputElement;
-    expect(input.value).toBe('INS-100');
+    expect(input.value).toBe('100');
+  });
+
+  it('PaguePlay: o Código só aceita números (26/10/2026)', async () => {
+    const acordo = makeAcordo({ instituicao: '100', nr_cliente: '', estado_uf: 'SP' });
+    renderInline(
+      <AcordoEditInline acordo={acordo} isPaguePlay onSaved={vi.fn()} onCancel={vi.fn()} />,
+    );
+
+    const input = screen.getByPlaceholderText(/Código \(opcional\)/i) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'abc1867804 .' } });
+    // Busca de novo: o formulário redesenha o campo depois da troca.
+    await waitFor(() => expect((screen.getByPlaceholderText(/Código \(opcional\)/i) as HTMLInputElement).value).toBe('1867804'));
   });
 
   it('BookPlay: salvar sem mexer preserva a instituição', async () => {
