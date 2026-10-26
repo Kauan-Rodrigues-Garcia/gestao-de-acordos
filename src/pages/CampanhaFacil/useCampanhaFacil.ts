@@ -6,7 +6,7 @@
  * de mensagens, descontos e ocultas passou de localStorage para Supabase,
  * separada por setor desde 20261016210000 (campanhaFacil.service).
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
@@ -15,6 +15,11 @@ import { CampaignCore, type Discounts, type ParsedResult, type Template, type Ca
 import { CampaignXlsx } from './lib/xlsx-export';
 import { parseSpreadsheetReport } from './lib/readSpreadsheet';
 import { idsDeMensagensBloqueadas } from './regras-mensagem';
+import {
+  PENDENCIA_PARCELA_MINIMA, mensagemAindaTemParcelaBaixa, parcelasBaixasDoItem, variaveisParceladasDoModelo,
+  type ParcelaBaixa,
+} from './parcela-minima';
+import { agruparPendencias, linhasComPendencia, pendenciasDoItem } from './pendencias';
 import { useEnviosCampanha } from './useEnviosCampanha';
 import {
   fetchMensagens, criarMensagem, atualizarMensagemCorpo, excluirMensagem,
@@ -28,8 +33,16 @@ const DISCOUNT_KEYS: (keyof Discounts)[] = ['overdue', 'settlement', 'interest',
 const PAGE_SIZE = 25;
 
 export interface ImportProgress { value: number; label: string; detail: string }
-/** `critico` = só os registros com pendência grave (o card do aviso leva até eles). */
-export type StatusFilter = 'all' | 'Revisar' | 'critico';
+/**
+ * `critico` = só os registros com pendência grave (o card do aviso leva até eles).
+ * `motivo:<texto>` = só os de um tipo de pendência (26/10/2026).
+ */
+export type StatusFilter = 'all' | 'Revisar' | 'critico' | `motivo:${string}`;
+
+/** O motivo de um filtro `motivo:…`, ou `null`. */
+export function motivoDoFiltro(f: StatusFilter): string | null {
+  return f.startsWith('motivo:') ? f.slice('motivo:'.length) : null;
+}
 
 /** Pendência grave: a que estraga o texto da mensagem (valor que vira R$ 0). */
 export function temPendenciaGrave(i: Pick<CampaignItem, 'hasBlockingIssues' | 'blockingIssues'>): boolean {
@@ -37,12 +50,13 @@ export function temPendenciaGrave(i: Pick<CampaignItem, 'hasBlockingIssues' | 'b
 }
 
 /**
- * Como está a campanha carregada. **Nenhum destes estados impede exportar** —
- * eles só graduam o aviso. `critical` são as pendências que estragam o texto da
+ * Como está a campanha carregada. Só `travada` impede exportar e liberar: tem
+ * parcela abaixo de R$ 30 (26/10/2026, ver `parcela-minima.ts`). Os outros só
+ * graduam o aviso. `critical` são as pendências que estragam o texto da
  * mensagem (valor que vira R$ 0); `review` são as que não estragam, como
  * telefone ausente.
  */
-export type WorkspaceState = 'ready' | 'review' | 'critical';
+export type WorkspaceState = 'ready' | 'review' | 'critical' | 'travada';
 
 function normalizeDiscountValue(value: number | string): number {
   const n = Number(value);
@@ -104,6 +118,13 @@ export function useCampanhaFacil() {
    * operador nenhum, nem para o Excel. Zera ao trocar o arquivo.
    */
   const [removidos, setRemovidos] = useState<Set<number>>(new Set());
+  /**
+   * Mensagens que o líder editou à mão, cliente a cliente (26/10/2026) — o
+   * jeito de corrigir a parcela abaixo do mínimo sem mexer no modelo de todos.
+   * Zera ao trocar o arquivo, a mensagem ou os descontos: o texto editado
+   * partiu da mensagem antiga.
+   */
+  const [mensagensEditadas, setMensagensEditadas] = useState<Map<number, string>>(new Map());
 
   // ── Configuração (form) ────────────────────────────────────────────────────
   const [templateId, setTemplateId] = useState<string>(CampaignCore.TEMPLATES[0].id);
@@ -264,17 +285,46 @@ export function useCampanhaFacil() {
    * dois operadores homônimos virariam um só. É desta versão que sai a parte de
    * cada um na liberação (`repartirPorOperador`).
    */
-  const campanhaPorId = useMemo<CampaignItem[]>(() => {
-    if (!parsed) return [];
+  const { campanhaPorId, parcelasBaixas } = useMemo(() => {
+    const baixasPorLinha = new Map<number, ParcelaBaixa[]>();
+    if (!parsed) return { campanhaPorId: [] as CampaignItem[], parcelasBaixas: baixasPorLinha };
     const registros = removidos.size > 0
       ? parsed.records.filter((r) => !removidos.has(r.rowNumber))
       : parsed.records;
-    return CampaignCore.buildCampaign(registros, {
+    const itens = CampaignCore.buildCampaign(registros, {
       discounts: discountsApplied,
       senders: operadoresSelecionados.map((o) => o.id),
       template: selectedTemplateBody,
     });
-  }, [parsed, removidos, discountsApplied, operadoresSelecionados, selectedTemplateBody]);
+    // A mensagem editada à mão substitui a do modelo, e a parcela mínima
+    // (26/10/2026) vira pendência que trava. Editada sem o valor baixo, passa.
+    const variaveis = variaveisParceladasDoModelo(selectedTemplateBody);
+    for (const item of itens) {
+      const editada = mensagensEditadas.get(item.rowNumber);
+      if (editada != null) item.message = editada;
+      if (variaveis.length === 0) continue;
+      const baixas = parcelasBaixasDoItem(item, variaveis, discountsApplied);
+      if (baixas.length === 0) continue;
+      if (editada != null && !mensagemAindaTemParcelaBaixa(editada, baixas)) continue;
+      baixasPorLinha.set(item.rowNumber, baixas);
+      item.issues.push(PENDENCIA_PARCELA_MINIMA);
+      item.status = 'Revisar';
+    }
+    return { campanhaPorId: itens, parcelasBaixas: baixasPorLinha };
+  }, [parsed, removidos, mensagensEditadas, discountsApplied, operadoresSelecionados, selectedTemplateBody]);
+
+  // Trocou a mensagem ou os descontos: as editadas à mão partiram do texto
+  // antigo e voltam ao modelo.
+  const assinaturaDasEdicoes = useRef('');
+  const qtdEditadas = mensagensEditadas.size;
+  useEffect(() => {
+    const assinatura = `${selectedTemplateBody}\u0000${JSON.stringify(discountsApplied)}`;
+    const anterior = assinaturaDasEdicoes.current;
+    assinaturaDasEdicoes.current = assinatura;
+    if (!anterior || anterior === assinatura || qtdEditadas === 0) return;
+    setMensagensEditadas(new Map());
+    toast.info(`${qtdEditadas.toLocaleString('pt-BR')} ${qtdEditadas === 1 ? 'mensagem editada à mão voltou' : 'mensagens editadas à mão voltaram'} ao modelo, porque a mensagem ou os descontos mudaram.`);
+  }, [selectedTemplateBody, discountsApplied, qtdEditadas]);
 
   /** A mesma campanha, com o NOME em `sender` — é o que a tela e o Excel mostram. */
   const campaign = useMemo<CampaignItem[]>(() => {
@@ -305,11 +355,13 @@ export function useCampanhaFacil() {
 
   const filtered = useMemo(() => {
     const query = search.trim().toLocaleLowerCase('pt-BR');
+    const motivo = motivoDoFiltro(statusFilter);
     return campaign
       .map((item, index) => ({ item, index }))
       .filter(({ item, index }) => {
         if (statusFilter === 'critico' && !temPendenciaGrave(item)) return false;
         if (statusFilter === 'Revisar' && item.status !== 'Revisar') return false;
+        if (motivo && !item.issues.includes(motivo)) return false;
         if (!query) return true;
         return textoDeBusca[index].includes(query);
       });
@@ -330,30 +382,62 @@ export function useCampanhaFacil() {
     // avisar, não trava: o nome antigo (`blocking`) descrevia um bloqueio que
     // não existe mais.
     const critical = campaign.filter(temPendenciaGrave).length;
-    return { total: campaign.length, ready, review, critical, senderCount: sendersList.length };
-  }, [campaign, sendersList]);
+    return {
+      total: campaign.length, ready, review, critical, senderCount: sendersList.length,
+      parcelaBaixa: parcelasBaixas.size, editadas: qtdEditadas,
+      // Quem tem alguma pendência do cliente (sem a de «quem encaminhará»).
+      comPendencia: campaign.filter((i) => pendenciasDoItem(i).length > 0).length,
+    };
+  }, [campaign, sendersList, parcelasBaixas, qtdEditadas]);
 
-  // Sem nenhuma pendência grave sobrando, o filtro delas não faz sentido.
+  /** Cada tipo de pendência com quantos clientes tem (26/10/2026). */
+  const gruposDePendencia = useMemo(() => agruparPendencias(campaign), [campaign]);
+
+  // Sem nenhum registro sobrando no filtro de pendência, ele não faz sentido.
   useEffect(() => {
+    const motivo = motivoDoFiltro(statusFilter);
     if (statusFilter === 'critico' && stats.critical === 0) setStatusFilter('all');
-  }, [statusFilter, stats.critical]);
+    else if (motivo && !gruposDePendencia.some((g) => g.motivo === motivo)) setStatusFilter('all');
+  }, [statusFilter, stats.critical, gruposDePendencia]);
 
-  /** Tira da campanha todos os que têm pendência grave agora. */
-  const removerPendenciasGraves = useCallback(() => {
-    const linhas = campaign.filter(temPendenciaGrave).map((i) => i.rowNumber);
+  const tirarLinhas = useCallback((linhas: number[]) => {
     if (linhas.length === 0) return;
     setRemovidos((r) => new Set([...r, ...linhas]));
     setSelectedRowNumber(null);
     toast.success(`${linhas.length.toLocaleString('pt-BR')} ${linhas.length === 1 ? 'cliente tirado' : 'clientes tirados'} da campanha. Não vão para nenhum operador.`);
-  }, [campaign]);
+  }, []);
+
+  /** Tira da campanha todos os que têm pendência grave agora. */
+  const removerPendenciasGraves = useCallback(() => {
+    tirarLinhas(campaign.filter(temPendenciaGrave).map((i) => i.rowNumber));
+  }, [campaign, tirarLinhas]);
+
+  /** Tira os de um tipo de pendência, ou, sem motivo, todos com alguma pendência. */
+  const tirarComPendencia = useCallback((motivo?: string) => {
+    tirarLinhas(linhasComPendencia(campaign, motivo));
+  }, [campaign, tirarLinhas]);
+
+  /** Tira um cliente só (pela prévia). */
+  const tirarCliente = useCallback((rowNumber: number) => tirarLinhas([rowNumber]), [tirarLinhas]);
 
   const devolverRemovidos = useCallback(() => {
     setRemovidos(new Set());
     toast.success('Os clientes tirados voltaram para a campanha.');
   }, []);
 
+  /** Guarda a mensagem editada de um cliente; `null` volta ao modelo. */
+  const editarMensagemDoCliente = useCallback((rowNumber: number, texto: string | null) => {
+    setMensagensEditadas((m) => {
+      const nova = new Map(m);
+      if (texto == null) nova.delete(rowNumber);
+      else nova.set(rowNumber, texto);
+      return nova;
+    });
+  }, []);
+
   const workspaceState: WorkspaceState =
-    stats.critical > 0 ? 'critical'
+    stats.parcelaBaixa > 0 ? 'travada'
+    : stats.critical > 0 ? 'critical'
     : (stats.review > 0 || stats.senderCount === 0) ? 'review'
     : 'ready';
 
@@ -420,6 +504,7 @@ export function useCampanhaFacil() {
 
       setParsed(result);
       setRemovidos(new Set());
+      setMensagensEditadas(new Map());
       setFileName(file.name);
       setSelectedRowNumber(null);
       setPage(1);
@@ -447,6 +532,7 @@ export function useCampanhaFacil() {
   const limparMailing = useCallback(() => {
     setParsed(null);
     setRemovidos(new Set());
+    setMensagensEditadas(new Map());
     setFileName('');
     setSelectedRowNumber(null);
     setPage(1);
@@ -619,10 +705,14 @@ export function useCampanhaFacil() {
    * identificada em vez de bloquear o arquivo. O único impedimento que sobra é
    * não haver quem encaminhe — esse é campo do próprio formulário, e sem ele a
    * coluna "ENCAMINHADA POR" sairia vazia na campanha toda.
+   *
+   * A outra é a parcela abaixo de R$ 30 (26/10/2026): não é dado faltando, é
+   * oferta que não pode sair. Trava até o líder tirar ou corrigir.
    */
   const exportCampaign = useCallback((rawFileName: string): boolean => {
     if (!campaign.length) return false;
     if (sendersList.length === 0) { toast.error('Marque ao menos um operador antes de exportar.'); return false; }
+    if (parcelasBaixas.size > 0) { toast.error(avisoParcelaBaixa(parcelasBaixas.size)); return false; }
     const nome = normalizeExportFileName(rawFileName);
     const pendentes = campaign.filter((i) => i.status !== 'Pronto').length;
     try {
@@ -640,7 +730,7 @@ export function useCampanhaFacil() {
       toast.error(error instanceof Error ? error.message : 'Não foi possível salvar a campanha.');
       return false;
     }
-  }, [campaign, sendersList]);
+  }, [campaign, sendersList, parcelasBaixas]);
 
   const defaultExportFileName = useCallback(() => {
     const date = new Date().toISOString().slice(0, 10);
@@ -662,6 +752,7 @@ export function useCampanhaFacil() {
   const { liberar } = envios;
   const liberarCampanha = useCallback(async (titulo?: string): Promise<boolean> => {
     if (!campanhaPorId.length) return false;
+    if (parcelasBaixas.size > 0) { toast.error(avisoParcelaBaixa(parcelasBaixas.size)); return false; }
     const ok = await liberar(campanhaPorId, {
       titulo: titulo?.trim() || selectedTemplate.name,
       arquivoNome: defaultExportFileName(),
@@ -678,7 +769,7 @@ export function useCampanhaFacil() {
       (document.querySelector<HTMLElement>('main') ?? document.documentElement).scrollTo({ top: 0, behavior: 'smooth' });
     }
     return ok;
-  }, [campanhaPorId, liberar, selectedTemplate, selectedTemplateBody, relatorioSemValores, discountsApplied, defaultExportFileName, limparMailing]);
+  }, [campanhaPorId, parcelasBaixas, liberar, selectedTemplate, selectedTemplateBody, relatorioSemValores, discountsApplied, defaultExportFileName, limparMailing]);
 
   const copyMessage = useCallback(async (item: CampaignItem | null) => {
     if (!item) return;
@@ -697,6 +788,8 @@ export function useCampanhaFacil() {
     isProcessing, importProgress, relatorioSemValores,
     stats, workspaceState,
     removidos: removidos.size, removerPendenciasGraves, devolverRemovidos,
+    gruposDePendencia, tirarComPendencia, tirarCliente,
+    parcelasBaixas, editarMensagemDoCliente, mensagensEditadas,
     // templates
     // `setTemplateId` exposto é o `escolherTemplate`, que recusa as bloqueadas.
     // O cru fica interno de propósito — a tela não deve ter como burlar a regra.
@@ -716,6 +809,10 @@ export function useCampanhaFacil() {
 }
 
 // ── util ───────────────────────────────────────────────────────────────────
+function avisoParcelaBaixa(n: number): string {
+  return `${n.toLocaleString('pt-BR')} ${n === 1 ? 'cliente tem' : 'clientes têm'} parcela abaixo de R$ 30. Tire da campanha ou corrija a mensagem antes de continuar.`;
+}
+
 function downloadBlob(blob: Blob, fileName: string) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');

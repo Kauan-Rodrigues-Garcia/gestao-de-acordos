@@ -23,6 +23,7 @@ import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import {
@@ -41,7 +42,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { CampaignCore, type CampaignItem } from './lib/campaign-core';
-import { temPendenciaGrave, useCampanhaFacil, type StatusFilter, type WorkspaceState } from './useCampanhaFacil';
+import { motivoDoFiltro, temPendenciaGrave, useCampanhaFacil, type StatusFilter, type WorkspaceState } from './useCampanhaFacil';
+import { PENDENCIA_PARCELA_MINIMA, mensagemAindaTemParcelaBaixa, type ParcelaBaixa } from './parcela-minima';
 import { SeletorOperadores } from './SeletorOperadores';
 import { MinhasCampanhas } from './HistoricoCampanhas';
 import { JanelaDaMensagem } from './JanelaDaMensagem';
@@ -105,6 +107,8 @@ export default function CampanhaFacil() {
   const [saveDiscountOpen, setSaveDiscountOpen] = useState(false);
   const [discountName, setDiscountName] = useState('');
   const [deleteDiscountOpen, setDeleteDiscountOpen] = useState(false);
+  /** Mensagem de UM cliente sendo editada (26/10/2026); `null` = fechado. */
+  const [edicaoCliente, setEdicaoCliente] = useState<{ item: CampaignItem; baixas: ParcelaBaixa[]; texto: string } | null>(null);
 
   // Categorias das mensagens para o Select agrupado
   const categorias = Array.from(new Set(cf.templates.map((t) => t.category)));
@@ -165,10 +169,18 @@ export default function CampanhaFacil() {
   function openSendersHint() {
     document.getElementById('cf-senders')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
-  /** O card da pendência grave: filtra a tabela e rola até ela. */
-  function verPendenciasGraves() {
-    cf.setStatusFilter('critico');
+  /** Os cards de pendência: filtram a tabela e rolam até ela. */
+  function verNaTabela(filtro: StatusFilter) {
+    cf.setStatusFilter(filtro);
     requestAnimationFrame(() => document.getElementById('cf-tabela')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  }
+  function abrirEdicaoCliente(item: CampaignItem) {
+    setEdicaoCliente({ item, baixas: cf.parcelasBaixas.get(item.rowNumber) ?? [], texto: item.message });
+  }
+  function salvarEdicaoCliente() {
+    if (!edicaoCliente) return;
+    cf.editarMensagemDoCliente(edicaoCliente.item.rowNumber, edicaoCliente.texto);
+    setEdicaoCliente(null);
   }
   function openLiberar() {
     if (!cf.campaign.length) return;
@@ -183,6 +195,11 @@ export default function CampanhaFacil() {
 
   const reviewCount = cf.stats.review;
   const excludedCount = cf.parsed?.excludedRecords?.length ?? 0;
+  const travada = cf.stats.parcelaBaixa > 0;
+  /** Os outros tipos de pendência — a parcela mínima tem card próprio. */
+  const outrasPendencias = cf.gruposDePendencia.filter((g) => !g.trava);
+  const comPendencia = cf.stats.comPendencia;
+  const motivoFiltrado = motivoDoFiltro(cf.statusFilter);
 
   return (
     <div className="mx-auto w-full max-w-[1400px] p-4 md:p-6">
@@ -513,7 +530,8 @@ export default function CampanhaFacil() {
                     <div>
                       <div className="flex items-center gap-2">
                         <h2 className="text-lg font-bold">
-                          {cf.workspaceState === 'critical' ? 'Pendências graves na campanha'
+                          {cf.workspaceState === 'travada' ? 'Parcelas abaixo de R$ 30'
+                            : cf.workspaceState === 'critical' ? 'Pendências graves na campanha'
                             : cf.workspaceState === 'review' ? 'Revisão recomendada'
                             : 'Pronta para exportar'}
                         </h2>
@@ -521,50 +539,100 @@ export default function CampanhaFacil() {
                       </div>
                       <p className="text-sm text-muted-foreground">
                         {cf.stats.total.toLocaleString('pt-BR')} mensagens com o modelo “{cf.selectedTemplate.name}”.
+                        {cf.stats.editadas > 0 && ` ${cf.stats.editadas.toLocaleString('pt-BR')} ${cf.stats.editadas === 1 ? 'editada' : 'editadas'} à mão.`}
                       </p>
                     </div>
-                    {/* Sem `disabled` por pendência: a exportação segue liberada e as
-                        linhas problemáticas saem marcadas na planilha. */}
+                    {/* Pendência de dado não trava: as linhas saem marcadas na
+                        planilha. Só a parcela abaixo de R$ 30 trava (26/10/2026). */}
                     <div className="flex flex-wrap gap-2">
-                      <Button variant="outline" className="gap-2" onClick={openExport}>
+                      <Button variant="outline" className="gap-2" onClick={openExport} disabled={travada}>
                         <Download className="h-4 w-4" /> Exportar Excel
                       </Button>
-                      <Button className="gap-2" onClick={openLiberar} disabled={cf.envios.liberando}>
+                      <Button className="gap-2" onClick={openLiberar} disabled={cf.envios.liberando || travada}>
                         <Send className="h-4 w-4" /> {cf.envios.liberando ? 'Liberando…' : 'Liberar para os operadores'}
                       </Button>
                     </div>
                   </div>
 
-                  {/* Pendência grave: o card leva até os registros e deixa tirá-los
-                      da campanha (09/10/2026). */}
-                  {cf.stats.critical > 0 && (
-                    <div className="flex flex-wrap items-start gap-x-3 gap-y-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
-                      <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-700 dark:text-amber-500" />
-                      <button
-                        type="button"
-                        onClick={verPendenciasGraves}
-                        className="min-w-0 flex-1 text-left"
-                        title="Mostrar só esses registros na tabela"
-                      >
-                        <strong>
-                          {cf.stats.critical.toLocaleString('pt-BR')} {cf.stats.critical === 1 ? 'registro com pendência grave' : 'registros com pendência grave'}.
-                        </strong>{' '}
-                        <span className="text-muted-foreground">
-                          Clique para ver quais são e o motivo. Se continuarem, saem marcados como “Revisar”.
-                        </span>
-                      </button>
-                      <div className="flex gap-2">
-                        <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={verPendenciasGraves}>
-                          <Filter className="h-3.5 w-3.5" /> Ver {cf.stats.critical === 1 ? 'o registro' : 'os registros'}
+                  {/* Parcela mínima (26/10/2026): trava a campanha. A correção não
+                      é automática porque o número de vezes é texto da mensagem. */}
+                  {travada && (
+                    <div className="space-y-2 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm">
+                      <div className="flex items-start gap-2">
+                        <Lock className="mt-0.5 h-4 w-4 flex-shrink-0 text-destructive" />
+                        <div className="min-w-0 flex-1">
+                          <p>
+                            <strong>
+                              {cf.stats.parcelaBaixa.toLocaleString('pt-BR')} {cf.stats.parcelaBaixa === 1 ? 'cliente fica' : 'clientes ficam'} com parcela abaixo de R$ 30.
+                            </strong>{' '}
+                            A campanha não sai assim.
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            O número de vezes está escrito na mensagem, então o valor não se corrige sozinho. Tire esses clientes,
+                            troque a mensagem para menos vezes, ou edite a mensagem de cada um na prévia — ela mostra em quantas vezes o total cabe.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2 pl-6">
+                        <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => verNaTabela(`motivo:${PENDENCIA_PARCELA_MINIMA}`)}>
+                          <Filter className="h-3.5 w-3.5" /> Ver e corrigir um a um
+                        </Button>
+                        <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={openEdit}>
+                          <Pencil className="h-3.5 w-3.5" /> Editar a mensagem de todos
                         </Button>
                         <Button
                           size="sm" variant="outline"
                           className="h-8 gap-1.5 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                          onClick={cf.removerPendenciasGraves}
+                          onClick={() => cf.tirarComPendencia(PENDENCIA_PARCELA_MINIMA)}
                         >
-                          <UserX className="h-3.5 w-3.5" /> Tirar da campanha
+                          <UserX className="h-3.5 w-3.5" /> Tirar {cf.stats.parcelaBaixa === 1 ? 'este cliente' : `os ${cf.stats.parcelaBaixa.toLocaleString('pt-BR')}`} da campanha
                         </Button>
                       </div>
+                    </div>
+                  )}
+
+                  {/* As outras pendências, por tipo (26/10/2026): qualquer dado
+                      faltando, não só a grave, pode sair da campanha — um tipo
+                      ou todos de uma vez. */}
+                  {outrasPendencias.length > 0 && (
+                    <div className="space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+                      <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
+                        <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-700 dark:text-amber-500" />
+                        <p className="min-w-0 flex-1">
+                          <strong>
+                            {comPendencia.toLocaleString('pt-BR')} {comPendencia === 1 ? 'registro com pendência' : 'registros com pendência'}.
+                          </strong>{' '}
+                          <span className="text-muted-foreground">
+                            Se continuarem, saem marcados como “Revisar”. Dá para tirar um tipo ou todos de uma vez.
+                          </span>
+                        </p>
+                        <Button
+                          size="sm" variant="outline"
+                          className="h-8 gap-1.5 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          onClick={() => cf.tirarComPendencia()}
+                        >
+                          <UserX className="h-3.5 w-3.5" /> Tirar todos com pendência ({comPendencia.toLocaleString('pt-BR')})
+                        </Button>
+                      </div>
+                      <ul className="divide-y divide-amber-500/15 pl-6">
+                        {outrasPendencias.map((g) => (
+                          <li key={g.motivo} className="flex flex-wrap items-center gap-2 py-1.5">
+                            <span className="w-14 text-right font-semibold tabular-nums">{g.quantidade.toLocaleString('pt-BR')}</span>
+                            <span className="min-w-0 flex-1">{g.motivo}</span>
+                            {g.grave && <Badge className="bg-destructive/15 text-destructive hover:bg-destructive/15">Grave</Badge>}
+                            <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs" onClick={() => verNaTabela(`motivo:${g.motivo}`)}>
+                              <Filter className="h-3 w-3" /> Ver
+                            </Button>
+                            <Button
+                              size="sm" variant="ghost"
+                              className="h-7 gap-1 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                              onClick={() => cf.tirarComPendencia(g.motivo)}
+                            >
+                              <UserX className="h-3 w-3" /> Tirar
+                            </Button>
+                          </li>
+                        ))}
+                      </ul>
                     </div>
                   )}
                   {cf.removidos > 0 && (
@@ -607,18 +675,20 @@ export default function CampanhaFacil() {
 
                   <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
                     {/* Tabela */}
-                    <Card id="cf-tabela" className={cn(cf.statusFilter === 'critico' && 'border-amber-500/50')}>
+                    <Card id="cf-tabela" className={cn((cf.statusFilter === 'critico' || motivoFiltrado) && 'border-amber-500/50')}>
                       <CardContent className="p-4">
                         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                           <div>
                             <h3 className="text-sm font-semibold">
-                              {cf.statusFilter === 'critico'
+                              {motivoFiltrado
+                                ? motivoFiltrado
+                                : cf.statusFilter === 'critico'
                                 ? 'Registros com pendência grave'
                                 : cf.relatorioSemValores ? 'Registros da campanha' : 'Contatos da campanha'}
                             </h3>
                             <p className="text-xs text-muted-foreground">
                               {cf.filtered.length.toLocaleString('pt-BR')} {cf.filtered.length === 1 ? 'registro' : 'registros'}
-                              {cf.statusFilter === 'critico' && (
+                              {(cf.statusFilter === 'critico' || motivoFiltrado) && (
                                 <>
                                   {' · '}
                                   <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={() => cf.setStatusFilter('all')}>
@@ -628,11 +698,11 @@ export default function CampanhaFacil() {
                               )}
                             </p>
                           </div>
-                          {cf.statusFilter === 'critico' && cf.filtered.length > 0 && (
+                          {(cf.statusFilter === 'critico' || motivoFiltrado) && cf.filtered.length > 0 && (
                             <Button
                               size="sm" variant="outline"
                               className="h-8 gap-1.5 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                              onClick={cf.removerPendenciasGraves}
+                              onClick={() => (motivoFiltrado ? cf.tirarComPendencia(motivoFiltrado) : cf.removerPendenciasGraves())}
                             >
                               <UserX className="h-3.5 w-3.5" /> Tirar {cf.filtered.length === 1 ? 'este' : `estes ${cf.filtered.length.toLocaleString('pt-BR')}`} da campanha
                             </Button>
@@ -649,11 +719,21 @@ export default function CampanhaFacil() {
                             </div>
                             {cf.stats.review > 0 && (
                               <Select value={cf.statusFilter} onValueChange={(v) => cf.setStatusFilter(v as StatusFilter)}>
-                                <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue /></SelectTrigger>
+                                <SelectTrigger className="h-8 w-[170px] text-xs"><SelectValue /></SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="all">Todos</SelectItem>
                                   <SelectItem value="Revisar">Precisam revisão</SelectItem>
                                   {cf.stats.critical > 0 && <SelectItem value="critico">Pendência grave</SelectItem>}
+                                  {cf.gruposDePendencia.length > 0 && (
+                                    <SelectGroup>
+                                      <SelectLabel>Por tipo</SelectLabel>
+                                      {cf.gruposDePendencia.map((g) => (
+                                        <SelectItem key={g.motivo} value={`motivo:${g.motivo}`}>
+                                          {g.motivo} ({g.quantidade.toLocaleString('pt-BR')})
+                                        </SelectItem>
+                                      ))}
+                                    </SelectGroup>
+                                  )}
                                 </SelectContent>
                               </Select>
                             )}
@@ -701,13 +781,17 @@ export default function CampanhaFacil() {
                                   </TableCell>
                                   {cf.stats.review > 0 && (
                                     <TableCell>
-                                      {temPendenciaGrave(item) ? (
+                                      {cf.parcelasBaixas.has(item.rowNumber) ? (
+                                        <span title={item.issues.join(', ')} className="text-xs font-medium text-destructive">
+                                          {PENDENCIA_PARCELA_MINIMA}
+                                        </span>
+                                      ) : temPendenciaGrave(item) ? (
                                         <span title={item.issues.join(', ')} className="text-xs font-medium text-destructive">
                                           {item.blockingIssues.join(' · ') || item.issues[0] || 'Pendência grave'}
                                         </span>
                                       ) : item.status !== 'Pronto' && (
                                         <span title={item.issues.join(', ')} className="text-xs font-medium text-amber-600 dark:text-amber-400">
-                                          {item.issues[0] || 'Revisar'}
+                                          {item.issues.join(' · ') || 'Revisar'}
                                         </span>
                                       )}
                                     </TableCell>
@@ -746,7 +830,14 @@ export default function CampanhaFacil() {
                     </Card>
 
                     {/* Prévia */}
-                    <MessagePreview item={cf.selectedItem} relatorioSemValores={cf.relatorioSemValores} onCopy={() => cf.copyMessage(cf.selectedItem)} />
+                    <MessagePreview
+                      item={cf.selectedItem} relatorioSemValores={cf.relatorioSemValores} onCopy={() => cf.copyMessage(cf.selectedItem)}
+                      baixas={cf.selectedItem ? cf.parcelasBaixas.get(cf.selectedItem.rowNumber) : undefined}
+                      editada={!!cf.selectedItem && cf.mensagensEditadas.has(cf.selectedItem.rowNumber)}
+                      onEditar={() => { if (cf.selectedItem) abrirEdicaoCliente(cf.selectedItem); }}
+                      onVoltarAoModelo={() => { if (cf.selectedItem) cf.editarMensagemDoCliente(cf.selectedItem.rowNumber, null); }}
+                      onTirar={() => { if (cf.selectedItem) cf.tirarCliente(cf.selectedItem.rowNumber); }}
+                    />
                   </div>
                 </div>
               )}
@@ -904,6 +995,45 @@ export default function CampanhaFacil() {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* ══ Dialog: editar a mensagem de UM cliente (26/10/2026) ════════════ */}
+      <Dialog open={!!edicaoCliente} onOpenChange={(v) => { if (!v) setEdicaoCliente(null); }}>
+        <DialogContent className="max-h-[92vh] max-w-2xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Mensagem de {edicaoCliente?.item.name || 'cliente'}</DialogTitle>
+            <DialogDescription>
+              Vale só para este cliente. As outras mensagens continuam com o modelo.
+            </DialogDescription>
+          </DialogHeader>
+          {edicaoCliente && edicaoCliente.baixas.length > 0 && (() => {
+            const aindaBaixa = mensagemAindaTemParcelaBaixa(edicaoCliente.texto, edicaoCliente.baixas);
+            return (
+              <div className={cn(
+                'space-y-1 rounded-lg border p-2.5 text-xs',
+                aindaBaixa ? 'border-destructive/40 bg-destructive/5' : 'border-emerald-500/40 bg-emerald-500/5',
+              )}>
+                <ul className="space-y-0.5">
+                  {edicaoCliente.baixas.map((b) => <li key={b.variavel}><TextoParcelaBaixa b={b} /></li>)}
+                </ul>
+                <p className={cn('font-medium', aindaBaixa ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-400')}>
+                  {aindaBaixa
+                    ? 'Troque o número de vezes e o valor no texto. Enquanto a parcela baixa estiver na mensagem, a campanha continua travada.'
+                    : 'A parcela baixa saiu do texto. Confira as vezes e o valor antes de salvar.'}
+                </p>
+              </div>
+            );
+          })()}
+          <Textarea
+            value={edicaoCliente?.texto ?? ''}
+            onChange={(e) => setEdicaoCliente((ed) => (ed ? { ...ed, texto: e.target.value } : ed))}
+            className="min-h-[280px] font-mono text-xs"
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEdicaoCliente(null)}>Cancelar</Button>
+            <Button onClick={salvarEdicaoCliente} disabled={!edicaoCliente?.texto.trim()}>Salvar mensagem</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* ══ Dialog: salvar configuração de desconto ═════════════════════════ */}
       <Dialog open={saveDiscountOpen} onOpenChange={setSaveDiscountOpen}>
         <DialogContent>
@@ -1001,6 +1131,7 @@ function StepTitle({ n, title, subtitle }: { n: number; title: string; subtitle:
 }
 
 function StateBadge({ state }: { state: WorkspaceState }) {
+  if (state === 'travada') return <Badge className="bg-destructive/15 text-destructive hover:bg-destructive/15">Travada</Badge>;
   if (state === 'critical') return <Badge className="bg-destructive/15 text-destructive hover:bg-destructive/15">Pendência grave</Badge>;
   if (state === 'review') return <Badge className="bg-amber-500/15 text-amber-600 hover:bg-amber-500/15 dark:text-amber-400">Atenção</Badge>;
   return <Badge className="bg-emerald-500/15 text-emerald-600 hover:bg-emerald-500/15 dark:text-emerald-400">Validada</Badge>;
@@ -1025,7 +1156,31 @@ function StatCard({ icon, value, label, tone }: { icon: React.ReactNode; value: 
   );
 }
 
-function MessagePreview({ item, relatorioSemValores, onCopy }: { item: CampaignItem | null; relatorioSemValores: boolean; onCopy: () => void }) {
+/** Uma parcela baixa e, quando cabe, em quantas vezes o total dá R$ 30 ou mais. */
+function TextoParcelaBaixa({ b }: { b: ParcelaBaixa }) {
+  return (
+    <>
+      <strong>{b.rotulo}: {b.parcelaTexto}</strong>
+      {b.sugestao
+        ? <> — o total de {CampaignCore.formatCurrency(b.total)} cabe em até <strong>{b.sugestao.vezes}x de {CampaignCore.formatCurrency(b.sugestao.parcela)}</strong>.</>
+        : <> — o total de {CampaignCore.formatCurrency(b.total)} não chega a 2x de R$ 30; ofereça à vista.</>}
+    </>
+  );
+}
+
+function MessagePreview({
+  item, relatorioSemValores, onCopy, baixas, editada, onEditar, onVoltarAoModelo, onTirar,
+}: {
+  item: CampaignItem | null;
+  relatorioSemValores: boolean;
+  onCopy: () => void;
+  /** As parcelas abaixo de R$ 30 deste cliente (26/10/2026). */
+  baixas?: ParcelaBaixa[];
+  editada: boolean;
+  onEditar: () => void;
+  onVoltarAoModelo: () => void;
+  onTirar: () => void;
+}) {
   const initials = item?.name?.split(/\s+/).slice(0, 2).map((p) => p[0] || '').join('').toUpperCase() || 'C';
   const waEnabled = !!item && CampaignCore.isValidPhone(item.phone) && !!item.sender;
   return (
@@ -1055,6 +1210,37 @@ function MessagePreview({ item, relatorioSemValores, onCopy }: { item: CampaignI
             {item?.message || 'Importe um mailing e selecione um contato para visualizar a mensagem.'}
           </pre>
         </div>
+
+        {baixas && baixas.length > 0 && (
+          <div className="space-y-1 rounded-lg border border-destructive/40 bg-destructive/5 p-2.5 text-xs">
+            <p className="font-semibold text-destructive">Parcela abaixo de R$ 30 — esta mensagem não sai assim.</p>
+            <ul className="space-y-0.5">
+              {baixas.map((b) => <li key={b.variavel}><TextoParcelaBaixa b={b} /></li>)}
+            </ul>
+          </div>
+        )}
+
+        {/* Editar ou tirar só este cliente (26/10/2026). */}
+        {item && (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={onEditar}>
+              <Pencil className="h-3 w-3" /> Editar a mensagem deste cliente
+            </Button>
+            {editada && (
+              <Button variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs" onClick={onVoltarAoModelo} title="Descartar a edição">
+                <Undo2 className="h-3 w-3" /> Voltar ao modelo
+              </Button>
+            )}
+            <Button
+              variant="ghost" size="sm"
+              className="ml-auto h-7 gap-1 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={onTirar}
+            >
+              <UserX className="h-3 w-3" /> Tirar da campanha
+            </Button>
+          </div>
+        )}
+        {editada && <p className="text-[11px] text-muted-foreground">Mensagem editada à mão só para este cliente.</p>}
 
         <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
           <span className="text-muted-foreground">Encaminhada por</span>
