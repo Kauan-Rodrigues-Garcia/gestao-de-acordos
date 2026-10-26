@@ -41,6 +41,8 @@ import {
 import { IconeChat } from './comum';
 import { AboboraChat } from '@/components/Halloween/Desenhos';
 import { useTemaHalloween } from '@/components/Halloween/tema';
+import { GloboDeNeve } from '@/components/Natal/Desenhos';
+import { useTemaNatal } from '@/components/Natal/tema';
 import { PainelSobDemanda } from '@/components/PainelSobDemanda';
 import { comNovaTentativa } from '@/lib/sobDemanda';
 import { usePrecarregarQuandoOcioso } from '@/hooks/useSobDemanda';
@@ -144,6 +146,9 @@ export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaI
   const celular = modo === 'celular';
   const { perfil } = useAuth();
   const halloween = useTemaHalloween();
+  // No Natal a bolha vira globo de neve — que neva quando chega mensagem.
+  const natal = useTemaNatal() !== null;
+  const enfeitada = halloween || natal;
   // Só o mouse acende a abóbora. O foco não: ao fechar a janela o foco volta
   // para a bolha e a abóbora ficava acesa até trocar de aba.
   const [mouseNaBolha, setMouseNaBolha] = useState(false);
@@ -619,7 +624,7 @@ export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaI
           // pedido explícito, e combina com o resto do sistema, que é todo
           // feito de cartões de canto arredondado. No Halloween o quadrado
           // some e a bolha é a própria abóbora.
-          halloween ? 'rounded-2xl' : 'rounded-2xl bg-primary text-primary-foreground shadow-lg',
+          enfeitada ? 'rounded-2xl' : 'rounded-2xl bg-primary text-primary-foreground shadow-lg',
           'transition-all duration-300',
           'hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 active:scale-95',
           'flex items-center justify-center',
@@ -632,14 +637,14 @@ export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaI
             ].filter(Boolean).join(', ')}`
           : 'Abrir o chat'}
       >
-        {avisosNaBolha > 0 && !halloween && (
+        {avisosNaBolha > 0 && !enfeitada && (
           <span
             aria-hidden="true"
             className="chat-alerta-pendente pointer-events-none absolute -inset-1 rounded-[18px] border-2 border-primary/70"
           />
         )}
         {/* O brilho, atrás. Acende no hover e fica aceso com mensagem nova. */}
-        {!halloween && (
+        {!enfeitada && (
           <span
             aria-hidden="true"
             className={cn(
@@ -648,7 +653,9 @@ export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaI
             )}
           />
         )}
-        {halloween
+        {natal
+          ? <GloboDeNeve nevando={avisosNaBolha > 0} />
+          : halloween
           ? <AboboraChat acesa={mouseNaBolha || avisosNaBolha > 0} />
           : <IconeChat ativo={sobre || avisosNaBolha > 0} />}
 

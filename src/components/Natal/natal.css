@@ -1,0 +1,81 @@
+/*
+ * Tema de Natal — só enfeite, nenhuma cor do tema escolhido muda. Luzes,
+ * bolas, trenó e presentes têm cor de objeto; neve e montes mudam de tom no
+ * tema claro (branco puro some num fundo branco).
+ */
+
+/* ── Camadas ─────────────────────────────────────────────────────────────── */
+.nt-fundo { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; color: oklch(0.98 0.01 230); }
+.nt-fundo.nt-claro { color: oklch(0.74 0.055 235); }
+/* Dentro do <main>, no alto do conteúdo: rola junto. Altura zero, só o eixo x recortado. */
+.nt-camada { position: absolute; top: 0; left: 0; right: 0; height: 0; z-index: 5; overflow-x: clip; overflow-y: visible; pointer-events: none; }
+.nt-sobre { position: absolute; inset: 0; z-index: 5; pointer-events: none; overflow: hidden; }
+.nt-revoada { position: absolute; inset: 0; z-index: 6; pointer-events: none; overflow: hidden; }
+
+/* ── Neve e montes ───────────────────────────────────────────────────────── */
+.nt-neve { position: absolute; inset: 0; width: 100%; height: 100%; opacity: .8; }
+.nt-claro .nt-neve { opacity: 1; }
+.nt-montes { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 110px; }
+.nt-montes .longe { fill: oklch(0.95 0.015 230 / .1); }
+.nt-montes .perto { fill: oklch(0.97 0.012 230 / .16); }
+.nt-claro .nt-montes .longe { fill: oklch(0.86 0.035 235 / .35); }
+.nt-claro .nt-montes .perto { fill: oklch(0.9 0.03 235 / .55); }
+
+/* ── Varal de luzinhas ───────────────────────────────────────────────────── */
+.nt-varal { position: absolute; top: 0; left: 0; display: flex; height: 48px; }
+.nt-vao { position: relative; flex: none; height: 48px; }
+.nt-vao > svg { position: absolute; inset: 0; overflow: visible; }
+.nt-varal .fio { fill: none; stroke: oklch(0.3 0.04 150); stroke-width: 1.3; }
+.nt-varal .soquete { fill: oklch(0.32 0.05 150); }
+.nt-varal.com-guirlanda .fio { stroke: oklch(0.36 0.07 150); }
+
+.nt-halo, .nt-miolo { position: absolute; border-radius: 50%; pointer-events: none; will-change: opacity; }
+.nt-halo { width: 30px; height: 30px; background: radial-gradient(circle, color-mix(in oklch, var(--cor) 70%, transparent) 0%, color-mix(in oklch, var(--cor) 25%, transparent) 40%, transparent 70%);
+  animation: nt-pisca 3.4s ease-in-out var(--d) infinite; }
+.nt-miolo { width: 6px; height: 8px; background: radial-gradient(circle, #fff 0%, rgb(255 255 255 / .6) 45%, transparent 75%); z-index: 1;
+  animation: nt-pisca 3.4s ease-in-out var(--d) infinite; }
+@keyframes nt-pisca { 0%, 100% { opacity: 1; } 45% { opacity: .25; } 60% { opacity: .9; } }
+
+/* ── Guirlanda ───────────────────────────────────────────────────────────── */
+.nt-varal .guirlanda path { fill: none; stroke-linecap: round; }
+.nt-varal .guirlanda .g1 { stroke: oklch(0.36 0.08 150); stroke-width: 10; }
+.nt-varal .guirlanda .g2 { stroke: oklch(0.48 0.12 148); stroke-width: 12; stroke-dasharray: 1.4 2.6; }
+.nt-varal .guirlanda .g3 { stroke: oklch(0.58 0.13 145); stroke-width: 7; stroke-dasharray: 1 3.4; stroke-dashoffset: 1.6; }
+.nt-varal .guirlanda .baga { fill: #D62828; }
+.nt-varal .guirlanda .baga-ouro { fill: #E8B93A; }
+.nt-varal .laco path { fill: #D32F2F; stroke: #9A1B1B; stroke-width: .5; }
+.nt-varal .laco .no { fill: #B71C1C; }
+
+/* ── Bolas penduradas ────────────────────────────────────────────────────── */
+.nt-bola { position: absolute; top: 0; display: flex; flex-direction: column; align-items: center; transform-origin: 50% 0;
+  animation: nt-pendulo var(--t) ease-in-out var(--d) infinite alternate; }
+.nt-bola .linha { width: 1px; height: var(--fio); background: linear-gradient(oklch(0.5 0.02 80 / .7), oklch(0.75 0.08 85 / .9)); }
+.nt-bola svg { margin-top: -1px; overflow: visible; cursor: pointer; pointer-events: auto; filter: drop-shadow(0 3px 4px oklch(0.2 0.03 30 / .3)); }
+.nt-bola.empurrada { animation: nt-empurrao 2.6s ease-out 1, nt-pendulo var(--t) ease-in-out 2.6s infinite alternate; }
+@keyframes nt-pendulo { from { transform: rotate(-3deg); } to { transform: rotate(3deg); } }
+@keyframes nt-empurrao {
+  0% { transform: rotate(0); } 12% { transform: rotate(22deg); } 30% { transform: rotate(-16deg); }
+  48% { transform: rotate(10deg); } 66% { transform: rotate(-6deg); } 84% { transform: rotate(3deg); } 100% { transform: rotate(-3deg); }
+}
+
+/* ── Festa do acordo salvo ───────────────────────────────────────────────── */
+.nt-festa { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+/* ── Trenó ───────────────────────────────────────────────────────────────── */
+.nt-treno { position: absolute; left: 100%; width: 230px; animation: nt-voa 16s linear 1 forwards; will-change: transform; }
+.nt-treno-svg { position: relative; width: 230px; height: auto; overflow: visible; animation: nt-sobe-desce 2.2s ease-in-out infinite alternate;
+  filter: drop-shadow(0 4px 6px oklch(0.15 0.03 250 / .35)); }
+.nt-treno .rastro { position: absolute; left: 190px; top: 30px; width: 260px; height: 14px; border-radius: 999px;
+  background: radial-gradient(circle, #FFE9A6 0 1.2px, transparent 1.6px) 0 0 / 14px 7px, linear-gradient(90deg, oklch(0.9 0.12 90 / .45), transparent);
+  -webkit-mask-image: linear-gradient(90deg, #000, transparent); mask-image: linear-gradient(90deg, #000, transparent); animation: nt-cintila .5s steps(2) infinite; }
+@keyframes nt-voa { from { transform: translateX(0); } to { transform: translateX(calc(-100vw - 560px)); } }
+@keyframes nt-sobe-desce { from { transform: translateY(-6px) rotate(-2deg); } to { transform: translateY(6px) rotate(1.5deg); } }
+@keyframes nt-cintila { from { opacity: .9; } to { opacity: .55; } }
+.nt-treno-svg .arreio { fill: none; stroke: #D9B24A; stroke-width: 1.2; }
+.nt-treno-svg .galho { fill: none; stroke: #6B4426; stroke-width: 1.4; stroke-linecap: round; }
+.nt-treno-svg .patas-tras path, .nt-treno-svg .patas-frente path { fill: none; stroke: #6B4426; stroke-width: 2.2; stroke-linecap: round; }
+.nt-treno-svg .patas-tras, .nt-treno-svg .patas-frente { transform-box: fill-box; transform-origin: 50% 0; animation: nt-galope .45s ease-in-out infinite alternate; }
+.nt-treno-svg .patas-frente { animation-direction: alternate-reverse; }
+.nt-treno-svg .rena:nth-of-type(2n) .patas-tras, .nt-treno-svg .rena:nth-of-type(2n) .patas-frente { animation-delay: -.2s; }
+@keyframes nt-galope { from { transform: rotate(-14deg); } to { transform: rotate(14deg); } }
+.nt-treno-svg .nariz { filter: drop-shadow(0 0 3px #FF4040); animation: nt-pisca 1.2s ease-in-out infinite; }

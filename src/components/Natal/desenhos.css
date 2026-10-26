@@ -1,0 +1,63 @@
+/*
+ * Natal — o que aparece fora das camadas: o globo de neve do chat e o gorro
+ * nas fotos. Cor de objeto (madeira, vidro, vermelho do gorro): lê no tema
+ * claro e no escuro. Sem `prefers-reduced-motion`, pelo mesmo motivo do
+ * Halloween: nos computadores da operação ela vem ligada por política.
+ */
+
+/* ── Globo de neve ───────────────────────────────────────────────────────── */
+.nt-globo { width: 60px; height: 67px; overflow: visible; filter: drop-shadow(0 6px 9px oklch(0.25 0.04 210 / .32)); }
+.nt-globo .globo-mexe { transform-box: view-box; transform-origin: 50px 104px; }
+.group:hover .nt-globo .globo-mexe { animation: nt-inclina .9s ease-in-out; }
+.nt-globo.chacoalha .globo-mexe { animation: nt-chacoalha 1.2s cubic-bezier(.36,.07,.19,.97); }
+@keyframes nt-inclina { 0%, 100% { transform: rotate(0); } 35% { transform: rotate(-4deg); } 70% { transform: rotate(2.5deg); } }
+@keyframes nt-chacoalha {
+  0%, 100% { transform: rotate(0); }
+  10% { transform: rotate(-9deg) translateY(-2px); } 22% { transform: rotate(8deg) translateY(-3px); }
+  34% { transform: rotate(-7deg); } 46% { transform: rotate(5deg); } 60% { transform: rotate(-3deg); } 76% { transform: rotate(1.5deg); }
+}
+
+.nt-globo .floco { fill: #FFFFFF; stroke: oklch(0.75 0.03 220 / .5); stroke-width: .25; }
+.nt-globo .neve-leve .floco { animation: nt-cai var(--t) linear var(--d) infinite; }
+@keyframes nt-cai {
+  0% { transform: translate(0, 0); opacity: 0; }
+  10% { opacity: 1; }
+  50% { transform: translate(calc(var(--dx) * -1), 36px); }
+  88% { opacity: 1; }
+  100% { transform: translate(var(--dx), 68px); opacity: 0; }
+}
+
+/* O redemoinho só corre com mensagem; parado e invisível, não custa nada. */
+.nt-globo .neve-forte { opacity: 0; transition: opacity .9s; }
+.nt-globo.nevando .neve-forte { opacity: 1; }
+.nt-globo .neve-forte .floco { animation: nt-redemoinho var(--t) linear var(--d) infinite paused; }
+.nt-globo .neve-forte .floco.avesso { animation-name: nt-redemoinho-avesso; }
+.nt-globo.nevando .neve-forte .floco { animation-play-state: running; }
+@keyframes nt-redemoinho {
+  0% { transform: translate(0, 0); opacity: 0; } 8% { opacity: 1; }
+  25% { transform: translate(6px, 16px); } 50% { transform: translate(-5px, 34px); }
+  75% { transform: translate(4px, 52px); } 92% { opacity: 1; }
+  100% { transform: translate(-1px, 70px); opacity: 0; }
+}
+@keyframes nt-redemoinho-avesso {
+  0% { transform: translate(0, 0); opacity: 0; } 8% { opacity: 1; }
+  25% { transform: translate(-6px, 15px); } 50% { transform: translate(5px, 33px); }
+  75% { transform: translate(-4px, 51px); } 92% { opacity: 1; }
+  100% { transform: translate(1px, 70px); opacity: 0; }
+}
+
+.nt-globo .janela { fill: #5A3A2E; transition: fill .5s; }
+.nt-globo .luz-casa { opacity: 0; transition: opacity .8s; }
+.nt-globo.nevando .janela { fill: #FFD46A; }
+.nt-globo.nevando .luz-casa { opacity: 1; animation: nt-lareira 2.4s ease-in-out infinite; }
+@keyframes nt-lareira { 0%, 100% { opacity: .85; } 40% { opacity: 1; } 70% { opacity: .7; } }
+
+.nt-globo .reflexo { opacity: .55; animation: nt-brilho-vidro 5s ease-in-out infinite; }
+@keyframes nt-brilho-vidro { 0%, 100% { opacity: .45; } 50% { opacity: .8; } }
+
+/* ── Gorro nas fotos ─────────────────────────────────────────────────────── */
+.nt-com-gorro { position: relative; display: inline-flex; flex: none; }
+.nt-gorro { position: absolute; left: 50%; height: auto; aspect-ratio: 100 / 80; pointer-events: none; overflow: visible; transform-origin: 50% 100%;
+  transform: translateX(-58%) rotate(-18deg); filter: drop-shadow(0 1px 1px oklch(0.2 0.05 25 / .35)); }
+.nt-com-gorro:hover .nt-gorro { animation: nt-tira-gorro .9s ease-in-out; }
+@keyframes nt-tira-gorro { 0%, 100% { transform: translateX(-58%) rotate(-18deg); } 40% { transform: translateX(-58%) translateY(-4px) rotate(-4deg); } }

@@ -72,6 +72,10 @@ import { EVENTO_ABRIR_BOAS_VINDAS, pediuBoasVindasNaUrl, temaEsperaACarta, useHa
 import { getImpersonacaoAtiva } from '@/services/impersonacao.service';
 import { MarcaHalloween } from '@/components/Halloween/MarcaHalloween';
 import { CrachaPendente } from '@/components/CrachaPendente';
+import { TemaNatalContext, cenaDaRota as cenaNatalDaRota, soParado as natalSoParado, temFundo as temFundoNatal } from '@/components/Natal/tema';
+import { useNatal } from '@/components/Natal/previa';
+import { MarcaNatal } from '@/components/Natal/MarcaNatal';
+import { PreviaNatal } from '@/components/Natal/PreviaNatal';
 import { useNotificacoes } from '@/providers/NotificacoesProvider';
 import { useEasterEggCriadores, DURACAO_ESCURECIMENTO_MS } from '@/hooks/useEasterEggCriadores';
 // O overlay continua no Layout: a comemoração explode em QUALQUER página, não
@@ -126,6 +130,12 @@ const FundoHalloween    = lazy(() => carregarHalloween().then(m => ({ default: m
 const CamadaHalloween   = lazy(() => carregarHalloween().then(m => ({ default: m.CamadaHalloween })));
 const RevoadaHalloween  = lazy(() => carregarHalloween().then(m => ({ default: m.RevoadaHalloween })));
 const SobreposicaoHalloween = lazy(() => carregarHalloween().then(m => ({ default: m.SobreposicaoHalloween })));
+// Tema de Natal: mesmo esquema — as camadas só descem com ele ligado.
+const carregarNatal         = comNovaTentativa(() => import('@/components/Natal/CenaNatal'));
+const FundoNatal        = lazy(() => carregarNatal().then(m => ({ default: m.FundoNatal })));
+const CamadaNatal       = lazy(() => carregarNatal().then(m => ({ default: m.CamadaNatal })));
+const SobreposicaoNatal = lazy(() => carregarNatal().then(m => ({ default: m.SobreposicaoNatal })));
+const RevoadaNatal      = lazy(() => carregarNatal().then(m => ({ default: m.RevoadaNatal })));
 const carregarBoasVindasHalloween = comNovaTentativa(() => import('@/components/Halloween/BoasVindasHalloween'));
 const BoasVindasHalloween = lazy(carregarBoasVindasHalloween);
 
@@ -307,6 +317,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       ? { teias: cena.teias, aranha: false, chuva: false, nuvens: false, nevoa: false, vulto: false, fantasmas: false, lanterna: null }
       : cena;
   }, [pathname, marcaPaguePlay, halloweenSoParado]);
+  // Tema de Natal (novembro) — em prévia, só no navegador de quem pede
+  // (`Natal/previa.ts`). Ligado, ele tira o Halloween da frente.
+  const { podeVer: podeVerNatal, estilo: natal } = useNatal();
+  const cenaNatal = useMemo(() => {
+    if (!natal) return null;
+    const cena = cenaNatalDaRota(pathname, natal);
+    return leve ? natalSoParado(cena) : cena;
+  }, [pathname, natal, leve]);
   // `valorDoCargo` é o que o editor de ordem usa para desenhar o menu de OUTRO
   // cargo: ele responde «o que este cargo concede», sem aplicar exceção de
   // pessoa nenhuma — que é exatamente a pergunta de uma prévia por cargo.
@@ -386,7 +404,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     pendente: hw.boasVindasPendentes,
     impersonando: !!getImpersonacaoAtiva(),
   });
-  const halloween = hw.ligado && !esperandoCarta;
+  const halloween = hw.ligado && !esperandoCarta && !natal;
   useVigiaDoHalloween(halloween && !halloweenSoParado);
 
   /*
@@ -578,7 +596,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <AnimatePresence>
           {(sidebarOpen || mobileOpen) && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="overflow-hidden">
-              {halloween
+              {natal
+                ? <MarcaNatal nome={branding.appName} />
+                : halloween
                 ? <MarcaHalloween nome={branding.appName} />
                 : (
                   <div>
@@ -760,10 +780,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   );
 
   const conteudo = (
-    <main ref={areaConteudo} className={cn('flex-1 overflow-y-auto', halloween && 'relative', halloween && temFundo(cenaHalloween) ? 'z-[1] bg-transparent' : 'bg-background')}>
+    <main ref={areaConteudo} className={cn('flex-1 overflow-y-auto', (halloween || natal) && 'relative', (halloween && temFundo(cenaHalloween)) || (cenaNatal && temFundoNatal(cenaNatal)) ? 'z-[1] bg-transparent' : 'bg-background')}>
       {/* Teias, aranha, lanterna e fantasmas moram no alto do conteúdo e
           rolam com a página — ficar parado lá em cima era o defeito. */}
       {halloween && <Suspense fallback={null}><CamadaHalloween cena={cenaHalloween} /></Suspense>}
+      {cenaNatal && <Suspense fallback={null}><CamadaNatal cena={cenaNatal} /></Suspense>}
       {children}
       <BarraRolagemLateral raiz={areaConteudo} />
     </main>
@@ -771,6 +792,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <TemaHalloweenContext.Provider value={halloween}>
+    <TemaNatalContext.Provider value={natal}>
     <DesfazTemaDaMarca />
     <div className="flex h-screen bg-background overflow-hidden">
       {/* O fio de 2 px que substituiu os esqueletos de releitura. Fica fora do
@@ -1088,7 +1110,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               </Suspense>
             )}
           </div>
+        ) : cenaNatal ? (
+          // A mesma caixa própria do Halloween, para as camadas do Natal.
+          <div className="relative flex-1 min-h-0 flex flex-col bg-background">
+            <Suspense fallback={null}>{temFundoNatal(cenaNatal) && <FundoNatal cena={cenaNatal} />}</Suspense>
+            {conteudo}
+            <Suspense fallback={null}>
+              <SobreposicaoNatal cena={cenaNatal} />
+              <RevoadaNatal cena={cenaNatal} />
+            </Suspense>
+          </div>
         ) : conteudo}
+        {podeVerNatal && (import.meta.env.DEV || natal) && <PreviaNatal estilo={natal} />}
         {/* `onFinished` voltou em 01/10/2026: libera a mensagem de Halloween
             assim que o tutorial sai do caminho, sem recarregar a página. */}
         <OnboardingTour
@@ -1263,6 +1296,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         />
       </PainelSobDemanda>
     </div>
+    </TemaNatalContext.Provider>
     </TemaHalloweenContext.Provider>
   );
 }
