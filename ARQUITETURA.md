@@ -48,7 +48,7 @@ src/
 │   ├── useAcordos.ts     # Acordos + métricas (React Query + realtime)
 │   ├── useAnalytics.ts   # Analytics com realtime
 │   ├── useAnalitico.ts / useAnaliticoImport.ts   # Aba Analítico
-│   ├── useDiario.ts / useDiarioImport.ts         # Recebimento diário
+│   ├── useDiario.ts / useImportacao945.ts        # Recebimento diário / importação do 945
 │   ├── useSolicitacoesWhatsapp.ts / useComemoracoes.ts / useOuvidoriaAcesso.ts
 │   └── useVersionCheck.ts       # Detecta novo deploy (dist/version.json)
 │
@@ -828,20 +828,21 @@ Adicionada em `cargos_permissoes` via migration `20260701b_diario_recebimentos.s
 ```
 supabase/migrations/20260701b_diario_recebimentos.sql   # tabela + RLS + realtime + RPC fn_diario_resumo_mes + permissão
 src/services/diario/
-  ├── diarioParser.ts           # parse Excel, resolveCols, formaKind, diaReferencia
-  ├── diario.service.ts         # importarLote, buscas, marcarVisto, notificar, limparDia
-  ├── diarioMensalGuard.ts      # exige o relatório MENSAL como 1º import do dia
+  ├── diario.service.ts         # importarLote (Nosso produto), buscas, marcarVisto, notificar, limparDia
   ├── escopoDiario.ts · diaDetalhado.ts · diarioComum.ts
-  └── *.test.ts                 # testes do parser (headers reais do ERP) e do guard
+  └── *.test.ts
+src/services/relatorio945/      # regra Cofen: o 945 grava diário + Relatório de pagamento (fn_relatorio_945)
+  ├── identificar.ts            # 58 × 945 pelo cabeçalho
+  ├── modelo.ts · service.ts    # cobertura por corte, conferência, importação em lote
+  └── relatorio945.sql.test.ts  # a função do banco rodando em PGlite
 src/hooks/
   ├── useDiario.ts              # fetch + realtime + novosIds/marcarVisto
-  └── useDiarioImport.ts        # máquina de estados upload→preview→confirmar
+  └── useImportacao945.ts       # arquivo→conferência→prévia→gravação (as duas telas)
 src/pages/Analitico/Diario/
   ├── index.tsx                 # raiz da aba (seletor de dia + roteia por cargo)
   ├── DiarioLider.tsx           # cards do dia/mês, lista por operador, órfãos, ignorados
   ├── DiarioOperador.tsx        # lista própria (código/nome, forma, valor, data, total)
   ├── DiaDetalhado.tsx          # abertura de um dia específico
-  ├── ImportarDiarioModal.tsx   # modal upload → preview (vínculo manual) → confirmar
   ├── FormaChip.tsx             # badge Pix/Boleto/Cartão
   └── helpers.ts                # consolidação, ignorados, agregação por operador
 src/pages/Analitico/index.tsx   # + abas internas Analítico × Recebimento diário

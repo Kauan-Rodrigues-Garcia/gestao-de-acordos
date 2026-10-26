@@ -39,7 +39,13 @@ const CAMINHO_DE_LEITURA = [
   'services/analitico/analiticoComum.ts',
   'services/diario/diario.service.ts',
   'services/diario/diarioComum.ts',
-  'services/diario/diarioMensalGuard.ts',
+  // Importação do 945 (26/10/2026): o xlsx entra só no worker, por import().
+  'services/relatorio945/service.ts',
+  'services/relatorio945/modelo.ts',
+  'services/relatorio945/identificar.ts',
+  'hooks/useImportacao945.ts',
+  'components/relatorio945/FaixaCobertura945.tsx',
+  'components/relatorio945/ImportarRelatorio945Modal.tsx',
   'pages/Analitico/Diario/helpers.ts',
   // `DiarioOperador.tsx` e `DiarioLider.tsx` estavam aqui até a aba Recebimento
   // diário sair do código. Quem herdou o papel delas — o mapa do mês e a faixa
@@ -138,6 +144,6 @@ describe('xlsx fora do caminho de leitura', () => {
   // detecção acima passa a ser vacuamente verdadeira e não guarda mais nada.
   it('detecta o xlsx nos parsers (o teste realmente funciona)', () => {
     expect(cadeiaAteXlsx(join(SRC, 'services/analitico/analiticoParser.ts'))).not.toBeNull();
-    expect(cadeiaAteXlsx(join(SRC, 'services/diario/diarioParser.ts'))).not.toBeNull();
+    expect(cadeiaAteXlsx(join(SRC, 'services/relatorioPaguePlay/parser.ts'))).not.toBeNull();
   });
 });

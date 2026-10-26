@@ -2,19 +2,14 @@
  * diarioComum.ts
  * Tipos e helpers do recebimento diário que **não dependem de xlsx**.
  *
- * Mesmo motivo de `analiticoComum.ts`: `diarioParser.ts` importa `@e965/xlsx`
- * (~484 KB). Quem exibe o recebimento (`FormaChip`, `helpers.ts` e, desde que
- * a aba virou o recorte Dia do Analítico, `AnaliticoLider`) precisa apenas de
- * `normDiario` / `formaKindDiario` e, por importar do parser, arrastava a
- * biblioteca inteira só para EXIBIR a lista.
+ * Quem exibe o recebimento (`FormaChip`, `helpers.ts`, `AnaliticoLider`) e
+ * quem grava o diário da regra Nosso produto (`useAnaliticoImport`, a partir do
+ * relatório mensal) importam daqui. O diário da regra Cofen vem do relatório
+ * 945 e é lido por `relatorioPaguePlay/parser.ts` desde 26/10/2026 — o parser
+ * próprio do diário (`diarioParser.ts`) saiu do código junto com a importação
+ * que aceitava o relatório 58 no lugar do 945.
  *
- * Regra:
- *   • **caminho de leitura** (services, hooks, telas) → importe DAQUI;
- *   • **caminho de importação** (ler o arquivo do ERP) → importe do parser.
- *
- * O parser reexporta tudo o que está aqui, então importar de lá não quebra —
- * apenas devolve os 484 KB ao bundle. O teste
- * `xlsx-fora-do-caminho-de-leitura.test.ts` guarda essa fronteira.
+ * O teste `xlsx-fora-do-caminho-de-leitura.test.ts` guarda a fronteira.
  */
 
 // ── Tipos de saída ───────────────────────────────────────────────────────────
@@ -34,13 +29,6 @@ export interface LinhaDiario {
   tabulacao: string;
   id_baixa: string;
   chave_unica: string;
-}
-
-export interface ResultadoParseDiario {
-  linhas: LinhaDiario[];
-  erros: string[];
-  /** Linhas do arquivo sem a coluna Operador preenchida (descartadas) */
-  descartadasSemOperador: number;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -69,74 +57,8 @@ export function isCartaoDiario(forma: string): boolean {
   return formaKindDiario(forma) === 'cartao';
 }
 
-/**
- * Código do cliente: só os dígitos.
- *
- * O ERP exporta com separador de milhar — "2,651,454" neste relatório, e há
- * exportações que usam ponto. Descartar tudo que não é dígito cobre os dois
- * casos e devolve o código igual ao que aparece na tabulação.
- */
-export function soDigitos(v: unknown): string {
-  return String(v ?? '').replace(/\D/g, '');
-}
-
 export function dayKeyDiario(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-export function parsearValor(v: unknown): number {
-  if (typeof v === 'number') return v;
-  const s = String(v ?? '').replace(/\./g, '').replace(',', '.').trim();
-  const n = parseFloat(s);
-  return isNaN(n) ? 0 : n;
-}
-
-// ── Resolução de colunas ─────────────────────────────────────────────────────
-
-export type ColKeysDiario =
-  'op' | 'cli' | 'prof' | 'acordo' | 'forma' | 'valor' | 'idb' | 'prox' | 'dt' | 'tab';
-
-const COL_EXATAS: Partial<Record<ColKeysDiario, string[]>> = {
-  op:     ['operador', 'cobradora', 'cobrador'],
-  // "Cód.Cliente" normaliza para "codcliente". Não confundir com "codacordo".
-  cli:    ['codcliente', 'codigocliente', 'clientecodigo', 'codcli'],
-  prof:   ['profissional', 'nome', 'cliente'],
-  acordo: ['codacordo', 'acordo'],
-  forma:  ['formapgto', 'formapagamento', 'formadepagamento', 'tpdoc'],
-  valor:  ['valorrecebido', 'recebido'],
-  idb:    ['idbaixa'],
-  prox:   ['proxcontato', 'proximocontato'],
-  dt:     ['data', 'dtpagamento', 'datapagamento', 'dtbaixa'],
-};
-
-const COL_PARCIAIS: Partial<Record<ColKeysDiario, string[]>> = {
-  cli:    ['codcliente'],   // específico: "codacordo" não casa
-  acordo: ['acordo'],
-  forma:  ['forma'],
-  valor:  ['valorrecebido'],
-  idb:    ['idbaixa'],
-  prox:   ['proxcontato', 'proximocontato'],
-  dt:     ['datapagamento'],
-  tab:    ['tabulacao'],
-};
-
-export function resolveColsDiario(headers: unknown[]): Partial<Record<ColKeysDiario, number>> | null {
-  const norms = headers.map(h => normDiario(h));
-  const map: Partial<Record<ColKeysDiario, number>> = {};
-
-  for (const [key, aliases] of Object.entries(COL_EXATAS) as [ColKeysDiario, string[]][]) {
-    const i = norms.findIndex(n => aliases.includes(n));
-    if (i !== -1) map[key] = i;
-  }
-  for (const [key, termos] of Object.entries(COL_PARCIAIS) as [ColKeysDiario, string[]][]) {
-    if (key in map) continue;
-    const i = norms.findIndex(n => termos.some(t => n.includes(t)));
-    if (i !== -1) map[key] = i;
-  }
-
-  // Obrigatórias: operador e valor recebido (mesma exigência do protótipo)
-  if (map.op == null || map.valor == null) return null;
-  return map;
 }
 
 // ── Dia de referência ────────────────────────────────────────────────────────

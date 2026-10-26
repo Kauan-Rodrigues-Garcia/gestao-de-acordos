@@ -1,5 +1,6 @@
 import { read, utils, SSF } from '@e965/xlsx';
-import { CAMPOS_VALOR, centavos, somarValores, zerarValores, type Modalidade, type Pagamento, type RelatorioLido, type Valores } from './modelo';
+import { identificarRelatorio, MSG_58_NO_LUGAR_DO_945 } from '@/services/relatorio945/identificar';
+import { CAMPOS_VALOR, centavos, somarValores, zerarValores, type DiarioDaBaixa, type Modalidade, type Pagamento, type RelatorioLido, type Valores } from './modelo';
 
 const normalizar = (v: unknown) => String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
 const vazio = (v: unknown) => v == null || String(v).trim() === '';
@@ -47,8 +48,34 @@ function ehParDeEstorno(a: Pagamento, b: Pagamento) {
     && CAMPOS_VALOR.every(k => a[k] === -b[k]);
 }
 
+/** Data opcional do diário (Próx. Contato): célula inválida vira null, não erro. */
+function dataOuNull(v: unknown): string | null {
+  if (vazio(v)) return null;
+  try { return dataISO(v); } catch { return null; }
+}
+
+const doisDigitos = (n: number) => String(n).padStart(2, '0');
+
+/**
+ * Hora da baixa em «HH:MM:SS». O ERP manda «Horário» como texto («08:55»); a
+ * Dt.Baixa às vezes já traz a hora (as linhas de estorno: «14/10 08:53:22»),
+ * que no Excel é a fração do serial.
+ */
+function horaDaBaixa(horario: unknown, dtBaixa: unknown): string {
+  const texto = /^(\d{1,2}):(\d{2})(?::(\d{2}))?/.exec(String(horario ?? '').trim());
+  if (texto) return `${doisDigitos(+texto[1])}:${texto[2]}:${texto[3] ?? '00'}`;
+  const fracao = (v: unknown) => typeof v === 'number' && v % 1 > 0 ? v % 1 : null;
+  const f = fracao(horario) ?? fracao(dtBaixa);
+  if (f === null) return '00:00:00';
+  const seg = Math.round(f * 86400);
+  return `${doisDigitos(Math.floor(seg / 3600) % 24)}:${doisDigitos(Math.floor(seg / 60) % 60)}:${doisDigitos(seg % 60)}`;
+}
+
 /** Parser exclusivo desta aba: não herda descartes por operador do diário. */
 export function lerLinhas(rows: unknown[][]): RelatorioLido {
+  // O relatório errado tem mensagem própria: «coluna idbaixa ausente» não
+  // diz a quem importou o 58 que o arquivo é outro.
+  if (identificarRelatorio(rows[0] ?? []) === '58') throw new Error(MSG_58_NO_LUGAR_DO_945);
   const headers = (rows[0] ?? []).map(normalizar);
   const coluna = (nomes: string[], obrigatoria = true) => {
     const matches = headers.flatMap((h, i) => nomes.includes(h) ? [i] : []);
@@ -62,7 +89,15 @@ export function lerLinhas(rows: unknown[][]): RelatorioLido {
     forma: coluna(['formapgto', 'formadepagamento']), ia: coluna(['ia'], false), periodo: coluna(['periodo'], false),
     total: coluna(['valorrecebido']), coren: coluna(['coren', 'coren5628']), cofen: coluna(['cofen', 'cofen1876']),
     pp: coluna(['pagueplay', 'pagueplay2496']),
+    // Recebimento diário e corte: opcionais — a diretoria lê sem eles.
+    operador: coluna(['operador'], false), cliente: coluna(['codcliente'], false),
+    profissional: coluna(['profissional'], false), prox: coluna(['proxcontato', 'proximocontato'], false),
+    tabulacao: coluna(['tabulacao'], false), dt_baixa: coluna(['dtbaixa'], false), horario: coluna(['horario'], false),
   };
+  const texto = (row: unknown[], i: number) => i < 0 ? '' : String(row[i] ?? '').trim();
+  const temOperador = c.operador >= 0;
+  const diario: Record<string, DiarioDaBaixa> = {};
+  let corte: string | null = null;
   const linhas: Pagamento[] = [], porId = new Map<string, Pagamento>();
   const totais = zerarValores(), somaArquivo = zerarValores();
   let rodape: Partial<Valores> | null = null, duplicadas = 0, estornos = 0;
@@ -111,6 +146,18 @@ export function lerLinhas(rows: unknown[][]): RelatorioLido {
       } else {
         porId.set(id, linha); linhas.push(linha); somarValores(totais, valores);
         if (tipoEstorno(linha.forma) === 'estorno') estornoSemPar.set(id, i + 1);
+        if (temOperador) diario[id] = {
+          operador: texto(row, c.operador),
+          cliente_codigo: texto(row, c.cliente).replace(/\D/g, ''),
+          profissional: texto(row, c.profissional),
+          prox_contato: c.prox < 0 ? null : dataOuNull(row[c.prox]),
+          tabulacao: texto(row, c.tabulacao),
+        };
+      }
+      const diaDaBaixa = c.dt_baixa < 0 ? null : dataOuNull(row[c.dt_baixa]);
+      if (diaDaBaixa) {
+        const momento = `${diaDaBaixa}T${horaDaBaixa(c.horario < 0 ? null : row[c.horario], row[c.dt_baixa])}`;
+        if (!corte || momento > corte) corte = momento;
       }
     } catch (e) {
       throw new Error(`Linha ${i + 1}: ${e instanceof Error ? e.message : 'Dados inválidos.'}`);
@@ -126,14 +173,15 @@ export function lerLinhas(rows: unknown[][]): RelatorioLido {
   }
   const datas = linhas.map(l => l.data).sort();
   const camposConferidos = CAMPOS_VALOR.filter(k => rodape?.[k] !== undefined);
-  return { linhas, totais, duplicadas, estornos, rodapeConferido: camposConferidos.length === 4, camposConferidos, inicio: datas[0], fim: datas[datas.length - 1], modalidade: [...modalidades][0] ?? null };
+  return { linhas, diario, temOperador, corte, totais, duplicadas, estornos, rodapeConferido: camposConferidos.length === 4, camposConferidos, inicio: datas[0], fim: datas[datas.length - 1], modalidade: [...modalidades][0] ?? null };
 }
 
 export function lerArquivo(buffer: ArrayBuffer): RelatorioLido {
   // Manter seriais Excel evita conversões de fuso horário em datas civis.
   const wb = read(buffer, { type: 'array', cellDates: false });
-  const candidatas = wb.SheetNames.map(n => utils.sheet_to_json<unknown[]>(wb.Sheets[n], { header: 1, defval: null, raw: true }))
-    .filter(rows => (rows[0] ?? []).some(v => normalizar(v) === 'idbaixa'));
+  const abas = wb.SheetNames.map(n => utils.sheet_to_json<unknown[]>(wb.Sheets[n], { header: 1, defval: null, raw: true }));
+  const candidatas = abas.filter(rows => (rows[0] ?? []).some(v => normalizar(v) === 'idbaixa'));
+  if (!candidatas.length && abas.some(rows => identificarRelatorio(rows[0] ?? []) === '58')) throw new Error(MSG_58_NO_LUGAR_DO_945);
   if (candidatas.length !== 1) throw new Error('O arquivo deve conter exatamente uma aba do relatório 945.');
   return lerLinhas(candidatas[0]);
 }

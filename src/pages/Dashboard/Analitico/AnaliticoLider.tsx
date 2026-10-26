@@ -112,7 +112,8 @@ import {
 import { useAnaliticoDashboard } from '@/hooks/useAnaliticoDashboard';
 // ── O recorte Dia: tudo abaixo vem do diário, não do analítico ──────────────
 import { useDiario } from '@/hooks/useDiario';
-import { useDiarioImport } from '@/hooks/useDiarioImport';
+import { useImportacao945 } from '@/hooks/useImportacao945';
+import { useEmpresaTemRegraCofen } from '@/hooks/useEmpresaTemRegraCofen';
 import {
   escopoDoDiario, linhasVisiveis, contarSetores,
   type EscopoDiario, type VinculosDiario,
@@ -127,15 +128,14 @@ import { FaixaPulso } from '@/pages/Analitico/FaixaPulso';
 // O mapa do mês — o outro formato da MESMA lista: um calendário com filtro
 // de operador. A fonte por empresa continua em `fonteDoMapa`.
 import { MapaDoMes, type CelulaDoMapa } from '@/pages/Analitico/MapaDoMes/MapaDoMes';
-import { ImportarDiarioModal } from '@/pages/Analitico/Diario/ImportarDiarioModal';
+import { ImportarRelatorio945Modal } from '@/components/relatorio945/ImportarRelatorio945Modal';
+import { FaixaCobertura945 } from '@/components/relatorio945/FaixaCobertura945';
+import { invalidarCobertura } from '@/services/relatorio945/service';
 import {
   limparDadosDoDia, limparMesDiario, buscarResumoMensalDiario,
 } from '@/services/diario/diario.service';
 import type { LinhaRecebidaDia } from '@/services/analitico/analitico.service';
 import { celulasDoMapa } from './fonteDoMapa';
-import {
-  mensalJaImportadoHoje, limparMarcaMensal,
-} from '@/services/diario/diarioMensalGuard';
 
 /*
  * Sob demanda, como em `AnaliticoOperador` — e é o MESMO `import()`.
@@ -243,16 +243,21 @@ export function AnaliticoLider({
    * daria a alguém um poder que ninguém lhe deu.
    */
   const podeImportarDiario = temPermissao('importar_diario');
-  const importDiarioHook = useDiarioImport();
+  /*
+   * O recebimento diário da regra Cofen vem do relatório 945 — e a regra é do
+   * setor, não da marca: a importação aparece onde a empresa tem setor Cofen.
+   * A cobertura (que dia está completo, de onde o próximo arquivo começa) mora
+   * no banco e vale para qualquer navegador; substituiu a marca «mensal
+   * importado hoje» que ficava no localStorage.
+   */
+  const temRegraCofen = useEmpresaTemRegraCofen(empresaId);
+  const imp945 = useImportacao945(podeImportarDiario && temRegraCofen ? empresaId : null, 'diario');
   const [modalImportarDiario,   setModalImportarDiario]   = useState(false);
   const [confirmandoLimpezaDia, setConfirmandoLimpezaDia] = useState(false);
   const [limpandoDia,           setLimpandoDia]           = useState(false);
-  // Limpar o MÊS do recebimento diário — só PP. Ver `limparMesDoDiario`.
+  // Limpar o MÊS do recebimento diário — só na regra Cofen. Ver `limparMesDoDiario`.
   const [confirmandoLimpezaMesDiario, setConfirmandoLimpezaMesDiario] = useState(false);
   const [limpandoMesDiario,           setLimpandoMesDiario]           = useState(false);
-  // PP: o primeiro relatório do dia deve ser o MENSAL — aviso até o mensal de
-  // hoje entrar; limpar o dia derruba a marca e ele volta.
-  const [mensalOkHoje, setMensalOkHoje] = useState(() => mensalJaImportadoHoje(empresaId));
 
   /*
    * As cinco abas de dentro, cada uma com a própria chave — desligar uma não
@@ -959,11 +964,6 @@ export function AnaliticoLider({
     dados: linhasDoDia, loading: carregandoDia, refetch: recarregarDia,
   } = useDiario({ dia: diaEmFoco });
 
-  // A marca do mensal é por dia e por empresa; revalida na virada de um ou de outro.
-  useEffect(() => {
-    setMensalOkHoje(mensalJaImportadoHoje(empresaId));
-  }, [empresaId, hojeISO]);
-
   /*
    * O escopo do diário tem a própria régua (`escopoDoDiario`), diferente da do
    * analítico (`filtrarResumos`). Ela NÃO é fundida aqui: cada fonte continua
@@ -1101,12 +1101,11 @@ export function AnaliticoLider({
     if (error) {
       toast.error(`Erro ao limpar: ${error}`);
     } else {
-      // Derruba a marca do mensal: a próxima importação exige o mês inteiro
-      limparMarcaMensal(empresaId);
-      setMensalOkHoje(false);
+      // O dia volta a exigir arquivo: o próximo 945 tem de começar nele.
+      if (temRegraCofen) await devolverCobertura(diaEmFoco, diaEmFoco);
       toast.success(
         `Dados de ${fmtDataISO(diaEmFoco)} excluídos. `
-        + 'A próxima importação deve ser o relatório MENSAL, para realinhar os valores.',
+        + 'O próximo relatório 945 precisa cobrir esse dia.',
       );
       setConfirmandoLimpezaDia(false);
       void recarregarDia();
@@ -1115,9 +1114,23 @@ export function AnaliticoLider({
   }
 
   /**
-   * Limpar o MÊS inteiro do recebimento diário — só na PaguePlay.
+   * Os dias apagados do diário voltam a exigir arquivo (`fn_relatorio_945`,
+   * ação `invalidar`). Sem isso a faixa de cobertura diria «completo» para um
+   * dia vazio e a próxima importação poderia pular o buraco.
+   */
+  async function devolverCobertura(inicio: string, fim: string) {
+    try {
+      await invalidarCobertura(empresaId, inicio, fim);
+    } catch (e) {
+      toast.warning(`Os dados saíram, mas a cobertura do 945 não foi atualizada: ${e instanceof Error ? e.message : e}`);
+    }
+    void imp945.recarregarCobertura();
+  }
+
+  /**
+   * Limpar o MÊS inteiro do recebimento diário — só na regra Cofen.
    *
-   * Existe porque lá o diário é um relatório PRÓPRIO (o `mes.xlsx` do ERP), e
+   * Existe porque lá o diário é um relatório PRÓPRIO (o 945 do ERP), e
    * o "Limpar mês" da lente Mês passa `incluirDiario: !isPP` — ou seja, na PP
    * ele derruba o analítico e deixa o diário de pé. Quem importou o arquivo
    * errado e quer refazer o mês não tinha por onde: só "Limpar dia", um dia de
@@ -1134,10 +1147,8 @@ export function AnaliticoLider({
     if (error) {
       toast.error(`Erro ao limpar: ${error}`);
     } else {
-      // A próxima importação tem de ser o mensal outra vez — a marca de hoje
-      // não vale mais para um mês que ficou vazio.
-      limparMarcaMensal(empresaId);
-      setMensalOkHoje(false);
+      // O mês vazio volta a exigir arquivo.
+      if (temRegraCofen) await devolverCobertura(primeiroDiaDoMes(mes), ultimoDiaDoMes(mes));
       // O Mapa do mês lê desta lista na PP; deixá-la em memória mostraria
       // dados que não existem mais no banco.
       setLinhasDiarioMes([]);
@@ -1145,7 +1156,7 @@ export function AnaliticoLider({
         .toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
       toast.success(
         `Recebimento diário de ${mesLabel} excluído. `
-        + 'Reimporte o relatório mensal para restaurar os dados.',
+        + 'Reimporte o relatório 945 do mês para restaurar os dados.',
       );
       setConfirmandoLimpezaMesDiario(false);
       void recarregarDia();
@@ -1154,11 +1165,9 @@ export function AnaliticoLider({
     setLimpandoMesDiario(false);
   }
 
-  function handlePosImportDiario() {
+  function handlePosImportDiario(concluiu: boolean) {
     setModalImportarDiario(false);
-    // Reflete a marca gravada pelo useDiarioImport (mensal importado hoje)
-    setMensalOkHoje(mensalJaImportadoHoje(empresaId));
-    if (importDiarioHook.estado === 'done') void recarregarDia();
+    if (concluiu) { void recarregarDia(); onRefetch(); }
   }
 
   /*
@@ -1735,22 +1744,10 @@ export function AnaliticoLider({
   return (
     <div className="space-y-4">
 
-      {/* Aviso diário (PP): o primeiro relatório do dia deve ser o MENSAL */}
-      {isPP && recorte.modo === 'dia' && !mensalOkHoje && (
-        <div className="flex items-start gap-2.5 rounded-xl border border-amber-300/70 dark:border-amber-700/50 bg-amber-50/70 dark:bg-amber-950/20 px-4 py-3">
-          <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-500 shrink-0 mt-0.5" />
-          <div className="text-xs">
-            <p className="font-semibold text-amber-700 dark:text-amber-400">
-              Primeiro relatório do dia: importe o MENSAL (mês inteiro)
-            </p>
-            <p className="text-muted-foreground mt-0.5">
-              O primeiro relatório importado hoje deve conter o mês inteiro — ele
-              realinha os dias anteriores e evita que algum valor quebrado passe
-              despercebido. Relatórios de apenas 1 dia ficam bloqueados até o
-              mensal de hoje ser importado. Limpar o dia volta a exigir o mensal.
-            </p>
-          </div>
-        </div>
+      {/* Regra Cofen: que dias o 945 já cobriu e de onde o próximo arquivo
+          começa. Só para quem importa — é instrução de importação. */}
+      {temRegraCofen && podeImportarDiario && recorte.modo === 'dia' && !setorEscopoDia && (
+        <FaixaCobertura945 cobertura={imp945.cobertura} erro={imp945.erroCobertura} />
       )}
 
       {/* ── Cards de resumo do recorte ─────────────────────────────────────── */}
@@ -1853,8 +1850,9 @@ export function AnaliticoLider({
             >
               <Trash2 className="w-4 h-4" /> Limpar mês
             </Button>
-            <Button size="sm" className="gap-1.5 rounded-lg" onClick={() => setModalImportar(true)}>
-              <Upload className="w-4 h-4" /> Importar relatório
+            <Button size="sm" className="gap-1.5 rounded-lg" onClick={() => setModalImportar(true)}
+              title="Relatório 58 — pagamento mensal (Cobradora, TpDoc, DtPgto, Recebido)">
+              <Upload className="w-4 h-4" /> Importar 58 · pagamento mensal
             </Button>
           </div>
         )}
@@ -1870,25 +1868,26 @@ export function AnaliticoLider({
                 <Trash2 className="h-4 w-4" /> Limpar dia
               </Button>
             )}
-            {/* "Limpar mês" volta ao recorte Dia, só na PaguePlay.
-                Lá o recebimento diário é um relatório PRÓPRIO (`mes.xlsx`), e
+            {/* "Limpar mês" volta ao recorte Dia, só na regra Cofen.
+                Lá o recebimento diário é um relatório PRÓPRIO (o 945), e
                 quem precisa refazer o mês inteiro está justamente aqui — não
-                na lente Mês, que limpa o analítico. No BookPlay o botão da
-                lente Mês já derruba os dois, porque saem do mesmo arquivo. */}
-            {isPP && (
+                na lente Mês, que limpa o analítico. Na regra Nosso produto o
+                botão da lente Mês já derruba os dois, porque saem do mesmo arquivo. */}
+            {temRegraCofen && (
               <Button size="sm" variant="outline"
                 className="gap-1.5 rounded-lg border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
                 onClick={() => setConfirmandoLimpezaMesDiario(true)}>
                 <Trash2 className="h-4 w-4" /> Limpar mês
               </Button>
             )}
-            {/* Na BookPlay a importação é feita pelo relatório mensal (mesmo
-                arquivo atualiza os dois); por isso não há botão de importar o
-                dia lá. */}
-            {isPP && (
+            {/* Na regra Nosso produto o diário sai do relatório mensal (o
+                mesmo arquivo atualiza os dois); por isso não há botão de
+                importar o dia lá. */}
+            {temRegraCofen && (
               <Button size="sm" className="gap-1.5 rounded-lg"
+                title="Relatório 945 — recebimento diário (Id.Baixa, UF Coren, Split). Atualiza também o Relatório de pagamento da diretoria."
                 onClick={() => setModalImportarDiario(true)}>
-                <Upload className="h-4 w-4" /> Importar relatório
+                <Upload className="h-4 w-4" /> Importar 945 · recebimento diário
               </Button>
             )}
           </div>
@@ -2537,10 +2536,10 @@ export function AnaliticoLider({
       </AlertDialog>
 
       <ImportarModal aberto={modalImportar} onFechar={handlePosImport} hook={importHook} />
-      <ImportarDiarioModal
+      <ImportarRelatorio945Modal
         aberto={modalImportarDiario}
         onFechar={handlePosImportDiario}
-        hook={importDiarioHook}
+        imp={imp945}
       />
     </div>
   );

@@ -4,6 +4,10 @@ import { Button } from '@/components/ui/button';
 import { carregarResumo, excluirRelatorio, importarRelatorio } from '@/services/relatorioPaguePlay/service';
 import { diaAnterior, formatarCentavos, validarPeriodo, type Modalidade, type RelatorioLido, type ResumoSalvo } from '@/services/relatorioPaguePlay/modelo';
 import { documentoRelatorio } from './documento';
+import { useImportacao945 } from '@/hooks/useImportacao945';
+import { ImportarRelatorio945Modal } from '@/components/relatorio945/ImportarRelatorio945Modal';
+import { FaixaCobertura945 } from '@/components/relatorio945/FaixaCobertura945';
+import { invalidarCobertura } from '@/services/relatorio945/service';
 
 const nome = (modo: Modalidade) => modo === 'pagamento' ? 'pagamento' : 'conciliação';
 const dataBR = (iso: string) => iso.split('-').reverse().join('/');
@@ -39,6 +43,14 @@ export default function RelatorioPaguePlay({ empresaId, versao }: { empresaId: s
   const frame = useRef<HTMLIFrameElement>(null);
   const pedido = useRef(0);
   const documento = useMemo(documentoRelatorio, []);
+  /*
+   * Pagamento = relatório 945, pelo fluxo único (26/10/2026): a mesma
+   * importação grava este histórico e o recebimento diário do Analítico, e a
+   * cobertura por dia substitui a trava «ontem e hoje». Conciliação segue no
+   * fluxo antigo, logo abaixo.
+   */
+  const imp945 = useImportacao945(modo === 'pagamento' && empresaId ? empresaId : null, 'diretoria');
+  const [modal945, setModal945] = useState(false);
 
   const atualizar = useCallback(async () => {
     const id = ++pedido.current;
@@ -127,6 +139,15 @@ export default function RelatorioPaguePlay({ empresaId, versao }: { empresaId: s
     setOcupado(true); setAviso('');
     try {
       const n = await excluirRelatorio(empresaId, modo, exclusao === 'mes' ? mes : null);
+      // Dias apagados voltam a exigir arquivo na cobertura do 945.
+      if (modo === 'pagamento') {
+        const [ano, num] = mes.split('-').map(Number);
+        await invalidarCobertura(empresaId,
+          exclusao === 'mes' ? `${mes}-01` : '2000-01-01',
+          exclusao === 'mes' ? `${mes}-${String(new Date(ano, num, 0).getDate()).padStart(2, '0')}` : hoje,
+        ).catch((): void => undefined);
+        void imp945.recarregarCobertura();
+      }
       setExclusao(null); setPrevia(null); setArquivo(null); setAviso(`${n} pagamentos removidos de ${nome(modo)}.`);
       await atualizar();
     } catch (e) { setAviso(mensagemErro(e)); }
@@ -137,7 +158,10 @@ export default function RelatorioPaguePlay({ empresaId, versao }: { empresaId: s
     <div className="rounded-xl border border-border bg-card p-4 space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         {(['pagamento', 'conciliacao'] as const).map(m => <Button key={m} variant={m === modo ? 'default' : 'outline'} disabled={ocupado} onClick={() => setModo(m)}>{m === 'pagamento' ? 'Pagamento' : 'Conciliação'}</Button>)}
-        <Button variant="outline" disabled={ocupado} onClick={() => input.current?.click()}>Importar relatório de {nome(modo)}</Button>
+        {modo === 'pagamento'
+          ? <Button variant="outline" disabled={ocupado} onClick={() => setModal945(true)}
+              title="Relatório 945 de pagamento. A mesma importação atualiza o recebimento diário do Analítico.">Importar relatório 945 de pagamento</Button>
+          : <Button variant="outline" disabled={ocupado} onClick={() => input.current?.click()}>Importar relatório de {nome(modo)}</Button>}
         <input ref={input} type="file" accept=".xlsx,.xls" className="hidden" aria-label={`Arquivo de ${nome(modo)}`} onChange={e => void selecionar(e.target.files?.[0])} />
         <div className="ml-auto flex flex-wrap gap-2">
           <Button variant="outline" disabled={exportando || !empresaId} onClick={() => void baixarAcumulado()}
@@ -147,11 +171,12 @@ export default function RelatorioPaguePlay({ empresaId, versao }: { empresaId: s
         </div>
       </div>
       <p className="text-sm text-muted-foreground">Históricos independentes. Os valores de Pague Play, Coren e Cofen vêm das colunas do relatório; os percentuais exibem a participação desses valores no total.</p>
-      <p className="text-sm">{resumo?.primeiraImportacaoPendente ? `Primeira atualização de hoje: importe ${dataBR(diaAnterior(hoje))} e ${dataBR(hoje)} juntos. Cargas históricas até ontem também são permitidas e não liberam essa atualização.` : resumo ? 'Ontem já foi atualizado hoje. As próximas importações podem conter somente hoje.' : 'Carregue um arquivo para conferir a prévia.'}</p>
+      {modo === 'pagamento' && <FaixaCobertura945 cobertura={imp945.cobertura} erro={imp945.erroCobertura} />}
+      {modo === 'conciliacao' && <p className="text-sm">{resumo?.primeiraImportacaoPendente ? `Primeira atualização de hoje: importe ${dataBR(diaAnterior(hoje))} e ${dataBR(hoje)} juntos. Cargas históricas até ontem também são permitidas e não liberam essa atualização.` : resumo ? 'Ontem já foi atualizado hoje. As próximas importações podem conter somente hoje.' : 'Carregue um arquivo para conferir a prévia.'}</p>}
       {carregando && <p role="status">Carregando histórico…</p>}
       {erro && <div role="alert" className="rounded-lg border border-destructive/30 p-3 text-sm"><strong>Histórico indisponível.</strong> {erro.includes('fn_pp_relatorio') ? 'A integração do banco ainda não está disponível. É possível conferir uma prévia local; salvar exige aplicar a migração após aprovação.' : erro}<Button className="ml-2" variant="outline" size="sm" disabled={ocupado} onClick={() => void atualizar()}>Tentar novamente</Button></div>}
       {aviso && <p role="status" className="rounded-lg bg-muted p-3 text-sm">{aviso}</p>}
-      {arquivo && <div className="space-y-3 rounded-lg border border-border p-4">
+      {arquivo && modo === 'conciliacao' && <div className="space-y-3 rounded-lg border border-border p-4">
         <p className="font-medium">{arquivo.nome} · {arquivo.dados.linhas.length} pagamentos únicos · {formatarCentavos(arquivo.dados.totais.total)}</p>
         <p className="text-sm">Pague Play: {formatarCentavos(arquivo.dados.totais.pp)} · Coren: {formatarCentavos(arquivo.dados.totais.coren)} · Cofen: {formatarCentavos(arquivo.dados.totais.cofen)}</p>
         <p className="text-sm text-muted-foreground">{arquivo.dados.rodapeConferido ? 'Os quatro totais conferem com o rodapé do arquivo.' : arquivo.dados.camposConferidos.length ? `${arquivo.dados.camposConferidos.length} totais conferidos no rodapé; os demais não constam nele e foram somados pelas linhas.` : 'Arquivo sem rodapé: totais calculados a partir das linhas, sem conferência externa.'} {arquivo.dados.duplicadas > 0 && `${arquivo.dados.duplicadas} linhas idênticas repetidas serão ignoradas.`} {arquivo.dados.estornos > 0 && `${arquivo.dados.estornos} ${arquivo.dados.estornos === 1 ? 'cartão estornado entra' : 'cartões estornados entram'} com o valor líquido (pagamento menos estorno).`}</p>
@@ -175,7 +200,9 @@ export default function RelatorioPaguePlay({ empresaId, versao }: { empresaId: s
             <Button variant="outline" disabled={ocupado || !mes} onClick={() => setExclusao('mes')}>Excluir mês</Button>
             <Button variant="destructive" disabled={ocupado || !resumo.dias.length} onClick={() => setExclusao('geral')}>Excluir todo o histórico de {nome(modo)}</Button>
           </div>
-          <p className="text-xs text-muted-foreground">Meses com importação: {meses.join(', ') || 'nenhum'}. A cobertura usa a coluna Data. Um dia em andamento só fica completo ao ser reimportado em um dia posterior.</p>
+          <p className="text-xs text-muted-foreground">Meses com importação: {meses.join(', ') || 'nenhum'}. A cobertura usa a coluna Data. {modo === 'pagamento'
+            ? 'Um dia fica completo quando um arquivo vai além do fim dele (Dt.Baixa e Horário da última baixa do arquivo).'
+            : 'Um dia em andamento só fica completo ao ser reimportado em um dia posterior.'}</p>
           {diasDoMes.length > 0 && <div className="grid grid-cols-2 md:grid-cols-4 gap-2">{diasDoMes.map(d => <div key={d.data} className="rounded border border-border p-2 text-xs"><strong>{dataBR(d.data)}</strong><br />{d.status}{d.salvo && ` · ${d.salvo.quantidade} pagamentos`}</div>)}</div>}
           {exclusao && <div role="alertdialog" aria-label="Confirmar exclusão" className="rounded-lg border border-destructive/40 p-4 space-y-3">
             <p>Excluir {exclusao === 'mes' ? `o mês ${mes}` : 'todo o histórico'} de {nome(modo)}? Os dados serão apagados e só voltarão após importar um novo relatório{exclusao === 'mes' ? ' desse mês' : ''}. A outra modalidade permanece salva.</p>
@@ -185,6 +212,8 @@ export default function RelatorioPaguePlay({ empresaId, versao }: { empresaId: s
       </details>}
     </div>
     {previa && <div role="status" className="rounded-lg border border-amber-500 bg-amber-500/10 p-3 text-sm">Prévia local do arquivo selecionado — estes dados não foram salvos e não incluem o histórico do banco. <Button variant="outline" size="sm" onClick={() => setPrevia(null)}>Fechar prévia</Button></div>}
+    <ImportarRelatorio945Modal aberto={modal945} imp={imp945}
+      onFechar={concluiu => { setModal945(false); if (concluiu) void atualizar(); }} />
     {exibido && <div className="overflow-x-auto rounded-xl border border-border"><iframe key={`${empresaId}:${modo}`} ref={frame} title={`Relatório de ${nome(modo)} PaguePlay`} srcDoc={documento} onLoad={() => setPronto(true)} allow="clipboard-write" sandbox="allow-scripts allow-same-origin allow-downloads" style={{ width: '100%', minWidth: 1080, height: altura, border: 0 }} /></div>}
   </div>;
 }

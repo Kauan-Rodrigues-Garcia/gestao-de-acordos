@@ -12,13 +12,36 @@ O parser lê `Valor Recebido`, `Pague Play`, `Coren` e `Cofen` diretamente das r
 
 Desde 30/09/2026 o ERP manda o estorno de cartão como duas linhas com o mesmo `Id.Baixa`: «Cartão Padrão - Estornado», com o valor original, e «Cartão Padrão - Estorno», com o mesmo valor negativo. O parser junta o par numa linha só, com a forma «Estornado» e o valor líquido (zero), porque a chave do banco é o `Id.Baixa`. Se a baixa já estava salva como paga, ela é atualizada para estornada e deixa de somar. O par só é aceito se os valores forem exatamente opostos e os demais dados iguais. Um «Estorno» sem o «Estornado» correspondente no mesmo arquivo é recusado, porque sobrescreveria a baixa salva com o valor negativo e descontaria duas vezes.
 
-CPF, nome de cliente, operador e demais informações pessoais do arquivo não são armazenados por esta aba. Não há sincronização com o recebimento diário existente.
+CPF e nome de cliente não são armazenados pelo Relatório de pagamento. Desde 26/10/2026 o pagamento é importado pelo fluxo único do relatório 945 (ver abaixo), que grava também o recebimento diário — e é lá, em `diario_recebimentos`, que ficam operador, Cód.Cliente, profissional, próximo contato e tabulação. O CPF continua ignorado.
+
+## Importação única do 945 (26/10/2026)
+
+Migration `20261026150000_relatorio_945_importacao_unica.sql`, RPC `fn_relatorio_945`. Vale para a modalidade **pagamento**; conciliação segue no fluxo antigo (`fn_pp_relatorio`).
+
+- **Uma importação, dois destinos.** O 945 de pagamento é o mesmo arquivo que alimenta o recebimento diário do Analítico (recorte Dia). As duas telas abrem o mesmo modal (`ImportarRelatorio945Modal`) e a confirmação grava `pp_relatorio_pagamentos` e `diario_recebimentos` na mesma transação. O diário recebe só a janela operacional, do 1º dia do mês anterior em diante.
+- **Quem importa.** Quem já tinha o Relatório de pagamento ou quem tem `importar_diario`, em empresa com setor da regra Cofen.
+- **Relatório errado.** O parser reconhece o 58 pelo cabeçalho e recusa dizendo onde ele vai; o importador do 58 faz o inverso (`relatorio945/identificar.ts`).
+- **Reconciliação por Id.Baixa** nas duas tabelas: valor, data, operador, código, próximo contato e tabulação seguem o arquivo mais novo, em qualquer dia. Vínculo manual de operador é preservado enquanto o login do arquivo for o mesmo. Id.Baixa é único por empresa no diário (`idx_diario_id_baixa`).
+- **Prévia confere antes de gravar:** rodapé, baixas que o banco tem no período e o arquivo não trouxe (opção de remover, desligada por padrão), linhas do diário sem Id.Baixa (nunca são do 945 — opção de remover, ligada por padrão), logins sem usuário.
+
+### Cobertura por corte
+
+Cada lote guarda o **corte** do arquivo: a maior `Dt.Baixa` + `Horário`. `private.r945_cobertura` guarda, por dia, o maior corte de um arquivo que o cobriu.
+
+| Estado | Quando |
+|---|---|
+| consolidado | um arquivo que cobre o dia tem corte 7+ dias depois do fim dele (baixa retroativa medida: até 5 dias) |
+| completo | o corte passou do fim do dia |
+| parcial | só foi coberto enquanto ainda acontecia |
+| sem importação | nenhum arquivo cobriu |
+
+A trava é uma data calculada (`private.r945_inicio_exigido`): o arquivo precisa começar no dia mais antigo dos últimos 35 que não está consolidado nem foi coberto por um arquivo hoje. A tela mostra a data — «exporte o 945 com data inicial 23/10/2026 (sex) até hoje». Fim de semana, feriado e virada de mês entram na conta sozinhos; depois do primeiro arquivo do dia, os seguintes podem ser de qualquer período. Arquivo inteiramente anterior ao dia exigido (carga histórica) passa. Limpar dia/mês do diário e excluir histórico devolvem os dias à exigência (ação `invalidar`). O histórico anterior à migration entrou com a régua antiga (corte = início do dia da importação).
 
 ## Datas e cobertura
 
 - `Data` define o período exportado, a cobertura, a exclusão mensal e o acumulado COREN × mês, como no HTML original.
 - `Dt.Pagamento` define o resultado diário e o detalhamento mensal por forma de pagamento, também preservando a distinção do original.
-- A primeira atualização que inclui hoje exige ontem e hoje juntos. O controle é salvo no banco por empresa, modalidade e dia, no fuso `America/Sao_Paulo`; recarregar a página ou trocar de usuário não reinicia esse controle.
+- *(Conciliação.)* A primeira atualização que inclui hoje exige ontem e hoje juntos. Pagamento usa a cobertura por corte, acima. O controle é salvo no banco por empresa, modalidade e dia, no fuso `America/Sao_Paulo`; recarregar a página ou trocar de usuário não reinicia esse controle.
 - Após concluir essa primeira atualização, outras importações do mesmo dia podem conter só hoje. Uma falha de importação não libera a regra.
 - Cargas históricas que terminam antes de hoje são permitidas para preencher ou recuperar o histórico e não dispensam a primeira atualização diária.
 - O relatório não contém uma prova confiável de todo o intervalo exportado. A tela sugere a primeira e a última `Data` das linhas e exige confirmar o intervalo completo usado no ERP. Isso permite registrar dias sem movimento. Não se infere completude apenas pela existência de um pagamento.

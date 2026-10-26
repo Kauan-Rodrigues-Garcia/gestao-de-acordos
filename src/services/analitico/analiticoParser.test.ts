@@ -183,6 +183,15 @@ describe('resolveCols', () => {
     expect(resultado.linhas[0].forma_pagamento).toBe('boleto_pix');
     expect(resultado.linhas[0].tpdoc_original).toBe('NÃO INFORMADO');
   });
+
+  it('recusa o relatório 945 dizendo qual é e onde ele vai', () => {
+    const resultado = parseRelatorioRows([
+      ['Data', 'Id.Baixa', 'UF Coren', 'Cód.Cliente', 'Valor Recebido', 'Pague Play', 'Coren', 'Cofen', 'Operador'],
+      ['01/10/2026', '6981514', 'MT', '1860034', 922.48, 208.48, 540.94, 173.06, 'KAUE_NADAI'],
+    ]);
+    expect(resultado.linhas).toEqual([]);
+    expect(resultado.erros[0]).toMatch(/relatório 945/);
+  });
 });
 
 // ── ehEquipeRetencao ─────────────────────────────────────────────────────────

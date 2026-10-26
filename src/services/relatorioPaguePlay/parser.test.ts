@@ -125,3 +125,47 @@ describe('precisão e período', () => {
     expect(()=>validarPeriodo('2026-09-11','2026-09-10','2026-09-11',false)).toThrow();
   });
 });
+
+describe('945 inteiro: recebimento diário e corte (importação única, 26/10/2026)', () => {
+  const cab = [...cabecalho, 'Cód.Cliente', 'CPF', 'Profissional', 'Dt.Baixa', 'Horário', 'Operador', 'Próx. Contato', 'Tabulação'];
+  const comDiario = (id: string, dtBaixa: unknown, horario: unknown, operador = 'KAUE_NADAI') =>
+    [...linha.slice(0, 2), id, ...linha.slice(3), '1,860,034', '00011122233', 'CLAUDINEIA', dtBaixa, horario, operador, '06/10/2026', 'Acordo Fechado'];
+
+  it('guarda operador, código só com dígitos, profissional, próximo contato e tabulação — e nunca o CPF', () => {
+    const r = lerLinhas([cab, comDiario('6934206', '11/09/2026', '08:55')]);
+    expect(r.temOperador).toBe(true);
+    expect(r.diario['6934206']).toEqual({
+      operador: 'KAUE_NADAI', cliente_codigo: '1860034', profissional: 'CLAUDINEIA',
+      prox_contato: '2026-10-06', tabulacao: 'Acordo Fechado',
+    });
+    expect(JSON.stringify(r.diario)).not.toContain('00011122233');
+  });
+
+  it('o corte é a maior Dt.Baixa + Horário, inclusive a hora que vem dentro da Dt.Baixa', () => {
+    const r = lerLinhas([cab,
+      comDiario('1', '11/09/2026', '08:55'),
+      comDiario('2', '12/09/2026', '07:10'),
+      // serial Excel com fração: 12/09/2026 09:30
+      comDiario('3', 46277 + 9.5 / 24, null, ''),
+    ]);
+    expect(r.corte).toBe('2026-09-12T09:30:00');
+    expect(r.diario['3'].operador).toBe('');
+  });
+
+  it('sem as colunas do diário, a diretoria continua lendo e o corte fica nulo', () => {
+    const r = lerLinhas([cabecalho, linha]);
+    expect(r.temOperador).toBe(false);
+    expect(r.diario).toEqual({});
+    expect(r.corte).toBeNull();
+  });
+
+  it('próximo contato inválido vira nulo, não derruba o arquivo', () => {
+    const l = comDiario('9', '11/09/2026', '08:55'); l[cab.indexOf('Próx. Contato')] = 'amanhã';
+    expect(lerLinhas([cab, l]).diario['9'].prox_contato).toBeNull();
+  });
+
+  it('recusa o relatório 58 dizendo qual é e onde ele vai', () => {
+    const cab58 = ['Cobradora', 'Equipe/SubGrupo', 'Cliente', 'TpDoc', 'DtPgto', 'Recebido', 'Total HO'];
+    expect(() => lerLinhas([cab58, ['ANA', 'EQ', 'X', 'PIX', '01/10/2026', 10, 2]])).toThrow(/relatório 58/);
+  });
+});

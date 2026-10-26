@@ -539,14 +539,15 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
       <DialogContent aria-describedby={undefined} className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Upload className="w-5 h-5 text-primary" /> Importar relatório de recebimentos
+            <Upload className="w-5 h-5 text-primary" /> Importar relatório 58 — pagamento mensal
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
           <p className="text-sm text-muted-foreground">
-            Selecione o arquivo Excel exportado do ERP (relatório analítico de recebimentos).
+            Selecione o relatório 58 exportado do ERP (Cobradora, Equipe, Cliente, TpDoc, DtPgto, Recebido).
             Os dados serão mesclados com os existentes — registros duplicados são ignorados.
+            O relatório 945 (recebimento diário da regra Cofen) não entra aqui: ele vai no recorte Dia.
           </p>
 
           <label

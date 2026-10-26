@@ -64,9 +64,13 @@ vi.mock('@/hooks/useDiario', () => ({
 vi.mock('@/hooks/useAnaliticoImport', () => ({
   useAnaliticoImport: () => ({ estado: 'idle', preview: null, resetar: vi.fn() }),
 }));
-vi.mock('@/hooks/useDiarioImport', () => ({
-  useDiarioImport: () => ({ estado: 'idle', preview: null, resetar: vi.fn() }),
+vi.mock('@/hooks/useImportacao945', () => ({
+  useImportacao945: () => ({
+    etapa: 'idle', previa: null, cobertura: null, erroCobertura: null,
+    cancelar: vi.fn(), recarregarCobertura: vi.fn(),
+  }),
 }));
+vi.mock('@/hooks/useEmpresaTemRegraCofen', () => ({ useEmpresaTemRegraCofen: () => false }));
 
 // O serviço inteiro em modo vazio. `importActual` não serve: ele abriria
 // conexão de verdade com o Supabase de produção na carga do módulo.

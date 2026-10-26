@@ -13,8 +13,26 @@ export interface Pagamento extends Valores {
   ia: string;
 }
 
+/** O que o recebimento diário guarda de cada baixa, além do pagamento. */
+export interface DiarioDaBaixa {
+  operador: string;
+  /** Cód.Cliente, só dígitos — o mesmo código da tabulação. */
+  cliente_codigo: string;
+  profissional: string;
+  prox_contato: string | null;
+  tabulacao: string;
+}
+
 export interface RelatorioLido {
   linhas: Pagamento[];
+  /** Por Id.Baixa. Vazio quando o arquivo não traz a coluna Operador. */
+  diario: Record<string, DiarioDaBaixa>;
+  temOperador: boolean;
+  /**
+   * Até onde o arquivo vai: a maior Dt.Baixa + Horário, em hora local de São
+   * Paulo sem fuso («2026-10-26T08:55:00»). Null quando faltam as colunas.
+   */
+  corte: string | null;
   totais: Valores;
   duplicadas: number;
   /** Pares «Estornado» + «Estorno» do mesmo Id.Baixa juntados numa linha líquida. */
