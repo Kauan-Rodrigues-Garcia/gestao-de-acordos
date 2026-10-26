@@ -18,9 +18,16 @@
  * Os oito cargos aparecem — `ouvidoria` era invisível na versão antiga —, e
  * `administrador`/`super_admin` aparecem em leitura, com a explicação de por
  * que não são editáveis.
+ *
+ * ## Próprias do setor (26/10/2026)
+ *
+ * Embaixo dos cargos ficam os mapas próprios de setor («Operador -
+ * Manutenção»): quem está naquele setor com aquele cargo usa este mapa, e a
+ * chave que ele não tiver vem do cargo. Nasce como cópia do cargo, e apagar
+ * devolve a pessoa às permissões do cargo (migration 20261026120000).
  */
 import { useMemo, useState } from 'react';
-import { Save, RotateCcw, ShieldCheck, Loader2, Search, X } from 'lucide-react';
+import { Save, RotateCcw, ShieldCheck, Loader2, Search, X, Plus, Building2, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -37,10 +44,18 @@ import { montarPorAba } from '@/lib/permissoes-abas';
 import { cn } from '@/lib/utils';
 import { BlocoAba } from './BlocoAba';
 import { useRascunho } from './useRascunho';
+import { rotuloNoSetor, useSetoresDaEmpresa } from './useSetoresDaEmpresa';
+
+/** O que está aberto: um cargo, ou o mapa dele num setor. */
+interface Alvo {
+  cargo: string;
+  setorId: string | null;
+}
 
 export function PorCargo() {
   const { empresa, tenantSlug } = useEmpresa();
-  const { todasPermissoes, refresh } = useCargoPermissoes();
+  const { todasPermissoes, todasPermissoesSetor, refresh } = useCargoPermissoes();
+  const setores = useSetoresDaEmpresa(empresa?.id);
   // As listas mudam quando o cadastro de cargos chega do banco (cargo novo
   // criado em Configurações > Cargos aparece aqui sem deploy).
   const cadastro = useCadastroDeCargos();
@@ -49,11 +64,32 @@ export function PorCargo() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- as listas mudam com o cadastro
     [cadastro],
   );
+  /** Os cargos que podem ter mapa de setor: os de setor, sem acesso total. */
+  const cargosDeSetor = useMemo(
+    () => cadastro.filter(c => c.ativo && c.pertence_a_setor && !c.acesso_total).map(c => c.slug as string),
+    [cadastro],
+  );
 
-  const [cargo, setCargo] = useState<string>('operador');
+  const [alvo, setAlvo] = useState<Alvo>({ cargo: 'operador', setorId: null });
+  const { cargo, setorId } = alvo;
   const [salvando, setSalvando] = useState(false);
   const [busca, setBusca] = useState('');
+  const [criando, setCriando] = useState<{ setorId: string; cargo: string } | null>(null);
   const rascunho = useRascunho<boolean>();
+
+  const nomeDoSetor = (id: string) => setores.find(s => s.id === id)?.nome ?? 'setor';
+  /** O mapa próprio do cargo no setor (vazio quando não há). */
+  const doSetor = (c: string, s: string | null) =>
+    (s ? todasPermissoesSetor.find(r => r.cargo === c && r.setor_id === s)?.permissoes : undefined) ?? {};
+  const rotuloDoAlvo = setorId ? rotuloNoSetor(cargo, nomeDoSetor(setorId)) : (PERFIL_LABELS[cargo] ?? cargo);
+
+  /** Os mapas de setor, por setor e na ordem dos cargos. */
+  const mapasDeSetor = useMemo(() => {
+    const ordem = (c: string) => { const i = TODOS_OS_CARGOS.indexOf(c as never); return i < 0 ? 99 : i; };
+    return [...todasPermissoesSetor].sort((a, b) =>
+      nomeDoSetor(a.setor_id).localeCompare(nomeDoSetor(b.setor_id)) || ordem(a.cargo) - ordem(b.cargo));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- nomeDoSetor lê `setores`
+  }, [todasPermissoesSetor, setores, TODOS_OS_CARGOS]);
 
   const catalogo = useMemo(() => catalogoDoTenant(tenantSlug), [tenantSlug]);
   const grupos   = useMemo(() => gruposDoTenant(tenantSlug), [tenantSlug]);
@@ -79,26 +115,70 @@ export function PorCargo() {
    */
   const salvo = useMemo(() => {
     const doBanco = todasPermissoes.find(r => r.cargo === cargo)?.permissoes;
-    return doBanco && Object.keys(doBanco).length > 0
+    const doCargo = doBanco && Object.keys(doBanco).length > 0
       ? doBanco
       : permissoesPadraoDoCargo(cargo);
-  }, [todasPermissoes, cargo]);
+    // No mapa de setor, o que vale é o do cargo com o do setor por cima — o
+    // mesmo que a pessoa do setor recebe (`mapaDoCargoNoSetor`).
+    return { ...doCargo, ...doSetor(cargo, setorId) };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- doSetor lê todasPermissoesSetor
+  }, [todasPermissoes, todasPermissoesSetor, cargo, setorId]);
 
   const valorDe = (key: string): boolean =>
     key in rascunho.alteracoes ? rascunho.alteracoes[key] : !!salvo[key];
 
   /** Quantas permissões cada cargo tem — o número que a coluna da esquerda mostra. */
-  const contarDe = useMemo(() => (c: string): number => {
+  const contarDe = useMemo(() => (c: string, setor: string | null = null): number => {
     if ((CARGOS_ACESSO_TOTAL as readonly string[]).includes(c)) return catalogo.length;
-    const mapa = todasPermissoes.find(r => r.cargo === c)?.permissoes
+    const doCargo = todasPermissoes.find(r => r.cargo === c)?.permissoes
       ?? permissoesPadraoDoCargo(c);
+    const mapa = { ...doCargo, ...doSetor(c, setor) };
     return catalogo.filter(p => !!mapa[p.key]).length;
-  }, [todasPermissoes, catalogo]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- doSetor lê todasPermissoesSetor
+  }, [todasPermissoes, todasPermissoesSetor, catalogo]);
 
-  function trocarCargo(novo: string) {
+  function trocarAlvo(novo: Alvo) {
     if (rascunho.sujo && !confirm('Descartar as alterações não salvas?')) return;
     rascunho.descartar();
-    setCargo(novo);
+    setAlvo(novo);
+  }
+
+  /** Cria o mapa do cargo no setor, cópia do mapa do cargo, e o abre. */
+  async function criarMapaDeSetor() {
+    if (!empresa?.id || !criando) return;
+    const doCargo = todasPermissoes.find(r => r.cargo === criando.cargo)?.permissoes
+      ?? permissoesPadraoDoCargo(criando.cargo);
+    const { error } = await supabase
+      .from('cargos_permissoes_setor')
+      .insert({ empresa_id: empresa.id, setor_id: criando.setorId, cargo: criando.cargo, permissoes: doCargo });
+    if (error) {
+      toast.error('Não foi possível criar. ' + error.message);
+      return;
+    }
+    toast.success(`${rotuloNoSetor(criando.cargo, nomeDoSetor(criando.setorId))} criado, igual ao cargo.`);
+    rascunho.descartar();
+    setAlvo({ cargo: criando.cargo, setorId: criando.setorId });
+    setCriando(null);
+    await refresh();
+  }
+
+  /** Apaga o mapa do setor: quem está lá volta às permissões do cargo. */
+  async function removerMapaDeSetor() {
+    if (!setorId) return;
+    if (!confirm(`Remover as permissões próprias de ${rotuloDoAlvo}? Quem está no setor volta às permissões de ${PERFIL_LABELS[cargo] ?? cargo}.`)) return;
+    const { error } = await supabase
+      .from('cargos_permissoes_setor')
+      .delete()
+      .eq('setor_id', setorId)
+      .eq('cargo', cargo);
+    if (error) {
+      toast.error('Não foi possível remover. ' + error.message);
+      return;
+    }
+    toast.success(`${rotuloDoAlvo} removido.`);
+    rascunho.descartar();
+    setAlvo({ cargo, setorId: null });
+    await refresh();
   }
 
   function alternar(key: string) {
@@ -124,14 +204,21 @@ export function PorCargo() {
         ...salvo,
         ...Object.fromEntries(catalogo.map(p => [p.key, valorDe(p.key)])),
       };
-      const { error } = await supabase
-        .from('cargos_permissoes')
-        .upsert(
-          { empresa_id: empresa.id, cargo, permissoes: completo },
-          { onConflict: 'empresa_id,cargo' },
-        );
+      const { error } = setorId
+        ? await supabase
+          .from('cargos_permissoes_setor')
+          .upsert(
+            { empresa_id: empresa.id, setor_id: setorId, cargo, permissoes: completo },
+            { onConflict: 'setor_id,cargo' },
+          )
+        : await supabase
+          .from('cargos_permissoes')
+          .upsert(
+            { empresa_id: empresa.id, cargo, permissoes: completo },
+            { onConflict: 'empresa_id,cargo' },
+          );
       if (error) throw error;
-      toast.success(`Permissões de ${PERFIL_LABELS[cargo] ?? cargo} salvas.`);
+      toast.success(`Permissões de ${rotuloDoAlvo} salvas.`);
       rascunho.descartar();
       await refresh();
     } catch (e) {
@@ -152,11 +239,11 @@ export function PorCargo() {
         <div className="flex gap-1.5 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible lg:pb-0">
           {TODOS_OS_CARGOS.map(c => {
             const total = (CARGOS_ACESSO_TOTAL as readonly string[]).includes(c);
-            const ativo = cargo === c;
+            const ativo = cargo === c && !setorId;
             return (
               <button
                 key={c}
-                onClick={() => trocarCargo(c)}
+                onClick={() => trocarAlvo({ cargo: c, setorId: null })}
                 className={cn(
                   'flex shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-left transition-colors lg:w-full',
                   ativo
@@ -181,6 +268,93 @@ export function PorCargo() {
             );
           })}
         </div>
+
+        {/* ── Próprias do setor ── */}
+        <p className="mb-2 mt-5 px-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Próprias do setor
+        </p>
+        <div className="flex gap-1.5 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible lg:pb-0">
+          {mapasDeSetor.map(m => {
+            const ativo = cargo === m.cargo && setorId === m.setor_id;
+            return (
+              <button
+                key={m.id}
+                onClick={() => trocarAlvo({ cargo: m.cargo, setorId: m.setor_id })}
+                className={cn(
+                  'flex shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-left transition-colors lg:w-full',
+                  ativo
+                    ? 'border-primary bg-primary/10 text-foreground'
+                    : 'border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground',
+                )}
+              >
+                <span className={cn(
+                  'h-6 w-1 shrink-0 rounded-full transition-colors',
+                  ativo ? 'bg-primary' : 'bg-transparent',
+                )} />
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-1 text-[13px] font-medium">
+                    {rotuloNoSetor(m.cargo, nomeDoSetor(m.setor_id))}
+                  </span>
+                  <span className="text-[10px] tabular-nums text-muted-foreground">
+                    {`${contarDe(m.cargo, m.setor_id)} de ${catalogo.length}`}
+                  </span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {criando ? (
+          <div className="mt-2 space-y-2 rounded-lg border border-border bg-card p-3">
+            <label className="block text-[11px] text-muted-foreground">
+              Setor
+              <select
+                value={criando.setorId}
+                onChange={e => setCriando({ ...criando, setorId: e.target.value })}
+                className="mt-1 h-8 w-full rounded-md border bg-background px-2 text-sm text-foreground"
+              >
+                <option value="">Escolha…</option>
+                {setores.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}
+              </select>
+            </label>
+            <label className="block text-[11px] text-muted-foreground">
+              Cargo
+              <select
+                value={criando.cargo}
+                onChange={e => setCriando({ ...criando, cargo: e.target.value })}
+                className="mt-1 h-8 w-full rounded-md border bg-background px-2 text-sm text-foreground"
+              >
+                {cargosDeSetor.map(c => (
+                  <option key={c} value={c}
+                    disabled={!!criando.setorId && todasPermissoesSetor.some(m => m.cargo === c && m.setor_id === criando.setorId)}>
+                    {PERFIL_LABELS[c] ?? c}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+              Começa igual ao cargo. Quem está no setor com esse cargo passa a usar este mapa.
+            </p>
+            <div className="flex justify-end gap-1.5">
+              <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setCriando(null)}>
+                Cancelar
+              </Button>
+              <Button
+                size="sm" className="h-7 text-xs" onClick={criarMapaDeSetor}
+                disabled={!criando.setorId || todasPermissoesSetor.some(m => m.cargo === criando.cargo && m.setor_id === criando.setorId)}
+              >
+                Criar
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <Button
+            size="sm" variant="outline" className="mt-2 h-8 w-full gap-1 text-xs"
+            onClick={() => setCriando({ setorId: '', cargo: cargosDeSetor[0] ?? 'operador' })}
+          >
+            <Plus className="h-3.5 w-3.5" /> Permissões próprias de um setor
+          </Button>
+        )}
       </aside>
 
       {/* ── Conteúdo ────────────────────────────────────────────────────── */}
@@ -209,6 +383,24 @@ export function PorCargo() {
           </div>
         ) : (
           <>
+            {setorId && (
+              <div className="flex flex-wrap items-start gap-3 rounded-xl border border-border bg-muted/20 px-4 py-3 text-sm">
+                <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-foreground">{rotuloDoAlvo}</p>
+                  <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                    Vale para quem é {PERFIL_LABELS[cargo] ?? cargo} no setor {nomeDoSetor(setorId)}, no
+                    lugar das permissões do cargo. Permissão nova que aparecer depois vem do cargo até
+                    ser ligada ou desligada aqui.
+                  </p>
+                </div>
+                <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs text-muted-foreground"
+                  onClick={removerMapaDeSetor}>
+                  <Trash2 className="h-3.5 w-3.5" /> Remover
+                </Button>
+              </div>
+            )}
+
             {/* Busca + barra de alterações, coladas no topo ao rolar */}
             <div className="sticky top-0 z-10 -mx-1 space-y-2 bg-background/95 px-1 py-2 backdrop-blur">
               <div className="relative">

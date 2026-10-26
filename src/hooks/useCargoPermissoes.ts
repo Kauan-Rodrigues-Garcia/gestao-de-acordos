@@ -23,6 +23,13 @@
  * `20260815154058` acabou com a ausência: todo cargo tem o catálogo inteiro.
  * Sem ausência, o fallback não tem função — e a divergência não tem como voltar.
  *
+ * ## O mapa do setor (26/10/2026)
+ *
+ * Um setor pode ter mapa próprio para um cargo («Operador - Manutenção»,
+ * `cargos_permissoes_setor`). Quem está nele usa o mapa do cargo com o do setor
+ * por cima: a chave do setor manda, a que ele não tem vem do cargo. É a mesma
+ * conta de `fn_permissoes_do_cargo` no banco (migration 20261026120000).
+ *
  * ## O que estas permissões NÃO fazem
  *
  * Elas governam navegação e interface. Quem manda no dado é a RLS. Forçar
@@ -52,6 +59,33 @@ export interface CargoPermissaoRow {
   atualizado_em: string;
 }
 
+/** O mapa próprio de um cargo num setor. Ver o cabeçalho. */
+export interface CargoSetorPermissaoRow {
+  id: string;
+  empresa_id: string;
+  setor_id: string;
+  cargo: string;
+  permissoes: PermissoesMap;
+  atualizado_em: string;
+}
+
+/**
+ * O mapa que vale para quem tem este cargo neste setor: o do cargo, com o do
+ * setor por cima. Sem mapa de setor, é o do cargo.
+ */
+export function mapaDoCargoNoSetor(
+  cargos: readonly CargoPermissaoRow[],
+  setores: readonly CargoSetorPermissaoRow[],
+  cargo: string,
+  setorId: string | null | undefined,
+): PermissoesMap {
+  const doCargo = cargos.find(r => r.cargo === cargo)?.permissoes ?? {};
+  const doSetor = setorId
+    ? setores.find(r => r.cargo === cargo && r.setor_id === setorId)?.permissoes
+    : undefined;
+  return doSetor ? { ...doCargo, ...doSetor } : doCargo;
+}
+
 export interface PerfilPermissaoRow {
   id: string;
   empresa_id: string;
@@ -62,12 +96,14 @@ export interface PerfilPermissaoRow {
 }
 
 interface UseCargoPermissoesReturn {
-  /** Permissões do CARGO da pessoa logada (sem as exceções aplicadas). */
+  /** Permissões do CARGO da pessoa logada, no setor dela (sem as exceções aplicadas). */
   permissoes: PermissoesMap;
   /** Exceções da própria pessoa. Chave presente sobrescreve o cargo. */
   excecoes: PermissoesMap;
   /** Todas as linhas de cargo da empresa — a aba «Por cargo» usa. */
   todasPermissoes: CargoPermissaoRow[];
+  /** Os mapas próprios de setor da empresa («Operador - Manutenção»). */
+  todasPermissoesSetor: CargoSetorPermissaoRow[];
   /** Todas as exceções da empresa — a aba «Por pessoa» usa (só admin lê). */
   todasExcecoes: PerfilPermissaoRow[];
   loading: boolean;
@@ -84,17 +120,20 @@ interface UseCargoPermissoesReturn {
   temPermissaoExplicita: (key: string) => boolean;
   /** admin e super_admin: acesso total por construção (migration 20260812b). */
   isAdmin: boolean;
-  /** Resolve para OUTRA pessoa — a tela de administração usa para prever. */
-  resolverParaUsuario: (usuarioId: string, cargo: string, key: string) => boolean;
   /**
-   * O que o CARGO concede, sem aplicar exceção nenhuma.
+   * Resolve para OUTRA pessoa — a tela de administração usa para prever.
+   * `setorId` é o setor dela: sem ele, o mapa de setor não entra.
+   */
+  resolverParaUsuario: (usuarioId: string, cargo: string, key: string, setorId?: string | null) => boolean;
+  /**
+   * O que o CARGO concede (no setor, quando dado), sem aplicar exceção nenhuma.
    *
    * A aba «Por pessoa» mostra este valor ao lado da escolha, para o admin saber
    * o que está sobrescrevendo. Usar `resolverParaUsuario` ali fazia o rótulo
    * "cargo: não" aparecer justamente quando o cargo dizia SIM e a exceção é que
    * negava — o número mostrado era o resultado, não a origem.
    */
-  valorDoCargo: (cargo: string, key: string) => boolean;
+  valorDoCargo: (cargo: string, key: string, setorId?: string | null) => boolean;
   /** O estado da exceção de alguém numa permissão. */
   estadoExcecao: (usuarioId: string, key: string) => EstadoExcecao;
   refresh: () => Promise<void>;
@@ -110,6 +149,7 @@ interface UseCargoPermissoesReturn {
 
 interface DadosPermissoes {
   cargos:   CargoPermissaoRow[];
+  setores:  CargoSetorPermissaoRow[];
   excecoes: PerfilPermissaoRow[];
 }
 
@@ -130,9 +170,12 @@ function chavePermissoes(empresaId: string, perfilId: string | undefined, cargo:
 }
 
 async function lerPermissoes(empresaId: string): Promise<DadosPermissoes> {
-  const [resCargos, resExcecoes] = await Promise.all([
+  const [resCargos, resSetores, resExcecoes] = await Promise.all([
     supabase.from('cargos_permissoes').select('*')
       .eq('empresa_id', empresaId).order('cargo'),
+    supabase.from('cargos_permissoes_setor')
+      .select('id, empresa_id, setor_id, cargo, permissoes, atualizado_em')
+      .eq('empresa_id', empresaId),
     // A RLS já recorta: operador recebe só a própria linha, admin recebe
     // todas. Não é preciso filtrar por usuário aqui.
     supabase.from('perfis_permissoes').select('*')
@@ -141,13 +184,17 @@ async function lerPermissoes(empresaId: string): Promise<DadosPermissoes> {
 
   if (resCargos.error) throw resCargos.error;
 
-  // Tabela nova: tolera ausência para o app não quebrar entre o deploy do
+  // Tabelas novas: toleram ausência para o app não quebrar entre o deploy do
   // frontend e a aplicação da migration.
   if (resExcecoes.error) {
     console.warn('[permissoes] exceções indisponíveis:', resExcecoes.error.message);
   }
+  if (resSetores.error) {
+    console.warn('[permissoes] mapas de setor indisponíveis:', resSetores.error.message);
+  }
   return {
     cargos:   (resCargos.data as CargoPermissaoRow[]) ?? [],
+    setores:  resSetores.error ? [] : ((resSetores.data as CargoSetorPermissaoRow[]) ?? []),
     excecoes: resExcecoes.error ? [] : ((resExcecoes.data as PerfilPermissaoRow[]) ?? []),
   };
 }
@@ -192,6 +239,8 @@ export function useCargoPermissoes(): UseCargoPermissoesReturn {
   // Outro componente já leu: começa pronto, sem esconder o menu nem um frame.
   const [todasPermissoes, setTodasPermissoes] = useState<CargoPermissaoRow[]>(
     () => (chave ? espiarCache<DadosPermissoes>(chave, VALIDADE_PERMISSOES_MS)?.cargos : undefined) ?? []);
+  const [todasPermissoesSetor, setTodasPermissoesSetor] = useState<CargoSetorPermissaoRow[]>(
+    () => (chave ? espiarCache<DadosPermissoes>(chave, VALIDADE_PERMISSOES_MS)?.setores : undefined) ?? []);
   const [todasExcecoes, setTodasExcecoes] = useState<PerfilPermissaoRow[]>(
     () => (chave ? espiarCache<DadosPermissoes>(chave, VALIDADE_PERMISSOES_MS)?.excecoes : undefined) ?? []);
   const [loading, setLoading] = useState(
@@ -227,6 +276,8 @@ export function useCargoPermissoes(): UseCargoPermissoesReturn {
       // novo a cada leitura — a comparação rasa nunca acharia duas linhas iguais.
       setTodasPermissoes(atual => reconciliarLista(
         atual, dados.cargos, { chave: r => r.id, iguais: iguaisProfundo }));
+      setTodasPermissoesSetor(atual => reconciliarLista(
+        atual, dados.setores, { chave: r => r.id, iguais: iguaisProfundo }));
       setTodasExcecoes(atual => reconciliarLista(
         atual, dados.excecoes, { chave: r => r.id, iguais: iguaisProfundo }));
     } catch (e) {
@@ -284,9 +335,10 @@ export function useCargoPermissoes(): UseCargoPermissoesReturn {
     return ouvirMudancas(empresa.id, () => { void carregar(false); });
   }, [empresa?.id, cargo, carregar]);
 
+  const setorId = perfil?.setor_id ?? null;
   const permissoes = useMemo(
-    () => todasPermissoes.find(r => r.cargo === cargo)?.permissoes ?? {},
-    [todasPermissoes, cargo],
+    () => mapaDoCargoNoSetor(todasPermissoes, todasPermissoesSetor, cargo, setorId),
+    [todasPermissoes, todasPermissoesSetor, cargo, setorId],
   );
 
   const excecoes = useMemo(
@@ -316,23 +368,23 @@ export function useCargoPermissoes(): UseCargoPermissoesReturn {
   );
 
   const resolverParaUsuario = useCallback(
-    (usuarioId: string, cargoAlvo: string, key: string): boolean => {
+    (usuarioId: string, cargoAlvo: string, key: string, setorAlvo?: string | null): boolean => {
       if ((CARGOS_ACESSO_TOTAL as readonly string[]).includes(cargoAlvo)) return true;
       const exc = todasExcecoes.find(r => r.usuario_id === usuarioId)?.permissoes ?? {};
       if (key in exc) return !!exc[key];
-      const doCargo = todasPermissoes.find(r => r.cargo === cargoAlvo)?.permissoes ?? {};
+      const doCargo = mapaDoCargoNoSetor(todasPermissoes, todasPermissoesSetor, cargoAlvo, setorAlvo);
       if (key in doCargo) return !!doCargo[key];
       return false;
     },
-    [todasExcecoes, todasPermissoes],
+    [todasExcecoes, todasPermissoes, todasPermissoesSetor],
   );
 
   const valorDoCargo = useCallback(
-    (cargoAlvo: string, key: string): boolean => {
+    (cargoAlvo: string, key: string, setorAlvo?: string | null): boolean => {
       if ((CARGOS_ACESSO_TOTAL as readonly string[]).includes(cargoAlvo)) return true;
-      return !!todasPermissoes.find(r => r.cargo === cargoAlvo)?.permissoes?.[key];
+      return !!mapaDoCargoNoSetor(todasPermissoes, todasPermissoesSetor, cargoAlvo, setorAlvo)[key];
     },
-    [todasPermissoes],
+    [todasPermissoes, todasPermissoesSetor],
   );
 
   const estadoExcecao = useCallback(
@@ -348,6 +400,7 @@ export function useCargoPermissoes(): UseCargoPermissoesReturn {
     permissoes,
     excecoes,
     todasPermissoes,
+    todasPermissoesSetor,
     todasExcecoes,
     loading,
     temPermissao,

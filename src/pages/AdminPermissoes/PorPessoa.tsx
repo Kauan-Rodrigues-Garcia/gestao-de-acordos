@@ -25,7 +25,6 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { supabase } from '@/lib/supabase';
-import { PERFIL_LABELS } from '@/lib/index';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes, type EstadoExcecao } from '@/hooks/useCargoPermissoes';
@@ -37,6 +36,7 @@ import { cn } from '@/lib/utils';
 import { BlocoAba } from './BlocoAba';
 import { useRascunho, type ValorRascunho } from './useRascunho';
 import { usePessoasDaEmpresa } from './usePessoasDaEmpresa';
+import { rotuloDaPessoa, useSetoresDaEmpresa } from './useSetoresDaEmpresa';
 
 const ESTADOS: { valor: EstadoExcecao; label: string; classe: string }[] = [
   { valor: 'herda', label: 'Herda', classe: 'data-[on=true]:bg-muted data-[on=true]:text-foreground' },
@@ -48,9 +48,13 @@ export function PorPessoa() {
   const { perfil } = useAuth();
   const { empresa, tenantSlug } = useEmpresa();
   const {
-    todasExcecoes, resolverParaUsuario, valorDoCargo, estadoExcecao, refresh,
+    todasExcecoes, todasPermissoesSetor, resolverParaUsuario, valorDoCargo, estadoExcecao, refresh,
   } = useCargoPermissoes();
   const { pessoas, carregando } = usePessoasDaEmpresa(empresa?.id);
+  const setores = useSetoresDaEmpresa(empresa?.id);
+  // «Operador - Manutenção» quando o setor da pessoa tem mapa próprio para o cargo.
+  const rotuloDe = (p: { perfil: string; setor_id: string | null }) =>
+    rotuloDaPessoa(p.perfil, p.setor_id, todasPermissoesSetor, setores);
 
   const [busca, setBusca] = useState('');
   const [buscaPermissao, setBuscaPermissao] = useState('');
@@ -117,7 +121,7 @@ export function PorPessoa() {
     const estado = estadoDe(key);
     if (estado === 'sim') return true;
     if (estado === 'nao') return false;
-    return resolverParaUsuario(pessoa.id, pessoa.perfil, key);
+    return resolverParaUsuario(pessoa.id, pessoa.perfil, key, pessoa.setor_id);
   }
 
   async function salvar() {
@@ -208,7 +212,7 @@ export function PorPessoa() {
               >
                 <p className="text-sm font-medium text-foreground truncate">{p.nome}</p>
                 <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
-                  {PERFIL_LABELS[p.perfil] ?? p.perfil}
+                  {rotuloDe(p)}
                   {n > 0 && (
                     <span className="text-amber-600 dark:text-amber-400 font-medium tabular-nums">
                       · {n} exceção{n !== 1 ? 'ões' : ''}
@@ -237,7 +241,7 @@ export function PorPessoa() {
             <div>
               <p className="text-sm font-semibold text-foreground">{pessoa.nome}</p>
               <p className="text-[11px] text-muted-foreground">
-                {PERFIL_LABELS[pessoa.perfil] ?? pessoa.perfil}
+                {rotuloDe(pessoa)}
                 {' · herda tudo deste cargo, exceto o que estiver marcado abaixo'}
               </p>
             </div>
@@ -274,7 +278,7 @@ export function PorPessoa() {
               filtro={buscaPermissao.trim().toLowerCase()}
               renderControle={(p, contexto) => {
                 const estado = estadoDe(p.key);
-                const doCargo = valorDoCargo(pessoa.perfil, p.key);
+                const doCargo = valorDoCargo(pessoa.perfil, p.key, pessoa.setor_id);
                 return (
                   <div className={cn('flex items-center gap-2', contexto.disabled && 'opacity-60')}>
                     <span className="whitespace-nowrap text-[10px] text-muted-foreground">

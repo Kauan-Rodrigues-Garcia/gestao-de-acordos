@@ -464,10 +464,11 @@ describe('useCargoPermissoes', () => {
     });
 
     expect(result.current.temPermissao('ver_lixeira')).toBe(true);
-    // Duas tabelas por fetch desde as Permissões 2.0: `cargos_permissoes` (o
-    // que o cargo dá) e `perfis_permissoes` (a exceção da pessoa). Dois fetches
-    // × duas tabelas = quatro chamadas.
-    expect(mockSupabaseFrom).toHaveBeenCalledTimes(4);
+    // Três tabelas por fetch: `cargos_permissoes` (o que o cargo dá),
+    // `cargos_permissoes_setor` (o mapa próprio do setor, 26/10/2026) e
+    // `perfis_permissoes` (a exceção da pessoa). Dois fetches × três tabelas =
+    // seis chamadas.
+    expect(mockSupabaseFrom).toHaveBeenCalledTimes(6);
   });
 
   // ─── Leitura compartilhada (17/09/2026) ───────────────────────────────
@@ -488,13 +489,13 @@ describe('useCargoPermissoes', () => {
 
     expect(a.result.current.temPermissao('ver_lixeira')).toBe(true);
     expect(b.result.current.temPermissao('ver_lixeira')).toBe(true);
-    expect(mockSupabaseFrom).toHaveBeenCalledTimes(2);
+    expect(mockSupabaseFrom).toHaveBeenCalledTimes(3);
 
     // Quem monta depois já nasce pronto, sem esqueleto.
     const c = renderHook(() => useCargoPermissoes());
     expect(c.result.current.loading).toBe(false);
     expect(c.result.current.temPermissao('ver_lixeira')).toBe(true);
-    expect(mockSupabaseFrom).toHaveBeenCalledTimes(2);
+    expect(mockSupabaseFrom).toHaveBeenCalledTimes(3);
   });
 
   it('outra pessoa na mesma empresa não reaproveita a leitura', async () => {
@@ -508,7 +509,7 @@ describe('useCargoPermissoes', () => {
     const b = renderHook(() => useCargoPermissoes());
     await waitFor(() => expect(b.result.current.loading).toBe(false));
 
-    expect(mockSupabaseFrom).toHaveBeenCalledTimes(4);
+    expect(mockSupabaseFrom).toHaveBeenCalledTimes(6);
   });
 });
 
@@ -654,5 +655,87 @@ describe('useCargoPermissoes — exceção por pessoa', () => {
     expect(result.current.estadoExcecao('outro-1', 'ver_logs')).toBe('sim');
     expect(result.current.estadoExcecao('outro-1', 'ver_lixeira')).toBe('herda');
     expect(result.current.estadoExcecao('sem-exc', 'ver_logs')).toBe('herda');
+  });
+});
+
+// ─── Mapa próprio do setor (26/10/2026) ──────────────────────────────────────
+//
+// «Operador - Manutenção»: quem está no setor usa o mapa do cargo com o do setor
+// por cima. Fora do setor, o cargo puro. A exceção da pessoa manda nos dois.
+describe('useCargoPermissoes — mapa do setor', () => {
+  const MANUTENCAO = 'setor-manutencao';
+
+  function cenario(setorDaPessoa: string | null, daPessoa: Record<string, boolean> | null = null) {
+    mockPerfilRef.current = { perfil: 'operador', id: 'eu', setor_id: setorDaPessoa } as typeof mockPerfilRef.current;
+    mockEmpresaRef.current = { id: EMPRESA_ID };
+    queueResultFor('cargos_permissoes', {
+      data: [makeCargoRow({ cargo: 'operador', permissoes: { ver_pix_automatico: true, ver_acordos: true } })],
+      error: null,
+    });
+    queueResultFor('cargos_permissoes_setor', {
+      data: [{
+        id: 'ms-1', empresa_id: EMPRESA_ID, setor_id: MANUTENCAO, cargo: 'operador',
+        permissoes: { ver_pix_automatico: false }, atualizado_em: '2026-10-26T00:00:00Z',
+      }],
+      error: null,
+    });
+    queueResultFor('perfis_permissoes', {
+      data: daPessoa ? [{
+        id: 'exc-s', empresa_id: EMPRESA_ID, usuario_id: 'eu', permissoes: daPessoa,
+        atualizado_em: '2026-10-26T00:00:00Z', atualizado_por: null,
+      }] : [],
+      error: null,
+    });
+  }
+
+  it('no setor, a chave do setor manda e a que ele não tem vem do cargo', async () => {
+    cenario(MANUTENCAO);
+    const { result } = renderHook(() => useCargoPermissoes());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.temPermissao('ver_pix_automatico')).toBe(false);
+    expect(result.current.temPermissao('ver_acordos')).toBe(true);
+  });
+
+  it('fora do setor, o cargo puro', async () => {
+    cenario('outro-setor');
+    const { result } = renderHook(() => useCargoPermissoes());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.temPermissao('ver_pix_automatico')).toBe(true);
+  });
+
+  it('a exceção da pessoa continua mandando sobre o setor', async () => {
+    cenario(MANUTENCAO, { ver_pix_automatico: true });
+    const { result } = renderHook(() => useCargoPermissoes());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.temPermissao('ver_pix_automatico')).toBe(true);
+  });
+
+  it('resolverParaUsuario e valorDoCargo usam o setor quando ele vem', async () => {
+    cenario(null);
+    const { result } = renderHook(() => useCargoPermissoes());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.resolverParaUsuario('outro', 'operador', 'ver_pix_automatico', MANUTENCAO)).toBe(false);
+    expect(result.current.resolverParaUsuario('outro', 'operador', 'ver_pix_automatico')).toBe(true);
+    expect(result.current.valorDoCargo('operador', 'ver_pix_automatico', MANUTENCAO)).toBe(false);
+    expect(result.current.valorDoCargo('operador', 'ver_pix_automatico')).toBe(true);
+  });
+
+  it('sem a tabela do setor (antes da migration), o cargo puro', async () => {
+    mockPerfilRef.current = { perfil: 'operador', id: 'eu', setor_id: MANUTENCAO } as typeof mockPerfilRef.current;
+    mockEmpresaRef.current = { id: EMPRESA_ID };
+    queueResultFor('cargos_permissoes', {
+      data: [makeCargoRow({ cargo: 'operador', permissoes: { ver_pix_automatico: true } })], error: null,
+    });
+    queueResultFor('cargos_permissoes_setor', {
+      data: null, error: { message: 'relation "cargos_permissoes_setor" does not exist' },
+    });
+    const { result } = renderHook(() => useCargoPermissoes());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.temPermissao('ver_pix_automatico')).toBe(true);
   });
 });

@@ -29,8 +29,13 @@ vi.mock('@/hooks/useCargoPermissoes', () => ({
         chave_que_nao_existe_mais: true,
       },
     }],
+    todasPermissoesSetor: [],
     refresh: vi.fn(async () => {}),
   }),
+}));
+vi.mock('../useSetoresDaEmpresa', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../useSetoresDaEmpresa')>()),
+  useSetoresDaEmpresa: () => [],
 }));
 
 import { PorCargo } from '../PorCargo';

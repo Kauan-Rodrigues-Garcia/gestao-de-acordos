@@ -1334,6 +1334,51 @@ export type Database = {
           },
         ]
       }
+      cargos_permissoes_setor: {
+        Row: {
+          atualizado_em: string
+          cargo: string
+          criado_em: string
+          empresa_id: string
+          id: string
+          permissoes: Json
+          setor_id: string
+        }
+        Insert: {
+          atualizado_em?: string
+          cargo: string
+          criado_em?: string
+          empresa_id: string
+          id?: string
+          permissoes?: Json
+          setor_id: string
+        }
+        Update: {
+          atualizado_em?: string
+          cargo?: string
+          criado_em?: string
+          empresa_id?: string
+          id?: string
+          permissoes?: Json
+          setor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cargos_permissoes_setor_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cargos_permissoes_setor_setor_id_fkey"
+            columns: ["setor_id"]
+            isOneToOne: false
+            referencedRelation: "setores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chat_config: {
         Row: {
           atualizado_em: string

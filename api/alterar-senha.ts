@@ -128,10 +128,12 @@ export default async function handler(req: ReqLike, res: ResLike): Promise<void>
      * Falha de leitura das permissões é NÃO: fechado por omissão.
      */
     const perfilResp = await fetch(
-      `${url}/rest/v1/perfis?id=eq.${caller.id}&select=perfil,nome,empresa_id`,
+      `${url}/rest/v1/perfis?id=eq.${caller.id}&select=perfil,nome,empresa_id,setor_id`,
       { headers: admin },
     );
-    const perfilArr = (await perfilResp.json()) as Array<{ perfil?: string; nome?: string; empresa_id?: string }>;
+    const perfilArr = (await perfilResp.json()) as Array<{
+      perfil?: string; nome?: string; empresa_id?: string; setor_id?: string | null;
+    }>;
     const callerPerfil = Array.isArray(perfilArr) ? perfilArr[0] : null;
     const callerRole = callerPerfil?.perfil;
     if (!callerPerfil) {
@@ -144,7 +146,9 @@ export default async function handler(req: ReqLike, res: ResLike): Promise<void>
 
     if (!podeRedefinir && callerPerfil.empresa_id && callerRole) {
       try {
-        const [excResp, cargoResp] = await Promise.all([
+        // O mapa do cargo no setor da pessoa vence o do cargo (20261026120000).
+        const setorId = callerPerfil.setor_id;
+        const [excResp, cargoResp, setorResp] = await Promise.all([
           fetch(
             `${url}/rest/v1/perfis_permissoes?usuario_id=eq.${caller.id}`
             + `&empresa_id=eq.${callerPerfil.empresa_id}&select=permissoes`,
@@ -155,17 +159,28 @@ export default async function handler(req: ReqLike, res: ResLike): Promise<void>
             + `&empresa_id=eq.${callerPerfil.empresa_id}&select=permissoes`,
             { headers: admin },
           ),
+          setorId
+            ? fetch(
+              `${url}/rest/v1/cargos_permissoes_setor?cargo=eq.${encodeURIComponent(callerRole)}`
+              + `&empresa_id=eq.${callerPerfil.empresa_id}&setor_id=eq.${setorId}&select=permissoes`,
+              { headers: admin },
+            )
+            : null,
         ]);
-        const leMapa = async (r: Response): Promise<Record<string, boolean>> => {
-          if (!r.ok) return {};
+        const leMapa = async (r: Response | null): Promise<Record<string, boolean>> => {
+          if (!r?.ok) return {};
           const linhas = (await r.json()) as Array<{ permissoes?: Record<string, boolean> }>;
           return (Array.isArray(linhas) ? linhas[0]?.permissoes : undefined) ?? {};
         };
-        const [excecoes, doCargo] = await Promise.all([leMapa(excResp), leMapa(cargoResp)]);
+        const [excecoes, doCargo, doSetor] = await Promise.all([
+          leMapa(excResp), leMapa(cargoResp), leMapa(setorResp),
+        ]);
         // Exceção da pessoa vence o cargo — chave PRESENTE, mesmo que `false`.
         podeRedefinir = CHAVE_SENHA in excecoes
           ? excecoes[CHAVE_SENHA] === true
-          : doCargo[CHAVE_SENHA] === true;
+          : CHAVE_SENHA in doSetor
+            ? doSetor[CHAVE_SENHA] === true
+            : doCargo[CHAVE_SENHA] === true;
       } catch {
         podeRedefinir = false;
       }
