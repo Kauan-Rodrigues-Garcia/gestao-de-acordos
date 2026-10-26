@@ -71,6 +71,7 @@ import { useHalloweenParado, useVigiaDoHalloween } from '@/components/Halloween/
 import { EVENTO_ABRIR_BOAS_VINDAS, pediuBoasVindasNaUrl, temaEsperaACarta, useHalloween } from '@/components/Halloween/preferencia';
 import { getImpersonacaoAtiva } from '@/services/impersonacao.service';
 import { MarcaHalloween } from '@/components/Halloween/MarcaHalloween';
+import { CrachaPendente } from '@/components/CrachaPendente';
 import { useNotificacoes } from '@/providers/NotificacoesProvider';
 import { useEasterEggCriadores, DURACAO_ESCURECIMENTO_MS } from '@/hooks/useEasterEggCriadores';
 // O overlay continua no Layout: a comemoração explode em QUALQUER página, não
@@ -1094,6 +1095,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           precisaAceitar={precisaAceitar}
           termoLoading={termoLoading}
           onFinished={aoResolverTour}
+        />
+        {/* Crachá pendente (26/10/2026): canto de baixo à esquerda, depois do
+            menu, no lugar onde ficava a pesquisa de experiência. */}
+        <CrachaPendente
+          liberado={!termoLoading && !precisaAceitar && tourJaVisto && !boasVindasAberta}
+          esquerda={sidebarOpen ? 240 : 64}
         />
         {boasVindasAberta && (
           <Suspense fallback={null}>
