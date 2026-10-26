@@ -39,6 +39,7 @@ import {
   chaveDaLinha,
   diaISO,
   preverRemocao,
+  arquivoComecaNoInicioDoMes,
   type RemocaoPrevista,
 } from '@/services/analitico/remocaoPrevista';
 import {
@@ -173,6 +174,19 @@ export function useAnaliticoImport() {
   const precisaEscolherSetor = usarSetorEscolhido;
 
   /*
+   * O que não veio no arquivo sai do setor/mês?
+   *
+   * Nosso produto: sempre — o 58 é o retrato do mês. Cofen (26/10/2026): também,
+   * desde que o arquivo comece no início do mês. Incremental, ela guardava a
+   * linha velha quando o ERP trocava o operador do pagamento, e o dinheiro
+   * contava duas vezes (R$ 33.613,83 no Conecta Play em outubro).
+   */
+  const sincronizaAusentes = !!preview && (
+    !tenant.isPaguePlay
+    || arquivoComecaNoInicioDoMes(preview.linhas.map(l => l.data_pagamento), preview.mes)
+  );
+
+  /*
    * A remoção é recalculada quando o setor muda, e não só ao ler o arquivo.
    *
    * Quem enxerga mais de um setor escolhe o setor DENTRO do modal, depois do
@@ -180,10 +194,10 @@ export function useAnaliticoImport() {
    * nenhuma, que é pior: a tela ficaria silenciosa justamente no caso em que a
    * pessoa está prestes a carimbar o arquivo no lugar errado.
    *
-   * Só na BookPlay: na PaguePlay a importação é incremental e não remove nada.
+   * Só quando a importação vai remover (`sincronizaAusentes`).
    */
   useEffect(() => {
-    if (!preview || !empresa?.id || tenant.isPaguePlay || !setorImportacao) {
+    if (!preview || !empresa?.id || !sincronizaAusentes || !setorImportacao) {
       setRemocaoPrevista(null);
       return;
     }
@@ -197,7 +211,7 @@ export function useAnaliticoImport() {
       // e ficar sem importar o relatório do dia é pior que importar sem ele.
       .catch(() => { if (!cancelado) setRemocaoPrevista(null); });
     return () => { cancelado = true; };
-  }, [preview, empresa?.id, tenant.isPaguePlay, setorImportacao]);
+  }, [preview, empresa?.id, sincronizaAusentes, setorImportacao]);
 
   /**
    * O cabeçalho mudou desde a última importação aceita?
@@ -388,11 +402,11 @@ export function useAnaliticoImport() {
       // acabavam no setor de QUEM IMPORTOU, por fallback, em vez do setor a que
       // o relatório pertence.
       setorImportacao,
-      // Na BookPlay, o relatório 58 é o retrato completo do mês. Assim, uma
-      // reimportação também remove do mesmo setor/mês linhas antigas que foram
-      // filtradas agora (Retenção/Colchão) ou que sumiram da origem. PaguePlay
-      // continua incremental porque seus relatórios podem ser parciais.
-      { sincronizarAusentesDoSetor: !tenant.isPaguePlay },
+      // O relatório 58 é o retrato completo do mês: uma reimportação remove do
+      // mesmo setor/mês as linhas que sumiram da origem (ou que o ERP passou
+      // para outro operador). Na regra Cofen, só quando o arquivo começa no
+      // início do mês — ver `sincronizaAusentes`.
+      { sincronizarAusentesDoSetor: sincronizaAusentes },
     );
 
     /*
@@ -525,7 +539,7 @@ export function useAnaliticoImport() {
     }
 
     setEstado('done');
-  }, [preview, vinculosManuais, empresa?.id, perfil?.id, perfil?.nome, setorImportacao, tenant.isPaguePlay]);
+  }, [preview, vinculosManuais, empresa?.id, perfil?.id, perfil?.nome, setorImportacao, tenant.isPaguePlay, sincronizaAusentes]);
 
   const cancelar = useCallback(() => {
     setEstado('idle');
@@ -554,5 +568,7 @@ export function useAnaliticoImport() {
     setorProprioAlternativo,
     /** O que a sincronização mensal vai apagar. `null` = nada a prever. */
     remocaoPrevista,
+    /** A importação vai remover o que não veio no arquivo (ver acima). */
+    sincronizaAusentes,
   };
 }

@@ -75,6 +75,25 @@ export function chaveDaLinha(
   return `${operadorUsuario}::${codigo}::${data}::${formaPagamento}`;
 }
 
+/**
+ * O arquivo começa no início do mês?
+ *
+ * A regra Cofen passou a remover os ausentes em 26/10/2026 — antes ela era
+ * incremental, e quando o ERP trocava o operador de um pagamento a linha velha
+ * ficava ao lado da nova: R$ 33.613,83 contados duas vezes no Conecta Play em
+ * outubro (48 linhas, 13 operadores). O 58 dela sempre vem com o mês inteiro,
+ * mas um export parcial apagaria o resto do mês; então a remoção só acontece
+ * quando a primeira data do arquivo cai nos primeiros dias do mês. Três dias
+ * de folga: o dia 1º pode cair num domingo sem pagamento.
+ */
+export const DIAS_DE_FOLGA_NO_INICIO = 3;
+export function arquivoComecaNoInicioDoMes(datas: readonly (Date | null | undefined)[], mes: string): boolean {
+  const doMes = datas.filter((d): d is Date => !!d).map(diaISO).filter(d => d.startsWith(mes));
+  if (!doMes.length) return false;
+  const primeira = doMes.reduce((a, b) => (a < b ? a : b));
+  return Number(primeira.slice(8, 10)) <= DIAS_DE_FOLGA_NO_INICIO;
+}
+
 /** `Date` → `yyyy-MM-dd` local, como o parser monta e o banco grava. */
 export function diaISO(d: Date): string {
   const mm = String(d.getMonth() + 1).padStart(2, '0');

@@ -31,7 +31,7 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
     vinculosManuais,
     carregarArquivo, confirmarImportacao, cancelar, definirVinculo,
     precisaEscolherSetor, setorImportacao, setSetorEscolhido, setorProprioAlternativo,
-    remocaoPrevista,
+    remocaoPrevista, sincronizaAusentes,
   } = hook;
 
   const { empresa } = useEmpresa();
@@ -253,6 +253,17 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
                       {preview.mudancaDeColunas.importacoesDoConhecido === 1 ? 'vez' : 'vezes'}.</>
                   )}
                 </p>
+              </div>
+            )}
+
+            {/* Arquivo que não começa no início do mês: nada é removido (a
+                regra Cofen só sincroniza o mês inteiro). Dito na tela, para
+                ninguém achar que a importação limpou o que sumiu do ERP. */}
+            {!sincronizaAusentes && (
+              <div className="rounded-lg border border-amber-300/70 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-700/50 dark:bg-amber-950/20 dark:text-amber-300">
+                O arquivo não começa no início do mês: esta importação só <strong>acrescenta</strong>.
+                Pagamentos que sumiram do ERP ou mudaram de operador continuam no sistema até
+                importar o 58 do mês inteiro.
               </div>
             )}
 

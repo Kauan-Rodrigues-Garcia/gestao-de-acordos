@@ -29,6 +29,7 @@ vi.mock('@/lib/supabase', () => ({
 }));
 
 import {
+  arquivoComecaNoInicioDoMes,
   chaveDaLinha,
   diaISO,
   preverRemocao,
@@ -177,5 +178,26 @@ describe('remocaoPreocupa', () => {
   it('fala no caso que motivou a trava', () => {
     // 13/09/2026: um export antigo apagou 413 linhas e R$ 175.768,38.
     expect(remocaoPreocupa(r(413, 175768.38))).toBe(true);
+  });
+});
+
+/*
+ * Regra Cofen (26/10/2026): o 58 remove os ausentes só quando o arquivo é o mês
+ * inteiro. Um export parcial não pode apagar o resto do mês.
+ */
+describe('arquivoComecaNoInicioDoMes', () => {
+  const d = (iso: string) => new Date(`${iso}T00:00:00`);
+  it('o mês inteiro começa no dia 1', () => {
+    expect(arquivoComecaNoInicioDoMes([d('2026-10-01'), d('2026-10-26')], '2026-10')).toBe(true);
+  });
+  it('dá folga de três dias — o dia 1º pode ser um domingo sem pagamento', () => {
+    expect(arquivoComecaNoInicioDoMes([d('2026-11-03'), d('2026-11-20')], '2026-11')).toBe(true);
+  });
+  it('arquivo que começa depois é parcial: não remove', () => {
+    expect(arquivoComecaNoInicioDoMes([d('2026-10-22'), d('2026-10-26')], '2026-10')).toBe(false);
+  });
+  it('olha só as datas do mês do arquivo, e sem data não decide nada', () => {
+    expect(arquivoComecaNoInicioDoMes([d('2026-09-30'), d('2026-10-15')], '2026-10')).toBe(false);
+    expect(arquivoComecaNoInicioDoMes([null, undefined], '2026-10')).toBe(false);
   });
 });
