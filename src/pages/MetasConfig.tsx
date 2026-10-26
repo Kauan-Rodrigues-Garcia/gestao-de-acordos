@@ -51,7 +51,7 @@ import { useNavigate } from "react-router-dom";
 import {
   Target, Check, ChevronLeft, ChevronRight, Building2, Users, User, ArrowLeft,
   TriangleAlert, Trash2,
-  Loader2, CalendarDays, Plus, X, Layers, GraduationCap, Lock, LockOpen, ShieldCheck,
+  Loader2, Plus, Layers, Lock, LockOpen, ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -70,6 +70,10 @@ import { diasUteisDoMes, diasUteisDecorridos, ordenarQuartis, QUARTIS_PADRAO } f
 import { getMetasConfig, upsertMetasConfig } from "@/services/metas/metasConfig.service";
 import { diasUteisDoSetor, type DiasUteisPorSetor, type DiasUteisSetor } from "@/lib/diasUteisDoSetor";
 import { CardDiasUteisSetor } from "@/components/PainelMetas/CardDiasUteisSetor";
+import { CardDiasUteisGeral } from "@/components/PainelMetas/CardDiasUteisGeral";
+import { CardQuartis } from "@/components/PainelMetas/CardQuartis";
+import { CardEquipesTreinamento } from "@/components/PainelMetas/CardEquipesTreinamento";
+import { SectionCard } from "@/components/PainelMetas/SectionCard";
 import {
   getMetaValidacaoStatus, upsertMetas, validarMetaSetor, reabrirMetaSetor, excluirMetas,
   type MetaValidacaoStatus,
@@ -84,9 +88,7 @@ import { AvisoVoltouDeFerias } from "@/components/TagFerias";
 import {
   fetchDiretoExtraConfigs, resolverDiretoExtraAtivo, type DiretoExtraConfig,
 } from "@/services/direto_extra.service";
-import {
-  Card, CardContent, CardHeader, CardTitle, CardDescription,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -95,7 +97,6 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -104,6 +105,7 @@ import {
 import { AbaComissao } from "@/components/Comissao/AbaComissao";
 import type { MetaLinhaBruta } from "@/services/comissao/entradaDoOperador";
 import { COLUNAS_SETOR_DO_FILTRO, setoresDosFiltros } from '@/lib/setoresDosFiltros';
+import { ehRegraDoSetor } from '@/lib/regraDoSetor';
 
 const MESES = [
   "Janeiro","Fevereiro","Março","Abril","Maio","Junho",
@@ -127,7 +129,7 @@ interface Meta {
   mes: number;
   ano: number;
 }
-interface Setor  { id: string; nome: string; ativo?: boolean | null; tipo?: string | null; }
+interface Setor  { id: string; nome: string; ativo?: boolean | null; tipo?: string | null; regra?: string | null; }
 interface Equipe {
   id: string; nome: string; setor_id: string;
   treinamento: boolean | null; treinamento_inicio: string | null;
@@ -574,27 +576,6 @@ function MetaRow({
   );
 }
 
-// ── SectionCard ───────────────────────────────────────────────────────────────
-function SectionCard({ title, description, icon, children, badge }: {
-  title: string; description?: string; icon: React.ReactNode;
-  children: React.ReactNode; badge?: string | number;
-}) {
-  return (
-    <Card className="border border-border shadow-sm">
-      <CardHeader className="pb-2">
-        <div className="flex items-center gap-2">
-          <span className="text-primary">{icon}</span>
-          <CardTitle className="text-base">{String(title ?? "")}</CardTitle>
-          {badge !== undefined && (
-            <Badge variant="secondary" className="text-xs ml-auto">{String(badge)}</Badge>
-          )}
-        </div>
-        {description && <CardDescription className="text-xs">{String(description)}</CardDescription>}
-      </CardHeader>
-      <CardContent className="pt-0">{children}</CardContent>
-    </Card>
-  );
-}
 
 // ── Componente principal ──────────────────────────────────────────────────────
 export default function MetasConfig() {
@@ -616,9 +597,18 @@ export default function MetasConfig() {
   const podeVerComissao = temPermissao("metas_comissao_ver");
 
   const tenant = useTenant();
-  const isPP = tenant.isPaguePlay;
-  // Dias úteis/feriados + quartis valem para os dois tenants (H.O. só na PP)
-  const temConfigMes = isPP || tenant.slug === "bookplay";
+  // Dias úteis/feriados + quartis valem para os dois tenants (H.O. só na regra Cofen)
+  const temConfigMes = tenant.isPaguePlay || tenant.slug === "bookplay";
+  /*
+   * A configuração GERAL do mês (dias úteis, feriados e quartis) é da gestão:
+   * super admin e administrador (22/10/2026). Os outros veem o cartão do
+   * próprio setor no lugar do geral — marcar «contar o dia de hoje» já grava a
+   * exceção do setor, sem cartão extra embaixo e sem mudar o mês de todo mundo
+   * (`CardDiasUteisSetor`) — e os quartis só para leitura. Os feriados ficam
+   * com a gestão «até segunda ordem».
+   */
+  const ehGestao = isAdmin;
+  const podeEditarConfigGeral = podeEditarDiasUteis && ehGestao;
 
   const hoje = new Date();
   const [mes, setMes] = useState(hoje.getMonth() + 1);
@@ -629,6 +619,15 @@ export default function MetasConfig() {
   const [setorSelecionado, setSetorSelecionado] = useState<string>("");
 
   const [setores,    setSetores]    = useState<Setor[]>([]);
+  /*
+   * H.O., meta indireta e o percentual de H.O. são da regra Cofen, e a regra é
+   * do SETOR em tela (CLAUDE.md, 04/10/2026), não da empresa. Antes era
+   * `tenant.isPaguePlay`: o admin que abria um setor Nosso produto da PaguePlay
+   * via campos de H.O., e um setor Cofen fora dela ficava sem eles. Sem a
+   * regra lida (setores ainda carregando), segue a empresa, como antes.
+   */
+  const regraEmTela = setores.find(s => s.id === setorSelecionado)?.regra;
+  const isPP = ehRegraDoSetor(regraEmTela) ? regraEmTela === "cofen" : tenant.isPaguePlay;
   const [equipes,    setEquipes]    = useState<Equipe[]>([]);
   const [operadores, setOperadores] = useState<Operador[]>([]);
   // Filtro por equipe na lista de operadores ('' = todas)
@@ -654,7 +653,6 @@ export default function MetasConfig() {
   // Config mensal (PP): feriados + quartis (metas_config_mes)
   const [feriados,      setFeriados]      = useState<string[]>([]);
   const [quartis,       setQuartis]       = useState<QuartilConfig[]>(QUARTIS_PADRAO);
-  const [feriadoNovo,   setFeriadoNovo]   = useState<string>("");
   // Contar o dia de hoje nos dias trabalhados. Padrão false: o dia atual ainda
   // está acontecendo, o analítico dele só fecha no fim do expediente.
   const [contarDiaAtual, setContarDiaAtual] = useState(false);
@@ -667,6 +665,8 @@ export default function MetasConfig() {
    * leitura nova, para o rascunho dele nascer do banco.
    */
   const [diasPorSetor, setDiasPorSetor] = useState<DiasUteisPorSetor>({});
+  // A tabela das exceções existe? Sem ela, todo mundo fica no cartão geral.
+  const [diasPorSetorAtiva, setDiasPorSetorAtiva] = useState(false);
   const [configLida, setConfigLida] = useState("");
   const [versaoConfig, setVersaoConfig] = useState(0);
   /*
@@ -854,7 +854,7 @@ export default function MetasConfig() {
     if (!empresa?.id) return;
     setLoadingSetores(true);
     try {
-      const { data, error } = await supabase.from("setores").select(COLUNAS_SETOR_DO_FILTRO)
+      const { data, error } = await supabase.from("setores").select(`${COLUNAS_SETOR_DO_FILTRO}, regra`)
         .eq("empresa_id", empresa.id).order("nome");
       if (error) throw error;
       const validos: Setor[] = ((data ?? []) as unknown as Setor[]).filter((s): s is Setor => typeof s?.id === "string" && s.id.length > 0);
@@ -1005,7 +1005,7 @@ export default function MetasConfig() {
   // Config mensal (feriados + quartis) — PP
   const fetchConfig = useCallback(async () => {
     if (!empresa?.id || !temConfigMes) { setConfigCarregada(true); return; }
-    const { data, dbAtiva, porSetor } = await getMetasConfig(empresa.id, mes, ano);
+    const { data, dbAtiva, porSetor, porSetorAtiva } = await getMetasConfig(empresa.id, mes, ano);
     const doBanco = {
       feriados:       data?.feriados ?? [],
       quartis:        data?.quartis ?? QUARTIS_PADRAO,
@@ -1013,6 +1013,7 @@ export default function MetasConfig() {
     };
     setConfigDbAtiva(dbAtiva);
     setDiasPorSetor(porSetor ?? {});
+    setDiasPorSetorAtiva(porSetorAtiva);
     setConfigLida(`${empresa.id}|${mes}|${ano}`);
     setVersaoConfig(v => v + 1);
     setFeriados(doBanco.feriados);
@@ -1100,25 +1101,6 @@ export default function MetasConfig() {
   useEffect(() => { fetchMetas(); }, [fetchMetas]);
   useEffect(() => { void fetchConfig(); }, [fetchConfig]);
   useEffect(() => { void fetchValidacao(); }, [fetchValidacao]);
-
-  function adicionarFeriado() {
-    if (!feriadoNovo) return;
-    const [y, m] = feriadoNovo.split("-").map(Number);
-    if (y !== ano || m !== mes) {
-      toast.warning(`O feriado deve estar em ${MESES[mes - 1]}/${ano}.`);
-      return;
-    }
-    if (feriados.includes(feriadoNovo)) { setFeriadoNovo(""); return; }
-    setFeriados(prev => [...prev, feriadoNovo].sort());
-    setFeriadoNovo("");
-  }
-
-  function setQuartilPct(quartil: number, pct: string) {
-    const num = parseInt(pct.replace(/\D/g, ""), 10);
-    setQuartis(prev => prev.map(q =>
-      q.quartil === quartil ? { ...q, min_pct: isNaN(num) ? 0 : num } : q,
-    ));
-  }
 
   // Equipes de treinamento: data de início salva na hora (equipes.treinamento_inicio)
   const [salvandoTreino, setSalvandoTreino] = useState<string | null>(null);
@@ -1450,7 +1432,7 @@ export default function MetasConfig() {
   const salvarConfigMes = useCallback(async () => {
     if (!empresa?.id || !perfil?.id) return;
     if (fechamento.impedir("alterar dias úteis e quartis deste mês")) return;
-    if (!(temConfigMes && configDbAtiva && configAlterada && podeEditarDiasUteis)) return;
+    if (!(temConfigMes && configDbAtiva && configAlterada && podeEditarConfigGeral)) return;
 
     setSalvandoTudo(true);
     const { error } = await upsertMetasConfig({
@@ -1467,7 +1449,7 @@ export default function MetasConfig() {
     setConfigOriginal({ feriados, quartis, contarDiaAtual });
   }, [
     empresa?.id, perfil?.id, temConfigMes, configDbAtiva, configAlterada,
-    podeEditarDiasUteis, mes, ano, feriados, quartis, contarDiaAtual, fechamento,
+    podeEditarConfigGeral, mes, ano, feriados, quartis, contarDiaAtual, fechamento,
   ]);
 
   /*
@@ -1485,6 +1467,30 @@ export default function MetasConfig() {
   }, [configAlterada, salvarConfigMes]);
 
   const setorNome = setores.find(s => s.id === setorSelecionado)?.nome ?? "";
+
+  // O cartão do setor só nasce da leitura do mês em tela (ver `configLida`).
+  const podeCartaoDoSetor = temConfigMes && configDbAtiva && configCarregada && diasPorSetorAtiva
+    && !!setorSelecionado && !!empresa?.id && !!perfil?.id && configLida === `${empresa?.id}|${mes}|${ano}`;
+  // Quem não é da gestão vê o do setor no lugar do geral (ver `ehGestao`).
+  const setorNoLugarDaGeral = !ehGestao && podeCartaoDoSetor;
+  const cartaoDiasDoSetor = (automatico: boolean) => (
+    <CardDiasUteisSetor
+      key={`${setorSelecionado}|${versaoConfig}|${automatico}`}
+      empresaId={empresa?.id ?? ""}
+      perfilId={perfil?.id ?? ""}
+      setorId={setorSelecionado}
+      setorNome={setorNome}
+      mes={mes}
+      ano={ano}
+      geral={{ feriados, contarDiaAtual }}
+      excecao={diasPorSetor[setorSelecionado] ?? null}
+      onExcecao={mudouExcecaoDoSetor}
+      podeEditar={podeEditarDiasUteis && !fechamento.bloqueado}
+      podeExcluir={podeExcluirDiasUteis && !fechamento.bloqueado}
+      impedir={fechamento.impedir}
+      automatico={automatico}
+    />
+  );
 
   /*
    * Os operadores do setor para a aba Comissão, com a ORIGEM de cada um.
@@ -1581,118 +1587,31 @@ export default function MetasConfig() {
           podeEditar={podeGerenciarMetas}
         />
       )}
-      {/* ── Config do mês (PP + BookPlay): dias úteis + feriados + quartis ── */}
+      {/* ── Config do mês (PP + BookPlay): dias úteis + feriados + quartis ──
+          A gestão vê a geral; os outros, o cartão do setor no lugar dela. */}
       {temConfigMes && configDbAtiva && configCarregada && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <SectionCard
-            title="Dias úteis do mês (geral)"
-            description="Segunda a sexta, menos os feriados cadastrados. Usado para calcular a meta diária. Vale para todos os setores, menos os que têm dias úteis próprios."
-            icon={<CalendarDays className="h-4 w-4" />}
-          >
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="flex-1 rounded-lg border border-border bg-muted/30 px-3 py-2 text-center">
-                  <p className="text-lg font-bold tabular-nums">{totalDiasUteis}</p>
-                  <p className="text-[11px] text-muted-foreground">dias úteis em {MESES[mes - 1]}</p>
-                </div>
-                <div className="flex-1 rounded-lg border border-border bg-muted/30 px-3 py-2 text-center">
-                  <p className="text-lg font-bold tabular-nums">
-                    {diasTrabalhados !== null ? diasTrabalhados : "—"}
-                  </p>
-                  <p className="text-[11px] text-muted-foreground">
-                    {diasTrabalhados !== null ? "já trabalhados" : "mês não atual"}
-                  </p>
-                </div>
-              </div>
-
-              {/* O dia de hoje ainda está acontecendo: contá-lo infla o esperado
-                  e derruba a projeção/quartil de todo mundo durante o dia. */}
-              <label className="flex items-start gap-2 rounded-lg border border-border bg-muted/20 px-3 py-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={contarDiaAtual}
-                  disabled={!podeEditarDiasUteis}
-                  onChange={e => setContarDiaAtual(e.target.checked)}
-                  className="mt-0.5 h-3.5 w-3.5 accent-primary cursor-pointer disabled:cursor-not-allowed"
-                />
-                <span className="text-[11px] leading-tight">
-                  <span className="font-medium text-foreground">Contar o dia de hoje</span>
-                  <span className="block text-muted-foreground">
-                    Desmarcado, os dias trabalhados consideram só os dias já fechados — o
-                    analítico de hoje ainda está entrando. Afeta a meta diária, a projeção
-                    e os quartis.
-                  </span>
-                </span>
-              </label>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Feriados (a operação não trabalha)</Label>
-                <div className="flex items-center gap-2">
-                  <Input
-                    type="date"
-                    className="h-8 text-sm max-w-[170px]"
-                    value={feriadoNovo}
-                    disabled={!podeEditarDiasUteis}
-                    onChange={(e) => setFeriadoNovo(e.target.value)}
-                  />
-                  <Button size="sm" variant="outline" className="h-8 gap-1 text-xs"
-                    onClick={adicionarFeriado} disabled={!feriadoNovo || !podeEditarDiasUteis}>
-                    <Plus className="h-3.5 w-3.5" /> Adicionar
-                  </Button>
-                </div>
-                {feriados.length > 0 ? (
-                  <div className="flex flex-wrap gap-1.5 pt-1">
-                    {feriados.map(f => (
-                      <Badge key={f} variant="secondary" className="gap-1 text-xs font-normal">
-                        {f.split("-").reverse().join("/")}
-                        {podeEditarDiasUteis && (
-                          <button type="button" className="hover:text-destructive"
-                            onClick={() => setFeriados(prev => prev.filter(x => x !== f))}>
-                            <X className="h-3 w-3" />
-                          </button>
-                        )}
-                      </Badge>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-[11px] text-muted-foreground">Nenhum feriado neste mês.</p>
-                )}
-              </div>
-            </div>
-          </SectionCard>
-
-          <SectionCard
-            title="Quartis de projeção"
-            description="Faixas de % da projeção diária (realizado ÷ esperado até hoje). 1º quartil = melhor."
-            icon={<Target className="h-4 w-4" />}
-          >
-            <div className="space-y-2">
-              {ordenarQuartis(quartis).map((q, i, arr) => {
-                const tetoAcima = i > 0 ? arr[i - 1].min_pct - 1 : null;
-                return (
-                  <div key={q.quartil} className="flex items-center gap-3">
-                    <span className="text-sm font-semibold w-20 shrink-0">{q.quartil}º quartil</span>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs text-muted-foreground">a partir de</span>
-                      <Input
-                        className="h-8 w-20 text-sm text-center"
-                        value={String(q.min_pct)}
-                        disabled={!podeEditarDiasUteis}
-                        onChange={(e) => setQuartilPct(q.quartil, e.target.value)}
-                      />
-                      <span className="text-xs text-muted-foreground">%</span>
-                    </div>
-                    <span className="text-[11px] text-muted-foreground ml-auto">
-                      {tetoAcima !== null ? `${q.min_pct}% – ${tetoAcima}%` : `≥ ${q.min_pct}%`}
-                    </span>
-                  </div>
-                );
-              })}
-              <p className="text-[11px] text-muted-foreground pt-1">
-                Com meta + dias úteis configurados, cada operador vê no dashboard a meta
-                diária, a projeção e o quartil em que está.
-              </p>
-            </div>
-          </SectionCard>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
+          {setorNoLugarDaGeral ? cartaoDiasDoSetor(true) : (
+            <CardDiasUteisGeral
+              mes={mes}
+              ano={ano}
+              feriados={feriados}
+              onFeriados={setFeriados}
+              contarDiaAtual={contarDiaAtual}
+              onContarDiaAtual={setContarDiaAtual}
+              totalDiasUteis={totalDiasUteis}
+              diasTrabalhados={diasTrabalhados}
+              podeEditar={podeEditarConfigGeral}
+              className="h-full"
+            />
+          )}
+          <CardQuartis
+            quartis={quartis}
+            onChange={setQuartis}
+            podeEditar={podeEditarConfigGeral}
+            daGestao={!ehGestao}
+            className="h-full"
+          />
         </div>
       )}
 
@@ -1706,71 +1625,22 @@ export default function MetasConfig() {
 
       {setorSelecionado && (
         <>
-          {/* Dias úteis próprios do setor — a exceção à configuração geral. */}
-          {temConfigMes && configDbAtiva && configCarregada && empresa?.id && perfil?.id
-            && configLida === `${empresa.id}|${mes}|${ano}` && (
-            <CardDiasUteisSetor
-              key={`${setorSelecionado}|${versaoConfig}`}
-              empresaId={empresa.id}
-              perfilId={perfil.id}
-              setorId={setorSelecionado}
-              setorNome={setorNome}
-              mes={mes}
-              ano={ano}
-              geral={{ feriados, contarDiaAtual }}
-              excecao={diasPorSetor[setorSelecionado] ?? null}
-              onExcecao={mudouExcecaoDoSetor}
-              podeEditar={podeEditarDiasUteis && !fechamento.bloqueado}
-              podeExcluir={podeExcluirDiasUteis && !fechamento.bloqueado}
-              impedir={fechamento.impedir}
-            />
-          )}
+          {/* Dias úteis próprios do setor — a exceção à configuração geral.
+              Só a gestão o vê aqui; os outros já o têm no lugar do geral. */}
+          {podeCartaoDoSetor && !setorNoLugarDaGeral && cartaoDiasDoSetor(false)}
 
           {/* Equipes de treinamento — data de início + dias úteis reduzidos */}
           {equipesTreinamento.length > 0 && (
-            <SectionCard
-              title="Equipes de treinamento"
-              description="Equipes que começaram no meio do mês. Informe a data de início — os dias úteis (e a meta diária/projeção da equipe e dos operadores) passam a contar a partir dela."
-              icon={<GraduationCap className="h-4 w-4" />}
-              badge={equipesTreinamento.length}
-            >
-              <div className="space-y-2">
-                {equipesTreinamento.map(eq => {
-                  const inicio = eq.treinamento_inicio ?? "";
-                  const uteis = diasUteisDoMes(ano, mes, reguaDoSetor.feriados, inicio || undefined);
-                  return (
-                    <div key={eq.id} className="flex flex-col sm:flex-row sm:items-center gap-3 py-2 border-b border-border last:border-0">
-                      <div className="flex items-center gap-2 sm:w-52 shrink-0">
-                        <GraduationCap className="h-4 w-4 text-amber-600 shrink-0" />
-                        <p className="text-sm font-medium truncate">{String(eq.nome ?? "")}</p>
-                      </div>
-                      <div className="flex flex-1 items-center gap-3 flex-wrap">
-                        <div className="flex flex-col gap-1">
-                          <Label className="text-xs text-muted-foreground">Início das atividades</Label>
-                          <Input
-                            type="date"
-                            className="h-8 text-sm max-w-[170px]"
-                            value={inicio}
-                            disabled={!podeGerenciarMetas || salvandoTreino === eq.id}
-                            onChange={e => setTreinamentoInicio(eq.id, e.target.value)}
-                          />
-                        </div>
-                        <div className="rounded-lg border border-border bg-muted/30 px-3 py-1.5 text-center">
-                          <p className="text-base font-bold tabular-nums">{inicio ? uteis : diasUteisDoSetorEmTela}</p>
-                          <p className="text-[11px] text-muted-foreground">
-                            {inicio ? "dias úteis no treino" : "sem data — mês cheio"}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-                <p className="text-[11px] text-muted-foreground pt-1">
-                  Feriados antes do início são ignorados; feriados após entram no cálculo.
-                  Marque/desmarque uma equipe como treinamento na aba <strong>Equipes</strong>.
-                </p>
-              </div>
-            </SectionCard>
+            <CardEquipesTreinamento
+              equipes={equipesTreinamento}
+              mes={mes}
+              ano={ano}
+              feriados={reguaDoSetor.feriados}
+              diasUteisDoMesCheio={diasUteisDoSetorEmTela}
+              onInicio={(id, data) => void setTreinamentoInicio(id, data)}
+              salvando={salvandoTreino}
+              podeEditar={podeGerenciarMetas}
+            />
           )}
 
           {/* Mês fechado: tudo aqui é só leitura (ou o aviso de quem passa por cima). */}

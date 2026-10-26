@@ -12,6 +12,12 @@
  *
  * O componente é montado de novo a cada leitura da config (a `key` vem de
  * quem usa): o rascunho nasce do banco e não precisa ser reconciliado com ele.
+ *
+ * `automatico` (22/10/2026): quem não é da gestão (super admin, administrador)
+ * vê só este cartão, no lugar do geral. Não há botão «trabalha diferente»:
+ * marcar «contar o dia de hoje» já grava a exceção do setor, e voltar a ficar
+ * igual à geral apaga a exceção sozinho. Os feriados aparecem, mas só a gestão
+ * os muda («até segunda ordem») — inclusive os de uma exceção que ela criou.
  */
 import { useEffect, useMemo, useState } from 'react';
 import { CalendarDays, Loader2, Plus, Undo2, X } from 'lucide-react';
@@ -24,6 +30,7 @@ import { Label } from '@/components/ui/label';
 import { diasUteisDecorridos, diasUteisDoMes } from '@/lib/diasUteis';
 import type { DiasUteisSetor } from '@/lib/diasUteisDoSetor';
 import { getTodayISO } from '@/lib/index';
+import { cn } from '@/lib/utils';
 import {
   removerDiasUteisSetor, upsertDiasUteisSetor,
 } from '@/services/metas/metasConfig.service';
@@ -55,6 +62,9 @@ interface Props {
   podeExcluir: boolean;
   /** `useFechamentoMes().impedir` — mês fechado não muda. */
   impedir: (acao?: string) => boolean;
+  /** Mexer já vira exceção do setor; igual à geral, a exceção some. Ver o topo. */
+  automatico?: boolean;
+  className?: string;
 }
 
 const dataBR = (iso: string) => iso.split('-').reverse().join('/');
@@ -62,13 +72,16 @@ const chave = (r: Regua) => `${r.contarDiaAtual}|${[...r.feriados].sort().join('
 
 export function CardDiasUteisSetor({
   empresaId, perfilId, setorId, setorNome, mes, ano, geral, excecao, onExcecao,
-  podeEditar, podeExcluir, impedir,
+  podeEditar, podeExcluir, impedir, automatico = false, className,
 }: Props) {
+  const podeMexerFeriados = podeEditar && !automatico;
+  const copiaDaGeral = (): Regua => ({ feriados: [...geral.feriados].sort(), contarDiaAtual: geral.contarDiaAtual });
   const inicial: Regua | null = excecao
     ? { feriados: [...excecao.feriados].sort(), contarDiaAtual: excecao.contar_dia_atual }
     : null;
   const [original, setOriginal] = useState<Regua | null>(inicial);
-  const [rascunho, setRascunho] = useState<Regua | null>(inicial);
+  // No automático o rascunho sempre existe: sem exceção, ele começa na geral.
+  const [rascunho, setRascunho] = useState<Regua | null>(inicial ?? (automatico ? copiaDaGeral() : null));
   const [feriadoNovo, setFeriadoNovo] = useState('');
   const [ocupado, setOcupado] = useState(false);
 
@@ -93,7 +106,11 @@ export function CardDiasUteisSetor({
     };
   }, [rascunho, geral]);
 
-  const alterado = !!rascunho && !!original && chave(rascunho) !== chave(original);
+  // No automático, sem exceção gravada, a base de comparação é a geral.
+  const base = original ?? (automatico ? geral : null);
+  const alterado = !!rascunho && !!base && chave(rascunho) !== chave(base);
+  const igualAGeral = !!rascunho && chave(rascunho) === chave(geral);
+  const proprio = automatico ? !!original : !!rascunho;
 
   async function gravar(regua: Regua): Promise<boolean> {
     const { error } = await upsertDiasUteisSetor({
@@ -115,6 +132,8 @@ export function CardDiasUteisSetor({
     if (!alterado || !rascunho || !podeEditar) return;
     const t = window.setTimeout(() => {
       if (impedir('alterar os dias úteis do setor neste mês')) return;
+      // Voltou a ficar igual à geral: a exceção não tem mais razão de existir.
+      if (automatico && igualAGeral && original && podeExcluir) { void voltarAGeral(); return; }
       void gravar(rascunho);
     }, 800);
     return () => window.clearTimeout(t);
@@ -147,7 +166,7 @@ export function CardDiasUteisSetor({
       return;
     }
     setOriginal(null);
-    setRascunho(null);
+    setRascunho(automatico ? copiaDaGeral() : null);
     onExcecao(setorId, null);
   }
 
@@ -165,19 +184,21 @@ export function CardDiasUteisSetor({
   }
 
   return (
-    <Card className="border border-border shadow-sm">
+    <Card className={cn('border border-border shadow-sm', className)}>
       <CardHeader className="pb-2">
         <div className="flex items-center gap-2">
           <span className="text-primary"><CalendarDays className="h-4 w-4" /></span>
           <CardTitle className="text-base">Dias úteis do setor {setorNome}</CardTitle>
-          <Badge variant={rascunho ? 'default' : 'secondary'} className="text-xs ml-auto">
-            {rascunho ? 'Próprios do setor' : 'Segue a geral'}
+          <Badge variant={proprio ? 'default' : 'secondary'} className="text-xs ml-auto">
+            {proprio ? 'Próprios do setor' : 'Segue a geral'}
           </Badge>
         </div>
         <CardDescription className="text-xs">
-          {rascunho
-            ? 'Este setor trabalha diferente: a meta diária, a projeção e os quartis dele usam os dias abaixo, e não os da configuração geral.'
-            : 'Este setor usa os dias úteis da configuração geral do mês. Se ele trabalha diferente (num feriado, ou folga num dia em que os outros trabalham), dá para trocar só para ele.'}
+          {automatico
+            ? 'Segunda a sexta, menos os feriados. Usado para a meta diária, a projeção e os quartis deste setor. «Contar o dia de hoje» vale só para ele; os feriados são definidos pela gestão.'
+            : rascunho
+              ? 'Este setor trabalha diferente: a meta diária, a projeção e os quartis dele usam os dias abaixo, e não os da configuração geral.'
+              : 'Este setor usa os dias úteis da configuração geral do mês. Se ele trabalha diferente (num feriado, ou folga num dia em que os outros trabalham), dá para trocar só para ele.'}
         </CardDescription>
       </CardHeader>
       <CardContent className="pt-0 space-y-3">
@@ -220,26 +241,27 @@ export function CardDiasUteisSetor({
             </label>
 
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Feriados do setor (o setor não trabalha)</Label>
-              <div className="flex items-center gap-2">
+              <Label className="text-xs text-muted-foreground">
+                {automatico ? 'Feriados (definidos pela gestão)' : 'Feriados do setor (o setor não trabalha)'}
+              </Label>
+              {podeMexerFeriados && <div className="flex items-center gap-2">
                 <Input
                   type="date"
                   className="h-8 text-sm max-w-[170px]"
                   value={feriadoNovo}
-                  disabled={!podeEditar}
                   onChange={e => setFeriadoNovo(e.target.value)}
                 />
                 <Button size="sm" variant="outline" className="h-8 gap-1 text-xs"
-                  onClick={adicionarFeriado} disabled={!feriadoNovo || !podeEditar}>
+                  onClick={adicionarFeriado} disabled={!feriadoNovo}>
                   <Plus className="h-3.5 w-3.5" /> Adicionar
                 </Button>
-              </div>
+              </div>}
               {rascunho.feriados.length > 0 ? (
                 <div className="flex flex-wrap gap-1.5 pt-1">
                   {rascunho.feriados.map(f => (
                     <Badge key={f} variant="secondary" className="gap-1 text-xs font-normal">
                       {dataBR(f)}
-                      {podeEditar && (
+                      {podeMexerFeriados && (
                         <button type="button" className="hover:text-destructive"
                           aria-label={`Tirar ${dataBR(f)}`}
                           onClick={() => setRascunho({ ...rascunho, feriados: rascunho.feriados.filter(x => x !== f) })}>
@@ -267,10 +289,14 @@ export function CardDiasUteisSetor({
                 )}
               </ul>
             ) : (
-              <p className="text-[11px] text-muted-foreground">Por enquanto igual à configuração geral.</p>
+              <p className="text-[11px] text-muted-foreground">
+                {automatico ? 'Igual à configuração geral do mês.' : 'Por enquanto igual à configuração geral.'}
+              </p>
             )}
 
-            {podeExcluir && (
+            {/* No automático não há «voltar»: desmarcar já volta, e a exceção
+                que a gestão criou (com feriados próprios) não é do líder apagar. */}
+            {podeExcluir && !automatico && (
               <Button size="sm" variant="ghost" className="gap-1.5 text-xs text-muted-foreground"
                 disabled={ocupado} onClick={voltarAGeral}>
                 {ocupado ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Undo2 className="h-3.5 w-3.5" />}

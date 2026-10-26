@@ -62,7 +62,11 @@ export async function buscarDiasUteisPorSetor(
 
 export async function getMetasConfig(
   empresaId: string, mes: number, ano: number,
-): Promise<{ data: MetasConfigMes | null; dbAtiva: boolean; porSetor: DiasUteisPorSetor }> {
+): Promise<{
+  data: MetasConfigMes | null; dbAtiva: boolean; porSetor: DiasUteisPorSetor;
+  /** A tabela das exceções existe (migration 20261021140000 aplicada). */
+  porSetorAtiva: boolean;
+}> {
   const [geral, setores] = await Promise.all([
     (async () => {
       try {
@@ -85,7 +89,7 @@ export async function getMetasConfig(
     })(),
     buscarDiasUteisPorSetor(empresaId, mes, ano),
   ]);
-  return { ...geral, porSetor: setores.porSetor };
+  return { ...geral, porSetor: setores.porSetor, porSetorAtiva: setores.dbAtiva };
 }
 
 export async function upsertMetasConfig(params: {
