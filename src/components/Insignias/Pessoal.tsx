@@ -1,6 +1,7 @@
 /**
  * As insígnias do pessoal (só o super_admin): todo mundo que tem pelo menos
- * uma, com a placa de cada medalha no hover. Pedaço próprio: só baixa quando
+ * uma, com a placa de cada medalha no hover. Em ordem de pontos
+ * (`pontuacao.ts`), com a conta no hover dos pontos. Pedaço próprio: só baixa quando
  * o super_admin abre a lista — não pesa nas medalhas do topo de ninguém.
  */
 import { useEffect, useMemo, useState } from 'react';
@@ -8,7 +9,8 @@ import { Loader2, Search } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { INSIGNIAS, TOTAL_INSIGNIAS, ordenarAlbuns, quantas } from './insignias';
+import { INSIGNIAS, TOTAL_INSIGNIAS, quantas } from './insignias';
+import { explicar, ordenarPorPontos, pontos } from './pontuacao';
 import { lerAlbunsDoPessoal, type Pessoal } from './banco';
 import { MedalhaComPlaca } from './Estante';
 import { prepararPlacas } from './placasSobDemanda';
@@ -41,7 +43,7 @@ export function DoPessoal() {
   const lista = useMemo(() => {
     if (!dados) return [];
     const termo = busca.trim().toLocaleLowerCase('pt-BR');
-    const todos = ordenarAlbuns(dados.albuns);
+    const todos = ordenarPorPontos(dados.albuns);
     if (!termo) return todos;
     return todos.filter(a =>
       `${a.nome} ${a.setor ?? ''} ${dados.empresas.get(a.usuario) ?? ''}`.toLocaleLowerCase('pt-BR').includes(termo));
@@ -108,6 +110,7 @@ export function DoPessoal() {
                     <MedalhaComPlaca key={ins.id} insignia={ins} conquista={a.conquistas[ins.id]} tam={20} />
                   ))}
                   <span className="ml-1 w-7 text-right text-xs font-semibold tabular-nums">{quantas(a)}/{TOTAL_INSIGNIAS}</span>
+                  <span className="w-12 text-right text-xs font-bold tabular-nums text-primary" title={explicar(a)}>{pontos(a)} pts</span>
                 </span>
               </li>
             );
