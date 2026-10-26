@@ -12,6 +12,10 @@
  * O operador avalia o retorno de cada campanha — joinha ou mãozinha para baixo
  * (20261009150000); o líder vê a contagem no histórico. E deixa uma observação
  * para o líder (20261016120000), que chega a ele como notificação.
+ *
+ * Cada mensagem que sai fica registrada com o número usado, e cada contato
+ * mostra quantas mensagens o cliente já recebeu hoje pela Campanha Fácil, de
+ * qualquer setor (20261026190000, `CampanhaFacil/jaRecebeu.ts`).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -20,6 +24,9 @@ import { useAuth } from '@/hooks/useAuth';
 import { assinarTabela } from '@/lib/realtime';
 import { copiarTextoSilencioso } from '@/lib/clipboard';
 import { listarMinhasCampanhas, type EnvioResumo } from '@/pages/CampanhaFacil/campanhaFacilEnvios.service';
+import {
+  consultarJaRecebeu, numerosDoCliente, registrarDisparo, type Recebimento,
+} from '@/pages/CampanhaFacil/jaRecebeu';
 import {
   CampanhaIndisponivel, avaliarCampanha, definirStatus, editarMensagem, listarContatos, minhasAvaliacoes,
   observarCampanha, type Avaliacao,
@@ -44,6 +51,16 @@ export function concluida(c: EnvioResumo): boolean {
 
 /** Qual número abrir: o principal ou o «Fone 2». */
 export type QualNumero = 1 | 2;
+
+/** De quanto em quanto tempo o aviso «já recebeu hoje» se refaz com a aba aberta. */
+const RELER_RECEBIDOS_MS = 5 * 60_000;
+/** Voltar para a aba relê o aviso, mas não mais que uma vez por minuto. */
+const RELER_NO_FOCO_MS = 60_000;
+
+/** Envio que não registrou não trava nada: só some do aviso dos outros. */
+function registrar(contatoId: string, numero: string | null) {
+  registrarDisparo(contatoId, numero).catch((err) => console.warn('[CampanhasWhatsapp] registrar envio:', err));
+}
 
 export function useCampanhasWhatsapp() {
   const { perfil } = useAuth();
@@ -130,6 +147,44 @@ export function useCampanhasWhatsapp() {
 
   const contagem = useMemo(() => contar(contatos), [contatos]);
 
+  // ── Quem já recebeu mensagem hoje (20261026190000) ──
+  // A consulta parte da lista carregada, não de cada mudança de status: o que
+  // ESTE contato enviou o banco já deixa de fora.
+  const [recebidos, setRecebidos] = useState<Map<string, Recebimento[]>>(new Map());
+  const ultimaLeituraRef = useRef(0);
+  const lerRecebidos = useCallback(async () => {
+    const lista = contatosRef.current;
+    if (lista.length === 0) { setRecebidos(new Map()); return; }
+    ultimaLeituraRef.current = Date.now();
+    try {
+      setRecebidos(await consultarJaRecebeu(lista.map((c) => ({
+        k: c.id, e: c.empresa_id ?? null, c: c.contrato, n: numerosDoCliente(c.whatsapp, c.whatsapp2),
+      }))));
+    } catch (err) {
+      console.warn('[CampanhasWhatsapp] já recebeu hoje:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    setRecebidos(new Map());
+    // Trocou de campanha e a lista ainda é a da anterior: espera carregar.
+    if (!selecionadaId || carregandoContatos || contatosRef.current[0]?.envio_id !== selecionadaId) return;
+    void lerRecebidos();
+    const relogio = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void lerRecebidos();
+    }, RELER_RECEBIDOS_MS);
+    const aoVoltar = () => {
+      if (document.visibilityState === 'visible' && Date.now() - ultimaLeituraRef.current > RELER_NO_FOCO_MS) void lerRecebidos();
+    };
+    window.addEventListener('focus', aoVoltar);
+    document.addEventListener('visibilitychange', aoVoltar);
+    return () => {
+      window.clearInterval(relogio);
+      window.removeEventListener('focus', aoVoltar);
+      document.removeEventListener('visibilitychange', aoVoltar);
+    };
+  }, [selecionadaId, carregandoContatos, lerRecebidos]);
+
   // O progresso da campanha aberta acompanha a lista na hora.
   useEffect(() => {
     if (!selecionadaId || carregandoContatos) return;
@@ -204,6 +259,7 @@ export function useCampanhasWhatsapp() {
       abrirAba();
     }
     marcarEnviada(c);
+    registrar(c.id, numero);
   }, [modo, marcarEnviada]);
 
   /**
@@ -216,6 +272,7 @@ export function useCampanhasWhatsapp() {
     if (!ok) { toast.error('Não foi possível copiar a mensagem.'); return; }
     toast.success('Mensagem copiada. Ela conta como enviada.');
     marcarEnviada(c);
+    registrar(c.id, null);
   }, [marcarEnviada]);
 
   // ── Avaliação do retorno: um voto por campanha (lote), não por envio ──
@@ -283,7 +340,7 @@ export function useCampanhasWhatsapp() {
 
   return {
     perfilId, carregando, campanhas, paraEnviar, selecionada, selecionar, recarregar,
-    contatos, carregandoContatos, contagem,
+    contatos, carregandoContatos, contagem, recebidos,
     modo, setModo, mesmaAba, enviar, copiar, marcarEnviada, marcar, salvarMensagem,
     avaliacoes, avaliar, observacoes, observar,
   };

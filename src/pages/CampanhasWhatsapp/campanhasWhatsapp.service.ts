@@ -14,7 +14,7 @@ const db = supabase as unknown as SupabaseClient;
 
 const PAGINA = 1000;
 const COLUNAS =
-  'id, envio_id, ordem, nome, contrato, empresa_cliente, telefone, whatsapp, telefone2, whatsapp2, mensagem, mensagem_editada, pendencias, status, enviado_em';
+  'id, envio_id, empresa_id, ordem, nome, contrato, empresa_cliente, telefone, whatsapp, telefone2, whatsapp2, mensagem, mensagem_editada, pendencias, status, enviado_em';
 
 /**
  * A campanha foi desativada ou excluída pelo líder: o banco não deixa mais

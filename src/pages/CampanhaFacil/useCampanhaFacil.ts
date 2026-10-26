@@ -21,6 +21,8 @@ import {
 } from './parcela-minima';
 import { agruparPendencias, linhasComPendencia, pendenciasDoItem } from './pendencias';
 import { useEnviosCampanha } from './useEnviosCampanha';
+import { numeroWhatsApp } from './envios';
+import { comNoFim, consultarJaRecebeu, numerosDoCliente, type Recebimento } from './jaRecebeu';
 import {
   fetchMensagens, criarMensagem, atualizarMensagemCorpo, excluirMensagem,
   fetchDescontos, salvarDesconto, excluirDesconto,
@@ -36,8 +38,9 @@ export interface ImportProgress { value: number; label: string; detail: string }
 /**
  * `critico` = só os registros com pendência grave (o card do aviso leva até eles).
  * `motivo:<texto>` = só os de um tipo de pendência (26/10/2026).
+ * `ja-recebeu` = só os clientes que já receberam mensagem hoje (26/10/2026).
  */
-export type StatusFilter = 'all' | 'Revisar' | 'critico' | `motivo:${string}`;
+export type StatusFilter = 'all' | 'Revisar' | 'critico' | 'ja-recebeu' | `motivo:${string}`;
 
 /** O motivo de um filtro `motivo:…`, ou `null`. */
 export function motivoDoFiltro(f: StatusFilter): string | null {
@@ -125,6 +128,12 @@ export function useCampanhaFacil() {
    * partiu da mensagem antiga.
    */
   const [mensagensEditadas, setMensagensEditadas] = useState<Map<number, string>>(new Map());
+  /**
+   * Linhas que o líder mandou para o fim da fila porque o cliente já recebeu
+   * mensagem hoje (26/10/2026). O rodízio reparte pela posição: cada operador
+   * recebe esses por último. Zera ao trocar o arquivo.
+   */
+  const [paraOFim, setParaOFim] = useState<Set<number>>(new Set());
 
   // ── Configuração (form) ────────────────────────────────────────────────────
   const [templateId, setTemplateId] = useState<string>(CampaignCore.TEMPLATES[0].id);
@@ -288,9 +297,10 @@ export function useCampanhaFacil() {
   const { campanhaPorId, parcelasBaixas } = useMemo(() => {
     const baixasPorLinha = new Map<number, ParcelaBaixa[]>();
     if (!parsed) return { campanhaPorId: [] as CampaignItem[], parcelasBaixas: baixasPorLinha };
-    const registros = removidos.size > 0
+    const semRemovidos = removidos.size > 0
       ? parsed.records.filter((r) => !removidos.has(r.rowNumber))
       : parsed.records;
+    const registros = paraOFim.size > 0 ? comNoFim(semRemovidos, (r) => paraOFim.has(r.rowNumber)) : semRemovidos;
     const itens = CampaignCore.buildCampaign(registros, {
       discounts: discountsApplied,
       senders: operadoresSelecionados.map((o) => o.id),
@@ -311,7 +321,82 @@ export function useCampanhaFacil() {
       item.status = 'Revisar';
     }
     return { campanhaPorId: itens, parcelasBaixas: baixasPorLinha };
-  }, [parsed, removidos, mensagensEditadas, discountsApplied, operadoresSelecionados, selectedTemplateBody]);
+  }, [parsed, removidos, paraOFim, mensagensEditadas, discountsApplied, operadoresSelecionados, selectedTemplateBody]);
+
+  // ── Quem já recebeu mensagem hoje (20261026190000) ─────────────────────────
+  //
+  // Consulta cada linha uma vez por arquivo (trocar mensagem, desconto ou
+  // operador não muda o Nr.Documento nem o número). «Atualizar» consulta tudo
+  // de novo: durante a montagem, outros setores continuam enviando.
+  const [recebidos, setRecebidos] = useState<Map<number, Recebimento[]>>(new Map());
+  const [consultandoRecebidos, setConsultandoRecebidos] = useState(false);
+  const consultadasRef = useRef<Set<number>>(new Set());
+  /** Sobe a cada arquivo novo ou «Atualizar»: a resposta de uma consulta antiga é descartada. */
+  const geracaoRef = useRef(0);
+  const [pedidoDeConsulta, setPedidoDeConsulta] = useState(0);
+
+  const zerarRecebidos = useCallback(() => {
+    geracaoRef.current++;
+    consultadasRef.current = new Set();
+    setRecebidos(new Map());
+    setParaOFim(new Set());
+  }, []);
+
+  useEffect(() => {
+    const faltam = campanhaPorId.filter((i) => !consultadasRef.current.has(i.rowNumber));
+    if (faltam.length === 0) return;
+    const geracao = geracaoRef.current;
+    const t = setTimeout(() => {
+      for (const i of faltam) consultadasRef.current.add(i.rowNumber);
+      setConsultandoRecebidos(true);
+      consultarJaRecebeu(faltam.map((i) => ({
+        k: String(i.rowNumber),
+        e: empresaId,
+        c: String(i.contract ?? '').trim() || null,
+        n: numerosDoCliente(numeroWhatsApp(i.phone), numeroWhatsApp(i.phone2)),
+      })))
+        .then((achados) => {
+          if (geracao !== geracaoRef.current) return;
+          setRecebidos((m) => {
+            const novo = new Map(m);
+            for (const [k, lista] of achados) novo.set(Number(k), lista);
+            return novo;
+          });
+        })
+        .catch((err) => {
+          if (geracao !== geracaoRef.current) return;
+          for (const i of faltam) consultadasRef.current.delete(i.rowNumber);
+          console.warn('[CampanhaFacil] já recebeu hoje:', err);
+        })
+        .finally(() => { if (geracao === geracaoRef.current) setConsultandoRecebidos(false); });
+    }, 400);
+    return () => clearTimeout(t);
+  }, [campanhaPorId, empresaId, pedidoDeConsulta]);
+
+  /** As linhas da campanha (já sem as tiradas) cujo cliente recebeu mensagem hoje. */
+  const linhasJaRecebidas = useMemo(
+    () => campanhaPorId.filter((i) => (recebidos.get(i.rowNumber)?.length ?? 0) > 0).map((i) => i.rowNumber),
+    [campanhaPorId, recebidos],
+  );
+
+  const atualizarRecebidos = useCallback(() => {
+    // Mantém o fim da fila de quem já estava lá; só relê os envios.
+    geracaoRef.current++;
+    consultadasRef.current = new Set();
+    setRecebidos(new Map());
+    setPedidoDeConsulta((n) => n + 1);
+  }, []);
+
+  const mandarRecebidosParaOFim = useCallback(() => {
+    if (linhasJaRecebidas.length === 0) return;
+    setParaOFim((s) => new Set([...s, ...linhasJaRecebidas]));
+    toast.success(`${linhasJaRecebidas.length.toLocaleString('pt-BR')} ${linhasJaRecebidas.length === 1 ? 'cliente foi' : 'clientes foram'} para o fim da fila. Cada operador envia esses por último.`);
+  }, [linhasJaRecebidas]);
+
+  const voltarDoFimDaFila = useCallback(() => {
+    setParaOFim(new Set());
+    toast.success('Os clientes voltaram para a posição original da fila.');
+  }, []);
 
   // Trocou a mensagem ou os descontos: as editadas à mão partiram do texto
   // antigo e voltam ao modelo.
@@ -361,11 +446,12 @@ export function useCampanhaFacil() {
       .filter(({ item, index }) => {
         if (statusFilter === 'critico' && !temPendenciaGrave(item)) return false;
         if (statusFilter === 'Revisar' && item.status !== 'Revisar') return false;
+        if (statusFilter === 'ja-recebeu' && !(recebidos.get(item.rowNumber)?.length)) return false;
         if (motivo && !item.issues.includes(motivo)) return false;
         if (!query) return true;
         return textoDeBusca[index].includes(query);
       });
-  }, [campaign, textoDeBusca, search, statusFilter]);
+  }, [campaign, textoDeBusca, search, statusFilter, recebidos]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.max(1, Math.min(page, pageCount));
@@ -419,6 +505,9 @@ export function useCampanhaFacil() {
 
   /** Tira um cliente só (pela prévia). */
   const tirarCliente = useCallback((rowNumber: number) => tirarLinhas([rowNumber]), [tirarLinhas]);
+
+  /** Tira os que já receberam mensagem hoje (26/10/2026). */
+  const tirarJaRecebidos = useCallback(() => tirarLinhas(linhasJaRecebidas), [tirarLinhas, linhasJaRecebidas]);
 
   const devolverRemovidos = useCallback(() => {
     setRemovidos(new Set());
@@ -504,6 +593,7 @@ export function useCampanhaFacil() {
 
       setParsed(result);
       setRemovidos(new Set());
+      zerarRecebidos();
       setMensagensEditadas(new Map());
       setFileName(file.name);
       setSelectedRowNumber(null);
@@ -526,19 +616,20 @@ export function useCampanhaFacil() {
       setIsProcessing(false);
       setTimeout(() => setImportProgress(null), 400);
     }
-  }, [isProcessing, templates, corpoDoTemplate, templateId]);
+  }, [isProcessing, templates, corpoDoTemplate, templateId, zerarRecebidos]);
 
   /** Volta ao passo 1, sem mailing. Mensagem, descontos e operadores ficam. */
   const limparMailing = useCallback(() => {
     setParsed(null);
     setRemovidos(new Set());
+    zerarRecebidos();
     setMensagensEditadas(new Map());
     setFileName('');
     setSelectedRowNumber(null);
     setPage(1);
     setSearch('');
     setStatusFilter('all');
-  }, []);
+  }, [zerarRecebidos]);
 
   const removeMailing = useCallback(() => {
     limparMailing();
@@ -790,6 +881,8 @@ export function useCampanhaFacil() {
     removidos: removidos.size, removerPendenciasGraves, devolverRemovidos,
     gruposDePendencia, tirarComPendencia, tirarCliente,
     parcelasBaixas, editarMensagemDoCliente, mensagensEditadas,
+    recebidos, linhasJaRecebidas, consultandoRecebidos, atualizarRecebidos,
+    paraOFim: paraOFim.size, mandarRecebidosParaOFim, voltarDoFimDaFila, tirarJaRecebidos,
     // templates
     // `setTemplateId` exposto é o `escolherTemplate`, que recusa as bloqueadas.
     // O cru fica interno de propósito — a tela não deve ter como burlar a regra.

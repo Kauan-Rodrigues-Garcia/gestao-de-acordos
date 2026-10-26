@@ -8,7 +8,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Check, CheckCircle2, Clock, Copy, Inbox, Loader2, Monitor, Pencil, RotateCcw, Search, Send, Undo2, X, XCircle,
+  AlertTriangle, Check, CheckCircle2, ChevronDown, Clock, Copy, Inbox, Loader2, Monitor, Pencil, RotateCcw, Search, Send, Undo2, X, XCircle,
   Globe, History, Layers, NotebookPen, Repeat, ThumbsDown, ThumbsUp,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -22,6 +22,9 @@ import {
 import { cn } from '@/lib/utils';
 import { copiarTexto } from '@/lib/clipboard';
 import type { EnvioResumo } from '@/pages/CampanhaFacil/campanhaFacilEnvios.service';
+import {
+  ROTULO_ORIGEM, fraseRecebidos, horaDe, origemDoNumero, type Recebimento,
+} from '@/pages/CampanhaFacil/jaRecebeu';
 import { concluida, useCampanhasWhatsapp } from './useCampanhasWhatsapp';
 import { LIMITE_OBSERVACAO } from './campanhasWhatsapp.service';
 import { DialogoMesmaAba, DialogoTrocarApp } from './AjudaWhatsapp';
@@ -274,6 +277,7 @@ export default function CampanhasWhatsapp() {
                   {lista.slice(0, limite).map((c) => (
                     <LinhaContato
                       key={c.id} c={c} proximo={c.id === proximo?.id}
+                      recebidos={w.recebidos.get(c.id)}
                       onEnviar={() => w.enviar(c)}
                       onEnviar2={() => w.enviar(c, 2)}
                       onCopiar={() => void w.copiar(c)}
@@ -497,8 +501,52 @@ function Aba({ ativo, onClick, rotulo, n, icone }: {
   );
 }
 
-function LinhaContato({ c, proximo, onEnviar, onEnviar2, onCopiar, onEditar, onNaoDeu, onVoltar }: {
-  c: Contato; proximo: boolean;
+/**
+ * «Já recebeu mensagem hoje» (26/10/2026, 20261026190000): o que saiu hoje pela
+ * Campanha Fácil para este Nr.Documento ou para estes números, de qualquer
+ * setor. Sem setor nem operador — só por onde chegou e a que horas.
+ */
+function JaRecebeuHoje({ c, lista }: { c: Contato; lista: readonly Recebimento[] }) {
+  const [aberto, setAberto] = useState(false);
+  return (
+    <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 text-xs">
+      <button
+        type="button" onClick={() => setAberto((a) => !a)} aria-expanded={aberto}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left"
+      >
+        <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+        <span className="min-w-0 flex-1 font-medium text-amber-800 dark:text-amber-300">{fraseRecebidos(lista)}</span>
+        <ChevronDown className={cn('h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform', aberto && 'rotate-180')} />
+      </button>
+      {aberto && (
+        <ul className="space-y-1 border-t border-amber-500/20 px-3 py-2">
+          {lista.map((r, i) => {
+            const origem = origemDoNumero(r.numero, c.whatsapp, c.whatsapp2);
+            return (
+              <li key={i} className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                <span className="w-11 shrink-0 font-semibold tabular-nums">{horaDe(r.enviado_em)}</span>
+                <span className={cn(origem === 'outro' && 'font-medium text-amber-800 dark:text-amber-300')}>
+                  {ROTULO_ORIGEM[origem]}
+                </span>
+                {r.numero && <span className="tabular-nums text-muted-foreground">{telefoneLegivel(r.numero, r.numero)}</span>}
+                {origem === 'outro' && <span className="text-muted-foreground">· não é nenhum dos números desta mensagem</span>}
+                {!r.mesmo_contrato && (
+                  <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">outro contrato</span>
+                )}
+              </li>
+            );
+          })}
+          <li className="pt-1 text-[11px] text-muted-foreground">
+            Aproximado: conta só o que saiu pela Campanha Fácil.
+          </li>
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function LinhaContato({ c, proximo, recebidos, onEnviar, onEnviar2, onCopiar, onEditar, onNaoDeu, onVoltar }: {
+  c: Contato; proximo: boolean; recebidos?: readonly Recebimento[];
   onEnviar: () => void; onEnviar2: () => void; onCopiar: () => void;
   onEditar: () => void; onNaoDeu: () => void; onVoltar: () => void;
 }) {
@@ -548,6 +596,7 @@ function LinhaContato({ c, proximo, onEnviar, onEnviar2, onCopiar, onEditar, onN
             <Campo rotulo="WhatsApp" valor={fone} copiavel />
             <Campo rotulo="Fone 2" valor={fone2} copiavel />
           </dl>
+          {recebidos && recebidos.length > 0 && <JaRecebeuHoje c={c} lista={recebidos} />}
         </div>
 
         <div className="flex shrink-0 flex-wrap items-center gap-1">

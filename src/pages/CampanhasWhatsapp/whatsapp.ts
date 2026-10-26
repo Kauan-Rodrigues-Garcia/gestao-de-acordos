@@ -8,6 +8,8 @@ export type StatusContato = 'pendente' | 'enviado' | 'nao_enviado';
 export interface Contato {
   id: string;
   envio_id: string;
+  /** A empresa do sistema — o Nr.Documento só vale dentro dela (20261026190000). */
+  empresa_id?: string | null;
   ordem: number;
   nome: string;
   contrato: string | null;
