@@ -22,7 +22,7 @@
  * empresa com a aba Desafios relia o placar a cada lote do 59, mesmo com a
  * pílula escondida.
  */
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getTodayISO } from '@/lib';
 import { assinarSinal } from '@/lib/sinais';
@@ -31,9 +31,10 @@ import { useDesafioEmCartaz } from '@/hooks/useDesafios';
 import { ouvirPrevias, previasDaBarra } from '@/lib/previaDesafioDoDia';
 import { buscarPlacarDoDia, type RespostaPlacarDoDia } from '@/services/desafios/desafios.service';
 import {
-  andamentoDoDia, ehDesafioDoDia, entradasNovas, linhasDoPlacar, minutoAgoraSaoPaulo, situacaoDoDia,
+  andamentoDoDia, ehDesafioDoDia, minutoAgoraSaoPaulo, situacaoDoDia,
   type AndamentoDoDia, type Entrada, type PlacarDoDia, type SituacaoDoDia,
 } from '@/services/desafios/desafioDoDia';
+import { feedDoDesafio, ouvirEntradas, registrarLeitura, type LoteDeEntradas } from './entradasDoDia';
 import type { Desafio } from '@/services/desafios/types';
 
 const DEBOUNCE_IMPORTACAO_MS = 1_500;
@@ -42,6 +43,7 @@ const RELEITURA_MS = 5 * 60 * 1000;
 const PASSO_RELOGIO_MS = 30_000;
 /** Quanto tempo uma entrada fica anunciada na tela. */
 const ENTRADA_VISIVEL_MS = 9_000;
+const SEM_ENTRADAS: Entrada[] = [];
 
 // ── O relógio da operação ────────────────────────────────────────────────────
 
@@ -74,6 +76,8 @@ export interface UsoPlacarDoDia {
   entradas: Entrada[];
   /** Muda a cada lote novo: chave de animação. */
   loteId: number;
+  /** O «Entrou agora»: os últimos lotes da sessão, o mais novo primeiro. */
+  feed: LoteDeEntradas[];
   carregando: boolean;
   erro: string | null;
   /** O placar acompanha o relatório sozinho (ver «Ao vivo só para quem participa»). */
@@ -142,24 +146,25 @@ export function usePlacarDoDia(
   const placar = resposta?.estado === 'ok' ? resposta.placar : null;
 
   // ── O que entrou desde a última leitura ───────────────────────────────────
-  const anterior = useRef<PlacarDoDia | null>(null);
-  const [entradas, setEntradas] = useState<Entrada[]>([]);
-  const [loteId, setLoteId] = useState(0);
+  // Uma comparação por desafio, compartilhada pela pílula, a gaveta e a tela
+  // (ver `entradasDoDia.ts`). Cada busca que volta conta, mesmo sem novidade.
+  const lidoEm = query.dataUpdatedAt;
   useEffect(() => {
-    if (!placar) return;
-    const antes = anterior.current;
-    anterior.current = placar;
-    // A primeira leitura não é «entrada»: é o placar que já existia.
-    if (!antes) return;
-    // Pessoas e o dinheiro do setor (o Receptivo, o «sem operador»): os dois
-    // entram no total, e os dois são anunciados.
-    const novas = entradasNovas(linhasDoPlacar(antes), linhasDoPlacar(placar));
-    if (!novas.length) return;
-    setEntradas(novas);
-    setLoteId(n => n + 1);
-    const t = setTimeout(() => setEntradas([]), ENTRADA_VISIVEL_MS);
+    if (!desafioId || !placar || !lidoEm) return;
+    registrarLeitura(desafioId, placar, lidoEm, aoVivo);
+  }, [desafioId, placar, lidoEm, aoVivo]);
+
+  const feed = useSyncExternalStore(ouvirEntradas, () => feedDoDesafio(desafioId), () => feedDoDesafio(desafioId));
+  const ultimo = feed[0] ?? null;
+  // O anúncio da pílula: o último lote, por alguns segundos.
+  const [escondido, setEscondido] = useState<number | null>(null);
+  useEffect(() => {
+    if (!ultimo) return;
+    const resta = ENTRADA_VISIVEL_MS - (Date.now() - ultimo.em);
+    const t = setTimeout(() => setEscondido(ultimo.id), Math.max(0, resta));
     return () => clearTimeout(t);
-  }, [placar]);
+  }, [ultimo]);
+  const entradas = ultimo && escondido !== ultimo.id ? ultimo.entradas : SEM_ENTRADAS;
 
   const andamento = useMemo(
     () => (diario && placar && desafio ? andamentoDoDia(diario, placar, desafio.dataInicio) : null),
@@ -181,11 +186,12 @@ export function usePlacarDoDia(
     minuto: relogio.minuto,
     hoje: relogio.hoje,
     entradas,
-    loteId,
+    loteId: ultimo?.id ?? 0,
+    feed,
     carregando: !!desafioId && query.isPending,
     erro: query.error instanceof Error ? query.error.message : null,
     aoVivo,
-    lidoEm: query.dataUpdatedAt || null,
+    lidoEm: lidoEm || null,
   };
 }
 

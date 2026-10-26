@@ -5,7 +5,6 @@
  *
  * Só desenha: o placar chega pronto de `usePlacarDoDia`.
  */
-import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   CalendarDays, Clock, Database, Gauge, Gift, Headset, Hourglass, Radio, Sparkles, Target, Trophy, UserX, Users, Zap,
@@ -19,7 +18,6 @@ import type { UsoPlacarDoDia } from '@/hooks/useDesafioDoDia';
 import {
   ID_RECEPTIVO, ROTULO_PUBLICO, duracaoCurta, ehLinhaDoSetor, linhasDoPlacar, minutosRestantes,
   rotuloAlvo, rotuloHora, rotuloJanela,
-  type Entrada,
 } from '@/services/desafios/desafioDoDia';
 import type { Desafio } from '@/services/desafios/types';
 import { AnelProgresso } from './AnelProgresso';
@@ -32,8 +30,6 @@ interface Props {
   /** `pagina` ocupa a largura da aba; `gaveta` é a coluna estreita. */
   variante?: 'gaveta' | 'pagina';
 }
-
-interface LoteNoFeed { id: number; hora: string; entradas: Entrada[] }
 
 const ROTULO_SITUACAO = {
   rascunho:  'Rascunho — só quem configura vê',
@@ -79,19 +75,14 @@ function dataCurta(iso: string): string {
 
 export function PainelDesafioDoDia({ desafio, uso, operadorId, variante = 'gaveta' }: Props) {
   const diario = desafio.regra.diario!;
-  const { resposta, placar, andamento, situacao, minuto, hoje, entradas, loteId, carregando, erro, aoVivo, lidoEm } = uso;
+  // O «Entrou agora» vem pronto do hook: um por desafio na sessão, o mesmo que
+  // a pílula viu chegar — e não começa vazio a cada vez que a gaveta abre.
+  const { resposta, placar, andamento, situacao, minuto, hoje, feed, carregando, erro, aoVivo, lidoEm } = uso;
   const bateu = !!andamento?.bateu;
   const estilo = bateu ? ESTILO_BATIDO : estiloDoDia(desafio.visual.acento);
   const porQtd = !!andamento?.porQuantidade;
   const formatar = (v: number) => (porQtd ? `${Math.round(v)}` : formatBRL(v));
   const pagina = variante === 'pagina';
-
-  // O feed de entradas desta sessão: cada lote novo entra no topo.
-  const [feed, setFeed] = useState<LoteNoFeed[]>([]);
-  useEffect(() => {
-    if (!entradas.length) return;
-    setFeed(f => [{ id: loteId, hora: horaCurta(new Date().toISOString()) ?? '', entradas }, ...f].slice(0, 6));
-  }, [loteId, entradas]);
 
   if (erro) {
     return <p role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">Não foi possível carregar o desafio: {erro}</p>;
@@ -330,7 +321,7 @@ export function PainelDesafioDoDia({ desafio, uso, operadorId, variante = 'gavet
                       exit={{ opacity: 0 }}
                       className={cn('rounded-lg border p-2.5', estilo.borda, estilo.suave)}
                     >
-                      <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{lote.hora}</p>
+                      <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{horaCurta(new Date(lote.em).toISOString())}</p>
                       <ul className="space-y-1">
                         {lote.entradas.slice(0, 5).map(e => (
                           <li key={e.id} className="flex items-center gap-2 text-xs">
