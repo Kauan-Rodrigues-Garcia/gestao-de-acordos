@@ -1,0 +1,563 @@
+/*
+ * O Portal de Outubro: a estética das placas das insígnias
+ * (`Insignias/insignias.css`) — noite listrada, borda em degrau, Pixelify no
+ * texto, Press Start nos números, Creepster nos títulos, as bandeirinhas das
+ * bruxas. Laranja e verde são as cores do portal; o metal (ouro, prata,
+ * bronze) só marca o lugar das Lendas.
+ */
+
+.portal-camada,
+.portal-aviso,
+.portal-aviso-centro,
+.portal-abertura,
+.portal-mural {
+  --noite: #0d100f;
+  --noite-2: #121815;
+  --texto: #ece5d0;
+  --apagado: #9aa69f;
+  --laranja: #ff8a1f;
+  --verde: #9dff5c;
+  --ouro: #f0c75e;
+  --v: 1;
+}
+
+/* ── As rachaduras ───────────────────────────────────────────────────────── */
+
+.portal-camada {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  pointer-events: none;
+}
+/*
+ * Camada isolada: rolar a página embaixo não a repinta, e o tremor só a
+ * desloca. A luz é outra camada, desenhada uma vez; o pulso é só `opacity`.
+ */
+.portal-camada { contain: strict; will-change: transform; }
+.portal-vidro, .portal-luz-camada, .portal-luz-pulso, .portal-luz-parada {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.portal-vidro { display: block; }
+.portal-luz-pulso { will-change: opacity; animation: portal-pulsa 3.2s ease-in-out infinite; }
+@keyframes portal-pulsa {
+  0%, 100% { opacity: 0.65; }
+  50%      { opacity: 1; }
+}
+
+.portal-treme { animation: portal-treme 0.7s steps(14, end); }
+.portal-treme-forte { animation: portal-treme 0.45s steps(9, end) infinite; }
+@keyframes portal-treme {
+  0%, 100% { transform: translate(0, 0); }
+  15% { transform: translate(-3px, 1px); }
+  30% { transform: translate(3px, -2px); }
+  45% { transform: translate(-2px, 2px); }
+  60% { transform: translate(2px, 1px); }
+  75% { transform: translate(-1px, -2px); }
+  90% { transform: translate(1px, 1px); }
+}
+
+.portal-farelo {
+  position: fixed;
+  background: #c9d1cc;
+  box-shadow: 1px 1px 0 rgb(0 0 0 / 0.6);
+  animation: portal-cai 1.6s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+@keyframes portal-cai {
+  to { translate: 0 260px; rotate: 300deg; opacity: 0; }
+}
+
+/* ── As plaquinhas ───────────────────────────────────────────────────────── */
+
+.portal-placa {
+  color: var(--texto);
+  font-family: 'Pixelify Sans', ui-monospace, monospace;
+  font-weight: 500;
+  background: repeating-linear-gradient(90deg, var(--noite) 0 4px, var(--noite-2) 4px 8px);
+  box-shadow:
+    0 -3px 0 0 var(--laranja), 0 3px 0 0 var(--laranja),
+    -3px 0 0 0 var(--laranja), 3px 0 0 0 var(--laranja),
+    0 10px 24px rgb(0 0 0 / 0.45);
+}
+.portal-aviso {
+  position: fixed;
+  top: 68px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 46;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.portal-aviso-texto { font-size: 16px; letter-spacing: 0.02em; }
+.portal-aviso-numero {
+  font-family: 'Press Start 2P', ui-monospace, monospace;
+  font-size: 14px;
+  color: var(--laranja);
+  text-shadow: 2px 2px 0 #000;
+}
+.portal-bilhete { animation: portal-aparece 0.6s steps(6, end); }
+.portal-bilhete .portal-aviso-texto { font-size: 17px; color: var(--laranja); }
+.portal-rever { pointer-events: auto; cursor: pointer; }
+.portal-rever:hover { filter: brightness(1.15); }
+@keyframes portal-aparece { from { opacity: 0; transform: translate(-50%, -8px); } }
+
+.portal-aviso-centro {
+  position: fixed;
+  inset: 0;
+  z-index: 46;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  pointer-events: none;
+  color: var(--texto);
+}
+.portal-aviso-centro .portal-aviso-texto {
+  font-family: 'Pixelify Sans', ui-monospace, monospace;
+  font-size: 28px;
+  padding: 6px 18px;
+  background: rgb(13 16 15 / 0.85);
+}
+.portal-aviso-grande {
+  font-family: 'Press Start 2P', ui-monospace, monospace;
+  font-size: 96px;
+  color: var(--laranja);
+  text-shadow: 8px 8px 0 #000;
+  animation: portal-bate 1s steps(2, end) infinite;
+}
+@keyframes portal-bate { 50% { transform: scale(1.06); } }
+
+/* ── A noite (abertura e mural) ──────────────────────────────────────────── */
+
+.portal-noite {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  color: var(--texto);
+  font-family: 'Pixelify Sans', ui-monospace, monospace;
+  font-weight: 500;
+  font-variant-ligatures: none;
+  background: repeating-linear-gradient(90deg, var(--noite) 0 8px, var(--noite-2) 8px 16px);
+}
+.portal-bandeirinhas {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 24px;
+  image-rendering: pixelated;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='42' height='8' shape-rendering='crispEdges'%3E%3Crect width='42' height='1' fill='%23050605'/%3E%3Cpath d='M1 1h9v2h-1v2h-1v2h-2v1h-1v-1h-2v-2h-1v-2h-1z' fill='%23ff8a1f'/%3E%3Cpath d='M15 1h9v2h-1v2h-1v2h-2v1h-1v-1h-2v-2h-1v-2h-1z' fill='%23c8202a'/%3E%3Cpath d='M29 1h9v2h-1v2h-1v2h-2v1h-1v-1h-2v-2h-1v-2h-1z' fill='%236abf3a'/%3E%3C/svg%3E") 0 0 / 126px 24px repeat-x;
+}
+
+.portal-titulo {
+  font-family: 'Creepster', 'Pixelify Sans', cursive;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: 0.03em;
+  color: var(--laranja);
+  text-shadow: 5px 5px 0 #3a1400;
+  font-size: clamp(56px, 7vw, 112px);
+  text-align: center;
+}
+.portal-titulo-medio { font-size: clamp(44px, 4.6vw, 76px); }
+.portal-titulo-gigante { font-size: clamp(72px, 10vw, 160px); }
+.portal-sub, .portal-frase { color: var(--apagado); font-size: 24px; text-align: center; }
+.portal-selo {
+  font-size: 18px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--verde);
+  text-shadow: 2px 2px 0 #000;
+}
+
+/* ── A abertura ──────────────────────────────────────────────────────────── */
+
+.portal-abertura {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  overflow: hidden;
+}
+.portal-abertura-vidro { position: absolute; inset: 0; will-change: transform; }
+.portal-abertura-vidro svg, .portal-cacos-contorno { position: absolute; inset: 0; width: 100%; height: 100%; }
+.portal-raios { position: absolute; inset: 0; }
+.portal-raios-crescem { will-change: transform; animation: portal-raios calc(1100ms / var(--v)) cubic-bezier(0.2, 0.8, 0.3, 1) both; }
+@keyframes portal-raios { from { transform: scale(0.02); } }
+
+.portal-cacos { position: absolute; inset: 0; overflow: hidden; }
+/* Cada caco: um pedaço de HTML recortado; cair é só deslocar (a placa de vídeo faz). */
+.portal-cacos-pecas { position: absolute; inset: 0; }
+.portal-caco { position: absolute; background: rgb(13 16 15 / 0.97); will-change: transform, opacity; }
+.portal-cacos-contorno { animation: portal-some calc(500ms / var(--v)) ease-out calc(250ms / var(--v)) forwards; }
+
+.portal-clarao {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  animation: portal-some calc(600ms / var(--v)) ease-out forwards;
+  pointer-events: none;
+}
+@keyframes portal-some { to { opacity: 0; } }
+
+.portal-girando { position: relative; }
+.portal-girando > svg, .portal-anel, .portal-fagulhas { position: absolute; inset: 0; }
+.portal-girando svg { display: block; width: 100%; height: 100%; }
+/* Quem gira é a camada do anel (o desenho fica parado): nada repinta. */
+.portal-anel { will-change: transform; animation: portal-gira linear infinite; }
+@keyframes portal-gira { to { transform: rotate(360deg); } }
+.portal-fagulhas { will-change: opacity; animation: portal-pisca 1.6s steps(2, end) infinite; }
+.portal-fagulhas-2 { animation-delay: -0.8s; }
+@keyframes portal-pisca { 50% { opacity: 0.15; } }
+
+/* Modo leve (máquina sem placa de vídeo, ou o tema recolhido): nada gira nem pisca. */
+.portal-leve .portal-anel,
+.portal-leve .portal-fagulhas,
+.portal-leve .portal-premio-acao,
+.portal-leve .portal-aviso-grande { animation: none !important; }
+.portal-leve .portal-confete { display: none; }
+
+.portal-abertura-anel {
+  position: absolute;
+  left: 50%;
+  top: 44%;
+  width: min(58vh, 560px);
+  height: min(58vh, 560px);
+  translate: -50% -50%;
+  animation: portal-cresce calc(1400ms / var(--v)) cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+@keyframes portal-cresce { from { scale: 0; rotate: -90deg; } }
+.portal-abertura-titulo {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 6vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  animation: portal-sobe calc(700ms / var(--v)) steps(7, end) both;
+}
+@keyframes portal-sobe { from { opacity: 0; translate: 0 16px; } }
+
+.portal-pular, .portal-fechar {
+  position: absolute;
+  z-index: 3;
+  color: var(--texto);
+  font-family: 'Pixelify Sans', ui-monospace, monospace;
+  font-size: 16px;
+  background: rgb(13 16 15 / 0.85);
+  box-shadow: 0 -2px 0 0 var(--apagado), 0 2px 0 0 var(--apagado), -2px 0 0 0 var(--apagado), 2px 0 0 0 var(--apagado);
+  cursor: pointer;
+}
+.portal-pular { right: 28px; bottom: 28px; padding: 6px 16px; }
+.portal-fechar { right: 24px; top: 36px; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; }
+.portal-pular:hover, .portal-fechar:hover { color: #fff; }
+
+/* ── O mural ─────────────────────────────────────────────────────────────── */
+
+.portal-mural { position: fixed; inset: 0; z-index: 9000; }
+.portal-palco {
+  position: absolute;
+  inset: 40px 0 76px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.portal-ato {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  width: min(1200px, 92vw);
+  animation: portal-sobe calc(600ms / var(--v)) steps(6, end) both;
+}
+
+/* Controles, embaixo. */
+.portal-controles {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: rgb(5 6 5 / 0.85);
+  box-shadow: 0 -2px 0 0 #2a322e, 0 2px 0 0 #2a322e, -2px 0 0 0 #2a322e, 2px 0 0 0 #2a322e;
+}
+.portal-controles button {
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  color: var(--texto);
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.portal-controles button svg { width: 18px; height: 18px; }
+.portal-controles button:hover:not(:disabled) { background: #1d2420; }
+.portal-controles button:disabled { opacity: 0.35; }
+.portal-controles .portal-ligado { color: #000; background: var(--laranja); }
+.portal-controles-sep { width: 1px; height: 22px; background: #2a322e; margin: 0 6px; }
+.portal-controles-nome { min-width: 150px; font-size: 14px; color: var(--apagado); padding-left: 8px; }
+.portal-pontos { display: flex; gap: 6px; }
+.portal-pontos button { min-width: 10px !important; width: 10px; height: 10px !important; padding: 0 !important; background: #39423d; }
+.portal-pontos button.portal-ligado { background: var(--laranja); }
+
+/* As medalhas penduradas (a mesma `Medalha` do topo do app). */
+.portal-varal { display: flex; justify-content: center; gap: calc(var(--tam-medalha) * 0.42); }
+.portal-varal .ins-medalha.ins-pendurada { --fio: calc(var(--tam-medalha) * 0.4); }
+
+/* Ato: Outubro no Gestão. */
+.portal-intro-anel {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 560px;
+  height: 560px;
+  translate: -50% -50%;
+  opacity: 0.22;
+  pointer-events: none;
+}
+.portal-ato-intro > :not(.portal-intro-anel), .portal-ato-fim > :not(.portal-intro-anel) { position: relative; }
+.portal-numeros { display: flex; gap: 64px; margin-top: 24px; }
+.portal-numeros div { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.portal-numeros strong {
+  font-family: 'Press Start 2P', ui-monospace, monospace;
+  font-weight: 400;
+  font-size: 40px;
+  color: var(--ouro);
+  text-shadow: 4px 4px 0 #000;
+}
+.portal-numeros span { color: var(--apagado); font-size: 20px; }
+
+/* Ato: uma gincana. */
+.portal-ato-gincana { flex-direction: row; align-items: center; justify-content: center; gap: 56px; }
+.portal-quadro {
+  flex-shrink: 0;
+  width: 520px;
+  height: 400px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 36px;
+  background: repeating-linear-gradient(90deg, #0a0d0c 0 6px, #0e1311 6px 12px);
+  box-shadow:
+    0 -8px 0 0 var(--fita), 0 8px 0 0 var(--fita),
+    -8px 0 0 0 var(--fita), 8px 0 0 0 var(--fita),
+    0 20px 40px rgb(0 0 0 / 0.5);
+}
+.portal-quadro-arte { display: flex; align-items: flex-end; justify-content: center; }
+.portal-arte-fila { display: flex; align-items: flex-end; gap: 24px; }
+.portal-gincana-texto { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; max-width: 520px; }
+.portal-gincana-texto .portal-titulo { text-align: left; }
+.portal-gincana-texto .portal-frase { text-align: left; color: var(--texto); }
+.portal-gincana-texto .portal-selo { color: var(--fita); filter: brightness(1.6); }
+.portal-fatos { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px; }
+.portal-fatos li {
+  padding: 4px 12px;
+  font-size: 18px;
+  background: #151b18;
+  box-shadow: 0 -2px 0 0 var(--fita), 0 2px 0 0 var(--fita), -2px 0 0 0 var(--fita), 2px 0 0 0 var(--fita);
+}
+
+/* Ato: ranking. */
+.portal-ato-ranking { gap: 10px; }
+.portal-ranking { display: flex; flex-direction: column; gap: 4px; width: min(860px, 92vw); }
+.portal-ranking-linha {
+  --metal: #39423d;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 4px 14px;
+  background: #121815;
+  box-shadow: inset 4px 0 0 var(--metal);
+  animation: portal-entra calc(500ms / var(--v)) steps(5, end) both;
+}
+@keyframes portal-entra { from { opacity: 0; translate: -24px 0; } }
+.portal-lugar-1 { --metal: #f0c75e; }
+.portal-lugar-2 { --metal: #d9dee5; }
+.portal-lugar-3 { --metal: #d08a4a; }
+.portal-ranking-pos {
+  width: 44px;
+  font-family: 'Press Start 2P', ui-monospace, monospace;
+  font-size: 16px;
+  color: var(--metal);
+  text-shadow: 2px 2px 0 #000;
+}
+.portal-ranking-linha:not(.portal-lugar-1):not(.portal-lugar-2):not(.portal-lugar-3) .portal-ranking-pos { color: var(--apagado); }
+.portal-avatar {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Press Start 2P', ui-monospace, monospace;
+  font-size: 12px;
+  color: var(--metal, var(--texto));
+  background: #1b221f;
+  box-shadow: 0 -3px 0 0 var(--metal, #39423d), 0 3px 0 0 var(--metal, #39423d), -3px 0 0 0 var(--metal, #39423d), 3px 0 0 0 var(--metal, #39423d);
+}
+.portal-avatar-grande { width: 120px; height: 120px; font-size: 30px; box-shadow: 0 -6px 0 0 var(--metal), 0 6px 0 0 var(--metal), -6px 0 0 0 var(--metal), 6px 0 0 0 var(--metal); }
+.portal-ranking-quem { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.portal-ranking-nome { font-size: 19px; line-height: 1.15; }
+.portal-ranking-setor { font-size: 13px; color: var(--apagado); }
+.portal-ranking-setor em, .portal-lenda-setor em { font-style: normal; color: #ffd34d; }
+.portal-bolinhas { display: flex; gap: 5px; }
+.portal-bolinhas span { width: 12px; height: 12px; background: #2a322e; }
+.portal-bolinhas .portal-bolinha-tem { background: var(--ouro); box-shadow: 1px 1px 0 #000; }
+.portal-ranking-pts {
+  width: 80px;
+  text-align: right;
+  font-family: 'Press Start 2P', ui-monospace, monospace;
+  font-size: 16px;
+  text-shadow: 2px 2px 0 #000;
+}
+.portal-rodape-ato { margin-top: 6px; font-size: 14px; color: #6f7b74; text-align: center; }
+
+/* Ato: as Lendas. */
+.portal-podio { display: flex; align-items: flex-end; justify-content: center; margin-top: 12px; }
+.portal-podio-coluna { width: 340px; display: flex; flex-direction: column; align-items: center; }
+.portal-lugar-1.portal-podio-coluna { width: 380px; }
+.portal-lenda {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 22px;
+  animation: portal-sobe calc(700ms / var(--v)) steps(7, end) both;
+}
+.portal-lenda-nome { font-size: 30px; text-shadow: 3px 3px 0 #000; margin-top: 12px; }
+.portal-lenda-setor { font-size: 18px; color: var(--apagado); }
+.portal-pedestal {
+  width: 100%;
+  background: #1a1f1d;
+  border-top: 8px solid var(--metal);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  animation: portal-sobe calc(700ms / var(--v)) steps(7, end) both;
+}
+.portal-lugar-1 .portal-pedestal { height: 250px; }
+.portal-lugar-2 .portal-pedestal { height: 200px; }
+.portal-lugar-3 .portal-pedestal { height: 170px; }
+.portal-pedestal-num {
+  font-family: 'Press Start 2P', ui-monospace, monospace;
+  font-size: 44px;
+  margin-top: 14px;
+  color: var(--metal);
+  text-shadow: 5px 5px 0 #000;
+}
+.portal-lugar-1 .portal-pedestal-num { font-size: 64px; margin-top: 22px; }
+.portal-pedestal-pts { font-family: 'Press Start 2P', ui-monospace, monospace; font-size: 16px; margin-top: 12px; text-shadow: 2px 2px 0 #000; }
+
+/* Ato: prêmio das Lendas. */
+.portal-premio-cards { display: flex; gap: 28px; margin-top: 18px; }
+.portal-premio-card {
+  width: 260px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 16px;
+  color: var(--texto);
+  background: #121815;
+  box-shadow: 0 -4px 0 0 var(--metal), 0 4px 0 0 var(--metal), -4px 0 0 0 var(--metal), 4px 0 0 0 var(--metal);
+  cursor: pointer;
+}
+.portal-premio-card .portal-avatar { width: 84px; height: 84px; font-size: 22px; }
+.portal-premio-card:hover:not(:disabled) { background: #1a221e; }
+.portal-premio-nome { font-size: 22px; }
+.portal-premio-acao { font-size: 16px; color: var(--laranja); animation: portal-pisca 1.4s steps(2, end) infinite; }
+.portal-premio-liberou { cursor: default; }
+.portal-premio-liberou .portal-premio-acao { color: var(--verde); animation: none; }
+.portal-premio-revelado { display: flex; flex-direction: column; align-items: center; gap: 18px; margin-top: 12px; }
+.portal-premio-titulo { font-size: 28px; }
+.portal-botao {
+  padding: 10px 24px;
+  font-family: 'Pixelify Sans', ui-monospace, monospace;
+  font-size: 22px;
+  color: #160800;
+  background: var(--laranja);
+  box-shadow: 0 -4px 0 0 #b0520a, 0 4px 0 0 #b0520a, -4px 0 0 0 #b0520a, 4px 0 0 0 #b0520a, 0 8px 0 0 #000;
+  cursor: pointer;
+}
+.portal-botao:hover { filter: brightness(1.1); }
+
+/* A roleta. */
+.portal-sorteio { position: relative; display: flex; flex-direction: column; align-items: center; gap: 20px; margin-top: 8px; }
+.portal-roleta {
+  position: relative;
+  width: 560px;
+  overflow: hidden;
+  background: #0a0d0c;
+  box-shadow: 0 -6px 0 0 var(--laranja), 0 6px 0 0 var(--laranja), -6px 0 0 0 var(--laranja), 6px 0 0 0 var(--laranja);
+}
+.portal-roleta-fita { will-change: transform; }
+.portal-roleta-linha { display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0.55; }
+.portal-roleta-nome { font-size: 26px; line-height: 1.1; }
+.portal-roleta-setor { font-size: 14px; color: var(--apagado); }
+.portal-roleta-ganhou { opacity: 1; }
+.portal-roleta-ganhou .portal-roleta-nome { color: var(--ouro); }
+.portal-roleta-mira {
+  position: absolute;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  box-shadow: inset 0 3px 0 0 var(--laranja), inset 0 -3px 0 0 var(--laranja);
+  background: rgb(255 138 31 / 0.1);
+}
+.portal-vencedor { display: flex; flex-direction: column; align-items: center; gap: 6px; animation: portal-sobe calc(600ms / var(--v)) steps(6, end) both; }
+.portal-vencedor-nome { font-family: 'Creepster', 'Pixelify Sans', cursive; font-size: 72px; color: var(--ouro); text-shadow: 5px 5px 0 #3a2a00; line-height: 1; }
+.portal-vencedor-premio { font-size: 20px; color: var(--apagado); }
+
+.portal-confete { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 2; }
+.portal-confete span { position: absolute; top: -20px; box-shadow: 2px 2px 0 rgb(0 0 0 / 0.5); will-change: transform; }
+
+/* Ato: a garrafa. */
+.portal-garrafa { display: flex; align-items: center; gap: 48px; margin-top: 12px; }
+.portal-garrafa .portal-frase { text-align: left; color: var(--texto); font-size: 26px; }
+.portal-garrafa-regra { margin: 10px 0 24px; font-size: 18px; color: var(--apagado); }
+
+/* ── O painel do relógio (só no localhost) ───────────────────────────────── */
+
+.portal-painel, .portal-painel-botao {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  z-index: 9500;
+  color: #e6e6e6;
+  font: 12px/1.4 system-ui, sans-serif;
+  background: #15181c;
+  border: 1px solid #353b44;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.4);
+}
+.portal-painel-botao { padding: 6px 10px; cursor: pointer; }
+.portal-painel { width: 420px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.portal-painel-topo { display: flex; justify-content: space-between; align-items: center; }
+.portal-painel-topo button { padding: 0 8px; font-size: 16px; }
+.portal-painel-hora { font-family: ui-monospace, monospace; font-size: 13px; }
+.portal-painel-hora span { color: #9aa3ad; }
+.portal-painel-regua { width: 100%; }
+.portal-painel-linha { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.portal-painel-linha button {
+  padding: 3px 7px;
+  border: 1px solid #353b44;
+  border-radius: 4px;
+  background: #1e2329;
+  color: inherit;
+  cursor: pointer;
+}
+.portal-painel-linha button:hover:not(:disabled) { background: #2a3038; }
+.portal-painel-linha button:disabled { opacity: 0.4; cursor: default; }
+.portal-painel-linha .portal-ligado { background: #ff8a1f; color: #111; border-color: #ff8a1f; }
+.portal-painel-sep { flex: 1; }

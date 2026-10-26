@@ -86,6 +86,7 @@ import { SeletorEmpresa } from './SeletorEmpresa';
 import { PainelSobDemanda } from './PainelSobDemanda';
 import { BotaoCalendario } from './Calendario/BotaoCalendario';
 import { BotaoInsignias } from './Insignias/BotaoInsignias';
+import { PORTAL_LIGADO } from './PortalOutubro/fases';
 import { BarraRolagemLateral } from './BarraRolagemLateral';
 import { ligarRolagemLateral } from '@/lib/rolagemLateral';
 import { comNovaTentativa } from '@/lib/sobDemanda';
@@ -128,6 +129,8 @@ const RevoadaHalloween  = lazy(() => carregarHalloween().then(m => ({ default: m
 const SobreposicaoHalloween = lazy(() => carregarHalloween().then(m => ({ default: m.SobreposicaoHalloween })));
 const carregarBoasVindasHalloween = comNovaTentativa(() => import('@/components/Halloween/BoasVindasHalloween'));
 const BoasVindasHalloween = lazy(carregarBoasVindasHalloween);
+// O Portal de Outubro (26–30/10/2026): por enquanto só no `npm run dev`.
+const PortalDeOutubro = lazy(() => import('@/components/PortalOutubro/PortalDeOutubro').then(m => ({ default: m.PortalDeOutubro })));
 
 /*
  * A lista e o filtro mudaram de casa: `src/lib/menuLateral.ts`.
@@ -1065,6 +1068,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <ChefeDeTeste />
         {/* O «Assistir» e o «Testar só na minha tela» do card da Corrida: aqui, trocar de aba não fecha. */}
         <PalcoDoOrganizador />
+        {/* O Portal de Outubro: o vidro rachando na semana e o mural da sexta, 16h. Ver `PortalOutubro/fases.ts`. */}
+        {PORTAL_LIGADO && <Suspense fallback={null}><PortalDeOutubro temaLigado={halloween} leve={halloweenSoParado} /></Suspense>}
 
         {/* Expand toggle */}
         <button
