@@ -115,7 +115,7 @@ import {
   fetchSaldosPix, saldosPorOperador, aplicarSaldoNoAcordo, retirarSaldoDoAcordo,
   fetchPedidosNr, pedirAutorizacaoNr, type PixNrPedido,
   fetchAprovacoesPedidosNr, type PixNrAprovacao, MSG_NR_MESMO_OPERADOR,
-  fetchDonosDeNrPix, type DonoDeNrPix,
+  fetchDonosDeNrPix, conflitoDeNrPix, type DonoDeNrPix,
   fetchAcordosRecorrentesSemPix, type AcordoSemRegistroPix,
   fetchMeusSetores,
   fetchPremiacoesPagamento, marcarPremiacaoPaga,
@@ -151,13 +151,15 @@ import { AnimatePresence } from 'framer-motion';
  * Nome e setor mudam de lugar sem mudar a decisão.
  */
 function donosIguais(
-  a: Map<string, DonoDeNrPix>,
-  b: Map<string, DonoDeNrPix>,
+  a: Map<string, DonoDeNrPix[]>,
+  b: Map<string, DonoDeNrPix[]>,
 ): boolean {
   if (a === b) return true;
   if (a.size !== b.size) return false;
-  for (const [nr, dono] of a) {
-    if (b.get(nr)?.operadorId !== dono.operadorId) return false;
+  for (const [nr, donos] of a) {
+    const outros = b.get(nr);
+    if (!outros || outros.length !== donos.length) return false;
+    if (donos.some((d, i) => d.operadorId !== outros[i].operadorId || d.mes !== outros[i].mes)) return false;
   }
   return true;
 }
@@ -422,7 +424,7 @@ export function PixAutomatico() {
    * pedido dos dois líderes. Com o Set, a tela não sabia qual dos dois
    * caminhos oferecer.
    */
-  const [donosDeNr, setDonosDeNr] = useState<Map<string, DonoDeNrPix>>(new Map());
+  const [donosDeNr, setDonosDeNr] = useState<Map<string, DonoDeNrPix[]>>(new Map());
   const nrsBloqueados = useMemo(() => new Set(donosDeNr.keys()), [donosDeNr]);
   const [saldos, setSaldos]         = useState<PixAutoSaldo[]>(() => guardado?.saldos ?? []);
   const [pagamentosPremiacao, setPagamentosPremiacao] = useState<PixPremiacaoPagamento[]>(
@@ -1593,25 +1595,25 @@ export function PixAutomatico() {
     const valor = parseCurrencyInput(valorNovo);
     if (!nr) { toast.error('Informe o NR do acordo'); return; }
     if (isNaN(valor) || valor <= 0) { toast.error('Valor inválido'); return; }
-    const donoAtual = donosDeNr.get(normalizarNr(nr));
-    if (donoAtual) {
-      /*
-       * NR já registrado: dois caminhos, e a diferença é de QUEM ele é.
-       *
-       * Do próprio dono do registro que se está tentando criar, é engano — a
-       * mesma linha duas vezes. Não vai para a fila: o líder não tem o que
-       * decidir, e aprovar contaria o mesmo dinheiro duas vezes na comissão e
-       * na dobra.
-       *
-       * De outra pessoa, é o pedido. A mensagem antiga mandava «exclua o
-       * registro existente», e quem teria de excluir era o operador do OUTRO
-       * setor; agora os líderes dos dois setores decidem.
-       */
-      const donoPretendido = podeAgirSobreOutros && vinculoOp ? vinculoOp.id : perfil.id;
-      if (donoAtual.operadorId === donoPretendido) {
-        toast.error(MSG_NR_MESMO_OPERADOR, { duration: 7000 });
-        return;
-      }
+    /*
+     * NR já registrado: dois caminhos, e a diferença é de QUEM ele é.
+     *
+     * Do próprio dono do registro que se está tentando criar, é engano — a
+     * mesma linha duas vezes, em qualquer mês. Não vai para a fila: o líder não
+     * tem o que decidir, e aprovar contaria o mesmo dinheiro duas vezes na
+     * comissão e na dobra.
+     *
+     * De outra pessoa NO MESMO MÊS, é o pedido dos líderes dos dois setores.
+     * De outra pessoa em outro mês, não é nada (26/10/2026): o NR de agosto
+     * não pede autorização para um registro de outubro. Ver `conflitoDeNrPix`.
+     */
+    const donoPretendido = podeAgirSobreOutros && vinculoOp ? vinculoOp.id : perfil.id;
+    const conflito = conflitoDeNrPix(donosDeNr, nr, donoPretendido, mes);
+    if (conflito?.tipo === 'mesma_pessoa') {
+      toast.error(MSG_NR_MESMO_OPERADOR, { duration: 7000 });
+      return;
+    }
+    if (conflito?.tipo === 'outra_pessoa') {
       await pedirAutorizacao(nr, valor);
       return;
     }

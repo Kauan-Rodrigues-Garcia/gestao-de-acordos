@@ -53,8 +53,8 @@ vi.mock('@/lib/supabase', () => ({
 
 import {
   ladosDoPedidoNr, setorDoLadoNr, podeAssinarLadoNr, estadoDoPedidoNr,
-  fetchDonosDeNrPix, fetchAcordosRecorrentesSemPix,
-  type PixNrPedido, type PixNrAprovacao,
+  fetchDonosDeNrPix, fetchAcordosRecorrentesSemPix, conflitoDeNrPix,
+  type PixNrPedido, type PixNrAprovacao, type DonoDeNrPix,
 } from './pix_automatico.service';
 
 beforeEach(() => { calls.length = 0; fila = []; });
@@ -223,10 +223,11 @@ describe('fetchDonosDeNrPix', () => {
     ], error: null }];
 
     const donos = await fetchDonosDeNrPix('emp-1');
-    expect(donos.get('23323')?.operadorId).toBe('ana');
+    expect(donos.get('23323')?.[0]?.operadorId).toBe('ana');
+    expect(donos.get('23323')?.[0]?.mes).toBe('2026-09');
   });
 
-  it('empatado o NR, fica o registro MAIS ANTIGO — o mesmo que o banco escolhe', async () => {
+  it('os registros do NR vêm do MAIS ANTIGO ao mais novo — o mesmo que o banco escolhe', async () => {
     // `fn_pix_nr_pedir` ordena por `criado_em` e pega o primeiro. Se a tela
     // apontasse o outro, o cartão do pedido mostraria um conflito e o banco
     // guardaria outro.
@@ -238,7 +239,44 @@ describe('fetchDonosDeNrPix', () => {
     ], error: null }];
 
     const donos = await fetchDonosDeNrPix('emp-1');
-    expect(donos.get('23323')?.operadorId).toBe('ana');
+    expect(donos.get('23323')?.map(d => d.operadorId)).toEqual(['ana', 'nicole']);
+  });
+
+  it('o mês é o de São Paulo: 31/08 às 22h é agosto, não setembro', async () => {
+    fila = [{ data: [
+      { id: 'a-1', nr_cliente: '1', operador_id: 'ana', operador_nome: 'Ana',
+        setor_id: null, criado_em: '2026-09-01T01:00:00Z' },
+    ], error: null }];
+
+    const donos = await fetchDonosDeNrPix('emp-1');
+    expect(donos.get('1')?.[0]?.mes).toBe('2026-08');
+  });
+});
+
+// ── O NR é único dentro do mês (26/10/2026) ─────────────────────────────────
+
+describe('conflitoDeNrPix', () => {
+  const dono = (operadorId: string, mes: string): DonoDeNrPix =>
+    ({ operadorId, operadorNome: operadorId, setorId: null, mes });
+
+  it('outra pessoa com o NR em outro mês não é conflito (o caso da Erika)', () => {
+    const donos = new Map([['12963612', [dono('agatha', '2026-08')]]]);
+    expect(conflitoDeNrPix(donos, '12963612', 'erika', '2026-10')).toBeNull();
+  });
+
+  it('outra pessoa no mesmo mês é o pedido, apontando o primeiro do mês', () => {
+    const donos = new Map([['23323', [dono('agatha', '2026-08'), dono('ana', '2026-10'), dono('nicole', '2026-10')]]]);
+    expect(conflitoDeNrPix(donos, ' 23323 ', 'erika', '2026-10'))
+      .toEqual({ tipo: 'outra_pessoa', dono: dono('ana', '2026-10') });
+  });
+
+  it('a mesma pessoa, em qualquer mês, é engano', () => {
+    const donos = new Map([['23323', [dono('erika', '2026-07')]]]);
+    expect(conflitoDeNrPix(donos, '23323', 'erika', '2026-10')?.tipo).toBe('mesma_pessoa');
+  });
+
+  it('NR sem registro nenhum: livre', () => {
+    expect(conflitoDeNrPix(new Map(), '1', 'erika', '2026-10')).toBeNull();
   });
 });
 

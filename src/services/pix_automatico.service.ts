@@ -18,6 +18,7 @@ import { tabelaSemTipo, rpcSemTipo } from '@/lib/supabaseSemTipo';
 import type { Database } from '@/lib/database.types';
 import { primeiroDiaDoMes, ultimoDiaDoMes, type MesRef } from '@/lib/mesReferencia';
 import { FORMAS_RECORRENTES } from '@/lib/formasRecorrentes';
+import { mesLocalPix } from '@/lib/mesPix';
 
 type PixAutoAcordoInsert = Database['public']['Tables']['pix_automatico_acordos']['Insert'];
 type PixAutoAcordoUpdate = Database['public']['Tables']['pix_automatico_acordos']['Update'];
@@ -714,29 +715,30 @@ export interface LinhaPixLote {
  *
  * Esta lista tem de dizer o mesmo que `fn_pix_nr_bloqueia_duplicado`, senão a
  * tela promete o que o banco recusa (ou pior: o contrário).
+ *
+ * Desde 26/10/2026 o REGISTRO NOVO olha o mês (`conflitoDeNrPix`): outra
+ * pessoa só barra no mesmo mês. Esta lista continua valendo para TROCAR o NR de
+ * um registro, que o banco segue barrando em qualquer mês
+ * (`fn_pix_nr_bloqueia_troca`).
  */
 export async function fetchNrsBloqueados(empresaId: string): Promise<Set<string>> {
   return new Set((await fetchDonosDeNrPix(empresaId)).keys());
 }
 
-/** Quem está com um NR hoje: nome para a tela, id para decidir de quem é. */
+/** Quem registrou um NR: nome para a tela, id para decidir de quem é. */
 export interface DonoDeNrPix {
   operadorId: string;
   operadorNome: string | null;
   setorId: string | null;
+  /** Mês do registro (`yyyy-MM`, no fuso da operação — `mesLocalPix`). */
+  mes: string;
 }
 
 /**
- * NR normalizado → quem o registrou.
+ * NR normalizado → os registros dele, do mais antigo ao mais novo.
  *
- * Existe porque a regra de duplicidade passou a depender de QUEM é o dono
- * (09/09/2026): o mesmo NR na mão da mesma pessoa é engano — não vai para a
- * fila de autorização —, e na mão de outra pessoa é o pedido dos dois líderes.
- * Só com o Set de NRs a tela não saberia qual dos dois caminhos oferecer.
- *
- * Guarda o registro MAIS ANTIGO de cada NR, que é o que `fn_pix_nr_pedir`
- * escolhe como conflito. Duas telas dizendo donos diferentes do mesmo NR seria
- * pior que não dizer nada.
+ * Existe porque a regra de duplicidade depende de QUEM é o dono (09/09/2026) e,
+ * desde 26/10/2026, de QUANDO: ver `conflitoDeNrPix`.
  *
  * Paginado: acima do teto do PostgREST a lista vinha cortada em silêncio, e aí
  * a tela deixava a pessoa registrar um NR que o trigger recusaria — o caminho
@@ -744,7 +746,7 @@ export interface DonoDeNrPix {
  */
 export async function fetchDonosDeNrPix(
   empresaId: string,
-): Promise<Map<string, DonoDeNrPix>> {
+): Promise<Map<string, DonoDeNrPix[]>> {
   const { linhas } = await paginarTudo<{
     id: string; nr_cliente: string; operador_id: string;
     operador_nome: string | null; setor_id: string | null; criado_em: string;
@@ -758,24 +760,51 @@ export async function fetchDonosDeNrPix(
       .range(de, ate),
   );
 
-  const donos = new Map<string, DonoDeNrPix & { criadoEm: string }>();
-  for (const r of linhas) {
+  // Do mais antigo ao mais novo: o primeiro do mês é o que `fn_pix_nr_pedir`
+  // escolhe como conflito.
+  const ordenadas = [...linhas].sort((a, b) => String(a.criado_em).localeCompare(String(b.criado_em)));
+  const saida = new Map<string, DonoDeNrPix[]>();
+  for (const r of ordenadas) {
     const chave = normalizarNr(r.nr_cliente);
-    const atual = donos.get(chave);
-    if (atual && String(atual.criadoEm) <= String(r.criado_em)) continue;
-    donos.set(chave, {
+    const lista = saida.get(chave) ?? [];
+    lista.push({
       operadorId: r.operador_id,
       operadorNome: r.operador_nome,
       setorId: r.setor_id,
-      criadoEm: r.criado_em,
+      mes: mesLocalPix(r.criado_em),
     });
-  }
-
-  const saida = new Map<string, DonoDeNrPix>();
-  for (const [nr, d] of donos) {
-    saida.set(nr, { operadorId: d.operadorId, operadorNome: d.operadorNome, setorId: d.setorId });
+    saida.set(chave, lista);
   }
   return saida;
+}
+
+export type ConflitoDeNrPix =
+  | { tipo: 'mesma_pessoa'; dono: DonoDeNrPix }
+  | { tipo: 'outra_pessoa'; dono: DonoDeNrPix };
+
+/**
+ * Registrar este NR para esta pessoa, neste mês, esbarra em quê?
+ *
+ *   • a MESMA pessoa já tem o NR, em qualquer mês → engano, não vai para a fila;
+ *   • OUTRA pessoa tem o NR NO MESMO MÊS → o pedido dos líderes (o registro
+ *     mais antigo do mês é o conflito, como em `fn_pix_nr_pedir`);
+ *   • outra pessoa só em outro mês → nada: o registro entra normal.
+ *
+ * O mês conta desde 26/10/2026 (migration 20261026140000): um NR registrado em
+ * agosto não pede autorização para um registro de outubro. É a mesma regra de
+ * `fn_pix_nr_bloqueia_duplicado`.
+ */
+export function conflitoDeNrPix(
+  donos: ReadonlyMap<string, readonly DonoDeNrPix[]>,
+  nr: string,
+  operadorId: string,
+  mes: string,
+): ConflitoDeNrPix | null {
+  const registros = donos.get(normalizarNr(nr)) ?? [];
+  const meu = registros.find(d => d.operadorId === operadorId);
+  if (meu) return { tipo: 'mesma_pessoa', dono: meu };
+  const outro = registros.find(d => d.mes === mes);
+  return outro ? { tipo: 'outra_pessoa', dono: outro } : null;
 }
 
 // ── O acordo que ficou só na aba Acordos ───────────────────────────────────
