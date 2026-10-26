@@ -20,6 +20,7 @@ import { TrendingUp, TrendingDown, Minus, Target } from 'lucide-react';
 import { formatCurrency } from '@/lib/index';
 import { rotuloUnidade, type UnidadeValor } from '@/lib/unidadeValor';
 import { corProjecao } from '@/lib/diasUteis';
+import { formatarPctDaMeta } from '@/lib/projecaoMetas';
 import { cn } from '@/lib/utils';
 import { SeletorUnidade } from '@/components/PainelMetas/SeletorUnidade';
 import { ValorAnimado } from './ValorAnimado';
@@ -138,7 +139,7 @@ export function FaixaDinheiro({
               className="font-semibold tabular-nums"
               style={{ color: corTexto(corProjecao(meta.percentual)) }}
             >
-              {meta.percentual}% da meta do dia
+              {formatarPctDaMeta(meta.percentual)} da meta do dia
             </span>
             <span>{meta.diasUteis} dias úteis no mês</span>
           </div>

@@ -4,6 +4,7 @@ import { ArrowUpRight, ArrowDownRight, Minus } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { formatCurrency } from '@/lib/index';
 import { cn } from '@/lib/utils';
+import { formatarPctDaMeta } from '@/lib/projecaoMetas';
 import { itemVariants } from './constants';
 
 import { corTexto } from '@/lib/temas';
@@ -182,7 +183,7 @@ export function DonutChart({ percent, sublabel, color = '#6366f1', size = 180 }:
       />
       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
         <span className="text-2xl font-extrabold leading-none tabular-nums tracking-tight">
-          {percent > 0 ? `${Math.min(percent, 999)}%` : '—'}
+          {percent > 0 ? formatarPctDaMeta(Math.min(percent, 999)) : '—'}
         </span>
         {sublabel && (
           <span className="text-[11px] text-muted-foreground mt-1 text-center leading-tight max-w-[80px]">

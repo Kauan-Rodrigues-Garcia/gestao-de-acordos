@@ -95,6 +95,7 @@ import {
   rotuloUnidade, UNIDADE_PADRAO, type UnidadeValor,
 } from '@/lib/unidadeValor';
 import { SeletorUnidade } from '@/components/PainelMetas/SeletorUnidade';
+import { formatarPctDaMeta } from '@/lib/projecaoMetas';
 import { cn } from '@/lib/utils';
 import {
   getTodayISO, PERFIS_QUE_CONTAM_NO_RECEBIMENTO,
@@ -342,7 +343,7 @@ function DetalheOperador({
                 Meta {f.titulo}
               </span>
               <span className="text-sm font-mono tabular-nums font-bold" style={{ color: corTexto(f.cor) }}>
-                {f.pct !== null ? `${f.pct}%` : '—'}
+                {f.pct !== null ? formatarPctDaMeta(f.pct) : '—'}
               </span>
             </div>
             <p className="text-[10px] text-muted-foreground mb-1">{f.sub}</p>
@@ -459,7 +460,7 @@ function DetalheOperador({
         <div className="space-y-1.5">
           <LinhaValor
             label="% da meta do mês"
-            valor={d.pctMeta !== null ? `${d.pctMeta}%` : '—'}
+            valor={d.pctMeta !== null ? formatarPctDaMeta(d.pctMeta) : '—'}
             hint="Recebimento ÷ meta cheia. Diferente da % da linha, que mede contra o esperado até hoje"
           />
           <LinhaValor

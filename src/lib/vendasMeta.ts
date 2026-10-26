@@ -39,6 +39,7 @@
  * apagaria a segunda leitura — e ela é gratuita.
  */
 import type { ResumoVendas } from '@/lib/vendas';
+import { formatarPctDaMeta } from '@/lib/projecaoMetas';
 
 /** Qual das duas decide se a meta foi batida. Vem da configuração. */
 export type ReguaMeta = 'quantidade' | 'valor';
@@ -206,7 +207,7 @@ export function bateuAMeta(a: AndamentoDaMeta): boolean {
  */
 export function rotuloDoAndamento(a: AndamentoDaMeta): string {
   if (!a.oficial || !a.regua) return 'Sem meta definida';
-  const pct = a.oficial.pct === null ? '—' : `${Math.round(a.oficial.pct * 100)}%`;
+  const pct = a.oficial.pct === null ? '—' : formatarPctDaMeta(a.oficial.pct * 100);
   return a.regua === 'quantidade'
     ? `${a.oficial.feito} de ${a.oficial.alvo} vendas · ${pct}`
     : `${pct} do faturamento`;

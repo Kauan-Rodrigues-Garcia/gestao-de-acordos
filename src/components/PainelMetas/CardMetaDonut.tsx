@@ -35,7 +35,7 @@ import { Button } from '@/components/ui/button';
 import { DonutChart } from '@/components/AnalyticsPanel/SubComponents';
 import { BREAKDOWN_COLORS } from '@/components/AnalyticsPanel/constants';
 import { formatBRL } from '@/lib/money';
-import { pctLimitado } from '@/lib/projecaoMetas';
+import { formatarPctDaMeta, pctLimitado } from '@/lib/projecaoMetas';
 import { cn } from '@/lib/utils';
 import { corDaMeta, fatiasDeForma, type FatiaForma } from './metaDonut';
 import { ALTURA_CARD_PROGRESSO } from './tamanhoCards';
@@ -112,7 +112,7 @@ export function CardMetaDonut({
             >
               <DonutChart
                 percent={pct}
-                label={`${pct}%`}
+                label={formatarPctDaMeta(pct)}
                 sublabel="da meta"
                 color={cor}
                 size={180}

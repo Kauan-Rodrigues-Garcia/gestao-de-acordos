@@ -32,6 +32,7 @@ import {
 import { formatBRL } from '@/lib/money';
 import { cn } from '@/lib/utils';
 import { COR_QUARTIL, corProjecao } from '@/lib/diasUteis';
+import { pctLimitado } from '@/lib/projecaoMetas';
 import { MetricCard } from '@/components/AnalyticsPanel/SubComponents';
 import { containerVariants } from '@/components/AnalyticsPanel/constants';
 import { CardMetaDonut } from './CardMetaDonut';
@@ -193,9 +194,8 @@ export function CardsMetas({
   // Meta batida não mostra "faltam -R$ 4.000" — mostra que bateu.
   const faltaParaMeta = meta !== null ? meta - totalRecebido : null;
   const metaBatida = faltaParaMeta !== null && faltaParaMeta <= 0;
-  const pctDaMeta = meta && meta > 0
-    ? Math.round((totalRecebido / meta) * 1000) / 10
-    : 0;
+  // Cortado, não arredondado: 99,96% arredondado escrevia «100% da meta».
+  const pctDaMeta = meta && meta > 0 ? pctLimitado(totalRecebido, meta, Infinity) : 0;
 
   return (
     <motion.div

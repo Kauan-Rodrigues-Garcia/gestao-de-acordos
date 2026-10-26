@@ -171,7 +171,7 @@ describe('mês fechado', () => {
 describe('rótulo', () => {
   it('por quantidade, mostra as vendas', () => {
     const a = progressoDaMeta({ ...AGOSTO, meta: { ...AGOSTO.meta, regua: 'quantidade' } });
-    expect(rotuloDoAndamento(a)).toBe('129 de 161 vendas · 80%');
+    expect(rotuloDoAndamento(a)).toBe('129 de 161 vendas · 80,1%');
   });
 
   it('por valor, mostra o percentual', () => {

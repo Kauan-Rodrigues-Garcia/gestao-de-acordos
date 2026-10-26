@@ -95,7 +95,7 @@ describe('corDaMeta', () => {
 describe('CardMetaDonut — resumo', () => {
   it('mostra a % da meta e o rodapé com os dois valores', () => {
     render0();
-    expect(screen.getByText('50%')).toBeInTheDocument();
+    expect(screen.getByText('50,4%')).toBeInTheDocument();
     expect(screen.getByText('da meta')).toBeInTheDocument();
     expect(screen.getByText('meta individual')).toBeInTheDocument();
   });

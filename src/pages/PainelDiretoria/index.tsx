@@ -23,6 +23,7 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { useHoPercentual, repassePercentuais } from '@/lib/hoPercentual';
 import { useTenant } from '@/lib/tenant-config';
 import { formatBRL } from '@/lib/money';
+import { pctLimitado } from '@/lib/projecaoMetas';
 import {
   deslocarMes, diasDecorridos, diasNoMes as diasDoMes, rotuloDoMes,
 } from '@/lib/mesReferencia';
@@ -232,7 +233,7 @@ export default function PainelDiretoria() {
    * Com o relatório no ar, a base é o bruto DELE.
    */
   const percMetaFinal = usarAnalitico && meta && meta.meta_valor > 0
-    ? Math.min(Math.round((recebidoBruto / meta.meta_valor) * 100), 999)
+    ? pctLimitado(recebidoBruto, meta.meta_valor)
     : percMeta;
 
   // O repasse do recebido é o que o relatório NÃO reteve: bruto − H.O. da

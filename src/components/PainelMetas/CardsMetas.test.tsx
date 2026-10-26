@@ -268,7 +268,7 @@ describe('CardsMetas — projeção', () => {
     render0(dados());
     expect(screen.getByText('Progresso da meta')).toBeInTheDocument();
     // 65.611,62 de 130.000 = 50%, e não os 177% da projeção
-    expect(screen.getByText('50%')).toBeInTheDocument();
+    expect(screen.getByText('50,4%')).toBeInTheDocument();
     expect(screen.getByText('da meta')).toBeInTheDocument();
     // O rodapé "R$ X de R$ Y" é um <p> com spans dentro — casa pelo texto todo.
     // Os valores soltos aparecem em mais de um card, então não servem de âncora.
@@ -327,7 +327,7 @@ describe('CardsMetas — quartil', () => {
   it('mostra a faixa, o quanto falta e a % alcançada', () => {
     render0(dados());
     expect(screen.getByText('1º Quartil')).toBeInTheDocument();
-    expect(screen.getByText(/Faltam R\$\s*64\.388,38 · 50,5% da meta/)).toBeInTheDocument();
+    expect(screen.getByText(/Faltam R\$\s*64\.388,38 · 50,4% da meta/)).toBeInTheDocument();
   });
 
   it('meta batida não mostra valor negativo faltando', () => {
@@ -338,7 +338,7 @@ describe('CardsMetas — quartil', () => {
         totalUteis: 21, decorridos: 6, quartis: QUARTIS_PADRAO,
       }),
     }));
-    expect(screen.getByText(/Meta alcançada — 107,7% dela/i)).toBeInTheDocument();
+    expect(screen.getByText(/Meta alcançada — 107,6% dela/i)).toBeInTheDocument();
     expect(screen.queryByText(/Faltam/i)).not.toBeInTheDocument();
   });
 });

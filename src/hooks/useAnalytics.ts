@@ -39,6 +39,7 @@ import { useEmpresa } from './useEmpresa';
 import type { NivelEscopo } from '@/lib/permissoes-escopo';
 import { getTodayISO } from '@/lib/index';
 import { paraHO } from '@/lib/hoPercentual';
+import { pctLimitado } from '@/lib/projecaoMetas';
 import {
   normalizarMes, partesDoMes, primeiroDiaDoMes, ultimoDiaDoMes, diasNoMes,
 } from '@/lib/mesReferencia';
@@ -181,8 +182,7 @@ interface InstantaneoAnalytics {
 }
 
 function calcPerc(realizado: number, meta: number): number {
-  if (!meta || meta <= 0) return 0;
-  return Math.min(Math.round((realizado / meta) * 100), 999);
+  return pctLimitado(realizado, meta);
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────

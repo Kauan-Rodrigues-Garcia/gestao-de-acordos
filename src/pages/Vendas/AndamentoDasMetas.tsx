@@ -51,6 +51,7 @@ import { Target, TriangleAlert, UserMinus } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { formatBRL } from '@/lib/money';
+import { cortarPct, formatarPctDaMeta } from '@/lib/projecaoMetas';
 import { cn } from '@/lib/utils';
 import { resumirVendas, type EixoDaVenda, type ResumoVendas } from '@/lib/vendas';
 import {
@@ -188,7 +189,7 @@ function LinhaDoAndamento({
   const a = progressoDaMeta({ meta, resumo: linha.resumo, uteis, trabalhados });
   const of = a.oficial!;
   const ritmo = a.ritmoOficial;
-  const pct = of.pct === null ? 0 : Math.round(of.pct * 100);
+  const pct = of.pct === null ? 0 : cortarPct(of.pct * 100);
   const noRitmo = (ritmo?.projecaoPct ?? 0) >= 1;
 
   const emRegua = (v: number) => (m.regua === 'quantidade' ? String(v) : formatBRL(v));
@@ -221,7 +222,7 @@ function LinhaDoAndamento({
             {explicacao && (
               <span className="ml-1 line-through opacity-60">{emRegua(alvoCheio)}</span>
             )}
-            {' · '}{pct}%
+            {' · '}{formatarPctDaMeta(pct)}
           </span>
         </span>
       </div>

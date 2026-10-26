@@ -28,6 +28,7 @@
  * `navigator.clipboard` — copiar é assunto de quem chama.
  */
 import { formatBRL } from '@/lib/money';
+import { formatarPctDaMeta } from '@/lib/projecaoMetas';
 import type { DetalheOperador } from './detalheOperador';
 
 export interface EntradaMensagem {
@@ -89,7 +90,7 @@ export function montarMensagemOperador(entrada: EntradaMensagem): string {
   const rotuloRecebido = rotuloUnidade ? `*Recebido (${rotuloUnidade}):*` : '*Recebido:*';
   linhas.push(`${rotuloRecebido} ${formatBRL(recebido)}`);
   if (meta !== null && meta > 0) {
-    linhas.push(`*Meta:* ${formatBRL(meta)}${d.pctMeta !== null ? ` (${d.pctMeta}% da meta)` : ''}`);
+    linhas.push(`*Meta:* ${formatBRL(meta)}${d.pctMeta !== null ? ` (${formatarPctDaMeta(d.pctMeta)} da meta)` : ''}`);
   }
   if (d.faixaAtual) {
     const pct = d.projecaoPct !== null ? ` — ritmo em ${d.projecaoPct}%` : '';

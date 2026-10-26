@@ -25,7 +25,7 @@
  */
 
 import {
-  calcularProjecao, degrausComAmanha, ritmoDoPeriodo, type DegrauComAmanha,
+  calcularProjecao, degrausComAmanha, pctLimitado, ritmoDoPeriodo, type DegrauComAmanha,
 } from '@/lib/projecaoMetas';
 
 import type { QuartilConfig } from '@/lib/supabase';
@@ -153,7 +153,7 @@ export function detalharOperador(entrada: EntradaDetalheOperador): DetalheOperad
     : [];
 
   const metaNum = Number(meta) || 0;
-  const pctMeta = metaNum > 0 ? Math.round((recebido / metaNum) * 100) : null;
+  const pctMeta = metaNum > 0 ? pctLimitado(recebido, metaNum, Infinity) : null;
 
   const qtd = pagamentos ?? null;
   const ticketMedio = qtd !== null && qtd > 0 ? recebido / qtd : null;

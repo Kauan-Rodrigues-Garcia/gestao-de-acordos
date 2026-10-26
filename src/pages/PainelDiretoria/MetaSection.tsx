@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Target, CheckCircle2, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatBRL } from '@/lib/money';
+import { formatarPctDaMeta } from '@/lib/projecaoMetas';
 
 interface MetaSectionProps {
   meta: { meta_valor: number };
@@ -43,7 +44,7 @@ export const MetaSection = memo(function MetaSection({
             percMeta >= 70  ? 'text-warning border-warning/30 bg-warning/10' :
             'text-destructive border-destructive/30 bg-destructive/10'
           )}>
-            {percMeta}% atingido
+            {formatarPctDaMeta(percMeta)} atingido
           </div>
         </div>
 

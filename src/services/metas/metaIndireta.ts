@@ -31,6 +31,8 @@
  * `lib/projecaoMetas.ts` — aqui só se decide **o que** entra nela.
  */
 
+import { pctLimitado } from '@/lib/projecaoMetas';
+
 /** Meta e recebimento de um operador nas duas frentes. */
 export interface EntradaMetaDupla {
   /** Meta direta (a de sempre). `null` = sem meta configurada. */
@@ -93,10 +95,13 @@ export function lerMetaIndiretaDaLinha(
   return linha.meta_indireta_ativa === true && valor > 0 ? valor : null;
 }
 
-/** Percentual inteiro de `valor` sobre `base`. `null` quando não há base. */
+/**
+ * Percentual de `valor` sobre `base`, com uma casa e cortado (ver
+ * `pctLimitado`). `null` quando não há base.
+ */
 function pct(valor: number, base: number | null): number | null {
   if (!base || base <= 0) return null;
-  return Math.round((valor / base) * 100);
+  return pctLimitado(valor, base, Infinity);
 }
 
 /**

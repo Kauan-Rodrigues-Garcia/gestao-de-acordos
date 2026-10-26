@@ -26,6 +26,7 @@ import {
 import { partesDoMes, type MesRef } from '@/lib/mesReferencia';
 import { dataLocalPix, mesLocalPix, noMesPix } from '@/lib/mesPix';
 import { contaNoRecebimento } from '@/lib/index';
+import { pctLimitado } from '@/lib/projecaoMetas';
 import {
   comissaoDe, valorAPagarDe, PIX_META_ACORDOS_DOBRA, metaDobraDoSetor,
   PIX_DIAS_UTEIS_EXPURGO,
@@ -587,7 +588,8 @@ export function calcularDobraComissao(
     faltam: Math.max(meta - feitos, 0),
     meta,
     acordosOk,
-    pctAcordos: Math.min(Math.round((feitos / meta) * 100), 100),
+    // Percentuais inteiros e cortados: 199 de 200 é 99%, não «100%» (26/10/2026).
+    pctAcordos: Math.min(Math.floor(pctLimitado(feitos, meta)), 100),
 
     metaValor,
     recebidoMes,
@@ -595,7 +597,7 @@ export function calcularDobraComissao(
     metaOk,
     faltaMeta: metaDefinida ? Math.max(metaValor! - (recebidoMes ?? 0), 0) : 0,
     pctMeta: metaDefinida
-      ? Math.min(Math.round(((recebidoMes ?? 0) / metaValor!) * 100), 100)
+      ? Math.min(Math.floor(pctLimitado(recebidoMes ?? 0, metaValor!)), 100)
       : 0,
 
     requisitosOk: (acordosOk ? 1 : 0) + (metaOk ? 1 : 0),

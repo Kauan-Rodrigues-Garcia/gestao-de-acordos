@@ -280,14 +280,36 @@ export function degrausComAmanha(
 }
 
 /**
- * % de um valor sobre uma base, arredondada e limitada.
+ * % de um valor sobre uma base, com uma casa, CORTADA, e limitada.
  *
  * O mesmo helper que vivia solto dentro de `MetaProgressoHeader`. Base zero ou
  * negativa devolve 0 em vez de `Infinity`/`NaN`.
+ *
+ * ## Cortada, não arredondada (26/10/2026)
+ *
+ * O Playmix tinha R$ 193.264,57 de R$ 194.000,00: 99,62%. Arredondado, o card
+ * mostrava 100% e «Meta atingida!» com R$ 735,43 ainda por receber. Percentual
+ * de meta só chega a 100 quando a meta chegou — ver `cortarPct`.
  */
 export function pctLimitado(valor: number, base: number, limite = 999): number {
   if (!base || base <= 0) return 0;
-  return Math.min(Math.round((valor / base) * 100), limite);
+  return Math.min(cortarPct((valor / base) * 100), limite);
+}
+
+/**
+ * Corta um percentual em uma casa, sempre para baixo: 99,96 vira 99,9, nunca 100.
+ *
+ * O `1e-9` só desfaz o ruído do ponto flutuante (29% chega aqui como
+ * 28,999…96, e cortado viraria 28,9). Nenhum valor em dinheiro de verdade fica
+ * tão perto da casa de cima a ponto de ser empurrado por ele.
+ */
+export function cortarPct(pct: number): number {
+  return Math.floor(pct * 10 + 1e-9) / 10;
+}
+
+/** «99,6%»: o percentual da meta cortado em uma casa, com vírgula. */
+export function formatarPctDaMeta(pct: number): string {
+  return `${cortarPct(pct).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`;
 }
 
 export interface DiaComRecebimento {

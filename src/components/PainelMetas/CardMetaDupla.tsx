@@ -27,6 +27,7 @@
 import { motion } from 'framer-motion';
 import { Target, Handshake } from 'lucide-react';
 import { formatBRL } from '@/lib/money';
+import { formatarPctDaMeta, pctLimitado } from '@/lib/projecaoMetas';
 import { COR_QUARTIL } from '@/lib/diasUteis';
 import { cn } from '@/lib/utils';
 
@@ -64,7 +65,7 @@ function Frente({ titulo, descricao, Icone, cor, meta, recebido, pct, falta }: F
           <Icone className="w-3.5 h-3.5 shrink-0" /> {titulo}
         </span>
         <span className="text-lg font-bold font-mono tabular-nums leading-none" style={{ color: corTexto(cor) }}>
-          {pct !== null ? `${pct}%` : '—'}
+          {pct !== null ? formatarPctDaMeta(pct) : '—'}
         </span>
       </div>
       <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">{descricao}</p>
@@ -94,7 +95,7 @@ export function CardMetaDupla({ dupla, rotuloUnidade }: Props) {
   if (!dupla.ativa) return null;
 
   const pctTotal = dupla.metaTotal && dupla.metaTotal > 0
-    ? Math.round((dupla.recebidoTotal / dupla.metaTotal) * 100)
+    ? pctLimitado(dupla.recebidoTotal, dupla.metaTotal, Infinity)
     : null;
 
   return (
@@ -116,7 +117,7 @@ export function CardMetaDupla({ dupla, rotuloUnidade }: Props) {
           {dupla.metaTotal !== null && (
             <> de <span className="font-mono tabular-nums">{formatBRL(dupla.metaTotal)}</span></>
           )}
-          {pctTotal !== null && <> · <strong>{pctTotal}%</strong></>}
+          {pctTotal !== null && <> · <strong>{formatarPctDaMeta(pctTotal)}</strong></>}
         </p>
       </div>
 

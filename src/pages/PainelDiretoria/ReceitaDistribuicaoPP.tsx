@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Percent, Banknote, PiggyBank } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatBRL } from '@/lib/money';
+import { formatarPctDaMeta } from '@/lib/projecaoMetas';
 import { useHoPercentual, repassePercentuais } from '@/lib/hoPercentual';
 
 interface ReceitaDistribuicaoPPProps {
@@ -72,7 +73,7 @@ export const ReceitaDistribuicaoPP = memo(function ReceitaDistribuicaoPP({
                 <div className="mt-2 flex items-center justify-between text-[11px]">
                   <span className="text-muted-foreground">Meta H.O.:</span>
                   <span className={cn('font-bold', percMeta >= 100 ? 'text-success' : percMeta >= 70 ? 'text-warning' : 'text-destructive')}>
-                    {formatBRL(meta.meta_valor)} ({percMeta}%)
+                    {formatBRL(meta.meta_valor)} ({formatarPctDaMeta(percMeta)})
                   </span>
                 </div>
               )}

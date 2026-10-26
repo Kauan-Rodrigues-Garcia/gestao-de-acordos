@@ -24,6 +24,7 @@
 
 import { listarDiasUteis } from '@/lib/diasUteis';
 import { partesDoMes } from '@/lib/mesReferencia';
+import { pctLimitado } from '@/lib/projecaoMetas';
 import { NIVEIS_ESCOPO, type NivelEscopo } from '@/lib/permissoes-escopo';
 
 // ─── Barra de três estados ───────────────────────────────────────────────────
@@ -127,7 +128,8 @@ export function metaDoDia(params: {
   const valor = metaMensal / diasUteis;
   return {
     valor,
-    percentual: valor > 0 ? Math.round((realizadoNoDia / valor) * 100) : 0,
+    // Cortado, não arredondado: 99,6% da meta do dia não é «100%».
+    percentual: valor > 0 ? pctLimitado(realizadoNoDia, valor, Infinity) : 0,
     diasUteis,
   };
 }

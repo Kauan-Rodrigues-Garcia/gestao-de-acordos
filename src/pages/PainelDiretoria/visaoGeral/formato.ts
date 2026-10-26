@@ -17,8 +17,18 @@ export const mil = (v: number) => (Math.abs(v) >= 1_000_000
 export const milhoes = (v: number) =>
   v >= 1_000_000 ? `R$ ${(v / 1_000_000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mi` : mil(v);
 
-/** «58%», «4,8%»: casa decimal só onde ela muda a leitura (abaixo de 10%). */
-export const pct = (v: number) => `${v.toLocaleString('pt-BR', { maximumFractionDigits: Math.abs(v) >= 10 ? 0 : 1 })}%`;
+/**
+ * «58%», «4,8%»: casa decimal só onde ela muda a leitura (abaixo de 10%).
+ *
+ * Cortado, não arredondado (26/10/2026): 99,6% da meta arredondado virava
+ * «100%» para um setor que ainda não tinha batido. O `1e-9` é só o ruído do
+ * ponto flutuante, como em `cortarPct`.
+ */
+export const pct = (v: number) => {
+  const fator = Math.abs(v) >= 10 ? 1 : 10;
+  const cortado = Math.trunc(v * fator + Math.sign(v) * 1e-9) / fator;
+  return `${cortado.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`;
+};
 
 /** «▲ 12,5%» / «▼ 3%»; nada sem base de comparação. */
 export const sinal = (v: number | null) => (v === null ? '' : `${v >= 0 ? '▲' : '▼'} ${pct(Math.abs(v))}`);

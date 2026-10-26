@@ -43,7 +43,7 @@ import { ALTURA_CARD_PROGRESSO } from '@/components/PainelMetas/tamanhoCards';
 import { corDaMeta } from '@/components/PainelMetas/metaDonut';
 import { PontoDaLegenda } from '@/components/PainelMetas/PontoDaLegenda';
 import { formatBRL } from '@/lib/money';
-import { pctLimitado } from '@/lib/projecaoMetas';
+import { formatarPctDaMeta, pctLimitado } from '@/lib/projecaoMetas';
 import { ROUTE_PATHS } from '@/lib/index';
 import { cn } from '@/lib/utils';
 import { GAVETAS_EM_ORDEM, type ResumoVendas } from '@/lib/vendas';
@@ -162,7 +162,7 @@ export function CardDoMes({ resumo, formas, meta, podeConfigurarMeta }: CardDoMe
               <div className="flex h-full flex-col items-center justify-center gap-4">
                 <DonutChart
                   percent={pctMeta}
-                  label={`${pctMeta}%`}
+                  label={formatarPctDaMeta(pctMeta)}
                   sublabel="da meta"
                   color={corDaMeta(pctMeta)}
                   size={180}

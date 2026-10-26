@@ -74,6 +74,7 @@ import { ROUTE_PATHS, getTodayISO } from '@/lib/index';
 import { partesDoMes, rotuloDoMes, ehMesAtual } from '@/lib/mesReferencia';
 import { useCalendarioVendas } from '@/hooks/useCalendarioVendas';
 import { cn } from '@/lib/utils';
+import { formatarPctDaMeta } from '@/lib/projecaoMetas';
 import { resumirVendas, type EixoDaVenda } from '@/lib/vendas';
 import {
   equipeDaVenda, placarPorOperador, placarPorEquipe, separarAutomacao, vendasPorUF,
@@ -408,7 +409,7 @@ export default function DashboardComercial() {
               <div className="flex flex-col items-end">
                 <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Meta</span>
                 <span className="font-bold tabular-nums font-mono">
-                  {Math.round(andamento.oficial.pct * 100)}%
+                  {formatarPctDaMeta(andamento.oficial.pct * 100)}
                 </span>
               </div>
             )}

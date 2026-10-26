@@ -25,6 +25,7 @@ import {
 } from '@/services/analitico/contribuicaoReceptivo.service';
 import { formatCurrency } from '@/lib/index';
 import { useHoPercentual } from '@/lib/hoPercentual';
+import { formatarPctDaMeta, pctLimitado } from '@/lib/projecaoMetas';
 import { useTenant } from '@/lib/tenant-config';
 import { diasDecorridos, diasNoMes, ehMesAtual } from '@/lib/mesReferencia';
 import { useMesGlobal } from '@/providers/MesProvider';
@@ -273,7 +274,7 @@ export function AnalyticsPanel({
   // Usa o acumulado COM Receptivo — mesma decisão do card de setor no Painel
   // Líder: o Receptivo soma no realizado, a meta segue sendo a da aba Metas.
   const percMetaAnalitico = meta && meta.meta_valor > 0
-    ? Math.min(Math.round((brutoComReceptivo / meta.meta_valor) * 100), 999)
+    ? pctLimitado(brutoComReceptivo, meta.meta_valor)
     : 0;
   const percMetaFinal = usarAnalitico && meta ? percMetaAnalitico : percMeta;
 
@@ -575,7 +576,7 @@ export function AnalyticsPanel({
               <div className="flex flex-col items-end">
                 <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Meta</span>
                 <span className="font-bold tabular-nums font-mono" style={{ color: corTexto(donutColor) }}>
-                  {percMetaFinal}%
+                  {formatarPctDaMeta(percMetaFinal)}
                 </span>
               </div>
             )}

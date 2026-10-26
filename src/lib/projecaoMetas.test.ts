@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  calcularProjecao, pctLimitado, ultimoDiaComRecebimento,
+  calcularProjecao, formatarPctDaMeta, pctLimitado, ultimoDiaComRecebimento,
 } from '@/lib/projecaoMetas';
 import { QUARTIS_PADRAO } from '@/lib/diasUteis';
 
@@ -124,7 +124,7 @@ describe('calcularProjecao — limitePct', () => {
 });
 
 describe('pctLimitado', () => {
-  it('arredonda e limita', () => {
+  it('limita', () => {
     expect(pctLimitado(50, 100)).toBe(50);
     expect(pctLimitado(1_000_000, 100)).toBe(999);
     expect(pctLimitado(1_000_000, 100, 200)).toBe(200);
@@ -133,6 +133,27 @@ describe('pctLimitado', () => {
   it('base zero ou negativa devolve 0, não NaN nem Infinity', () => {
     expect(pctLimitado(100, 0)).toBe(0);
     expect(pctLimitado(100, -5)).toBe(0);
+  });
+
+  it('corta em vez de arredondar: quem não bateu a meta não vê 100% (Playmix, 26/10/2026)', () => {
+    expect(pctLimitado(193_264.57, 194_000)).toBe(99.6);
+    expect(pctLimitado(193_999.99, 194_000)).toBe(99.9);
+    expect(pctLimitado(194_000, 194_000)).toBe(100);
+  });
+
+  it('o ruído do ponto flutuante não tira uma casa de quem está exato', () => {
+    expect(pctLimitado(29, 100)).toBe(29);
+    expect(pctLimitado(57, 100)).toBe(57);
+    expect(pctLimitado(1, 3)).toBe(33.3);
+  });
+});
+
+describe('formatarPctDaMeta', () => {
+  it('uma casa, com vírgula, cortada', () => {
+    expect(formatarPctDaMeta(99.62)).toBe('99,6%');
+    expect(formatarPctDaMeta(99.96)).toBe('99,9%');
+    expect(formatarPctDaMeta(100)).toBe('100%');
+    expect(formatarPctDaMeta(50)).toBe('50%');
   });
 });
 

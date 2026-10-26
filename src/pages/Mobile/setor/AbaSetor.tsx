@@ -63,7 +63,7 @@ export function AbaSetor({ nome, recebido, ritmo, emHO, cofen, equipes, linhasSe
                 <span className="s-eq-l1">
                   <span className="s-eq-nm">{e.nome}</span>
                   <span className="s-eq-pct" style={pct !== null ? { color: corDoPct(pct) } : undefined}>
-                    {pct !== null ? `${Math.round(pct)}%` : 'sem meta'}
+                    {pct !== null ? `${Math.floor(pct)}%` : 'sem meta'}
                   </span>
                   <Seta tamanho={13} />
                 </span>
