@@ -101,6 +101,7 @@ export default function CampanhaFacil() {
   const [exportOpen, setExportOpen] = useState(false);
   const [exportName, setExportName] = useState('');
   const [liberarOpen, setLiberarOpen] = useState(false);
+  const [liberarTitulo, setLiberarTitulo] = useState('');
   const [saveDiscountOpen, setSaveDiscountOpen] = useState(false);
   const [discountName, setDiscountName] = useState('');
   const [deleteDiscountOpen, setDeleteDiscountOpen] = useState(false);
@@ -172,7 +173,12 @@ export default function CampanhaFacil() {
   function openLiberar() {
     if (!cf.campaign.length) return;
     if (cf.sendersList.length === 0) { openSendersHint(); return; }
+    setLiberarTitulo('');
     setLiberarOpen(true);
+  }
+  function confirmarLiberar() {
+    setLiberarOpen(false);
+    void cf.liberarCampanha(liberarTitulo);
   }
 
   const reviewCount = cf.stats.review;
@@ -872,6 +878,18 @@ export default function CampanhaFacil() {
               uma notificação e envia a parte dele pela aba Campanhas de WhatsApp. Fica disponível até o fim do mês.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="space-y-1">
+            <label className="text-xs font-medium" htmlFor="cf-liberar-titulo">Título da campanha</label>
+            <Input
+              id="cf-liberar-titulo" value={liberarTitulo} maxLength={200} autoFocus
+              onChange={(e) => setLiberarTitulo(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); confirmarLiberar(); } }}
+              placeholder={`Ex.: Atrasados de outubro — ${cf.selectedTemplate.name}`}
+            />
+            <p className="text-[11px] text-muted-foreground">
+              É o nome que aparece no histórico e na aba dos operadores. Em branco, fica “{cf.selectedTemplate.name}”.
+            </p>
+          </div>
           {reviewCount > 0 && (
             <p className="text-xs text-amber-600 dark:text-amber-400">
               {reviewCount.toLocaleString('pt-BR')} registros precisam de atenção e aparecem marcados para quem recebê-los.
@@ -879,7 +897,7 @@ export default function CampanhaFacil() {
           )}
           <AlertDialogFooter>
             <AlertDialogCancel>Voltar</AlertDialogCancel>
-            <AlertDialogAction onClick={() => { void cf.liberarCampanha(); }}>
+            <AlertDialogAction onClick={confirmarLiberar}>
               Liberar
             </AlertDialogAction>
           </AlertDialogFooter>

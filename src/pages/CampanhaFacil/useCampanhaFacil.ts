@@ -654,12 +654,16 @@ export function useCampanhaFacil() {
    * Liberou: a campanha está feita e a tela volta ao começo, pronta para a
    * próxima — «como uma forma de finalizar» (Cleber, 19/10/2026). Antes ela
    * continuava na configuração da campanha que já tinha saído.
+   *
+   * O título é o que o líder digitou ao liberar (22/10/2026), para achar a
+   * campanha no histórico e na aba dos operadores sem depender do nome da
+   * mensagem. Em branco, fica o nome da mensagem, como era antes.
    */
   const { liberar } = envios;
-  const liberarCampanha = useCallback(async (): Promise<boolean> => {
+  const liberarCampanha = useCallback(async (titulo?: string): Promise<boolean> => {
     if (!campanhaPorId.length) return false;
     const ok = await liberar(campanhaPorId, {
-      titulo: selectedTemplate.name,
+      titulo: titulo?.trim() || selectedTemplate.name,
       arquivoNome: defaultExportFileName(),
       // O modelo e os descontos vão junto: é o que deixa o líder trocar a
       // mensagem depois de lançada (o banco refaz o texto dos pendentes).
