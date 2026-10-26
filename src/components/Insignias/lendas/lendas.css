@@ -1,0 +1,206 @@
+/*
+ * As Lendas de Outubro (`Lendas.tsx`): a estética das placas das insígnias
+ * (`../insignias.css`) em tamanho de pôster — noite listrada, borda em
+ * degrau, letra de fliperama, bandeirinhas das bruxas. O metal (ouro, prata,
+ * bronze) só marca a moldura da foto, o tampo do pedestal e o número.
+ */
+
+.lenda-quadro {
+  --metal: #f0c75e;
+  --metal-escuro: #8a6a1c;
+  --noite: #0d100f;
+  --noite-2: #121815;
+  --texto: #ece5d0;
+  --apagado: #9aa69f;
+  --laranja: #ff8a1f;
+  position: relative;
+  overflow: hidden;
+  color: var(--texto);
+  font-family: 'Pixelify Sans', ui-monospace, monospace;
+  font-weight: 500;
+  font-variant-ligatures: none;
+  background: repeating-linear-gradient(90deg, var(--noite) 0 8px, var(--noite-2) 8px 16px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.lenda-lugar-2 { --metal: #d9dee5; --metal-escuro: #6b7480; }
+.lenda-lugar-3 { --metal: #d08a4a; --metal-escuro: #6e3a10; }
+
+/* As bandeirinhas do letreiro das bruxas, em fio no alto. */
+.lenda-bandeirinhas {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 32px;
+  image-rendering: pixelated;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='42' height='8' shape-rendering='crispEdges'%3E%3Crect width='42' height='1' fill='%23050605'/%3E%3Cpath d='M1 1h9v2h-1v2h-1v2h-2v1h-1v-1h-2v-2h-1v-2h-1z' fill='%23ff8a1f'/%3E%3Cpath d='M15 1h9v2h-1v2h-1v2h-2v1h-1v-1h-2v-2h-1v-2h-1z' fill='%23c8202a'/%3E%3Cpath d='M29 1h9v2h-1v2h-1v2h-2v1h-1v-1h-2v-2h-1v-2h-1z' fill='%236abf3a'/%3E%3C/svg%3E") 0 0 / 168px 32px repeat-x;
+}
+
+.lenda-selo {
+  font-family: 'Press Start 2P', ui-monospace, monospace;
+  font-size: 20px;
+  letter-spacing: 0.08em;
+  color: #9dff5c;
+  text-shadow: 3px 3px 0 #000;
+}
+.lenda-titulo {
+  font-family: 'Creepster', 'Pixelify Sans', cursive;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: 0.03em;
+  color: var(--laranja);
+  text-shadow: 6px 6px 0 #3a1400;
+}
+.lenda-sub { color: var(--apagado); }
+
+/* A foto: moldura em degrau no metal do lugar. */
+.lenda-foto {
+  position: relative;
+  width: var(--foto);
+  height: var(--foto);
+  background: #1a201d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  box-shadow:
+    0 -8px 0 0 var(--metal), 0 8px 0 0 var(--metal),
+    -8px 0 0 0 var(--metal), 8px 0 0 0 var(--metal),
+    0 0 0 8px #000 inset;
+}
+.lenda-foto img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 30%; }
+.lenda-iniciais {
+  font-family: 'Press Start 2P', ui-monospace, monospace;
+  font-size: calc(var(--foto) * 0.24);
+  color: var(--metal);
+  text-shadow: 6px 6px 0 #000;
+}
+
+.lenda-nome { line-height: 1.05; text-align: center; text-shadow: 4px 4px 0 #000; }
+.lenda-setor { color: var(--apagado); text-align: center; }
+.lenda-golpe { color: #ffd34d; }
+
+/* As medalhas penduradas, como no topo do app: a barra e as fitas saindo dela. */
+.lenda-varal {
+  display: flex;
+  justify-content: center;
+  gap: calc(var(--tam-medalha) * 0.42);
+}
+.lenda-varal-item { display: flex; flex-direction: column; align-items: center; }
+.lenda-varal .ins-medalha.ins-pendurada { --fio: calc(var(--tam-medalha) * 0.4); }
+.lenda-varal .ins-disco { box-shadow: inset 0 0 0 calc(var(--tam) * 0.035 + 0.5px) var(--ouro-claro), 0 6px 0 rgb(0 0 0 / 0.45) !important; }
+.lenda-varal-rotulo { margin-top: 14px; font-size: 24px; color: var(--apagado); }
+
+/* ── O pódio (1920 × 1080) ────────────────────────────────────────────────── */
+
+.lenda-podio { width: 1920px; height: 1080px; }
+.lenda-podio .lenda-cabeca { margin-top: 64px; text-align: center; }
+.lenda-podio .lenda-titulo { font-size: 128px; margin-top: 14px; }
+.lenda-podio .lenda-sub { font-size: 32px; margin-top: 12px; }
+
+.lenda-degraus {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 0;
+}
+.lenda-coluna { display: flex; flex-direction: column; align-items: center; width: 520px; }
+.lenda-lugar-1.lenda-coluna { width: 560px; }
+.lenda-pessoa { display: flex; flex-direction: column; align-items: center; padding-bottom: 28px; }
+.lenda-podio .lenda-foto { --foto: 210px; }
+.lenda-podio .lenda-lugar-1 .lenda-foto { --foto: 240px; }
+.lenda-podio .lenda-nome { font-size: 44px; margin-top: 28px; }
+.lenda-podio .lenda-lugar-1 .lenda-nome { font-size: 52px; }
+.lenda-podio .lenda-setor { font-size: 26px; margin-top: 6px; }
+
+/* O pedestal: pedra chapada, o tampo no metal, o número grande. */
+.lenda-pedestal {
+  position: relative;
+  width: 100%;
+  background: #1a1f1d;
+  border-top: 10px solid var(--metal);
+  box-shadow: inset 0 10px 0 var(--metal-escuro), inset 1px 0 0 #000, inset -1px 0 0 #000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.lenda-lugar-1 .lenda-pedestal { height: 370px; }
+.lenda-lugar-2 .lenda-pedestal { height: 310px; }
+.lenda-lugar-3 .lenda-pedestal { height: 270px; }
+.lenda-pedestal .lenda-varal { margin-top: 0; }
+.lenda-numero {
+  font-family: 'Press Start 2P', ui-monospace, monospace;
+  color: var(--metal);
+  text-shadow: 6px 6px 0 #000;
+  line-height: 1;
+  font-size: 56px;
+  margin-top: 22px;
+}
+.lenda-lugar-1 .lenda-numero { font-size: 88px; margin-top: 36px; }
+.lenda-pontos {
+  font-family: 'Press Start 2P', ui-monospace, monospace;
+  font-size: 22px;
+  margin-top: 18px;
+  color: var(--texto);
+  text-shadow: 3px 3px 0 #000;
+}
+.lenda-lugar-1 .lenda-pontos { font-size: 26px; margin-top: 26px; }
+
+/* ── O card solo (1080 × 1350) ────────────────────────────────────────────── */
+
+.lenda-cartao {
+  width: 1080px;
+  height: 1350px;
+  padding: 72px 72px 0;
+}
+/* A borda do card: degrau no metal, por dentro. */
+.lenda-cartao::after {
+  content: '';
+  position: absolute;
+  inset: 24px;
+  pointer-events: none;
+  box-shadow:
+    0 -6px 0 0 var(--metal), 0 6px 0 0 var(--metal),
+    -6px 0 0 0 var(--metal), 6px 0 0 0 var(--metal);
+}
+.lenda-cartao .lenda-bandeirinhas { top: 30px; left: 30px; right: 30px; }
+.lenda-cartao-topo {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  margin-top: 16px;
+}
+.lenda-cartao-topo .lenda-selo:first-child { color: var(--metal); }
+.lenda-cartao .lenda-titulo { font-size: 104px; margin-top: 8px; }
+.lenda-cartao .lenda-foto { --foto: 400px; margin-top: 40px; }
+.lenda-cartao .lenda-nome { font-size: 68px; margin-top: 40px; }
+.lenda-cartao .lenda-setor { font-size: 32px; margin-top: 8px; }
+.lenda-cartao-medalhas {
+  width: 100%;
+  margin-top: 36px;
+  border-top: 8px solid #050605;
+}
+.lenda-numeros {
+  display: flex;
+  justify-content: center;
+  gap: 56px;
+  margin-top: 40px;
+  text-align: center;
+}
+.lenda-numeros dt {
+  font-family: 'Press Start 2P', ui-monospace, monospace;
+  font-size: 36px;
+  text-shadow: 4px 4px 0 #000;
+}
+.lenda-numeros div:first-child dt { color: var(--metal); }
+.lenda-numeros dd { margin-top: 12px; font-size: 24px; color: var(--apagado); }
+.lenda-rodape {
+  position: absolute;
+  bottom: 52px;
+  font-size: 22px;
+  color: #5f6b65;
+}
