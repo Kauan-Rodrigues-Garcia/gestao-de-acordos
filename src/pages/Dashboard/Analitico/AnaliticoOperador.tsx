@@ -44,9 +44,11 @@ import { FitaDoMes } from '@/pages/Analitico/Extrato/FitaDoMes';
 import { resumirVinculos, totaisPorDiaDoMes } from '@/pages/Analitico/Extrato/extrato';
 
 import {
+  buscarPessoasDoRanking,
   buscarResumoOperadoresAnalitico,
   type ResumoOperadorAnalitico,
 } from '@/services/analitico/analitico.service';
+import { ehMesAtual } from '@/lib/mesReferencia';
 import { buscarForaDoRanking } from '@/services/situacaoUsuario.service';
 import { posicaoNoRanking } from '@/services/analitico/posicaoNoRanking';
 import {
@@ -116,6 +118,7 @@ export function AnaliticoOperador({
 
   // Férias e líderes somem do ranking (recebimento deles segue nos totais).
   const [operadoresOcultos, setOperadoresOcultos] = useState<Set<string>>(new Set());
+  const [fotos, setFotos] = useState<Record<string, string | null>>({});
 
   const carregarRanking = useCallback(async () => {
     if (!empresaId || !mes) return;
@@ -125,8 +128,16 @@ export function AnaliticoOperador({
       buscarForaDoRanking(empresaId, mes),
     ]);
     if (error) toast.error(`Erro ao carregar ranking: ${error}`);
+    /*
+     * `buscarForaDoRanking` lê `perfis`, e o operador só lê o próprio: sem
+     * isto, líderes e gente de férias apareciam no ranking dele. O «fica fora»
+     * da RPC é o de hoje, por isso só vale no mês corrente — o fechado já vem
+     * do retrato (`composicao_mes`), que o operador lê.
+     */
+    const pessoas = await buscarPessoasDoRanking(empresaId, data.map(r => r.operador_id).filter(Boolean));
     setRanking(data);
-    setOperadoresOcultos(foraDoRanking);
+    setFotos(pessoas.fotos);
+    setOperadoresOcultos(ehMesAtual(mes) ? new Set([...foraDoRanking, ...pessoas.fora]) : foraDoRanking);
     setLoadingRanking(false);
   }, [empresaId, mes]);
 
@@ -464,7 +475,7 @@ export function AnaliticoOperador({
               <p className="text-sm">Nenhum dado para exibir neste mês.</p>
             </div>
           ) : (
-            <RankingView resumos={ranking} destaqueOperadorId={operadorId} operadoresOcultos={operadoresOcultos} />
+            <RankingView resumos={ranking} destaqueOperadorId={operadorId} operadoresOcultos={operadoresOcultos} fotos={fotos} />
           )}
         </div>
       )}

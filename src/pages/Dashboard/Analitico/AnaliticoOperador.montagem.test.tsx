@@ -30,6 +30,7 @@ vi.mock('@/hooks/useMudancasImportacao', () => ({
 }));
 vi.mock('@/services/analitico/analitico.service', () => ({
   buscarResumoOperadoresAnalitico: vi.fn(async () => ({ data: [], error: null })),
+  buscarPessoasDoRanking: vi.fn(async () => ({ fotos: {}, fora: new Set<string>() })),
 }));
 vi.mock('@/services/situacaoUsuario.service', () => ({
   buscarForaDoRanking: vi.fn(async () => new Set<string>()),

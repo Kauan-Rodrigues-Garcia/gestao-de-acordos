@@ -1175,6 +1175,45 @@ export async function buscarResumoOperadoresAnalitico(
   return { data: ordenadas, error: null };
 }
 
+export interface PessoasDoRanking {
+  /** operador_id → foto_url. Ausente = iniciais. */
+  fotos: Record<string, string | null>;
+  /** Férias ou cargo que não conta no recebimento, pelo perfil de HOJE. */
+  fora: Set<string>;
+}
+
+/**
+ * A foto e o «fica fora» de quem está no ranking (20261023120000).
+ *
+ * O operador não lê `perfis` dos colegas: na PaguePlay o escopo dele é
+ * individual, e o ranking saía só com iniciais, mostrando líderes e gente de
+ * férias. A RPC devolve só isso, com a guarda da RPC do ranking.
+ *
+ * Sem a migration, cai na leitura direta: as fotos que a RLS deixar, e
+ * nenhum «fica fora» (o que a tela já fazia antes).
+ */
+export async function buscarPessoasDoRanking(empresaId: string, ids: string[]): Promise<PessoasDoRanking> {
+  const fotos: Record<string, string | null> = {};
+  const fora = new Set<string>();
+  if (ids.length === 0) return { fotos, fora };
+
+  const { data, error } = await rpcSemTipo<{ id: string; foto_url: string | null; fora_do_ranking: boolean }[]>(
+    'fn_analitico_ranking_pessoas',
+    { p_empresa_id: empresaId, p_ids: ids },
+  );
+  if (!error) {
+    for (const p of data ?? []) {
+      fotos[p.id] = p.foto_url;
+      if (p.fora_do_ranking) fora.add(p.id);
+    }
+    return { fotos, fora };
+  }
+
+  const direto = await supabase.from('perfis').select('id, foto_url').in('id', ids);
+  for (const p of (direto.data ?? []) as { id: string; foto_url: string | null }[]) fotos[p.id] = p.foto_url;
+  return { fotos, fora };
+}
+
 // ── Agregado do mês para o dashboard (ver 20260710c) ─────────────────────────
 // Operador recebe só as próprias linhas; líder+ recebe a empresa toda.
 // Tolerante à migration ausente: retorna dbAtiva=false e o dashboard esconde.
