@@ -6,10 +6,10 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-  estaNoAr, fimMs, inicioMs, msAteComecar, proximaDaFila, vaiComecar,
+  estaNoAr, fimMs, inicioMs, msAteComecar, msAteDespertar, proximaDaFila,
   desvioDoServidor, estaAgendada, jaPassou, validarAgendamento,
   estaEncerrada, estadoDe,
-  HORIZONTE_TIMER_MS, MAX_DIAS_AGENDAMENTO, TOLERANCIA_PASSADO_MS,
+  MAX_DIAS_AGENDAMENTO, TOLERANCIA_PASSADO_MS, VIGIA_MS,
   type Exibivel,
 } from './janela';
 
@@ -63,23 +63,36 @@ describe('estaNoAr', () => {
   });
 });
 
-describe('vaiComecar', () => {
-  it('dentro do horizonte, sim', () => {
-    expect(vaiComecar(c({ inicia_em: new Date(T0 + 60_000).toISOString() }), T0)).toBe(true);
+describe('msAteDespertar', () => {
+  const em = (ms: number, over: Partial<Exibivel> = {}) =>
+    c({ id: `c${ms}`, inicia_em: new Date(T0 + ms).toISOString(), ...over });
+
+  it('acorda no início da próxima, já dentro da janela', () => {
+    expect(msAteDespertar([em(5_000)], T0)).toBe(5_050);
   });
 
-  it('além do horizonte, não — o timer seria longo demais', () => {
-    const longe = new Date(T0 + HORIZONTE_TIMER_MS + 1000).toISOString();
-    expect(vaiComecar(c({ inicia_em: longe }), T0)).toBe(false);
+  it('agendada com horas de antecedência ainda arma a vigia (27/10/2026)', () => {
+    // O defeito: além de 30 min não havia timer nenhum, e a página aberta o
+    // dia todo nunca via a festa do Luciano.
+    expect(msAteDespertar([em(5 * 3_600_000)], T0)).toBe(VIGIA_MS);
   });
 
-  it('já começou não conta como "vai começar"', () => {
-    expect(vaiComecar(c(), T0 + 1)).toBe(false);
+  it('a mais próxima manda, qualquer que seja a ordem da lista', () => {
+    expect(msAteDespertar([em(50_000), em(10_000), em(3 * 3_600_000)], T0)).toBe(10_050);
   });
 
-  it('cancelada não agenda timer', () => {
-    const futura = c({ inicia_em: new Date(T0 + 60_000).toISOString(), cancelada_em: 'x' });
-    expect(vaiComecar(futura, T0)).toBe(false);
+  it('nada agendado: não arma timer', () => {
+    expect(msAteDespertar([], T0)).toBeNull();
+    expect(msAteDespertar([c()], T0 + 1)).toBeNull();   // já começou
+  });
+
+  it('cancelada e finalizada não armam timer', () => {
+    expect(msAteDespertar([em(60_000, { cancelada_em: 'x' })], T0)).toBeNull();
+    expect(msAteDespertar([em(60_000, { finalizada_em: 'x' })], T0)).toBeNull();
+  });
+
+  it('a vigia é o teto', () => {
+    expect(msAteDespertar([em(10_000)], T0, 2_000)).toBe(2_000);
   });
 });
 
@@ -220,7 +233,7 @@ describe('finalizada não volta ao ar', () => {
       inicia_em: new Date(T0 + 60_000).toISOString(),
       finalizada_em: new Date(T0).toISOString(),
     });
-    expect(vaiComecar(futura, T0)).toBe(false);
+    expect(msAteDespertar([futura], T0)).toBeNull();
     expect(estaAgendada(futura, T0)).toBe(false);
     expect(proximaDaFila([futura], T0 + 60_001, new Set())).toBeNull();
   });

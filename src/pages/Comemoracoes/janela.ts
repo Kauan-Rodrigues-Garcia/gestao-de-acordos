@@ -28,12 +28,23 @@ export function estaEncerrada(c: Exibivel): boolean {
 }
 
 /**
- * Até onde no futuro vale agendar um timer local.
+ * O intervalo máximo entre duas olhadas do overlay na fila.
  *
- * `setTimeout` de dias é desperdício e impreciso; o que passar disso é pego na
- * próxima releitura ou pelo realtime.
+ * ## Por que existe (27/10/2026)
+ *
+ * Até aqui o timer só era armado para o que começava nos próximos 30 min, e o
+ * resto ficava para «a próxima releitura ou o realtime». Releitura periódica
+ * nunca existiu, e o realtime só fala quando uma comemoração MUDA. Num call
+ * center a página fica aberta o dia todo: o Luciano agendou três festas com
+ * horas de antecedência e nenhuma tocou para quem já estava com o sistema
+ * aberto — e o histórico seguiu dizendo «agendada» depois da hora.
+ *
+ * Agora o overlay sempre acorda para a próxima, e nunca dorme mais que isto:
+ * um PC que hiberna ou uma aba em segundo plano atrasam o `setTimeout`, e a
+ * vigia de 1 min é o que garante que a festa entre assim que a aba respirar.
+ * É conta local, sem consulta ao banco.
  */
-export const HORIZONTE_TIMER_MS = 30 * 60_000;   // 30 min
+export const VIGIA_MS = 60_000;
 
 /** Instante em que a comemoração começa, em ms. NaN vira 0 (nunca no ar). */
 export function inicioMs(c: Exibivel): number {
@@ -53,17 +64,27 @@ export function estaNoAr(c: Exibivel, agora: number): boolean {
   return agora >= inicio && agora < fimMs(c);
 }
 
-/** Começa daqui a pouco e merece um timer local. */
-export function vaiComecar(c: Exibivel, agora: number, horizonte = HORIZONTE_TIMER_MS): boolean {
-  if (estaEncerrada(c)) return false;
-  const inicio = inicioMs(c);
-  if (!inicio) return false;
-  return inicio > agora && inicio - agora <= horizonte;
-}
-
 /** Quanto falta para começar, nunca negativo. */
 export function msAteComecar(c: Exibivel, agora: number): number {
   return Math.max(0, inicioMs(c) - agora);
+}
+
+/**
+ * Daqui a quanto o overlay deve olhar a fila de novo, ou null se nada espera.
+ *
+ * A próxima agendada, por mais longe que esteja, com teto em `VIGIA_MS`. Os
+ * +50 ms são para acordar já dentro da janela, não no limite exato.
+ */
+export function msAteDespertar(
+  lista: readonly Exibivel[],
+  agora: number,
+  vigia = VIGIA_MS,
+): number | null {
+  const esperas = lista
+    .filter((c) => estaAgendada(c, agora))
+    .map((c) => msAteComecar(c, agora));
+  if (esperas.length === 0) return null;
+  return Math.min(Math.min(...esperas) + 50, vigia);
 }
 
 /**

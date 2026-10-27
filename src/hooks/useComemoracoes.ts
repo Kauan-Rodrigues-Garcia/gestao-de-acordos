@@ -19,7 +19,7 @@ import {
 } from '@/services/comemoracoes.service';
 import { sortearFrase } from '@/pages/Comemoracoes/frases';
 import {
-  estaNoAr, estaEncerrada, fimMs, msAteComecar, proximaDaFila, vaiComecar,
+  estaNoAr, estaEncerrada, fimMs, msAteDespertar, proximaDaFila,
   desvioDoServidor,
 } from '@/pages/Comemoracoes/janela';
 import { deveExplodir } from '@/pages/Comemoracoes/escopo';
@@ -207,20 +207,28 @@ export function useComemoracaoNoAr(params: {
     const proxima = proximaDaFila(minhas, agora, exibidasRef.current);
     if (proxima) { setAtual(proxima); return; }
 
-    // Nada no ar: dorme até a próxima começar. Sem isso, uma comemoração
-    // agendada só apareceria quando algo mais provocasse um render.
-    const esperas = minhas
-      .filter((c) => vaiComecar(c, agora))
-      .map((c) => msAteComecar(c, agora));
-    if (esperas.length) {
-      // +50 ms para acordar já dentro da janela, não no limite exato.
-      timerRef.current = setTimeout(() => setTick((t) => t + 1), Math.min(...esperas) + 50);
+    // Nada no ar: dorme até a próxima começar, por mais longe que esteja, e
+    // nunca mais que a vigia de 1 min — ver `VIGIA_MS`. Sem isso, uma
+    // comemoração agendada só apareceria quando algo mais provocasse um render.
+    const espera = msAteDespertar(minhas, agora);
+    if (espera !== null) {
+      timerRef.current = setTimeout(() => setTick((t) => t + 1), espera);
     }
 
     return () => {
       if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
     };
   }, [minhas, atual, tick, agoraCorrigido, encerrarParaMim]);
+
+  // A aba voltou a aparecer: o navegador segura os timers de aba escondida, e a
+  // festa que começou nesse meio-tempo entra agora, não na próxima vigia.
+  useEffect(() => {
+    const acordar = () => {
+      if (document.visibilityState === 'visible') setTick((t) => t + 1);
+    };
+    document.addEventListener('visibilitychange', acordar);
+    return () => document.removeEventListener('visibilitychange', acordar);
+  }, []);
 
   /**
    * Fecha antes da hora (botão ×). Não volta — nem num F5.
