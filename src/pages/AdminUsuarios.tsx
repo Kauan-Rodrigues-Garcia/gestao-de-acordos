@@ -1529,12 +1529,15 @@ export default function AdminUsuarios() {
             </div>
 
             {/* Recolher some durante a busca: lá os grupos ficam abertos à
-                força, e um botão que não faz nada é pior que um botão a menos. */}
-            {setoresParaFiltro.length > 1 && !busca && agrupar === 'setor' && (
+                força, e um botão que não faz nada é pior que um botão a menos.
+                Recolhe os grupos DA TELA, e não as opções do seletor: o seletor
+                deixa de fora setor de sistema e inativo, e por isso o Núcleo e
+                o «Sem setor» ficavam abertos. */}
+            {setoresOrdenados.length > 1 && !busca && agrupar === 'setor' && (
               <Button
                 variant="ghost" size="sm" className="h-9 text-xs"
                 onClick={() => setSetoresRecolhidos(
-                  atual => atual.size ? new Set() : new Set(setoresParaFiltro.map(([sid]) => sid)),
+                  atual => atual.size ? new Set() : new Set(setoresOrdenados.map(g => g.id)),
                 )}
               >
                 {setoresRecolhidos.size ? 'Expandir todos' : 'Minimizar todos'}
