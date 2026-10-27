@@ -87,8 +87,8 @@ SET LOCAL lock_timeout = '15s';
 --   gerência (nível 4+ de setor)  o próprio setor e as equipes dele
 --   líder / elite                 o próprio setor e as equipes que lidera
 --   resto                         nada
--- O menu ainda pede `ver_painel_lider`: quem não abre o Painel do Líder não
--- vê a aba.
+-- O menu e a rota usam a mesma régua por cargo (`CARGOS_MODO_TV`): só líder,
+-- elite e acima (Cleber, 27/10/2026).
 
 CREATE OR REPLACE FUNCTION public.fn_tv_alvo_no_meu_alcance(p_setor uuid, p_equipe uuid)
 RETURNS boolean
@@ -146,6 +146,14 @@ CREATE TABLE IF NOT EXISTS public.tv_paineis (
   criado_em         TIMESTAMPTZ NOT NULL DEFAULT now(),
   atualizado_em     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- A 1ª versão desta migration (sem tempo por tela e sem tela fixa) chegou a
+-- ser aplicada: lá a tabela já existe e o CREATE acima não faz nada. Daqui para
+-- baixo o banco fica igual nos dois casos.
+ALTER TABLE public.tv_paineis ADD COLUMN IF NOT EXISTS tela_fixa TEXT;
+ALTER TABLE public.tv_paineis DROP CONSTRAINT IF EXISTS tv_paineis_segundos_por_tela_check;
+ALTER TABLE public.tv_paineis ADD CONSTRAINT tv_paineis_segundos_por_tela_check
+  CHECK (segundos_por_tela BETWEEN 5 AND 3600);
 
 CREATE INDEX IF NOT EXISTS idx_tv_paineis_setor ON public.tv_paineis (setor_id);
 CREATE INDEX IF NOT EXISTS idx_tv_paineis_empresa ON public.tv_paineis (empresa_id);
@@ -243,6 +251,10 @@ CREATE TABLE IF NOT EXISTS public.tv_conexoes (
   versao_exibida   TIMESTAMPTZ,
   criado_em        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Idem: na 1ª versão a tabela nasceu sem estas duas.
+ALTER TABLE public.tv_conexoes ADD COLUMN IF NOT EXISTS saiu_em TIMESTAMPTZ;
+ALTER TABLE public.tv_conexoes ADD COLUMN IF NOT EXISTS versao_exibida TIMESTAMPTZ;
 
 CREATE INDEX IF NOT EXISTS idx_tv_conexoes_painel ON public.tv_conexoes (painel_id);
 CREATE INDEX IF NOT EXISTS idx_tv_conexoes_aguardando ON public.tv_conexoes (criado_em)
