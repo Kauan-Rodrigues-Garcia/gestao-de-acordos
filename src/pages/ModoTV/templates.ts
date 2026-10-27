@@ -24,12 +24,15 @@ export const CATEGORIAS: { id: CategoriaTemplate; nome: string }[] = [
   { id: 'midia',   nome: 'Imagem, vídeo e recado' },
 ];
 
-export type CampoOpcao =
+/** Campo que só aparece quando outro tem um certo valor (ex.: o valor da meta própria). */
+interface Condicao { quando?: { chave: string; valor: string } }
+
+export type CampoOpcao = Condicao & (
   | { chave: string; rotulo: string; tipo: 'texto'; padrao: string; max: number; dica?: string }
   | { chave: string; rotulo: string; tipo: 'numero'; padrao: number | null; dica?: string }
   | { chave: string; rotulo: string; tipo: 'escolha'; padrao: string; escolhas: { valor: string; rotulo: string }[] }
   | { chave: string; rotulo: string; tipo: 'liga'; padrao: boolean }
-  | { chave: string; rotulo: string; tipo: 'midia'; padrao: string; aceita: 'imagem' | 'video' };
+  | { chave: string; rotulo: string; tipo: 'midia'; padrao: string; aceita: 'imagem' | 'video' });
 
 export interface Template {
   id: TemplateId;
@@ -43,33 +46,44 @@ export interface Template {
 const TITULO = (padrao: string): CampoOpcao =>
   ({ chave: 'titulo', rotulo: 'Título', tipo: 'texto', padrao, max: 40 });
 
+/**
+ * Há líder que não mostra a meta para o time, só o quanto falta (Cleber,
+ * 27/10). Desligado, some a meta E o recebido — com os dois e o «falta» na
+ * tela, a meta sai numa conta de somar.
+ */
+const MOSTRAR_META: CampoOpcao =
+  { chave: 'mostrar_meta', rotulo: 'Mostrar o valor da meta e do recebido', tipo: 'liga', padrao: true };
+
 export const TEMPLATES: Template[] = [
   {
     id: 'contagem', categoria: 'meta',
     nome: 'Contagem regressiva',
     descricao: 'Quanto falta para a meta, em número gigante. Diminui a cada relatório que entra.',
-    campos: [TITULO('Faltam para a meta')],
+    campos: [TITULO('Faltam para a meta'), MOSTRAR_META],
   },
   {
     id: 'barra', categoria: 'meta',
     nome: 'Meta em barra',
     descricao: 'O percentual em destaque e a barra enchendo conforme o recebido.',
-    campos: [TITULO('Meta do mês')],
+    campos: [TITULO('Meta do mês'), MOSTRAR_META],
   },
   {
     id: 'anel', categoria: 'meta',
     nome: 'Anel da meta',
     descricao: 'Um anel que fecha ao bater a meta. Lê bem do fundo da sala.',
-    campos: [TITULO('Meta do mês')],
+    campos: [TITULO('Meta do mês'), MOSTRAR_META],
   },
   {
     id: 'hoje', categoria: 'meta',
     nome: 'Meta de hoje',
-    descricao: 'O alvo do dia e quanto já entrou hoje.',
+    descricao: 'O alvo do dia, quanto já entrou hoje e o percentual. A meta pode ser a do sistema ou uma própria.',
     campos: [
       TITULO('Meta de hoje'),
-      { chave: 'alvo_manual', rotulo: 'Alvo do dia (opcional)', tipo: 'numero', padrao: null,
-        dica: 'Vazio = meta do mês ÷ dias úteis.' },
+      { chave: 'origem_alvo', rotulo: 'Meta do dia', tipo: 'escolha', padrao: 'sistema',
+        escolhas: [{ valor: 'sistema', rotulo: 'Meta do sistema' }, { valor: 'propria', rotulo: 'Outra meta' }] },
+      { chave: 'alvo_manual', rotulo: 'Valor da meta de hoje (R$)', tipo: 'numero', padrao: null,
+        quando: { chave: 'origem_alvo', valor: 'propria' },
+        dica: 'O percentual e o «falta» passam a contar sobre este valor. O recebido continua vindo do relatório.' },
     ],
   },
   {
@@ -166,6 +180,35 @@ export function opcao<T extends string | number | boolean | null>(
     case 'escolha':
       return (campo.escolhas.some(e => e.valor === bruto) ? bruto : campo.padrao) as T;
   }
+}
+
+/**
+ * A meta de hoje escolhida na tela «Meta de hoje»: o valor digitado quando a
+ * origem é «Outra meta», ou `null` para a do sistema (meta do mês ÷ dias úteis).
+ *
+ * Tela gravada antes da escolha existir (só com `alvo_manual`) conta como
+ * «Outra meta» — era o que ela já fazia.
+ */
+export function alvoDoDiaProprio(tela: Pick<TelaDoPainel, 'template' | 'opcoes'>): number | null {
+  if (tela.template !== 'hoje') return null;
+  const valor = opcao<number | null>(tela, 'alvo_manual');
+  const origem = tela.opcoes?.origem_alvo;
+  const propria = origem === 'propria' || (origem === undefined && valor != null);
+  return propria && valor != null && valor > 0 ? valor : null;
+}
+
+/**
+ * Campo condicional escondido: o `quando` aponta outro campo, e ele não tem o
+ * valor pedido. Lê pelo `opcao`, então a regra de compatibilidade acima vale.
+ */
+export function campoVisivel(tela: Pick<TelaDoPainel, 'template' | 'opcoes'>, campo: CampoOpcao): boolean {
+  if (!campo.quando) return true;
+  if (tela.template === 'hoje' && campo.quando.chave === 'origem_alvo') {
+    const origem = tela.opcoes?.origem_alvo;
+    const propria = origem === 'propria' || (origem === undefined && tela.opcoes?.alvo_manual != null && tela.opcoes?.alvo_manual !== '');
+    return (propria ? 'propria' : 'sistema') === campo.quando.valor;
+  }
+  return opcao<string>(tela, campo.quando.chave) === campo.quando.valor;
 }
 
 /** Uma tela nova, com o id que a lista do editor usa como chave. */

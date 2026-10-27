@@ -36,7 +36,7 @@ import {
 import type { AlvoTv, ConexaoTv, NumerosTv, Painel, TelaDoPainel, TemaId, Unidade } from './tipos';
 import {
   CATEGORIAS, SEGUNDOS_MAX, SEGUNDOS_MIN, TEMAS, TEMPLATES, TEMPOS_PRONTOS,
-  novaTela, opcao, rotuloTempo, segundosDaTela, templateDe, type CampoOpcao,
+  campoVisivel, novaTela, opcao, rotuloTempo, segundosDaTela, templateDe, type CampoOpcao,
 } from './templates';
 import { CORES } from './TelaTv';
 import { Rodizio } from './Rodizio';
@@ -45,6 +45,7 @@ import {
   conectarTv, desconectarTv, enviarMidia, excluirPainel, fixarTela, previa, salvarPainel,
 } from './servico';
 import { estadoDaTv, horaCurta, rotuloAlvo, situacaoDoPainel, type EstadoTv } from './apoio';
+import { diferencaDoServidor, telaNoInstante } from './relogio';
 
 interface Rascunho {
   nome: string; tema: TemaId; unidade: Unidade; segundos_por_tela: number; telas: TelaDoPainel[];
@@ -86,14 +87,30 @@ export function Editor({ painel, alvo, conexoes, aoMudar, aoMudarConexoes }: {
   const telaFixa = painel.tela_fixa ? painel.telas.find(t => t.id === painel.tela_fixa) ?? null : null;
   const publicadas = useMemo(() => new Set(painel.telas.map(t => t.id)), [painel.telas]);
 
-  // Os números da prévia: na abertura e a cada minuto (o cache do banco é de 1 min).
+  // Os números da prévia, no mesmo compasso da TV (30 s, sobre o mesmo cache),
+  // e a hora do banco — o rodízio daqui e o da parede contam pelo mesmo relógio.
+  const [diferencaMs, setDiferencaMs] = useState(0);
   useEffect(() => {
     let vivo = true;
-    const ler = () => previa(painel.id).then(n => { if (vivo) setNumeros(n); }, () => {});
+    const ler = () => previa(painel.id).then(n => {
+      if (!vivo) return;
+      setNumeros(n);
+      const dif = diferencaDoServidor(n?.agora);
+      if (dif != null) setDiferencaMs(atual => (Math.abs(atual - dif) > 400 ? dif : atual));
+    }, () => {});
     void ler();
-    const t = setInterval(() => { if (document.visibilityState === 'visible') void ler(); }, 60_000);
+    const t = setInterval(() => { if (document.visibilityState === 'visible') void ler(); }, 30_000);
     return () => { vivo = false; clearInterval(t); };
   }, [painel.id]);
+
+  // Depois de publicar ou fixar, a TV confirma em segundos: relê o estado
+  // dela em rajada curta, em vez de esperar a volta normal de 5 s.
+  const rajada = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const acompanharTv = () => {
+    rajada.current.forEach(clearTimeout);
+    rajada.current = [600, 1500, 3000, 5000, 8000].map(ms => setTimeout(aoMudarConexoes, ms));
+  };
+  useEffect(() => () => rajada.current.forEach(clearTimeout), []);
 
   // «Sem sinal desde» depende do relógio, não só das conexões.
   useEffect(() => {
@@ -124,9 +141,9 @@ export function Editor({ painel, alvo, conexoes, aoMudar, aoMudarConexoes }: {
     setSalvando(true);
     try {
       await salvarPainel({ id: painel.id, ...r, nome: r.nome.trim() });
-      toast.success(conexoes.length ? 'Publicado. A TV troca em poucos segundos.' : 'Publicado.');
+      toast.success(conexoes.length ? 'Publicado. A TV já está trocando.' : 'Publicado.');
       await aoMudar();
-      aoMudarConexoes();
+      acompanharTv();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Não deu para publicar.');
     } finally {
@@ -137,9 +154,8 @@ export function Editor({ painel, alvo, conexoes, aoMudar, aoMudarConexoes }: {
   const fixar = async (telaId: string | null) => {
     try {
       await fixarTela(painel.id, telaId);
-      toast.success(telaId ? 'A TV vai parar nesta tela em poucos segundos.' : 'A TV volta ao rodízio em poucos segundos.');
       await aoMudar();
-      aoMudarConexoes();
+      acompanharTv();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Não deu para mudar a TV.');
     }
@@ -212,12 +228,15 @@ export function Editor({ painel, alvo, conexoes, aoMudar, aoMudarConexoes }: {
             painel={painelDaPrevia}
             numeros={numeros}
             fixarEm={vista === 'edicao' ? sel : null}
+            diferencaMs={diferencaMs}
             style={{ width: '100%', aspectRatio: '16 / 9' }}
           />
           <span className={`absolute top-2 left-2 rounded-full px-2.5 py-1 text-[11px] font-semibold text-white ${vista === 'edicao' ? (sujo ? 'bg-amber-600' : 'bg-slate-600') : 'bg-emerald-600'}`}>
             {vista === 'edicao' ? (sujo ? 'RASCUNHO' : 'PRÉVIA') : 'NO AR'}
           </span>
         </div>
+
+        <ControleDaTv painel={painel} diferencaMs={diferencaMs} aoEscolher={id => { setVista('no_ar'); void fixar(id); }} />
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
@@ -289,7 +308,7 @@ export function Editor({ painel, alvo, conexoes, aoMudar, aoMudarConexoes }: {
                 <div className="font-semibold">{tplSel.nome}</div>
                 <div className="text-xs text-muted-foreground">{tplSel.descricao}</div>
               </div>
-              {tplSel.campos.map(campo => (
+              {tplSel.campos.filter(campo => campoVisivel(telaSel, campo)).map(campo => (
                 <CampoDaTela key={campo.chave} campo={campo} tela={telaSel} painelId={painel.id}
                   aoMudar={v => mudarOpcao(sel, { [campo.chave]: v })} />
               ))}
@@ -449,6 +468,69 @@ function FaixaDeSituacao({ situacao, telaFixa, salvando, aoPublicar, aoDescartar
           <Button size="sm" variant="outline" onClick={aoSoltar}><Play className="h-4 w-4 mr-1.5" />Voltar ao rodízio</Button>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * O controle remoto: qual tela está na TV agora, e escolher outra.
+ *
+ * Mostra a versão PUBLICADA — é o que a parede tem. A tela acesa é calculada
+ * pelo mesmo relógio do rodízio da TV (`telaNoInstante`), então troca junto com
+ * ela. Clicar numa tela para a TV nela, na hora; «Rodízio» solta.
+ */
+function ControleDaTv({ painel, diferencaMs, aoEscolher }: {
+  painel: Painel; diferencaMs: number; aoEscolher: (telaId: string | null) => void;
+}) {
+  const fixa = painel.tela_fixa && painel.telas.some(t => t.id === painel.tela_fixa) ? painel.tela_fixa : null;
+  const inicio = painel.atualizado_em ? Date.parse(painel.atualizado_em) : Date.now();
+  const calcular = () => telaNoInstante(painel.telas, painel.segundos_por_tela, inicio, Date.now() + diferencaMs);
+  const [agora, setAgora] = useState(() => calcular());
+
+  useEffect(() => {
+    if (fixa || painel.telas.length < 2) return;
+    let t: ReturnType<typeof setTimeout>;
+    const passo = () => {
+      const r = calcular();
+      setAgora(r);
+      t = setTimeout(passo, Math.min(1000, r.restanteMs + 30));
+    };
+    passo();
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fixa, inicio, diferencaMs, painel.telas, painel.segundos_por_tela]);
+
+  if (!painel.telas.length) return null;
+  const noAr = fixa ? painel.telas.findIndex(t => t.id === fixa) : painel.telas.length < 2 ? 0 : agora.indice;
+
+  return (
+    <div className="rounded-xl border p-3 space-y-2">
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="font-semibold">Na TV agora</span>
+        <span className="text-muted-foreground">
+          {fixa ? '— parada nesta tela. Clique em outra para trocar.' : `— rodízio; próxima troca em ${Math.ceil(agora.restanteMs / 1000)} s. Clique numa tela para deixar só ela.`}
+        </span>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <button
+          onClick={() => aoEscolher(null)}
+          className={`h-9 rounded-full border px-3 text-sm flex items-center gap-1.5 ${!fixa ? 'bg-primary text-primary-foreground border-primary' : 'hover:bg-accent'}`}
+        >
+          <Play className="h-3.5 w-3.5" />Rodízio
+        </button>
+        {painel.telas.map((t, i) => (
+          <button
+            key={t.id}
+            onClick={() => aoEscolher(t.id)}
+            className={`h-9 rounded-full border px-3 text-sm flex items-center gap-2 transition-colors ${
+              i === noAr ? (fixa ? 'bg-sky-600 text-white border-sky-600' : 'bg-emerald-600 text-white border-emerald-600') : 'hover:bg-accent'}`}
+          >
+            {i === noAr && <span className="h-2 w-2 rounded-full bg-white animate-pulse" />}
+            {i + 1}. {templateDe(t.template)?.nome}
+            {fixa === t.id && <Pin className="h-3.5 w-3.5" />}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

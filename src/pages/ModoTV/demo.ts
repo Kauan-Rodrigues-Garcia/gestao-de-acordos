@@ -59,3 +59,29 @@ export function painelDemo(tema: string | null): Painel {
     ],
   };
 }
+
+/**
+ * Um «relatório» de mentira: entra entre R$ 3 mil e R$ 12 mil, espalhado por
+ * duas ou três pessoas do ranking — às vezes o bastante para trocar posição.
+ */
+export function simularRelatorio(n: NumerosTv): NumerosTv {
+  const entrou = Math.round(3_000 + Math.random() * 9_000);
+  const ranking = n.ranking.map(p => ({ ...p }));
+  const sorteados = new Set<number>();
+  while (sorteados.size < Math.min(3, ranking.length)) sorteados.add(Math.floor(Math.random() * ranking.length));
+  for (const i of sorteados) {
+    const parte = Math.round(entrou / sorteados.size);
+    ranking[i].valor += parte;
+    ranking[i].valor_ho = Math.round(ranking[i].valor * 22.6) / 100;
+  }
+  ranking.sort((a, b) => b.valor - a.valor);
+  return {
+    ...n,
+    recebido: n.recebido + entrou,
+    recebido_ho: Math.round((n.recebido + entrou) * 22.6) / 100,
+    recebido_hoje: n.recebido_hoje + entrou,
+    recebido_hoje_ho: Math.round((n.recebido_hoje + entrou) * 22.6) / 100,
+    ranking,
+    calculado_em: new Date().toISOString(),
+  };
+}

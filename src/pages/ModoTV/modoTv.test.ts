@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { montarVisao, moedaTv, nomeCurto, percentualTv } from './numeros';
-import { midiaSegura, opcao, rotuloTempo, segundosDaTela, telasValidas } from './templates';
+import { alvoDoDiaProprio, campoVisivel, midiaSegura, opcao, rotuloTempo, segundosDaTela, telasValidas, templateDe } from './templates';
 import { numerosDemo } from './demo';
 import { estadoDaTv, situacaoDoPainel } from './apoio';
+import { diferencaDoServidor, telaNoInstante } from './relogio';
 import type { NumerosTv } from './tipos';
 
 const base = (parcial: Partial<NumerosTv> = {}): NumerosTv => ({ ...numerosDemo(), ...parcial });
@@ -166,5 +167,54 @@ describe('tempo de cada tela', () => {
     expect(rotuloTempo(60)).toBe('1 min');
     expect(rotuloTempo(90)).toBe('1 min 30 s');
     expect(rotuloTempo(3600)).toBe('1 h');
+  });
+});
+
+describe('telaNoInstante — TV e PC no mesmo compasso', () => {
+  const telas = [{ segundos: null }, { segundos: 30 }, { segundos: null }];
+  const inicio = Date.parse('2026-10-27T12:00:00Z');
+
+  it('conta a partir da versão do painel, com o tempo de cada tela', () => {
+    expect(telaNoInstante(telas, 10, inicio, inicio)).toEqual({ indice: 0, restanteMs: 10_000 });
+    expect(telaNoInstante(telas, 10, inicio, inicio + 12_000)).toEqual({ indice: 1, restanteMs: 28_000 });
+    expect(telaNoInstante(telas, 10, inicio, inicio + 45_000)).toEqual({ indice: 2, restanteMs: 5_000 });
+  });
+
+  it('dá a volta: 50 s depois, recomeça na primeira', () => {
+    expect(telaNoInstante(telas, 10, inicio, inicio + 51_000).indice).toBe(0);
+  });
+
+  it('relógio atrás da versão não quebra: primeira tela', () => {
+    expect(telaNoInstante(telas, 10, inicio, inicio - 5_000).indice).toBe(0);
+  });
+
+  it('diferença do servidor', () => {
+    expect(diferencaDoServidor('2026-10-27T12:00:05Z', inicio)).toBe(5_000);
+    expect(diferencaDoServidor(undefined, inicio)).toBeNull();
+    expect(diferencaDoServidor('lixo', inicio)).toBeNull();
+  });
+});
+
+describe('Meta de hoje: do sistema ou outra', () => {
+  const tela = (opcoes: Record<string, unknown>) => ({ template: 'hoje' as const, opcoes });
+  const campoValor = templateDe('hoje')!.campos.find(c => c.chave === 'alvo_manual')!;
+
+  it('do sistema: sem alvo próprio, e o campo de valor some', () => {
+    expect(alvoDoDiaProprio(tela({}))).toBeNull();
+    expect(alvoDoDiaProprio(tela({ origem_alvo: 'sistema', alvo_manual: 9000 }))).toBeNull();
+    expect(campoVisivel(tela({ origem_alvo: 'sistema' }), campoValor)).toBe(false);
+  });
+
+  it('outra meta: o percentual conta sobre o valor digitado', () => {
+    const t = tela({ origem_alvo: 'propria', alvo_manual: 20_000 });
+    expect(alvoDoDiaProprio(t)).toBe(20_000);
+    expect(campoVisivel(t, campoValor)).toBe(true);
+    const v = montarVisao(base({ recebido_hoje: 5_000 }), 'bruto', alvoDoDiaProprio(t));
+    expect(v.hoje.fracao).toBe(0.25);
+  });
+
+  it('tela antiga, só com o valor, continua como outra meta', () => {
+    expect(alvoDoDiaProprio(tela({ alvo_manual: 7_000 }))).toBe(7_000);
+    expect(campoVisivel(tela({ alvo_manual: 7_000 }), campoValor)).toBe(true);
   });
 });

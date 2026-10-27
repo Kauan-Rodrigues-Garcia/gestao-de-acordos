@@ -62,6 +62,9 @@ export function PalcoTv({ tema, children, style }: { tema: TemaId; children: Rea
           width: LARGURA, height: ALTURA,
           transform: `translate(-50%, -50%) scale(${escala})`,
           transformOrigin: 'center',
+          // O verde de «melhorou» que os números acendem ao mudar.
+          ['--tv-ok' as string]: c.ok,
+          ['--tv-ok-brilho' as string]: `${c.ok}80`,
           color: c.texto,
           background: `radial-gradient(ellipse 120% 90% at 15% 0%, ${c.fundo2} 0%, ${c.fundo} 60%)`,
           fontFamily: 'Inter, "Segoe UI", system-ui, sans-serif',
@@ -78,36 +81,117 @@ export function PalcoTv({ tema, children, style }: { tema: TemaId; children: Rea
 
 // ── O número que anima quando muda ───────────────────────────────────────────
 
-function useContador(alvo: number, duracaoMs = 900): number {
+/**
+ * Quanto dura a subida de um número quando chega relatório novo. Devagar de
+ * propósito (pedido do Cleber, 27/10): começa lento, acelera no meio e assenta
+ * devagar — quem está na sala tem tempo de ver o número andar.
+ */
+export const DURACAO_MUDANCA_MS = 3200;
+/** As barras, o anel e o ranking andam no mesmo compasso dos números. */
+const CURVA = 'cubic-bezier(.65, 0, .35, 1)';
+/** Depois de assentar, o verde ainda fica um pouco antes de sumir. */
+const BRILHO_DEPOIS_MS = 1800;
+
+const entraESai = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+
+type Mudanca = 'subiu' | 'desceu' | null;
+
+function useContador(alvo: number): { valor: number; mudanca: Mudanca } {
   const [valor, setValor] = useState(alvo);
+  const [mudanca, setMudanca] = useState<Mudanca>(null);
   const atual = useRef(alvo);
 
   useEffect(() => {
     const de = atual.current;
     if (de === alvo) return;
+    setMudanca(alvo > de ? 'subiu' : 'desceu');
     const reduzido = typeof window !== 'undefined'
       && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    if (reduzido) { atual.current = alvo; setValor(alvo); return; }
 
     let quadro = 0;
+    let apagar: ReturnType<typeof setTimeout> | undefined;
+    const terminar = () => {
+      atual.current = alvo;
+      setValor(alvo);
+      apagar = setTimeout(() => setMudanca(null), BRILHO_DEPOIS_MS);
+    };
+    if (reduzido) { terminar(); return () => clearTimeout(apagar); }
+
     const inicio = performance.now();
     const passo = (agora: number) => {
-      const t = Math.min(1, (agora - inicio) / duracaoMs);
-      const v = de + (alvo - de) * (1 - Math.pow(1 - t, 3));
+      const t = Math.min(1, (agora - inicio) / DURACAO_MUDANCA_MS);
+      const v = de + (alvo - de) * entraESai(t);
       atual.current = v;
       setValor(v);
       if (t < 1) quadro = requestAnimationFrame(passo);
+      else terminar();
     };
     quadro = requestAnimationFrame(passo);
-    return () => cancelAnimationFrame(quadro);
-  }, [alvo, duracaoMs]);
+    return () => { cancelAnimationFrame(quadro); clearTimeout(apagar); };
+  }, [alvo]);
 
-  return valor;
+  return { valor, mudanca };
 }
 
-function Moeda({ v, style }: { v: number; style?: CSSProperties }) {
-  const animado = useContador(v);
-  return <span style={style}>{moedaTv(animado)}</span>;
+/** O verde de «melhorou», em cima da cor que o número já tinha. */
+function brilho(mudanca: Mudanca, bomQuando: 'sobe' | 'desce'): CSSProperties {
+  const melhorou = mudanca && (mudanca === 'subiu') === (bomQuando === 'sobe');
+  return {
+    transition: 'color 700ms ease, text-shadow 700ms ease',
+    ...(melhorou ? { color: 'var(--tv-ok)', textShadow: '0 0 48px var(--tv-ok-brilho)' } : {}),
+  };
+}
+
+/**
+ * Dinheiro que anima quando muda. `bomQuando`: o «falta» é bom quando DESCE,
+ * e fica verde do mesmo jeito que o recebido quando sobe.
+ */
+function Moeda({ v, style, bomQuando = 'sobe' }: { v: number; style?: CSSProperties; bomQuando?: 'sobe' | 'desce' }) {
+  const { valor, mudanca } = useContador(v);
+  return <span style={{ ...style, ...brilho(mudanca, bomQuando) }}>{moedaTv(valor)}</span>;
+}
+
+function Percentual({ fracao, style }: { fracao: number; style?: CSSProperties }) {
+  const { valor, mudanca } = useContador(Math.round(fracao * 10000) / 10000);
+  return <span style={{ ...style, ...brilho(mudanca, 'sobe') }}>{percentualTv(valor)}</span>;
+}
+
+/**
+ * FLIP: quem troca de posição no ranking DESLIZA até a nova, em vez de
+ * aparecer lá. Mede por `offsetLeft/Top` — o palco inteiro está dentro de um
+ * `scale()`, e o retângulo da tela viria escalado.
+ */
+function useDeslizar(chave: string) {
+  const caixa = useRef<HTMLDivElement>(null);
+  const antes = useRef(new Map<string, { x: number; y: number }>());
+
+  useLayoutEffect(() => {
+    const el = caixa.current;
+    if (!el) return;
+    const agora = new Map<string, { x: number; y: number }>();
+    const itens = Array.from(el.querySelectorAll<HTMLElement>('[data-flip]'));
+    for (const item of itens) {
+      const id = item.dataset.flip!;
+      const pos = { x: item.offsetLeft, y: item.offsetTop };
+      agora.set(id, pos);
+      const velho = antes.current.get(id);
+      if (antes.current.size && !velho) {
+        // Entrou agora no ranking: aparece de baixo.
+        item.animate(
+          [{ opacity: 0, transform: 'translateY(40px)' }, { opacity: 1, transform: 'none' }],
+          { duration: 1200, easing: 'ease-out' },
+        );
+      } else if (velho && (velho.x !== pos.x || velho.y !== pos.y)) {
+        item.animate(
+          [{ transform: `translate(${velho.x - pos.x}px, ${velho.y - pos.y}px)` }, { transform: 'none' }],
+          { duration: 1600, easing: CURVA },
+        );
+      }
+    }
+    antes.current = agora;
+  }, [chave]);
+
+  return caixa;
 }
 
 // ── Peças comuns ─────────────────────────────────────────────────────────────
@@ -131,7 +215,7 @@ function Barra({ fracao, c, altura = 28, cor }: { fracao: number; c: Cores; altu
     <div style={{ width: '100%', height: altura, borderRadius: altura, background: c.trilho, overflow: 'hidden' }}>
       <div style={{
         width: `${Math.min(100, Math.max(0, fracao * 100))}%`, height: '100%', borderRadius: altura,
-        background: cor ?? c.destaque, transition: 'width 900ms cubic-bezier(.2,.8,.2,1)',
+        background: cor ?? c.destaque, transition: `width ${DURACAO_MUDANCA_MS}ms ${CURVA}, background 700ms ease`,
       }} />
     </div>
   );
@@ -175,29 +259,46 @@ const SEM_META = 'A meta deste mês ainda não foi cadastrada.';
 
 // ── Os templates ─────────────────────────────────────────────────────────────
 
+/*
+ * «Mostrar o valor da meta» desligado esconde a meta E o recebido: com o
+ * recebido e o «falta» na tela, a meta sai numa conta de somar.
+ */
+
 function Contagem({ v, tela, c }: { v: VisaoTv; tela: TelaDoPainel; c: Cores }) {
   if (v.meta <= 0) return <Aviso texto={SEM_META} c={c} />;
+  const mostrarMeta = opcao<boolean>(tela, 'mostrar_meta');
   if (v.batida) {
     return (
       <div style={centro}>
         <div style={{ fontSize: 60, fontWeight: 700, color: c.ok, letterSpacing: 6 }}>META BATIDA</div>
-        <Moeda v={v.recebido} style={{ fontSize: 230, fontWeight: 800, lineHeight: 1, margin: '20px 0 28px', letterSpacing: -4 }} />
-        <div style={{ fontSize: 44, color: c.suave }}>
-          {percentualTv(v.fracao)} da meta · {moedaTv(v.recebido - v.meta)} acima
-        </div>
+        {mostrarMeta ? (
+          <>
+            <Moeda v={v.recebido} style={{ fontSize: 230, fontWeight: 800, lineHeight: 1, margin: '20px 0 28px', letterSpacing: -4 }} />
+            <div style={{ fontSize: 44, color: c.suave }}>
+              <Percentual fracao={v.fracao} /> da meta · {moedaTv(v.recebido - v.meta)} acima
+            </div>
+          </>
+        ) : (
+          <Percentual fracao={v.fracao} style={{ fontSize: 230, fontWeight: 800, lineHeight: 1, margin: '20px 0 28px', letterSpacing: -4 }} />
+        )}
       </div>
     );
   }
   return (
     <div style={centro}>
       <Titulo texto={opcao<string>(tela, 'titulo')} c={c} />
-      <Moeda v={v.falta} style={{ fontSize: 250, fontWeight: 800, lineHeight: 1, letterSpacing: -6 }} />
+      <Moeda v={v.falta} bomQuando="desce" style={{ fontSize: 250, fontWeight: 800, lineHeight: 1, letterSpacing: -6 }} />
       <div style={{ width: 1200, margin: '56px 0 36px' }}>
         <Barra fracao={v.fracao} c={c} altura={18} />
       </div>
       <div style={{ display: 'flex', gap: 72, fontSize: 38, color: c.suave }}>
-        <span>Recebido <b style={{ color: c.texto }}>{moedaTv(v.recebido)}</b></span>
-        <span>Meta <b style={{ color: c.texto }}>{moedaTv(v.meta)}</b></span>
+        {mostrarMeta && (
+          <>
+            <span>Recebido <b style={{ color: c.texto }}><Moeda v={v.recebido} /></b></span>
+            <span>Meta <b style={{ color: c.texto }}>{moedaTv(v.meta)}</b></span>
+          </>
+        )}
+        {!mostrarMeta && <span><b style={{ color: c.texto }}><Percentual fracao={v.fracao} /></b> do caminho</span>}
         <span><b style={{ color: c.destaque }}>{v.diasRestantes}</b> {v.diasRestantes === 1 ? 'dia útil' : 'dias úteis'} pela frente</span>
       </div>
     </div>
@@ -206,17 +307,20 @@ function Contagem({ v, tela, c }: { v: VisaoTv; tela: TelaDoPainel; c: Cores }) 
 
 function MetaBarra({ v, tela, c }: { v: VisaoTv; tela: TelaDoPainel; c: Cores }) {
   if (v.meta <= 0) return <Aviso texto={SEM_META} c={c} />;
+  const mostrarMeta = opcao<boolean>(tela, 'mostrar_meta');
   return (
     <div style={centro}>
       <Titulo texto={opcao<string>(tela, 'titulo')} c={c} />
-      <div style={{ fontSize: 280, fontWeight: 800, lineHeight: 1, letterSpacing: -6, color: v.batida ? c.ok : c.texto }}>
-        {percentualTv(v.fracao)}
-      </div>
+      <Percentual fracao={v.fracao} style={{ fontSize: 280, fontWeight: 800, lineHeight: 1, letterSpacing: -6, color: v.batida ? c.ok : c.texto }} />
       <div style={{ width: 1400, margin: '60px 0 40px' }}>
         <Barra fracao={v.fracao} c={c} altura={56} cor={v.batida ? c.ok : undefined} />
       </div>
       <div style={{ fontSize: 50, color: c.suave }}>
-        <Moeda v={v.recebido} style={{ color: c.texto, fontWeight: 700 }} /> de {moedaTv(v.meta)}
+        {mostrarMeta
+          ? <><Moeda v={v.recebido} style={{ color: c.texto, fontWeight: 700 }} /> de {moedaTv(v.meta)}</>
+          : v.batida
+            ? 'Meta batida!'
+            : <>Faltam <Moeda v={v.falta} bomQuando="desce" style={{ color: c.texto, fontWeight: 700 }} /></>}
       </div>
     </div>
   );
@@ -224,6 +328,7 @@ function MetaBarra({ v, tela, c }: { v: VisaoTv; tela: TelaDoPainel; c: Cores })
 
 function Anel({ v, tela, c }: { v: VisaoTv; tela: TelaDoPainel; c: Cores }) {
   if (v.meta <= 0) return <Aviso texto={SEM_META} c={c} />;
+  const mostrarMeta = opcao<boolean>(tela, 'mostrar_meta');
   const r = 300;
   const volta = 2 * Math.PI * r;
   const cheio = Math.min(1, v.fracao);
@@ -235,19 +340,22 @@ function Anel({ v, tela, c }: { v: VisaoTv; tela: TelaDoPainel; c: Cores }) {
           <circle
             cx={350} cy={350} r={r} fill="none" stroke={v.batida ? c.ok : c.destaque} strokeWidth={52}
             strokeLinecap="round" strokeDasharray={volta} strokeDashoffset={volta * (1 - cheio)}
-            style={{ transition: 'stroke-dashoffset 900ms cubic-bezier(.2,.8,.2,1)' }}
+            style={{ transition: `stroke-dashoffset ${DURACAO_MUDANCA_MS}ms ${CURVA}, stroke 700ms ease` }}
           />
         </svg>
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 150, fontWeight: 800, letterSpacing: -3 }}>
-          {percentualTv(v.fracao)}
+          <Percentual fracao={v.fracao} />
         </div>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 56, alignItems: 'flex-start' }}>
         <Titulo texto={opcao<string>(tela, 'titulo')} c={c} />
-        <Rotulado rotulo="Recebido" c={c} tamanho={88}><Moeda v={v.recebido} /></Rotulado>
-        <Rotulado rotulo={v.batida ? 'Acima da meta' : 'Falta'} c={c} tamanho={88} cor={v.batida ? c.ok : c.destaque}>
-          <Moeda v={v.batida ? v.recebido - v.meta : v.falta} />
-        </Rotulado>
+        {mostrarMeta && <Rotulado rotulo="Recebido" c={c} tamanho={88}><Moeda v={v.recebido} /></Rotulado>}
+        {(mostrarMeta || !v.batida) && (
+          <Rotulado rotulo={v.batida ? 'Acima da meta' : 'Falta'} c={c} tamanho={88} cor={v.batida ? c.ok : c.destaque}>
+            <Moeda v={v.batida ? v.recebido - v.meta : v.falta} bomQuando={v.batida ? 'sobe' : 'desce'} />
+          </Rotulado>
+        )}
+        {!mostrarMeta && v.batida && <div style={{ fontSize: 72, fontWeight: 800, color: c.ok }}>Meta batida!</div>}
       </div>
     </div>
   );
@@ -264,8 +372,12 @@ function Hoje({ v, tela, c }: { v: VisaoTv; tela: TelaDoPainel; c: Cores }) {
       <div style={{ width: 1300, margin: '56px 0 36px' }}>
         <Barra fracao={v.hoje.fracao} c={c} altura={40} cor={bateu ? c.ok : undefined} />
       </div>
-      <div style={{ fontSize: 46, fontWeight: 600, color: bateu ? c.ok : c.destaque }}>
-        {bateu ? 'Meta de hoje batida!' : `Faltam ${moedaTv(v.hoje.falta)} hoje`}
+      <div style={{ display: 'flex', gap: 56, alignItems: 'baseline', fontSize: 46, fontWeight: 600 }}>
+        {/* Sobre a meta escolhida na tela: a do sistema ou a digitada. */}
+        <span><Percentual fracao={v.hoje.fracao} style={{ fontWeight: 800 }} /> <span style={{ color: c.suave, fontWeight: 500 }}>da meta de hoje</span></span>
+        <span style={{ color: bateu ? c.ok : c.destaque }}>
+          {bateu ? 'Meta de hoje batida!' : <>Faltam <Moeda v={v.hoje.falta} bomQuando="desce" /></>}
+        </span>
       </div>
     </div>
   );
@@ -311,14 +423,14 @@ function Placar({ v, tela, c }: { v: VisaoTv; tela: TelaDoPainel; c: Cores }) {
         <div style={caixa}><Rotulado rotulo="Meta" c={c} tamanho={110}>{moedaTv(v.meta)}</Rotulado></div>
         <div style={caixa}>
           <Rotulado rotulo={v.batida ? 'Acima' : 'Falta'} c={c} tamanho={110} cor={v.batida ? c.ok : c.destaque}>
-            <Moeda v={v.batida ? v.recebido - v.meta : v.falta} />
+            <Moeda v={v.batida ? v.recebido - v.meta : v.falta} bomQuando={v.batida ? 'sobe' : 'desce'} />
           </Rotulado>
         </div>
       </div>
       <div style={{ width: '100%', marginTop: 56 }}>
         <Barra fracao={v.fracao} c={c} altura={20} cor={v.batida ? c.ok : undefined} />
       </div>
-      <div style={{ fontSize: 40, color: c.suave, marginTop: 24 }}>{percentualTv(v.fracao)} da meta</div>
+      <div style={{ fontSize: 40, color: c.suave, marginTop: 24 }}><Percentual fracao={v.fracao} /> da meta</div>
     </div>
   );
 }
@@ -330,16 +442,21 @@ function Podio({ v, tela, c }: { v: VisaoTv; tela: TelaDoPainel; c: Cores }) {
   if (!top.length) return <Aviso texto="Ainda não há recebimento neste mês." c={c} />;
   const mostrar = opcao<boolean>(tela, 'mostrar_valor');
   // 2º, 1º, 3º — o primeiro no meio e mais alto.
+  return <PodioVivo top={top} tela={tela} c={c} mostrar={mostrar} />;
+}
+
+function PodioVivo({ top, tela, c, mostrar }: { top: VisaoTv['ranking']; tela: TelaDoPainel; c: Cores; mostrar: boolean }) {
+  const caixa = useDeslizar(top.map(p => p.id).join(','));
   const ordem = [1, 0, 2].filter(i => top[i]);
   const altura = [280, 200, 150];
   return (
     <div style={{ ...centro, justifyContent: 'flex-end', paddingBottom: 0 }}>
       <Titulo texto={opcao<string>(tela, 'titulo')} c={c} />
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 56, marginTop: 'auto' }}>
+      <div ref={caixa} style={{ display: 'flex', alignItems: 'flex-end', gap: 56, marginTop: 'auto' }}>
         {ordem.map(i => {
           const p = top[i];
           return (
-            <div key={p.id} style={{ width: 460, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <div key={p.id} data-flip={p.id} style={{ width: 460, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
               <Foto nome={p.nome} foto={p.foto} tamanho={i === 0 ? 190 : 150} c={c} borda={MEDALHA[i]} />
               <div style={{ fontSize: i === 0 ? 52 : 44, fontWeight: 700, marginTop: 24, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 460 }}>
                 {nomeCurto(p.nome)}
@@ -347,6 +464,7 @@ function Podio({ v, tela, c }: { v: VisaoTv; tela: TelaDoPainel; c: Cores }) {
               {mostrar && <Moeda v={p.valor} style={{ fontSize: 40, color: c.suave, marginTop: 6 }} />}
               <div style={{
                 width: '100%', height: altura[i], marginTop: 28, borderRadius: '28px 28px 0 0',
+                transition: `height 1600ms ${CURVA}`,
                 background: `linear-gradient(180deg, ${MEDALHA[i]}55, ${MEDALHA[i]}14)`,
                 display: 'flex', justifyContent: 'center', paddingTop: 20,
                 fontSize: 100, fontWeight: 800, color: MEDALHA[i],
@@ -365,13 +483,18 @@ function Lista({ v, tela, c }: { v: VisaoTv; tela: TelaDoPainel; c: Cores }) {
   const qtd = Number(opcao<string>(tela, 'quantidade')) || 5;
   const pessoas = v.ranking.slice(0, qtd);
   if (!pessoas.length) return <Aviso texto="Ainda não há recebimento neste mês." c={c} />;
+  return <ListaViva pessoas={pessoas} tela={tela} c={c} />;
+}
+
+function ListaViva({ pessoas, tela, c }: { pessoas: VisaoTv['ranking']; tela: TelaDoPainel; c: Cores }) {
+  const caixa = useDeslizar(pessoas.map(p => p.id).join(','));
   const mostrar = opcao<boolean>(tela, 'mostrar_valor');
   const duasColunas = pessoas.length > 5;
   const linha = duasColunas ? 112 : 124;
   return (
     <div style={{ ...centro, top: 140, justifyContent: 'flex-start' }}>
       <Titulo texto={opcao<string>(tela, 'titulo')} c={c} />
-      <div style={{
+      <div ref={caixa} style={{
         display: 'grid', width: '100%', gap: '18px 56px',
         gridTemplateColumns: duasColunas ? 'minmax(0, 1fr) minmax(0, 1fr)' : 'minmax(0, 1fr)',
         gridAutoFlow: duasColunas ? 'column' : 'row',
@@ -379,7 +502,8 @@ function Lista({ v, tela, c }: { v: VisaoTv; tela: TelaDoPainel; c: Cores }) {
         maxWidth: duasColunas ? undefined : 1300,
       }}>
         {pessoas.map((p, i) => (
-          <div key={p.id} style={{
+          <div key={p.id} data-flip={p.id} style={{
+            transition: 'background 900ms ease',
             display: 'flex', alignItems: 'center', gap: duasColunas ? 22 : 32, padding: duasColunas ? '0 24px' : '0 40px',
             borderRadius: 28, background: i < 3 ? c.linha : 'transparent',
             borderBottom: i < 3 ? undefined : `2px solid ${c.linha}`,

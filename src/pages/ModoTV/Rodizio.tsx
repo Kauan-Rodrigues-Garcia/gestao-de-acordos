@@ -1,55 +1,77 @@
 /**
  * Rodizio.tsx — passa as telas do painel, uma de cada vez, em tela cheia.
  *
- * O MESMO componente roda na TV e na prévia da montagem. O relógio do rodízio
- * é local: a TV não pergunta ao banco qual tela mostrar, só quais existem.
+ * O MESMO componente roda na TV e na prévia da montagem, e os dois chegam à
+ * MESMA tela no mesmo instante: o rodízio é contado pelo relógio do banco a
+ * partir da versão do painel (`relogio.ts`), e não de quando a página abriu.
  *
  * Só a tela da vez fica montada (mais a que está saindo, durante o fade). Um
  * vídeo fora da vez não fica tocando escondido.
  */
 import { useEffect, useMemo, useState } from 'react';
 import type { NumerosTv, Painel } from './tipos';
-import { midiaSegura, opcao, segundosDaTela } from './templates';
+import { alvoDoDiaProprio, midiaSegura, opcao } from './templates';
 import { montarVisao } from './numeros';
+import { telaNoInstante } from './relogio';
 import { PalcoTv, TelaTv } from './TelaTv';
 
-const FADE_MS = 700;
+const FADE_MS = 900;
 const BASE_SUPABASE = (import.meta.env.VITE_SUPABASE_URL as string | undefined) ?? '';
 
 export interface PropsRodizio {
   painel: Painel;
   numeros: NumerosTv | null;
-  /** Prévia: fixa numa tela em vez de rodar. */
+  /** Prévia da edição: fixa numa tela escolhida, ignorando a tela fixa e o relógio. */
   fixarEm?: number | null;
-  /** Prévia: não roda sozinho. */
+  /** Vitrine: não roda. */
   parado?: boolean;
+  /** `Date.now()` + isto = hora do banco. Sem ela, o relógio local. */
+  diferencaMs?: number;
+  /** Avisa qual tela entrou — a montagem destaca a mesma. */
+  aoTrocar?: (indice: number) => void;
   style?: React.CSSProperties;
 }
 
-export function Rodizio({ painel, numeros, fixarEm = null, parado = false, style }: PropsRodizio) {
+export function Rodizio({ painel, numeros, fixarEm = null, parado = false, diferencaMs = 0, aoTrocar, style }: PropsRodizio) {
   const total = painel.telas.length;
-  const [indice, setIndice] = useState(0);
-  const [saindo, setSaindo] = useState<number | null>(null);
+  // Sem versão (demonstração, vitrine), o rodízio conta de quando montou.
+  const [montouEm] = useState(() => Date.now());
+  const inicioMs = painel.atualizado_em ? Date.parse(painel.atualizado_em) : montouEm;
 
-  // A prévia escolhe a tela que quer ver; na TV, quem manda é a tela fixa do painel.
   const indiceFixo = painel.tela_fixa ? painel.telas.findIndex(t => t.id === painel.tela_fixa) : -1;
   const fixo = fixarEm ?? (indiceFixo >= 0 ? indiceFixo : null);
-  const atual = Math.min(fixo ?? indice, Math.max(0, total - 1));
-  const segundos = painel.telas[atual] ? segundosDaTela(painel.telas[atual], painel.segundos_por_tela) : 20;
+  const rodando = fixo == null && !parado && total > 1;
 
-  // Soltou a tela fixa: o rodízio continua dela, e não de onde tinha parado antes.
-  useEffect(() => {
-    if (indiceFixo >= 0) setIndice(indiceFixo);
-  }, [indiceFixo]);
+  const calcular = () => telaNoInstante(painel.telas, painel.segundos_por_tela, inicioMs, Date.now() + diferencaMs);
+  const [doRelogio, setDoRelogio] = useState(() => calcular().indice);
+  const [saindo, setSaindo] = useState<number | null>(null);
+
+  // A chave das durações: mudou o tempo de uma tela, o relógio recalcula.
+  const duracoes = painel.telas.map(t => t.segundos ?? '').join(',');
 
   useEffect(() => {
-    if (parado || fixo != null || total <= 1) return;
-    const t = setTimeout(() => {
-      setSaindo(atual);
-      setIndice((atual + 1) % total);
-    }, segundos * 1000);
+    if (!rodando) return;
+    let t: ReturnType<typeof setTimeout>;
+    const agendar = () => {
+      const { indice, restanteMs } = calcular();
+      setDoRelogio(indice);
+      t = setTimeout(agendar, Math.max(200, restanteMs + 30));
+    };
+    agendar();
     return () => clearTimeout(t);
-  }, [atual, total, parado, fixo, segundos]);
+    // `calcular` lê só o que está nas dependências abaixo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rodando, inicioMs, diferencaMs, painel.segundos_por_tela, duracoes, total]);
+
+  const atual = Math.min(fixo ?? (rodando ? doRelogio : 0), Math.max(0, total - 1));
+
+  // Toda troca — relógio, fixar, soltar — sai com o fade.
+  const [ultimo, setUltimo] = useState(atual);
+  useEffect(() => {
+    if (ultimo !== atual) { setSaindo(ultimo); setUltimo(atual); }
+  }, [atual, ultimo]);
+
+  useEffect(() => { aoTrocar?.(atual); }, [atual, aoTrocar]);
 
   useEffect(() => {
     if (saindo == null) return;
@@ -58,7 +80,7 @@ export function Rodizio({ painel, numeros, fixarEm = null, parado = false, style
   }, [saindo]);
 
   const visaoPorTela = useMemo(() => painel.telas.map(t => (
-    numeros ? montarVisao(numeros, painel.unidade, t.template === 'hoje' ? opcao<number | null>(t, 'alvo_manual') : null) : null
+    numeros ? montarVisao(numeros, painel.unidade, alvoDoDiaProprio(t)) : null
   )), [painel.telas, painel.unidade, numeros]);
 
   if (!total) {
@@ -101,7 +123,7 @@ export function Rodizio({ painel, numeros, fixarEm = null, parado = false, style
       {desenhar(atual, 'entra')}
       {saindo != null && saindo !== atual && desenhar(saindo, 'sai')}
       <style>{`
-        @keyframes tv2-entra { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes tv2-entra { from { opacity: 0; transform: scale(1.015); } to { opacity: 1; transform: none; } }
         @keyframes tv2-sai   { from { opacity: 1; } to { opacity: 0; } }
         @media (prefers-reduced-motion: reduce) {
           @keyframes tv2-entra { from { opacity: 1; } to { opacity: 1; } }

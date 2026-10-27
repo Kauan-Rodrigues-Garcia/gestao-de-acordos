@@ -64,18 +64,20 @@ export interface NumerosTv {
   dias_decorridos: number;
   ranking: PessoaRanking[];
   calculado_em: string;
+  /** Hora do banco na resposta da prévia (20261027190000). */
+  agora?: string;
 }
 
 /** A resposta de `fn_tv_ver`. */
 export type RespostaTv =
   | { estado: 'desconhecida' | 'expirada' }
   | { estado: 'aguardando'; codigo: string; expira_em: string }
-  | { estado: 'conectada'; painel: Painel; numeros: NumerosTv | null };
+  | { estado: 'conectada'; painel: Painel; numeros: NumerosTv | null; agora?: string };
 
 /** A resposta de `fn_tv_versao`, a pergunta curta. */
 export type VersaoTv =
   | { estado: 'desconhecida' | 'aguardando' }
-  | { estado: 'conectada'; versao: string };
+  | { estado: 'conectada'; versao: string; agora?: string };
 
 export interface AlvoTv {
   setor_id: string;

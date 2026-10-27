@@ -20,9 +20,10 @@
  *
  * ## Tempo real sem peso
  *
- * A cada 5 s a TV faz a pergunta curta (`fn_tv_versao`: «o painel mudou?»),
- * que é uma busca por índice. Mudou — o líder publicou, fixou ou soltou uma
- * tela —, ela lê tudo na hora. Os números ela relê a cada 30 s, e o banco os
+ * Publicar, fixar ou soltar chega na hora: o banco avisa pelo tópico público
+ * `tv-painel:<id>` (20261027190000) e a TV relê. Como rede de segurança, a
+ * cada 3 s ela faz a pergunta curta (`fn_tv_versao`: «o painel mudou?»), uma
+ * busca por índice. Os números ela relê a cada 30 s, e o banco os
  * guarda por 1 minuto (`tv_numeros_cache`): dez TVs no mesmo setor custam um
  * cálculo por minuto. O relatório que entra aparece em até ~1 min e meio.
  *
@@ -35,13 +36,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Rodizio } from './ModoTV/Rodizio';
 import { PalcoTv, CORES } from './ModoTV/TelaTv';
-import { numerosDemo, painelDemo } from './ModoTV/demo';
+import { numerosDemo, painelDemo, simularRelatorio } from './ModoTV/demo';
 import { avisarSaida, pedirCodigo, versaoTv, verTv } from './ModoTV/servico';
+import { diferencaDoServidor } from './ModoTV/relogio';
+import { supabase } from '@/lib/supabase';
 import type { NumerosTv, Painel } from './ModoTV/tipos';
 
 const CHAVE_TOKEN = 'tv2:token';
-/** «O painel mudou?» — o que faz o Publicar chegar em segundos. */
-const PERGUNTA_CURTA_MS = 5_000;
+/** «O painel mudou?» — rede de segurança do aviso do banco, que é o que chega na hora. */
+const PERGUNTA_CURTA_MS = 3_000;
 /** Os números, mesmo sem mudança no painel. */
 const LEITURA_CONECTADA_MS = 30_000;
 const LEITURA_AGUARDANDO_MS = 4_000;
@@ -65,15 +68,23 @@ export default function TvPalco() {
   const [params] = useSearchParams();
   if (params.get('demo') === '1') {
     const tela = Number(params.get('tela'));
-    return <TvDemo tema={params.get('tema')} fixarEm={Number.isInteger(tela) && tela > 0 ? tela - 1 : null} />;
+    return <TvDemo tema={params.get('tema')} vivo={params.get('vivo') === '1'} fixarEm={Number.isInteger(tela) && tela > 0 ? tela - 1 : null} />;
   }
   return <TvPareada />;
 }
 
-function TvDemo({ tema, fixarEm }: { tema: string | null; fixarEm: number | null }) {
+function TvDemo({ tema, fixarEm, vivo }: { tema: string | null; fixarEm: number | null; vivo: boolean }) {
   useTelaSempreAcesa();
-  const [numeros] = useState(numerosDemo);
+  const [numeros, setNumeros] = useState(numerosDemo);
   const painel = useMemo(() => painelDemo(tema), [tema]);
+
+  // `&vivo=1`: entra dinheiro a cada 12 s, para ver os números, as barras e o
+  // ranking andarem como andam quando chega relatório.
+  useEffect(() => {
+    if (!vivo) return;
+    const t = setInterval(() => setNumeros(n => simularRelatorio(n)), 12_000);
+    return () => clearInterval(t);
+  }, [vivo]);
   return (
     <div style={{ position: 'fixed', inset: 0, cursor: 'none' }}>
       <Rodizio key={tema ?? ''} painel={painel} numeros={numeros} fixarEm={fixarEm} style={{ position: 'absolute', inset: 0 }} />
@@ -90,6 +101,11 @@ function TvPareada() {
   // O que a parede está mostrando agora, para a pergunta curta comparar.
   const versaoNaParede = useRef<string | null>(null);
   const ultimaLeituraCheia = useRef(0);
+  // Hora do banco − hora deste PC: o rodízio da TV e o da prévia contam pelo
+  // mesmo relógio (`relogio.ts`).
+  const [diferencaMs, setDiferencaMs] = useState(0);
+  // O aviso do banco chegou: leitura cheia agora, sem esperar a próxima volta.
+  const acordar = useRef<() => void>(() => {});
 
   const ler = useCallback(async (): Promise<number> => {
     try {
@@ -109,6 +125,8 @@ function TvPareada() {
       if (versaoNaParede.current && Date.now() - ultimaLeituraCheia.current < LEITURA_CONECTADA_MS) {
         const v = await versaoTv(token);
         setOffline(false);
+        const dif = v.estado === 'conectada' ? diferencaDoServidor(v.agora) : null;
+        if (dif != null) setDiferencaMs(atual => (Math.abs(atual - dif) > 400 ? dif : atual));
         if (v.estado === 'conectada' && v.versao === versaoNaParede.current) return PERGUNTA_CURTA_MS;
         if (v.estado === 'desconhecida') { gravarToken(null); versaoNaParede.current = null; return 500; }
       }
@@ -118,6 +136,10 @@ function TvPareada() {
       if (r.estado === 'conectada') {
         versaoNaParede.current = r.painel.atualizado_em ?? null;
         ultimaLeituraCheia.current = Date.now();
+        const dif = diferencaDoServidor(r.agora);
+        // Só troca por diferença que importa: oscilar 50 ms a cada leitura
+        // faria o rodízio recalcular à toa.
+        if (dif != null) setDiferencaMs(atual => (Math.abs(atual - dif) > 400 ? dif : atual));
         // Número nulo (cálculo falhou) não apaga o que já está na parede.
         setEstado(atual => ({
           tipo: 'painel',
@@ -144,13 +166,43 @@ function TvPareada() {
   useEffect(() => {
     vivo.current = true;
     let t: ReturnType<typeof setTimeout>;
+    let lendo = false;
+    let deNovo = false;
     const rodar = async () => {
+      clearTimeout(t);
+      if (lendo) { deNovo = true; return; }
+      lendo = true;
       const espera = await ler();
-      if (vivo.current) t = setTimeout(rodar, espera);
+      lendo = false;
+      if (!vivo.current) return;
+      if (deNovo) { deNovo = false; void rodar(); return; }
+      t = setTimeout(rodar, espera);
+    };
+    acordar.current = () => {
+      // Força a leitura CHEIA: a versão nova vem nela.
+      ultimaLeituraCheia.current = 0;
+      void rodar();
     };
     void rodar();
-    return () => { vivo.current = false; clearTimeout(t); };
+    return () => { vivo.current = false; clearTimeout(t); acordar.current = () => {}; };
   }, [ler]);
+
+  /*
+   * O aviso do banco (`fn_tv_avisar_tvs`, 20261027190000): publicou, fixou,
+   * soltou, excluiu ou desconectou — a TV relê na hora. Tópico PÚBLICO porque
+   * a TV não tem sessão; o que trafega é só a versão. `supabase.channel` direto
+   * e não `assinarTabela`: o helper do app só fala com canal privado. Se o
+   * canal cair, a pergunta curta de 3 s segura.
+   */
+  const painelId = estado.tipo === 'painel' ? estado.painel.id : null;
+  useEffect(() => {
+    if (!painelId) return;
+    const canal = supabase
+      .channel(`tv-painel:${painelId}`)
+      .on('broadcast', { event: 'mudou' }, () => acordar.current())
+      .subscribe();
+    return () => { void supabase.removeChannel(canal); };
+  }, [painelId]);
 
   // Fechou a aba, desligou o PC pelo botão: a montagem fica sabendo na hora.
   useEffect(() => {
@@ -162,7 +214,7 @@ function TvPareada() {
   return (
     <div style={{ position: 'fixed', inset: 0, cursor: 'none', background: CORES.noite.fundo }}>
       {estado.tipo === 'painel' && (
-        <Rodizio painel={estado.painel} numeros={estado.numeros} style={{ position: 'absolute', inset: 0 }} />
+        <Rodizio painel={estado.painel} numeros={estado.numeros} diferencaMs={diferencaMs} style={{ position: 'absolute', inset: 0 }} />
       )}
       {estado.tipo === 'codigo' && <TelaCodigo codigo={estado.codigo} expiraEm={estado.expiraEm} />}
       {estado.tipo === 'iniciando' && (
