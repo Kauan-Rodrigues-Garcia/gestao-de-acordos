@@ -131,6 +131,7 @@ export function PalcoCorrida({ corrida, pessoas, eu, agora, gravacao, videos, on
     return () => window.removeEventListener('keydown', k);
   }, [onFechar]);
   useEffect(() => { motorRef.current?.seguir(seguindo ? eu : null); }, [seguindo, eu, gravacao]);
+  useEffect(() => { motorRef.current?.setPalpite(palpite.meu); }, [palpite.meu]);
 
   const tela = painel?.tela ?? 'lobby';
   const novo = tema !== 'atual' && tela === 'lobby';

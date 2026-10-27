@@ -778,6 +778,143 @@ function rankingV() {
 const trechoDe = y => { let k = 0; TRECHOS.forEach((p, i) => { if (y >= p.y) k = i; }); return k; };
 const ondeDe = o => { const k = trechoDe(o.y); if (TRECHOS[k].tipo === 'caminhos') return SK.ladosCurtos[o.x < DIV_X ? 0 : 1]; return TRECHOS[k].curto; };
 
+/* ================= os lances (27/10/2026): o locutor, a reta final e o chip de quem torce ================= */
+/* Tirados da gravação na hora de reproduzir (valem também para as corridas já gravadas): a posição de cada
+   um a cada 0,1 s, a entrada do líder na reta final e o cabeça a cabeça dos dois da frente. É conta só
+   sobre `rec`, então toda tela vê o mesmo lance no mesmo T. A posição do chip só muda quando fica 0,5 s
+   parada: no meio do bolo ela trocava a cada quadro e o chip piscava sem parar. */
+const LANCE_DT = 0.1, LANCE_ESTAVEL = 5, COLADO_PX = 60, RETA_S = 6;
+let LANCES = null, palpiteId = null;
+function montarLances(r) {
+  const n = r.n, nd = r.nomes.length, passo = Math.max(1, Math.round(r.fps * LANCE_DT)), ks = Math.floor((r.frames - 1) / passo) + 1;
+  // a reta final são os últimos 6 s antes do vencedor cruzar (a última peça sozinha durava de 1 a 5 s)
+  const retaT = r.vencedor >= 0 ? Math.max(3.5, r.tVenc - RETA_S) : Infinity;
+  const bruto = new Int16Array(ks * nd), pos = new Int16Array(ks * nd), colado = new Uint8Array(ks), melhor = new Float64Array(nd);
+  for (let s = 0; s < ks; s++) {
+    const k = s * passo, t = k / r.fps; melhor.fill(-Infinity);
+    for (let i = 0; i < n; i++) {
+      const fim = r.tFim[i] > 0 && t >= r.tFim[i] ? r.ordem[i] : 0, p = fim ? 1e6 - fim : r.Y[k * n + i] / 2, d = r.dono[i];
+      if (p > melhor[d]) melhor[d] = p;
+    }
+    const ordem = Array.from({ length: nd }, (_, d) => d).sort((a, b) => melhor[b] - melhor[a]);
+    ordem.forEach((d, i) => { bruto[s * nd + d] = i + 1; });
+    const l1 = melhor[ordem[0]], l2 = nd > 1 ? melhor[ordem[1]] : -Infinity;
+    colado[s] = t >= retaT && l1 < 1e5 && l1 - l2 < COLADO_PX ? 1 : 0;
+  }
+  for (let d = 0; d < nd; d++) {
+    let atual = bruto[d], cand = atual, desde = 0;
+    for (let s = 0; s < ks; s++) {
+      const b = bruto[s * nd + d];
+      if (b !== cand) { cand = b; desde = s; }
+      if (cand !== atual && s - desde + 1 >= LANCE_ESTAVEL) atual = cand;
+      pos[s * nd + d] = atual;
+    }
+  }
+  // «cabeça a cabeça»: os dois da frente colados por 0,3 s na reta final; no máximo 2, com 5 s entre eles
+  const cabeca = [];
+  for (let s = 2; s < ks; s++) {
+    const t = (s - 2) * passo / r.fps;
+    if (colado[s] && colado[s - 1] && colado[s - 2] && !(s > 2 && colado[s - 3]) && t > retaT + 1.8 && (!cabeca.length || t - cabeca[cabeca.length - 1] > 5) && cabeca.length < 2) cabeca.push(t);
+  }
+  const est = Array.from({ length: nd }, (_, d) => r.est[r.dono.indexOf(d)]);
+  return { dt: passo / r.fps, ks, nd, pos, colado, retaT, cabeca, est, foto: !!(r.foto && r.foto.d2 >= 0 && r.foto.t2 - r.foto.t1 < 0.3) };
+}
+const amostraL = t => clamp(Math.round(t / LANCES.dt), 0, LANCES.ks - 1);
+const posEm = (d, t) => LANCES.pos[amostraL(t) * LANCES.nd + d];
+const coladoEm = t => !!LANCES.colado[amostraL(t)];
+const fonteHud = (px, n) => px ? `${n * 0.5}px "Press Start 2P", monospace` : `${n}px ${SK.fonte}`;
+function cabeTexto(c, txt, maxW) {
+  if (c.measureText(txt).width <= maxW) return txt;
+  while (txt.length > 1 && c.measureText(txt + '…').width > maxW) txt = txt.slice(0, -1);
+  return txt + '…';
+}
+/** A faixa grande do meio da tela («RETA FINAL!»): entra crescendo, fica 1,4 s e some. */
+function faixaLance(c, px, txt, t0, tam, cor) {
+  const u = T - t0; if (u < 0 || u > 1.8) return;
+  const a = Math.min(1, u * 6, (1.8 - u) * 3), s = u < 0.2 ? 1.6 - 0.6 * (1 - Math.pow(1 - u / 0.2, 3)) : 1, y = ch * 0.34;
+  c.globalAlpha = a;
+  c.fillStyle = 'rgba(16,12,21,.62)'; c.fillRect(0, y - tam * 0.8, cw, tam * 1.6);
+  c.fillStyle = cor; c.fillRect(0, y - tam * 0.8, cw, 3); c.fillRect(0, y + tam * 0.8 - 3, cw, 3);
+  c.save(); c.translate(cw / 2, y); c.scale(s, s);
+  c.textAlign = 'center'; c.textBaseline = 'middle'; c.font = fonteHud(px, Math.min(tam, cw / (txt.length * 0.62)));
+  c.fillStyle = cor; c.fillText(txt, 0, 2);
+  c.restore(); c.globalAlpha = 1; c.textAlign = 'left'; c.textBaseline = 'alphabetic';
+}
+/** O chip do canto: a posição de quem você acompanha, com a seta do que mudou nos últimos 3 s. */
+function chipLance(c, px, hud, y, rotulo, d) {
+  const p = posEm(d, T), mud = posEm(d, T - 3) - p, pisca = posEm(d, T - 0.5) !== p, est = LANCES.est[d];
+  c.font = `600 ${px ? 8 : 11}px ${hud}`;
+  const rot = cabeTexto(c, rotulo, Math.max(80, cw * 0.32)), wr = c.measureText(rot).width;
+  c.font = `700 ${px ? 11 : 16}px ${hud}`;
+  const tp = `${p}º`, wp = c.measureText(tp).width;
+  c.font = `500 ${px ? 7 : 10}px ${hud}`;
+  const td = ` de ${LANCES.nd}`, wd = c.measureText(td).width;
+  // a seta é desenhada (a fonte de pixel não tem ▲▼)
+  const ts = mud ? String(Math.abs(mud)) : '', ws = ts ? c.measureText(ts).width + 22 : 0;
+  const w = 46 + wr + 8 + wp + wd + ws + 12, h = 30, x = 12;
+  c.fillStyle = 'rgba(16,12,21,.82)'; rr(c, x, y, w, h, 8); c.fill();
+  if (pisca) { c.strokeStyle = mud >= 0 ? '#5ee08a' : '#ff6b6b'; c.lineWidth = 2; rr(c, x, y, w, h, 8); c.stroke(); }
+  c.fillStyle = est.cor; c.fillRect(x, y + 6, 3, h - 12);
+  desenhaAlma(c, x + 20, y + h / 2 + 1, 9, est, { expr: mud < 0 ? 'medo' : 'feliz', t: T, lx: 0, ly: 0 });
+  let xx = x + 46; c.textBaseline = 'middle';
+  c.font = `600 ${px ? 8 : 11}px ${hud}`; c.fillStyle = '#c8bcd6'; c.fillText(rot, xx, y + h / 2 + 1); xx += wr + 8;
+  c.font = `700 ${px ? 11 : 16}px ${hud}`; c.fillStyle = p <= 3 ? SK.cor.destaque : '#efe6d4'; c.fillText(tp, xx, y + h / 2 + 1); xx += wp;
+  c.font = `500 ${px ? 7 : 10}px ${hud}`; c.fillStyle = 'rgba(239,230,212,.6)'; c.fillText(td, xx, y + h / 2 + 2); xx += wd + 10;
+  if (ts) {
+    const cy = y + h / 2; c.fillStyle = mud > 0 ? '#5ee08a' : '#ff6b6b';
+    c.beginPath(); if (mud > 0) { c.moveTo(xx, cy + 4); c.lineTo(xx + 10, cy + 4); c.lineTo(xx + 5, cy - 4); } else { c.moveTo(xx, cy - 4); c.lineTo(xx + 10, cy - 4); c.lineTo(xx + 5, cy + 4); }
+    c.closePath(); c.fill(); c.fillText(ts, xx + 13, cy + 1);
+  }
+  c.textBaseline = 'alphabetic';
+}
+/** Tudo dos lances por cima da corrida. Fora da festa: o replay e o vídeo do fim ficam limpos. */
+function desenhaLances(c, px, hud, venceu) {
+  if (!LANCES || festa || T < 3) return;
+  const fimLance = rec.vencedor >= 0 ? rec.tVenc : Infinity;
+  // o coração da reta final: a borda pulsa enquanto os dois da frente estão colados
+  if (T < fimLance && coladoEm(T)) {
+    const bat = performance.now() / 650 % 1, a = 0.16 + 0.22 * Math.max(0, 1 - bat * 3.5);
+    const g = c.createRadialGradient(cw / 2, ch / 2, Math.min(cw, ch) * 0.3, cw / 2, ch / 2, Math.max(cw, ch) * 0.72);
+    g.addColorStop(0, 'rgba(255,59,59,0)'); g.addColorStop(1, `rgba(255,59,59,${a})`); c.fillStyle = g; c.fillRect(0, 0, cw, ch);
+  }
+  // o locutor: a última frase da gravação, por 3,5 s, no alto (sai na câmera lenta e na faixa do vencedor)
+  if (escala >= 0.6 && !venceu && T - 3 > 0.8) {
+    let nn = null; for (let k = rec.narr.length - 1; k >= 0; k--) if (rec.narr[k].t <= T) { nn = rec.narr[k]; break; }
+    const age = nn ? T - nn.t : 9;
+    if (age < 3.5) {
+      c.globalAlpha = Math.min(1, age * 6, (3.5 - age) * 3);
+      c.font = `600 ${px ? 8 : 12}px ${hud}`;
+      const txt = cabeTexto(c, nn.txt, Math.max(150, cw - 250)), tw = c.measureText(txt).width, bx = cw / 2 - tw / 2 - 14;
+      c.fillStyle = 'rgba(16,12,21,.8)'; rr(c, bx, 12, tw + 28, 26, 13); c.fill();
+      c.fillStyle = SK.cor.destaque; circ(c, bx + 10, 25, 3); c.fill();
+      c.fillStyle = '#efe6d4'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(txt, cw / 2 + 4, 26);
+      c.textAlign = 'left'; c.textBaseline = 'alphabetic'; c.globalAlpha = 1;
+    }
+  }
+  faixaLance(c, px, 'RETA FINAL!', LANCES.retaT, 56, SK.cor.destaque);
+  for (const t0 of LANCES.cabeca) faixaLance(c, px, 'CABEÇA A CABEÇA!', t0, 44, '#ff6b6b');
+  // os chips: o seu bichinho e, para quem palpitou, o escolhido (some na faixa do vencedor)
+  if (!venceu) {
+    let y = ch - 14 - 30;
+    if (rec.voce >= 0) { chipLance(c, px, hud, y, 'VOCÊ', rec.voce); y -= 36; }
+    const dp = palpiteId ? (rec.ids || []).indexOf(palpiteId) : -1;
+    if (dp >= 0 && dp !== rec.voce) chipLance(c, px, hud, y, `PALPITE · ${rec.nomes[dp]}`, dp);
+  }
+}
+/* Os sons dos lances, no relógio da corrida (quem chega atrasado ou pula não ouve o que já passou). */
+let proxBatida = 0, ultChipSom = 0;
+function sonsDosLances(antes, agoraT) {
+  if (!LANCES || !tocando || agoraT <= antes || agoraT - antes > 0.5) return;
+  if (antes < LANCES.retaT && agoraT >= LANCES.retaT) som.reta();
+  for (const t0 of LANCES.cabeca) if (antes < t0 && agoraT >= t0) som.torcida();
+  const agoraMs = performance.now();
+  if ((rec.vencedor < 0 || agoraT < rec.tVenc) && coladoEm(agoraT) && agoraMs >= proxBatida) { som.coracao(); proxBatida = agoraMs + 650; }
+  if (rec.voce >= 0 && agoraT >= 3 && agoraMs - ultChipSom > 1500) {
+    const p0 = posEm(rec.voce, antes), p1 = posEm(rec.voce, agoraT);
+    if (p1 !== p0) { ultChipSom = agoraMs; if (p1 < p0) som.sobe(); else som.cai(); }
+  }
+}
+
 /* ================= o placar (o React desenha o painel) ================= */
 const fmtC = s => { s = Math.max(0, s); return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`; };
 const fmt = s => { s = Math.max(0, s); const m = Math.floor(s / 60), r = s - m * 60; return `${m}:${r < 10 ? '0' : ''}${r.toFixed(3).replace('.', ',')}`; };
@@ -788,7 +925,7 @@ const setTocando = v => { tocando = v; };
 /* ================= os seis mapas ================= */
 const MAPAS = [
   { id: 'halloween', nome: 'Noite Assombrada', tema: 'Halloween', desc: 'O clássico: cemitério, mansão dos fantasmas, moinho do Ceifador, e o portão e o caldeirão que juntam a turma antes de soltar.', blocos: ['lapides', 'forquilha', 'portao', 'salao', 'ponte', 'moinho', 'caldeirao', 'teias', 'fliper'] },
-  { id: 'pixel', nome: 'Caça Pixelada', tema: 'Pixel art', desc: 'Oito bits, com os zumbis e as bruxas da caça. Sem nenhuma espera: blocos-mola que jogam o bichinho para cima e plataformas que andam de um lado para o outro.', blocos: ['lapides', 'molas', 'ponte', 'forquilha', 'plataformas', 'salao', 'moinho', 'fliper'], pixel: true },
+  { id: 'pixel', nome: 'Caça Pixelada', tema: 'Pixel art', desc: 'Oito bits, com os zumbis e as bruxas da caça: blocos-mola que jogam o bichinho para cima, plataformas que andam de um lado para o outro e, antes da fase final, o caldeirão da Chefona, que junta a turma e solta em ordem sorteada.', blocos: ['lapides', 'molas', 'ponte', 'forquilha', 'plataformas', 'salao', 'moinho', 'caldeirao', 'fliper'], pixel: true },
   { id: 'mar', nome: 'Naufrágio', tema: 'Fundo do mar', desc: 'Uma correnteza que empurra de lado e troca de sentido, colunas de bolhas que seguram a queda, águas-vivas e a concha gigante.', blocos: ['lapides', 'correntes', 'salao', 'forquilha', 'caldeirao', 'teias', 'moinho', 'fliper'] },
   { id: 'espaco', nome: 'Estação Cósmica', tema: 'Espaço', desc: 'Um trecho de gravidade zero, onde os bichinhos flutuam e um redemoinho leva de um lado para o outro, e satélites que andam. Sem espera.', blocos: ['lapides', 'forquilha', 'orbita', 'plataformas', 'salao', 'moinho', 'fliper'] },
   { id: 'templo', nome: 'Templo Perdido', tema: 'Selva', desc: 'O rio puxa os bichinhos e troca de sentido, lâminas de pêndulo balançam e a porta de pedra abre sozinha a cada 5 segundos, sem esperar ninguém.', blocos: ['lapides', 'esteiras', 'forquilha', 'pendulos', 'portao', 'salao', 'teias', 'fliper'], modos: { portao: 'ritmo' } },
@@ -797,11 +934,12 @@ const MAPAS = [
 /* A corrida especial (27/10/2026): fora da roleta. Só sai quando o super admin pede (`gravar({ especial: true })`).
    É o mapa grande, em pixel art de fliperama, com as peças que só ele tem: canhões que lançam o bichinho por cima
    do campo de pinos, luvas de boxe que socam da parede, a mesa de pinball e o teletransporte; e quase todas as
-   peças dos outros mapas, uma atrás da outra, sem nenhuma espera. */
+   peças dos outros mapas, uma atrás da outra. A única espera é o caldeirão antes da fase final (27/10/2026): sem
+   ele, o líder abria e a corrida estava decidida uns 18 s antes da linha. */
 const MAPA_ESPECIAL = {
   id: 'arcade', nome: 'Fliperama Turbo', tema: 'Corrida especial', especial: true, pixel: true,
-  desc: 'O mapa grande da corrida especial: canhões, luvas de boxe, pinball, teletransporte, discos voadores e o resto das peças dos outros mapas, sem espera nenhuma.',
-  blocos: ['lapides', 'canhoes', 'molas', 'luvas', 'forquilha', 'flipers', 'plataformas', 'portais', 'salao', 'geiseres', 'pendulos', 'canhoes', 'esteiras', 'moinho', 'fliper'],
+  desc: 'O mapa grande da corrida especial: canhões, luvas de boxe, pinball, teletransporte, discos voadores e o resto das peças dos outros mapas, com o caldeirão da Chefona antes da fase final.',
+  blocos: ['lapides', 'canhoes', 'molas', 'luvas', 'forquilha', 'flipers', 'plataformas', 'portais', 'salao', 'geiseres', 'pendulos', 'canhoes', 'esteiras', 'moinho', 'caldeirao', 'fliper'],
 };
 const mapaPorId = id => MAPAS.find(m => m.id === id) || (id === MAPA_ESPECIAL.id ? MAPA_ESPECIAL : null);
 
@@ -2348,7 +2486,7 @@ SKINS.arcade = skin(Object.assign({}, SKINS.pixel, {
     largada: ['Insert Coin', 'Insert Coin', 'ao'], lapides: ['Chuva de Fichas', 'Fichas', 'à'], canhoes: ['Canhões de 8 Bits', 'Canhões', 'aos'], molas: ['Pula-Pula Pixel', 'Pula-pula', 'ao'],
     luvas: ['Corredor do Nocaute', 'Nocaute', 'ao'], encruzilhada: ['Seleção de Fase', 'Seleção', 'à'], caminhos: ['Os dois mundos', 'Mundos', 'aos'], flipers: ['Mesa de Pinball', 'Pinball', 'à'],
     plataformas: ['Plataformas Móveis', 'Plataformas', 'às'], portais: ['Zona de Teletransporte', 'Teletransporte', 'à'], salao: ['Labirinto dos Fantasminhas', 'Labirinto', 'ao'],
-    geiseres: ['Jatos de Ar', 'Jatos', 'aos'], pendulos: ['Bolas de Demolição', 'Demolição', 'às'], esteiras: ['Esteiras da Fábrica', 'Esteiras', 'às'], moinho: ['Roda do Fliperama', 'Roda', 'à'], fliper: ['Fase Final', 'Fase final', 'à'],
+    geiseres: ['Jatos de Ar', 'Jatos', 'aos'], pendulos: ['Bolas de Demolição', 'Demolição', 'às'], esteiras: ['Esteiras da Fábrica', 'Esteiras', 'às'], moinho: ['Roda do Fliperama', 'Roda', 'à'], caldeirao: ['Caldeirão da Chefona', 'Caldeirão', 'ao'], fliper: ['Fase Final', 'Fase final', 'à'],
   },
   lados: ['a Fase dos Invasores', 'a Fase Bônus'], ladosCurtos: ['Invasores', 'Bônus'], ladosPlaca: ['Fase dos Invasores', 'Fase Bônus'],
   bg: {
@@ -2867,7 +3005,7 @@ function desenhar(dtR) {
   c3.font = `500 ${px ? 7 : 10}px ${hud}`; c3.fillStyle = 'rgba(239,230,212,.55)'; c3.textAlign = 'right'; c3.fillText(MAPA.nome.toUpperCase(), cw - 28, ch - 14); c3.textAlign = 'left';
   if (escala < 0.6) {
     c3.font = `600 ${px ? 9 : 12}px ${hud}`; c3.textAlign = 'center'; c3.fillStyle = 'rgba(16,12,21,.75)'; rr(c3, cw / 2 - 74, 14, 148, 24, 12); c3.fill();
-    c3.fillStyle = SK.cor.destaque; c3.fillText('● CÂMERA LENTA', cw / 2, 30); c3.textAlign = 'left';
+    c3.fillStyle = SK.cor.destaque; c3.fillText(LANCES && LANCES.foto ? '● VAI DAR FOTO!' : '● CÂMERA LENTA', cw / 2, 30); c3.textAlign = 'left';
     c3.fillStyle = 'rgba(0,0,0,.25)'; c3.fillRect(0, 0, cw, 22); c3.fillRect(0, ch - 22, cw, 22);
   }
   const fonteGrande = n => px ? `${n * 0.5}px "Press Start 2P", monospace` : `${n}px ${SK.fonte}`;
@@ -2926,6 +3064,7 @@ function desenhar(dtR) {
     c3.font = '500 11px "IBM Plex Mono", monospace'; c3.fillText(`+${(foto.t2 - foto.t1).toFixed(3).replace('.', ',')} s`, tx, by + 114);
     c3.globalAlpha = 1;
   }
+  desenhaLances(c3, px, hud, venceu);
   if (flash > 0) { c3.fillStyle = `rgba(235,228,255,${flash})`; c3.fillRect(0, 0, cw, ch); }
 }
 
@@ -3002,6 +3141,11 @@ const som = {
   pop() { this.tom(880 + Math.random() * 400, 0.06, { tipo: 'triangle', vol: 0.03 }); },
   bip(final) { const tb = TIMBRE[MAPA.id]; if (final) { this.tom(880, 0.5, { tipo: tb, vol: 0.14 }); this.tom(1320, 0.5, { tipo: 'sine', vol: 0.07 }); } else this.tom(587, 0.16, { tipo: tb, vol: 0.12 }); },
   tique(k) { this.tom(1400 + (k % 2) * 300, 0.035, { tipo: 'square', vol: 0.05 }); this.ruido(0.025, { vol: 0.05, filtro: { tipo: 'highpass', f: 3000 } }); },
+  // os lances da reta final e do chip
+  reta() { this.ruido(1.6, { vol: 0.12, atk: 0.3, filtro: { tipo: 'bandpass', f: 400, f2: 2400, q: 1.2 } }); this.notas([523, 659, 784, 1047], 0.08, { tipo: TIMBRE[MAPA.id], vol: 0.07, dur: 0.35 }); },
+  coracao() { this.tom(64, 0.15, { f2: 40, vol: 0.3 }); this.tom(58, 0.15, { f2: 38, vol: 0.22, q: 0.18 }); },
+  sobe() { this.notas([660, 990], 0.07, { tipo: 'triangle', vol: 0.05, dur: 0.14 }); },
+  cai() { this.notas([440, 294], 0.08, { tipo: 'triangle', vol: 0.04, dur: 0.16 }); },
   pouso() { this.tom(110, 0.6, { f2: 48, vol: 0.32 }); this.ruido(0.7, { vol: 0.18, filtro: { f: 2400, f2: 200 } }); this.notas([392, 523, 659, 784], 0.05, { tipo: 'triangle', vol: 0.07, dur: 1.1 }); },
 };
 const SOM_INTRO = {
@@ -4277,6 +4421,7 @@ function quadro() {
       const antes = T; T = novoT; ultT = novoT;
       for (const k of [1, 2]) if (antes < k && T >= k) som.bip(false);
       if (antes < 3 && T >= 3) som.bip(true);
+      sonsDosLances(antes, T);
       desenhar(Math.max(0, T - antes));
     } else if (tl.tela === 'video') {
       quadroVideo(tl);
@@ -4331,9 +4476,9 @@ function avisaPainel(tl) {
 
 /* ================= ler e preparar a gravação de uma corrida ================= */
 function prepararGravacao(r, extra) {
-  if (!r) { rec = null; return; }
+  if (!r) { rec = null; LANCES = null; return; }
   if (!MAPA || MAPA.id !== r.mapa) carregaMapa(r.mapa);
-  rec = r; rec.voce = (rec.ids || []).indexOf(EU);
+  rec = r; rec.voce = (rec.ids || []).indexOf(EU); LANCES = montarLances(r);
   CORRIDA.semente = r.seed; CORRIDA.mapa = r.mapa;
   SHOW_ATUAL = { mapa: r.mapa, faixa: extra.faixa, parada: extra.parada, tique: -1 };
   vb.length = 0; buscar(0); ultT = -1; festaViva = null;
@@ -4415,6 +4560,8 @@ return {
   ligarEq(elementos) { eqBarras = Array.from(elementos || []); eqParado = true; },
   /** A câmera da corrida: seguir uma pessoa (id) ou o líder (null). */
   seguir(id) { const i = id && rec ? (rec.ids || []).indexOf(id) : -1; seguirPedido = i; if (!festa) seguir = i; },
+  /** O palpite de quem assiste (o id de quem ele escolheu): vira o chip «PALPITE» no canto da corrida. */
+  setPalpite(id) { palpiteId = id || null; },
   gravar,
   podeGravarVideo,
   /** As fontes chegaram: redesenha o que estava guardado com a fonte provisória. */

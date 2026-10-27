@@ -113,6 +113,8 @@ export interface Motor {
   volume(max?: number, mudo?: boolean): void;
   ligarEq(barras: ArrayLike<HTMLElement>): void;
   seguir(id: string | null): void;
+  /** O palpite de quem assiste (o id de quem ele escolheu): vira o chip «PALPITE» no canto da corrida. */
+  setPalpite(id: string | null): void;
   gravar(opcoes: {
     pessoas: Array<{ id: string; nome: string; setor: string | null; foto: string | null; est: Estilo }>;
     premio: string | null;
