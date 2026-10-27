@@ -20,7 +20,6 @@ import {
 import { sortearFrase } from '@/pages/Comemoracoes/frases';
 import {
   estaNoAr, estaEncerrada, fimMs, msAteDespertar, proximaDaFila,
-  desvioDoServidor,
 } from '@/pages/Comemoracoes/janela';
 import { deveExplodir } from '@/pages/Comemoracoes/escopo';
 import { lerVistas, marcarVista } from '@/pages/Comemoracoes/vistas';
@@ -47,14 +46,6 @@ export function useComemoracoes(
   const [dbAtiva, setDbAtiva]           = useState(true);
   const [erro, setErro]                 = useState<string | null>(null);
 
-  /**
-   * Diferença entre o relógio do banco e o do navegador.
-   *
-   * Um PC com a hora adiantada mostraria a comemoração antes de todo mundo — e
-   * um atrasado, depois de ela já ter acabado para os colegas.
-   */
-  const desvioRef = useRef(0);
-
   const montadoRef = useRef(true);
   useEffect(() => {
     montadoRef.current = true;
@@ -65,9 +56,6 @@ export function useComemoracoes(
     if (!empresaId || !habilitado) { setLoading(false); return; }
     const res = await buscarComemoracoes(empresaId, desdeMs);
     if (!montadoRef.current) return;
-    if (res.agoraServidor) {
-      desvioRef.current = desvioDoServidor(res.agoraServidor, Date.now());
-    }
     // A releitura do realtime devolve a lista inteira. Sem reconciliar, cada
     // evento trocaria TODOS os cartoes de comemoracao por objetos novos e o
     // overlay em cena remontaria no meio da animacao. Ver `lib/dadosVivos`.
@@ -96,8 +84,18 @@ export function useComemoracoes(
     });
   }, [empresaId, habilitado, dbAtiva]);
 
-  /** Agora corrigido pelo relógio do servidor. */
-  const agoraCorrigido = useCallback(() => Date.now() + desvioRef.current, []);
+  /**
+   * O relógio do PC (27/10/2026).
+   *
+   * Era «corrigido pelo servidor», mas a hora do servidor saía do `criado_em`
+   * da comemoração mais à frente — o instante em que ela foi CRIADA, não o
+   * agora. O relógio da tela voltava para esse instante: o Luciano criou três
+   * festas às 14:10 para 14:11 e, para quem carregou a lista depois, as 14:11
+   * nunca chegavam; cada releitura atrasava o relógio de novo. Os PCs estão no
+   * domínio e acertam a hora pelo Windows, e um segundo de diferença não muda
+   * uma festa de 30 s. Nome mantido para não mexer em quem chama.
+   */
+  const agoraCorrigido = useCallback(() => Date.now(), []);
 
   return { comemoracoes, loading, dbAtiva, erro, recarregar, agoraCorrigido };
 }

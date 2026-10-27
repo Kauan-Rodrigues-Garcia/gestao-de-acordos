@@ -163,15 +163,3 @@ export function validarAgendamento(iso: string, agora: number): string | null {
   }
   return null;
 }
-
-/**
- * Desvio entre o relógio do banco e o do navegador, em ms.
- *
- * Um PC com a hora adiantada mostraria a comemoração antes de todo mundo. O
- * desvio é medido uma vez e somado ao `Date.now()` local daí em diante.
- */
-export function desvioDoServidor(agoraServidorIso: string, agoraLocalMs: number): number {
-  const servidor = new Date(agoraServidorIso).getTime();
-  if (!Number.isFinite(servidor)) return 0;
-  return servidor - agoraLocalMs;
-}

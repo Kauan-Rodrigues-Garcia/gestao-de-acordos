@@ -23,7 +23,8 @@ vi.mock('@/lib/sinais', () => ({
   avisoToca:    () => false,
 }));
 
-import { useComemoracaoNoAr } from '@/hooks/useComemoracoes';
+import { useComemoracaoNoAr, useComemoracoes } from '@/hooks/useComemoracoes';
+import { buscarComemoracoes } from '@/services/comemoracoes.service';
 
 const T0 = new Date('2026-10-27T13:00:00.000Z').getTime();
 
@@ -93,6 +94,19 @@ describe('useComemoracaoNoAr — agendamento distante', () => {
     act(() => { vi.setSystemTime(T0 + 3 * 3_600_000 + 1_000); });
     act(() => { document.dispatchEvent(new Event('visibilitychange')); });
     expect(result.current.atual?.id).toBe('festa-1');
+  });
+
+  it('o relógio da tela é o do PC, não o criado_em da festa', async () => {
+    // O defeito das 14:50: a «hora do servidor» era o criado_em da festa mais
+    // à frente, e a tela voltava 40 min no tempo — tudo seguia «agendada».
+    vi.mocked(buscarComemoracoes).mockResolvedValue({
+      data: [festa(T0 + 60_000, { criado_em: new Date(T0 - 40 * 60_000).toISOString() } as never)],
+      dbAtiva: true, erro: null,
+    });
+    const { result } = renderHook(() => useComemoracoes('emp'));
+    await act(async () => { await Promise.resolve(); });
+    expect(result.current.comemoracoes).toHaveLength(1);
+    expect(result.current.agoraCorrigido()).toBe(T0);
   });
 
   it('de outro setor continua sem explodir', () => {

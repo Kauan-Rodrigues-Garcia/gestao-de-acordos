@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   estaNoAr, fimMs, inicioMs, msAteComecar, msAteDespertar, proximaDaFila,
-  desvioDoServidor, estaAgendada, jaPassou, validarAgendamento,
+  estaAgendada, jaPassou, validarAgendamento,
   estaEncerrada, estadoDe,
   MAX_DIAS_AGENDAMENTO, TOLERANCIA_PASSADO_MS, VIGIA_MS,
   type Exibivel,
@@ -186,21 +186,6 @@ describe('validarAgendamento', () => {
 
   it('data inválida tem mensagem própria', () => {
     expect(validarAgendamento('qualquer coisa', T0)).toMatch(/válidas/i);
-  });
-});
-
-describe('desvioDoServidor', () => {
-  it('relógio local atrasado dá desvio positivo', () => {
-    // O banco está 3 s à frente: somamos 3 s ao Date.now() local.
-    expect(desvioDoServidor(new Date(T0 + 3_000).toISOString(), T0)).toBe(3_000);
-  });
-
-  it('relógio local adiantado dá desvio negativo', () => {
-    expect(desvioDoServidor(new Date(T0 - 3_000).toISOString(), T0)).toBe(-3_000);
-  });
-
-  it('data inválida não desregula o relógio', () => {
-    expect(desvioDoServidor('nao-e-data', T0)).toBe(0);
   });
 });
 

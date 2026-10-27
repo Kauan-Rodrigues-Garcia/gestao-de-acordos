@@ -200,8 +200,6 @@ export interface ListaComemoracoes {
   data:     Comemoracao[];
   dbAtiva:  boolean;
   erro:     string | null;
-  /** Hora do banco no momento da leitura — corrige o relógio do navegador. */
-  agoraServidor: string | null;
 }
 
 /**
@@ -233,10 +231,10 @@ export async function buscarComemoracoes(
 
   if (error) {
     if (tabelaAusente(error)) {
-      return { data: [], dbAtiva: false, erro: null, agoraServidor: null };
+      return { data: [], dbAtiva: false, erro: null };
     }
     logger.warn('[comemoracoes] erro ao listar:', error.message);
-    return { data: [], dbAtiva: true, erro: 'Não foi possível carregar as comemorações.', agoraServidor: null };
+    return { data: [], dbAtiva: true, erro: 'Não foi possível carregar as comemorações.' };
   }
 
   // As colunas da 20260801a chegam ausentes num banco que ainda não migrou —
@@ -302,15 +300,7 @@ export async function buscarComemoracoes(
     };
   });
 
-  return {
-    data: lista,
-    dbAtiva: true,
-    erro: null,
-    // O servidor não devolve a hora dele nesta query; usamos o carimbo mais
-    // recente que ele mesmo gerou. Sem nenhuma linha não há como medir o
-    // desvio, e o relógio local serve — é o caso de quem nunca comemorou.
-    agoraServidor: lista[0]?.criado_em ?? null,
-  };
+  return { data: lista, dbAtiva: true, erro: null };
 }
 
 /**

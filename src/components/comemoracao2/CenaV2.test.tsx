@@ -18,7 +18,7 @@ vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ perfil: { id: 'eu', setor_
 vi.mock('@/hooks/useEmpresa', () => ({ useEmpresa: () => ({ empresa: { id: 'emp' } }) }));
 vi.mock('@/hooks/useEquipesDoPerfil', () => ({ useEquipesDoPerfil: () => ({ todas: [] }) }));
 vi.mock('@/services/comemoracoes.service', () => ({
-  buscarComemoracoes: () => Promise.resolve({ data: [], dbAtiva: true, erro: null, agoraServidor: null }),
+  buscarComemoracoes: () => Promise.resolve({ data: [], dbAtiva: true, erro: null }),
   buscarParabens: () => Promise.resolve([]),
   parabenizar: vi.fn(),
   finalizarComemoracao: vi.fn(),
