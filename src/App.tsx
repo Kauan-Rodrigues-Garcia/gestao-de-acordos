@@ -26,7 +26,7 @@ import { NotificacoesProvider } from '@/providers/NotificacoesProvider';
 import { MesProvider } from '@/providers/MesProvider';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useVersionCheck } from '@/hooks/useVersionCheck';
-import { ROUTE_PATHS } from '@/lib/index';
+import { CARGOS_MODO_TV, ROUTE_PATHS } from '@/lib/index';
 import { produtoDaEmpresa, type Produto } from '@/lib/produto';
 import { SoNoEnderecoDoApp } from '@/pages/Mobile/comum/SoNoEnderecoDoApp';
 import { decidirDesvio, deveAbrirMobile, destinoMobile, ehCelular, lerVersao, temaSoClaro } from '@/lib/mobile/preferencia';
@@ -77,6 +77,9 @@ const ImportarExcel     = lazy(() => import('@/pages/ImportarExcel'));
 const NotFound          = lazy(() => import('@/pages/not-found/Index'));
 const Lixeira           = lazy(() => import('@/pages/Lixeira'));
 const PainelDiretoria   = lazy(() => import('@/pages/PainelDiretoria'));
+const ModoTV            = lazy(() => import('@/pages/ModoTV'));
+// O PC da TV baixa SÓ este pedaço, e não a montagem nem o Gestão inteiro.
+const TvPalco           = lazy(() => import('@/pages/TvPalco'));
 const PaginaAnalitico   = lazy(() => import('@/pages/Analitico'));
 const CampanhaFacil     = lazy(() => import('@/pages/CampanhaFacil'));
 const CampanhasWhatsapp = lazy(() => import('@/pages/CampanhasWhatsapp'));
@@ -573,6 +576,21 @@ export default function App() {
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
+
+              {/* Modo TV 2 — a montagem. Só líder, elite e acima, por cargo; o
+                  alcance de cada painel é da RLS (fn_tv_alvo_no_meu_alcance). */}
+              <Route path={ROUTE_PATHS.MODO_TV} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COBRANCA} roles={[...CARGOS_MODO_TV]}>
+                    <ModoTV />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+
+              {/* A TV na parede: tela cheia, sem LayoutWrapper e SEM login. O
+                  que abre o painel é o token do pareamento (fn_tv_ver), não a
+                  sessão — ver TvPalco.tsx. */}
+              <Route path={ROUTE_PATHS.TV_PALCO} element={<TvPalco />} />
 
               {/* Analítico (PaguePlay + BookPlay — o gate por slug continua
                   dentro da página; a permissão decide QUEM abre) */}

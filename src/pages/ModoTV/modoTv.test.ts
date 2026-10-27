@@ -1,0 +1,170 @@
+import { describe, expect, it } from 'vitest';
+import { montarVisao, moedaTv, nomeCurto, percentualTv } from './numeros';
+import { midiaSegura, opcao, rotuloTempo, segundosDaTela, telasValidas } from './templates';
+import { numerosDemo } from './demo';
+import { estadoDaTv, situacaoDoPainel } from './apoio';
+import type { NumerosTv } from './tipos';
+
+const base = (parcial: Partial<NumerosTv> = {}): NumerosTv => ({ ...numerosDemo(), ...parcial });
+
+describe('montarVisao', () => {
+  it('conta falta, fração, ritmo e projeção em bruto', () => {
+    const v = montarVisao(base({ meta: 100_000, recebido: 60_000, dias_uteis: 20, dias_decorridos: 15 }), 'bruto');
+    expect(v.falta).toBe(40_000);
+    expect(v.fracao).toBeCloseTo(0.6);
+    expect(v.diasRestantes).toBe(5);
+    expect(v.ritmo).toBe(8_000);
+    expect(v.projecao).toBe(80_000);
+    expect(v.hoje.alvo).toBe(5_000);
+    expect(v.batida).toBe(false);
+  });
+
+  it('Nosso produto ignora o H.O. do painel', () => {
+    const v = montarVisao(base({ regra: 'nosso_produto' }), 'ho');
+    expect(v.unidade).toBe('bruto');
+  });
+
+  it('Cofen em H.O.: meta convertida pelo percentual da empresa, recebido da coluna H.O.', () => {
+    const v = montarVisao(base({ regra: 'cofen', meta: 100_000, recebido_ho: 10_000, ho_percentual: 0.25 }), 'ho');
+    expect(v.unidade).toBe('ho');
+    expect(v.meta).toBe(25_000);
+    expect(v.recebido).toBe(10_000);
+    expect(v.falta).toBe(15_000);
+  });
+
+  it('percentual inválido volta ao padrão de 22,60%', () => {
+    const v = montarVisao(base({ regra: 'cofen', meta: 100_000, ho_percentual: 'lixo' }), 'ho');
+    expect(v.meta).toBe(22_600);
+  });
+
+  it('meta batida não tem falta nem ritmo', () => {
+    const v = montarVisao(base({ meta: 50_000, recebido: 60_000 }), 'bruto');
+    expect(v.batida).toBe(true);
+    expect(v.falta).toBe(0);
+    expect(v.ritmo).toBe(0);
+  });
+
+  it('último dia útil: o ritmo é tudo o que falta', () => {
+    const v = montarVisao(base({ meta: 100_000, recebido: 90_000, dias_uteis: 20, dias_decorridos: 20 }), 'bruto');
+    expect(v.ritmo).toBe(10_000);
+  });
+
+  it('alvo manual de hoje substitui a meta ÷ dias úteis', () => {
+    const v = montarVisao(base({ recebido_hoje: 1_000 }), 'bruto', 4_000);
+    expect(v.hoje.alvo).toBe(4_000);
+    expect(v.hoje.falta).toBe(3_000);
+  });
+
+  it('pacote torto não quebra a parede', () => {
+    const v = montarVisao({ ...base(), meta: undefined, ranking: null, dias_uteis: 'x' } as unknown as NumerosTv, 'bruto');
+    expect(v.meta).toBe(0);
+    expect(v.fracao).toBe(0);
+    expect(v.ranking).toEqual([]);
+  });
+});
+
+describe('formatos da parede', () => {
+  it('dinheiro sem centavos', () => {
+    expect(moedaTv(1234.99).replace(/\s/g, ' ')).toBe('R$ 1.234');
+  });
+  it('percentual cortado, nunca arredondado para 100%', () => {
+    expect(percentualTv(0.9996)).toBe('99,9%');
+    expect(percentualTv(1.125)).toBe('112,5%');
+  });
+  it('nome curto', () => {
+    expect(nomeCurto('Maria Aparecida Souza')).toBe('Maria Souza');
+    expect(nomeCurto(' Ana  Lima ')).toBe('Ana Lima');
+  });
+});
+
+describe('telas e opções', () => {
+  it('descarta tela de template que não existe', () => {
+    expect(telasValidas([{ id: 'a', template: 'contagem' }, { id: 'b', template: 'roleta' }, null, 'x'])).toEqual([
+      { id: 'a', template: 'contagem', opcoes: {}, segundos: null },
+    ]);
+  });
+
+  it('opção fora do tipo cai no padrão', () => {
+    const t = { template: 'lista' as const, opcoes: { quantidade: '7', mostrar_valor: 'sim', titulo: 42 } };
+    expect(opcao(t, 'quantidade')).toBe('5');
+    expect(opcao(t, 'mostrar_valor')).toBe(true);
+    expect(opcao(t, 'titulo')).toBe('Ranking do mês');
+  });
+
+  it('texto é cortado no máximo do campo', () => {
+    const t = { template: 'recado' as const, opcoes: { texto: 'x'.repeat(500) } };
+    expect(opcao<string>(t, 'texto')).toHaveLength(120);
+  });
+});
+
+describe('midiaSegura', () => {
+  const BASE = 'https://abc.supabase.co';
+  it('aceita só o balde tv/paineis do projeto', () => {
+    const ok = `${BASE}/storage/v1/object/public/tv/paineis/123/foto.png`;
+    expect(midiaSegura(ok, BASE)).toBe(ok);
+    expect(midiaSegura(`${BASE}/`, BASE)).toBeNull();
+    expect(midiaSegura('https://outro.site/foto.png', BASE)).toBeNull();
+    expect(midiaSegura(`${BASE}/storage/v1/object/public/avatars/x.png`, BASE)).toBeNull();
+    expect(midiaSegura(`${BASE}/storage/v1/object/public/tv/paineis/../x.png`, BASE)).toBeNull();
+    expect(midiaSegura(123, BASE)).toBeNull();
+  });
+});
+
+describe('estadoDaTv', () => {
+  const agora = Date.parse('2026-10-27T12:00:00Z');
+  const v1 = '2026-10-27T11:00:00.123456+00:00';
+  const v2 = '2026-10-27T11:59:50+00:00';
+  const tv = (p: Partial<{ ultimo_sinal: string | null; saiu_em: string | null; versao_exibida: string | null }>) =>
+    ({ ultimo_sinal: '2026-10-27T11:59:30Z', saiu_em: null, versao_exibida: v1, ...p });
+
+  it('ligada e em dia', () => {
+    expect(estadoDaTv(tv({}), v1, agora)).toBe('em_dia');
+  });
+  it('ligada com a versão anterior: atualizando', () => {
+    expect(estadoDaTv(tv({}), v2, agora)).toBe('atualizando');
+  });
+  it('sem sinal depois de 75 s', () => {
+    expect(estadoDaTv(tv({ ultimo_sinal: '2026-10-27T11:58:40Z' }), v1, agora)).toBe('sem_sinal');
+    expect(estadoDaTv(tv({ ultimo_sinal: null }), v1, agora)).toBe('sem_sinal');
+  });
+  it('página fechada vence o sinal anterior; sinal depois de fechar = reaberta', () => {
+    expect(estadoDaTv(tv({ saiu_em: '2026-10-27T11:59:40Z' }), v1, agora)).toBe('fechada');
+    expect(estadoDaTv(tv({ saiu_em: '2026-10-27T11:59:00Z' }), v1, agora)).toBe('em_dia');
+  });
+});
+
+describe('situacaoDoPainel', () => {
+  const agora = Date.parse('2026-10-27T12:00:00Z');
+  const v = '2026-10-27T11:00:00Z';
+  const ligada = { ultimo_sinal: '2026-10-27T11:59:30Z', saiu_em: null, versao_exibida: v };
+  it('rascunho vem antes de tudo', () => {
+    expect(situacaoDoPainel(true, [ligada], v, agora).tipo).toBe('rascunho');
+  });
+  it('sem TV, TV desligada, enviando e no ar', () => {
+    expect(situacaoDoPainel(false, [], v, agora).tipo).toBe('sem_tv');
+    expect(situacaoDoPainel(false, [{ ...ligada, ultimo_sinal: '2026-10-27T10:00:00Z' }], v, agora))
+      .toEqual({ tipo: 'tvs_desligadas', ultimoSinal: '2026-10-27T10:00:00Z' });
+    expect(situacaoDoPainel(false, [{ ...ligada, versao_exibida: '2026-10-27T10:00:00Z' }], v, agora).tipo).toBe('enviando');
+    expect(situacaoDoPainel(false, [ligada, { ...ligada, ultimo_sinal: null }], v, agora))
+      .toEqual({ tipo: 'no_ar', ligadas: 1, total: 2 });
+  });
+});
+
+describe('tempo de cada tela', () => {
+  it('tela sem tempo próprio usa o padrão do painel', () => {
+    expect(segundosDaTela({ segundos: null }, 30)).toBe(30);
+    expect(segundosDaTela({ segundos: 300 }, 30)).toBe(300);
+    expect(segundosDaTela({ segundos: 2 }, 30)).toBe(30);
+    expect(segundosDaTela({}, 0)).toBe(20);
+  });
+  it('tempo inválido no jsonb vira nulo', () => {
+    expect(telasValidas([{ id: 'a', template: 'podio', segundos: 99999 }])[0].segundos).toBeNull();
+    expect(telasValidas([{ id: 'a', template: 'podio', segundos: 90 }])[0].segundos).toBe(90);
+  });
+  it('rótulo', () => {
+    expect(rotuloTempo(20)).toBe('20 s');
+    expect(rotuloTempo(60)).toBe('1 min');
+    expect(rotuloTempo(90)).toBe('1 min 30 s');
+    expect(rotuloTempo(3600)).toBe('1 h');
+  });
+});
