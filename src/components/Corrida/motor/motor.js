@@ -3665,16 +3665,28 @@ function desenhaShow(tl, agora, dt) {
 }
 let SHOW_ATUAL = { mapa: 'halloween', faixa: [], parada: 0.5, tique: -1 };
 
-/* ================= a música: o lobby (15 s depois de abrir, 10% subindo rápido até 20%), a da corrida e o Tema da Vitória ================= */
-// LOBBY_INICIO: a faixa do lobby começa (e volta, no loop) do 6º segundo, pedido do Cleber em 21/10/2026
-const LOBBY_ATRASO = 15, LOBBY_SUBIDA = 6, LOBBY_INICIO = 6, VOL_TETO = 0.2;
-// a música da corrida entra no «já» (T = 3, depois dos três bipes), um pouco abaixo do teto para os efeitos aparecerem
-const CORRIDA_LARGA = 3, CORRIDA_VOL = 0.8;
+/* ================= a música: o lobby (15 s depois de abrir, 15% subindo rápido até 30%), a da corrida e o Tema da Vitória ================= */
+// LOBBY_INICIO: de que segundo a faixa do lobby começa (e volta, no loop); a de 27/10/2026 vai do começo
+// O volume é a fração do som cheio (a barra do player mostra isso em %). VOL_PADRAO: o lobby chega a 30%
+// (pedido do Cleber em 27/10/2026) e dali a pessoa sobe até 100% ou abaixa.
+const LOBBY_ATRASO = 15, LOBBY_SUBIDA = 6, LOBBY_INICIO = 0, VOL_TETO = 1, VOL_PADRAO = 0.3;
+// a música da corrida entra no «já» (T = 3, depois dos três bipes), baixa para os efeitos aparecerem
+const CORRIDA_LARGA = 3, CORRIDA_VOL = 0.16;
 const faixaCorrida = () => { const l = opcoes.sons.corrida || []; return l.length ? l[hashStr(String((rec && rec.mapa) || CORRIDA.mapa || '')) % l.length] : null; };
 const volVitoria = s => s < 15 ? 0.25 : s < 17 ? 0.25 - 0.10 * (s - 15) / 2 : 0.15;
-let prefs = { max: VOL_TETO, mudo: false };
-try { const p = JSON.parse(localStorage.getItem('corrida-volume') || 'null'); if (p && typeof p.max === 'number') prefs = { max: clamp(p.max, 0, VOL_TETO), mudo: !!p.mudo }; } catch (e) { }
-const salvaPrefs = () => { try { localStorage.setItem('corrida-volume', JSON.stringify(prefs)); } catch (e) { } };
+let prefs = { max: VOL_PADRAO, mudo: false };
+// A corrida e a vitória ficam no volume de antes com a barra no padrão; o volume escolhido escala as duas.
+const escalaVol = () => prefs.max / VOL_PADRAO;
+try {
+  const p = JSON.parse(localStorage.getItem('corrida-volume-2') || 'null');
+  if (p && typeof p.max === 'number') prefs = { max: clamp(p.max, 0, VOL_TETO), mudo: !!p.mudo };
+  else {
+    // a régua antiga ia até 0,2 (= 100% na barra): quem tinha abaixado continua na mesma proporção do padrão novo
+    const v = JSON.parse(localStorage.getItem('corrida-volume') || 'null');
+    if (v && typeof v.max === 'number') prefs = { max: clamp(v.max / 0.2, 0, 1) * VOL_PADRAO, mudo: !!v.mudo };
+  }
+} catch (e) { }
+const salvaPrefs = () => { try { localStorage.setItem('corrida-volume-2', JSON.stringify(prefs)); } catch (e) { } };
 const musica = {
   lobby: null, vitoria: null, corrida: null, ganhoL: null, ganhoV: null, ganhoC: null, analisador: null, bins: null, ligada: false,
   criar() {
@@ -3721,12 +3733,12 @@ const musica = {
     const pL = agora - (CORRIDA.abertaEm + LOBBY_ATRASO);
     const naLobby = entrei && CORRIDA.abertaEm && (tl.tela === 'lobby' || (tl.tela === 'show' && tl.t < 2.5));
     L.toca = !!naLobby && pL >= 0;
-    const rampa = Math.min(prefs.max, 0.10 + 0.10 * clamp(pL / LOBBY_SUBIDA, 0, 1));
+    const rampa = prefs.max * (0.5 + 0.5 * clamp(pL / LOBBY_SUBIDA, 0, 1));
     L.vol = tl.tela === 'show' ? rampa * clamp(1 - tl.t / 2.5, 0, 1) : rampa;
     const naFesta = entrei && (tl.tela === 'video' || tl.tela === 'festa') && tl.ef < FESTA_MUSICA;
-    V.toca = !!naFesta; V.vol = naFesta ? volVitoria(tl.ef) * (prefs.max / VOL_TETO) : 0;
+    V.toca = !!naFesta; V.vol = naFesta ? Math.min(1, volVitoria(tl.ef) * escalaVol()) : 0;
     const C = this.estadoC, pC = tl.tela === 'corrida' ? tl.T - CORRIDA_LARGA : -1;
-    C.toca = !!entrei && pC >= 0; C.vol = prefs.max * CORRIDA_VOL;
+    C.toca = !!entrei && pC >= 0; C.vol = Math.min(1, CORRIDA_VOL * escalaVol());
     if (!this.lobby && (L.toca || V.toca || C.toca)) this.criar();
     const dL = this.lobby && isFinite(this.lobby.duration) && this.lobby.duration > LOBBY_INICIO + 1 ? this.lobby.duration - LOBBY_INICIO : 0;
     this.ajusta(this.lobby, this.ganhoL, L, LOBBY_INICIO + (dL ? Math.max(0, pL) % dL : Math.max(0, pL)), 0);
@@ -3745,7 +3757,7 @@ const musica = {
     if (!this.analisador || !this.estadoL.toca || prefs.mudo || !this.lobby || this.lobby.paused) return null;
     this.analisador.getByteFrequencyData(this.bins);
     // As barras acompanham o volume escolhido (20/10/2026): som baixo, barras baixas.
-    const nivel = 0.25 + 0.75 * clamp(this.estadoL.vol / VOL_TETO, 0, 1);
+    const nivel = 0.25 + 0.75 * clamp(this.estadoL.vol / VOL_PADRAO, 0, 1);
     const lo = 1, hi = Math.floor(this.bins.length * 0.72);
     return Array.from({ length: n }, (_, i) => {
       const a = Math.floor(lo * Math.pow(hi / lo, i / n)), b = Math.max(a + 1, Math.floor(lo * Math.pow(hi / lo, (i + 1) / n)));
