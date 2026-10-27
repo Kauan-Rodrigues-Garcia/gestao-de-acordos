@@ -66,10 +66,11 @@ const COL = {
 const SITU_DOT: Record<SituacaoUsuario, string> = {
   ativo:     'bg-success',
   ferias:    'bg-warning',
+  afastado:  'bg-info',
   desligado: 'bg-destructive',
 };
 const SITU_LABEL: Record<SituacaoUsuario, string> = {
-  ativo: 'Ativo', ferias: 'Férias', desligado: 'Desligado',
+  ativo: 'Ativo', ferias: 'Férias', afastado: 'Afastado', desligado: 'Desligado',
 };
 
 interface Props {
@@ -108,6 +109,8 @@ interface Props {
   onSituacao: (u: Perfil, s: SituacaoUsuario) => void;
   onEntrarComo: (u: Perfil) => void;
   onVerFoto: (f: { url: string; nome: string }) => void;
+  /** «Atestado até 05/11» de quem tem afastamento em curso ou marcado. */
+  rotuloAfastamento?: (u: Perfil) => string | null;
 }
 
 export function ListaPessoas({
@@ -116,7 +119,7 @@ export function ListaPessoas({
   onlineIds, perfilAtualId, impersonando,
   podeTransferir, podeGerenciarSituacao, podeImpersonar, podeEditar,
   mostrarEmpresa, nomeEmpresa, nomeEquipe, marcaDe, onAbrir, abertaId,
-  onEditar, onTransferir, onSituacao, onEntrarComo, onVerFoto,
+  onEditar, onTransferir, onSituacao, onEntrarComo, onVerFoto, rotuloAfastamento,
 }: Props) {
   return (
     <div className="space-y-3">
@@ -250,6 +253,7 @@ export function ListaPessoas({
                             onSituacao={onSituacao}
                             onEntrarComo={onEntrarComo}
                             onVerFoto={onVerFoto}
+                            afastamento={rotuloAfastamento ? rotuloAfastamento(u) : null}
                           />
                         ))}
                       </div>
@@ -290,13 +294,21 @@ interface LinhaProps {
   onSituacao: (u: Perfil, s: SituacaoUsuario) => void;
   onEntrarComo: (u: Perfil) => void;
   onVerFoto: (f: { url: string; nome: string }) => void;
+  afastamento: string | null;
 }
+
+/** O seletor de situação: férias e afastamento entram pelo mesmo «Afastar…». */
+const OPCOES_SITUACAO: readonly { s: SituacaoUsuario; rotulo: string }[] = [
+  { s: 'ativo', rotulo: 'Ativo' },
+  { s: 'afastado', rotulo: 'Afastar…' },
+  { s: 'desligado', rotulo: 'Desligado' },
+];
 
 function LinhaPessoa({
   u, online, souEu, selecionado, impersonando,
   podeTransferir, podeGerenciarSituacao, podeImpersonar, podeEditar,
   mostrarEmpresa, nomeEmpresa, nomeEquipe, marca, onAbrir, aberta,
-  onAlternarSelecao, onEditar, onTransferir, onSituacao, onEntrarComo, onVerFoto,
+  onAlternarSelecao, onEditar, onTransferir, onSituacao, onEntrarComo, onVerFoto, afastamento,
 }: LinhaProps) {
   const ehClone = !!u._cloneDe;
   const situacao = u.situacao ?? 'ativo';
@@ -454,7 +466,7 @@ function LinhaPessoa({
                 <span className={cn('inline-flex w-2 h-2 rounded-full shrink-0', SITU_DOT[situacao])} />
                 {SITU_LABEL[situacao]}
                 {/* A data responde «até quando», que é a pergunta seguinte. */}
-                {situacao === 'ferias' && u.ferias_ate && (
+                {situacao === 'ferias' && u.ferias_ate && !afastamento && (
                   <span className="tabular-nums text-muted-foreground">
                     até {u.ferias_ate.slice(8, 10)}/{u.ferias_ate.slice(5, 7)}
                   </span>
@@ -463,10 +475,10 @@ function LinhaPessoa({
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              {(['ativo', 'ferias', 'desligado'] as SituacaoUsuario[]).map(s => (
+              {OPCOES_SITUACAO.map(({ s, rotulo }) => (
                 <DropdownMenuItem key={s} className="gap-2 text-xs" onClick={() => onSituacao(u, s)}>
                   <span className={cn('inline-flex w-2 h-2 rounded-full', SITU_DOT[s])} />
-                  {SITU_LABEL[s]}
+                  {rotulo}
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>
@@ -475,6 +487,13 @@ function LinhaPessoa({
           <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
             <span className={cn('inline-flex w-2 h-2 rounded-full shrink-0', SITU_DOT[situacao])} />
             {SITU_LABEL[situacao]}
+          </span>
+        )}
+        {/* O motivo e a volta: «Atestado até 05/11». Vale também para quem
+            segue ativo com afastamento que não tira das contas. */}
+        {afastamento && (
+          <span className="mt-0.5 block truncate text-[10px] text-muted-foreground" title={afastamento}>
+            {afastamento}
           </span>
         )}
       </div>

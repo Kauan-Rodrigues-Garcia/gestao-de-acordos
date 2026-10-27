@@ -222,23 +222,25 @@ export default function AdminEquipes() {
       setSetores(setoresList);
       setEquipes((equipesRes.data ?? []) as Equipe[]);
       setOperadores((operadoresRes.data ?? []) as unknown as Operador[]);
-      const [clonesData, lideresData, subgruposData] = await Promise.all([
+      /*
+       * O vínculo pessoa→subgrupo vem À PARTE: nomear uma coluna inexistente
+       * derruba a consulta INTEIRA no PostgREST, e um banco sem a migration
+       * mostraria a aba vazia em vez de mostrá-la sem subgrupos. Vai junto da
+       * mesma leva (uma viagem a menos); sem subgrupos, o resultado é ignorado.
+       */
+      const [clonesData, lideresData, subgruposData, vinculosRes] = await Promise.all([
         listarClonesEquipes(empresaId),
         listarLideresEquipes(empresaId),
         listarSubgrupos(empresaId),
+        supabase.from('perfis').select('id, subgrupo_id').eq('empresa_id', empresaId),
       ]);
       setClones(clonesData);
       setLideresEq(lideresData);
       setSubgrupos(subgruposData);
 
-      /*
-       * O vínculo pessoa→subgrupo vem À PARTE: nomear uma coluna inexistente
-       * derruba a consulta INTEIRA no PostgREST, e um banco sem a migration
-       * mostraria a aba vazia em vez de mostrá-la sem subgrupos.
-       */
-      if (subgruposData !== null) {
-        const { data: vinculos } = await supabase.from('perfis').select('id, subgrupo_id').eq('empresa_id', empresaId);
-        const mapa = new Map(((vinculos as { id: string; subgrupo_id: string | null }[]) ?? []).map(v => [v.id, v.subgrupo_id] as const));
+      if (subgruposData !== null && !vinculosRes.error) {
+        const vinculos = vinculosRes.data as { id: string; subgrupo_id: string | null }[] | null;
+        const mapa = new Map((vinculos ?? []).map(v => [v.id, v.subgrupo_id] as const));
         setOperadores(prev => prev.map(o => ({ ...o, subgrupo_id: mapa.get(o.id) ?? null })));
       }
 

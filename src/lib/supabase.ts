@@ -186,9 +186,10 @@ export interface Perfil {
    * Ninguém lê este valor. Ele sai junto com a coluna, quando ela sair.
    */
   pet_despedida?: string | null;
-  /** Situação operacional (item 5): 'ativo' | 'ferias' | 'desligado'.
-   *  Férias/desligado somem de ranking e quartil; recebimento ainda conta.
-   *  Desligado não loga. Ver migration 20260723c. */
+  /** Situação operacional (item 5): 'ativo' | 'ferias' | 'afastado' | 'desligado'.
+   *  Férias/afastado/desligado somem de ranking e quartil; recebimento ainda
+   *  conta. Desligado não loga. Afastado = afastamento «fora das contas» em
+   *  curso (20261028100000). Ver migration 20260723c. */
   situacao?: SituacaoUsuario | null;
   /** Quando foi desligado — usado para arquivar na virada do mês. */
   desligado_em?: string | null;
@@ -224,7 +225,7 @@ export interface Perfil {
   empresas?: (Pick<Empresa, 'id' | 'nome'> & Partial<Empresa>) | null;
 }
 
-export type SituacaoUsuario = 'ativo' | 'ferias' | 'desligado';
+export type SituacaoUsuario = 'ativo' | 'ferias' | 'afastado' | 'desligado';
 
 /*
  * SQL para adicionar colunas de parcelamento (executar no Supabase SQL editor):
