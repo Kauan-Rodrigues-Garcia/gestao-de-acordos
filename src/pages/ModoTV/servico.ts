@@ -126,8 +126,18 @@ export async function listarConexoes(painelIds: string[]): Promise<ConexaoTv[]> 
   return (data ?? []) as ConexaoTv[];
 }
 
+/**
+ * Desde 20261027180000 a função responde `{ok, id}` ou `{ok: false, erro}` em
+ * vez de lançar (a tentativa errada precisa ficar gravada para o limite contar).
+ * O id puro é a resposta da versão anterior, e continua valendo.
+ */
 export async function conectarTv(codigo: string, painelId: string, nome: string): Promise<void> {
-  await rpc<string>('fn_tv_conectar', { p_codigo: codigo, p_painel_id: painelId, p_nome: nome });
+  const r = await rpc<string | { ok?: boolean; erro?: string } | null>(
+    'fn_tv_conectar', { p_codigo: codigo, p_painel_id: painelId, p_nome: nome },
+  );
+  if (r && typeof r === 'object' && r.ok === false) {
+    throw new Error(r.erro || 'Não deu para conectar a TV.');
+  }
 }
 
 export async function desconectarTv(conexaoId: string): Promise<void> {
