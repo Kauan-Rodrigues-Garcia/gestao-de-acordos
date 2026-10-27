@@ -1850,7 +1850,16 @@ export function AnaliticoLider({
             >
               <Trash2 className="w-4 h-4" /> Limpar mês
             </Button>
-            <Button size="sm" className="gap-1.5 rounded-lg" onClick={() => setModalImportar(true)}
+            {/* O 994 é a Retenção do Jornada: o 58 a descarta, e ela entra pelo
+                relatório próprio — prévia do 59, como o 58. Mesmo modal, outro
+                parser — cada botão recusa o arquivo do outro. */}
+            <Button size="sm" variant="outline" className="gap-1.5 rounded-lg"
+              onClick={() => { importHook.setRelatorio('994'); setModalImportar(true); }}
+              title="Relatório 994 — recebimento da Retenção do Jornada (Nr. Doc., Valor Pagto, Sub Grupo)">
+              <Upload className="w-4 h-4" /> Importar 994 · Retenção
+            </Button>
+            <Button size="sm" className="gap-1.5 rounded-lg"
+              onClick={() => { importHook.setRelatorio('58'); setModalImportar(true); }}
               title="Relatório 58 — pagamento mensal (Cobradora, TpDoc, DtPgto, Recebido)">
               <Upload className="w-4 h-4" /> Importar 58 · pagamento mensal
             </Button>

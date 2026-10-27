@@ -31,7 +31,7 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
     vinculosManuais,
     carregarArquivo, confirmarImportacao, cancelar, definirVinculo,
     precisaEscolherSetor, setorImportacao, setSetorEscolhido, setorProprioAlternativo,
-    remocaoPrevista, sincronizaAusentes,
+    remocaoPrevista, sincronizaAusentes, relatorio,
   } = hook;
 
   const { empresa } = useEmpresa();
@@ -168,7 +168,7 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileSpreadsheet className="w-5 h-5 text-primary" />
-              Preview — {preview.mes ? new Date(preview.mes + '-15').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }) : 'Relatório'}
+              {preview.relatorio === '994' ? 'Preview 994 · Retenção' : 'Preview'} — {preview.mes ? new Date(preview.mes + '-15').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }) : 'Relatório'}
             </DialogTitle>
           </DialogHeader>
 
@@ -219,6 +219,38 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
                   linha{preview.retencaoRemovidas !== 1 ? 's' : ''} da equipe de{' '}
                   <strong>Retenção</strong> {preview.retencaoRemovidas !== 1 ? 'foram removidas' : 'foi removida'}{' '}
                   do arquivo — esse recebimento não conta para o Receptivo.
+                </p>
+              </div>
+            )}
+
+            {/* 994: o arquivo traz o Jornada inteiro, e só a Retenção entra.
+                O que sai é dito com valor, para a conta fechar com o ERP. */}
+            {preview.fora994 && (
+              <div className="rounded-lg border border-sky-200 bg-sky-50 dark:bg-sky-950/20 p-3 space-y-1 text-xs text-sky-700 dark:text-sky-300">
+                <p>
+                  Entram só as linhas da equipe de <strong>Retenção</strong> (Sub Grupo do arquivo).
+                </p>
+                {preview.fora994.outraEquipe.linhas > 0 && (
+                  <p>
+                    <strong>{preview.fora994.outraEquipe.linhas}</strong> de outras equipes ficam fora
+                    ({formatBRL(preview.fora994.outraEquipe.valor)}) — elas vêm pelo 58.
+                  </p>
+                )}
+                {preview.fora994.pagamentoFuturo.linhas > 0 && (
+                  <p>
+                    <strong>{preview.fora994.pagamentoFuturo.linhas}</strong> da Retenção com data de pagamento
+                    futura ficam fora ({formatBRL(preview.fora994.pagamentoFuturo.valor)}) — ainda não foram pagas.
+                  </p>
+                )}
+                {preview.linhasColchao.length > 0 && (
+                  <p>
+                    <strong>{preview.linhasColchao.length}</strong> de Pix Automático ou Recorrente de acordo
+                    anterior são Colchão e ficam fora da meta
+                    ({formatBRL(preview.linhasColchao.reduce((s, l) => s + l.valor_recebido, 0))}).
+                  </p>
+                )}
+                <p className="text-[11px] text-sky-700/80 dark:text-sky-300/80">
+                  Pagamento que o 58 ou o 59 já trouxe (mesmo NR no mesmo dia) não entra de novo.
                 </p>
               </div>
             )}
@@ -302,7 +334,7 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
               </div>
             )}
 
-            {(preview.colchaoNaMeta.linhas > 0 || preview.linhasColchao.length > 0) && (
+            {!preview.fora994 && (preview.colchaoNaMeta.linhas > 0 || preview.linhasColchao.length > 0) && (
               <div className="rounded-lg border border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/20 p-3 space-y-1">
                 {preview.colchaoNaMeta.linhas > 0 && (
                   <p className="text-xs text-amber-800 dark:text-amber-300">
@@ -550,16 +582,28 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
       <DialogContent aria-describedby={undefined} className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Upload className="w-5 h-5 text-primary" /> Importar relatório 58 — pagamento mensal
+            <Upload className="w-5 h-5 text-primary" />
+            {relatorio === '994'
+              ? 'Importar relatório 994 — Retenção do Jornada'
+              : 'Importar relatório 58 — pagamento mensal'}
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          <p className="text-sm text-muted-foreground">
-            Selecione o relatório 58 exportado do ERP (Cobradora, Equipe, Cliente, TpDoc, DtPgto, Recebido).
-            Os dados serão mesclados com os existentes — registros duplicados são ignorados.
-            O relatório 945 (recebimento diário da regra Cofen) não entra aqui: ele vai no recorte Dia.
-          </p>
+          {relatorio === '994' ? (
+            <p className="text-sm text-muted-foreground">
+              Selecione o relatório 994 exportado do ERP (Cód. Venda, Nr. Doc., Operador, Data Pagamento,
+              Valor Pagto, Setor Original, Sub Grupo). Entram só os recebimentos da equipe de Retenção;
+              o resto do Jornada continua vindo pelo 58.
+            </p>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Selecione o relatório 58 exportado do ERP (Cobradora, Equipe, Cliente, TpDoc, DtPgto, Recebido).
+              Os dados serão mesclados com os existentes — registros duplicados são ignorados.
+              O relatório 945 (recebimento diário da regra Cofen) não entra aqui: ele vai no recorte Dia,
+              e o 994 da Retenção tem botão próprio.
+            </p>
+          )}
 
           <label
             className={`

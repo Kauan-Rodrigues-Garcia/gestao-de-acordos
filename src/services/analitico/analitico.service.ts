@@ -299,8 +299,32 @@ export interface ResultadoImportacao {
    * anteriores a ontem, ou NR+dia que o 59 já trouxe. Ver `linhasDo58NoMesDo59`.
    */
   ignoradasPelo59?: number;
+  /**
+   * Linhas do arquivo que NÃO foram gravadas porque o OUTRO relatório do setor
+   * já trouxe o mesmo NR no mesmo dia: o 994 diante do 58/59, ou o 58 diante do
+   * 994. Ver `PROCEDENCIA_994`.
+   */
+  ignoradasPorOutroRelatorio?: number;
   erros: string[];
 }
+
+/**
+ * A procedência do relatório 994 — a Retenção do Jornada (migration
+ * 20261027210000).
+ *
+ * O Jornada tem dois relatórios no mesmo setor/mês: o 58 (os operadores) e o
+ * 994 (a Retenção, que o 58 descarta). Cada um é o retrato completo do que é
+ * dele, e por isso cada um só remove, reconcilia e sobrepõe a própria
+ * procedência. E um confere o outro: NR+dia que um já gravou o outro não grava
+ * de novo — os dois relatórios podem trazer o mesmo pagamento, e ele contaria
+ * duas vezes.
+ *
+ * Diante do 59, o 994 é o 58: num mês do 59 grava só hoje e ontem que o 59
+ * ainda não trouxe, e a sincronização do 59 assume, preserva ou apaga a linha
+ * do 994 pela mesma regra da do 58 (20261027220000).
+ */
+export const PROCEDENCIA_994 = 'relatorio_994';
+export type ProcedenciaImportada = 'relatorio_58' | typeof PROCEDENCIA_994;
 
 type GrupoRelatorioAnalitico = {
   operador_usuario: string;
@@ -376,10 +400,12 @@ const chaveLinhaAnalitico = (r: LinhaRelatorioAnalitico) =>
 export function idsAusentesDoRelatorioMensal(
   existentes: Array<LinhaRelatorioAnalitico & { id: string; procedencia?: string }>,
   relatorio: LinhaRelatorioAnalitico[],
+  /** O 994 também é retrato completo — do que é dele. Ver `PROCEDENCIA_994`. */
+  procedencia: ProcedenciaImportada = 'relatorio_58',
 ): string[] {
   const presentes = new Set(relatorio.map(chaveLinhaAnalitico));
   return existentes
-    .filter(linha => (linha.procedencia ?? 'relatorio_58') === 'relatorio_58')
+    .filter(linha => (linha.procedencia ?? 'relatorio_58') === procedencia)
     .filter(linha => !presentes.has(chaveLinhaAnalitico(linha)))
     .map(linha => linha.id);
 }
@@ -492,6 +518,67 @@ export interface OpcoesImportacaoAnalitico {
    * importações parciais, como as da PaguePlay.
    */
   sincronizarAusentesDoSetor?: boolean;
+  /** De qual relatório vêm as linhas. Padrão: o 58. Ver `PROCEDENCIA_994`. */
+  procedencia?: ProcedenciaImportada;
+}
+
+/**
+ * Um relatório confere o outro: tira do lote o NR+dia que o outro já gravou.
+ *
+ * `jaGravadas` = chaves `codigo::data_pagamento` do outro relatório. Pura, para
+ * o teste fixar a regra sem banco.
+ */
+export function semOQueOutroRelatorioTrouxe<T extends { codigo: string; data_pagamento: string }>(
+  linhas: readonly T[],
+  jaGravadas: ReadonlySet<string>,
+): T[] {
+  return linhas.filter(l => !jaGravadas.has(`${l.codigo}::${l.data_pagamento}`));
+}
+
+/**
+ * NR+dia que o OUTRO relatório do setor já gravou nestes meses.
+ *
+ * Para o 994: tudo o que não é do 994 (58, 59, manual, contribuição) — o 59 é a
+ * autoridade e o 58 chegou antes. Para o 58: só o que é do 994. `null` = a
+ * leitura falhou (quem chama grava sem recortar, como antes).
+ */
+async function nrDiaDoOutroRelatorio(
+  empresaId: string,
+  procedencia: ProcedenciaImportada,
+  meses: readonly string[],
+  codigos: readonly string[],
+): Promise<Set<string> | null> {
+  const chaves = new Set<string>();
+  if (!meses.length || !codigos.length) return chaves;
+  const ler = async (fatia: readonly string[] | null) => paginarParalelo<{ codigo: string; data_pagamento: string }>(async (de, ate) => {
+    let q = supabase
+      .from('analitico_recebimentos')
+      .select('codigo, data_pagamento')
+      .eq('empresa_id', empresaId)
+      .in('mes_referencia', [...meses]);
+    q = procedencia === PROCEDENCIA_994
+      ? q.neq('procedencia', PROCEDENCIA_994)
+      : q.eq('procedencia', PROCEDENCIA_994);
+    if (fatia) q = q.in('codigo', [...fatia]);
+    const r = await q.order('id', { ascending: true }).range(de, ate);
+    return { data: (r.data as unknown as { codigo: string; data_pagamento: string }[]) ?? [], error: r.error?.message ?? null };
+  });
+
+  // O 994 tem poucas linhas: lê pelos NRs dele. O 58 tem milhares, e as linhas
+  // do 994 no mês são poucas: lê todas elas, sem filtro de NR.
+  const fatias: (readonly string[] | null)[] = [];
+  if (procedencia === PROCEDENCIA_994) {
+    const unicos = [...new Set(codigos)];
+    for (let i = 0; i < unicos.length; i += 200) fatias.push(unicos.slice(i, i + 200));
+  } else {
+    fatias.push(null);
+  }
+  for (const fatia of fatias) {
+    const { data, error } = await ler(fatia);
+    if (error) return null;
+    for (const l of data) chaves.add(`${l.codigo}::${l.data_pagamento}`);
+  }
+  return chaves;
 }
 
 /**
@@ -526,8 +613,14 @@ async function importarLoteAnaliticoNoBanco(
     return { inseridos: 0, duplicados: 0, atualizados: 0, removidos: 0, erros: [] };
   }
 
+  const procedencia: ProcedenciaImportada = opcoes.procedencia ?? 'relatorio_58';
+  const eh994 = procedencia === PROCEDENCIA_994;
+
   const todasAsLinhas = linhas.map(l => ({
     empresa_id:      empresaId,
+    // Só o 994 manda a coluna: o 58 segue no padrão do banco ('relatorio_58'),
+    // exatamente como antes da procedência nova.
+    ...(eh994 ? { procedencia: PROCEDENCIA_994 } : {}),
     operador_id:     operadoresMap[l.operador_usuario] ?? null,
     operador_usuario: l.operador_usuario,
     codigo:          normCodigo(l.codigo),
@@ -605,6 +698,9 @@ async function importarLoteAnaliticoNoBanco(
   const mesesDoArquivo = [...new Set(todasAsLinhas.map(r => r.mes_referencia))];
   let sincronizadoPelo59 = false;
   const mesesDo59 = new Set<string>();
+  // O 994 passa por isto igual ao 58: o 59 traz a Retenção no Jornada
+  // (conferido em 27/10/2026, R$ 49.071,25 em outubro) e a sincronização trata
+  // a linha do 994 como a do 58 (20261027220000).
   if (setorImportacaoId) {
     for (const mes of mesesDoArquivo) {
       const { data, error } = await rpcSemTipo<string>('fn_analitico_fonte_do_setor', {
@@ -633,6 +729,21 @@ async function importarLoteAnaliticoNoBanco(
     }
   }
   const ignoradasPelo59 = todasAsLinhas.length - rows.length;
+
+  // Um relatório confere o outro (ver `PROCEDENCIA_994`). Falha de leitura não
+  // trava a importação: grava como antes e a próxima importação confere.
+  let ignoradasPorOutroRelatorio = 0;
+  {
+    const doOutro = await nrDiaDoOutroRelatorio(
+      empresaId, procedencia, mesesDoArquivo, rows.map(r => r.codigo));
+    if (doOutro === null) {
+      console.warn('[analitico] linhas do outro relatório não lidas; o lote grava sem a conferência cruzada.');
+    } else if (doOutro.size > 0) {
+      const antes = rows.length;
+      rows = semOQueOutroRelatorioTrouxe(rows, doOutro);
+      ignoradasPorOutroRelatorio = antes - rows.length;
+    }
+  }
 
   const CHUNK = 200;
   let inseridos = 0;
@@ -663,7 +774,7 @@ async function importarLoteAnaliticoNoBanco(
       categoria: 'importacao',
       severidade: erros.length > 0 ? 'aviso' : 'info',
       descricao:
-        `Importou relatório analítico: ${inseridos} linha(s) nova(s), `
+        `Importou relatório ${eh994 ? '994 (Retenção)' : 'analítico'}: ${inseridos} linha(s) nova(s), `
         + `${duplicados} já existente(s), ${atualizados} reconciliada(s), `
         + `${removidos} ausente(s) removida(s)`
         + (erros.length > 0 ? ` — ${erros.length} problema(s)` : ''),
@@ -690,6 +801,8 @@ async function importarLoteAnaliticoNoBanco(
            reescrevê-las). Fica no log para a pergunta «importei e o número não
            mudou, por quê?» ter resposta sem reproduzir a importação. */
         ignoradas_pelo_59: ignoradasPelo59,
+        procedencia,
+        ignoradas_por_outro_relatorio: ignoradasPorOutroRelatorio,
         primeiros_erros: erros.slice(0, 20),
       },
       usuarioId: importadoPorId,
@@ -870,13 +983,16 @@ async function importarLoteAnaliticoNoBanco(
   if (!leituraCompleta) {
     erros.push('Conferência de valores não executada (falha ao ler o mês). Reimporte para refazê-la.');
     registrarResumo(false);
-    return { inseridos, duplicados, atualizados, removidos, tiposPreenchidos, sincronizadoPelo59, ignoradasPelo59, erros };
+    return { inseridos, duplicados, atualizados, removidos, tiposPreenchidos, sincronizadoPelo59, ignoradasPelo59, ignoradasPorOutroRelatorio, erros };
   }
 
   const dbPorGrupo = new Map<string, ExRow[]>();
   for (const ex of existentes) {
-    // Mês do 59: a linha do 59 é a autoridade e o 58 nunca a ajusta.
-    if (mesesDo59.has(ex.mes_referencia) && (ex.procedencia ?? 'relatorio_58') !== 'relatorio_58') continue;
+    // Mês do 59: a linha do 59 é a autoridade e o 58 (ou o 994) nunca a ajusta.
+    if (mesesDo59.has(ex.mes_referencia) && (ex.procedencia ?? 'relatorio_58') !== procedencia) continue;
+    // 58 e 994 não se ajustam: o 994 só confere linha do 994, e o 58 nunca
+    // mexe nela. Somar as duas compararia o arquivo de um com o banco dos dois.
+    if (((ex.procedencia ?? 'relatorio_58') === PROCEDENCIA_994) !== eh994) continue;
     const k = chaveConferencia(ex);
     if (!alvoPorGrupo.has(k)) continue;
     const lista = dbPorGrupo.get(k);
@@ -960,7 +1076,7 @@ async function importarLoteAnaliticoNoBanco(
       } else {
         // Contra o ARQUIVO inteiro, não contra o recorte gravado: a linha que
         // o 59 já tem continua no relatório e não pode ser dada como ausente.
-        const idsAusentes = idsAusentesDoRelatorioMensal(leituraSetor.data, todasAsLinhas);
+        const idsAusentes = idsAusentesDoRelatorioMensal(leituraSetor.data, todasAsLinhas, procedencia);
         /*
          * Copiar e apagar, numa transação só.
          *
@@ -994,7 +1110,7 @@ async function importarLoteAnaliticoNoBanco(
   }
 
   registrarResumo(true);
-  return { inseridos, duplicados, atualizados, removidos, tiposPreenchidos, sincronizadoPelo59, ignoradasPelo59, erros };
+  return { inseridos, duplicados, atualizados, removidos, tiposPreenchidos, sincronizadoPelo59, ignoradasPelo59, ignoradasPorOutroRelatorio, erros };
 }
 
 // ── Revínculo de órfãos (operador criado após importação anterior) ────────────

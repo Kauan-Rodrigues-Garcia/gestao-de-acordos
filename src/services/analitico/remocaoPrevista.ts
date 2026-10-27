@@ -36,6 +36,7 @@
  */
 
 import { rpcSemTipo } from '@/lib/supabaseSemTipo';
+import { supabase } from '@/lib/supabase';
 
 export interface DiaRemovido {
   dia: string;
@@ -132,6 +133,48 @@ export async function preverRemocao(
     valor: Number(d.valor ?? 0) || 0,
   }));
 
+  return {
+    linhas: porDia.reduce((s, d) => s + d.linhas, 0),
+    valor:  porDia.reduce((s, d) => s + d.valor, 0),
+    porDia,
+  };
+}
+
+/**
+ * O que o 994 tiraria do setor — a mesma pergunta, para a Retenção.
+ *
+ * `fn_analitico_remocao_prevista` só conta linha do 58, e é certo que conte: o
+ * 58 só apaga o dele. O 994 apaga só o dele (`relatorio_994`), e são poucas
+ * linhas por mês — a conta é feita aqui, lendo as linhas do 994 no setor/mês e
+ * comparando pela mesma `chaveDaLinha`.
+ */
+export async function preverRemocao994(
+  empresaId: string,
+  setorId: string | null,
+  mes: string,
+  chaves: readonly string[],
+): Promise<RemocaoPrevista | null> {
+  if (!setorId || !/^\d{4}-\d{2}$/.test(mes)) return null;
+
+  const { data, error } = await supabase
+    .from('analitico_recebimentos')
+    .select('operador_usuario, codigo, data_pagamento, forma_pagamento, valor_recebido')
+    .eq('empresa_id', empresaId)
+    .eq('setor_id', setorId)
+    .eq('mes_referencia', `${mes}-01`)
+    .eq('procedencia', 'relatorio_994');
+  if (error) throw new Error(error.message);
+
+  const presentes = new Set(chaves);
+  const dias = new Map<string, DiaRemovido>();
+  for (const l of (data ?? []) as { operador_usuario: string; codigo: string; data_pagamento: string; forma_pagamento: string; valor_recebido: unknown }[]) {
+    if (presentes.has(chaveDaLinha(l.operador_usuario, l.codigo, l.data_pagamento, l.forma_pagamento))) continue;
+    const d = dias.get(l.data_pagamento) ?? { dia: l.data_pagamento, linhas: 0, valor: 0 };
+    d.linhas++;
+    d.valor += Number(l.valor_recebido ?? 0) || 0;
+    dias.set(l.data_pagamento, d);
+  }
+  const porDia = [...dias.values()].sort((a, b) => a.dia.localeCompare(b.dia));
   return {
     linhas: porDia.reduce((s, d) => s + d.linhas, 0),
     valor:  porDia.reduce((s, d) => s + d.valor, 0),
