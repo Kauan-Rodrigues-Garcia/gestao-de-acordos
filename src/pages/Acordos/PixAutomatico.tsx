@@ -42,7 +42,7 @@ import {
   Clock, CheckCircle2, Percent, Hash, DollarSign, User, Layers, Save,
   Copy, Upload, Download, Building2, Lock,
   Pencil, Banknote, AlertTriangle, History, Scale, Eraser, Sparkles,
-  ListChecks, ShieldAlert, Trophy, Medal, ArrowRight, ShieldCheck,
+  ListChecks, ShieldAlert, Trophy, Medal, ArrowRight, ShieldCheck, Gift,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -110,7 +110,7 @@ import {
   purgarLixeiraPixExpirada, type PixLixeiraItem,
   fetchLogPix, type PixLogItem,
   setPermiteRegistroOperador, normalizarNr,
-  comissaoDe, valorAPagarDe, formatarCopiaPix, formatarCopiaPixPorOperador, separarParaCopiaPix, criarAcordosPixLote, editarAcordoPix,
+  comissaoDe, pctDaLinha, valorAPagarDe, formatarCopiaPix, formatarCopiaPixPorOperador, separarParaCopiaPix, criarAcordosPixLote, editarAcordoPix,
   marcarComissaoPaga, quemJaDecidiuPix, fetchMetasPixEquipes, upsertMetaPixEquipe,
   expurgarDesaprovadosVencidos, PIX_DIAS_UTEIS_EXPURGO,
   fetchSaldosPix, saldosPorOperador, aplicarSaldoNoAcordo, retirarSaldoDoAcordo,
@@ -124,6 +124,7 @@ import {
   type LinhaPixLote, type PixAutoMeta, type PixAutoSaldo, type PixPremiacaoPagamento,
 } from '@/services/pix_automatico.service';
 import { PixSaldoPainel } from './PixSaldoPainel';
+import { PixBonusPainel } from './PixBonusPainel';
 import { PixPainelPremiacoes } from './PixPainelPremiacoes';
 import { PixPedidosNr } from './PixPedidosNr';
 import { PixAcordosSemRegistro } from './PixAcordosSemRegistro';
@@ -2265,6 +2266,7 @@ export function PixAutomatico() {
       Operador:  i.operador_nome ?? '',
       Valor:     Number(i.valor),
       Comissao:  comissaoDe(i, pctPorSetor),
+      Bonus:     Number(i.bonus_pct) > 0 ? `+${fmtPct(Number(i.bonus_pct))}` : '',
       Status:    STATUS_INFO[i.status].label,
       Data:      new Date(i.criado_em).toLocaleDateString('pt-BR'),
     }));
@@ -2916,6 +2918,22 @@ export function PixAutomatico() {
         )}
       </div>
 
+      {/* ── Bônus do período: aviso para todos, gestão para quem configura ── */}
+      {empresa?.id && perfil?.id && (
+        <PixBonusPainel
+          empresaId={empresa.id}
+          setores={setoresDoFiltro}
+          setoresDoAviso={setorFoco
+            ? [setorFoco]
+            : (podeVerTodosSetores ? setoresDoFiltro.map(s => s.id) : (meuSetor ? [meuSetor] : []))}
+          pctPorSetor={pctPorSetor}
+          podeEditar={podeEditarConfig}
+          autorId={perfil.id}
+          autorNome={perfil.nome ?? perfil.email ?? '—'}
+          onMudou={carregar}
+        />
+      )}
+
       {/* ── Configuração do setor (líder+): % de comissão + registro manual ── */}
       {podeEditarConfig && setorConfig && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-border bg-card px-3 py-2">
@@ -3079,9 +3097,7 @@ export function PixAutomatico() {
                   <AnimatePresence initial={false}>
                   {daPagina.map((item) => {
                     const comissao = comissaoDe(item, pctPorSetor);
-                    const pctLinha = item.status === 'aprovado' && item.pct_comissao != null
-                      ? Number(item.pct_comissao)
-                      : (item.setor_id != null ? (pctPorSetor[item.setor_id] ?? PIX_AUTO_PCT_PADRAO) : PIX_AUTO_PCT_PADRAO);
+                    const pctLinha = pctDaLinha(item, pctPorSetor);
                     const sInfo = STATUS_INFO[item.status];
                     const desaprovado = item.status === 'desaprovado';
                     const emEdicao = editandoId === item.id;
@@ -3120,6 +3136,16 @@ export function PixAutomatico() {
                                   className="inline-flex shrink-0 items-center gap-0.5 rounded px-1 py-px text-[9px] font-bold uppercase leading-none tracking-wide bg-fuchsia-500/15 text-fuchsia-600 ring-1 ring-fuchsia-500/30 dark:text-fuchsia-400"
                                 >
                                   <Sparkles className="h-2.5 w-2.5" /> extra
+                                </span>
+                              )}
+                              {/* Carimbado pelo banco: o acordo entrou num
+                                  período de bônus do setor. */}
+                              {Number(item.bonus_pct) > 0 && (
+                                <span
+                                  title={`Acordo no período de bônus: +${fmtPct(Number(item.bonus_pct))} sobre a comissão do setor`}
+                                  className="inline-flex shrink-0 items-center gap-0.5 rounded px-1 py-px text-[9px] font-bold uppercase leading-none tracking-wide bg-success/15 text-success ring-1 ring-success/30"
+                                >
+                                  <Gift className="h-2.5 w-2.5" /> bônus +{fmtPct(Number(item.bonus_pct))}
                                 </span>
                               )}
                               <button title="Copiar NR" onClick={() => copiarTexto(item.nr_cliente, 'NR copiado.')}
