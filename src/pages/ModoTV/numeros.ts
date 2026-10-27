@@ -34,6 +34,10 @@ export interface VisaoTv {
   ritmo: number;
   projecao: number;
   ranking: { id: string; nome: string; foto: string | null; valor: number }[];
+  diasNoMes: number;
+  hojeDia: number;
+  /** Recebido acumulado por dia, do dia 0 (zero) até hoje. */
+  serie: { dia: number; valor: number }[];
 }
 
 const num = (v: unknown): number => {
@@ -95,16 +99,73 @@ export function montarVisao(
       foto: p.foto ?? null,
       valor: num(emHo ? p.valor_ho : p.valor),
     })).sort((a, b) => b.valor - a.valor),
+    diasNoMes: diasDoMes(n.mes),
+    hojeDia: diaDe(n.hoje) ?? diasDoMes(n.mes),
+    serie: serieAcumulada(n, unidade),
   };
 }
 
+function diasDoMes(mes: string | undefined): number {
+  const [a, m] = String(mes ?? '').split('-').map(Number);
+  return a && m ? new Date(a, m, 0).getDate() : 30;
+}
+
+function diaDe(iso: string | undefined): number | null {
+  const d = Number(String(iso ?? '').slice(8, 10));
+  return Number.isInteger(d) && d >= 1 && d <= 31 ? d : null;
+}
+
+/**
+ * O recebido ACUMULADO de cada dia do mês, até hoje, para o gráfico.
+ *
+ * A série do banco é o formato do mês (uma leitura só do analítico); o total
+ * oficial é o do Painel do Líder. A curva é escalada para terminar exatamente
+ * no total — o último ponto do gráfico é o mesmo número das outras telas.
+ * Sem série (cache antigo), uma reta de 0 ao total.
+ */
+export function serieAcumulada(n: Pick<NumerosTv, 'serie' | 'mes' | 'hoje' | 'recebido' | 'recebido_ho'>, unidade: Unidade): { dia: number; valor: number }[] {
+  const total = num(unidade === 'ho' ? n.recebido_ho : n.recebido);
+  const ultimo = diaDe(n.hoje) ?? diasDoMes(n.mes);
+  const porDia = new Map<number, number>();
+  for (const p of Array.isArray(n.serie) ? n.serie : []) {
+    const d = diaDe(p?.dia);
+    if (d && d <= ultimo) porDia.set(d, (porDia.get(d) ?? 0) + num(unidade === 'ho' ? p.valor_ho : p.valor));
+  }
+  const soma = [...porDia.values()].reduce((a, b) => a + b, 0);
+
+  const pontos: { dia: number; valor: number }[] = [{ dia: 0, valor: 0 }];
+  if (soma <= 0) {
+    pontos.push({ dia: ultimo, valor: total });
+    return pontos;
+  }
+  const fator = total / soma;
+  let acc = 0;
+  for (let d = 1; d <= ultimo; d++) {
+    acc += (porDia.get(d) ?? 0) * fator;
+    pontos.push({ dia: d, valor: d === ultimo ? total : centavos(acc) });
+  }
+  return pontos;
+}
+
 const MOEDA = new Intl.NumberFormat('pt-BR', {
-  style: 'currency', currency: 'BRL', maximumFractionDigits: 0, minimumFractionDigits: 0,
+  style: 'currency', currency: 'BRL', maximumFractionDigits: 2, minimumFractionDigits: 2,
 });
 
-/** Dinheiro de parede: sem centavos, que ninguém lê a cinco metros. */
+/** Dinheiro de parede: o valor exato do relatório, com centavos (Cleber, 27/10). */
 export function moedaTv(v: number): string {
-  return MOEDA.format(Math.floor(v));
+  return MOEDA.format(Math.round(v * 100) / 100);
+}
+
+/** Largura de cada caractere, em «em», na fonte da TV (Inter, negrito, algarismos tabulares). */
+const LARGURA_EM: Record<string, number> = { '.': 0.3, ',': 0.3, ' ': 0.28, ' ': 0.28, R: 0.7, $: 0.64, '%': 0.92 };
+
+/**
+ * O maior corpo, até `base`, em que `texto` cabe em `largura` px. Com centavos
+ * o número cresceu: «R$ 1.234.567,89» não cabe no corpo de «R$ 1.234.567».
+ */
+export function tamanhoQueCabe(texto: string, largura: number, base: number): number {
+  const em = [...texto].reduce((s, ch) => s + (LARGURA_EM[ch] ?? 0.64), 0);
+  return em > 0 ? Math.min(base, Math.floor(largura / em)) : base;
 }
 
 /** Percentual cortado, nunca arredondado para cima: 99,6% não é 100%. */

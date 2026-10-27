@@ -17,8 +17,8 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type { TelaDoPainel, TemaId } from './tipos';
-import { opcao } from './templates';
-import { iniciais, moedaTv, nomeCurto, percentualTv, type VisaoTv } from './numeros';
+import { alvoDoDiaProprio, opcao } from './templates';
+import { iniciais, moedaTv, nomeCurto, percentualTv, tamanhoQueCabe, type VisaoTv } from './numeros';
 
 // ── Temas ────────────────────────────────────────────────────────────────────
 
@@ -146,9 +146,15 @@ function brilho(mudanca: Mudanca, bomQuando: 'sobe' | 'desce'): CSSProperties {
  * Dinheiro que anima quando muda. `bomQuando`: o «falta» é bom quando DESCE,
  * e fica verde do mesmo jeito que o recebido quando sobe.
  */
-function Moeda({ v, style, bomQuando = 'sobe' }: { v: number; style?: CSSProperties; bomQuando?: 'sobe' | 'desce' }) {
+function Moeda({ v, style, bomQuando = 'sobe', caber }: {
+  v: number; style?: CSSProperties; bomQuando?: 'sobe' | 'desce';
+  /** Largura máxima, em px do palco: o corpo encolhe para o valor com centavos caber. */
+  caber?: number;
+}) {
   const { valor, mudanca } = useContador(v);
-  return <span style={{ ...style, ...brilho(mudanca, bomQuando) }}>{moedaTv(valor)}</span>;
+  // Mede o valor FINAL, e não o que está animando: o corpo não pula a cada quadro.
+  const corpo = caber && typeof style?.fontSize === 'number' ? tamanhoQueCabe(moedaTv(v), caber, style.fontSize) : undefined;
+  return <span style={{ ...style, ...(corpo ? { fontSize: corpo } : {}), whiteSpace: 'nowrap', ...brilho(mudanca, bomQuando) }}>{moedaTv(valor)}</span>;
 }
 
 function Percentual({ fracao, style }: { fracao: number; style?: CSSProperties }) {
@@ -273,7 +279,7 @@ function Contagem({ v, tela, c }: { v: VisaoTv; tela: TelaDoPainel; c: Cores }) 
         <div style={{ fontSize: 60, fontWeight: 700, color: c.ok, letterSpacing: 6 }}>META BATIDA</div>
         {mostrarMeta ? (
           <>
-            <Moeda v={v.recebido} style={{ fontSize: 230, fontWeight: 800, lineHeight: 1, margin: '20px 0 28px', letterSpacing: -4 }} />
+            <Moeda v={v.recebido} caber={1600} style={{ fontSize: 230, fontWeight: 800, lineHeight: 1, margin: '20px 0 28px', letterSpacing: -4 }} />
             <div style={{ fontSize: 44, color: c.suave }}>
               <Percentual fracao={v.fracao} /> da meta · {moedaTv(v.recebido - v.meta)} acima
             </div>
@@ -287,7 +293,7 @@ function Contagem({ v, tela, c }: { v: VisaoTv; tela: TelaDoPainel; c: Cores }) 
   return (
     <div style={centro}>
       <Titulo texto={opcao<string>(tela, 'titulo')} c={c} />
-      <Moeda v={v.falta} bomQuando="desce" style={{ fontSize: 250, fontWeight: 800, lineHeight: 1, letterSpacing: -6 }} />
+      <Moeda v={v.falta} bomQuando="desce" caber={1600} style={{ fontSize: 250, fontWeight: 800, lineHeight: 1, letterSpacing: -6 }} />
       <div style={{ width: 1200, margin: '56px 0 36px' }}>
         <Barra fracao={v.fracao} c={c} altura={18} />
       </div>
@@ -349,10 +355,10 @@ function Anel({ v, tela, c }: { v: VisaoTv; tela: TelaDoPainel; c: Cores }) {
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 56, alignItems: 'flex-start' }}>
         <Titulo texto={opcao<string>(tela, 'titulo')} c={c} />
-        {mostrarMeta && <Rotulado rotulo="Recebido" c={c} tamanho={88}><Moeda v={v.recebido} /></Rotulado>}
+        {mostrarMeta && <Rotulado rotulo="Recebido" c={c} tamanho={88}><Moeda v={v.recebido} caber={820} style={{ fontSize: 88 }} /></Rotulado>}
         {(mostrarMeta || !v.batida) && (
           <Rotulado rotulo={v.batida ? 'Acima da meta' : 'Falta'} c={c} tamanho={88} cor={v.batida ? c.ok : c.destaque}>
-            <Moeda v={v.batida ? v.recebido - v.meta : v.falta} bomQuando={v.batida ? 'sobe' : 'desce'} />
+            <Moeda v={v.batida ? v.recebido - v.meta : v.falta} bomQuando={v.batida ? 'sobe' : 'desce'} caber={820} style={{ fontSize: 88 }} />
           </Rotulado>
         )}
         {!mostrarMeta && v.batida && <div style={{ fontSize: 72, fontWeight: 800, color: c.ok }}>Meta batida!</div>}
@@ -364,20 +370,67 @@ function Anel({ v, tela, c }: { v: VisaoTv; tela: TelaDoPainel; c: Cores }) {
 function Hoje({ v, tela, c }: { v: VisaoTv; tela: TelaDoPainel; c: Cores }) {
   if (v.hoje.alvo <= 0) return <Aviso texto={SEM_META} c={c} />;
   const bateu = v.hoje.recebido >= v.hoje.alvo;
+  const propria = alvoDoDiaProprio(tela) != null;
+  // Pedido de 27/10: a META e o ATINGIDO em destaque, lado a lado, e a barra embaixo.
   return (
     <div style={centro}>
       <Titulo texto={opcao<string>(tela, 'titulo')} c={c} />
-      <Moeda v={v.hoje.recebido} style={{ fontSize: 230, fontWeight: 800, lineHeight: 1, letterSpacing: -5, color: bateu ? c.ok : c.texto }} />
-      <div style={{ fontSize: 48, color: c.suave, marginTop: 20 }}>de {moedaTv(v.hoje.alvo)} hoje</div>
-      <div style={{ width: 1300, margin: '56px 0 36px' }}>
-        <Barra fracao={v.hoje.fracao} c={c} altura={40} cor={bateu ? c.ok : undefined} />
+      <div style={{ display: 'flex', gap: 48, width: '100%', marginTop: 8 }}>
+        <Bloco c={c} rotulo={propria ? 'Meta de hoje · definida pela liderança' : 'Meta de hoje'}>
+          <Moeda v={v.hoje.alvo} caber={720} style={{ fontSize: 128, fontWeight: 800, letterSpacing: -2 }} />
+        </Bloco>
+        <Bloco c={c} rotulo="Recebido hoje" destaque={bateu ? c.ok : c.destaque}>
+          <Moeda v={v.hoje.recebido} caber={720} style={{ fontSize: 128, fontWeight: 800, letterSpacing: -2, color: bateu ? c.ok : c.destaque }} />
+        </Bloco>
       </div>
-      <div style={{ display: 'flex', gap: 56, alignItems: 'baseline', fontSize: 46, fontWeight: 600 }}>
-        {/* Sobre a meta escolhida na tela: a do sistema ou a digitada. */}
-        <span><Percentual fracao={v.hoje.fracao} style={{ fontWeight: 800 }} /> <span style={{ color: c.suave, fontWeight: 500 }}>da meta de hoje</span></span>
-        <span style={{ color: bateu ? c.ok : c.destaque }}>
-          {bateu ? 'Meta de hoje batida!' : <>Faltam <Moeda v={v.hoje.falta} bomQuando="desce" /></>}
-        </span>
+      <div style={{ width: '100%', marginTop: 56 }}>
+        <BarraDeProgresso fracao={v.hoje.fracao} c={c} batida={bateu} />
+      </div>
+      <div style={{ marginTop: 28, fontSize: 52, fontWeight: 700, color: bateu ? c.ok : c.texto }}>
+        {bateu
+          ? <>Meta de hoje batida! <Moeda v={v.hoje.recebido - v.hoje.alvo} /> acima</>
+          : <>Faltam <Moeda v={v.hoje.falta} bomQuando="desce" /> para a meta de hoje</>}
+      </div>
+    </div>
+  );
+}
+
+/** Um número com rótulo, num cartão. A borda de cima leva a cor do número. */
+function Bloco({ c, rotulo, destaque, children }: { c: Cores; rotulo: string; destaque?: string; children: ReactNode }) {
+  return (
+    <div style={{
+      flex: 1, minWidth: 0, padding: '44px 36px 48px', borderRadius: 40, background: c.linha,
+      borderTop: `8px solid ${destaque ?? c.trilho}`, textAlign: 'center',
+      transition: 'border-color 700ms ease',
+    }}>
+      <div style={{ fontSize: 38, fontWeight: 600, color: c.suave, marginBottom: 14 }}>{rotulo}</div>
+      <div style={{ lineHeight: 1.05 }}>{children}</div>
+    </div>
+  );
+}
+
+/**
+ * A barra de progresso grande: trilho com marcas de 25/50/75%, preenchimento
+ * em degradê com brilho, e o percentual na ponta do preenchimento.
+ */
+function BarraDeProgresso({ fracao, c, batida }: { fracao: number; c: Cores; batida: boolean }) {
+  const largura = Math.min(100, Math.max(0, fracao * 100));
+  const fim = batida ? c.ok : c.destaque;
+  return (
+    <div style={{ position: 'relative', height: 84, borderRadius: 84, background: c.trilho, overflow: 'hidden' }}>
+      {[25, 50, 75].map(m => (
+        <span key={m} style={{ position: 'absolute', left: `${m}%`, top: 18, bottom: 18, width: 3, borderRadius: 3, background: c.linha }} />
+      ))}
+      <div style={{
+        position: 'absolute', left: 0, top: 0, bottom: 0, width: `${Math.max(largura, 9)}%`,
+        borderRadius: 84,
+        background: `linear-gradient(90deg, ${fim}66 0%, ${fim} 100%)`,
+        boxShadow: `0 0 40px ${fim}55`,
+        transition: `width ${DURACAO_MUDANCA_MS}ms ${CURVA}, background 700ms ease`,
+        display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 28,
+      }}>
+        <span style={{ position: 'absolute', inset: '8px 16px auto', height: 22, borderRadius: 22, background: 'rgba(255,255,255,.18)' }} />
+        <Percentual fracao={fracao} style={{ position: 'relative', fontSize: 50, fontWeight: 800, color: '#0b1220' }} />
       </div>
     </div>
   );
@@ -395,14 +448,14 @@ function Ritmo({ v, tela, c }: { v: VisaoTv; tela: TelaDoPainel; c: Cores }) {
           <div style={{ fontSize: 36, color: c.suave, marginBottom: 20 }}>
             {v.batida ? 'Meta batida' : 'Precisamos por dia útil'}
           </div>
-          <Moeda v={v.batida ? 0 : v.ritmo} style={{ fontSize: 112, fontWeight: 800, color: v.batida ? c.ok : c.destaque, letterSpacing: -3 }} />
+          <Moeda v={v.batida ? 0 : v.ritmo} caber={680} style={{ fontSize: 112, fontWeight: 800, color: v.batida ? c.ok : c.destaque, letterSpacing: -3 }} />
           <div style={{ fontSize: 32, color: c.suave, marginTop: 20 }}>
             {v.diasRestantes} {v.diasRestantes === 1 ? 'dia útil restante' : 'dias úteis restantes'}
           </div>
         </div>
         <div style={{ width: 760, padding: '56px 40px', borderRadius: 40, background: c.linha, textAlign: 'center' }}>
           <div style={{ fontSize: 36, color: c.suave, marginBottom: 20 }}>No ritmo atual, o mês fecha em</div>
-          <Moeda v={v.projecao} style={{ fontSize: 112, fontWeight: 800, letterSpacing: -3 }} />
+          <Moeda v={v.projecao} caber={680} style={{ fontSize: 112, fontWeight: 800, letterSpacing: -3 }} />
           <div style={{ fontSize: 36, marginTop: 20, fontWeight: 600, color: chega ? c.ok : c.alerta }}>
             {percentualTv(fracaoProj)} da meta
           </div>
@@ -414,23 +467,140 @@ function Ritmo({ v, tela, c }: { v: VisaoTv; tela: TelaDoPainel; c: Cores }) {
 
 function Placar({ v, tela, c }: { v: VisaoTv; tela: TelaDoPainel; c: Cores }) {
   if (v.meta <= 0) return <Aviso texto={SEM_META} c={c} />;
-  const caixa: CSSProperties = { flex: 1, padding: '64px 32px', borderRadius: 40, background: c.linha };
+  // Refeito em 27/10: três caixas lado a lado cortavam o número com centavos.
+  // Agora o recebido manda, em cima; meta e falta embaixo; a barra fecha.
   return (
     <div style={centro}>
       <Titulo texto={opcao<string>(tela, 'titulo')} c={c} />
-      <div style={{ display: 'flex', gap: 48, width: '100%', marginTop: 24 }}>
-        <div style={caixa}><Rotulado rotulo="Recebido" c={c} tamanho={110}><Moeda v={v.recebido} /></Rotulado></div>
-        <div style={caixa}><Rotulado rotulo="Meta" c={c} tamanho={110}>{moedaTv(v.meta)}</Rotulado></div>
-        <div style={caixa}>
-          <Rotulado rotulo={v.batida ? 'Acima' : 'Falta'} c={c} tamanho={110} cor={v.batida ? c.ok : c.destaque}>
-            <Moeda v={v.batida ? v.recebido - v.meta : v.falta} bomQuando={v.batida ? 'sobe' : 'desce'} />
-          </Rotulado>
+      <div style={{ fontSize: 40, fontWeight: 600, color: c.suave }}>Recebido no mês</div>
+      <Moeda v={v.recebido} caber={1600} style={{ fontSize: 190, fontWeight: 800, lineHeight: 1.05, letterSpacing: -4, color: v.batida ? c.ok : c.texto }} />
+      <div style={{ display: 'flex', gap: 48, width: '100%', marginTop: 40 }}>
+        <Bloco c={c} rotulo="Meta do mês">
+          <Moeda v={v.meta} caber={720} style={{ fontSize: 96, fontWeight: 800, letterSpacing: -2 }} />
+        </Bloco>
+        <Bloco c={c} rotulo={v.batida ? 'Acima da meta' : 'Falta para a meta'} destaque={v.batida ? c.ok : c.destaque}>
+          <Moeda v={v.batida ? v.recebido - v.meta : v.falta} bomQuando={v.batida ? 'sobe' : 'desce'} caber={720}
+            style={{ fontSize: 96, fontWeight: 800, letterSpacing: -2, color: v.batida ? c.ok : c.destaque }} />
+        </Bloco>
+      </div>
+      <div style={{ width: '100%', marginTop: 40 }}>
+        <BarraDeProgresso fracao={v.fracao} c={c} batida={v.batida} />
+      </div>
+    </div>
+  );
+}
+
+// ── O gráfico ────────────────────────────────────────────────────────────────
+
+const MOEDA_CURTA = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 });
+
+/** Eixo do gráfico: «R$ 250 mil», «R$ 1,2 mi». */
+function moedaCurta(v: number): string {
+  if (v >= 1_000_000) return `R$ ${MOEDA_CURTA.format(v / 1_000_000)} mi`;
+  if (v >= 1_000) return `R$ ${MOEDA_CURTA.format(v / 1_000)} mil`;
+  return `R$ ${MOEDA_CURTA.format(v)}`;
+}
+
+/** Os pontos da curva andam até os novos no mesmo compasso dos números. */
+function useSerieAnimada(alvo: { dia: number; valor: number }[]): { dia: number; valor: number }[] {
+  const [atual, setAtual] = useState(alvo);
+  const ref = useRef(alvo);
+  const chave = alvo.map(p => `${p.dia}:${p.valor}`).join('|');
+
+  useEffect(() => {
+    const de = ref.current;
+    const para = alvo;
+    const reduzido = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (reduzido) { ref.current = para; setAtual(para); return; }
+    const inicio = performance.now();
+    let quadro = 0;
+    const passo = (agora: number) => {
+      const t = Math.min(1, (agora - inicio) / DURACAO_MUDANCA_MS);
+      const k = entraESai(t);
+      // Ponto novo (dia que entrou agora) nasce do último ponto antigo.
+      const base = de[de.length - 1]?.valor ?? 0;
+      const v = para.map((p, i) => ({ dia: p.dia, valor: (de[i]?.valor ?? base) + (p.valor - (de[i]?.valor ?? base)) * k }));
+      ref.current = v;
+      setAtual(v);
+      if (t < 1) quadro = requestAnimationFrame(passo);
+    };
+    quadro = requestAnimationFrame(passo);
+    return () => cancelAnimationFrame(quadro);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chave]);
+
+  return atual;
+}
+
+function Grafico({ v, tela, c }: { v: VisaoTv; tela: TelaDoPainel; c: Cores }) {
+  const mostrarMeta = opcao<boolean>(tela, 'mostrar_meta') && v.meta > 0;
+  const pontos = useSerieAnimada(v.serie);
+
+  const L = 1680, A = 680;                 // a área do gráfico
+  const esq = 190, dir = 60, cima = 40, baixo = 64;
+  const w = L - esq - dir, h = A - cima - baixo;
+  const teto = Math.max(mostrarMeta ? v.meta : 0, v.recebido, 1) * 1.1;
+  const x = (dia: number) => esq + (dia / Math.max(1, v.diasNoMes)) * w;
+  const y = (valor: number) => cima + h - (Math.max(0, valor) / teto) * h;
+
+  const linha = pontos.map((p, i) => `${i ? 'L' : 'M'}${x(p.dia).toFixed(1)},${y(p.valor).toFixed(1)}`).join(' ');
+  const ultimo = pontos[pontos.length - 1] ?? { dia: 0, valor: 0 };
+  const area = `${linha} L${x(ultimo.dia).toFixed(1)},${y(0)} L${x(0)},${y(0)} Z`;
+  const marcas = [0.25, 0.5, 0.75, 1].map(f => teto / 1.1 * f);
+  const diasEixo = [1, 5, 10, 15, 20, 25, v.diasNoMes].filter((d, i, a) => d <= v.diasNoMes && a.indexOf(d) === i);
+  const idGrad = `tv-graf-${c.destaque.slice(1)}`;
+
+  return (
+    <div style={{ ...centro, justifyContent: 'flex-start', top: 140 }}>
+      <div style={{ width: '100%', display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 }}>
+        <div style={{ fontSize: 46, fontWeight: 700, color: c.suave }}>{opcao<string>(tela, 'titulo')}</div>
+        <div style={{ fontSize: 52, fontWeight: 800 }}>
+          <Moeda v={v.recebido} />
+          {mostrarMeta && <span style={{ color: c.suave, fontWeight: 600, fontSize: 40 }}> · <Percentual fracao={v.fracao} /> da meta</span>}
         </div>
       </div>
-      <div style={{ width: '100%', marginTop: 56 }}>
-        <Barra fracao={v.fracao} c={c} altura={20} cor={v.batida ? c.ok : undefined} />
-      </div>
-      <div style={{ fontSize: 40, color: c.suave, marginTop: 24 }}><Percentual fracao={v.fracao} /> da meta</div>
+      <svg width={L} height={A} viewBox={`0 0 ${L} ${A}`} style={{ overflow: 'visible' }}>
+        <defs>
+          <linearGradient id={idGrad} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={c.destaque} stopOpacity={0.45} />
+            <stop offset="100%" stopColor={c.destaque} stopOpacity={0} />
+          </linearGradient>
+          {/* Na primeira vez, a curva se desenha da esquerda para a direita. */}
+          <clipPath id={`${idGrad}-entrada`}>
+            <rect x={0} y={-50} width={L} height={A + 100} style={{ transformOrigin: 'left', animation: `tv2-desenha 1800ms ${CURVA} both` }} />
+          </clipPath>
+        </defs>
+
+        {marcas.map(m => (
+          <g key={m}>
+            <line x1={esq} x2={L - dir} y1={y(m)} y2={y(m)} stroke={c.linha} strokeWidth={2} />
+            <text x={esq - 20} y={y(m) + 10} textAnchor="end" fontSize={28} fill={c.suave}>{moedaCurta(m)}</text>
+          </g>
+        ))}
+        {diasEixo.map(d => (
+          <text key={d} x={x(d)} y={A - 16} textAnchor="middle" fontSize={28} fill={c.suave}>{d}</text>
+        ))}
+
+        {mostrarMeta && (
+          <>
+            {/* O ritmo ideal: de zero à meta no último dia. */}
+            <line x1={x(0)} y1={y(0)} x2={x(v.diasNoMes)} y2={y(v.meta)} stroke={c.suave} strokeWidth={3} strokeDasharray="4 14" strokeLinecap="round" opacity={0.7} />
+            <line x1={esq} x2={L - dir} y1={y(v.meta)} y2={y(v.meta)} stroke={c.alerta} strokeWidth={4} strokeDasharray="18 12" />
+            <text x={L - dir} y={y(v.meta) - 16} textAnchor="end" fontSize={32} fontWeight={700} fill={c.alerta}>Meta {moedaTv(v.meta)}</text>
+          </>
+        )}
+
+        <g clipPath={`url(#${idGrad}-entrada)`}>
+          <path d={area} fill={`url(#${idGrad})`} />
+          <path d={linha} fill="none" stroke={v.batida ? c.ok : c.destaque} strokeWidth={7} strokeLinejoin="round" strokeLinecap="round"
+            style={{ transition: 'stroke 700ms ease' }} />
+          <circle cx={x(ultimo.dia)} cy={y(ultimo.valor)} r={26} fill={c.destaque} opacity={0.25}>
+            <animate attributeName="r" values="18;34;18" dur="2.4s" repeatCount="indefinite" />
+          </circle>
+          <circle cx={x(ultimo.dia)} cy={y(ultimo.valor)} r={13} fill={v.batida ? c.ok : c.destaque} stroke={c.fundo} strokeWidth={5} />
+        </g>
+      </svg>
+      <style>{'@keyframes tv2-desenha { from { transform: scaleX(0); } to { transform: scaleX(1); } }'}</style>
     </div>
   );
 }
@@ -461,7 +631,7 @@ function PodioVivo({ top, tela, c, mostrar }: { top: VisaoTv['ranking']; tela: T
               <div style={{ fontSize: i === 0 ? 52 : 44, fontWeight: 700, marginTop: 24, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 460 }}>
                 {nomeCurto(p.nome)}
               </div>
-              {mostrar && <Moeda v={p.valor} style={{ fontSize: 40, color: c.suave, marginTop: 6 }} />}
+              {mostrar && <Moeda v={p.valor} caber={440} style={{ fontSize: 40, color: c.suave, marginTop: 6 }} />}
               <div style={{
                 width: '100%', height: altura[i], marginTop: 28, borderRadius: '28px 28px 0 0',
                 transition: `height 1600ms ${CURVA}`,
@@ -620,7 +790,7 @@ export function TelaTv({ tela, tema, visao, midiaUrl, posicao, atualizadoEm, mes
     const P = { v: visao, tela, c };
     corpo = {
       contagem: <Contagem {...P} />, barra: <MetaBarra {...P} />, anel: <Anel {...P} />,
-      hoje: <Hoje {...P} />, ritmo: <Ritmo {...P} />, placar: <Placar {...P} />,
+      hoje: <Hoje {...P} />, ritmo: <Ritmo {...P} />, placar: <Placar {...P} />, grafico: <Grafico {...P} />,
       podio: <Podio {...P} />, lista: <Lista {...P} />,
     }[tela.template as 'contagem'] ?? <Aviso texto="Template desconhecido." c={c} />;
   }

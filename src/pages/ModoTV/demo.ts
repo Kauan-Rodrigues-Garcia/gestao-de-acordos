@@ -34,8 +34,22 @@ export function numerosDemo(): NumerosTv {
       id: `demo-${i}`, nome: nome as string, foto: null as string | null,
       valor: valor as number, valor_ho: Math.round((valor as number) * 22.6) / 100,
     })),
+    serie: serieDemo(hoje),
     calculado_em: new Date().toISOString(),
   };
+}
+
+/** Dias úteis com recebimento, fins de semana sem: o formato que o gráfico mostra. */
+function serieDemo(hoje: Date): NonNullable<NumerosTv['serie']> {
+  const a = hoje.getFullYear(), m = hoje.getMonth();
+  const serie: NonNullable<NumerosTv['serie']> = [];
+  for (let d = 1; d <= hoje.getDate(); d++) {
+    const dia = new Date(a, m, d);
+    if (dia.getDay() === 0 || dia.getDay() === 6) continue;
+    const valor = 12_000 + ((d * 7919) % 11) * 1_400;
+    serie.push({ dia: `${a}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`, valor, valor_ho: Math.round(valor * 22.6) / 100 });
+  }
+  return serie;
 }
 
 export function painelDemo(tema: string | null): Painel {
@@ -53,6 +67,7 @@ export function painelDemo(tema: string | null): Painel {
       { id: 'd4', template: 'hoje', opcoes: {} },
       { id: 'd5', template: 'ritmo', opcoes: {} },
       { id: 'd6', template: 'placar', opcoes: {} },
+      { id: 'd10', template: 'grafico', opcoes: {} },
       { id: 'd7', template: 'podio', opcoes: {} },
       { id: 'd8', template: 'lista', opcoes: { quantidade: '10' } },
       { id: 'd9', template: 'recado', opcoes: { texto: 'Faltam poucos dias. Cada acordo conta!', assinatura: 'Liderança' } },
@@ -82,6 +97,10 @@ export function simularRelatorio(n: NumerosTv): NumerosTv {
     recebido_hoje: n.recebido_hoje + entrou,
     recebido_hoje_ho: Math.round((n.recebido_hoje + entrou) * 22.6) / 100,
     ranking,
+    // O dinheiro novo entra no dia de hoje da série.
+    serie: (n.serie ?? []).some(p => p.dia === n.hoje)
+      ? (n.serie ?? []).map(p => (p.dia === n.hoje ? { ...p, valor: p.valor + entrou } : p))
+      : [...(n.serie ?? []), { dia: n.hoje, valor: entrou, valor_ho: Math.round(entrou * 22.6) / 100 }],
     calculado_em: new Date().toISOString(),
   };
 }

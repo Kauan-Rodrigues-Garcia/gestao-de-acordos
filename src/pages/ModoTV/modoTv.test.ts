@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { montarVisao, moedaTv, nomeCurto, percentualTv } from './numeros';
+import { montarVisao, moedaTv, nomeCurto, percentualTv, serieAcumulada, tamanhoQueCabe } from './numeros';
 import { alvoDoDiaProprio, campoVisivel, midiaSegura, opcao, rotuloTempo, segundosDaTela, telasValidas, templateDe } from './templates';
 import { numerosDemo } from './demo';
 import { estadoDaTv, situacaoDoPainel } from './apoio';
@@ -65,8 +65,14 @@ describe('montarVisao', () => {
 });
 
 describe('formatos da parede', () => {
-  it('dinheiro sem centavos', () => {
-    expect(moedaTv(1234.99).replace(/\s/g, ' ')).toBe('R$ 1.234');
+  it('dinheiro exato, com centavos', () => {
+    expect(moedaTv(1234.99).replace(/\s/g, ' ')).toBe('R$ 1.234,99');
+    expect(moedaTv(500000).replace(/\s/g, ' ')).toBe('R$ 500.000,00');
+    expect(moedaTv(0.005).replace(/\s/g, ' ')).toBe('R$ 0,01');
+  });
+  it('o corpo encolhe para o valor caber', () => {
+    expect(tamanhoQueCabe('R$ 1.000,00', 2000, 250)).toBe(250);
+    expect(tamanhoQueCabe('R$ 1.234.567,89', 1600, 250)).toBeLessThan(250);
   });
   it('percentual cortado, nunca arredondado para 100%', () => {
     expect(percentualTv(0.9996)).toBe('99,9%');
@@ -216,5 +222,27 @@ describe('Meta de hoje: do sistema ou outra', () => {
   it('tela antiga, só com o valor, continua como outra meta', () => {
     expect(alvoDoDiaProprio(tela({ alvo_manual: 7_000 }))).toBe(7_000);
     expect(campoVisivel(tela({ alvo_manual: 7_000 }), campoValor)).toBe(true);
+  });
+});
+
+describe('serieAcumulada — o gráfico fecha no total oficial', () => {
+  const n = { mes: '2026-10', hoje: '2026-10-05', recebido: 1_000, recebido_ho: 226 };
+
+  it('acumula por dia e escala para terminar no recebido', () => {
+    const s = serieAcumulada({ ...n, serie: [
+      { dia: '2026-10-01', valor: 100, valor_ho: 20 },
+      { dia: '2026-10-03', valor: 300, valor_ho: 60 },
+    ] }, 'bruto');
+    expect(s.map(p => p.dia)).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(s[1].valor).toBe(250);
+    expect(s[2].valor).toBe(250);
+    expect(s[3].valor).toBe(1_000);
+    expect(s[5].valor).toBe(1_000);
+  });
+
+  it('ignora dia depois de hoje e, sem série, faz a reta', () => {
+    expect(serieAcumulada({ ...n, serie: [{ dia: '2026-10-09', valor: 50, valor_ho: 1 }] }, 'bruto'))
+      .toEqual([{ dia: 0, valor: 0 }, { dia: 5, valor: 1_000 }]);
+    expect(serieAcumulada({ ...n }, 'ho')).toEqual([{ dia: 0, valor: 0 }, { dia: 5, valor: 226 }]);
   });
 });

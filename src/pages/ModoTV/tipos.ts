@@ -11,7 +11,7 @@ export type TemaId = 'noite' | 'grafite' | 'oceano' | 'floresta' | 'vinho' | 'cl
 export type Unidade = 'ho' | 'bruto';
 
 export type TemplateId =
-  | 'contagem' | 'barra' | 'anel' | 'hoje' | 'ritmo' | 'placar'
+  | 'contagem' | 'barra' | 'anel' | 'hoje' | 'ritmo' | 'placar' | 'grafico'
   | 'podio' | 'lista'
   | 'imagem' | 'video' | 'recado';
 
@@ -63,6 +63,8 @@ export interface NumerosTv {
   dias_uteis: number;
   dias_decorridos: number;
   ranking: PessoaRanking[];
+  /** Dinheiro de cada dia com movimento (20261027200000). Formato do mês, não o total. */
+  serie?: { dia: string; valor: number; valor_ho: number }[];
   calculado_em: string;
   /** Hora do banco na resposta da prévia (20261027190000). */
   agora?: string;

@@ -87,6 +87,12 @@ export const TEMPLATES: Template[] = [
     ],
   },
   {
+    id: 'grafico', categoria: 'meta',
+    nome: 'Evolução do mês',
+    descricao: 'Gráfico do recebido dia a dia rumo à meta, com o ritmo ideal. Cresce a cada relatório.',
+    campos: [TITULO('Evolução do mês'), MOSTRAR_META],
+  },
+  {
     id: 'ritmo', categoria: 'meta',
     nome: 'Ritmo e projeção',
     descricao: 'Quanto precisa entrar por dia útil e onde o mês fecha no ritmo atual.',
