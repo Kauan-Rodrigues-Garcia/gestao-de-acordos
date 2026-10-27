@@ -18,6 +18,9 @@ function registro(extra: Record<string, string> = {}): RawRecord {
   return { rowNumber: 2, values, normalized, sourceType: 'report-247', financialDataAvailable: true };
 }
 
+/** As parceladas saem com as vezes (27/10/2026): «12x de R$ 117,00». */
+const vezes = (n: number, valor: number) => `${n}x de ${CampaignCore.formatCurrency(valor)}`;
+
 describe('parcelamentos em 12x, 20x e 21x', () => {
   const descontos = { ...CampaignCore.DEFAULT_DISCOUNTS, settlement: 30, annual: 25, pix_automatico: 5 };
   const item = CampaignCore.deriveRecord(registro(), descontos);
@@ -25,21 +28,35 @@ describe('parcelamentos em 12x, 20x e 21x', () => {
 
   it('cartão: quitação e anual, o total ÷ n arredondado para cima', () => {
     expect(item.settlement).toBe(1400); // 2000 × 0,70
-    expect(v.cartao_quitacao).toBe(CampaignCore.formatCurrency(117)); // 1400 / 12 = 116,67
-    expect(v.cartao_quitacao_20x).toBe(CampaignCore.formatCurrency(70));
-    expect(v.cartao_quitacao_21x).toBe(CampaignCore.formatCurrency(67)); // 66,67
+    expect(v.cartao_quitacao).toBe(vezes(12, 117)); // 1400 / 12 = 116,67
+    expect(v.cartao_quitacao_20x).toBe(vezes(20, 70));
+    expect(v.cartao_quitacao_21x).toBe(vezes(21, 67)); // 66,67
     expect(item.annual).toBe(1800); // 200 × 12 × 0,75
-    expect(v.cartao_anual_20x).toBe(CampaignCore.formatCurrency(90));
-    expect(v.cartao_anual_21x).toBe(CampaignCore.formatCurrency(86)); // 85,71
+    expect(v.cartao_anual_20x).toBe(vezes(20, 90));
+    expect(v.cartao_anual_21x).toBe(vezes(21, 86)); // 85,71
   });
 
   it('Pix Automático: do Valor Aberto, com e sem desconto (21/10/2026)', () => {
-    expect(v.pix_automatico_12x).toBe(CampaignCore.formatCurrency(167)); // 2000 / 12 = 166,67
-    expect(v.pix_automatico_20x).toBe(CampaignCore.formatCurrency(100));
-    expect(v.pix_automatico_21x).toBe(CampaignCore.formatCurrency(96)); // 95,24
-    expect(v.pix_automatico_desconto_12x).toBe(CampaignCore.formatCurrency(159)); // 1900 / 12 = 158,33
-    expect(v.pix_automatico_desconto_20x).toBe(CampaignCore.formatCurrency(95));
-    expect(v.pix_automatico_desconto_21x).toBe(CampaignCore.formatCurrency(91)); // 90,48
+    expect(v.pix_automatico_12x).toBe(vezes(12, 167)); // 2000 / 12 = 166,67
+    expect(v.pix_automatico_20x).toBe(vezes(20, 100));
+    expect(v.pix_automatico_21x).toBe(vezes(21, 96)); // 95,24
+    expect(v.pix_automatico_desconto_12x).toBe(vezes(12, 159)); // 1900 / 12 = 158,33
+    expect(v.pix_automatico_desconto_20x).toBe(vezes(20, 95));
+    expect(v.pix_automatico_desconto_21x).toBe(vezes(21, 91)); // 90,48
+  });
+
+  it('Cartão Recorrente: o Pix Automático clonado, com o próprio % (27/10/2026)', () => {
+    const d = { ...descontos, cartao_recorrente: 10 };
+    const r = CampaignCore.variablesFor(CampaignCore.deriveRecord(registro(), d), d);
+    expect(r.cartao_recorrente_12x).toBe(vezes(12, 167));
+    expect(r.cartao_recorrente_21x).toBe(vezes(21, 96));
+    expect(r.cartao_recorrente_desconto_12x).toBe(vezes(12, 150)); // 1800 / 12
+    expect(r.cartao_recorrente_desconto_21x).toBe(vezes(21, 86)); // 1800 / 21 = 85,71
+    expect(r.cartao_recorrente_parcela).toBe(CampaignCore.formatCurrency(180)); // 200 − 10%
+    expect(r.pct_cartao_recorrente).toBe('10%');
+    // O % do Pix não mexe no Cartão Recorrente.
+    expect(r.pix_automatico_desconto_21x).toBe(vezes(21, 91));
+    expect(mensagemUsaValores('x {{cartao_recorrente_desconto_21x}} y')).toBe(true);
   });
 
   it('as variáveis novas de valor travam no relatório sem valores', () => {
@@ -56,12 +73,13 @@ describe('junção parcelada em 6x e 12x (20/10/2026)', () => {
 
   it('o valor da junção ÷ n, arredondado para cima, como o cartão', () => {
     expect(item.bundle).toBe(510);
-    expect(v.juncao_6x).toBe(CampaignCore.formatCurrency(85));
-    expect(v.juncao_12x).toBe(CampaignCore.formatCurrency(43)); // 42,50
+    expect(v.juncao_6x).toBe(vezes(6, 85));
+    expect(v.juncao_12x).toBe(vezes(12, 43)); // 42,50
   });
 
   it('a mensagem do exemplo sai com a junção e a parcela', () => {
-    const texto = CampaignCore.renderTemplate('aproveitando a {{juncao}} em até 12x de {{juncao_12x}}', v);
+    // As vezes vêm na variável (27/10/2026): a mensagem não escreve «12x de».
+    const texto = CampaignCore.renderTemplate('aproveitando a {{juncao}} em até {{juncao_12x}}', v);
     expect(texto).toBe(`aproveitando a ${CampaignCore.formatCurrency(510)} em até 12x de ${CampaignCore.formatCurrency(43)}`);
   });
 
@@ -142,7 +160,13 @@ describe('os botões das variáveis, por categoria', () => {
     for (const k of ['parcela_desconto', 'juncao', 'juncao_6x', 'juncao_12x']) {
       expect(doGrupo(k)?.secao).toBe('atraso');
     }
-    expect(SECOES.map((s) => s.id)).toEqual(['cliente', 'pix_automatico', 'quitacao', 'atraso', 'anual', 'juros', 'percentuais']);
+    const recorrente = VARIABLE_GROUPS.filter((g) => g.secao === 'cartao_recorrente').flatMap((g) => g.itens.map(([v]) => v));
+    expect(recorrente.sort()).toEqual([
+      'cartao_recorrente_12x', 'cartao_recorrente_20x', 'cartao_recorrente_21x',
+      'cartao_recorrente_desconto_12x', 'cartao_recorrente_desconto_20x', 'cartao_recorrente_desconto_21x',
+      'cartao_recorrente_parcela',
+    ]);
+    expect(SECOES.map((s) => s.id)).toEqual(['cliente', 'pix_automatico', 'cartao_recorrente', 'quitacao', 'atraso', 'anual', 'juros', 'percentuais']);
   });
 
   it('dentro do bloco, sem desconto e com desconto em grupos separados', () => {

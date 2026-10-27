@@ -17,7 +17,7 @@ import {
   Upload, FileText, Trash2, Plus, Pencil, Copy, Download, Search,
   ChevronLeft, ChevronRight, MessageSquare, Percent,
   AlertTriangle, Eye, Users, Save, Sparkles, Lock, Send, Filter, UserX, Undo2, Star, Building2,
-  ArrowDownToLine, RefreshCw, Loader2,
+  ArrowDownToLine, RefreshCw, Loader2, Calculator, Check,
 } from 'lucide-react';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
@@ -62,6 +62,7 @@ const DISCOUNT_FIELDS: [keyof typeof CampaignCore.DEFAULT_DISCOUNTS, string, str
   ['bundle', 'Junção', 'À vista, 6x e 12x'],
   ['annual', 'Anual', 'À vista e cartão'],
   ['pix_automatico', 'Pix Automático', 'Com desconto e só a parcela'],
+  ['cartao_recorrente', 'Cartão Recorrente', 'Com desconto e só a parcela'],
 ];
 
 export default function CampanhaFacil() {
@@ -558,8 +559,9 @@ export default function CampanhaFacil() {
                     </div>
                   </div>
 
-                  {/* Parcela mínima (26/10/2026): trava a campanha. A correção não
-                      é automática porque o número de vezes é texto da mensagem. */}
+                  {/* Parcela mínima (26/10/2026): trava a campanha. Desde 27/10/2026
+                      dá para recalcular (as vezes vêm na variável) e manter o
+                      resto — menos Pix Automático e Cartão Recorrente. */}
                   {travada && (
                     <div className="space-y-2 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm">
                       <div className="flex items-start gap-2">
@@ -572,12 +574,33 @@ export default function CampanhaFacil() {
                             A campanha não sai assim.
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            O número de vezes está escrito na mensagem, então o valor não se corrige sozinho. Tire esses clientes,
-                            troque a mensagem para menos vezes, ou edite a mensagem de cada um na prévia — ela mostra em quantas vezes o total cabe.
+                            Recalcular troca as vezes e o valor juntos — «21x de R$ 15,00» vira «10x de R$ 32,00», sem mudar o total.
+                            Também dá para tirar esses clientes, editar a mensagem, ou manter mesmo assim.
                           </p>
+                          {cf.parcelas.rigidas > 0 && (
+                            <p className="mt-1 text-xs font-medium text-destructive">
+                              {cf.parcelas.rigidas.toLocaleString('pt-BR')} {cf.parcelas.rigidas === 1 ? 'cliente tem' : 'clientes têm'} Pix Automático
+                              ou Cartão Recorrente abaixo de R$ 30: {cf.parcelas.rigidas === 1 ? 'esse não pode' : 'esses não podem'} ficar assim.
+                              Recalcule, edite ou tire.
+                            </p>
+                          )}
                         </div>
                       </div>
                       <div className="flex flex-wrap gap-2 pl-6">
+                        {!cf.recalcular && cf.parcelas.recalculaveis > 0 && (
+                          <Button size="sm" className="h-8 gap-1.5" onClick={() => cf.setRecalcular(true)}>
+                            <Calculator className="h-3.5 w-3.5" /> Recalcular parcelas ({cf.parcelas.recalculaveis.toLocaleString('pt-BR')})
+                          </Button>
+                        )}
+                        {!cf.manterBaixas && cf.parcelas.mantiveis > 0 && (
+                          <Button
+                            size="sm" variant="outline" className="h-8 gap-1.5"
+                            onClick={() => cf.setManterBaixas(true)}
+                            title="Libera a campanha com essas parcelas abaixo de R$ 30. Fica sob a responsabilidade de quem libera."
+                          >
+                            <Check className="h-3.5 w-3.5" /> Manter mesmo assim ({cf.parcelas.mantiveis.toLocaleString('pt-BR')})
+                          </Button>
+                        )}
                         <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => verNaTabela(`motivo:${PENDENCIA_PARCELA_MINIMA}`)}>
                           <Filter className="h-3.5 w-3.5" /> Ver e corrigir um a um
                         </Button>
@@ -592,6 +615,30 @@ export default function CampanhaFacil() {
                           <UserX className="h-3.5 w-3.5" /> Tirar {cf.stats.parcelaBaixa === 1 ? 'este cliente' : `os ${cf.stats.parcelaBaixa.toLocaleString('pt-BR')}`} da campanha
                         </Button>
                       </div>
+                    </div>
+                  )}
+                  {cf.recalcular && cf.parcelas.recalculadas > 0 && (
+                    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm">
+                      <Calculator className="h-4 w-4 text-muted-foreground" />
+                      <span>
+                        <strong>{cf.parcelas.recalculadas.toLocaleString('pt-BR')}</strong>{' '}
+                        {cf.parcelas.recalculadas === 1 ? 'cliente teve' : 'clientes tiveram'} o parcelamento refeito em menos vezes, com a parcela no mínimo de R$ 30.
+                      </span>
+                      <Button variant="link" className="ml-auto h-auto p-0 text-xs" onClick={() => cf.setRecalcular(false)}>
+                        <Undo2 className="mr-1 h-3.5 w-3.5" /> Desfazer
+                      </Button>
+                    </div>
+                  )}
+                  {cf.manterBaixas && cf.parcelas.mantidas > 0 && (
+                    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-sm">
+                      <AlertTriangle className="h-4 w-4 text-amber-700 dark:text-amber-500" />
+                      <span>
+                        <strong>{cf.parcelas.mantidas.toLocaleString('pt-BR')}</strong>{' '}
+                        {cf.parcelas.mantidas === 1 ? 'cliente sai' : 'clientes saem'} com parcela abaixo de R$ 30, mantida por você. Fica sob a responsabilidade de quem libera a campanha.
+                      </span>
+                      <Button variant="link" className="ml-auto h-auto p-0 text-xs" onClick={() => cf.setManterBaixas(false)}>
+                        <Undo2 className="mr-1 h-3.5 w-3.5" /> Desfazer
+                      </Button>
                     </div>
                   )}
 

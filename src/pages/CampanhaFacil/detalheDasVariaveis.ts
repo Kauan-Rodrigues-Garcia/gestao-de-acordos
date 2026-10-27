@@ -7,6 +7,7 @@
  * prévia da mensagem montada para um cliente.
  */
 import { CampaignCore, type CampaignItem, type Discounts, type RawRecord } from './lib/campaign-core';
+import { VEZES_DA_VARIAVEL } from './parcela-minima';
 
 export interface DetalheDaVariavel {
   /** O que a variável escreve na mensagem. */
@@ -32,30 +33,38 @@ export const DETALHE_DA_VARIAVEL: Readonly<Record<string, DetalheDaVariavel>> = 
   local_trabalho: { oQue: 'Onde o cliente trabalha.', origem: 'Coluna Local de trabalho' },
   ocupacao: { oQue: 'A profissão do cliente.', origem: 'Coluna Ocupação' },
   tempo_atraso: { oQue: 'Os dias em atraso, escritos «45 dias».', origem: 'Coluna Tempo de atraso' },
-  // Pix Automático
-  pix_automatico_12x: { oQue: 'Parcela do Pix Automático em 12x, sem desconto.', origem: 'Valor Aberto ÷ 12' },
-  pix_automatico_20x: { oQue: 'Parcela do Pix Automático em 20x, sem desconto.', origem: 'Valor Aberto ÷ 20' },
-  pix_automatico_21x: { oQue: 'Parcela do Pix Automático em 21x, sem desconto.', origem: 'Valor Aberto ÷ 21' },
-  pix_automatico_desconto_12x: { oQue: 'Parcela do Pix Automático em 12x, com desconto.', origem: '(Valor Aberto − % Pix Automático) ÷ 12' },
-  pix_automatico_desconto_20x: { oQue: 'Parcela do Pix Automático em 20x, com desconto.', origem: '(Valor Aberto − % Pix Automático) ÷ 20' },
-  pix_automatico_desconto_21x: { oQue: 'Parcela do Pix Automático em 21x, com desconto.', origem: '(Valor Aberto − % Pix Automático) ÷ 21' },
+  // Pix Automático. As parceladas já escrevem as vezes: «21x de R$ 59,00» (27/10/2026).
+  pix_automatico_12x: { oQue: '«12x de R$ …» do Pix Automático, sem desconto.', origem: 'Valor Aberto ÷ 12' },
+  pix_automatico_20x: { oQue: '«20x de R$ …» do Pix Automático, sem desconto.', origem: 'Valor Aberto ÷ 20' },
+  pix_automatico_21x: { oQue: '«21x de R$ …» do Pix Automático, sem desconto.', origem: 'Valor Aberto ÷ 21' },
+  pix_automatico_desconto_12x: { oQue: '«12x de R$ …» do Pix Automático, com desconto.', origem: '(Valor Aberto − % Pix Automático) ÷ 12' },
+  pix_automatico_desconto_20x: { oQue: '«20x de R$ …» do Pix Automático, com desconto.', origem: '(Valor Aberto − % Pix Automático) ÷ 20' },
+  pix_automatico_desconto_21x: { oQue: '«21x de R$ …» do Pix Automático, com desconto.', origem: '(Valor Aberto − % Pix Automático) ÷ 21' },
   pix_automatico_parcela: { oQue: 'Uma parcela em atraso no Pix Automático, com desconto.', origem: '1 parcela − % Pix Automático' },
+  // Cartão Recorrente (27/10/2026): o Pix Automático clonado, com o próprio %.
+  cartao_recorrente_12x: { oQue: '«12x de R$ …» do Cartão Recorrente, sem desconto.', origem: 'Valor Aberto ÷ 12' },
+  cartao_recorrente_20x: { oQue: '«20x de R$ …» do Cartão Recorrente, sem desconto.', origem: 'Valor Aberto ÷ 20' },
+  cartao_recorrente_21x: { oQue: '«21x de R$ …» do Cartão Recorrente, sem desconto.', origem: 'Valor Aberto ÷ 21' },
+  cartao_recorrente_desconto_12x: { oQue: '«12x de R$ …» do Cartão Recorrente, com desconto.', origem: '(Valor Aberto − % Cartão Recorrente) ÷ 12' },
+  cartao_recorrente_desconto_20x: { oQue: '«20x de R$ …» do Cartão Recorrente, com desconto.', origem: '(Valor Aberto − % Cartão Recorrente) ÷ 20' },
+  cartao_recorrente_desconto_21x: { oQue: '«21x de R$ …» do Cartão Recorrente, com desconto.', origem: '(Valor Aberto − % Cartão Recorrente) ÷ 21' },
+  cartao_recorrente_parcela: { oQue: 'Uma parcela em atraso no Cartão Recorrente, com desconto.', origem: '1 parcela − % Cartão Recorrente' },
   // Quitação
   quitacao: { oQue: 'Quitação à vista no Pix, com desconto.', origem: 'Valor Aberto − % quitação' },
-  cartao_quitacao: { oQue: 'Parcela da quitação no cartão em 12x.', origem: 'Quitação ÷ 12' },
-  cartao_quitacao_20x: { oQue: 'Parcela da quitação no cartão em 20x.', origem: 'Quitação ÷ 20' },
-  cartao_quitacao_21x: { oQue: 'Parcela da quitação no cartão em 21x.', origem: 'Quitação ÷ 21' },
+  cartao_quitacao: { oQue: '«12x de R$ …» da quitação no cartão.', origem: 'Quitação ÷ 12' },
+  cartao_quitacao_20x: { oQue: '«20x de R$ …» da quitação no cartão.', origem: 'Quitação ÷ 20' },
+  cartao_quitacao_21x: { oQue: '«21x de R$ …» da quitação no cartão.', origem: 'Quitação ÷ 21' },
   // Atrasadas e junção
   parcela_desconto: { oQue: 'A soma de TODAS as parcelas em atraso, com desconto.', origem: 'Valor − % parcela' },
   uma_parcela_desconto: { oQue: 'UMA parcela em atraso, com desconto.', origem: '(Valor ÷ parcelas em atraso) − % parcela' },
   juncao: { oQue: 'As atrasadas mais a próxima parcela, com desconto.', origem: '1 parcela × (atrasadas + 1) − % junção' },
-  juncao_6x: { oQue: 'Parcela da junção em 6x.', origem: 'Junção ÷ 6' },
-  juncao_12x: { oQue: 'Parcela da junção em 12x.', origem: 'Junção ÷ 12' },
+  juncao_6x: { oQue: '«6x de R$ …» da junção.', origem: 'Junção ÷ 6' },
+  juncao_12x: { oQue: '«12x de R$ …» da junção.', origem: 'Junção ÷ 12' },
   // Plano anual
   anual: { oQue: 'O plano anual à vista, com desconto.', origem: '(1 parcela × 12) − % anual' },
-  cartao_anual: { oQue: 'Parcela do plano anual no cartão em 12x.', origem: 'Anual ÷ 12' },
-  cartao_anual_20x: { oQue: 'Parcela do plano anual no cartão em 20x.', origem: 'Anual ÷ 20' },
-  cartao_anual_21x: { oQue: 'Parcela do plano anual no cartão em 21x.', origem: 'Anual ÷ 21' },
+  cartao_anual: { oQue: '«12x de R$ …» do plano anual no cartão.', origem: 'Anual ÷ 12' },
+  cartao_anual_20x: { oQue: '«20x de R$ …» do plano anual no cartão.', origem: 'Anual ÷ 20' },
+  cartao_anual_21x: { oQue: '«21x de R$ …» do plano anual no cartão.', origem: 'Anual ÷ 21' },
   // Saldo com juros
   valor_com_juros: { oQue: 'O saldo do contrato com juros.', origem: 'Valor Atualizado − % juros (padrão 0%)' },
   // Percentuais
@@ -65,6 +74,7 @@ export const DETALHE_DA_VARIAVEL: Readonly<Record<string, DetalheDaVariavel>> = 
   pct_juros: { oQue: 'O número do % dos juros, para citar no texto.', origem: '«Descontos e cálculos» → Juros' },
   pct_anual: { oQue: 'O número do % do plano anual, para citar no texto.', origem: '«Descontos e cálculos» → Anual' },
   pct_pix_automatico: { oQue: 'O número do % do Pix Automático, para citar no texto.', origem: '«Descontos e cálculos» → Pix Automático' },
+  pct_cartao_recorrente: { oQue: 'O número do % do Cartão Recorrente, para citar no texto.', origem: '«Descontos e cálculos» → Cartão Recorrente' },
 };
 
 /** O cliente de exemplo da prévia: o mesmo do documento, fictício. */
@@ -138,6 +148,9 @@ export const VARIAVEIS_EM_REAIS: readonly string[] = [
   'pix_automatico_12x', 'pix_automatico_20x', 'pix_automatico_21x',
   'pix_automatico_desconto_12x', 'pix_automatico_desconto_20x', 'pix_automatico_desconto_21x',
   'pix_automatico_parcela',
+  'cartao_recorrente_12x', 'cartao_recorrente_20x', 'cartao_recorrente_21x',
+  'cartao_recorrente_desconto_12x', 'cartao_recorrente_desconto_20x', 'cartao_recorrente_desconto_21x',
+  'cartao_recorrente_parcela',
 ];
 
 const EM_REAIS = `\\{\\{\\s*(${VARIAVEIS_EM_REAIS.join('|')})\\s*\\}\\}`;
@@ -159,6 +172,38 @@ export function corrigirReaisDuplicados(texto: string): string {
   return texto
     .replace(RS_ANTES, (_, negrito: string, nome: string) => `${negrito}{{${nome}}}`)
     .replace(VIRGULA_00_DEPOIS, (_, nome: string) => `{{${nome}}}`);
+}
+
+/**
+ * As vezes escritas antes de uma variável que já as traz (27/10/2026):
+ * «12x de {{cartao_quitacao}}» manda «12x de 12x de R$ 59,00». Pega o número
+ * da própria variável colado nela — «12x de», «12 vezes:», «*12x de R$ *» —,
+ * guardando o negrito e as aspas que estavam no meio.
+ */
+const VEZES_ANTES = new RegExp(
+  `(^|[^0-9])(\\d{1,2})\\s*(?:x|vezes)([*"]?\\s*(?:de)?\\s*[*"]?\\s*(?:R\\$\\s*)?[*"]?\\s*:?\\s*[*"]?\\s*)\\{\\{\\s*(${Object.keys(VEZES_DA_VARIAVEL).join('|')})\\s*\\}\\}`,
+  'gi',
+);
+
+/** As variáveis de parcelamento que a mensagem escreve com as vezes antes. */
+export function vezesRepetidas(texto: string): string[] {
+  const nomes = new Set<string>();
+  for (const m of texto.matchAll(VEZES_ANTES)) {
+    if (Number(m[2]) === VEZES_DA_VARIAVEL[m[4].toLowerCase()]) nomes.add(m[4]);
+  }
+  return [...nomes];
+}
+
+/** Tira as vezes repetidas antes das variáveis de parcelamento; o negrito fica. */
+export function corrigirVezesRepetidas(texto: string): string {
+  return texto
+    .replace(VEZES_ANTES, (todo: string, antes: string, vezes: string, meio: string, nome: string) => (
+      Number(vezes) === VEZES_DA_VARIAVEL[nome.toLowerCase()]
+        ? `${antes}${(meio.match(/[*"]/g) ?? []).join('')}{{${nome}}}`
+        : todo
+    ))
+    // «*12x de *{{v}}*» deixava «**{{v}}*»: um asterisco só abre o negrito.
+    .replace(/\*\*(?=\{\{)/g, '*');
 }
 
 /** Um pedaço da prévia: texto, ou o valor de uma variável (e se ele saiu). */

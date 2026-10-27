@@ -15,13 +15,11 @@ import { CampaignCore, type Discounts, type ParsedResult, type Template, type Ca
 import { CampaignXlsx } from './lib/xlsx-export';
 import { parseSpreadsheetReport } from './lib/readSpreadsheet';
 import { idsDeMensagensBloqueadas } from './regras-mensagem';
-import {
-  PENDENCIA_PARCELA_MINIMA, mensagemAindaTemParcelaBaixa, parcelasBaixasDoItem, variaveisParceladasDoModelo,
-  type ParcelaBaixa,
-} from './parcela-minima';
+import { aplicarParcelaMinima, type ParcelaBaixa } from './parcela-minima';
 import { agruparPendencias, linhasComPendencia, pendenciasDoItem } from './pendencias';
 import { useEnviosCampanha } from './useEnviosCampanha';
 import { numeroWhatsApp } from './envios';
+import { corrigirVezesRepetidas } from './detalheDasVariaveis';
 import { comNoFim, consultarJaRecebeu, numerosDoCliente, type Recebimento } from './jaRecebeu';
 import {
   fetchMensagens, criarMensagem, atualizarMensagemCorpo, excluirMensagem,
@@ -31,7 +29,7 @@ import {
   type CampanhaMensagem, type CampanhaDesconto,
 } from './campanhaFacil.service';
 
-const DISCOUNT_KEYS: (keyof Discounts)[] = ['overdue', 'settlement', 'interest', 'bundle', 'annual', 'pix_automatico'];
+const DISCOUNT_KEYS: (keyof Discounts)[] = ['overdue', 'settlement', 'interest', 'bundle', 'annual', 'pix_automatico', 'cartao_recorrente'];
 const PAGE_SIZE = 25;
 
 export interface ImportProgress { value: number; label: string; detail: string }
@@ -134,6 +132,13 @@ export function useCampanhaFacil() {
    * recebe esses por último. Zera ao trocar o arquivo.
    */
   const [paraOFim, setParaOFim] = useState<Set<number>>(new Set());
+  /**
+   * Parcela abaixo de R$ 30 (27/10/2026): refazer o parcelamento em menos
+   * vezes, e manter a que sobrar mesmo assim — responsabilidade de quem
+   * libera. Zeram ao trocar o arquivo.
+   */
+  const [recalcular, setRecalcular] = useState(false);
+  const [manterBaixas, setManterBaixas] = useState(false);
 
   // ── Configuração (form) ────────────────────────────────────────────────────
   const [templateId, setTemplateId] = useState<string>(CampaignCore.TEMPLATES[0].id);
@@ -228,10 +233,14 @@ export function useCampanhaFacil() {
     }
   }, [templates, templateId]);
 
-  const selectedTemplateBody = useMemo(() => {
-    if (isUserTemplate(selectedTemplate.id)) return selectedTemplate.body;
-    return customBodies.get(selectedTemplate.id) ?? selectedTemplate.body;
-  }, [selectedTemplate, customBodies, isUserTemplate]);
+  // As variáveis de parcelamento trazem as vezes (27/10/2026): a mensagem
+  // salva antes disso que ainda diga «12x de {{cartao_quitacao}}» sai sem o
+  // «12x de» repetido.
+  const selectedTemplateBody = useMemo(() => corrigirVezesRepetidas(
+    isUserTemplate(selectedTemplate.id)
+      ? selectedTemplate.body
+      : (customBodies.get(selectedTemplate.id) ?? selectedTemplate.body),
+  ), [selectedTemplate, customBodies, isUserTemplate]);
 
   /**
    * O relatório importado é o CADASTRAL (245) — vem sem coluna de valor nenhuma.
@@ -294,9 +303,14 @@ export function useCampanhaFacil() {
    * dois operadores homônimos virariam um só. É desta versão que sai a parte de
    * cada um na liberação (`repartirPorOperador`).
    */
-  const { campanhaPorId, parcelasBaixas } = useMemo(() => {
-    const baixasPorLinha = new Map<number, ParcelaBaixa[]>();
-    if (!parsed) return { campanhaPorId: [] as CampaignItem[], parcelasBaixas: baixasPorLinha };
+  const { campanhaPorId, parcelasBaixas, parcelas } = useMemo(() => {
+    if (!parsed) {
+      return {
+        campanhaPorId: [] as CampaignItem[],
+        parcelasBaixas: new Map<number, ParcelaBaixa[]>(),
+        parcelas: { recalculaveis: 0, recalculadas: 0, mantidas: 0, rigidas: 0, mantiveis: 0 },
+      };
+    }
     const semRemovidos = removidos.size > 0
       ? parsed.records.filter((r) => !removidos.has(r.rowNumber))
       : parsed.records;
@@ -307,21 +321,12 @@ export function useCampanhaFacil() {
       template: selectedTemplateBody,
     });
     // A mensagem editada à mão substitui a do modelo, e a parcela mínima
-    // (26/10/2026) vira pendência que trava. Editada sem o valor baixo, passa.
-    const variaveis = variaveisParceladasDoModelo(selectedTemplateBody);
-    for (const item of itens) {
-      const editada = mensagensEditadas.get(item.rowNumber);
-      if (editada != null) item.message = editada;
-      if (variaveis.length === 0) continue;
-      const baixas = parcelasBaixasDoItem(item, variaveis, discountsApplied);
-      if (baixas.length === 0) continue;
-      if (editada != null && !mensagemAindaTemParcelaBaixa(editada, baixas)) continue;
-      baixasPorLinha.set(item.rowNumber, baixas);
-      item.issues.push(PENDENCIA_PARCELA_MINIMA);
-      item.status = 'Revisar';
-    }
-    return { campanhaPorId: itens, parcelasBaixas: baixasPorLinha };
-  }, [parsed, removidos, paraOFim, mensagensEditadas, discountsApplied, operadoresSelecionados, selectedTemplateBody]);
+    // (26/10/2026) trava — a menos que o líder recalcule ou mantenha (27/10/2026).
+    const { travadas, contagem } = aplicarParcelaMinima(itens, selectedTemplateBody, discountsApplied, {
+      recalcular, manter: manterBaixas, editadas: mensagensEditadas,
+    });
+    return { campanhaPorId: itens, parcelasBaixas: travadas, parcelas: contagem };
+  }, [parsed, removidos, paraOFim, mensagensEditadas, discountsApplied, operadoresSelecionados, selectedTemplateBody, recalcular, manterBaixas]);
 
   // ── Quem já recebeu mensagem hoje (20261026190000) ─────────────────────────
   //
@@ -594,6 +599,8 @@ export function useCampanhaFacil() {
       setParsed(result);
       setRemovidos(new Set());
       zerarRecebidos();
+      setRecalcular(false);
+      setManterBaixas(false);
       setMensagensEditadas(new Map());
       setFileName(file.name);
       setSelectedRowNumber(null);
@@ -623,6 +630,8 @@ export function useCampanhaFacil() {
     setParsed(null);
     setRemovidos(new Set());
     zerarRecebidos();
+    setRecalcular(false);
+    setManterBaixas(false);
     setMensagensEditadas(new Map());
     setFileName('');
     setSelectedRowNumber(null);
@@ -881,6 +890,7 @@ export function useCampanhaFacil() {
     removidos: removidos.size, removerPendenciasGraves, devolverRemovidos,
     gruposDePendencia, tirarComPendencia, tirarCliente,
     parcelasBaixas, editarMensagemDoCliente, mensagensEditadas,
+    parcelas, recalcular, setRecalcular, manterBaixas, setManterBaixas,
     recebidos, linhasJaRecebidas, consultandoRecebidos, atualizarRecebidos,
     paraOFim: paraOFim.size, mandarRecebidosParaOFim, voltarDoFimDaFila, tirarJaRecebidos,
     // templates
