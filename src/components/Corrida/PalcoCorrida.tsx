@@ -19,6 +19,7 @@ import { criarMotor, type Gravacao, type Motor, type Painel, type VideosDaFesta 
 import { bichinhoDe } from './motor/bichinhos';
 import { segundos, type CorridaJson, type PessoaJson } from './banco';
 import { NOME_CORRIDA, SONS, audioDestravado } from './nome';
+import { ehMapaEspecial } from './especial';
 import LobbyNovo from './lobbies/LobbyNovo';
 import type { Cena, Palpite, TemaLobby } from './lobbies/cena';
 import './corrida.css';
@@ -152,6 +153,8 @@ export function PalcoCorrida({ corrida, pessoas, eu, agora, gravacao, videos, on
     ? apostas.find(a => a.alvo.usuario === painel.vencedor?.id) ?? null : null;
   useEffect(() => { if (tela !== 'lobby') setVerApostas(false); }, [tela]);
 
+  // A corrida especial: o mapa grande vem na gravação; quem assiste fica sabendo assim que ela chega.
+  const especial = ehMapaEspecial(gravacao?.rec.mapa);
   const status = (() => {
     if (corrida.estado === 'cancelada') return 'A corrida foi cancelada';
     if (tela === 'lobby') return corrida.inicia_em ? 'Largada!' : `Lobby · ${noLobby} aguardando`;
@@ -207,6 +210,7 @@ export function PalcoCorrida({ corrida, pessoas, eu, agora, gravacao, videos, on
         <div className="flex h-10 shrink-0 items-center gap-2 bg-black/70 pl-3 pr-1.5 text-[13px] font-semibold tracking-wide">
           <i className="cds-ao-vivo inline-block h-2 w-2 shrink-0 rounded-full bg-[#ff4d5e]" aria-hidden="true" />
           <span className="min-w-0 truncate uppercase">{status}</span>
+          {especial && <span className="shrink-0 rounded-full bg-[#5ff0f0]/15 px-2 py-0.5 text-[11px] uppercase text-[#5ff0f0]" title="O mapa grande, com canhões, luvas de boxe, pinball e teletransporte">⚡ Especial</span>}
           <span className="ml-auto flex items-center gap-0.5">
             {/* o volume: arrastar a barra (0% é sem som, 100% é o som cheio); começa em 30% (VOL_PADRAO) */}
             <span className="mx-1 flex items-center gap-2 rounded-full bg-white/10 py-1 pl-2.5 pr-3 text-[12px]">

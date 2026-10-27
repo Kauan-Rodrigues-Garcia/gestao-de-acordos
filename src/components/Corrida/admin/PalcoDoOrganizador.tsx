@@ -22,7 +22,7 @@ export function PalcoDoOrganizador() {
         : <PalcoAoVivo corridaId={assistindo.corridaId} onFechar={pararDeAssistir} />)}
       {testando && (testando.cavalos
         ? <TesteCavalos onFechar={pararDeTestar} />
-        : <TesteCorrida premio={testando.premio} onFechar={pararDeTestar} tema={testando.tema} palpiteDemo />)}
+        : <TesteCorrida premio={testando.premio} onFechar={pararDeTestar} tema={testando.tema} especial={testando.especial} palpiteDemo />)}
     </Suspense>
   );
 }

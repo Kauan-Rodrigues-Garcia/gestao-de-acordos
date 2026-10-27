@@ -44,6 +44,7 @@ function Lab() {
   const [tema, setTema] = useState<TemaLobby>('f1');
   const [visao, setVisao] = useState<'corredor' | 'torcida'>('corredor');
   const [palpite, setPalpite] = useState(true);
+  const [especial, setEspecial] = useState(false);
   const chip = (ativo: boolean) => `rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${ativo ? 'bg-[#ffd84d] text-[#1b1405]' : 'bg-white/10 hover:bg-white/20'}`;
   return (
     <>
@@ -62,6 +63,7 @@ function Lab() {
           </div>
         </div>
         <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={palpite} onChange={ev => setPalpite(ev.target.checked)} /> Palpite no vencedor</label>
+        <label className="flex items-center gap-2 text-xs"><input id="lab-especial" type="checkbox" checked={especial} onChange={ev => { setEspecial(ev.target.checked); setAberto(null); }} /> Corrida especial (Fliperama Turbo)</label>
         <button id="lab-teste" type="button" className="w-full rounded-full bg-[#ffd84d] py-2 text-sm font-bold text-[#1b1405] hover:brightness-110" onClick={() => { destravarAudio(); setAberto('teste'); }}>
           {aberto === 'teste' ? 'Abrir de novo' : 'Assistir à corrida'}
         </button>
@@ -70,7 +72,7 @@ function Lab() {
           <button id="lab-card" type="button" className={chip(false)} onClick={() => setAberto('card')}>Card</button>
         </div>
       </div>
-      {aberto === 'teste' && <TesteCorrida key={visao} premio="R$ 30" onFechar={() => setAberto(null)} tema={tema} visao={visao} palpiteDemo={palpite} />}
+      {aberto === 'teste' && <TesteCorrida key={visao} premio="R$ 30" onFechar={() => setAberto(null)} tema={tema} visao={visao} palpiteDemo={palpite} especial={especial} />}
       {aberto === 'escolha' && <EscolhaBichinho corrida={CORRIDA} usuario="lab-usuario" escolhaAtual={null} onDepois={() => setAberto(null)} />}
       {aberto === 'card' && <CardDivulgacao teste divulgacao={{ id: 0, titulo: 'Vem aí a Corrida da Sorte!', mensagem: 'Fica de olho: logo mais tem corrida de bichinhos valendo prêmio, e o seu nome pode estar no grid de largada. Boa sorte!', premio: 'R$ 30', criada_em: new Date().toISOString() }} onFechou={() => setAberto(null)} />}
     </>

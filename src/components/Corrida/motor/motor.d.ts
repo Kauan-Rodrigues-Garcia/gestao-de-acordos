@@ -116,6 +116,8 @@ export interface Motor {
   gravar(opcoes: {
     pessoas: Array<{ id: string; nome: string; setor: string | null; foto: string | null; est: Estilo }>;
     premio: string | null;
+    /** A corrida especial: o mapa grande (Fliperama Turbo), fora da roleta. */
+    especial?: boolean;
     aoProgresso?: (fracao: number) => void;
     cancelado?: () => boolean;
   }): Promise<ResultadoGravacao | null>;
