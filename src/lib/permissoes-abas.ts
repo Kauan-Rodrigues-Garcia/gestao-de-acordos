@@ -211,7 +211,7 @@ export const MODULOS_PERMISSAO: readonly DefinicaoModulo[] = [
     descricao: 'Relatórios, ranking, recebimento diário e conferências.',
     grupos: ['Analítico', 'Filtros e visão'],
     chaves: [
-      'importar_analitico', 'importar_diario',
+      'importar_analitico', 'importar_analitico_retencao', 'importar_diario',
       'ajuste_recebimento_lancar', 'ajuste_recebimento_administrar',
       'desafios_configurar_setor', 'desafios_configurar',
       'desafios_excluir', 'desafios_multiempresa',
@@ -415,6 +415,7 @@ const SECOES_ANALITICO: Record<string, string> = {
   analitico_sub_sem_operador: 'Dentro do relatório Analítico',
   analitico_validar_relatorio: 'Ações e importações',
   importar_analitico: 'Ações e importações',
+  importar_analitico_retencao: 'Ações e importações',
   importar_diario: 'Ações e importações',
   ajuste_recebimento_lancar: 'Ações e importações',
   ajuste_recebimento_administrar: 'Ações e importações',
