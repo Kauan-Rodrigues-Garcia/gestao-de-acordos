@@ -134,6 +134,34 @@ describe('dados do mailing', () => {
   });
 });
 
+describe('o avalista (28/10/2026)', () => {
+  it('nome e CPF do avalista viram variáveis; o CPF sai mascarado', () => {
+    const item = CampaignCore.deriveRecord(registro({ 'Nome Avalista': 'JOSE CARLOS PEREIRA', 'CPF Avalista': '123.456.789-00' }));
+    const v = CampaignCore.variablesFor(item, CampaignCore.DEFAULT_DISCOUNTS);
+    expect(v.nome_avalista).toBe('Jose Carlos Pereira');
+    expect(v.cpf_avalista).toBe('xxx.xxx.789-00');
+    expect(v.cpf).not.toBe(v.cpf_avalista);
+    expect(JSON.stringify(v)).not.toContain('12345678900');
+  });
+
+  it('no 245 também, e o endereço do avalista não vira o do cliente', () => {
+    const CAB = ['Grupo', 'Usuário', 'Dt.Pagamento', 'Cód.Cliente', 'Cliente', 'Nr.Documento', 'Empresa',
+      'Valor Aberto', 'DDD 1', 'Telefone 1', 'Nome Avalista', 'CPF Avalista', 'Endereço Avalista'];
+    const linha = ['COB PLAY 1', 'ANA', '', '1', 'ANA SOUZA', '123', 'BOOKPLAY', '9', '18', '999999999',
+      'PAULO SOUZA', '98765432100', 'Rua do Avalista, 1'];
+    const item = CampaignCore.deriveRecord(CampaignCore.parseReport245([CAB, linha]).records[0]);
+    expect(item.mailing.nome_avalista).toBe('Paulo Souza');
+    expect(item.mailing.cpf_avalista).toBe('xxx.xxx.321-00');
+    expect(item.mailing.endereco).toBe('');
+  });
+
+  it('mensagem que cita o avalista de quem não tem pede revisão', () => {
+    const [item] = CampaignCore.buildCampaign([registro()], { template: 'Avalista: {{nome_avalista}}', senders: ['Ana'] });
+    expect(item.issues).toContain('Nome do avalista ausente no mailing');
+    expect(item.hasBlockingIssues).toBe(false);
+  });
+});
+
 describe('os botões das variáveis, por categoria', () => {
   it('nome e empresa (sem valor) ficam separados dos valores', () => {
     const grupo = (k: string) => VARIABLE_GROUPS.find((g) => g.itens.some(([v]) => v === k))?.titulo;

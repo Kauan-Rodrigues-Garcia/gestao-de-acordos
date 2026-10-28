@@ -33,6 +33,8 @@ export const DETALHE_DA_VARIAVEL: Readonly<Record<string, DetalheDaVariavel>> = 
   local_trabalho: { oQue: 'Onde o cliente trabalha.', origem: 'Coluna Local de trabalho' },
   ocupacao: { oQue: 'A profissão do cliente.', origem: 'Coluna Ocupação' },
   tempo_atraso: { oQue: 'Os dias em atraso, escritos «45 dias».', origem: 'Coluna Tempo de atraso' },
+  nome_avalista: { oQue: 'O nome do avalista do contrato.', origem: 'Coluna Nome Avalista' },
+  cpf_avalista: { oQue: 'O CPF do avalista mascarado: só os 5 últimos dígitos.', origem: 'Coluna CPF Avalista' },
   // Pix Automático. As parceladas já escrevem as vezes: «21x de R$ 59,00» (27/10/2026).
   pix_automatico_12x: { oQue: '«12x de R$ …» do Pix Automático, sem desconto.', origem: 'Valor Aberto ÷ 12' },
   pix_automatico_20x: { oQue: '«20x de R$ …» do Pix Automático, sem desconto.', origem: 'Valor Aberto ÷ 20' },
@@ -84,7 +86,8 @@ function registroDeExemplo(): RawRecord {
     'Parcelas em atraso': '2', Protesto: '0', Valor: '400,00', 'Valor Aberto': '2.000,00',
     'Valor Atualizado': '2.100,00', 'Tp. Venda': 'PRO', 'Whats Titular': '14999990000',
     Cidade: 'Marília', 'Endereço': 'Rua das Flores, 100', 'Local de Trabalho': 'Hospital Central',
-    'Ocupação': 'Enfermeiro', 'Dias de atraso': '45', 'Link curto': 'https://exemplo.link/abc',
+    'Ocupação': 'Enfermeiro', 'Dias de atraso': '45', 'Nome Avalista': 'MARIA APARECIDA DA SILVA', 'CPF Avalista': '98765432100',
+    'Link curto': 'https://exemplo.link/abc',
   };
   const normalized = Object.fromEntries(Object.entries(values).map(([k, v]) => [CampaignCore.normalizeHeader(k), v]));
   return { rowNumber: 2, values, normalized, sourceType: 'report-247', financialDataAvailable: true };

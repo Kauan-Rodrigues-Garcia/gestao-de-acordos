@@ -69,6 +69,8 @@ export const VARIABLE_GROUPS: GrupoDeVariaveis[] = [
     itens: [
       ['endereco', 'Endereço'], ['cidade', 'Cidade'], ['local_trabalho', 'Local de trabalho'],
       ['ocupacao', 'Ocupação'], ['tempo_atraso', 'Tempo de atraso'],
+      // O avalista (28/10/2026): o CPF sai mascarado como o do cliente.
+      ['nome_avalista', 'Nome do avalista'], ['cpf_avalista', 'CPF do avalista (5 últimos)'],
     ],
   },
   // Nos blocos de valor, o bloco e o grupo já dizem o que é: o botão leva só

@@ -15,7 +15,9 @@ export interface Discounts {
 }
 
 /** Os dados do cliente que vêm do mailing e viram variável da mensagem. */
-export type MailingFieldKey = 'endereco' | 'cidade' | 'local_trabalho' | 'ocupacao' | 'tempo_atraso';
+export type MailingFieldKey =
+  | 'endereco' | 'cidade' | 'local_trabalho' | 'ocupacao' | 'tempo_atraso'
+  | 'nome_avalista' | 'cpf_avalista';
 
 export interface MailingField {
   key: MailingFieldKey;

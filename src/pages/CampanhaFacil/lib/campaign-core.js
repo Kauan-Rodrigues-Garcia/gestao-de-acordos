@@ -50,19 +50,19 @@
       key: "endereco", header: "Endereço",
       names: ["Endereço", "Endereco", "Endereço Residencial", "Endereço Completo", "Logradouro"],
       partials: ["ENDERECO", "LOGRADOURO"],
-      excludes: ["EMAIL", "ELETRONICO", "TRABALHO", "COMERCIAL", "EMPRESA"],
+      excludes: ["EMAIL", "ELETRONICO", "TRABALHO", "COMERCIAL", "EMPRESA", "AVALISTA"],
     },
     {
       key: "cidade", header: "Cidade",
       names: ["Cidade", "Município", "Municipio", "Cidade Residencial"],
       partials: ["CIDADE", "MUNICIPIO"],
-      excludes: ["TRABALHO", "COMERCIAL", "EMPRESA", "NASC"],
+      excludes: ["TRABALHO", "COMERCIAL", "EMPRESA", "NASC", "AVALISTA"],
     },
     {
       key: "local_trabalho", header: "Local de trabalho",
       names: ["Local de Trabalho", "Local Trabalho", "Empresa onde trabalha", "Empresa Trabalho", "Empregador"],
       partials: ["LOCALDETRABALHO", "LOCALTRABALHO", "EMPREGADOR", "EMPRESATRABALHO", "TRABALHO"],
-      excludes: ["ENDERECO", "CIDADE", "FONE", "TELEFONE", "RAMAL"],
+      excludes: ["ENDERECO", "CIDADE", "FONE", "TELEFONE", "RAMAL", "AVALISTA"],
     },
     {
       key: "ocupacao", header: "Ocupação",
@@ -76,6 +76,20 @@
       names: ["Tempo de atraso", "Dias de atraso", "Dias em atraso", "Dias Atraso", "Atraso"],
       partials: ["DIASDEATRASO", "DIASEMATRASO", "DIASATRASO", "TEMPODEATRASO", "TEMPOATRASO", "ATRASODIAS"],
       excludes: ["PARCELA"],
+    },
+    // O avalista do contrato (28/10/2026): «Nome Avalista» e «CPF Avalista»,
+    // as colunas AI e AJ do relatório. O CPF sai mascarado como o {{cpf}}.
+    {
+      key: "nome_avalista", header: "Nome do avalista",
+      names: ["Nome Avalista", "Nome do Avalista", "Avalista"],
+      partials: ["NOMEAVALISTA", "NOMEDOAVALISTA"],
+      excludes: [],
+    },
+    {
+      key: "cpf_avalista", header: "CPF do avalista",
+      names: ["CPF Avalista", "CPF do Avalista", "CPF/CNPJ Avalista"],
+      partials: ["CPFAVALISTA", "CPFDOAVALISTA", "CPFCNPJAVALISTA"],
+      excludes: [],
     },
   ]);
 
@@ -1001,6 +1015,9 @@ Contrato: *{{contrato}}*
         value = key ? cleanValue(record.normalized[key]) : "";
       }
       if (field.key === "tempo_atraso") value = formatOverdueTime(value);
+      if (field.key === "nome_avalista") value = titleCase(value);
+      // Como o {{cpf}}: o CPF inteiro do avalista não sai do navegador.
+      if (field.key === "cpf_avalista") value = maskCpf(value);
       return [field.key, value];
     }));
   }
