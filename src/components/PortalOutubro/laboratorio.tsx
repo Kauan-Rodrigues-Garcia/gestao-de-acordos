@@ -1,7 +1,7 @@
 /**
  * laboratorio.tsx — o Portal de Outubro por cima de um Gestão de mentira, SÓ
  * no localhost (http://localhost:8080/lab-portal.html). Sem login e sem
- * banco: serve para ver o vidro rachar e o mural passar com o painel do
+ * banco: serve para ver o bueiro, os balões e o mural com o painel do
  * relógio. No app de verdade o portal monta no `Layout`.
  */
 import { StrictMode } from 'react';

@@ -47,26 +47,28 @@ function BruxaDoPantano({ escala }: { escala: number }) {
   return <canvas ref={ref} style={{ imageRendering: 'pixelated', transform: `scale(${escala})`, transformOrigin: 'bottom center' }} />;
 }
 
-export function ArteDaGincana({ id }: { id: IdInsignia }) {
+/** `fator` encolhe a arte (no mural ela vai numa foto pequena); o pixel continua inteiro. */
+export function ArteDaGincana({ id, fator = 1 }: { id: IdInsignia; fator?: number }) {
+  const inteiro = (n: number) => Math.max(1, Math.round(n * fator));
   switch (id) {
     case 'zumbi':
       return (
         <div className="portal-arte-fila">
-          {ZUMBIS.slice(0, 3).map((z, i) => <SpriteZumbi key={i} zumbi={z} escala={5} animado />)}
+          {ZUMBIS.slice(0, 3).map((z, i) => <SpriteZumbi key={i} zumbi={z} escala={inteiro(5)} animado />)}
         </div>
       );
     case 'reiDoPop':
-      return <SpriteZumbi zumbi={CHEFAO} escala={8} animado />;
+      return <SpriteZumbi zumbi={CHEFAO} escala={inteiro(8)} animado />;
     case 'bruxas':
       return (
         <div className="portal-arte-fila">
-          {[BRUXAS[0], BRUXAS[Math.min(2, BRUXAS.length - 1)]].map((b, i) => <SpriteBruxa key={i} bruxa={b} escala={4} animado />)}
+          {[BRUXAS[0], BRUXAS[Math.min(2, BRUXAS.length - 1)]].map((b, i) => <SpriteBruxa key={i} bruxa={b} escala={inteiro(4)} animado />)}
         </div>
       );
     case 'pantano':
-      return <div style={{ height: 84 * 3.4, display: 'flex', alignItems: 'flex-end' }}><BruxaDoPantano escala={3.4} /></div>;
+      return <div style={{ height: 84 * 3.4 * fator, display: 'flex', alignItems: 'flex-end' }}><BruxaDoPantano escala={3.4 * fator} /></div>;
     case 'guerra':
-      return <SpriteCavaloDaGuerra escala={1.9} animado />;
+      return <SpriteCavaloDaGuerra escala={1.9 * fator} animado />;
   }
 }
 

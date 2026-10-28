@@ -131,30 +131,38 @@ const CSS_DA_MEDICAO = `img[src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///
   display: inline !important;
 }`;
 
-async function gerarPng(el: HTMLElement, fundo: string): Promise<Blob> {
-  // Sob demanda: o html2canvas pesa ~200 KB e só este botão o usa.
+type OpcoesDoHtml2canvas = NonNullable<Parameters<typeof import('html2canvas').default>[1]>;
+
+/**
+ * O html2canvas com as duas correções do app: as cores do tema trocadas na
+ * cópia e a imagem de medição do texto na linha certa. Também serve ao Portal
+ * de Outubro (o retrato da tela que desmancha).
+ */
+export async function desenharComHtml2canvas(el: HTMLElement, opcoes: OpcoesDoHtml2canvas): Promise<HTMLCanvasElement> {
+  // Sob demanda: o html2canvas pesa ~200 KB e só quem fotografa o usa.
   const { default: html2canvas } = await import('html2canvas');
   const paraRgb = criarConversorRgb();
   const medicao = document.createElement('style');
   medicao.textContent = CSS_DA_MEDICAO;
   document.head.appendChild(medicao);
-  let canvas: HTMLCanvasElement;
   try {
-    canvas = await html2canvas(el, {
-      scale: 2,
-      backgroundColor: fundo,
-      logging: false,
-      useCORS: true,
+    return await html2canvas(el, {
+      ...opcoes,
       onclone: (doc, alvo) => {
         const estilo = doc.createElement('style');
         estilo.textContent = CSS_DA_COPIA;
         doc.head.appendChild(estilo);
         trocarCoresIlegiveis(doc, alvo, paraRgb);
+        return opcoes.onclone?.(doc, alvo);
       },
     });
   } finally {
     medicao.remove();
   }
+}
+
+async function gerarPng(el: HTMLElement, fundo: string): Promise<Blob> {
+  const canvas = await desenharComHtml2canvas(el, { scale: 2, backgroundColor: fundo, logging: false, useCORS: true });
   return new Promise<Blob>((ok, falha) => {
     canvas.toBlob(b => (b ? ok(b) : falha(new Error('O navegador não gerou a imagem.'))), 'image/png');
   });

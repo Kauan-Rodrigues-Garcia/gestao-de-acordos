@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { ABERTURA, DIAS, FIM, INICIO, emSaoPaulo, estadoDoPortal, partesEmSaoPaulo, relogioDaContagem } from './fases';
-import { crescimento, gerarRachaduras, LARGURA, ALTURA } from './rachaduras';
 import { horaSimulada, rebasear, type Simulacao } from './relogio';
 import { freio, montarFita, sortearComPeso } from './sorteio';
-import { LENDAS, PESSOAL, TOP10, bilhetes } from './dados';
+import { LENDAS, PESSOAL, TAMBEM_TEVE, TOP10 } from './dados';
 
 const H = 3_600_000;
 
@@ -21,7 +20,7 @@ describe('as fases da semana (hora de São Paulo)', () => {
 
   it('cada dia ganha o seu: luz na quarta, tremor e bilhete na quinta, contagem na sexta', () => {
     const seg = estadoDoPortal(DIAS[1] + 10 * H);
-    expect(seg).toMatchObject({ fase: 'rachando', dia: 1, luz: 0, tremor: false, bilhete: false, contagem: false });
+    expect(seg).toMatchObject({ fase: 'espreitando', dia: 1, luz: 0, tremor: false, bilhete: false, contagem: false });
     expect(estadoDoPortal(DIAS[2] + 10 * H)).toMatchObject({ dia: 2, luz: 0 });
     expect(estadoDoPortal(DIAS[3] + 10 * H).luz).toBeGreaterThan(0);
     expect(estadoDoPortal(DIAS[4] + 10 * H)).toMatchObject({ dia: 4, tremor: true, bilhete: true, contagem: false });
@@ -29,7 +28,7 @@ describe('as fases da semana (hora de São Paulo)', () => {
   });
 
   it('o último minuto, a abertura em ponto e o sábado com o mural', () => {
-    expect(estadoDoPortal(ABERTURA - 60_001).fase).toBe('rachando');
+    expect(estadoDoPortal(ABERTURA - 60_001).fase).toBe('espreitando');
     expect(estadoDoPortal(ABERTURA - 60_000).fase).toBe('ultimoMinuto');
     expect(estadoDoPortal(ABERTURA - 1).fase).toBe('ultimoMinuto');
     expect(estadoDoPortal(ABERTURA)).toMatchObject({ fase: 'aberto', faltaMs: 0, tremor: false, contagem: false });
@@ -50,42 +49,25 @@ describe('as fases da semana (hora de São Paulo)', () => {
   });
 });
 
-describe('as rachaduras', () => {
-  const todas = gerarRachaduras();
-
-  it('saem sempre iguais (a tela de todo mundo racha igual)', () => {
-    expect(gerarRachaduras().map(r => r.d)).toEqual(todas.map(r => r.d));
+describe('os balões do bueiro', () => {
+  it('sobem mais vezes a cada dia, e quase sem parar na última hora', () => {
+    const a = (t: number) => estadoDoPortal(t).balaoACadaMs!;
+    expect(a(DIAS[1] + 9 * H)).toBeGreaterThan(a(DIAS[3] + 9 * H));
+    expect(a(DIAS[3] + 9 * H)).toBeGreaterThan(a(DIAS[5] + 9 * H));
+    expect(a(ABERTURA - 30 * 60_000)).toBe(2 * 60_000);
+    expect(a(ABERTURA - 30_000)).toBe(15_000);
   });
 
-  it('a segunda tem só o impacto do canto; cada dia soma as suas', () => {
-    const doDia = (d: number) => todas.filter(r => r.dia === d && !r.galho);
-    expect(doDia(1)).toHaveLength(1);
-    expect(doDia(1)[0].pontos[0][0]).toBeGreaterThan(LARGURA - 120); // o impacto, no canto de cima à direita
-    expect(doDia(1)[0].pontos[0][1]).toBeLessThan(80);
-    expect(doDia(2).length).toBeGreaterThan(0);
-    expect(doDia(5).length).toBeGreaterThan(doDia(2).length);
+  it('fora da semana e com o mural aberto, nenhum balão nem barquinho', () => {
+    expect(estadoDoPortal(DIAS[1] - 1).balaoACadaMs).toBeNull();
+    expect(estadoDoPortal(ABERTURA).balaoACadaMs).toBeNull();
+    expect(estadoDoPortal(ABERTURA).barcoACadaMs).toBeNull();
   });
 
-  it('nenhuma nasce antes do dia dela, e nada cresce antes de nascer', () => {
-    for (const r of todas) {
-      expect(r.nasceEm).toBeGreaterThanOrEqual(DIAS[r.dia]);
-      expect(crescimento(r, r.nasceEm - 1)).toBe(0);
-      expect(crescimento(r, r.nasceEm + r.cresceMs)).toBeCloseTo(1, 6);
-    }
-  });
-
-  it('as da sexta não chegam no meio da tela (ninguém perde o que está lendo)', () => {
-    const meio = { x: LARGURA / 2, y: ALTURA / 2 };
-    for (const r of todas) for (const [x, y] of r.pontos) {
-      expect(Math.hypot(x - meio.x, y - meio.y)).toBeGreaterThan(120);
-    }
-  });
-
-  it('segunda às 9h já aparece a fissura; domingo, nada', () => {
-    const visiveis = (t: number) => todas.filter(r => crescimento(r, t) > 0).length;
-    expect(visiveis(DIAS[1] - 1)).toBe(0);
-    expect(visiveis(DIAS[1] + 9 * H)).toBeGreaterThan(0);
-    expect(visiveis(ABERTURA - 1)).toBeGreaterThan(visiveis(DIAS[4] + 9 * H));
+  it('o barquinho cai mais vezes a cada dia', () => {
+    const b = (t: number) => estadoDoPortal(t).barcoACadaMs!;
+    expect(b(DIAS[1] + 9 * H)).toBeGreaterThan(b(DIAS[5] + 9 * H));
+    expect(b(ABERTURA - 30 * 60_000)).toBe(3 * 60_000);
   });
 });
 
@@ -138,8 +120,9 @@ describe('o retrato do mês', () => {
     for (let i = 1; i < PESSOAL.length; i++) expect(PESSOAL[i].pontos).toBeLessThanOrEqual(PESSOAL[i - 1].pontos);
   });
 
-  it('a garrafa: um bilhete por insígnia', () => {
-    expect(bilhetes({ insignias: 5 })).toBe(5);
+  it('quem não tem setor, e o chat do que também teve', () => {
     expect(PESSOAL.find(p => !p.setor)?.nome).toBe('Cleber Junior');
+    expect(TAMBEM_TEVE.length).toBeGreaterThan(0);
+    for (const m of TAMBEM_TEVE) expect(m.texto.length).toBeLessThan(110);
   });
 });

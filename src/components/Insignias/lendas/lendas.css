@@ -1,8 +1,9 @@
 /*
  * As Lendas de Outubro (`Lendas.tsx`): a estética das placas das insígnias
- * (`../insignias.css`) em tamanho de pôster — noite listrada, borda em
- * degrau, letra de fliperama, bandeirinhas das bruxas. O metal (ouro, prata,
- * bronze) só marca a moldura da foto, o tampo do pedestal e o número.
+ * (`../insignias.css`) em tamanho de pôster — borda em degrau, letra de
+ * fliperama — numa noite de Halloween (28/10: a lua, o cemitério, a neblina,
+ * as teias; os pedestais de pedra com vela). O metal (ouro, prata, bronze) só
+ * marca a moldura da foto, o tampo do pedestal e o número.
  */
 
 .lenda-quadro {
@@ -14,12 +15,13 @@
   --apagado: #9aa69f;
   --laranja: #ff8a1f;
   position: relative;
+  isolation: isolate;
   overflow: hidden;
   color: var(--texto);
   font-family: 'Pixelify Sans', ui-monospace, monospace;
   font-weight: 500;
   font-variant-ligatures: none;
-  background: repeating-linear-gradient(90deg, var(--noite) 0 8px, var(--noite-2) 8px 16px);
+  background: #07040d;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -27,20 +29,44 @@
 .lenda-lugar-2 { --metal: #d9dee5; --metal-escuro: #6b7480; }
 .lenda-lugar-3 { --metal: #d08a4a; --metal-escuro: #6e3a10; }
 
-/* As bandeirinhas do letreiro das bruxas, em fio no alto. */
-.lenda-bandeirinhas {
+/* A noite: o desenho em pixel atrás de tudo, e a neblina passando embaixo. */
+/* Atrás de todo o resto (o quadro isola as camadas). */
+.lenda-noite { position: absolute; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
+.lenda-noite svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.lenda-neblina {
   position: absolute;
-  inset: 0 0 auto 0;
-  height: 32px;
-  image-rendering: pixelated;
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='42' height='8' shape-rendering='crispEdges'%3E%3Crect width='42' height='1' fill='%23050605'/%3E%3Cpath d='M1 1h9v2h-1v2h-1v2h-2v1h-1v-1h-2v-2h-1v-2h-1z' fill='%23ff8a1f'/%3E%3Cpath d='M15 1h9v2h-1v2h-1v2h-2v1h-1v-1h-2v-2h-1v-2h-1z' fill='%23c8202a'/%3E%3Cpath d='M29 1h9v2h-1v2h-1v2h-2v1h-1v-1h-2v-2h-1v-2h-1z' fill='%236abf3a'/%3E%3C/svg%3E") 0 0 / 168px 32px repeat-x;
+  left: -20%;
+  right: -20%;
+  bottom: -40px;
+  height: 260px;
+  background:
+    radial-gradient(ellipse 22% 40% at 18% 70%, rgb(150 130 175 / 0.22), transparent 70%),
+    radial-gradient(ellipse 26% 45% at 52% 80%, rgb(150 130 175 / 0.18), transparent 70%),
+    radial-gradient(ellipse 20% 38% at 84% 66%, rgb(150 130 175 / 0.2), transparent 70%);
+  animation: lenda-neblina 26s linear infinite alternate;
 }
+.lenda-neblina-2 { bottom: 120px; height: 200px; opacity: 0.6; animation-duration: 34s; animation-direction: alternate-reverse; }
+@keyframes lenda-neblina { from { transform: translateX(-6%); } to { transform: translateX(6%); } }
+
+/* As teias nos cantos de cima. */
+.lenda-teia {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 240px;
+  height: 240px;
+  z-index: 2;
+  pointer-events: none;
+  overflow: visible;
+}
+.lenda-teia path { fill: none; stroke: rgb(220 214 232 / 0.38); stroke-width: 0.7; stroke-linecap: round; }
+.lenda-teia-direita { left: auto; right: 0; transform: scaleX(-1); }
 
 .lenda-selo {
   font-family: 'Press Start 2P', ui-monospace, monospace;
   font-size: 20px;
   letter-spacing: 0.08em;
-  color: #9dff5c;
+  color: #c9a4ff;
   text-shadow: 3px 3px 0 #000;
 }
 .lenda-titulo {
@@ -49,9 +75,9 @@
   line-height: 1;
   letter-spacing: 0.03em;
   color: var(--laranja);
-  text-shadow: 6px 6px 0 #3a1400;
+  text-shadow: 0 0 28px rgb(255 120 20 / 0.45), 6px 6px 0 #3a1400;
 }
-.lenda-sub { color: var(--apagado); }
+.lenda-sub { color: #b9a9cf; }
 
 /* A foto: moldura em degrau no metal do lugar. */
 .lenda-foto {
@@ -117,17 +143,44 @@
 .lenda-podio .lenda-lugar-1 .lenda-nome { font-size: 52px; }
 .lenda-podio .lenda-setor { font-size: 26px; margin-top: 6px; }
 
-/* O pedestal: pedra chapada, o tampo no metal, o número grande. */
+/* O pedestal: pedra de cripta em blocos, o tampo no metal, o número grande e as velas. */
 .lenda-pedestal {
   position: relative;
   width: 100%;
-  background: #1a1f1d;
+  background:
+    repeating-linear-gradient(0deg, transparent 0 46px, rgb(0 0 0 / 0.55) 46px 50px),
+    repeating-linear-gradient(90deg, transparent 0 96px, rgb(0 0 0 / 0.4) 96px 100px),
+    linear-gradient(180deg, #2b2733, #1a1720);
   border-top: 10px solid var(--metal);
   box-shadow: inset 0 10px 0 var(--metal-escuro), inset 1px 0 0 #000, inset -1px 0 0 #000;
   display: flex;
   flex-direction: column;
   align-items: center;
 }
+/* As velas nos cantos do tampo, a chama tremendo. */
+.lenda-vela {
+  position: absolute;
+  left: 22px;
+  top: -64px;
+  width: 16px;
+  height: 52px;
+  background: linear-gradient(90deg, #e8dcc0 0 60%, #b8aa88 60%);
+  box-shadow: 0 4px 0 #6e6250;
+}
+.lenda-vela-direita { left: auto; right: 22px; }
+.lenda-vela::before {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: -22px;
+  width: 10px;
+  height: 18px;
+  background: linear-gradient(180deg, #fff6c0, #ffb43a 55%, #ff6a10);
+  box-shadow: 0 0 26px 10px rgb(255 150 40 / 0.35);
+  clip-path: polygon(50% 0, 100% 60%, 80% 100%, 20% 100%, 0 60%);
+  animation: lenda-chama 0.5s steps(2, end) infinite alternate;
+}
+@keyframes lenda-chama { from { transform: scaleY(1) translateX(0); } to { transform: scaleY(0.82) translateX(1px); } }
 .lenda-lugar-1 .lenda-pedestal { height: 370px; }
 .lenda-lugar-2 .lenda-pedestal { height: 310px; }
 .lenda-lugar-3 .lenda-pedestal { height: 270px; }
@@ -167,7 +220,6 @@
     0 -6px 0 0 var(--metal), 0 6px 0 0 var(--metal),
     -6px 0 0 0 var(--metal), 6px 0 0 0 var(--metal);
 }
-.lenda-cartao .lenda-bandeirinhas { top: 30px; left: 30px; right: 30px; }
 .lenda-cartao-topo {
   width: 100%;
   display: flex;

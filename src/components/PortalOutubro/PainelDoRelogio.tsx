@@ -6,15 +6,16 @@
  * - a régua da semana: arrastar leva o portal para qualquer hora;
  * - os atalhos: cada dia às 9h, sexta 15h59m30s e 16h;
  * - a velocidade: parado, 1×, 1 min/s, 10 min/s, 1 h/s, 4 h/s;
- * - o mural: abertura agora, só o mural, esquecer que viu, zerar os cliques
- *   das Lendas, e a velocidade do mural;
+ * - o mural: abertura agora, só o mural, a Coisa agora (a cena e o mural
+ *   puxado, sem a abertura), esquecer que viu, zerar os cliques das Lendas, e a
+ *   velocidade do mural (vale também para a abertura e para a Coisa);
  * - «Relógio real» desliga tudo isso.
  */
 import { useState } from 'react';
 import { ABERTURA, DIAS, FIM, NOME_DA_FASE, dataCurta, emSaoPaulo, estadoDoPortal } from './fases';
 import { irPara, mudarVelocidade, pausar, useAgoraDoPortal, useSimulacao, voltarAoReal } from './relogio';
 import {
-  VELOCIDADES_DO_MURAL, abrirAbertura, abrirMural, esquecerVisto, mudarVelocidadeDoMural, useJaViu,
+  VELOCIDADES_DO_MURAL, abrirAbertura, abrirCoisa, abrirMural, esquecerVisto, mudarVelocidadeDoMural, useJaViu,
   useVelocidadeDoMural, zerarCliquesDasLendas,
 } from './estado';
 
@@ -42,12 +43,12 @@ export function PainelDoRelogio() {
   const estado = estadoDoPortal(agora);
 
   if (!aberto) {
-    return <button type="button" className="portal-painel-botao" onClick={() => setAberto(true)}>Portal ⏱</button>;
+    return <button type="button" className="portal-painel-botao" data-portal-fora onClick={() => setAberto(true)}>Mural ⏱</button>;
   }
   return (
-    <div className="portal-painel">
+    <div className="portal-painel" data-portal-fora>
       <div className="portal-painel-topo">
-        <strong>Portal de Outubro · teste</strong>
+        <strong>Mural de Outubro · teste</strong>
         <button type="button" onClick={() => setAberto(false)} aria-label="Recolher">–</button>
       </div>
       <p className="portal-painel-hora">
@@ -74,7 +75,8 @@ export function PainelDoRelogio() {
       </div>
       <div className="portal-painel-linha">
         <button type="button" onClick={abrirAbertura}>Abertura agora</button>
-        <button type="button" onClick={() => abrirMural(0)}>Só o mural</button>
+        <button type="button" onClick={abrirMural}>Só o mural</button>
+        <button type="button" onClick={abrirCoisa}>A Coisa agora</button>
         <button type="button" onClick={esquecerVisto} disabled={!viu}>Esquecer que vi</button>
         <button type="button" onClick={zerarCliquesDasLendas}>Zerar cliques</button>
       </div>

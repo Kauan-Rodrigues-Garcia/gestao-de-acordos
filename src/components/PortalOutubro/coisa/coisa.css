@@ -1,0 +1,230 @@
+/*
+ * A Coisa: o palco de Derry em pixel (o canvas ampliado sem borrar), os
+ * balões que sobem, o sangue na tela, a câmera que chega no rosto. As letras
+ * são as do portal (Creepster no nome, Pixelify no resto); o vermelho é o do
+ * balão.
+ */
+
+.coisa {
+  --v: 1;
+  --sangue: #c3121b;
+  --texto: #ece5d0;
+  --apagado: #9aa69f;
+  --laranja: #ff8a1f;
+  --verde: #9dff5c;
+  position: fixed;
+  inset: 0;
+  z-index: 9002;
+  overflow: hidden;
+  color: var(--texto);
+  font-family: 'Pixelify Sans', ui-monospace, monospace;
+  font-weight: 500;
+  user-select: none;
+}
+
+.coisa-palco { position: absolute; inset: 0; overflow: hidden; background: #000; }
+/* A câmera: quando ela baba, chega devagar no rosto (a origem é o rosto, na tela). */
+.coisa-camera { position: absolute; inset: 0; transition: transform calc(3.6s / var(--v)) cubic-bezier(0.4, 0, 0.2, 1); }
+.coisa-camera-perto { transform: scale(2.1); }
+/* O close acabou: a câmera volta do rosto, mais depressa. */
+.coisa-camera-volta { transition-duration: calc(0.9s / var(--v)); }
+
+/* Ela puxando o mural: por cima do palco e do mural, no tamanho do palco. */
+.coisa-puxando {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 9004;
+  image-rendering: pixelated;
+  pointer-events: none;
+  filter: drop-shadow(-14px 18px 16px rgb(0 0 0 / 0.55));
+}
+/* O rastro borrado da corrida (a foto dela na caverna): vermelho, sem sombra. */
+.coisa-puxando-rastro { filter: sepia(1) saturate(5) hue-rotate(-28deg) brightness(0.75) blur(1px); }
+.coisa-canvas {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 320px;
+  height: 180px;
+  image-rendering: pixelated;
+}
+
+.portal-desmanche {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+.coisa-clarao {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  background: #c3121b;
+  pointer-events: none;
+  animation: coisa-clarao calc(0.9s / var(--v)) steps(6, end) forwards;
+}
+@keyframes coisa-clarao { from { opacity: 0.85; } to { opacity: 0; } }
+
+.coisa-sangue { position: absolute; inset: 0; z-index: 5; pointer-events: none; }
+.coisa-respingo {
+  position: absolute;
+  transform: translate(-50%, -30%);
+  animation: coisa-escorre calc(4.8s / var(--v)) linear forwards;
+}
+.coisa-respingo svg { display: block; }
+@keyframes coisa-escorre {
+  0%   { opacity: 0; translate: 0 -4px; }
+  4%   { opacity: 0.95; translate: 0 0; }
+  75%  { opacity: 0.9; }
+  100% { opacity: 0; translate: 0 90px; }
+}
+
+/* A apresentação (a dança no palco). */
+.coisa-apresenta {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  padding-left: 5vw;
+  max-width: 32vw;
+  pointer-events: none;
+  animation: coisa-aparece calc(0.5s / var(--v)) steps(5, end);
+}
+.coisa-selo {
+  font-family: 'Press Start 2P', ui-monospace, monospace;
+  font-size: clamp(10px, 0.8vw, 14px);
+  letter-spacing: 0.12em;
+  color: #ffe7a0;
+  text-shadow: 2px 2px 0 #000;
+}
+.coisa-frase-baixa { font-size: clamp(14px, 1.2vw, 20px); color: var(--apagado); }
+.coisa-nome {
+  font-family: 'Creepster', 'Pixelify Sans', cursive;
+  font-size: clamp(64px, 8vw, 150px);
+  line-height: 1;
+  color: var(--sangue);
+  text-shadow: 6px 6px 0 #1a0003, 0 0 40px rgb(195 18 27 / 0.5);
+  animation: coisa-treme 0.18s steps(3, end) infinite;
+}
+.coisa-frase {
+  margin-top: 10px;
+  font-size: clamp(18px, 1.8vw, 28px);
+  color: var(--texto);
+  text-shadow: 2px 2px 0 #000;
+}
+@keyframes coisa-aparece { from { opacity: 0; transform: scale(1.15); } }
+@keyframes coisa-treme {
+  0%, 100% { transform: translate(0, 0); }
+  33% { transform: translate(-3px, 2px); }
+  66% { transform: translate(3px, -1px); }
+}
+
+/*
+ * O close (as fotos no fogo): o rosto dela de perto, de baixo para cima, com
+ * a luz de fogo atrás e as brasas; entra e sai num corte seco.
+ */
+.coisa-close {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: grid;
+  place-items: end center;
+  overflow: hidden;
+  background: #0a0302;
+  animation: coisa-close-chega calc(8.2s / var(--v)) linear both;
+}
+.coisa-close-fogo {
+  position: absolute;
+  inset: -10%;
+  background:
+    radial-gradient(ellipse 60% 45% at 50% 100%, rgb(255 140 40 / 0.55), transparent 70%),
+    radial-gradient(ellipse 45% 60% at 50% 40%, rgb(150 40 10 / 0.5), transparent 75%);
+  animation: coisa-fogo 0.22s steps(2, end) infinite alternate;
+}
+/* O fogo de pixel dos dois lados (a pixel art dela no fogo). */
+.coisa-close-chamas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+.coisa-close-rosto {
+  position: relative;
+  margin-bottom: -6vh;
+  filter: drop-shadow(0 0 30px rgb(255 120 30 / 0.35));
+  transition: transform calc(1.2s / var(--v)) cubic-bezier(0.5, 0, 0.8, 0.4);
+}
+/* A boca abre e a câmera entra nela. */
+.coisa-close-abrindo { transform: scale(2.6); }
+/* As luzes mortas: nascem no fundo da boca e tomam a tela. */
+.coisa-luzes-mortas {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  animation: coisa-luzes-entram calc(0.7s / var(--v)) ease-in both;
+}
+@keyframes coisa-luzes-entram {
+  from { clip-path: ellipse(4% 6% at 50% 62%); }
+  to   { clip-path: ellipse(80% 90% at 50% 50%); }
+}
+@keyframes coisa-close-chega {
+  from { transform: scale(1); }
+  to   { transform: scale(1.08); }
+}
+@keyframes coisa-fogo {
+  from { opacity: 0.85; }
+  to   { opacity: 1; }
+}
+/* O corte de câmera: um quadro preto e o chiado. */
+.coisa-corte {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  pointer-events: none;
+  background: repeating-linear-gradient(0deg, #000 0 2px, #1a1a1a 2px 3px);
+  animation: coisa-corte calc(0.22s / var(--v)) steps(3, end) forwards;
+}
+@keyframes coisa-corte { from { opacity: 1; } to { opacity: 0; } }
+
+/* O sussurro, embaixo, no close. */
+.coisa-sussurro {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 9vh;
+  z-index: 6;
+  text-align: center;
+  font-family: 'Creepster', 'Pixelify Sans', cursive;
+  font-size: clamp(28px, 3.2vw, 54px);
+  letter-spacing: 0.04em;
+  color: #e9dcb2;
+  text-shadow: 0 0 18px rgb(195 18 27 / 0.7), 4px 4px 0 #000;
+  pointer-events: none;
+  animation: coisa-aparece calc(1.6s / var(--v)) ease-out both;
+}
+
+.coisa-fechar {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 8;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  color: var(--texto);
+  background: rgb(13 16 15 / 0.85);
+  box-shadow: 0 -2px 0 0 var(--apagado), 0 2px 0 0 var(--apagado), -2px 0 0 0 var(--apagado), 2px 0 0 0 var(--apagado);
+  cursor: pointer;
+}
+.coisa-fechar svg { width: 20px; height: 20px; }

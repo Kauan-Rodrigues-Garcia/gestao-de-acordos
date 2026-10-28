@@ -56,6 +56,7 @@
 /* Fora do <main> (portal no body) para poder cair para fora da tela. Acima
    do conteúdo e da barra, abaixo de diálogos e menus (z 50). */
 .hw-aranha-palco { position: fixed; inset: 0; z-index: 45; pointer-events: none; }
+.hw-aranha-palco.hw-aranha-palco-alto { z-index: 9100; }
 .hw-aranha-fios { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .hw-aranha-fios .fio-livre { fill: none; stroke: color-mix(in oklch, currentColor 45%, transparent); stroke-width: 1; stroke-linecap: round; stroke-linejoin: round; }
 /* O toco que fica pendurado nela depois de o fio estourar. */

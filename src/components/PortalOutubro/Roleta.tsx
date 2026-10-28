@@ -7,7 +7,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { freio, montarFita } from './sorteio';
-import { sorteador } from './rachaduras';
+import { sorteador } from './acaso';
 
 export interface NaRoleta { nome: string; setor: string | null }
 

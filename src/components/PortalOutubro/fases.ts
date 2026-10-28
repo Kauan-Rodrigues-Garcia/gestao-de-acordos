@@ -9,12 +9,20 @@
  * teve a maior pontuação de medalhas; e um sorteio de uma garrafa.» A
  * comemoração é na sexta, 30/10, porque o dia 31 (Halloween) cai no sábado.
  *
- *   seg 26  uma fissura fina no canto de cima
- *   ter 27  a rachadura atravessa o topo
- *   qua 28  rachaduras pelas bordas, e luz vazando das frestas
- *   qui 29  a tela treme de vez em quando; «Amanhã, às 16h.»
- *   sex 30  as rachaduras tomam a borda e chegam perto do meio, com a contagem;
- *           às 16h o vidro quebra, o portal abre e o mural passa
+ * Em 27/10 o vidro rachando virou o bueiro da Coisa: «em vez das rachaduras
+ * subirá um balão, aonde terá meio que um esgoto, aonde ficará só os olhos
+ * do IT até ser o dia».
+ *
+ *   seg 26  o bueiro aparece no alto da tela, com os olhos piscando lá
+ *           dentro (e seguindo o mouse); de vez em quando um balão vermelho
+ *           aparece em algum canto da tela (não estoura), e um barquinho de
+ *           papel desce a borda e cai no bueiro
+ *   ter 27  os balões e o barquinho vêm mais vezes
+ *   qua 28  o bueiro começa a brilhar por dentro, mais a cada dia
+ *   qui 29  o bueiro treme de vez em quando; «Amanhã, às 16h.»
+ *   sex 30  a contagem, e os balões quase sem parar perto da hora;
+ *           às 16h os olhos acendem, um balão sobe até o meio da tela,
+ *           estoura, a tela desmancha e o mural aparece
  *   sáb 31  o mural fica para rever o dia todo; depois, nada
  *
  * ## Só o relógio
@@ -53,7 +61,7 @@ export function partesEmSaoPaulo(ms: number) {
 }
 
 export const INICIO = emSaoPaulo(2026, 10, 26);
-/** O vidro quebra e o portal abre. */
+/** O balão sobe do bueiro, estoura, a tela desmancha e o mural aparece. */
 export const ABERTURA = emSaoPaulo(2026, 10, 30, 16);
 /** O último minuto: a contagem vai para o meio da tela e a tela treme sem parar. */
 export const ULTIMO_MINUTO = ABERTURA - MINUTO;
@@ -69,16 +77,20 @@ export const DIAS: Readonly<Record<1 | 2 | 3 | 4 | 5, number>> = {
   5: emSaoPaulo(2026, 10, 30),
 };
 
-export type Fase = 'fora' | 'rachando' | 'ultimoMinuto' | 'aberto';
+export type Fase = 'fora' | 'espreitando' | 'ultimoMinuto' | 'aberto';
 
 export interface EstadoDoPortal {
   fase: Fase;
   /** O dia da semana do evento (1 = segunda … 5 = sexta); 0 fora da semana, 6 no sábado. */
   dia: number;
-  /** Luz vazando das frestas: de quarta em diante, mais forte a cada dia, cheia às 16h de sexta. */
+  /** O brilho dentro do bueiro: de quarta em diante, mais forte a cada dia, cheio às 16h de sexta. */
   luz: number;
-  /** A tela treme de vez em quando (quinta e sexta). */
+  /** O bueiro treme de vez em quando (quinta e sexta). */
   tremor: boolean;
+  /** De quanto em quanto tempo (da hora do portal) aparece um balão na tela; `null` fora da semana. */
+  balaoACadaMs: number | null;
+  /** De quanto em quanto tempo o barquinho de papel cai no bueiro; `null` fora da semana. */
+  barcoACadaMs: number | null;
   /** «Amanhã, às 16h.» (quinta). */
   bilhete: boolean;
   /** A contagem regressiva (sexta, até abrir). */
@@ -99,23 +111,36 @@ export function estadoDoPortal(agora: number): EstadoDoPortal {
     agora < INICIO || agora >= FIM ? 'fora'
       : agora >= ABERTURA ? 'aberto'
         : agora >= ULTIMO_MINUTO ? 'ultimoMinuto'
-          : 'rachando';
+          : 'espreitando';
   let luz = 0;
-  if (fase === 'rachando' || fase === 'ultimoMinuto') {
+  const espreitando = fase === 'espreitando' || fase === 'ultimoMinuto';
+  if (espreitando) {
     if (dia === 3) luz = 0.35;
     else if (dia === 4) luz = 0.55;
     else if (dia === 5) luz = 0.65 + 0.35 * Math.min(1, (agora - DIAS[5]) / (ABERTURA - DIAS[5]));
   }
-  const rachando = fase === 'rachando' || fase === 'ultimoMinuto';
   return {
     fase,
     dia,
     luz,
-    tremor: rachando && dia >= 4,
-    bilhete: rachando && dia === 4,
-    contagem: rachando && dia === 5,
+    tremor: espreitando && dia >= 4,
+    balaoACadaMs: espreitando ? intervaloDosBaloes(dia, faltaMs) : null,
+    barcoACadaMs: espreitando ? (faltaMs <= HORA ? 3 * MINUTO : (BARCOS[dia] ?? 30) * MINUTO) : null,
+    bilhete: espreitando && dia === 4,
+    contagem: espreitando && dia === 5,
     faltaMs,
   };
+}
+
+/** Os balões: mais vezes a cada dia, e quase sem parar na última hora. */
+const BALOES: Readonly<Record<number, number>> = { 1: 40, 2: 25, 3: 15, 4: 10, 5: 6 };
+/** O barquinho caindo no bueiro (minutos). */
+const BARCOS: Readonly<Record<number, number>> = { 1: 30, 2: 25, 3: 20, 4: 15, 5: 10 };
+
+function intervaloDosBaloes(dia: number, faltaMs: number): number {
+  if (faltaMs <= MINUTO) return 15_000;
+  if (faltaMs <= HORA) return 2 * MINUTO;
+  return (BALOES[dia] ?? 40) * MINUTO;
 }
 
 /** «03:12:45» (ou «12:45» na última hora). */
@@ -137,7 +162,7 @@ export function dataCurta(ms: number): string {
 
 export const NOME_DA_FASE: Readonly<Record<Fase, string>> = {
   fora: 'fora da semana',
-  rachando: 'rachando',
+  espreitando: 'a Coisa espreita',
   ultimoMinuto: 'último minuto',
-  aberto: 'portal aberto',
+  aberto: 'mural aberto',
 };

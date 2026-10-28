@@ -14,7 +14,6 @@
  *     Eduardo Naia). Número que não se sabe fica `null` e não aparece —
  *     nada aqui é inventado.
  *
- * O prêmio das Lendas e a garrafa ainda não têm descrição: ficam «a definir».
  */
 import type { IdInsignia } from '@/components/Insignias/insignias';
 
@@ -24,6 +23,8 @@ export interface Pessoa {
   setor: string | null;
   insignias: number;
   pontos: number;
+  /** A foto do perfil (só do top 10; sem ela, as iniciais). */
+  foto: string | null;
 }
 
 /**
@@ -207,10 +208,41 @@ const LISTA = `
 174|Mirian Barbosa|Play 2|1|115
 `;
 
+/**
+ * A foto e QUAIS insígnias tem cada um do top 10 — o ranking de 26/10 guardou
+ * só quantas. Lido do banco em 27/10/2026 com a autorização do Kauan (perfis
+ * e as tabelas das gincanas, a mesma regra do álbum); bate com a contagem de
+ * cada um. Sem foto no perfil: as iniciais.
+ */
+const AVATAR = 'https://vfrvvoetidtsqbbhdkmj.supabase.co/storage/v1/object/public/perfis/avatars/';
+const DO_TOP: Readonly<Record<string, { foto: string | null; tem: readonly IdInsignia[] }>> = {
+  'Erika Eduarda': { foto: `${AVATAR}4f2ca1aa-8da8-450e-9b09-a5734072c030.jpg?t=1791914461571`, tem: ['zumbi', 'reiDoPop', 'bruxas', 'pantano', 'guerra'] },
+  'Ayslan Silva': { foto: `${AVATAR}0744c00a-cd73-4189-bc49-c1d4332eed43.jpg?t=1792430440625`, tem: ['zumbi', 'reiDoPop', 'bruxas', 'pantano', 'guerra'] },
+  'Nicole Pacheco': { foto: `${AVATAR}2d917b2f-233f-4b18-9165-049863927958.jpg?t=1788872811949`, tem: ['zumbi', 'reiDoPop', 'bruxas', 'pantano', 'guerra'] },
+  'Lucas Nascimento': { foto: `${AVATAR}4aa15ec5-b249-4da4-94c4-18ea897af36f.jpg?t=1791906604109`, tem: ['zumbi', 'reiDoPop', 'pantano', 'guerra'] },
+  'Marianne Freitas': { foto: `${AVATAR}c799c054-59f3-45ee-be51-26464dfa9fb7.jpg?t=1791906604892`, tem: ['zumbi', 'reiDoPop', 'pantano', 'guerra'] },
+  'Vitoria Grosso': { foto: `${AVATAR}52a0aae5-e96d-4453-9599-ffe12d0d0527.jpg?t=1791485902926`, tem: ['reiDoPop', 'bruxas', 'pantano', 'guerra'] },
+  'Debora Portela da Silva': { foto: `${AVATAR}827b8e43-675a-46ee-b9d5-bdfe28d8d038.jpg?t=1784056577162`, tem: ['zumbi', 'reiDoPop', 'pantano', 'guerra'] },
+  'Isabella Rocha': { foto: `${AVATAR}8b58aa13-ce96-4f22-8d97-a88faa2f1cdf.jpg?t=1790624396709`, tem: ['reiDoPop', 'bruxas', 'pantano', 'guerra'] },
+  'Pedro Pugina Verdinasse': { foto: null, tem: ['zumbi', 'reiDoPop', 'pantano', 'guerra'] },
+  'Joao Miguel': { foto: null, tem: ['zumbi', 'reiDoPop', 'bruxas', 'pantano'] },
+};
+
 export const PESSOAL: readonly Pessoa[] = LISTA.trim().split('\n').map(linha => {
   const [posicao, nome, setor, insignias, pontos] = linha.split('|');
-  return { posicao: Number(posicao), nome, setor: setor || null, insignias: Number(insignias), pontos: Number(pontos) };
+  return {
+    posicao: Number(posicao), nome, setor: setor || null, insignias: Number(insignias), pontos: Number(pontos),
+    foto: DO_TOP[nome]?.foto ?? null,
+  };
 });
+
+const TODAS: readonly IdInsignia[] = ['zumbi', 'reiDoPop', 'bruxas', 'pantano', 'guerra'];
+
+/** Quais insígnias a pessoa tem (as cinco, nas Lendas); `null` = só se sabe quantas. */
+export function insigniasDe(p: Pick<Pessoa, 'nome' | 'insignias'>): readonly IdInsignia[] | null {
+  if (p.insignias === TODAS.length) return TODAS;
+  return DO_TOP[p.nome]?.tem ?? null;
+}
 
 /** O ranking do mural: só o top 10 (pedido de 26/10). */
 export const TOP10 = PESSOAL.slice(0, 10);
@@ -267,25 +299,25 @@ export const GINCANAS: readonly Gincana[] = [
   },
 ];
 
-// ── Os prêmios ──────────────────────────────────────────────────────────────
+// ── O prêmio ────────────────────────────────────────────────────────────────
 
 /**
- * O prêmio das Lendas (pedido de 26/10): as três clicam, e quando as três
- * clicarem ele aparece e é sorteado numa roleta. Entendido como: UM prêmio,
- * sorteado ENTRE as três. Descrição a definir.
+ * O prêmio das Lendas é a garrafa (pedido de 28/10: «o prêmio das lendas é a
+ * garrafa, então o sorteio tem que ser esse»). Não há mais sorteio geral: as
+ * três clicam, a garrafa aparece e a roleta sorteia ENTRE as três.
  */
-export const PREMIO_DAS_LENDAS = { titulo: 'Prêmio das Lendas', descricao: 'A definir' };
+export const PREMIO_DAS_LENDAS = { titulo: 'A Garrafa', descricao: 'O prêmio das Lendas, sorteado entre as três.' };
 
-/** A garrafa do sorteio geral. Descrição a definir. */
-export const GARRAFA = { titulo: 'A Garrafa', descricao: 'A definir' };
+// ── O que também teve (o chat do mural) ─────────────────────────────────────
 
 /**
- * Quem concorre à garrafa — decisão do Kauan / Cleber, ainda aberta.
- * Por enquanto: quem tem insígnia, um bilhete por insígnia (a sugestão de
- * 26/10). Trocar para `'iguais'` dá um bilhete para cada.
+ * O que teve em outubro além das cinco gincanas, para o chat do mural
+ * (pedido de 28/10). Tirado do que foi feito no Gestão no mês — CONFERIR
+ * com o Kauan antes de sexta.
  */
-export const REGRA_DA_GARRAFA: 'bilhete-por-insignia' | 'iguais' = 'bilhete-por-insignia';
-
-export function bilhetes(p: Pick<Pessoa, 'insignias'>): number {
-  return REGRA_DA_GARRAFA === 'iguais' ? 1 : p.insignias;
-}
+export const TAMBEM_TEVE: readonly { quando: string; texto: string }[] = [
+  { quando: '22/10', texto: 'Os cavalos entraram na Corrida. Antes da largada, a sala votava: bichinhos ou cavalos?' },
+  { quando: '27/10', texto: 'Corrida especial Fliperama Turbo: canhão, luva, pinball e teletransporte na pista.' },
+  { quando: '27/10', texto: 'Sorteio da pizza: quem levou foi a Rayane Estevan, do Play 2.' },
+  { quando: '26 a 30/10', texto: 'O Gestão foi rachando a semana toda: o bueiro, os olhos, os balões… até hoje, 16h.' },
+];

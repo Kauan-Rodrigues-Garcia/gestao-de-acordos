@@ -1,0 +1,986 @@
+/*
+ * O mural: a parede de cortiça escura de um quadro de investigação, com as
+ * peças pregadas (alfinete ou fita), o fio vermelho e, no meio delas, os
+ * cartões no jeito do Gestão (o cartão do Dashboard, a tabela). As letras do
+ * portal nos títulos; a do app nos números e nas tabelas.
+ */
+
+.mural {
+  --noite: #0d100f;
+  --noite-2: #121815;
+  --texto: #ece5d0;
+  --apagado: #9aa69f;
+  --laranja: #ff8a1f;
+  --verde: #9dff5c;
+  --ouro: #f0c75e;
+  --fio: #b3121b;
+  --cartao: #141917;
+  --cartao-borda: #2b3430;
+  --v: 1;
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  overflow: hidden;
+  color: var(--texto);
+  font-family: 'Pixelify Sans', ui-monospace, monospace;
+  font-weight: 500;
+  font-variant-ligatures: none;
+  /* Cortiça: o fundo marrom escuro e o granulado em duas camadas. */
+  background-color: #1b140f;
+  background-image:
+    radial-gradient(circle at 20% 30%, rgb(255 220 170 / 0.05) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 70% 60%, rgb(0 0 0 / 0.35) 0 1.2px, transparent 1.8px),
+    radial-gradient(circle at 40% 80%, rgb(255 200 150 / 0.04) 0 1px, transparent 1.6px);
+  background-size: 9px 9px, 13px 13px, 17px 17px;
+  box-shadow: inset 0 0 220px 60px rgb(0 0 0 / 0.75);
+}
+
+.mural-caixa {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform-origin: center;
+}
+
+/* ── O título e o varal ──────────────────────────────────────────────────── */
+
+.mural-titulo {
+  position: absolute;
+  left: 50%;
+  top: 6px;
+  transform: translateX(-50%);
+  text-align: center;
+  white-space: nowrap;
+  animation: mural-entra calc(0.6s / var(--v)) steps(6, end) both;
+}
+.mural-titulo .portal-titulo { font-size: 66px; }
+.mural-titulo .portal-selo { margin-bottom: 4px; }
+.mural-varal {
+  position: absolute;
+  inset: 92px 0 auto 0;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  animation: mural-entra calc(0.6s / var(--v)) steps(6, end) calc(0.3s / var(--v)) both;
+}
+
+/* ── As medalhas na corda (como no topo do Gestão) ─────────────────────── */
+
+.mural-corda { position: relative; pointer-events: auto; }
+.mural-corda-fio { position: absolute; left: 0; top: 0; overflow: visible; }
+.mural-corda-fio path { fill: none; stroke: #8a6a3e; stroke-width: 3; stroke-linecap: round; filter: drop-shadow(0 2px 1px rgb(0 0 0 / 0.6)); }
+.mural-corda .ins-medalha.mural-medalha-viva { position: absolute; }
+/* Cada uma balança no seu tempo; o mouse dá o balanço do app (`ins-balanca`). */
+.mural-medalha-viva { animation: mural-medalha-balanca 3.4s ease-in-out var(--atraso, 0s) infinite alternate; }
+@keyframes mural-medalha-balanca {
+  from { transform: rotate(-5deg); }
+  to   { transform: rotate(5deg); }
+}
+/* O brilho que passa no disco. */
+.mural-medalha-viva .ins-disco { overflow: hidden; }
+.mural-medalha-viva .ins-disco::after {
+  content: '';
+  position: absolute;
+  top: -20%;
+  bottom: -20%;
+  width: 30%;
+  left: -60%;
+  background: rgb(255 255 255 / 0.45);
+  transform: skewX(-20deg);
+  animation: mural-brilho 4.2s ease-in-out var(--atraso, 0s) infinite;
+  pointer-events: none;
+}
+@keyframes mural-brilho {
+  0%, 70% { left: -60%; }
+  100%    { left: 130%; }
+}
+.mural-ranking-medalhas { display: flex; gap: 3px; align-items: flex-end; }
+
+/* A foto no quadradinho do avatar. */
+.portal-avatar-foto { overflow: hidden; padding: 0; }
+.portal-avatar-foto img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* ── O letreiro de Derry e o cacho de balões ─────────────────────────────── */
+
+.mural-canto-derry { position: absolute; left: 44px; top: 26px; animation: mural-entra-varal calc(0.6s / var(--v)) steps(6, end) calc(0.2s / var(--v)) both; }
+.mural-derry { position: relative; }
+.mural-derry-corrente {
+  position: absolute;
+  top: -26px;
+  width: 4px;
+  height: 30px;
+  background: repeating-linear-gradient(180deg, #6d6a64 0 5px, #3b3935 5px 8px);
+}
+.mural-derry-corrente-e { left: 60px; rotate: 8deg; }
+.mural-derry-corrente-d { right: 60px; rotate: -8deg; }
+.mural-derry-placa {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #16231c;
+  box-shadow: inset 0 0 0 4px #0b120e, inset 0 0 0 7px #c9b98f, inset 0 0 0 10px #0b120e, 0 16px 26px rgb(0 0 0 / 0.6);
+}
+.mural-lampada {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  background: #ffe7a0;
+  box-shadow: 0 0 0 2px rgb(255 190 80 / 0.45);
+  animation: mural-lampada 1.2s steps(1, end) infinite;
+}
+.mural-lampada-b { animation-delay: -0.6s; }
+.mural-lampada-queimada { animation: none; background: #3b3426; box-shadow: none; }
+@keyframes mural-lampada {
+  0%   { background: #ffe7a0; box-shadow: 0 0 0 2px rgb(255 190 80 / 0.45); }
+  50%  { background: #6b5a30; box-shadow: none; }
+}
+.mural-derry-boas {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-style: italic;
+  font-size: 20px;
+  color: #e9dcb2;
+  text-shadow: 2px 2px 0 #050806;
+}
+.mural-derry-nome {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-weight: 700;
+  font-size: 62px;
+  line-height: 0.95;
+  letter-spacing: 0.16em;
+  margin-right: -0.16em;
+  color: #fff1d6;
+  /* O neon em degrau, sem borrar: o tubo vermelho colado na letra e a sombra dura. */
+  text-shadow: 0 0 1px #fff, 2px 0 0 #e0222c, -2px 0 0 #e0222c, 0 2px 0 #e0222c, 0 -2px 0 #e0222c, 5px 5px 0 #3a0306;
+}
+/* A letra que falha, como neon velho. */
+.mural-derry-falha { animation: mural-falha 3.7s steps(1, end) infinite; }
+@keyframes mural-falha {
+  0%, 62%, 66%, 70%, 100% { color: #fff1d6; text-shadow: 0 0 1px #fff, 2px 0 0 #e0222c, -2px 0 0 #e0222c, 0 2px 0 #e0222c, 0 -2px 0 #e0222c, 5px 5px 0 #3a0306; }
+  64%, 68% { color: #4a2a26; text-shadow: 5px 5px 0 #3a0306; }
+}
+.mural-derry-sub {
+  margin-top: 2px;
+  font-family: 'Press Start 2P', ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.3em;
+  color: #c9b98f;
+}
+
+.mural-canto-cacho { position: absolute; left: 1607px; top: -6px; animation: mural-entra-varal calc(0.6s / var(--v)) steps(6, end) calc(0.5s / var(--v)) both; }
+.mural-cacho { position: relative; width: 180px; height: 200px; }
+.mural-cacho-fios { position: absolute; inset: 0; overflow: visible; }
+.mural-cacho-fios path { fill: none; stroke: #d6d6d6; stroke-width: 2; opacity: 0.85; }
+.mural-cacho-balao {
+  position: absolute;
+  transform-origin: 50% 100%;
+  filter: drop-shadow(0 8px 8px rgb(0 0 0 / 0.5));
+  animation: mural-cacho 3s ease-in-out var(--atraso) infinite alternate;
+}
+.mural-cacho-balao svg { display: block; }
+@keyframes mural-cacho {
+  from { transform: rotate(var(--giro)) translateY(0); }
+  to   { transform: rotate(calc(var(--giro) * -0.5)) translateY(-8px); }
+}
+
+/* ── As peças ────────────────────────────────────────────────────────────── */
+
+.mural-peca {
+  position: absolute;
+  rotate: var(--giro);
+  box-shadow: 0 14px 22px rgb(0 0 0 / 0.55), 0 2px 4px rgb(0 0 0 / 0.5);
+  transition: rotate 0.25s, translate 0.25s, box-shadow 0.25s;
+  animation: mural-prega calc(0.5s / var(--v)) cubic-bezier(0.3, 1.4, 0.5, 1) calc((0.4s + var(--vez) * 0.16s) / var(--v)) both;
+}
+.mural-peca:hover {
+  z-index: 2;
+  rotate: 0deg;
+  translate: 0 -6px;
+  box-shadow: 0 24px 36px rgb(0 0 0 / 0.6), 0 2px 4px rgb(0 0 0 / 0.5);
+}
+@keyframes mural-prega {
+  from { opacity: 0; transform: scale(1.18) translateY(-30px); }
+  60%  { opacity: 1; }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes mural-entra { from { opacity: 0; transform: translateX(-50%) translateY(-12px); } }
+.mural-varal { animation-name: mural-entra-varal; }
+@keyframes mural-entra-varal { from { opacity: 0; transform: translateY(-12px); } }
+
+.mural-alfinete {
+  position: absolute;
+  top: -7px;
+  left: 50%;
+  z-index: 3;
+  width: 16px;
+  height: 16px;
+  margin-left: -8px;
+  border-radius: 50%;
+  background: #d8202a;
+  box-shadow: inset -3px -3px 0 0 #7d0a10, inset 2px 2px 0 0 #ff7a7a, 0 4px 4px rgb(0 0 0 / 0.6);
+}
+.mural-fita {
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  z-index: 3;
+  width: 86px;
+  height: 24px;
+  margin-left: -43px;
+  rotate: -4deg;
+  background: rgb(232 222 190 / 0.55);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
+}
+
+/* O fio vermelho: desenha depois que as peças entram. */
+.mural-fios {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 4;
+  overflow: visible;
+  pointer-events: none;
+}
+.mural-fios path {
+  fill: none;
+  stroke: var(--fio);
+  stroke-width: 3;
+  stroke-linecap: round;
+  filter: drop-shadow(0 3px 2px rgb(0 0 0 / 0.6));
+  stroke-dasharray: 1200;
+  stroke-dashoffset: 1200;
+  animation: mural-fio calc(0.9s / var(--v)) ease-out calc((0.6s + var(--vez) * 0.16s) / var(--v)) forwards;
+}
+@keyframes mural-fio { to { stroke-dashoffset: 0; } }
+
+/* ── As fotos das gincanas ───────────────────────────────────────────────── */
+
+.mural-foto {
+  padding: 12px 12px 14px;
+  background: #ebe4d2;
+  color: #1c1712;
+}
+.mural-foto-quadro {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  height: 172px;
+  padding-bottom: 8px;
+  overflow: hidden;
+  background: repeating-linear-gradient(90deg, var(--noite) 0 8px, var(--noite-2) 8px 16px);
+  box-shadow: inset 0 -6px 0 0 var(--fita, var(--laranja));
+}
+.mural-foto-quadro .portal-arte-fila { gap: 6px; }
+.mural-foto-data {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 3px 6px;
+  font-family: 'Press Start 2P', ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--laranja);
+  background: rgb(0 0 0 / 0.6);
+}
+.mural-foto-legenda { display: flex; gap: 10px; align-items: flex-start; margin-top: 10px; }
+.mural-foto-legenda .ins-medalha { flex-shrink: 0; }
+.mural-foto-titulo {
+  font-family: 'Creepster', 'Pixelify Sans', cursive;
+  font-size: 28px;
+  line-height: 1;
+  color: #8a1c08;
+}
+.mural-foto-frase { margin-top: 4px; font-size: 15px; line-height: 1.25; color: #3c342b; }
+.mural-foto-fatos { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.mural-foto-fatos li { padding: 2px 8px; font-size: 13px; color: #ebe4d2; background: #2b241d; }
+
+/* ── Os cartões no jeito do Gestão ───────────────────────────────────────── */
+
+.mural-cartao {
+  padding: 14px 16px;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-weight: 400;
+  color: #e7ece9;
+  background: var(--cartao);
+  border: 1px solid var(--cartao-borda);
+  border-radius: 10px;
+}
+.mural-cartao-topo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.mural-cartao-topo svg { width: 18px; height: 18px; color: var(--laranja); }
+.mural-cartao-topo span { margin-left: auto; font-size: 12px; font-weight: 500; color: var(--apagado); }
+.mural-cartao-rodape { margin-top: 10px; font-size: 11px; line-height: 1.35; color: var(--apagado); }
+
+.mural-indicador { padding: 12px 14px; }
+.mural-indicador-rotulo { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--apagado); }
+.mural-indicador-rotulo svg { width: 15px; height: 15px; color: var(--laranja); }
+.mural-indicador-valor { margin-top: 4px; font-size: 34px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.mural-indicador-sub { font-size: 12px; color: var(--apagado); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* O ranking. */
+.mural-ranking ol { display: flex; flex-direction: column; }
+.mural-ranking li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 3px 4px;
+  border-top: 1px solid var(--cartao-borda);
+}
+.mural-ranking li:first-child { border-top: 0; }
+.mural-ranking-pos { width: 20px; font-weight: 700; text-align: right; color: var(--metal, var(--apagado)); font-variant-numeric: tabular-nums; }
+.mural-ranking .portal-avatar { width: 26px; height: 26px; font-size: 10px; }
+.mural-ranking-quem { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.mural-ranking-nome { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mural-ranking-setor { font-size: 11px; line-height: 1.2; color: var(--apagado); }
+.mural-ranking-setor em { font-style: normal; color: var(--laranja); }
+.mural-ranking-pts { width: 40px; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* As Lendas. */
+.mural-podio { display: flex; align-items: flex-end; justify-content: center; gap: 14px; }
+.mural-podio-coluna { display: flex; flex-direction: column; align-items: center; width: 150px; text-align: center; }
+.mural-podio-coluna .portal-avatar-grande { width: 60px; height: 60px; font-size: 20px; box-shadow: 0 0 0 3px var(--metal); }
+.mural-podio-coluna .mural-corda { margin-top: 4px; }
+.mural-podio-nome { margin-top: 8px; font-size: 15px; font-weight: 600; }
+.mural-podio-setor { font-size: 12px; color: var(--apagado); }
+.mural-podio-setor em { font-style: normal; color: var(--laranja); }
+.mural-pedestal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  margin-top: 10px;
+  background: repeating-linear-gradient(90deg, var(--noite) 0 6px, var(--noite-2) 6px 12px);
+  box-shadow: inset 0 4px 0 0 var(--metal);
+}
+.portal-lugar-1 .mural-pedestal { height: 88px; }
+.portal-lugar-2 .mural-pedestal { height: 72px; }
+.portal-lugar-3 .mural-pedestal { height: 60px; }
+.mural-pedestal-num { font-family: 'Press Start 2P', ui-monospace, monospace; font-size: 22px; color: var(--metal); text-shadow: 3px 3px 0 #000; }
+.mural-pedestal-pts { margin-top: 4px; font-size: 12px; font-weight: 600; color: var(--texto); }
+.mural-botao { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 14px auto 2px; font-size: 18px; padding: 8px 18px; }
+.mural-botao svg { width: 18px; height: 18px; }
+
+/* O carimbo das fotos que invadem (o mouse entra e eles voltam, `Invasao.tsx`). */
+.mural-foto-carimbo {
+  position: absolute;
+  left: 8px;
+  top: 10px;
+  padding: 3px 6px;
+  rotate: -7deg;
+  font-family: 'Press Start 2P', ui-monospace, monospace;
+  font-size: 8px;
+  letter-spacing: 0.04em;
+  color: #ff5a4a;
+  border: 2px solid #ff5a4a;
+  background: rgb(0 0 0 / 0.45);
+  opacity: 0.9;
+}
+.mural-foto:hover .mural-foto-carimbo { animation: mural-carimbo 0.18s steps(2, end) 3; }
+@keyframes mural-carimbo { 50% { translate: 2px -1px; color: #fff; border-color: #fff; } }
+
+/* ── O pôster das Lendas e o prêmio ──────────────────────────────────────── */
+
+.mural-poster {
+  padding: 8px 8px 0;
+  background: #0a0c0b;
+  border: 1px solid #2b3430;
+  transform-origin: 50% 100%;
+}
+.mural-poster-quadro { position: relative; overflow: hidden; box-shadow: inset 0 0 0 1px #000; }
+.mural-poster-legenda {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 4px 9px;
+  font-family: 'Press Start 2P', ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--ouro);
+}
+.mural-poster-legenda svg { width: 16px; height: 16px; color: var(--ouro); }
+.mural-poster-ampliar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  padding: 5px 10px;
+  font-family: 'Pixelify Sans', ui-monospace, monospace;
+  font-size: 14px;
+  color: var(--texto);
+  background: #1a201d;
+  box-shadow: 0 0 0 2px #000, 0 0 0 3px var(--ouro);
+  cursor: pointer;
+}
+.mural-poster-ampliar:hover { color: #000; background: var(--ouro); }
+.mural-poster-ampliar svg { width: 14px; height: 14px; color: inherit; }
+/* O pôster aberto por cima, no tamanho que cabe. */
+.mural-foco-caixa.mural-foco-largo { width: auto; padding: 44px 24px 24px; }
+.mural-poster-grande { overflow: hidden; box-shadow: 0 0 0 1px #000; }
+
+.mural-premio { display: flex; align-items: center; gap: 16px; padding: 12px 18px; }
+.mural-premio-arte { flex-shrink: 0; filter: drop-shadow(0 0 12px rgb(120 170 255 / 0.35)); }
+.mural-premio-texto { flex: 1; min-width: 0; }
+.mural-premio-selo { font-family: 'Press Start 2P', ui-monospace, monospace; font-size: 10px; color: var(--verde); }
+.mural-premio-nome { margin-top: 4px; font-family: 'Creepster', 'Pixelify Sans', cursive; font-size: 40px; line-height: 1; color: var(--laranja); text-shadow: 3px 3px 0 #3a1400; }
+.mural-premio-regra { margin-top: 4px; font-size: 13px; color: var(--apagado); }
+.mural-premio .mural-botao { margin: 0; font-size: 17px; }
+
+/* ── O chat do que também teve ───────────────────────────────────────────── */
+
+.mural-chat {
+  display: flex;
+  flex-direction: column;
+  height: 512px;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-weight: 400;
+  color: #e7ece9;
+  background: #0b0f0d;
+  border: 1px solid var(--cartao-borda);
+  border-radius: 14px;
+}
+.mural-chat-topo {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 16px 12px 10px;
+  border-bottom: 1px solid var(--cartao-borda);
+  background: var(--cartao);
+  border-radius: 14px 14px 0 0;
+}
+.mural-chat-avatar {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #1f1308;
+  box-shadow: 0 0 0 2px var(--laranja);
+}
+.mural-chat-avatar svg { display: block; }
+.mural-chat-quem { display: flex; flex-direction: column; line-height: 1.15; }
+.mural-chat-nome { font-size: 14px; font-weight: 700; }
+.mural-chat-status { font-size: 11px; color: var(--verde); }
+.mural-chat-corpo {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px 10px 12px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 20% 30%, rgb(255 138 31 / 0.05) 0 1px, transparent 1.5px) 0 0 / 14px 14px,
+    #0b0f0d;
+}
+.mural-chat-dia {
+  align-self: center;
+  padding: 3px 9px;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--apagado);
+  background: #18201c;
+  border-radius: 6px;
+}
+.mural-chat-msg {
+  position: relative;
+  max-width: 92%;
+  padding: 7px 9px 8px;
+  font-size: 12px;
+  line-height: 1.28;
+  background: #1b2420;
+  border-radius: 2px 10px 10px 10px;
+  box-shadow: 0 1px 0 rgb(0 0 0 / 0.5);
+  animation: mural-chat-chega 0.25s cubic-bezier(0.3, 1.4, 0.5, 1) both;
+}
+.mural-chat-msg::before {
+  content: '';
+  position: absolute;
+  left: -6px;
+  top: 0;
+  border: 6px solid transparent;
+  border-top-color: #1b2420;
+  border-right-color: #1b2420;
+}
+.mural-chat-quando { display: block; margin-bottom: 2px; font-size: 11px; font-weight: 700; color: var(--laranja); }
+@keyframes mural-chat-chega { from { opacity: 0; transform: translateY(6px) scale(0.96); } }
+.mural-chat-digitando { display: flex; gap: 4px; width: 52px; padding: 10px 12px; }
+.mural-chat-digitando span { width: 7px; height: 7px; border-radius: 50%; background: var(--apagado); animation: mural-chat-ponto 0.9s ease-in-out infinite; }
+.mural-chat-digitando span:nth-child(2) { animation-delay: 0.15s; }
+.mural-chat-digitando span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes mural-chat-ponto { 50% { transform: translateY(-3px); background: var(--texto); } }
+
+/* ── O fone do player que se foi ─────────────────────────────────────────── */
+
+.mural-fone {
+  position: absolute;
+  width: 300px;
+  height: 180px;
+  animation: mural-entra-varal calc(0.6s / var(--v)) steps(6, end) calc(0.6s / var(--v)) both;
+}
+.mural-fone-prego {
+  position: absolute;
+  left: 50px;
+  top: 2px;
+  width: 10px;
+  height: 10px;
+  background: #8a8a92;
+  box-shadow: inset -3px -3px 0 #45454c, 0 3px 3px rgb(0 0 0 / 0.6);
+}
+.mural-fone-pendurado {
+  position: absolute;
+  left: 0;
+  top: 6px;
+  transform-origin: 55px 0;
+  filter: drop-shadow(0 10px 8px rgb(0 0 0 / 0.6));
+}
+.mural-fone-pendurado > svg:first-child { display: block; }
+.mural-fone-balanca { animation: mural-fone-balanca 1.4s cubic-bezier(0.3, 0, 0.3, 1); }
+@keyframes mural-fone-balanca {
+  0%   { rotate: 0deg; }
+  15%  { rotate: 9deg; }
+  40%  { rotate: -6deg; }
+  65%  { rotate: 3deg; }
+  85%  { rotate: -1deg; }
+  100% { rotate: 0deg; }
+}
+.mural-fone-fio { position: absolute; left: 2px; top: 88px; overflow: visible; }
+.mural-fone-fio path { fill: none; stroke: #1c1c22; stroke-width: 4; stroke-linecap: round; }
+.mural-fone-fio .mural-fone-cobre { stroke: #c87533; stroke-width: 2; }
+.mural-fone-etiqueta {
+  position: absolute;
+  left: 96px;
+  top: 92px;
+  width: 118px;
+  padding: 5px 7px 6px;
+  rotate: -4deg;
+  font-family: Georgia, 'Times New Roman', serif;
+  color: #221d16;
+  background: #d9cfb4;
+  box-shadow: 0 6px 8px rgb(0 0 0 / 0.5);
+}
+.mural-fone-etiqueta::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  top: -14px;
+  width: 1px;
+  height: 16px;
+  background: #d9cfb4;
+}
+.mural-fone-nome { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+.mural-fone-data { font-size: 10px; }
+.mural-fone-frase { margin-top: 2px; font-size: 9.5px; font-style: italic; color: #7d0a10; }
+/* A tecla F. */
+.mural-fone-tecla {
+  position: absolute;
+  left: 146px;
+  top: 14px;
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  font-family: 'Press Start 2P', ui-monospace, monospace;
+  font-size: 22px;
+  color: #ece5d0;
+  background: linear-gradient(#3a3a42, #2a2a31);
+  border: 2px solid #08080b;
+  border-radius: 6px;
+  box-shadow: inset 0 -6px 0 #18181d, inset 0 2px 0 #55555f, 0 6px 0 #08080b, 0 10px 12px rgb(0 0 0 / 0.5);
+  cursor: pointer;
+}
+.mural-fone-tecla span { translate: 0 -3px; }
+.mural-fone-tecla:hover { color: var(--laranja); }
+.mural-fone-tecla-apertou { animation: mural-fone-tecla 0.2s steps(2, end); }
+@keyframes mural-fone-tecla {
+  50% { translate: 0 5px; box-shadow: inset 0 -2px 0 #18181d, inset 0 2px 0 #55555f, 0 1px 0 #08080b, 0 3px 4px rgb(0 0 0 / 0.5); }
+}
+.mural-fone-dica {
+  position: absolute;
+  left: 210px;
+  top: 20px;
+  width: 86px;
+  font-size: 12px;
+  line-height: 1.2;
+  color: var(--apagado);
+}
+.mural-fone-fs { position: absolute; left: 160px; top: 10px; width: 0; height: 0; pointer-events: none; }
+.mural-fone-fs span {
+  position: absolute;
+  top: 0;
+  font-family: 'Press Start 2P', ui-monospace, monospace;
+  font-size: 20px;
+  color: #ece5d0;
+  text-shadow: 3px 3px 0 #000;
+  animation: mural-fone-f 2.2s cubic-bezier(0.2, 0.6, 0.4, 1) forwards;
+}
+@keyframes mural-fone-f {
+  0%   { transform: translateY(0) scale(0.6); opacity: 0; }
+  12%  { transform: translateY(-14px) scale(1.15); opacity: 1; }
+  100% { transform: translateY(150px) scale(1); opacity: 0; }
+}
+
+/* ── Os enfeites ─────────────────────────────────────────────────────────── */
+
+/* A aranha do tema (`Halloween/Aranha.tsx`), a que se puxa: presa no alto da parede, maior. */
+.mural-aranha {
+  position: absolute;
+  left: 598px;
+  top: 0;
+  width: 0;
+  height: 0;
+  z-index: 6;
+  color: #d8d4e0;
+  scale: 1.7;
+  transform-origin: 0 0;
+}
+.mural-aranha .hw-aranha { top: 0; right: -13px; }
+
+/* Os desenhos são os do tema (`components/Halloween`); as cores e os keyframes
+   (`hw-gira`, `hw-bate-*`, `hw-respira`, `hw-vela`…) também, de `halloween.css`. */
+.enfeite-aranha {
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+  color: #d8d4e0;
+  translate: -50% 0;
+}
+.enfeite-aranha-fio {
+  width: 1.5px;
+  height: var(--fio);
+  background: color-mix(in oklch, currentColor 45%, transparent);
+  transform-origin: top;
+  animation: enfeite-aranha-desce 6s ease-in-out var(--atraso) infinite alternate;
+}
+.enfeite-aranha-corpo { position: relative; margin-top: -4px; animation: enfeite-aranha-anda 6s ease-in-out var(--atraso) infinite alternate; }
+@keyframes enfeite-aranha-desce { from { transform: scaleY(0.35); } to { transform: scaleY(1); } }
+@keyframes enfeite-aranha-anda { from { translate: 0 calc(var(--fio) * -0.65); } to { translate: 0 0; } }
+.enfeite-aranha-corpo svg { display: block; overflow: visible; filter: drop-shadow(0 4px 3px rgb(0 0 0 / 0.6)); animation: hw-gira 3s ease-in-out infinite alternate; }
+.enfeite-aranha .corpo { fill: oklch(0.22 0.02 320); stroke: color-mix(in oklch, currentColor 50%, transparent); stroke-width: .8; }
+.enfeite-aranha .pernas { stroke: color-mix(in oklch, currentColor 35%, oklch(0.22 0.02 320)); stroke-width: 1.5; fill: none; stroke-linecap: round; }
+.enfeite-aranha .olho { fill: oklch(0.72 0.2 35); }
+
+.enfeite-abobora {
+  position: absolute;
+  z-index: 5;
+  pointer-events: none;
+  filter: drop-shadow(0 0 10px rgb(255 140 30 / 0.45));
+  animation: enfeite-vela 2.6s steps(1, end) var(--atraso) infinite;
+}
+@keyframes enfeite-vela {
+  0%, 100% { filter: drop-shadow(0 0 10px rgb(255 140 30 / 0.45)); }
+  30%      { filter: drop-shadow(0 0 16px rgb(255 160 40 / 0.65)); }
+  55%      { filter: drop-shadow(0 0 7px rgb(255 120 20 / 0.35)); }
+  70%      { filter: drop-shadow(0 0 13px rgb(255 150 30 / 0.55)); }
+}
+/* A bolha do chat, no tamanho pedido e sempre acesa. */
+.enfeite-abobora-desenho { display: block; width: var(--tam); height: var(--tam); }
+.enfeite-abobora-desenho .hw-abobora { display: block; width: 100%; height: 100%; }
+
+.enfeite-teia { position: absolute; z-index: 5; pointer-events: none; overflow: visible; }
+.enfeite-teia path { fill: none; stroke: rgb(225 225 232 / 0.4); stroke-width: 1.2; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+
+.enfeite-morcegos { position: fixed; inset: 0; z-index: 5; pointer-events: none; overflow: hidden; }
+.enfeite-morcego {
+  position: absolute;
+  left: 0;
+  animation: enfeite-morcego-voa calc(var(--dura) / var(--v)) linear var(--atraso) infinite;
+}
+.enfeite-morcego svg { display: block; width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 0 1.5px rgb(225 220 235 / 0.55)); }
+.enfeite-morcego .asa-e, .enfeite-morcego .asa-d { transform-box: view-box; animation: .34s ease-in-out infinite alternate; }
+.enfeite-morcego .asa-e { transform-origin: 44px 21px; animation-name: hw-bate-e; }
+.enfeite-morcego .asa-d { transform-origin: 56px 21px; animation-name: hw-bate-d; }
+.enfeite-morcego .corpo-m { animation: hw-sobe-m .34s ease-in-out infinite alternate; }
+.enfeite-morcego .olhos-x { display: none; }
+@keyframes enfeite-morcego-voa {
+  0%   { transform: translate(-80px, 0); }
+  25%  { transform: translate(25vw, -26px); }
+  50%  { transform: translate(50vw, 14px); }
+  75%  { transform: translate(75vw, -18px); }
+  /* Fica fora da tela o resto do tempo: passa de vez em quando. */
+  80%, 100% { transform: translate(calc(100vw + 80px), 0); }
+}
+
+/* ── A invasão ───────────────────────────────────────────────────────────── */
+
+.mural-invasao { position: fixed; inset: 0; z-index: 9; pointer-events: none; image-rendering: pixelated; }
+.mural-invasao-placar {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  z-index: 9;
+  translate: -50% 0;
+  padding: 9px 16px;
+  font-family: 'Press Start 2P', ui-monospace, monospace;
+  font-size: 13px;
+  color: var(--verde);
+  white-space: nowrap;
+  background: rgb(8 10 9 / 0.88);
+  box-shadow: 0 0 0 3px #000, 0 0 0 5px var(--verde);
+  pointer-events: none;
+  animation: mural-chat-chega 0.25s ease-out both;
+}
+.mural-invasao-placar span { margin-left: 10px; color: var(--texto); font-size: 11px; }
+.mural-invasao-fim { color: var(--ouro); box-shadow: 0 0 0 3px #000, 0 0 0 5px var(--ouro); font-size: 15px; }
+
+/* ── O jornal ────────────────────────────────────────────────────────────── */
+
+.mural-jornal {
+  padding: 14px 16px 16px;
+  font-family: Georgia, 'Times New Roman', serif;
+  color: #221d16;
+  background: #d9cfb4;
+  clip-path: polygon(0 2%, 6% 0, 18% 1.5%, 33% 0, 51% 1%, 68% 0, 84% 1.5%, 100% 0, 99% 30%, 100% 62%, 98.5% 100%, 80% 98.5%, 60% 100%, 41% 98%, 22% 100%, 4% 98.5%, 0 100%, 1% 60%);
+}
+.mural-jornal-nome { font-size: 30px; font-weight: 700; text-align: center; letter-spacing: 0.02em; border-bottom: 3px double #221d16; padding-bottom: 4px; }
+.mural-jornal-data { margin-top: 4px; font-size: 11px; text-align: center; text-transform: uppercase; letter-spacing: 0.08em; }
+.mural-jornal-manchete { margin-top: 10px; font-size: 21px; font-weight: 700; line-height: 1.1; }
+.mural-jornal-menor { font-size: 17px; padding-top: 8px; border-top: 1px solid #8c8068; }
+.mural-jornal-texto { margin-top: 4px; font-size: 13px; line-height: 1.35; }
+
+/* ── O canto da Coisa ────────────────────────────────────────────────────── */
+
+.mural-bilhete {
+  padding: 18px 12px 14px;
+  font-family: 'Creepster', 'Pixelify Sans', cursive;
+  font-size: 24px;
+  line-height: 1.1;
+  text-align: center;
+  color: #7d0a10;
+  background: #f0d84a;
+}
+.mural-barco {
+  position: absolute;
+  left: 1396px;
+  top: 1046px;
+  rotate: -8deg;
+  filter: drop-shadow(0 8px 6px rgb(0 0 0 / 0.6));
+  animation: mural-entra-varal calc(0.5s / var(--v)) steps(5, end) calc((0.4s + var(--vez) * 0.16s) / var(--v)) both;
+}
+
+/* ── O mural que entra puxado por ela (e o baque quando chega) ──────────── */
+
+/* Por cima do palco; quem anda com ele é ela (`coisa/Puxando.tsx`, pelo transform). */
+.mural.mural-puxado {
+  z-index: 9003;
+  overflow: visible;
+  transform: translateX(100%);
+  box-shadow: -30px 0 60px rgb(0 0 0 / 0.7);
+}
+.mural-sem-entrada .mural-peca,
+.mural-sem-entrada .mural-titulo,
+.mural-sem-entrada .mural-varal,
+.mural-sem-entrada .mural-canto-derry,
+.mural-sem-entrada .mural-canto-cacho,
+.mural-sem-entrada .mural-barco,
+.mural-sem-entrada .mural-porta,
+.mural-sem-entrada .mural-fone { animation: none; }
+.mural-sem-entrada .mural-fios path { animation: none; stroke-dashoffset: 0; }
+/* Chegou: a parede bate, as peças sacodem. */
+.mural-baque .mural-caixa { animation: mural-baque calc(0.5s / var(--v)) steps(8, end); }
+@keyframes mural-baque {
+  0%   { translate: -10px 3px; }
+  25%  { translate: 7px -2px; }
+  50%  { translate: -4px 1px; }
+  75%  { translate: 2px 0; }
+  100% { translate: 0 0; }
+}
+
+/* ── A Coisa na porta, olhando o mouse (`coisa/NoMural.tsx`) ─────────────── */
+
+/*
+ * A porta do canto (a pixel art do balão): o batente de madeira escura, a
+ * folha entreaberta e, lá dentro, a neblina cinza com a chuva riscando na
+ * diagonal — o cinza é o que deixa ela, toda preta, aparecer.
+ */
+.mural-porta {
+  position: absolute;
+  left: 1736px;
+  top: 640px;
+  width: 220px;
+  height: 440px;
+  background:
+    repeating-linear-gradient(90deg, rgb(0 0 0 / 0.18) 0 2px, transparent 2px 7px),
+    #2b1d14;
+  box-shadow: 0 0 0 3px #0c0806, -14px 0 26px rgb(0 0 0 / 0.6);
+  animation: mural-entra-varal calc(0.5s / var(--v)) steps(5, end) calc(1.8s / var(--v)) both;
+}
+.mural-porta-vao {
+  position: absolute;
+  inset: 12px 0 0 12px;
+  overflow: hidden;
+  background:
+    repeating-linear-gradient(118deg, transparent 0 22px, rgb(220 220 228 / 0.07) 22px 25px, transparent 25px 47px),
+    radial-gradient(ellipse 80% 60% at 55% 45%, #64646b, #3d3d43 55%, #1d1d21);
+  box-shadow: inset 6px 6px 0 rgb(0 0 0 / 0.55), inset 0 0 40px rgb(0 0 0 / 0.6);
+}
+/* A chuva lá dentro, descendo devagar. */
+.mural-porta-vao::before {
+  content: '';
+  position: absolute;
+  inset: -60px 0 0 0;
+  background: repeating-linear-gradient(112deg, transparent 0 30px, rgb(235 235 240 / 0.08) 30px 32px, transparent 32px 61px);
+  animation: mural-porta-chuva calc(1.4s / var(--v)) linear infinite;
+}
+@keyframes mural-porta-chuva { to { transform: translate(-24px, 60px); } }
+/* A folha da porta, entreaberta para dentro. */
+.mural-porta-folha {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  bottom: 0;
+  width: 34px;
+  background: repeating-linear-gradient(180deg, #1d140e 0 46px, #120c08 46px 50px);
+  box-shadow: inset -4px 0 0 #0a0705, 8px 0 14px rgb(0 0 0 / 0.55);
+}
+.mural-porta-numero {
+  position: absolute;
+  left: 50%;
+  top: -34px;
+  translate: -50% 0;
+  padding: 3px 8px;
+  font-family: 'Press Start 2P', ui-monospace, monospace;
+  font-size: 13px;
+  color: #c9b98f;
+  background: #1b130d;
+  box-shadow: 0 0 0 2px #0c0806, 0 0 0 4px #6d5a3a;
+}
+
+/* O vão da porta na tela: ela fica dentro, cortada pelo batente. */
+.coisa-na-porta { position: absolute; z-index: 7; overflow: hidden; pointer-events: none; }
+.coisa-no-mural {
+  position: absolute;
+  filter: drop-shadow(-6px 10px 12px rgb(0 0 0 / 0.55));
+  transition: transform calc(0.2s / var(--v)) cubic-bezier(0.5, 0, 0.9, 0.4);
+  animation: coisa-sai-do-escuro calc(1.6s / var(--v)) cubic-bezier(0.3, 1.2, 0.5, 1) both;
+}
+.coisa-no-mural-respira canvas { animation: coisa-respira 3.8s ease-in-out infinite alternate; transform-origin: 50% 100%; }
+/* Antes do bote ela recua um pouco; no bote quem aparece é o mesmo desenho, grande. */
+.coisa-no-mural-arma { transform: translate(5%, 3%) scale(0.97); }
+.coisa-no-mural-fora { visibility: hidden; }
+@keyframes coisa-sai-do-escuro {
+  from { translate: 0 10%; filter: brightness(0); }
+  to   { translate: 0 0; }
+}
+@keyframes coisa-aparece-devagar { from { opacity: 0; } }
+@keyframes coisa-respira {
+  from { translate: 0 0; rotate: 0deg; }
+  to   { translate: 0 -3px; rotate: -1.2deg; }
+}
+
+/* O balão que ela solta para dar o bote: sobe pela parede e some. */
+.coisa-balao-solto {
+  position: fixed;
+  z-index: 8;
+  pointer-events: none;
+  translate: -50% -50%;
+  filter: drop-shadow(0 8px 8px rgb(0 0 0 / 0.5));
+  animation: coisa-balao-sobe calc(2.6s / var(--v)) cubic-bezier(0.4, 0, 0.8, 0.6) forwards;
+}
+.coisa-balao-solto svg { display: block; }
+@keyframes coisa-balao-sobe {
+  to { transform: translate(-60px, -75vh) rotate(-14deg); opacity: 0; }
+}
+
+/*
+ * O bote: o busto sai do tamanho e do lugar dele na porta (`--de-x`,
+ * `--de-y`, `--de-s`) e cresce até a boca ficar em volta do cursor; na volta,
+ * o caminho ao contrário.
+ */
+.coisa-bote {
+  position: fixed;
+  z-index: 9;
+  pointer-events: none;
+  transform-origin: 0 0;
+  filter: drop-shadow(0 30px 30px rgb(0 0 0 / 0.8));
+}
+.coisa-bote-salta { animation: coisa-bote-salta calc(0.32s / var(--v)) cubic-bezier(0.55, 0, 0.35, 1.25) both; }
+.coisa-bote-abre { animation: coisa-bote-treme 0.09s steps(2, end) infinite; }
+.coisa-bote-nhac { translate: 0 12px; }
+.coisa-bote-vai { animation: coisa-bote-vai calc(0.42s / var(--v)) cubic-bezier(0.6, 0, 0.9, 0.5) forwards; }
+@keyframes coisa-bote-salta {
+  from { transform: translate(var(--de-x), var(--de-y)) scale(var(--de-s)); }
+  to   { transform: none; }
+}
+@keyframes coisa-bote-treme {
+  0%   { translate: -4px 2px; }
+  100% { translate: 4px -2px; }
+}
+@keyframes coisa-bote-vai {
+  to { transform: translate(var(--de-x), var(--de-y)) scale(var(--de-s)); }
+}
+.coisa-bote-leve { animation: none !important; }
+/* O nhac: a parede treme e a tela pisca em vermelho. */
+.mural:has(.coisa-bote-nhac) .mural-caixa,
+.mural:has(.coisa-bote-olha) .mural-caixa { animation: mural-baque calc(0.4s / var(--v)) steps(8, end); }
+.coisa-bote-clarao {
+  position: fixed;
+  inset: 0;
+  z-index: 8;
+  pointer-events: none;
+  background: radial-gradient(circle, rgb(120 0 8 / 0.15), rgb(60 0 4 / 0.75));
+  animation: coisa-bote-clarao calc(0.8s / var(--v)) steps(6, end) forwards;
+}
+@keyframes coisa-bote-clarao { from { opacity: 1; } to { opacity: 0; } }
+.coisa-bote-frase {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 8vh;
+  z-index: 9;
+  text-align: center;
+  pointer-events: none;
+  font-family: 'Creepster', 'Pixelify Sans', cursive;
+  font-size: clamp(32px, 4vw, 68px);
+  color: #e9dcb2;
+  text-shadow: 0 0 18px rgb(195 18 27 / 0.8), 4px 4px 0 #000;
+  animation: coisa-aparece-devagar calc(0.3s / var(--v)) ease-out both;
+}
+/* Abocanhou o mouse: o cursor some até mexer de novo. */
+html.portal-sem-cursor, html.portal-sem-cursor * { cursor: none !important; }
+/* Em cima de um zumbi ou de uma bruxa: a mira. */
+html.portal-mira, html.portal-mira * { cursor: crosshair !important; }
+
+/* ── A janela por cima (o prêmio, a garrafa) ─────────────────────────────── */
+
+.mural-foco {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgb(0 0 0 / 0.7);
+}
+.mural-foco-caixa {
+  position: relative;
+  width: min(900px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  padding: 32px 28px 28px;
+}
+.mural-foco-fechar { position: absolute; top: 10px; right: 10px; padding: 6px; color: var(--texto); cursor: pointer; }
+.mural-foco-fechar svg { width: 22px; height: 22px; }
+.mural-sorteio { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+
+.mural .portal-fechar { position: absolute; top: 16px; right: 16px; z-index: 6; display: grid; place-items: center; width: 40px; height: 40px; }
+.mural .portal-fechar svg { width: 20px; height: 20px; }
+
+.portal-leve .mural-peca, .portal-leve .mural-medalha-viva, .portal-leve .mural-medalha-viva .ins-disco::after,
+.portal-leve .mural-lampada, .portal-leve .mural-derry-falha, .portal-leve .mural-cacho-balao, .portal-leve .coisa-no-mural, .portal-leve .mural-porta, .portal-leve .mural-porta-vao::before { animation: none; }
+.portal-leve .mural-fios path { animation: none; stroke-dashoffset: 0; }
+.portal-leve .enfeite-aranha, .portal-leve .enfeite-aranha *, .portal-leve .enfeite-abobora, .portal-leve .enfeite-abobora *, .portal-leve .mural-chat-digitando span, .portal-leve .mural-poster-quadro * { animation: none !important; }

@@ -2,9 +2,9 @@
  * PortalDeOutubro.tsx — a peça que o `Layout` monta: decide, pela hora do
  * portal (`fases.ts`), o que aparece.
  *
- *   rachando / último minuto  as rachaduras (com o tema de Halloween ligado:
- *                             quem desligou os enfeites não vê o vidro) e os
- *                             avisos (para todos)
+ *   espreitando / último minuto  o bueiro com os olhos e os balões (com o
+ *                             tema de Halloween ligado: quem desligou os
+ *                             enfeites não vê) e os avisos (para todos)
  *   aberto                    a abertura, uma vez por pessoa, só com a aba à
  *                             vista (quem está em outra aba vê quando voltar —
  *                             ninguém é chamado de volta no mesmo segundo);
@@ -17,7 +17,7 @@ import { lazy, Suspense, useEffect } from 'react';
 import { PORTAL_LIGADO, estadoDoPortal } from './fases';
 import { agoraDoPortal, useAgoraDoPortal } from './relogio';
 import { abrirAbertura, lerTela, useJaViu, useTela } from './estado';
-import { CamadaDeRachaduras } from './CamadaDeRachaduras';
+import { CamadaDoBueiro } from './Bueiro';
 import { Avisos, BotaoRever } from './Avisos';
 import { PainelDoRelogio } from './PainelDoRelogio';
 import { carregarFonte, carregarFontesPixel } from '@/components/Halloween/fonte';
@@ -56,11 +56,11 @@ export function PortalDeOutubro({ temaLigado, leve = false }: { temaLigado: bool
   }, [estado.fase, viu]);
 
   if (!PORTAL_LIGADO) return null;
-  const rachando = estado.fase === 'rachando' || estado.fase === 'ultimoMinuto';
+  const espreitando = estado.fase === 'espreitando' || estado.fase === 'ultimoMinuto';
   return (
     <>
-      {rachando && temaLigado && !tela && <CamadaDeRachaduras agora={agora} estado={estado} leve={parado} />}
-      {rachando && !tela && <Avisos agora={agora} estado={estado} />}
+      {espreitando && temaLigado && !tela && <CamadaDoBueiro estado={estado} leve={parado} />}
+      {espreitando && !tela && <Avisos agora={agora} estado={estado} />}
       {estado.fase === 'aberto' && viu && !tela && <BotaoRever />}
       {tela && (
         <Suspense fallback={null}>

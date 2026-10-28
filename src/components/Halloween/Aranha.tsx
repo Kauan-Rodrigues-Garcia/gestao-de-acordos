@@ -60,7 +60,7 @@ interface Controle {
 
 const acaso = (min: number, max: number) => min + Math.random() * (max - min);
 
-function AranhaSvg(props: React.SVGProps<SVGSVGElement>) {
+export function AranhaSvg(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="-13 -13 26 26" {...props}>
       <g className="pernas">
@@ -74,7 +74,11 @@ function AranhaSvg(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-export function Aranha({ claro }: { claro: boolean }) {
+/**
+ * `palcoNoAlto`: a aranha solta passa por cima de tela cheia (o mural de outubro, z 9000).
+ * `fogeDoMouse`: passar o mouse faz ela subir (no mural não: lá ela é para ser puxada).
+ */
+export function Aranha({ claro, palcoNoAlto = false, fogeDoMouse = true }: { claro: boolean; palcoNoAlto?: boolean; fogeDoMouse?: boolean }) {
   const caixa = useRef<HTMLDivElement>(null);
   const fio = useRef<HTMLDivElement>(null);
   const palco = useRef<HTMLDivElement>(null);
@@ -445,13 +449,13 @@ export function Aranha({ claro }: { claro: boolean }) {
       <div ref={caixa} className="hw-aranha ociosa" style={{ ['--h' as string]: `${ALTURA_DO_FIO}px` }}>
         <div ref={fio} className="fio" />
         <AranhaSvg
-          onMouseEnter={() => controle.current?.foge()}
+          onMouseEnter={fogeDoMouse ? () => controle.current?.foge() : undefined}
           onPointerDown={e => controle.current?.pegarDaTeia(e)}
         />
       </div>
       {cartaz && <CartazProcuraSe estado={cartaz} />}
       {createPortal(
-        <div ref={palco} className={cn('hw-aranha-palco text-foreground', claro && 'hw-claro')} aria-hidden="true">
+        <div ref={palco} className={cn('hw-aranha-palco text-foreground', claro && 'hw-claro', palcoNoAlto && 'hw-aranha-palco-alto')} aria-hidden="true">
           <svg className="hw-aranha-fios">
             <path ref={linha} className="fio-livre" />
             <path ref={caco} className="fio-livre" />

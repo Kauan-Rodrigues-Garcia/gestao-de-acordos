@@ -28,7 +28,7 @@ export function Avisos({ agora, estado }: { agora: number; estado: EstadoDoPorta
   if (estado.fase === 'ultimoMinuto') {
     return (
       <div className="portal-aviso-centro" aria-live="polite">
-        <p className="portal-aviso-texto">O portal está abrindo</p>
+        <p className="portal-aviso-texto">O mural está abrindo</p>
         <p className="portal-aviso-grande">{relogioDaContagem(estado.faltaMs)}</p>
       </div>
     );
@@ -36,7 +36,7 @@ export function Avisos({ agora, estado }: { agora: number; estado: EstadoDoPorta
   if (estado.contagem) {
     return (
       <div className="portal-aviso portal-placa" role="status">
-        <span className="portal-aviso-texto">O portal abre em</span>
+        <span className="portal-aviso-texto">O mural abre em</span>
         <span className="portal-aviso-numero">{relogioDaContagem(estado.faltaMs)}</span>
       </div>
     );
@@ -53,7 +53,7 @@ export function Avisos({ agora, estado }: { agora: number; estado: EstadoDoPorta
 
 export function BotaoRever() {
   return (
-    <button type="button" className="portal-aviso portal-placa portal-rever" onClick={() => abrirMural(0)}>
+    <button type="button" className="portal-aviso portal-placa portal-rever" onClick={() => abrirMural()}>
       <span className="portal-aviso-texto">Rever o mural de outubro</span>
     </button>
   );

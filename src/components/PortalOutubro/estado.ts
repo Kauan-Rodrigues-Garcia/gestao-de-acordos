@@ -37,7 +37,7 @@ export function marcarVisto(): void {
   visto.mudar(true);
 }
 
-/** Do painel de teste: a abertura volta a passar. */
+/** Do painel de teste: a abertura (e a Coisa, que vem nela) volta a passar. */
 export function esquecerVisto(): void {
   try { localStorage.removeItem(CHAVE_VISTO); } catch { /* idem */ }
   visto.mudar(false);
@@ -45,17 +45,26 @@ export function esquecerVisto(): void {
 
 // ── O mural na tela ─────────────────────────────────────────────────────────
 
-export type Tela = null | { modo: 'abertura' } | { modo: 'mural'; ato?: number };
+/**
+ * A ordem da primeira vez (pedido de 28/10/2026: a Coisa vem ANTES do mural,
+ * dançando): a abertura, a Coisa e o mural `puxado` por ela para a tela. No
+ * «Rever», só o mural — com ela escondida no canto.
+ */
+export type Tela = null | { modo: 'abertura' } | { modo: 'coisa' } | { modo: 'mural'; puxado?: boolean };
 
 const tela = criar<Tela>(null);
 
 export const useTela = tela.useValor;
 export const lerTela = tela.ler;
 
-/** A abertura inteira (o vidro quebrando, o portal e o mural). */
+/** A abertura inteira (a tela desmanchando, a Coisa e o mural). */
 export function abrirAbertura(): void { tela.mudar({ modo: 'abertura' }); }
-/** Direto no mural (o «Rever o mural»), num ato se pedir. */
-export function abrirMural(ato = 0): void { tela.mudar({ modo: 'mural', ato }); }
+/** Direto no mural (o «Rever o mural»). */
+export function abrirMural(): void { tela.mudar({ modo: 'mural' }); }
+/** O fim da cena: o mural entra, puxado pela Coisa. */
+export function puxarMural(): void { tela.mudar({ modo: 'mural', puxado: true }); }
+/** A Coisa no palco de Derry (depois da abertura, antes do mural). */
+export function abrirCoisa(): void { tela.mudar({ modo: 'coisa' }); }
 export function fecharTela(): void { tela.mudar(null); }
 
 // ── A velocidade do mural ───────────────────────────────────────────────────
