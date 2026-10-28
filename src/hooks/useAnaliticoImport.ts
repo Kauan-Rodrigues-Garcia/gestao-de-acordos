@@ -17,12 +17,12 @@ import { toast } from 'sonner';
 import {
   resolverOperadores,
   importarLoteAnalitico,
+  importarLote994,
   revincularOrfaosAnalitico,
   notificarImportacaoAnalitico,
   atualizarResumoMensal,
   congelarComposicaoDoMes,
   sincronizarCartoesPagos,
-  PROCEDENCIA_994,
   type OperadorResolvidoMap,
   type OperadorMatchDetalhe,
   type PerfilResumido,
@@ -91,12 +91,20 @@ export interface PreviewImport {
   assinatura: string[];
   /** Qual relatório é: o 58 ou o 994 da Retenção do Jornada. */
   relatorio: RelatorioDoImport;
-  /** Só no 994: o que ficou fora do arquivo, para a prévia dizer. */
-  fora994?: {
-    outraEquipe:     { linhas: number; valor: number };
-    pagamentoFuturo: { linhas: number; valor: number };
+  /** Só no 994: o que a prévia precisa dizer (ver `ResultadoParse994`). */
+  resumo994?: {
+    /** O total do arquivo por pessoa — o número do ERP. */
+    totalPorOperador:   Record<string, SomaLinhas>;
+    /** Pagamento com data futura, lançado na data do acordo. */
+    naDataDoAcordo:     SomaLinhas;
+    /** Linha sem Nr. Doc., gravada com o Cód. Acordo. */
+    peloCodigoDoAcordo: SomaLinhas;
+    /** Linhas de outros subgrupos, que vêm pelo 58/59. */
+    outraEquipe:        SomaLinhas;
   };
 }
+
+interface SomaLinhas { linhas: number; valor: number }
 
 /** O 58 (pagamento mensal) ou o 994 (Retenção do Jornada) — ver `PROCEDENCIA_994`. */
 export type RelatorioDoImport = '58' | '994';
@@ -227,7 +235,10 @@ export function useAnaliticoImport() {
     const chaves = preview.linhas.map(l => chaveDaLinha(
       l.operador_usuario, l.codigo, diaISO(l.data_pagamento), l.forma_pagamento,
     ));
-    (preview.relatorio === '994' ? preverRemocao994 : preverRemocao)(empresa.id, setorImportacao, preview.mes, chaves)
+    (preview.relatorio === '994'
+      ? preverRemocao994(empresa.id, setorImportacao, preview.mes, chaves,
+          [...new Set(preview.linhas.map(l => l.operador_usuario))])
+      : preverRemocao(empresa.id, setorImportacao, preview.mes, chaves))
       .then(r => { if (!cancelado) setRemocaoPrevista(r); })
       // Falhar a previsão não pode impedir a importação — o aviso é um extra,
       // e ficar sem importar o relatório do dia é pior que importar sem ele.
@@ -270,33 +281,34 @@ export function useAnaliticoImport() {
     // 994 não traz a hora nem a tabulação que ele mostra.
     if (relatorio === '994') {
       const { parseRelatorio994 } = await import('@/services/relatorio994/relatorio994Parser');
-      const { cabecalho, linhas, colchao, fora, erros } = await parseRelatorio994(file);
-      if (!linhas.length && !colchao.length) {
+      const {
+        cabecalho, linhas, totalPorOperador, naDataDoAcordo, peloCodigoDoAcordo, fora, erros,
+      } = await parseRelatorio994(file);
+      if (!linhas.length) {
         setErroGeral(
           erros.length
             ? erros.join('\n')
-            : fora.outraEquipe.linhas > 0 || fora.pagamentoFuturo.linhas > 0
-              ? `Nenhuma linha da Retenção a importar: ${fora.outraEquipe.linhas} são de outras equipes (vêm pelo 58) `
-                + `e ${fora.pagamentoFuturo.linhas} têm pagamento com data futura.`
+            : fora.outraEquipe.linhas > 0
+              ? `Nenhuma linha da Retenção a importar: as ${fora.outraEquipe.linhas} linhas são de outras equipes.`
               : 'Nenhuma linha válida encontrada no arquivo.',
         );
         setEstado('error');
         return;
       }
-      const usuarios = [...new Set([...linhas, ...colchao].map(l => l.operador_usuario))];
+      const usuarios = [...new Set(linhas.map(l => l.operador_usuario))];
       const { map, matches, todosPerfis } = await resolverOperadores(empresa.id, usuarios);
-      const meses = [...linhas, ...colchao].map(l => `${l.data_pagamento.getFullYear()}-${String(l.data_pagamento.getMonth() + 1).padStart(2, '0')}`);
+      const meses = linhas.map(l => `${l.data_pagamento.getFullYear()}-${String(l.data_pagamento.getMonth() + 1).padStart(2, '0')}`);
       const contagem = meses.reduce<Record<string, number>>((acc, m) => { acc[m] = (acc[m] ?? 0) + 1; return acc; }, {});
       const colunas = await conferirColunas(empresa.id, 'analitico_994', cabecalho);
 
       setPreview({
-        linhasTotais:     linhas.length + colchao.length,
+        linhasTotais:     linhas.length,
         linhasNovas:      linhas.length,
         duplicadasEst:    0,
         operadoresNaoEncontrados: usuarios.filter(u => map[u] === null),
         errosParse:       erros,
         linhas,
-        linhasColchao:    colchao,
+        linhasColchao:    [],
         colchaoNaMeta:    { linhas: 0, valor: 0 },
         operadoresMap:    map,
         matches,
@@ -307,7 +319,7 @@ export function useAnaliticoImport() {
         mudancaDeColunas: colunas.mudanca,
         assinatura:       colunas.assinatura,
         relatorio:        '994',
-        fora994:          fora,
+        resumo994:        { totalPorOperador, naDataDoAcordo, peloCodigoDoAcordo, outraEquipe: fora.outraEquipe },
       });
       setEstado('preview');
       return;
@@ -461,9 +473,24 @@ export function useAnaliticoImport() {
       mapFinal[usuario] = perfilId;
     }
 
+    // 994: o mês de quem veio no arquivo é trocado pelo arquivo inteiro, no
+    // banco, numa transação (`importarLote994`). Sem setor não há o que trocar.
+    const eh994 = preview.relatorio === '994';
+    if (eh994 && !setorImportacao) {
+      setErroGeral('Escolha o setor do 994 antes de importar.');
+      setEstado('preview');
+      return;
+    }
+
     // O Colchão fora da meta não é gravado: a aba que o acompanhava saiu em
     // 21/10/2026. A regra continua — o parser já o tirou de `preview.linhas`.
-    const res = await importarLoteAnalitico(
+    const res994 = eh994
+      ? await importarLote994(
+          empresa.id, perfil.id, preview.loteId, preview.linhas, mapFinal,
+          setorImportacao as string, preview.mes,
+        )
+      : null;
+    const res = res994 ?? await importarLoteAnalitico(
       empresa.id,
       perfil.id,
       preview.loteId,
@@ -478,10 +505,7 @@ export function useAnaliticoImport() {
       // mesmo setor/mês as linhas que sumiram da origem (ou que o ERP passou
       // para outro operador). Na regra Cofen, só quando o arquivo começa no
       // início do mês — ver `sincronizaAusentes`.
-      {
-        sincronizarAusentesDoSetor: sincronizaAusentes,
-        procedencia: preview.relatorio === '994' ? PROCEDENCIA_994 : 'relatorio_58',
-      },
+      { sincronizarAusentesDoSetor: sincronizaAusentes, procedencia: 'relatorio_58' },
     );
 
     /*
@@ -507,11 +531,26 @@ export function useAnaliticoImport() {
     if (ignoradasPorOutro > 0) {
       toast.info(
         `${ignoradasPorOutro} pagamento${ignoradasPorOutro !== 1 ? 's' : ''} não ${ignoradasPorOutro !== 1 ? 'entraram' : 'entrou'}: `
-        + (preview.relatorio === '994'
-          ? `o mesmo NR no mesmo dia já veio pelo 58 (ou pelo 59) e contaria duas vezes.`
-          : `o mesmo NR no mesmo dia já veio pelo 994 da Retenção e contaria duas vezes.`),
+        + `o mesmo NR no mesmo dia já veio pelo 994 da Retenção e contaria duas vezes.`,
         { duration: 9000 },
       );
+    }
+
+    if (res994) {
+      const { espelhos, ignoradas, foraDoMes } = res994;
+      const avisos: string[] = [];
+      if (espelhos > 0) {
+        avisos.push(`${espelhos} pagamento${espelhos !== 1 ? 's são' : ' é'} extra de outro setor pelo 59: `
+          + 'conta para a Retenção e uma vez só no total da empresa.');
+      }
+      if (ignoradas > 0) {
+        avisos.push(`${ignoradas} linha${ignoradas !== 1 ? 's' : ''} não ${ignoradas !== 1 ? 'entraram' : 'entrou'}: `
+          + 'o mesmo pagamento já está em outro setor ou numa correção manual.');
+      }
+      if (foraDoMes > 0) {
+        avisos.push(`${foraDoMes} linha${foraDoMes !== 1 ? 's' : ''} de outro mês não ${foraDoMes !== 1 ? 'entraram' : 'entrou'}.`);
+      }
+      if (avisos.length) toast.info(avisos.join(' '), { duration: 10000 });
     }
 
     // Revincula linhas órfãs de operadores criados após uma importação anterior.
@@ -548,7 +587,7 @@ export function useAnaliticoImport() {
       );
     }
 
-    if (res.atualizados > 0) {
+    if (res.atualizados > 0 && !eh994) {
       toast.success(
         `${res.atualizados} recebimento${res.atualizados !== 1 ? 's' : ''} ` +
         `${res.atualizados !== 1 ? 'tiveram os valores atualizados' : 'teve o valor atualizado'} ` +

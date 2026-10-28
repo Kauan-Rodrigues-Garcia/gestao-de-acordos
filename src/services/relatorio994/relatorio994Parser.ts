@@ -1,6 +1,6 @@
 /**
  * relatorio994Parser.ts
- * Parser do relatório 994 — o recebimento da equipe de Retenção do Jornada.
+ * Parser do relatório 994 — a produção da equipe de Retenção do Jornada.
  *
  * ## Por que um relatório só para três pessoas
  *
@@ -9,9 +9,10 @@
  * outubro/2026 ela é monica_souza, vitoria_nascimento e jessica_s_souza — as
  * únicas pessoas com Sub Grupo «RETENÇÃO» no arquivo.
  *
- * O 994 vem com o Jornada INTEIRO (563 linhas, 17 operadores em out/2026), não
- * só com a Retenção. O resto já entra pelo 58; importar o arquivo todo contaria
- * esse dinheiro duas vezes. Por isso a linha que não é da Retenção sai aqui.
+ * O 994 pode vir com o Jornada INTEIRO (563 linhas, 17 operadores em
+ * out/2026), não só com a Retenção. O resto entra pelo 58/59; importar o
+ * arquivo todo contaria esse dinheiro duas vezes. Por isso a linha que não é
+ * da Retenção sai aqui.
  *
  * Quem é Retenção quem diz é a coluna Sub Grupo, não uma lista de nomes: gente
  * que entrar ou sair da equipe muda no ERP e o importador acompanha sozinho.
@@ -24,21 +25,27 @@
  *
  * A última linha do arquivo é o TOTAL (só «Valor Pagto» preenchido). Sai calada.
  *
- * ## O que fica de fora, e por quê (dito na prévia, nunca calado)
+ * ## Tudo o que é da Retenção entra (decisão do usuário, 28/10/2026)
  *
- *   • **Pagamento com data futura.** 80 linhas de «PADRÃO»/«* PADRÃO» em
- *     out/2026 (R$ 157 mil) vêm com Data Pagamento de nov/2026 a jun/2028, no
- *     mesmo dia do mês do acordo — com cara de cartão parcelado com a data da
- *     última parcela. O que ainda não foi pago não é recebimento: a linha sai.
- *     Gravá-la levaria o valor para um mês de 2027.
- *   • **Colchão.** O 994 não tem a coluna «Colchão?» do 58. O Colchão é a 2ª
- *     parcela em diante de Pix Automático ou Cartão Recorrente, e não conta
- *     para o setor (`colchaoContaNaMeta`). Aqui ele é DEDUZIDO: Pix Automático
- *     ou Recorrente pago `DIAS_PARA_SER_COLCHAO` dias ou mais depois do acordo.
- *     Acordo de 07/07 pago em 08/10 é parcela de mês seguinte; acordo de 13/10
- *     pago em 15/10 é a primeira.
+ * O 994 é a PRODUÇÃO da Retenção: todo acordo fechado, pelo valor cheio. O
+ * número da pessoa no gestão tem de ser o do ERP, ao centavo — em out/2026 a
+ * Jessica era R$ 30.423,30 no ERP e R$ 16.078,56 aqui, porque este parser
+ * deixava de fora:
  *
- * Consolidação: 1 linha por (operador + NR + dia), como o 58 da BookPlay.
+ *   • **Pagamento com data futura.** «PADRÃO»/«* PADRÃO» vêm com Data
+ *     Pagamento de meses à frente (até 2028), no mesmo dia do mês do acordo —
+ *     a data da última parcela. A linha entra na DATA DO ACORDO, como o 59 já
+ *     faz com o cartão parcelado.
+ *   • **Pix Automático de acordo antigo** (o Colchão do 58). Entra no dia em
+ *     que foi pago, como qualquer pagamento.
+ *   • **Linha sem Nr. Doc.** (out/2026: um PADRÃO de R$ 1.200). Entra com o
+ *     Cód. Acordo no lugar do NR, para não sumir do total.
+ *
+ * Quem grava é `fn_analitico_994_substituir` (migration 20261028150000), que
+ * troca o mês da pessoa pelo arquivo inteiro.
+ *
+ * Consolidação: 1 linha por (operador + NR + dia + forma) — a chave do índice
+ * único do analítico.
  *
  * ⚠️  Este arquivo importa `@e965/xlsx`. Importe daqui só no fluxo de
  *     importação de arquivo, e dinamicamente.
@@ -46,12 +53,10 @@
 
 import { read as xlsxRead, utils as xlsxUtils } from '@e965/xlsx';
 import {
-  colchaoContaNaMeta,
   ehEquipeRetencao,
   extrairNome,
   norm,
   toDate,
-  type LinhaColchao,
   type LinhaRelatorio,
 } from '@/services/analitico/analiticoComum';
 import { dayKeyDiario } from '@/services/diario/diarioComum';
@@ -59,39 +64,34 @@ import { labelPagamentoBookplay } from '@/services/bookplay/bookplayRecebimentoP
 import { identificarRelatorio, MSG_OUTRO_NO_LUGAR_DO_994 } from '@/services/relatorio945/identificar';
 import type { FormaPagementoAnalitico } from '@/lib/supabase';
 
-/**
- * A partir de quantos dias entre o acordo e o pagamento um Pix Automático ou
- * Recorrente é parcela de mês seguinte (Colchão). A cobrança mensal cai entre
- * 28 e 31 dias depois; a primeira, em poucos dias. 25 separa os dois sem
- * depender de o acordo ter sido no fim do mês.
- */
-export const DIAS_PARA_SER_COLCHAO = 25;
-
 export interface Soma { linhas: number; valor: number }
 
 export interface ResultadoParse994 {
   /** Cabeçalho como veio, para a armadilha de colunas comparar. */
   cabecalho: string[];
-  /** Retenção, consolidada por operador + NR + dia: o que entra no Analítico. */
+  /** Retenção, consolidada por operador + NR + dia + forma: o que entra no Analítico. */
   linhas: LinhaRelatorio[];
-  /** Colchão deduzido (ver o topo): lido e fora da meta. */
-  colchao: LinhaColchao[];
+  /** Total do arquivo por pessoa da Retenção — o número que o ERP mostra. */
+  totalPorOperador: Record<string, Soma>;
+  /** Pagamento com data futura, lançado na data do acordo. Entra; a prévia diz. */
+  naDataDoAcordo: Soma;
+  /** Linhas sem Nr. Doc. que entraram pelo Cód. Acordo. */
+  peloCodigoDoAcordo: Soma;
   /** O que ficou fora, para a prévia dizer. */
   fora: {
-    /** Linhas de outros subgrupos — vêm pelo 58. */
+    /** Linhas de outros subgrupos — vêm pelo 58/59. */
     outraEquipe: Soma;
-    /** Data de pagamento depois de hoje. */
-    pagamentoFuturo: Soma;
   };
   erros: string[];
 }
 
-type ColKeys = 'op' | 'nr' | 'cli' | 'tp' | 'dtAcordo' | 'dt' | 'rec' | 'eq';
+type ColKeys = 'op' | 'nr' | 'acordo' | 'cli' | 'tp' | 'dtAcordo' | 'dt' | 'rec' | 'eq';
 
 /** Nomes normalizados por `norm` (sem acento, minúsculo, sem espaço). */
 const COL_ALIASES: Record<ColKeys, string[]> = {
   op:       ['operador', 'cobradora'],
   nr:       ['nr.doc.', 'nr.doc', 'nrdoc', 'nrdocumento'],
+  acordo:   ['cod.acordo', 'codacordo'],
   cli:      ['cliente'],
   tp:       ['tp.documento', 'tpdocumento', 'tpdoc'],
   dtAcordo: ['dataacordo'],
@@ -133,19 +133,17 @@ function formaEnum(label: string): FormaPagementoAnalitico {
   return label.startsWith('Cartão') ? 'cartao' : 'boleto_pix';
 }
 
-function ehRecorrencia(label: string): boolean {
-  return label === 'Pix Automático' || label === 'Cartão Recorrente';
-}
-
-const DIA_MS = 86_400_000;
 const soData = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+const somar = (s: Soma, valor: number) => { s.linhas++; s.valor += valor; };
 
 function resultadoVazio(erros: string[], cabecalho: string[] = []): ResultadoParse994 {
   return {
     cabecalho,
     linhas: [],
-    colchao: [],
-    fora: { outraEquipe: { linhas: 0, valor: 0 }, pagamentoFuturo: { linhas: 0, valor: 0 } },
+    totalPorOperador: {},
+    naDataDoAcordo: { linhas: 0, valor: 0 },
+    peloCodigoDoAcordo: { linhas: 0, valor: 0 },
+    fora: { outraEquipe: { linhas: 0, valor: 0 } },
     erros,
   };
 }
@@ -183,9 +181,7 @@ export function parseRelatorio994Rows(rows: unknown[][], hoje: Date = new Date()
   }
 
   const limite = soData(hoje).getTime();
-  const erros: string[] = [];
-  const fora = { outraEquipe: { linhas: 0, valor: 0 }, pagamentoFuturo: { linhas: 0, valor: 0 } };
-  const colchao: LinhaColchao[] = [];
+  const r = resultadoVazio([], cabecalho);
   const porChave = new Map<string, LinhaRelatorio>();
 
   for (let i = 1; i < rows.length; i++) {
@@ -200,52 +196,35 @@ export function parseRelatorio994Rows(rows: unknown[][], hoje: Date = new Date()
 
     const eq = String(row[cols.eq!] ?? '').trim();
     if (!ehEquipeRetencao(eq)) {
-      fora.outraEquipe.linhas++;
-      fora.outraEquipe.valor += rec;
+      somar(r.fora.outraEquipe, rec);
       continue;
     }
 
-    // A data futura vem antes do «dados incompletos»: a linha que ainda não foi
-    // paga sai por isso, falte ou não o NR (em out/2026, uma «Outras» sem Nr.
-    // Doc. tinha pagamento em 2027).
-    const dt = toDate(row[cols.dt!]);
-    if (dt && dt.getTime() > limite) {
-      fora.pagamentoFuturo.linhas++;
-      fora.pagamentoFuturo.valor += rec;
+    const acordo   = cols.dtAcordo != null ? toDate(row[cols.dtAcordo]) : null;
+    const pagou    = toDate(row[cols.dt!]);
+    const futuro   = pagou != null && pagou.getTime() > limite;
+    // Pago: o dia do pagamento. Ainda vai ser pago: o dia do acordo.
+    const dt       = futuro ? (acordo ? soData(acordo) : null) : pagou;
+    const codAcordo = cols.acordo != null ? String(row[cols.acordo] ?? '').trim() : '';
+    const codigo   = nr || codAcordo;
+
+    if (!op || !codigo || !dt) {
+      r.erros.push(
+        `Linha ${i + 1}: dados incompletos (operador="${op}", Nr. Doc.="${nr}", `
+        + `Cód. Acordo="${codAcordo}", data="${row[cols.dt!] ?? ''}") — ignorada.`);
       continue;
     }
 
-    if (!op || !nr || !dt) {
-      erros.push(`Linha ${i + 1}: dados incompletos (operador="${op}", Nr. Doc.="${nr}", data="${row[cols.dt!] ?? ''}") — ignorada.`);
-      continue;
-    }
+    if (futuro) somar(r.naDataDoAcordo, rec);
+    if (!nr) somar(r.peloCodigoDoAcordo, rec);
+    somar(r.totalPorOperador[op] ??= { linhas: 0, valor: 0 }, rec);
 
     const tp    = cols.tp != null ? String(row[cols.tp] ?? '').trim() : '';
     const label = labelPagamentoBookplay(tp);
+    const forma = formaEnum(label);
     const cli   = cols.cli != null ? row[cols.cli] : '';
-    const acordo = cols.dtAcordo != null ? toDate(row[cols.dtAcordo]) : null;
 
-    const parcelaSeguinte = ehRecorrencia(label) && acordo != null
-      && (dt.getTime() - acordo.getTime()) / DIA_MS >= DIAS_PARA_SER_COLCHAO;
-    if (parcelaSeguinte && !colchaoContaNaMeta(dt)) {
-      colchao.push({
-        operador_usuario: op,
-        equipe:           eq,
-        codigo:           nr,
-        nome_cliente:     extrairNome(cli),
-        nr_documento:     nr,
-        titulo:           '',
-        parcela:          '',
-        forma_pagamento:  formaEnum(label),
-        tpdoc_original:   label,
-        valor_recebido:   rec,
-        total_ho:         0,
-        data_pagamento:   dt,
-      });
-      continue;
-    }
-
-    const chave = `${op}::${nr}::${dayKeyDiario(dt)}`;
+    const chave = `${op}::${codigo}::${dayKeyDiario(dt)}::${forma}`;
     const existe = porChave.get(chave);
     if (existe) {
       existe.valor_recebido += rec;
@@ -253,10 +232,10 @@ export function parseRelatorio994Rows(rows: unknown[][], hoje: Date = new Date()
       porChave.set(chave, {
         operador_usuario: op,
         equipe:           '',
-        codigo:           nr,
+        codigo,
         nome_cliente:     extrairNome(cli),
         forma_detalhe:    label,
-        forma_pagamento:  formaEnum(label),
+        forma_pagamento:  forma,
         tpdoc_original:   label,
         valor_recebido:   rec,
         total_ho:         0,
@@ -265,5 +244,11 @@ export function parseRelatorio994Rows(rows: unknown[][], hoje: Date = new Date()
     }
   }
 
-  return { cabecalho, linhas: [...porChave.values()], colchao, fora, erros };
+  // A soma em ponto flutuante não pode virar um centavo a mais no banco.
+  const centavos = (v: number) => Math.round(v * 100) / 100;
+  r.linhas = [...porChave.values()].map(l => ({ ...l, valor_recebido: centavos(l.valor_recebido) }));
+  for (const s of [r.naDataDoAcordo, r.peloCodigoDoAcordo, r.fora.outraEquipe, ...Object.values(r.totalPorOperador)]) {
+    s.valor = centavos(s.valor);
+  }
+  return r;
 }

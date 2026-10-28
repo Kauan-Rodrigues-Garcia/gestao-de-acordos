@@ -53,6 +53,12 @@ export interface LinhaEscopavel {
   /** O setor de quem cobrou a contribuição. É a origem da linha. */
   contribuicao_de_setor_id?: string | null;
   /**
+   * Linha do 994 (Retenção) cujo pagamento o 59 já lançou como extra para
+   * outro operador em outro setor (20261028150000). Conta para a pessoa, a
+   * equipe e o setor; na empresa, o mesmo dinheiro já está no outro setor.
+   */
+  espelho_extra?: boolean;
+  /**
    * Ajuste de recebimento lançado para uma EQUIPE (26/10/2026): sem operador,
    * conta na equipe que o recebeu e no setor dela (pelo carimbo).
    */
@@ -205,9 +211,10 @@ export function escopoUniao(partes: readonly EscopoAnalitico[]): EscopoAnalitico
 export function linhaNoEscopo(linha: LinhaEscopavel, escopo: EscopoAnalitico): boolean {
   switch (escopo.tipo) {
     case 'empresa':
-      // Tudo o que veio no relatório, menos a contribuição: ela é a 2ª perna de
-      // um pagamento que já está no Receptivo, e somá-la aqui dobraria.
-      return !linha.contribuicao;
+      // Tudo o que veio no relatório, menos as 2ªs pernas: a contribuição (o
+      // pagamento já está no Receptivo) e o espelho do extra da Retenção (já
+      // está no setor que o 59 creditou). Somá-las aqui dobraria.
+      return !linha.contribuicao && !linha.espelho_extra;
 
     case 'operador':
       return linha.operador_id === escopo.operadorId;

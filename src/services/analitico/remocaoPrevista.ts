@@ -143,18 +143,20 @@ export async function preverRemocao(
 /**
  * O que o 994 tiraria do setor — a mesma pergunta, para a Retenção.
  *
- * `fn_analitico_remocao_prevista` só conta linha do 58, e é certo que conte: o
- * 58 só apaga o dele. O 994 apaga só o dele (`relatorio_994`), e são poucas
- * linhas por mês — a conta é feita aqui, lendo as linhas do 994 no setor/mês e
- * comparando pela mesma `chaveDaLinha`.
+ * O 994 é dono do mês de quem vem nele (20261028150000): sai toda linha dessas
+ * pessoas no setor/mês que não está no arquivo — inclusive a que o 59 gravou
+ * antes do primeiro 994 do mês. Só a correção manual fica. São poucas linhas,
+ * então a conta é feita aqui, pela mesma `chaveDaLinha` da importação.
  */
 export async function preverRemocao994(
   empresaId: string,
   setorId: string | null,
   mes: string,
   chaves: readonly string[],
+  /** Quem veio no arquivo: o mês dessas pessoas é o que o 994 substitui. */
+  operadores: readonly string[],
 ): Promise<RemocaoPrevista | null> {
-  if (!setorId || !/^\d{4}-\d{2}$/.test(mes)) return null;
+  if (!setorId || !/^\d{4}-\d{2}$/.test(mes) || operadores.length === 0) return null;
 
   const { data, error } = await supabase
     .from('analitico_recebimentos')
@@ -162,7 +164,8 @@ export async function preverRemocao994(
     .eq('empresa_id', empresaId)
     .eq('setor_id', setorId)
     .eq('mes_referencia', `${mes}-01`)
-    .eq('procedencia', 'relatorio_994');
+    .in('operador_usuario', [...operadores])
+    .neq('procedencia', 'manual');
   if (error) throw new Error(error.message);
 
   const presentes = new Set(chaves);

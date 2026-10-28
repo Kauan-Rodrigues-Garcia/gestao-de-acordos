@@ -223,34 +223,43 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
               </div>
             )}
 
-            {/* 994: o arquivo traz o Jornada inteiro, e só a Retenção entra.
-                O que sai é dito com valor, para a conta fechar com o ERP. */}
-            {preview.fora994 && (
+            {/* 994: o mês de cada pessoa da Retenção vira o arquivo inteiro.
+                O total por pessoa é o do ERP — é com ele que a conta fecha. */}
+            {preview.resumo994 && (
               <div className="rounded-lg border border-sky-200 bg-sky-50 dark:bg-sky-950/20 p-3 space-y-1 text-xs text-sky-700 dark:text-sky-300">
                 <p>
-                  Entram só as linhas da equipe de <strong>Retenção</strong> (Sub Grupo do arquivo).
+                  Entram só as linhas da equipe de <strong>Retenção</strong> (Sub Grupo do arquivo). O mês de
+                  cada pessoa abaixo passa a ser o do 994, inteiro:
                 </p>
-                {preview.fora994.outraEquipe.linhas > 0 && (
+                <ul className="pl-3">
+                  {Object.entries(preview.resumo994.totalPorOperador)
+                    .sort((a, b) => b[1].valor - a[1].valor)
+                    .map(([op, s]) => (
+                      <li key={op}>
+                        {op}: <strong>{formatBRL(s.valor)}</strong> ({s.linhas} linha{s.linhas !== 1 ? 's' : ''})
+                      </li>
+                    ))}
+                </ul>
+                {preview.resumo994.naDataDoAcordo.linhas > 0 && (
                   <p>
-                    <strong>{preview.fora994.outraEquipe.linhas}</strong> de outras equipes ficam fora
-                    ({formatBRL(preview.fora994.outraEquipe.valor)}) — elas vêm pelo 58.
+                    <strong>{preview.resumo994.naDataDoAcordo.linhas}</strong> com data de pagamento futura entram
+                    na data do acordo ({formatBRL(preview.resumo994.naDataDoAcordo.valor)}).
                   </p>
                 )}
-                {preview.fora994.pagamentoFuturo.linhas > 0 && (
+                {preview.resumo994.peloCodigoDoAcordo.linhas > 0 && (
                   <p>
-                    <strong>{preview.fora994.pagamentoFuturo.linhas}</strong> da Retenção com data de pagamento
-                    futura ficam fora ({formatBRL(preview.fora994.pagamentoFuturo.valor)}) — ainda não foram pagas.
+                    <strong>{preview.resumo994.peloCodigoDoAcordo.linhas}</strong> sem Nr. Doc. entram com o Cód. Acordo
+                    ({formatBRL(preview.resumo994.peloCodigoDoAcordo.valor)}).
                   </p>
                 )}
-                {preview.linhasColchao.length > 0 && (
+                {preview.resumo994.outraEquipe.linhas > 0 && (
                   <p>
-                    <strong>{preview.linhasColchao.length}</strong> de Pix Automático ou Recorrente de acordo
-                    anterior são Colchão e ficam fora da meta
-                    ({formatBRL(preview.linhasColchao.reduce((s, l) => s + l.valor_recebido, 0))}).
+                    <strong>{preview.resumo994.outraEquipe.linhas}</strong> de outras equipes ficam fora
+                    ({formatBRL(preview.resumo994.outraEquipe.valor)}) — elas vêm pelo 58/59.
                   </p>
                 )}
                 <p className="text-[11px] text-sky-700/80 dark:text-sky-300/80">
-                  Pagamento que o 58 ou o 59 já trouxe (mesmo NR no mesmo dia) não entra de novo.
+                  Extra que o 59 deu a outro setor conta para a Retenção e uma vez só no total da empresa.
                 </p>
               </div>
             )}
@@ -334,7 +343,7 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
               </div>
             )}
 
-            {!preview.fora994 && (preview.colchaoNaMeta.linhas > 0 || preview.linhasColchao.length > 0) && (
+            {!preview.resumo994 && (preview.colchaoNaMeta.linhas > 0 || preview.linhasColchao.length > 0) && (
               <div className="rounded-lg border border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/20 p-3 space-y-1">
                 {preview.colchaoNaMeta.linhas > 0 && (
                   <p className="text-xs text-amber-800 dark:text-amber-300">
@@ -593,8 +602,8 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
           {relatorio === '994' ? (
             <p className="text-sm text-muted-foreground">
               Selecione o relatório 994 exportado do ERP (Cód. Venda, Nr. Doc., Operador, Data Pagamento,
-              Valor Pagto, Setor Original, Sub Grupo). Entram só os recebimentos da equipe de Retenção;
-              o resto do Jornada continua vindo pelo 58.
+              Valor Pagto, Setor Original, Sub Grupo). Entra tudo o que é da equipe de Retenção, e o mês
+              de cada pessoa dela passa a ser o do 994; o resto do Jornada continua como está.
             </p>
           ) : (
             <p className="text-sm text-muted-foreground">

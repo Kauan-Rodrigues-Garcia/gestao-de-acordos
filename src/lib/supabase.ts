@@ -586,6 +586,12 @@ export interface AnaliticoDashboardLinha {
   /** Só na contribuição: o setor de quem cobrou. */
   contribuicao_de_setor_id?: string | null;
   /**
+   * Linha do 994 cujo pagamento o 59 já lançou como extra em outro setor
+   * (migration 20261028150000): conta na pessoa e no setor, não na empresa —
+   * ver `linhaNoEscopo`. `undefined` antes da migration.
+   */
+  espelho_extra?: boolean;
+  /**
    * Ajuste de recebimento lançado para uma EQUIPE (26/10/2026): a linha não tem
    * operador e conta nesta equipe e no setor dela — ver `linhaNoEscopo`.
    */
