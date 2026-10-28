@@ -144,6 +144,26 @@ describe('relatório mensal de parcelas pagas → acordos quitados no mês', () 
     });
   });
 
+  describe('saldo zerado quita, qualquer que seja o rótulo', () => {
+    const CAB_NR = ['Cód. Acordo', 'Nr. Documento', 'Operador', 'Dt. Pgto', 'Valor Acordo', 'Valor Restante', 'Situação Atual', 'Data da quitação'];
+    const s = (cod: string, nr: string, valor: number, restante: number, atual: string, quitou: string | null = '2026-10-27') =>
+      [cod, nr, 'TAIS', d('2026-10-27'), valor, restante, atual, quitou ? d(quitou) : null];
+
+    it('NR 12552080: Parcelamento 1/1, saldo 0 e data da quitação — conta', () => {
+      const r = extrairQuitacoes([CAB_NR, s('5871579', '12552080', 955.8, 0, 'Parcelamento')]);
+      expect(r.acordos).toEqual([{ cod_acordo: '5871579', operador_usuario: 'TAIS', valor_acordo: 955.8, data_quitacao: '2026-10-27' }]);
+    });
+
+    it('sem a data da quitação, ou com saldo, não conta', () => {
+      const r = extrairQuitacoes([
+        CAB_NR,
+        s('1', '800', 500, 0, 'Parcelamento', null),
+        s('2', '801', 900, 300, 'Parcelamento'),
+      ]);
+      expect(r.acordos).toEqual([]);
+    });
+  });
+
   it('aceita datas como número serial do Excel e valor em texto pt-BR', () => {
     // 46267 = 2026-09-02.
     const r = extrairQuitacoes([CAB, ['9', 1, 'ANA', 46267, 100, 'Quitação', '1.234,50', 'Quitação', 46267]]);
