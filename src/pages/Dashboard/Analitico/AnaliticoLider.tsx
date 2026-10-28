@@ -10,7 +10,8 @@
  */
 
 import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
-import { lazy, Suspense, useState, useEffect, useCallback, useMemo } from 'react';
+import { lazy, Suspense, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { assinarSinal } from '@/lib/sinais';
 import {
   Upload, Users, Trophy, AlertCircle,
   Trash2, Loader2, Star, CalendarDays, X, Filter, Copy,
@@ -422,12 +423,18 @@ export function AnaliticoLider({
   const [nomeDoSetor, setNomeDoSetor] = useState<Map<string, string>>(new Map());
 
   // ── Cargas ────────────────────────────────────────────────────────────────
-  const carregarResumos = useCallback(async () => {
+  /**
+   * `silencioso`: a recarga que o aviso do banco dispara (ver abaixo). Não
+   * mostra carregando nem fecha os cards abertos — a tela só troca os números.
+   */
+  const carregarResumos = useCallback(async (silencioso = false) => {
     if (!empresaId || !mes) return;
-    setLoadingResumos(true);
-    setExpandidos(new Set());
-    setLinhasMap(new Map());
-    setFiltrosDatas(new Map());
+    if (!silencioso) {
+      setLoadingResumos(true);
+      setExpandidos(new Set());
+      setLinhasMap(new Map());
+      setFiltrosDatas(new Map());
+    }
     // As exclusões vêm ANTES: `buscarTotalPorSetor` já devolve o total líquido
     // delas, para que nenhuma tela precise lembrar de aplicá-las depois.
     const { porSetor: exclusoesDoMes, dbAtiva } = await buscarExclusoesSetor(empresaId, mes);
@@ -441,7 +448,11 @@ export function AnaliticoLider({
       buscarTotalOrfaosPorSetor(empresaId, mes),
       buscarTotalPorSetor(empresaId, mes, exclusoesDoMes),
     ]);
-    if (error) toast.error(`Erro ao carregar resumo: ${error}`);
+    if (error) {
+      // Na recarga silenciosa, a lista que está na tela vale mais que uma vazia.
+      if (silencioso) return;
+      toast.error(`Erro ao carregar resumo: ${error}`);
+    }
     setResumos(data);
     setOrfaosPorSetor(orfaosSetor);
     setTotalPorSetor(totSetor);
@@ -524,6 +535,46 @@ export function AnaliticoLider({
     void carregarResumos();
     void carregarSnapshot();
   }, [carregarResumos, carregarSnapshot]);
+
+  /*
+   * O banco avisou que o analítico mudou (59, 994, importação de outra pessoa).
+   *
+   * As células do Mapa do mês já se atualizavam sozinhas (`useAnaliticoDashboard`
+   * ouve o mesmo aviso), mas a lista, os totais por setor e os órfãos só
+   * recarregavam ao abrir a tela ou depois de uma importação feita AQUI. O mapa
+   * desenha só quem está na lista: quem recebeu o primeiro pagamento do mês
+   * pelo 59 ficava fora dele até alguém recarregar a página (28/10/2026).
+   *
+   * Recarga silenciosa: os cards abertos continuam abertos e relêem as linhas.
+   * Aviso só de tabulação (UPDATE) espera 5 min, como no dashboard — tabular
+   * não muda valor.
+   */
+  const recarregarAoVivo = useRef<() => void>(() => {});
+  recarregarAoVivo.current = () => {
+    void carregarResumos(true);
+    void carregarSnapshot();
+    if (recorte.modo === 'dia') return;
+    for (const opId of expandidos) {
+      void buscarAnalitico({ empresaId, mes, operadorId: opId }).then(({ data }) => {
+        setLinhasMap(prev => (prev.has(opId) ? new Map(prev).set(opId, data) : prev));
+      });
+    }
+  };
+  useEffect(() => {
+    if (!empresaId) return;
+    let debounce: ReturnType<typeof setTimeout> | null = null;
+    const cancelar = assinarSinal('analitico', empresaId, {
+      onMudou: () => {
+        if (debounce) clearTimeout(debounce);
+        debounce = setTimeout(() => { debounce = null; recarregarAoVivo.current(); }, 1_500);
+      },
+      onReconectado: () => recarregarAoVivo.current(),
+    }, { minimoSoUpdateMs: 5 * 60_000 });
+    return () => {
+      if (debounce) clearTimeout(debounce);
+      cancelar();
+    };
+  }, [empresaId]);
 
   /*
    * Fotos dos operadores visíveis. A RPC do resumo não devolve `foto_url` e a

@@ -3390,6 +3390,11 @@ export interface StatusTabulacaoResultado {
   acordoId: string | null;
   outroOperadorId: string | null;
   outroOperadorNome: string | null;
+  /**
+   * Linha «Extra» do relatório tabulada no acordo DIRETO do colega
+   * (20261028180000). `outroOperador*` é o dono do direto.
+   */
+  extraDoDireto: boolean;
 }
 
 /**
@@ -3410,6 +3415,7 @@ export async function verificarStatusTabulacao(
 ): Promise<StatusTabulacaoResultado> {
   const vazio: StatusTabulacaoResultado = {
     status: 'nao_tabulado', acordoId: null, outroOperadorId: null, outroOperadorNome: null,
+    extraDoDireto: false,
   };
 
   const { data, error } = await rpcSemTipo<{
@@ -3417,6 +3423,7 @@ export async function verificarStatusTabulacao(
     acordo_id?: string | null;
     outro_operador_id?: string | null;
     outro_operador_nome?: string | null;
+    extra_do_direto?: boolean;
     erro?: string;
   }>('fn_analitico_status_tabulacao', { p_linha_id: linhaId });
 
@@ -3434,6 +3441,7 @@ export async function verificarStatusTabulacao(
     acordoId:          data.acordo_id ?? null,
     outroOperadorId:   data.outro_operador_id ?? null,
     outroOperadorNome: data.outro_operador_nome ?? null,
+    extraDoDireto:     data.extra_do_direto === true,
   };
 }
 
@@ -3472,6 +3480,7 @@ type ItemLoteTabulacao = {
   acordo_id?: string | null;
   outro_operador_id?: string | null;
   outro_operador_nome?: string | null;
+  extra_do_direto?: boolean;
 };
 
 async function despacharLoteTabulacao(): Promise<void> {
@@ -3481,6 +3490,7 @@ async function despacharLoteTabulacao(): Promise<void> {
   const ids = [...fila.keys()];
   const vazio: StatusTabulacaoResultado = {
     status: 'nao_tabulado', acordoId: null, outroOperadorId: null, outroOperadorNome: null,
+    extraDoDireto: false,
   };
 
   for (let i = 0; i < ids.length; i += LOTE_TABULACAO_MAX) {
@@ -3508,6 +3518,7 @@ async function despacharLoteTabulacao(): Promise<void> {
             acordoId:          item.acordo_id ?? null,
             outroOperadorId:   item.outro_operador_id ?? null,
             outroOperadorNome: item.outro_operador_nome ?? null,
+            extraDoDireto:     item.extra_do_direto === true,
           }
         : vazio;
       if (item?.status) cacheTabulacao.set(id, { resultado: r, ate });
@@ -3550,6 +3561,8 @@ export type TabularDivergenteResultado =
   | { ok: true; resultado: 'transferido'; acordoId: string; operadorAnteriorNome: string | null; operadorNovoNome: string | null }
   /** O dono da linha já tinha o acordo (DIRETO ou EXTRA) — nada a transferir. */
   | { ok: true; resultado: 'ja_era_seu'; acordoId: string }
+  /** Linha «Extra» do relatório: ligada ao direto do colega, nada transferido (20261028180000). */
+  | { ok: true; resultado: 'extra_do_direto'; acordoId: string; donoDoDiretoNome: string | null }
   /** O acordo sumiu desde que a tela olhou: o código está livre para tabular. */
   | { ok: true; resultado: 'livre' }
   | { ok: false; error: string };
@@ -3582,7 +3595,7 @@ export async function tabularDivergente(linhaId: string): Promise<TabularDiverge
   const { data, error } = await rpcSemTipo<{
     ok: boolean;
     erro?: string;
-    resultado?: 'transferido' | 'ja_era_seu' | 'livre';
+    resultado?: 'transferido' | 'ja_era_seu' | 'livre' | 'extra_do_direto';
     acordo_id?: string;
     operador_anterior_nome?: string | null;
     operador_novo_nome?: string | null;
@@ -3598,6 +3611,12 @@ export async function tabularDivergente(linhaId: string): Promise<TabularDiverge
   if (!data.acordo_id) return { ok: false, error: 'O servidor não devolveu o acordo.' };
   if (data.resultado === 'ja_era_seu') {
     return { ok: true, resultado: 'ja_era_seu', acordoId: data.acordo_id };
+  }
+  if (data.resultado === 'extra_do_direto') {
+    return {
+      ok: true, resultado: 'extra_do_direto', acordoId: data.acordo_id,
+      donoDoDiretoNome: data.operador_anterior_nome ?? null,
+    };
   }
   return {
     ok: true,

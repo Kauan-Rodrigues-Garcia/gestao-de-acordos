@@ -4,6 +4,9 @@
  * Estados:
  *   NÃO TABULADO → botão "Tabular acordo"
  *   TABULADO     → botão "Ver acordo" (abre detalhe no Dashboard)
+ *   EXTRA        → tabulado também: a linha é «Extra» no relatório e está
+ *                  ligada ao acordo DIRETO do colega (20261028180000). O
+ *                  botão diz de quem é o direto e abre esse acordo.
  *   DIVERGENTE   → botão "Divergente": o acordo do código é de outra pessoa.
  *                  Confirmar passa o acordo DIRETO para o operador da linha —
  *                  o pagamento já entrou em nome dele, então não há autorização
@@ -31,6 +34,7 @@ import {
   tabularDivergente,
 } from '@/services/analitico/analitico.service';
 import { ehLinhaDeAjuste } from '@/services/analitico/ajusteManual.service';
+import { ehComissaoExtra } from '@/services/analitico/analiticoComum';
 
 interface TabulacaoCellProps {
   linha: AnaliticoRecebimento;
@@ -60,6 +64,8 @@ export function TabulacaoCell({
   const [acordoIdLocal,    setAcordoIdLocal]    = useState<string | null>(linha.acordo_id);
   const [divergenteInfo,   setDivergenteInfo]   = useState<{ outroNome: string; acordoId: string } | null>(null);
   const [confirmandoDiv,   setConfirmandoDiv]   = useState(false);
+  /** Dono do acordo direto quando a linha é Extra tabulada nele; `''` = nome não sabido. */
+  const [donoDoDireto,     setDonoDoDireto]     = useState<string | null>(null);
 
   // Ref para evitar usar status stale dentro do setTimeout
   const statusRef = useRef(statusLocal);
@@ -82,10 +88,11 @@ export function TabulacaoCell({
     let cancelled = false;
     const timer = setTimeout(async () => {
       if (cancelled || statusRef.current === 'tabulado') return;
-      const { status, acordoId, outroOperadorNome } = await verificarStatusTabulacaoEmLote(linha.id);
+      const { status, acordoId, outroOperadorNome, extraDoDireto } = await verificarStatusTabulacaoEmLote(linha.id);
       if (cancelled) return;
       setStatusLocal(status);
       setAcordoIdLocal(acordoId);
+      setDonoDoDireto(extraDoDireto ? (outroOperadorNome ?? '') : null);
       setDivergenteInfo(
         status === 'divergente' && acordoId
           ? { outroNome: outroOperadorNome ?? 'outro operador', acordoId }
@@ -109,13 +116,16 @@ export function TabulacaoCell({
   async function handleTabular() {
     setCarregando(true);
     esquecerStatusTabulacao(linha.id);
-    const { status, acordoId, outroOperadorNome } = await verificarStatusTabulacao(linha.id);
+    const { status, acordoId, outroOperadorNome, extraDoDireto } = await verificarStatusTabulacao(linha.id);
 
     if (status === 'tabulado' && acordoId) {
       await atualizarTabulacao(linha.id, 'tabulado', acordoId);
       setStatusLocal('tabulado');
       setAcordoIdLocal(acordoId);
-      toast.success('Acordo já tabulado para este operador. Registro atualizado.');
+      setDonoDoDireto(extraDoDireto ? (outroOperadorNome ?? '') : null);
+      toast.success(extraDoDireto
+        ? `Extra: tabulado no acordo direto de ${outroOperadorNome ?? 'outro operador'}.`
+        : 'Acordo já tabulado para este operador. Registro atualizado.');
       onRefetch();
       setCarregando(false);
       return;
@@ -166,6 +176,13 @@ export function TabulacaoCell({
 
     setStatusLocal('tabulado');
     setAcordoIdLocal(r.acordoId);
+    if (r.resultado === 'extra_do_direto') {
+      // O servidor recusou a transferência: a linha é Extra e o direto é o par.
+      setDonoDoDireto(r.donoDoDiretoNome ?? '');
+      toast.success(`Extra: tabulado no acordo direto de ${r.donoDoDiretoNome ?? divergenteInfo.outroNome}. Nada foi transferido.`);
+      onRefetch();
+      return;
+    }
     toast.success(
       r.resultado === 'transferido'
         ? `Acordo transferido de ${r.operadorAnteriorNome ?? divergenteInfo.outroNome} para ${r.operadorNovoNome ?? operadorNome}.`
@@ -193,6 +210,22 @@ export function TabulacaoCell({
       >
         <SlidersHorizontal className="w-3 h-3" /> Ajuste manual
       </span>
+    );
+  }
+
+  // Extra do relatório: tabulado no direto do colega (ou num extra próprio).
+  if (statusLocal === 'tabulado' && acordoIdLocal
+      && (donoDoDireto !== null || ehComissaoExtra(linha.tipo_comissao) === true)) {
+    return (
+      <Button
+        size="sm" variant="outline"
+        title="Extra no relatório: o acordo direto é do colega, e este pagamento é o extra dele."
+        className="h-7 gap-1.5 text-xs border-emerald-500/40 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950"
+        onClick={() => onVerAcordo(acordoIdLocal, linha.codigo)}
+      >
+        <CheckCircle2 className="w-3 h-3" />
+        {donoDoDireto ? `Extra · direto de ${donoDoDireto.split(/\s+/)[0]}` : 'Extra · ver acordo'}
+      </Button>
     );
   }
 
