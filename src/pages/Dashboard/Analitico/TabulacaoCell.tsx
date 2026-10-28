@@ -66,6 +66,7 @@ export function TabulacaoCell({
   const [confirmandoDiv,   setConfirmandoDiv]   = useState(false);
   /** Dono do acordo direto quando a linha é Extra tabulada nele; `''` = nome não sabido. */
   const [donoDoDireto,     setDonoDoDireto]     = useState<string | null>(null);
+  const [vendoExtra,       setVendoExtra]       = useState(false);
 
   // Ref para evitar usar status stale dentro do setTimeout
   const statusRef = useRef(statusLocal);
@@ -213,19 +214,71 @@ export function TabulacaoCell({
     );
   }
 
+  /*
+   * «Extra»: o acordo ligado é o DIRETO do colega, quase sempre de outro setor.
+   * A lista de Acordos só mostra o que a permissão de quem clica deixa ver, e
+   * abri-la filtrada pelo NR dava uma página vazia (28/10/2026). Então o
+   * botão explica ali mesmo de quem é o direto. Se a conferência disser que o
+   * acordo é do próprio operador (um extra registrado por ele), aí abre a lista.
+   */
+  async function abrirExtra() {
+    if (donoDoDireto) { setVendoExtra(true); return; }
+    setCarregando(true);
+    esquecerStatusTabulacao(linha.id);
+    const r = await verificarStatusTabulacao(linha.id);
+    setCarregando(false);
+    if (r.status === 'tabulado' && r.acordoId && !r.extraDoDireto) {
+      onVerAcordo(r.acordoId, linha.codigo);
+      return;
+    }
+    setDonoDoDireto(r.extraDoDireto ? (r.outroOperadorNome ?? '') : '');
+    setVendoExtra(true);
+  }
+
   // Extra do relatório: tabulado no direto do colega (ou num extra próprio).
   if (statusLocal === 'tabulado' && acordoIdLocal
       && (donoDoDireto !== null || ehComissaoExtra(linha.tipo_comissao) === true)) {
     return (
-      <Button
-        size="sm" variant="outline"
-        title="Extra no relatório: o acordo direto é do colega, e este pagamento é o extra dele."
-        className="h-7 gap-1.5 text-xs border-emerald-500/40 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950"
-        onClick={() => onVerAcordo(acordoIdLocal, linha.codigo)}
-      >
-        <CheckCircle2 className="w-3 h-3" />
-        {donoDoDireto ? `Extra · direto de ${donoDoDireto.split(/\s+/)[0]}` : 'Extra · ver acordo'}
-      </Button>
+      <>
+        <Button
+          size="sm" variant="outline"
+          title="Extra no relatório: o acordo direto é do colega, e este pagamento é o extra dele."
+          className="h-7 gap-1.5 text-xs border-emerald-500/40 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950"
+          onClick={abrirExtra}
+          disabled={carregando}
+        >
+          {carregando ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
+          {donoDoDireto ? `Extra · direto de ${donoDoDireto.split(/\s+/)[0]}` : 'Extra'}
+        </Button>
+
+        <AlertDialog open={vendoExtra} onOpenChange={setVendoExtra}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2 text-emerald-600">
+                <CheckCircle2 className="w-5 h-5" /> Pagamento Extra
+              </AlertDialogTitle>
+              <AlertDialogDescription className="space-y-2 text-left">
+                <p>
+                  O relatório marca este pagamento como <strong>Extra</strong>: o acordo direto do
+                  código <strong>{linha.codigo}</strong> é de{' '}
+                  <strong>{donoDoDireto || 'outro operador'}</strong>, e{' '}
+                  <strong>{operadorNome}</strong> recebe como extra.
+                </p>
+                <p>
+                  A linha já está tabulada nesse acordo direto. Não é preciso registrar nada.
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Recebido: <strong>{formatBRL(linha.valor_recebido)}</strong> · Forma:{' '}
+                  <strong>{linha.forma_pagamento === 'cartao' ? 'Cartão' : 'Boleto/Pix'}</strong>
+                </p>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Fechar</AlertDialogCancel>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </>
     );
   }
 
