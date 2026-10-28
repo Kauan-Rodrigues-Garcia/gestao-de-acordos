@@ -69,7 +69,7 @@ import { TemaHalloweenContext, cenaDaRota, temFundo } from '@/components/Hallowe
 import { useModoLeve } from '@/lib/modoLeve';
 import { useHalloweenParado, useVigiaDoHalloween } from '@/components/Halloween/aguenta';
 import { EVENTO_ABRIR_BOAS_VINDAS, pediuBoasVindasNaUrl, temaEsperaACarta, useHalloween } from '@/components/Halloween/preferencia';
-import { getImpersonacaoAtiva } from '@/services/impersonacao.service';
+import { getImpersonacaoAtiva, sairImpersonacao } from '@/services/impersonacao.service';
 import { MarcaHalloween } from '@/components/Halloween/MarcaHalloween';
 import { CrachaPendente } from '@/components/CrachaPendente';
 import { useNotificacoes } from '@/providers/NotificacoesProvider';
@@ -495,6 +495,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const nomeSetor = (perfil?.setores as { nome?: string } | undefined)?.nome || null;
 
   async function handleSignOut() {
+    // No «Entrar como», sair é voltar à conta do super admin (ver `signOut`).
+    if (getImpersonacaoAtiva()) { await sairImpersonacao(); return; }
     await signOut();
     navigate(ROUTE_PATHS.LOGIN);
   }

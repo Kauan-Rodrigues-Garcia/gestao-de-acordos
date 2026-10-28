@@ -40,7 +40,7 @@ import { User, Session } from '@supabase/supabase-js';
 import { supabase, Perfil, Empresa } from '@/lib/supabase';
 import { getConfiguredTenantSlug, siteAceitaEmpresa } from '@/lib/tenant';
 import { pareceEmailEntregavel } from '@/lib/identificadorLogin';
-import { getImpersonacaoAtiva } from '@/services/impersonacao.service';
+import { getImpersonacaoAtiva, sairImpersonacao } from '@/services/impersonacao.service';
 import { esquecerAparelhoAoSair } from '@/lib/mobile/push';
 import { identificarUsuario, limparUsuario } from '@/lib/observabilidade';
 import { esquecerInstantaneos } from '@/lib/cacheInstantaneo';
@@ -497,6 +497,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signOut() {
+    // No «Entrar como», sair é voltar à conta do super admin. O logout comum
+    // derruba TODAS as sessões da conta (escopo global): tirava a pessoa de
+    // verdade do celular e do computador dela, e desligava o aviso do aparelho.
+    if (getImpersonacaoAtiva()) { await sairImpersonacao(); return; }
     isManualSignOut.current = true;
     // Antes de derrubar a sessão: depois do signOut, `auth.uid()` é nulo e a
     // função de log não tem como saber quem saiu.
