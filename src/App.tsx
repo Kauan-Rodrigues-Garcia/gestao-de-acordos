@@ -792,13 +792,13 @@ export default function App() {
                 Creators Lab — a área escondida.
 
                 Sem `LayoutWrapper` de propósito: ela substitui a tela inteira,
-                sem barra lateral nem cabeçalho do Gestão. Continua dentro de
-                `ProtectedRoute` (só quem está logado), mas sem exigir permissão
-                — não há dado do Gestão ali, e o ponto é justamente qualquer
-                pessoa curiosa poder encontrar.
+                sem barra lateral nem cabeçalho do Gestão.
+
+                Fora do ar desde 28/10/2026 (Cleber): só o super admin entra.
+                Quem digitar o endereço cai no Dashboard.
               */}
               <Route path={ROUTE_PATHS.CREATORS_LAB} element={
-                <ProtectedRoute produtos={SO_COBRANCA}>
+                <ProtectedRoute produtos={SO_COBRANCA} roles={['super_admin']}>
                   <CreatorsLab />
                 </ProtectedRoute>
               } />

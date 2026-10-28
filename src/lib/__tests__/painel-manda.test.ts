@@ -127,8 +127,9 @@ const EXCECOES: Record<string, Excecao> = {
     motivo: 'espelho da policy `acordos_sinal_empresa` (`OR fn_user_is_super_admin()`): decide só se vale ASSINAR o aviso da empresa, para não pedir um join que o servidor recusaria. Não libera dado — a releitura passa pela RLS de acordos.',
   },
   'components/Layout.tsx': {
-    linhas: 1, familia: 'chave-mestra',
-    motivo: 'o editor do menu lateral configura o que os outros cargos veem — quem edita o painel não pode ser configurável por ele.',
+    linhas: 2, familia: 'chave-mestra',
+    motivo: 'o editor do menu lateral configura o que os outros cargos veem — quem edita o painel não pode ser configurável por ele. '
+      + 'E o Creators Lab, fora do ar para todos desde 28/10/2026: só o super admin abre (o logo só conta clique para ele).',
   },
   'components/Corrida/cavalos/PalcoCavalos.tsx': {
     linhas: 1, familia: 'chave-mestra',
