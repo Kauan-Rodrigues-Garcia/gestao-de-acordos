@@ -10,7 +10,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   FORMAS_RECORRENTES, ehFormaRecorrente, nomeDaFormaRecorrente,
-  erroVencimentoRecorrente, ultimoDiaDoMesDe,
+  erroVencimentoRecorrente, ultimoDiaDoMesDe, recorrenteSeguraONr,
 } from '@/lib/formasRecorrentes';
 import { TIPOS_BOOKPLAY } from '@/components/AcordoNovoInline/constants';
 import { isTipoParcelado } from '@/components/AcordoDetalheInline/helpers';
@@ -84,5 +84,25 @@ describe('vencimento recorrente: só o mês atual, de hoje em diante', () => {
     expect(ultimoDiaDoMesDe('2026-02-10')).toBe('2026-02-28');
     expect(ultimoDiaDoMesDe('2028-02-10')).toBe('2028-02-29');
     expect(ultimoDiaDoMesDe('2026-12-05')).toBe('2026-12-31');
+  });
+});
+
+describe('recorrenteSeguraONr (28/10/2026)', () => {
+  const hoje = '2026-10-28';
+
+  it('o Pix Automático pago de agosto não segura mais o NR (caso da Sirlei)', () => {
+    expect(recorrenteSeguraONr({ tipo: 'pix_automatico', status: 'pago', vencimento: '2026-08-21' }, hoje)).toBe(false);
+  });
+
+  it('recorrente de mês anterior, mesmo em aberto, libera', () => {
+    expect(recorrenteSeguraONr({ tipo: 'cartao_recorrente', status: 'pendente', vencimento: '2026-09-30' }, hoje)).toBe(false);
+  });
+
+  it('recorrente do mês corrente em aberto continua segurando', () => {
+    expect(recorrenteSeguraONr({ tipo: 'pix_automatico', status: 'pendente', vencimento: '2026-10-30' }, hoje)).toBe(true);
+  });
+
+  it('acordo comum não é assunto desta regra', () => {
+    expect(recorrenteSeguraONr({ tipo: 'boleto', status: 'pendente', vencimento: '2026-10-30' }, hoje)).toBe(false);
   });
 });

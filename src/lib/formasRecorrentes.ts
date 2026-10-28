@@ -78,3 +78,22 @@ export function erroVencimentoRecorrente(
   }
   return null;
 }
+
+/**
+ * O acordo recorrente ainda segura o NR do próprio operador? (28/10/2026)
+ *
+ * O recorrente não recebe parcela (item 2), então o NR que já é seu num Pix
+ * Automático não tinha caminho nenhum: nem acordo novo, nem parcela, e «edite
+ * o existente» não serve quando ele é de mês fechado. Era o caso da Sirlei,
+ * presa a um Pix Automático PAGO de agosto. Agora só segura o recorrente do
+ * mês corrente ainda em aberto; pago, ou de mês anterior, o acordo novo entra
+ * normalmente (e a trava do NR passa para ele).
+ */
+export function recorrenteSeguraONr(
+  acordo: { tipo?: string | null; status?: string | null; vencimento?: string | null },
+  hoje: string,
+): boolean {
+  if (!ehFormaRecorrente(acordo.tipo)) return false;
+  if (acordo.status === 'pago') return false;
+  return String(acordo.vencimento ?? '').slice(0, 7) >= hoje.slice(0, 7);
+}
