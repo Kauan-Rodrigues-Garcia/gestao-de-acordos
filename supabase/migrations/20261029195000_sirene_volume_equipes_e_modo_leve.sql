@@ -234,7 +234,7 @@ CREATE TABLE IF NOT EXISTS public.modo_leve_zerado (
 
 COMMENT ON TABLE public.modo_leve_zerado IS
   'Uma linha: quando o modo leve foi desligado em todos os computadores (a limpeza de 29/10/2026). '
-  'Cada tela que ligou o modo leve antes dessa hora o desliga. Gravada por esta migration. Ver 20261029200000.';
+  'Cada tela que ligou o modo leve antes dessa hora o desliga. Gravada por esta migration. Ver 20261029195000.';
 
 INSERT INTO public.modo_leve_zerado (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
 

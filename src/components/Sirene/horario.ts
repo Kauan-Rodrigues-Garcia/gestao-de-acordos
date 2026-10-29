@@ -30,7 +30,7 @@ export const DIAS_DA_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 export const DURACAO_MIN_S = 3;
 export const DURACAO_MAX_S = 60;
 export const DURACAO_PADRAO_S = 10;
-/** Volume em %, de 0 a 100 (migration 20261029200000). 50 = o volume que valia até aqui. */
+/** Volume em %, de 0 a 100 (migration 20261029195000). 50 = o volume que valia até aqui. */
 export const VOLUME_PADRAO = 50;
 
 /**

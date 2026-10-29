@@ -7,10 +7,10 @@
  *   Testar em mim só nesta aba, nada gravado
  *
  * «Para quem»: todos, ou setores e/ou equipes — ouve quem é de um dos setores
- * OU de uma das equipes (migration 20261029200000).
+ * OU de uma das equipes (migration 20261029195000).
  *
  * Só super_admin — as funções `fn_sirene_*` conferem de novo no banco. Ver
- * `Sirene/sirene.ts` e as migrations 20261029160000 e 20261029200000.
+ * `Sirene/sirene.ts` e as migrations 20261029160000 e 20261029195000.
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Siren, Loader2, Play, Eye, Plus, Pencil, Trash2, X, Volume2, VolumeX } from 'lucide-react';

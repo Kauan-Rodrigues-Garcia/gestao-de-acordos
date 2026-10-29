@@ -1,6 +1,6 @@
 /**
  * modoLeveZerado.ts — a limpeza do modo leve de todos os computadores
- * (29/10/2026, migration 20261029200000).
+ * (29/10/2026, migration 20261029195000).
  *
  * Pedido do Kauan: «apenas aplique para meio que limpar, e depois eles podem
  * voltar normalmente». Sem cartão nem botão: a migration grava, UMA vez, a hora
