@@ -1,12 +1,9 @@
 /**
- * DestaqueGibi.tsx — a cena «Destaque em gibi»: quem mais recebeu no dia (ou
+ * Gibi.tsx — o estilo «Gibi» da cena «Destaque»: quem mais recebeu no dia (ou
  * no mês), numa página de quadrinho, com a foto ENORME.
  *
  * Pedido do Cleber (29/10/2026): «design de gibi bonito, a foto bem destacada
- * e grande, atrativo para ficar numa TV». Quem é vem de `destaqueDaTela`
- * (`numeros.ts`), do analítico; aqui é só o desenho.
- *
- * ## A página
+ * e grande, atrativo para ficar numa TV».
  *
  *   ┌──────────────┬─────────────────────┐
  *   │              │  DESTAQUE DO DIA!   │  título em letra de gibi
@@ -17,31 +14,11 @@
  *   └──────────────┴─────────────────────┘
  *
  * Quadros de borda preta grossa e sombra dura, retícula de pontos e raios
- * atrás da foto. O tema do painel não entra: gibi tem a paleta dele.
- *
- * Leve como o resto da TV: tudo é CSS (gradiente, `clip-path`), nada de
- * imagem baixada além da foto e da fonte. A animação é só a da entrada —
- * nenhuma contínua.
+ * atrás da foto. Tudo é CSS (gradiente, `clip-path`); só a entrada anima.
  */
-import { useEffect, useState, type CSSProperties } from 'react';
-import type { TelaDoPainel } from './tipos';
-import { opcao } from './templates';
-import { destaqueDaTela, iniciais, moedaTv, nomeCurto, type VisaoTv } from './numeros';
-
-const ID_FONTE = 'tv-gibi-fontes';
-const URL_FONTE = 'https://fonts.googleapis.com/css2?family=Bangers&family=Comic+Neue:wght@700&display=swap';
-
-/** A letra de gibi, baixada só quando a cena aparece (como `carregarFontesDoCard`). */
-function carregarFonte(): void {
-  try {
-    if (document.getElementById(ID_FONTE)) return;
-    const link = document.createElement('link');
-    link.id = ID_FONTE;
-    link.rel = 'stylesheet';
-    link.href = URL_FONTE;
-    document.head.appendChild(link);
-  } catch { /* sem a fonte, a reserva (Impact) */ }
-}
+import type { CSSProperties } from 'react';
+import { caber, dadosDoDestaque, emPagamentos, iniciais, useFonte, type PropsEstilo } from './comum';
+import { Animacoes, FotoDestaque } from './pecas';
 
 const TITULO = '"Bangers", Impact, "Arial Black", sans-serif';
 const TEXTO = '"Comic Neue", "Comic Sans MS", "Segoe UI", sans-serif';
@@ -95,28 +72,10 @@ function letreiro(tam: number, cor: string, contorno = 7): CSSProperties {
   };
 }
 
-/** Corpo que cabe: a letra de gibi tem ~0,5 em por caractere. */
-const caber = (texto: string, largura: number, max: number) =>
-  Math.max(48, Math.min(max, Math.floor(largura / (Math.max(1, texto.length) * 0.5))));
-
-function dataPorExtenso(iso: string): string {
-  const d = new Date(`${iso}T12:00:00`);
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
-}
-
-const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
-
-function FotoGrande({ nome, foto }: { nome: string | null; foto: string | null }) {
-  const [falhou, setFalhou] = useState(false);
-  useEffect(() => setFalhou(false), [foto]);
-  const base: CSSProperties = { width: '100%', height: '100%', objectFit: 'cover', display: 'block' };
-  if (nome && foto && !falhou) {
-    return <img src={foto} alt="" style={base} decoding="async" onError={() => setFalhou(true)} />;
-  }
+function Reserva({ nome }: { nome: string | null }) {
   return (
     <div style={{
-      ...base, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
       background: `${reticula('rgba(255,255,255,.18)', 26, 3)}, linear-gradient(160deg, ${COR.azul}, ${COR.azulEscuro})`,
       ...letreiro(nome ? 320 : 460, nome ? COR.amarelo : '#ffffff', 12),
     }}>
@@ -125,18 +84,14 @@ function FotoGrande({ nome, foto }: { nome: string | null; foto: string | null }
   );
 }
 
-export function DestaqueGibi({ v, tela }: { v: VisaoTv; tela: TelaDoPainel }) {
-  useEffect(() => { carregarFonte(); }, []);
+export function DestaqueGibi({ v, tela }: PropsEstilo) {
+  useFonte('tv-gibi-fontes', 'https://fonts.googleapis.com/css2?family=Bangers&family=Comic+Neue:wght@700&display=swap');
 
-  const d = destaqueDaTela(v, tela);
+  const d = dadosDoDestaque(v, tela, { dia: 'Destaque do dia!', mes: 'Destaque do mês!' });
   const p = d.pessoa;
-  const mostrarValor = opcao<boolean>(tela, 'mostrar_valor');
-  const titulo = (opcao<string>(tela, 'titulo') || (d.doMes ? 'Destaque do mês!' : 'Destaque do dia!')).toUpperCase();
-  const quando = d.doMes
-    ? `${MESES[Number(v.mesIso.slice(5, 7)) - 1] ?? ''} · até agora`
-    : d.dia ? dataPorExtenso(d.dia) : '';
-  const nome = p ? nomeCurto(p.nome).toUpperCase() : 'QUEM SERÁ?';
-  const valor = p ? moedaTv(p.valor) : '';
+  const titulo = d.titulo.toUpperCase();
+  const nome = d.nome.toUpperCase();
+  const valor = d.valor ?? '';
 
   return (
     <div style={{
@@ -146,7 +101,6 @@ export function DestaqueGibi({ v, tela }: { v: VisaoTv; tela: TelaDoPainel }) {
     }}>
       {/* ── Quadro 1: a foto ── */}
       <div style={quadro(56, 52, 900, 966, -1.2, COR.amarelo, 0)}>
-        {/* Os raios saindo de trás da foto, e a retícula por cima. */}
         <div style={{
           position: 'absolute', inset: -400,
           background: `repeating-conic-gradient(from 0deg at 50% 50%, ${COR.amarelo} 0deg 7deg, ${COR.laranja} 7deg 14deg)`,
@@ -160,7 +114,7 @@ export function DestaqueGibi({ v, tela }: { v: VisaoTv; tela: TelaDoPainel }) {
           animation: 'gibi-foto 900ms cubic-bezier(.2, 1.5, .35, 1) 250ms both',
         }}>
           <div style={{ width: '100%', height: '100%', border: `6px solid ${TINTA}`, overflow: 'hidden' }}>
-            <FotoGrande nome={p?.nome ?? null} foto={p?.foto ?? null} />
+            <FotoDestaque foto={p?.foto ?? null} reserva={<Reserva nome={p?.nome ?? null} />} />
           </div>
         </div>
 
@@ -191,19 +145,19 @@ export function DestaqueGibi({ v, tela }: { v: VisaoTv; tela: TelaDoPainel }) {
 
       {/* ── Quadro 2: o título ── */}
       <div style={quadro(1000, 52, 864, 318, 1.4, `${reticula('rgba(255,255,255,.16)', 20, 3)}, linear-gradient(135deg, ${COR.azul}, ${COR.azulEscuro})`, 120)}>
-        {quando && (
+        {d.quando && (
           <div style={{
             position: 'absolute', left: -10, top: -10, padding: '10px 26px 12px',
             background: COR.amarelo, borderRight: `7px solid ${TINTA}`, borderBottom: `7px solid ${TINTA}`,
             fontFamily: TEXTO, fontWeight: 700, fontSize: 34, textTransform: 'uppercase', letterSpacing: 1,
           }}>
-            {quando}
+            {d.quando}
           </div>
         )}
         <div style={{
           position: 'absolute', inset: '70px 30px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
-          <span style={{ ...letreiro(caber(titulo, 780, 150), COR.amarelo, 8), transform: 'rotate(-3deg)' }}>{titulo}</span>
+          <span style={{ ...letreiro(caber(titulo, 780, 150, 0.5, 48), COR.amarelo, 8), transform: 'rotate(-3deg)' }}>{titulo}</span>
         </div>
       </div>
 
@@ -226,7 +180,7 @@ export function DestaqueGibi({ v, tela }: { v: VisaoTv; tela: TelaDoPainel }) {
             position: 'absolute', inset: 0, background: '#fff', border: `8px solid ${TINTA}`, borderRadius: '50%',
             display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 70px',
           }}>
-            <span style={{ ...letreiro(caber(nome, 640, 128), p ? COR.vermelho : COR.azul, 6), textShadow: `5px 5px 0 ${TINTA}` }}>
+            <span style={{ ...letreiro(caber(nome, 640, 128, 0.5, 48), p ? COR.vermelho : COR.azul, 6), textShadow: `5px 5px 0 ${TINTA}` }}>
               {nome}
             </span>
             {!p && (
@@ -240,7 +194,7 @@ export function DestaqueGibi({ v, tela }: { v: VisaoTv; tela: TelaDoPainel }) {
 
       {/* ── Quadro 4: o valor, na explosão ── */}
       <div style={quadro(1000, 776, 864, 242, 1.2, `${reticula('rgba(17,17,17,.18)', 18, 2.6)}, ${COR.vermelho}`, 360)}>
-        {p && mostrarValor ? (
+        {p && d.valor ? (
           <>
             <div style={{
               position: 'absolute', left: 0, top: -150, width: 540, height: 540,
@@ -254,11 +208,9 @@ export function DestaqueGibi({ v, tela }: { v: VisaoTv; tela: TelaDoPainel }) {
               display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
               animation: 'gibi-selo 800ms cubic-bezier(.2, 1.6, .4, 1) 1150ms both',
             }}>
-              <span style={{ ...letreiro(caber(valor, 420, 92), '#fff', 6), transform: 'rotate(-4deg)' }}>{valor}</span>
-              {p.pagamentos > 0 && (
-                <span style={{ fontFamily: TEXTO, fontWeight: 700, fontSize: 30, marginTop: 6 }}>
-                  em {p.pagamentos} {p.pagamentos === 1 ? 'pagamento' : 'pagamentos'}
-                </span>
+              <span style={{ ...letreiro(caber(valor, 420, 92, 0.5, 48), '#fff', 6), transform: 'rotate(-4deg)' }}>{valor}</span>
+              {d.pagamentos > 0 && (
+                <span style={{ fontFamily: TEXTO, fontWeight: 700, fontSize: 30, marginTop: 6 }}>{emPagamentos(d.pagamentos)}</span>
               )}
             </div>
             <span style={{
@@ -277,18 +229,12 @@ export function DestaqueGibi({ v, tela }: { v: VisaoTv; tela: TelaDoPainel }) {
         )}
       </div>
 
-      <style>{`
+      <Animacoes css={`
         @keyframes gibi-entra { from { opacity: 0; transform: rotate(var(--giro)) scale(.82); } to { opacity: 1; transform: rotate(var(--giro)) scale(1); } }
         @keyframes gibi-foto  { from { opacity: 0; transform: rotate(-14deg) scale(.6); } to { opacity: 1; transform: rotate(2.5deg) scale(1); } }
         @keyframes gibi-selo  { from { opacity: 0; transform: scale(.2) rotate(-40deg); } to { opacity: 1; transform: none; } }
         @keyframes gibi-balao { from { opacity: 0; transform: scale(.5); } to { opacity: 1; transform: none; } }
-        @media (prefers-reduced-motion: reduce) {
-          @keyframes gibi-entra { from { opacity: 1; } to { opacity: 1; } }
-          @keyframes gibi-foto  { from { opacity: 1; } to { opacity: 1; } }
-          @keyframes gibi-selo  { from { opacity: 1; } to { opacity: 1; } }
-          @keyframes gibi-balao { from { opacity: 1; } to { opacity: 1; } }
-        }
-      `}</style>
+      `} />
     </div>
   );
 }

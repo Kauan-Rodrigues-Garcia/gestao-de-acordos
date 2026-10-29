@@ -89,6 +89,11 @@ export function painelDemo(tema: string | null): Painel {
       { id: 'd8', template: 'lista', opcoes: { quantidade: '10' } },
       { id: 'd9', template: 'recado', opcoes: { texto: 'Faltam poucos dias. Cada acordo conta!', assinatura: 'Liderança' } },
       { id: 'd11', template: 'destaque', opcoes: { dia: 'mes' } },
+      { id: 'd12', template: 'destaque', opcoes: { dia: 'mes', estilo: 'serio' } },
+      { id: 'd13', template: 'destaque', opcoes: { dia: 'mes', estilo: 'fofo' } },
+      { id: 'd14', template: 'destaque', opcoes: { dia: 'mes', estilo: 'pixel' } },
+      { id: 'd15', template: 'destaque', opcoes: { dia: 'mes', estilo: 'neon' } },
+      { id: 'd16', template: 'destaque', opcoes: { dia: 'mes', estilo: 'jornal' } },
     ],
   };
 }

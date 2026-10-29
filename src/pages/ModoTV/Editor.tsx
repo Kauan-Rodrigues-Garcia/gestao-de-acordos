@@ -767,6 +767,18 @@ function CampoDaTela({ campo, tela, painelId, aoMudar, aoEnviarVideo, equipes = 
       );
     case 'escolha': {
       const v = opcao<string>(tela, campo.chave);
+      // Muitas escolhas não cabem em botões lado a lado: vira lista.
+      if (campo.escolhas.length > 4) {
+        return (
+          <div className="space-y-1.5">
+            <Label>{campo.rotulo}</Label>
+            <select className="h-9 w-full rounded-md border bg-background px-2 text-sm" value={v}
+              onChange={e => aoMudar(e.target.value)}>
+              {campo.escolhas.map(e => <option key={e.valor} value={e.valor}>{e.rotulo}</option>)}
+            </select>
+          </div>
+        );
+      }
       return (
         <div className="space-y-1.5">
           <Label>{campo.rotulo}</Label>

@@ -289,6 +289,11 @@ describe('cena Destaque em gibi', () => {
     expect(destaqueDaTela(v, tela({ escopo: 'equipe' })).motivo).toMatch(/Escolha a equipe/);
     expect(destaqueDaTela(montarVisao({ ...base, equipe_id: E1 }, 'bruto'), tela({ escopo: 'equipe' })).pessoa?.nome).toBe('Davi');
   });
+  it('estilo: gibi por padrão; os seis e a surpresa valem, o resto cai no gibi', () => {
+    expect(opcao<string>(tela({}), 'estilo')).toBe('gibi');
+    for (const e of ['serio', 'fofo', 'pixel', 'neon', 'jornal', 'surpresa']) expect(opcao<string>(tela({ estilo: e }), 'estilo')).toBe(e);
+    expect(opcao<string>(tela({ estilo: 'batman' }), 'estilo')).toBe('gibi');
+  });
   it('sem ninguém: hoje ainda vazio, dia de outro mês', () => {
     expect(destaqueDaTela(v, tela({ dia: 'hoje' })).pessoa).toBeNull();
     expect(destaqueDaTela(v, tela({ dia: 'data', data: '2026-09-10' })).motivo).toMatch(/mês atual/);

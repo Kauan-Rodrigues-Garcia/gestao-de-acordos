@@ -129,11 +129,17 @@ export const TEMPLATES: Template[] = [
     ],
   },
   {
-    // 29/10/2026: o destaque em quadrinho, com a foto grande (`DestaqueGibi.tsx`).
+    // 29/10/2026: o destaque com a foto grande, em vários estilos (`destaque/`).
     id: 'destaque', categoria: 'ranking',
-    nome: 'Destaque em gibi',
-    descricao: 'Quem mais recebeu no dia ou no mês, com a foto bem grande, em quadrinho.',
+    nome: 'Destaque do dia',
+    descricao: 'Quem mais recebeu no dia ou no mês, com a foto bem grande. Estilos: gibi, sério, fofo, pixel art, neon e jornal.',
     campos: [
+      { chave: 'estilo', rotulo: 'Estilo', tipo: 'escolha', padrao: 'gibi',
+        escolhas: [
+          { valor: 'gibi', rotulo: 'Gibi' }, { valor: 'serio', rotulo: 'Sério' }, { valor: 'fofo', rotulo: 'Fofo' },
+          { valor: 'pixel', rotulo: 'Pixel art' }, { valor: 'neon', rotulo: 'Neon' }, { valor: 'jornal', rotulo: 'Jornal' },
+          { valor: 'surpresa', rotulo: 'Surpresa (sorteia a cada vez)' },
+        ] },
       { chave: 'titulo', rotulo: 'Título (vazio = automático)', tipo: 'texto', padrao: '', max: 28 },
       { chave: 'escopo', rotulo: 'Destaque de', tipo: 'escolha', padrao: 'setor',
         escolhas: [{ valor: 'setor', rotulo: 'Setor' }, { valor: 'equipe', rotulo: 'Equipe' }] },

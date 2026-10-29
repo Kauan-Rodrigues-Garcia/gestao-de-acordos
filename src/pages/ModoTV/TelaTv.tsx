@@ -19,7 +19,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type 
 import type { TelaDoPainel, TemaId } from './tipos';
 import { alvoDoDiaProprio, opcao } from './templates';
 import { iniciais, moedaTv, nomeCurto, percentualTv, tamanhoQueCabe, type VisaoTv } from './numeros';
-import { DestaqueGibi } from './DestaqueGibi';
+import { Destaque } from './destaque/Destaque';
 
 // ── Temas ────────────────────────────────────────────────────────────────────
 
@@ -815,7 +815,7 @@ export interface PropsTelaTv {
 
 export function TelaTv({ tela, tema, visao, midiaUrl, posicao, atualizadoEm, mes, parada, semSom }: PropsTelaTv) {
   const c = CORES[tema];
-  // Tela cheia, sem o cabeçalho e o rodapé: a mídia e o gibi (que tem a página dele).
+  // Tela cheia, sem o cabeçalho e o rodapé: a mídia e o destaque (cada estilo tem a página dele).
   const ehMidia = tela.template === 'imagem' || tela.template === 'video' || tela.template === 'destaque';
   const nomeMes = mes ? MESES[Number(mes.slice(5, 7)) - 1] : undefined;
 
@@ -829,7 +829,7 @@ export function TelaTv({ tela, tema, visao, midiaUrl, posicao, atualizadoEm, mes
     corpo = {
       contagem: <Contagem {...P} />, barra: <MetaBarra {...P} />, anel: <Anel {...P} />,
       hoje: <Hoje {...P} />, ritmo: <Ritmo {...P} />, placar: <Placar {...P} />, grafico: <Grafico {...P} />,
-      podio: <Podio {...P} />, lista: <Lista {...P} />, destaque: <DestaqueGibi v={visao} tela={tela} />,
+      podio: <Podio {...P} />, lista: <Lista {...P} />, destaque: <Destaque v={visao} tela={tela} />,
     }[tela.template as 'contagem'] ?? <Aviso texto="Template desconhecido." c={c} />;
   }
 
