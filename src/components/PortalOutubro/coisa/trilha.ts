@@ -11,10 +11,11 @@
  *              aos 0,25 s e o golpe da música aos 2,75 s, junto do estouro
  *              dos balões da abertura (2,9 s)
  *   balao      «Balloon POP Sound Effect»              4,05 a 4,75 s
- *   apresenta  «IT BEM VINDOS A DERRY»               68,85 a 76,95 s  «Permitam-me
+ *   apresenta  «IT BEM VINDOS A DERRY»               68,85 a 77,75 s  «Permitam-me
  *              apresentar o inigualável Pennywise, um palhaço dançarino»; a
- *              última palavra acaba aos 7,85 s do trecho, quando ela começa a
- *              dançar (`cena.ts` mede o balão por isso)
+ *              última sílaba vai de 8,0 a 8,35 s do trecho (até 29/10 o corte
+ *              era 76,95 s e comia o «-no»), abaixando nos últimos 0,35 s. A
+ *              dança só começa depois de `FIM_DA_APRESENTACAO` (`cena.ts`)
  *   danca      «Pennywise Dance and The Dead Lights»  28,30 a 41,98 s  (pedido
  *              de 29/10: «0:29 a 42 segundos»): o golpe da dança cai aos
  *              28,33 s do original, por isso o corte começa ali e não no 0:29
@@ -60,6 +61,9 @@ const VOLUME: Readonly<Record<SomDaCoisa, number>> = {
 
 /** Quanto dura o trecho da dança (a fase `dancando` em `cena.ts` dura isso). */
 export const DURA_DA_DANCA = 13.68;
+
+/** Do balão sair (a apresentação começar) até a fala acabar: antes disso, não dança. */
+export const FIM_DA_APRESENTACAO = 8.45;
 
 /** O laço do tema, em segundos do arquivo: chegou no fim, volta ao começo. */
 export const LACO_DO_TEMA = { de: 48.95, ate: 96.95 } as const;

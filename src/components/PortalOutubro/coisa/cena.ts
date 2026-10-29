@@ -24,7 +24,7 @@ import { sorteador } from '../acaso';
 import { pintarPor } from '../cinzas';
 import { ALTURA_DA_COISA, BALAO, LARGURA_DA_COISA, PALETA_DA_COISA, PALETA_DO_BALAO } from './arte';
 import { BABANDO, CANTOS_DA_BOCA, DANCA, QUADROS } from './desenho';
-import { DURA_DA_DANCA } from './trilha';
+import { DURA_DA_DANCA, FIM_DA_APRESENTACAO } from './trilha';
 import { BUEIRO, CHAO_DA_COISA, COVIL_A, OLHOS_DO_BUEIRO, PALCO_A, PALCO_L, RUA_Y, desenharCovil, desenharDerry, lampada, pintarGrade } from './derry';
 
 export type FaseDaCena = 'espera' | 'subindo' | 'enchendo' | 'nascendo' | 'dancando' | 'babando' | 'perto' | 'fim';
@@ -50,7 +50,8 @@ export const DURA_DO_CLOSE = 8.6;
 /**
  * Os tempos casam com a trilha (`trilha.ts`, 29/10/2026): do balão sair do
  * bueiro até ela dançar são uns 7,8 s (subindo + enchendo + nascendo, ~2,7),
- * o «palhaço dançarino» da apresentação; a dança dura o trecho dela inteiro
+ * e ela espera nascida até `FIM_DA_APRESENTACAO` (o «palhaço dançarino»
+ * inteiro) para a música da dança não cortar a fala; a dança dura o trecho dela inteiro
  * (`DURA_DA_DANCA`, 28,3 a 42 s do original, pedido de 29/10); babando e
  * encarando, o «we'll float down here».
  */
@@ -82,6 +83,8 @@ export class CenaDaCoisa {
   private t = 0;
   private tFase = 0;
   private tremor = 0;
+  /** Quando o balão saiu do bueiro (e a apresentação começou a tocar). */
+  private tBalao = 0;
 
   private readonly letras: string[][] = QUADROS.map(q => q.linhas.join('').split(''));
   private quadro = 0;
@@ -153,6 +156,7 @@ export class CenaDaCoisa {
   comecarBalao(): void {
     if (this.fase !== 'espera') return;
     this.grande = { x: BUEIRO.x + BUEIRO.l / 2, y: BUEIRO.y + 2, esc: 1 };
+    this.tBalao = this.t;
     this.mudar('subindo');
   }
 
@@ -230,7 +234,11 @@ export class CenaDaCoisa {
           if (!this.nasceu[i] && this.tFase >= nc.atraso[k] + 0.7) this.nasceu[i] = 1;
           if (!this.nasceu[i]) faltam++;
         }
-        if (faltam === 0) { this.nasceu.fill(1); this.tremor = 0.8; this.tCovil = 0; this.mudar('dancando'); }
+        // Nascida, espera parada a apresentação acabar de dizer «dançarino»:
+        // a música da dança não corta a fala.
+        if (faltam === 0 && this.t - this.tBalao >= FIM_DA_APRESENTACAO) {
+          this.nasceu.fill(1); this.tremor = 0.8; this.tCovil = 0; this.mudar('dancando');
+        }
         break;
       }
       case 'dancando': {
