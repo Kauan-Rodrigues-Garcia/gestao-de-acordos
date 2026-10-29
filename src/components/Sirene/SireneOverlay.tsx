@@ -11,6 +11,16 @@
  *     (a primeira que marcar a chave no `localStorage`);
  *   - nunca presa: some pelo timer da duração, por um vigia com o teto de
  *     60 s, e no «Silenciar». A camada não pega clique, só o botão.
+ *
+ * ## Leve de desenhar (29/10/2026)
+ *
+ * A primeira versão girava fachos do tamanho da tela misturados com o fundo
+ * (`mix-blend-mode`) e piscava as bordas com sombra borrada: em computador sem
+ * placa de vídeo o processador não dava conta e a luz ficava PARADA. Agora o
+ * giro é a luz dentro da cúpula (pequena), e as bordas piscam trocando a
+ * opacidade de duas camadas — o que o navegador faz sem redesenhar. Os fachos
+ * grandes só aparecem em máquina com placa de vídeo e fora do modo leve; no
+ * modo leve a sirene continua girando e piscando (ver `sirene.css`).
  */
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
@@ -18,13 +28,14 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { DURACAO_MAX_S, TOLERANCIA_MS, corDaSirene, proximoToque, type CorDaSirene } from './horario';
 import { agoraDoServidor, ouvirTeste, useMinhaSirene } from './sirene';
 import { destravarNoPrimeiroGesto, tocarSom } from './som';
+import { semPlacaDeVideo } from '@/components/Halloween/aguenta';
 import './sirene.css';
 
 /** O maior atraso que o `setTimeout` aceita (~24,8 dias). */
 const TIMER_MAX_MS = 2_147_483_000;
 const CHAVE_SOM = 'sirene:som:';
 
-interface NaTela { chave: string; cor: CorDaSirene; duracaoMs: number; texto: string | null }
+interface NaTela { chave: string; cor: CorDaSirene; duracaoMs: number; texto: string | null; volume: number }
 
 /** Esta aba fica com o som deste toque? A primeira a marcar fica. */
 function ficarComOSom(chave: string): boolean {
@@ -60,7 +71,7 @@ export function SireneOverlay() {
 
   function tocar(t: NaTela, comSom: boolean) {
     pararSom.current();
-    pararSom.current = comSom ? tocarSom(t.duracaoMs) : () => undefined;
+    pararSom.current = comSom ? tocarSom(t.duracaoMs, t.volume) : () => undefined;
     setSaindo(false);
     setNaTela(t);
   }
@@ -75,7 +86,7 @@ export function SireneOverlay() {
       const atraso = agoraDoServidor() - prox.quando;
       tocados.current.add(prox.chave);
       if (atraso <= TOLERANCIA_MS) {
-        tocar({ chave: prox.chave, cor: prox.cor, duracaoMs: prox.duracaoMs, texto: prox.descricao }, ficarComOSom(prox.chave));
+        tocar({ chave: prox.chave, cor: prox.cor, duracaoMs: prox.duracaoMs, texto: prox.descricao, volume: prox.volume }, ficarComOSom(prox.chave));
       }
       setRodada(r => r + 1);
     }, Math.max(0, falta));
@@ -89,13 +100,13 @@ export function SireneOverlay() {
     if (falta < -TOLERANCIA_MS) return;
     const id = setTimeout(() => {
       tocados.current.add(toque.id);
-      tocar({ chave: toque.id, cor: toque.cor, duracaoMs: toque.duracaoMs, texto: null }, ficarComOSom(toque.id));
+      tocar({ chave: toque.id, cor: toque.cor, duracaoMs: toque.duracaoMs, texto: null, volume: toque.volume }, ficarComOSom(toque.id));
     }, Math.max(0, falta));
     return () => clearTimeout(id);
   }, [toque]);
 
   // ── O teste: só nesta aba ──
-  useEffect(() => ouvirTeste(p => tocar({ chave: `teste:${Date.now()}`, cor: p.cor, duracaoMs: p.duracaoMs, texto: 'Teste da sirene' }, true)), []);
+  useEffect(() => ouvirTeste(p => tocar({ chave: `teste:${Date.now()}`, cor: p.cor, duracaoMs: p.duracaoMs, texto: 'Teste da sirene', volume: p.volume }, true)), []);
 
   // ── As saídas: a duração e o vigia ──
   useEffect(() => {
@@ -122,14 +133,17 @@ export function SireneOverlay() {
 
   return createPortal(
     <div
-      className={`sirene-camada${saindo ? ' saindo' : ''}`}
+      className={`sirene-camada${saindo ? ' saindo' : ''}${semPlacaDeVideo() ? ' sem-placa' : ''}`}
       style={{ '--luz': cor.luz, '--luz2': cor.luz2 } as CSSProperties}
       data-testid="sirene"
     >
-      <div className="sirene-bordas" aria-hidden />
+      <div className="sirene-borda sirene-borda-a" aria-hidden />
+      <div className="sirene-borda sirene-borda-b" aria-hidden />
       <div className="sirene-fachos" aria-hidden />
       <div className="sirene-peca" aria-hidden>
-        <div className="sirene-cupula" />
+        <div className="sirene-cupula">
+          <div className="sirene-farol" />
+        </div>
         <div className="sirene-anel" />
         <div className="sirene-base" />
       </div>

@@ -5,13 +5,13 @@ import { TOLERANCIA_MS, proximoToque, resumoDosDias, type Agendamento } from './
 const sp = (dia: number, h: number, m = 0) => Date.UTC(2026, 9, dia, h + 3, m);
 
 const ag = (over: Partial<Agendamento> = {}): Agendamento => ({
-  id: 'a', hora: '09:00', dias: [1, 2, 3, 4, 5], cor: 'azul', duracao_s: 10, descricao: null, ...over,
+  id: 'a', hora: '09:00', dias: [1, 2, 3, 4, 5], cor: 'azul', duracao_s: 10, descricao: null, volume: 50, ...over,
 });
 
 describe('proximoToque', () => {
   it('toca hoje às 9h de São Paulo (qui 29/10)', () => {
     const t = proximoToque([ag()], sp(29, 8));
-    expect(t).toMatchObject({ quando: sp(29, 9), chave: 'a:2026-10-29', cor: 'azul', duracaoMs: 10_000 });
+    expect(t).toMatchObject({ quando: sp(29, 9), chave: 'a:2026-10-29', cor: 'azul', duracaoMs: 10_000, volume: 50 });
   });
 
   it('passou da hora (fora da tolerância): vai para o próximo dia da semana', () => {
@@ -44,5 +44,13 @@ describe('resumoDosDias', () => {
     expect(resumoDosDias([1, 2, 3, 4, 5])).toBe('Seg a Sex');
     expect(resumoDosDias([0, 1, 2, 3, 4, 5, 6])).toBe('Todos os dias');
     expect(resumoDosDias([5, 1, 3])).toBe('Seg, Qua, Sex');
+  });
+});
+
+describe('volume', () => {
+  it('vai junto no toque e fica entre 0 e 100', () => {
+    expect(proximoToque([ag({ volume: 80 })], sp(29, 8))?.volume).toBe(80);
+    expect(proximoToque([ag({ volume: 250 })], sp(29, 8))?.volume).toBe(100);
+    expect(proximoToque([ag({ volume: -5 })], sp(29, 8))?.volume).toBe(0);
   });
 });

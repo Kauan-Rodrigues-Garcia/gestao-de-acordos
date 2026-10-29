@@ -79,6 +79,7 @@ import { useEasterEggCriadores, DURACAO_ESCURECIMENTO_MS } from '@/hooks/useEast
 import { ComemoracaoOverlay } from './comemoracao/ComemoracaoOverlay';
 import { JumpscareOverlay } from './Jumpscare/JumpscareOverlay';
 import { SireneOverlay } from './Sirene/SireneOverlay';
+import { useModoLeveZeradoPeloAdmin } from '@/lib/modoLeveZerado';
 import { useTermoUso } from '@/hooks/useTermoUso';
 import { useMarcarAtrasados } from '@/hooks/useMarcarAtrasados';
 import { ChatplayOnboardingModal } from './ChatplayOnboardingModal';
@@ -145,6 +146,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const { perfil, signOut } = useAuth();
   const { empresa, branding } = useEmpresa();
   const liberacaoDoMural = useLiberacaoDoMural(empresa?.id);
+  // O super admin pode desligar o modo leve de todos (29/10/2026). Ver `lib/modoLeveZerado.ts`.
+  useModoLeveZeradoPeloAdmin(empresa?.id);
   const previaDoMural = usePrevia();
   // Lida aqui só para o Layout redesenhar quando a prévia do bueiro liga/desliga.
   usePreviaDoBueiro();

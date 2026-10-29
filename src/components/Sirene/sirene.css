@@ -1,5 +1,9 @@
 /* A sirene na tela (`SireneOverlay.tsx`). `--luz` e `--luz2` vêm da cor escolhida;
-   na cor «policia» são azul e vermelho, e as duas alternam. */
+   na cor «policia» são azul e vermelho, e as duas alternam.
+
+   Leve de desenhar (29/10/2026): tudo o que anima é `transform` ou `opacity`, que o
+   navegador compõe sem redesenhar — o que computador sem placa de vídeo aguenta.
+   Nada de sombra borrada animada nem `mix-blend-mode`. */
 
 .sirene-camada {
   position: fixed;
@@ -15,39 +19,51 @@
 @keyframes sirene-entra { from { opacity: 0; } to { opacity: 1; } }
 @keyframes sirene-sai   { from { opacity: 1; } to { opacity: 0; } }
 
-/* As bordas da tela piscando na cor. */
-.sirene-bordas {
+/* As bordas da tela piscando: duas camadas paradas, uma em cada cor, trocando a opacidade. */
+.sirene-borda {
   position: absolute;
   inset: 0;
-  animation: sirene-bordas 0.7s steps(1, end) infinite;
+  --c: color-mix(in srgb, var(--luz) 70%, transparent);
+  background:
+    linear-gradient(to right,  var(--c), transparent 110px),
+    linear-gradient(to left,   var(--c), transparent 110px),
+    linear-gradient(to bottom, var(--c), transparent 110px),
+    linear-gradient(to top,    var(--c), transparent 110px);
+  will-change: opacity;
+  animation: sirene-pisca-a 0.7s steps(1, end) infinite;
 }
 
-@keyframes sirene-bordas {
-  0%   { box-shadow: inset 0 0 120px 40px color-mix(in srgb, var(--luz) 75%, transparent); }
-  50%  { box-shadow: inset 0 0 120px 40px color-mix(in srgb, var(--luz2) 75%, transparent); }
+.sirene-borda-b {
+  --c: color-mix(in srgb, var(--luz2) 70%, transparent);
+  animation-name: sirene-pisca-b;
 }
 
-/* Os fachos de luz girando a partir da sirene. */
+@keyframes sirene-pisca-a { 0% { opacity: 1; } 50% { opacity: 0; } }
+@keyframes sirene-pisca-b { 0% { opacity: 0; } 50% { opacity: 1; } }
+
+/* Os fachos grandes girando a partir da sirene — só com placa de vídeo e fora do modo leve. */
 .sirene-fachos {
   position: absolute;
   left: 50%;
   top: 70px;
-  width: 260vmax;
-  height: 260vmax;
-  margin: -130vmax 0 0 -130vmax;
+  width: 200vmax;
+  height: 200vmax;
+  margin: -100vmax 0 0 -100vmax;
   border-radius: 50%;
   background: conic-gradient(
     from 0deg,
-    color-mix(in srgb, var(--luz) 55%, transparent) 0deg,
-    transparent 28deg,
+    color-mix(in srgb, var(--luz) 45%, transparent) 0deg,
+    transparent 26deg,
     transparent 180deg,
-    color-mix(in srgb, var(--luz2) 55%, transparent) 180deg,
-    transparent 208deg,
+    color-mix(in srgb, var(--luz2) 45%, transparent) 180deg,
+    transparent 206deg,
     transparent 360deg);
-  mix-blend-mode: screen;
-  opacity: 0.55;
+  opacity: 0.6;
+  will-change: transform;
   animation: sirene-gira 0.9s linear infinite;
 }
+
+.sirene-camada.sem-placa .sirene-fachos { display: none; }
 
 @keyframes sirene-gira { to { transform: rotate(360deg); } }
 
@@ -78,7 +94,27 @@
   box-shadow:
     0 0 40px 10px color-mix(in srgb, var(--luz) 60%, transparent),
     0 0 40px 10px color-mix(in srgb, var(--luz2) 40%, transparent);
-  animation: sirene-pisca 0.45s steps(1, end) infinite;
+}
+
+/* O giro: a luz branca varrendo por dentro da cúpula. Pequena — gira em qualquer máquina. */
+.sirene-farol {
+  position: absolute;
+  left: 50%;
+  top: 60%;
+  width: 180px;
+  height: 180px;
+  margin: -90px 0 0 -90px;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg,
+    rgba(255, 255, 255, 0.85) 0deg,
+    rgba(255, 255, 255, 0) 50deg,
+    rgba(255, 255, 255, 0) 180deg,
+    rgba(255, 255, 255, 0.85) 180deg,
+    rgba(255, 255, 255, 0) 230deg,
+    rgba(255, 255, 255, 0) 360deg);
+  will-change: transform;
+  animation: sirene-gira 0.9s linear infinite;
 }
 
 /* O reflexo do acrílico. */
@@ -91,11 +127,6 @@
   height: 70%;
   border-radius: 40px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0));
-}
-
-@keyframes sirene-pisca {
-  0%  { filter: brightness(1.25) saturate(1.2); }
-  50% { filter: brightness(0.8); }
 }
 
 .sirene-anel {
@@ -146,7 +177,21 @@
 
 .sirene-silenciar:hover { background: rgba(0, 0, 0, 0.9); }
 
+/* Modo leve (`html[data-leve]`, que corta toda animação para 1 ms): a sirene é
+   aviso, então o giro da cúpula e o pisca das bordas continuam — são baratos.
+   Só os fachos grandes saem. */
+html[data-leve] .sirene-camada .sirene-fachos { display: none; }
+html[data-leve] .sirene-camada .sirene-farol {
+  animation-duration: 0.9s !important;
+  animation-iteration-count: infinite !important;
+}
+html[data-leve] .sirene-camada .sirene-borda {
+  animation-duration: 0.7s !important;
+  animation-iteration-count: infinite !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .sirene-fachos { animation: none; opacity: 0.25; }
-  .sirene-bordas, .sirene-cupula { animation-duration: 1.6s; }
+  .sirene-fachos { display: none; }
+  .sirene-farol { animation-duration: 1.8s; }
+  .sirene-borda { animation-duration: 1.6s; }
 }

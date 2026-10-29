@@ -30,6 +30,8 @@ export const DIAS_DA_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 export const DURACAO_MIN_S = 3;
 export const DURACAO_MAX_S = 60;
 export const DURACAO_PADRAO_S = 10;
+/** Volume em %, de 0 a 100 (migration 20261029200000). 50 = o volume que valia até aqui. */
+export const VOLUME_PADRAO = 50;
 
 /**
  * Depois da hora, quanto tempo ainda vale tocar. Aba em segundo plano tem o
@@ -46,6 +48,8 @@ export interface Agendamento {
   cor: CorDaSirene;
   duracao_s: number;
   descricao: string | null;
+  /** 0 a 100 (%). */
+  volume: number;
 }
 
 export interface Toque {
@@ -55,6 +59,7 @@ export interface Toque {
   cor: CorDaSirene;
   duracaoMs: number;
   descricao: string | null;
+  volume: number;
 }
 
 const HORA_MS = 3_600_000;
@@ -66,6 +71,12 @@ export function duracaoSegura(s: unknown): number {
   const n = Math.round(Number(s));
   if (!Number.isFinite(n)) return DURACAO_PADRAO_S;
   return Math.min(DURACAO_MAX_S, Math.max(DURACAO_MIN_S, n));
+}
+
+export function volumeSeguro(v: unknown): number {
+  const n = Math.round(Number(v));
+  if (!Number.isFinite(n)) return VOLUME_PADRAO;
+  return Math.min(100, Math.max(0, n));
 }
 
 /** «HH:MM» → minutos do dia, ou `null`. */
@@ -101,7 +112,7 @@ export function proximoToque(
       const chave = `${a.id}:${new Date(meiaNoite - FUSO_MS).toISOString().slice(0, 10)}`;
       if (jaTocou.has(chave)) continue;
       if (!melhor || quando < melhor.quando) {
-        melhor = { chave, quando, cor: a.cor, duracaoMs: duracaoSegura(a.duracao_s) * 1000, descricao: a.descricao };
+        melhor = { chave, quando, cor: a.cor, duracaoMs: duracaoSegura(a.duracao_s) * 1000, descricao: a.descricao, volume: volumeSeguro(a.volume) };
       }
       break;
     }

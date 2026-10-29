@@ -34,6 +34,7 @@ import RankingQuitacaoConfig from '@/components/admin/RankingQuitacaoConfig';
 import JumpscareConfig from '@/components/admin/JumpscareConfig';
 import MuralOutubroConfig from '@/components/admin/MuralOutubroConfig';
 import SireneConfig from '@/components/admin/SireneConfig';
+import ModoLeveConfig from '@/components/admin/ModoLeveConfig';
 
 const MIGRATION_SQL = `ALTER TABLE public.acordos
   ADD COLUMN IF NOT EXISTS instituicao TEXT;
@@ -321,6 +322,10 @@ export default function AdminConfiguracoes() {
           {/* ── Sirene: luz e som por horário, cor e setor (29/10/2026). Só
               super_admin — as funções `fn_sirene_*` conferem de novo no banco. */}
           {ehSuperAdmin && <SireneConfig />}
+
+          {/* ── Modo leve: desligar em todos os computadores (29/10/2026). Só
+              super_admin — `fn_modo_leve_zerar` confere de novo no banco. */}
+          {ehSuperAdmin && <ModoLeveConfig />}
 
           {ehSuperAdmin && <LiberacaoChat />}
 

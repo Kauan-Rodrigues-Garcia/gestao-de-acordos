@@ -14,7 +14,6 @@ import { TermoUsoProvider } from '@/hooks/useTermoUso';
 import { ImpersonacaoBanner } from '@/components/ImpersonacaoBanner';
 import { Toaster } from '@/components/ui/sonner';
 import { MotionConfig } from 'framer-motion';
-import { SugestaoModoLeve } from '@/components/SugestaoModoLeve';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useModoLeve } from '@/lib/modoLeve';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -808,7 +807,7 @@ export default function App() {
           </Suspense>
           <ImpersonacaoBanner />
           <Toaster richColors position="top-right" />
-          <SugestaoModoLeve />
+          {/* A oferta do modo leve saiu (29/10/2026): quem quiser liga no menu de tema. */}
           </RastreioUsoProvider>
         </Router>
           </NotificacoesProvider>

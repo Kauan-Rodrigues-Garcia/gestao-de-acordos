@@ -13,13 +13,14 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { supabase } from '@/lib/supabase';
 import { assinarSinal } from '@/lib/sinais';
-import { corDaSirene, duracaoSegura, type Agendamento, type CorDaSirene } from './horario';
+import { corDaSirene, duracaoSegura, volumeSeguro, type Agendamento, type CorDaSirene } from './horario';
 
 export interface ToqueSolto {
   id: string;
   cor: CorDaSirene;
   duracaoMs: number;
   tocaEm: number;
+  volume: number;
 }
 
 export interface MinhaSirene {
@@ -53,6 +54,7 @@ function lerAgendamento(x: Record<string, unknown>): Agendamento {
     cor: corDaSirene(String(x.cor)).slug,
     duracao_s: duracaoSegura(x.duracao_s),
     descricao: typeof x.descricao === 'string' ? x.descricao : null,
+    volume: volumeSeguro(x.volume),
   };
 }
 
@@ -73,7 +75,7 @@ async function ler(): Promise<void> {
   minha = {
     agendamentos: Array.isArray(d.agendamentos) ? (d.agendamentos as Record<string, unknown>[]).map(lerAgendamento) : [],
     toque: t && Number.isFinite(tocaEm)
-      ? { id: String(t.id), cor: corDaSirene(String(t.cor)).slug, duracaoMs: duracaoSegura(t.duracao_s) * 1000, tocaEm }
+      ? { id: String(t.id), cor: corDaSirene(String(t.cor)).slug, duracaoMs: duracaoSegura(t.duracao_s) * 1000, tocaEm, volume: volumeSeguro(t.volume) }
       : null,
   };
   for (const o of ouvintes) o();
@@ -114,11 +116,11 @@ export function useMinhaSirene(empresaId: string | null | undefined): MinhaSiren
 
 const EVENTO_TESTE = 'sirene:teste';
 
-export interface PedidoDeTeste { cor: CorDaSirene; duracaoMs: number }
+export interface PedidoDeTeste { cor: CorDaSirene; duracaoMs: number; volume: number }
 
-export function testarEmMim(cor: CorDaSirene, duracaoS: number): void {
+export function testarEmMim(cor: CorDaSirene, duracaoS: number, volume: number): void {
   window.dispatchEvent(new CustomEvent<PedidoDeTeste>(EVENTO_TESTE, {
-    detail: { cor, duracaoMs: duracaoSegura(duracaoS) * 1000 },
+    detail: { cor, duracaoMs: duracaoSegura(duracaoS) * 1000, volume: volumeSeguro(volume) },
   }));
 }
 
@@ -132,6 +134,7 @@ export function ouvirTeste(f: (p: PedidoDeTeste) => void): () => void {
 
 export interface AgendamentoNoPainel extends Agendamento {
   setor_ids: string[];
+  equipe_ids: string[];
   ativo: boolean;
 }
 
@@ -139,7 +142,9 @@ export interface ToqueNoPainel {
   id: string;
   cor: CorDaSirene;
   setor_ids: string[];
+  equipe_ids: string[];
   duracao_s: number;
+  volume: number;
   toca_em: string;
   criado_por_nome: string | null;
 }
@@ -156,6 +161,7 @@ function lerPainel(data: unknown): Painel {
       ? (d.agendamentos as Record<string, unknown>[]).map(x => ({
           ...lerAgendamento(x),
           setor_ids: Array.isArray(x.setor_ids) ? x.setor_ids.map(String) : [],
+          equipe_ids: Array.isArray(x.equipe_ids) ? x.equipe_ids.map(String) : [],
           ativo: x.ativo !== false,
         }))
       : [],
@@ -164,7 +170,9 @@ function lerPainel(data: unknown): Painel {
           id: String(x.id),
           cor: corDaSirene(String(x.cor)).slug,
           setor_ids: Array.isArray(x.setor_ids) ? x.setor_ids.map(String) : [],
+          equipe_ids: Array.isArray(x.equipe_ids) ? x.equipe_ids.map(String) : [],
           duracao_s: duracaoSegura(x.duracao_s),
+          volume: volumeSeguro(x.volume),
           toca_em: String(x.toca_em),
           criado_por_nome: typeof x.criado_por_nome === 'string' ? x.criado_por_nome : null,
         }))
@@ -186,7 +194,9 @@ export interface Rascunho {
   dias: number[];
   cor: CorDaSirene;
   setor_ids: string[];
+  equipe_ids: string[];
   duracao_s: number;
+  volume: number;
   ativo: boolean;
   descricao: string;
 }
@@ -194,7 +204,8 @@ export interface Rascunho {
 export async function salvarAgendamento(r: Rascunho): Promise<{ erro: string | null }> {
   const { error } = await rpc('fn_sirene_salvar', {
     p_id: r.id, p_hora: r.hora, p_dias: r.dias, p_cor: r.cor, p_setor_ids: r.setor_ids,
-    p_duracao_s: duracaoSegura(r.duracao_s), p_ativo: r.ativo, p_descricao: r.descricao,
+    p_equipe_ids: r.equipe_ids, p_duracao_s: duracaoSegura(r.duracao_s), p_volume: volumeSeguro(r.volume),
+    p_ativo: r.ativo, p_descricao: r.descricao,
   });
   return { erro: error?.message ?? null };
 }
@@ -204,9 +215,12 @@ export async function apagarAgendamento(id: string): Promise<{ erro: string | nu
   return { erro: error?.message ?? null };
 }
 
-export async function tocarAgora(cor: CorDaSirene, setorIds: string[], duracaoS: number): Promise<{ painel: Painel | null; erro: string | null }> {
+export async function tocarAgora(
+  cor: CorDaSirene, setorIds: string[], equipeIds: string[], duracaoS: number, volume: number,
+): Promise<{ painel: Painel | null; erro: string | null }> {
   const { data, error } = await rpc('fn_sirene_tocar', {
-    p_cor: cor, p_setor_ids: setorIds, p_duracao_s: duracaoSegura(duracaoS),
+    p_cor: cor, p_setor_ids: setorIds, p_equipe_ids: equipeIds,
+    p_duracao_s: duracaoSegura(duracaoS), p_volume: volumeSeguro(volume),
   });
   if (error) return { painel: null, erro: error.message };
   return { painel: lerPainel(data), erro: null };

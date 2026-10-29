@@ -23,11 +23,19 @@
  * `SugestaoModoLeve` observa travadas de verdade (`PerformanceObserver`) e,
  * passando de `deveSugerir`, oferece o modo. «Agora não» cala a oferta por
  * `SILENCIO_MS`.
+ *
+ * Desde 29/10/2026 a oferta NÃO aparece mais (pedido do Kauan: «a pessoa tem
+ * que habilitar, e não ser habilitado automaticamente») — o componente fica,
+ * desmontado, em `App.tsx`. E o super admin pode desligar o modo leve de todos
+ * os computadores de uma vez (`modoLeveZerado.ts`): por isso a hora em que
+ * cada máquina ligou o modo fica guardada (`ligadoEm`).
  */
 import { useSyncExternalStore } from 'react';
 
 const CHAVE = 'gestao:modo-leve';
 const CHAVE_RECUSA = 'gestao:modo-leve-recusado-em';
+/** Quando este computador ligou o modo leve (ms). */
+const CHAVE_LIGADO_EM = 'gestao:modo-leve-ligado-em';
 
 /** Quanto tempo a oferta fica quieta depois de um «Agora não». */
 export const SILENCIO_MS = 7 * 24 * 60 * 60_000;
@@ -53,10 +61,24 @@ export function modoLeveLigado(): boolean {
 
 export function definirModoLeve(v: boolean): void {
   ligado = v;
-  try { localStorage.setItem(CHAVE, v ? '1' : '0'); } catch { /* modo privado: vale até recarregar */ }
+  try {
+    localStorage.setItem(CHAVE, v ? '1' : '0');
+    if (v) localStorage.setItem(CHAVE_LIGADO_EM, String(Date.now()));
+    else localStorage.removeItem(CHAVE_LIGADO_EM);
+  } catch { /* modo privado: vale até recarregar */ }
   aplicarNoHtml(v);
   for (const o of ouvintes) {
     try { o(); } catch { /* quem ouve não derruba o interruptor */ }
+  }
+}
+
+/** Quando o modo leve foi ligado neste computador; `null` se não se sabe (ligado antes de 29/10/2026). */
+export function modoLeveLigadoEm(): number | null {
+  try {
+    const n = Number(localStorage.getItem(CHAVE_LIGADO_EM));
+    return Number.isFinite(n) && n > 0 ? n : null;
+  } catch {
+    return null;
   }
 }
 
