@@ -199,7 +199,7 @@ export const MODULOS_PERMISSAO: readonly DefinicaoModulo[] = [
       'config_sub_geral', 'config_sub_permissoes', 'config_sub_direto_extra',
       'config_sub_tags', 'ver_logs', 'config_sub_documentacoes',
       'config_sub_multiempresa', 'ver_monitoramento_uso', 'ver_banco_dados',
-      'administrar_sistema', 'ignorar_fechamento_mes',
+      'administrar_sistema',
     ],
   },
   {
@@ -400,7 +400,6 @@ const SECOES_CONFIG: Record<string, string> = {
   ver_monitoramento_uso: 'Logs',
   ver_banco_dados: 'Geral',
   administrar_sistema: 'Administração',
-  ignorar_fechamento_mes: 'Administração',
 };
 
 const SECOES_ANALITICO: Record<string, string> = {

@@ -20,7 +20,6 @@
 import { useCallback, useMemo } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
-import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import {
   estadoFechamento, estadoFechamentoDaData,
   mensagemFechamento, mensagemFechamentoLiberado,
@@ -47,16 +46,11 @@ export interface FechamentoDoMes extends EstadoFechamento {
 
 export function useFechamentoMes(mes: string | null | undefined): FechamentoDoMes {
   const { perfil } = useAuth();
-  const { temPermissaoExplicita } = useCargoPermissoes();
   const cargo = perfil?.perfil ?? null;
 
-  // `temPermissaoExplicita`, e não `temPermissao`: este é o poder que não se
-  // herda de "administrador pode tudo". Ver `PERMISSOES_EXPLICITAS`.
-  const liberadoPorPermissao = temPermissaoExplicita('ignorar_fechamento_mes');
-
   const estado = useMemo(
-    () => estadoFechamento({ mes, cargo, liberadoPorPermissao }),
-    [mes, cargo, liberadoPorPermissao],
+    () => estadoFechamento({ mes, cargo }),
+    [mes, cargo],
   );
 
   const mensagem = useMemo(
@@ -77,12 +71,12 @@ export function useFechamentoMes(mes: string | null | undefined): FechamentoDoMe
 
   const bloqueadoNaData = useCallback(
     (data: string | null | undefined) =>
-      estadoFechamentoDaData({ data, cargo, liberadoPorPermissao }).bloqueado,
-    [cargo, liberadoPorPermissao],
+      estadoFechamentoDaData({ data, cargo }).bloqueado,
+    [cargo],
   );
 
   const impedirData = useCallback((data: string | null | undefined, acao?: string) => {
-    const doRegistro = estadoFechamentoDaData({ data, cargo, liberadoPorPermissao });
+    const doRegistro = estadoFechamentoDaData({ data, cargo });
     if (!doRegistro.bloqueado) return false;
     const mesDoRegistro = String(data ?? '').slice(0, 7);
     toast.warning(
@@ -92,7 +86,7 @@ export function useFechamentoMes(mes: string | null | undefined): FechamentoDoMe
       { duration: 5000 },
     );
     return true;
-  }, [cargo, liberadoPorPermissao]);
+  }, [cargo]);
 
   return {
     ...estado,

@@ -204,6 +204,9 @@ describe('catálogo — integridade', () => {
     // sozinha decidia o alcance de Acordos, Dashboard e Lixeira. As três já
     // têm `<aba>_escopo_setor` própria.
     expect(CHAVES_PERMISSAO).not.toContain('ver_acordos_gerais');
+
+    // Aposentada em 29/10/2026: mês fechado é só do super admin.
+    expect(CHAVES_PERMISSAO).not.toContain('ignorar_fechamento_mes');
   });
 
   it('toda dependência declarada aponta para chave que existe', () => {

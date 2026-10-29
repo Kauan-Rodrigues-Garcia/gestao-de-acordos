@@ -1730,9 +1730,29 @@ selo **nunca** é alterado nem apagado; correção = versão nova, só super adm
 com motivo (`fn_fechamento_mes_selar`), e só se algum número mudou. Setembro e
 antes não têm selo.
 
-**Excluir equipe** com comissão ou meta de Pix de mês fechado é recusado para
-todos, super admin incluído (`20261029202000`) — o CASCADE apagaria o histórico.
-A meta de Pix ganhou a trava de mês fechado que faltava.
+~~**Excluir equipe** com comissão ou meta de Pix de mês fechado é recusado~~ —
+substituído na fase 2a, abaixo. A meta de Pix ganhou a trava de mês fechado que
+faltava (`20261029202000`).
+
+#### Auditoria de fechamento — fase 2a (29/10/2026)
+
+**Mês fechado é só do super admin** (`20261029220000`). A permissão «Escrever
+em mês fechado» (`ignorar_fechamento_mes`) saiu do catálogo e da trava do banco.
+Importação de relatório continua entrando em mês fechado.
+
+**Excluir equipe é permitido e não mexe em mês fechado** (`20261029221000`).
+Comissão, meta de Pix, ajuste, vendas, indicações, transferências e comemorações
+guardam o `equipe_id` sem FK, como `metas.referencia_id`; o nome do mês vem de
+`composicao_mes_equipe`. Só o mês em aberto perde a comissão e a meta de Pix da
+equipe (ou do subgrupo) excluída.
+
+**Recebido por equipe/setor de mês fechado lê o retrato** (`20261029222000`).
+`fn_recebido_por_equipe` e `fn_recebido_por_setor` (desafios, app, avisos, TV,
+selo) tiram cargo, equipe, situação, liderança, clones e a chave `alternativo`
+de `composicao_mes*` quando o mês fechou e tem retrato. Quem mudou de equipe no
+meio do mês conta o mês inteiro na equipe onde terminou (decisão do Cleber); o
+fantasma da transferência continua valendo. Mês corrente: igual ao de antes, com
+prova na própria migration.
 
 ---
 

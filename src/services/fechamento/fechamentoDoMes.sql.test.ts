@@ -123,14 +123,108 @@ describe('equipe e meta de Pix (20261029202000)', () => {
     expect(TRANCAS).toMatch(/BEFORE INSERT OR UPDATE OR DELETE ON public\.pix_automatico_metas\s+FOR EACH ROW EXECUTE FUNCTION public\.fn_trava_mes_fechado_ano_mes\('Meta de Pix'\)/);
   });
 
-  it('excluir equipe com histórico fechado é recusado para todos, super admin incluído', () => {
-    expect(TRANCAS).toMatch(/BEFORE DELETE ON public\.equipes\s+FOR EACH ROW EXECUTE FUNCTION public\.fn_equipes_preserva_mes_fechado\(\)/);
-    const gatilho = TRANCAS.match(/FUNCTION public\.fn_equipes_preserva_mes_fechado\(\)[\s\S]*?\$function\$;/)![0];
-    expect(gatilho).not.toContain('fn_user_is_super_admin');
+});
+
+const SO_SUPER = semComentarios(migration('_mes_fechado_so_super_admin.sql'));
+const EXCLUIDA = semComentarios(migration('_equipe_excluida_fica_no_mes_fechado.sql'));
+const SO_SUPER_BRUTO = migration('_mes_fechado_so_super_admin.sql');
+
+describe('mês fechado é só do super admin (20261029220000)', () => {
+  it('a barreira não lê mais a permissão', () => {
+    const barrar = SO_SUPER.match(/FUNCTION public\.fn_mes_fechado_barrar[\s\S]*?\$function\$;/)![0];
+    expect(barrar).not.toContain('fn_user_tem');
+    expect(barrar).toMatch(/IF public\.fn_user_is_super_admin\(\) THEN RETURN; END IF;/);
   });
 
-  it('confere as duas tabelas que descem em CASCADE com histórico', () => {
-    expect(TRANCAS).toContain('FROM public.comissao_config');
-    expect(TRANCAS).toContain('FROM public.pix_automatico_metas');
+  it('a chave sai do catálogo SQL, pela convenção do teste do catálogo', () => {
+    expect(SO_SUPER_BRUTO).toMatch(/--\s*REMOVE_PERMISSOES:\s*ignorar_fechamento_mes/);
+    expect(SO_SUPER).toMatch(/WHERE c\.chave <> 'ignorar_fechamento_mes'/);
+  });
+});
+
+describe('equipe excluída fica no mês fechado (20261029221000)', () => {
+  it('a recusa da fase 1 sai: excluir equipe volta a ser possível', () => {
+    expect(EXCLUIDA).toContain('DROP TRIGGER IF EXISTS trg_equipes_preserva_mes_fechado ON public.equipes');
+  });
+
+  it('as tabelas de história perdem a FK para equipes (e o subgrupo da comissão)', () => {
+    for (const t of ['comissao_config', 'pix_automatico_metas', 'analitico_ajustes_manuais',
+      'vendas', 'indicacoes', 'perfis_transferencias', 'comemoracoes']) {
+      expect(EXCLUIDA, t).toContain(`'public.${t}'::regclass`);
+    }
+    expect(EXCLUIDA).toMatch(/c\.confrelid = 'public\.equipe_subgrupos'::regclass\s+AND c\.conrelid = 'public\.comissao_config'::regclass/);
+  });
+
+  it('a estrutura de hoje continua com FK', () => {
+    for (const t of ['equipe_lideres', 'equipe_operadores_clones', 'equipe_membros', 'tv_paineis', 'perfis']) {
+      expect(EXCLUIDA, t).not.toContain(`'public.${t}'::regclass`);
+    }
+  });
+
+  it('o mês em aberto continua sendo limpo, por gatilho em equipes e subgrupos', () => {
+    expect(EXCLUIDA).toMatch(/BEFORE DELETE ON public\.equipes\s+FOR EACH ROW EXECUTE FUNCTION public\.fn_equipe_excluida_limpa_mes_aberto\(\)/);
+    expect(EXCLUIDA).toMatch(/BEFORE DELETE ON public\.equipe_subgrupos\s+FOR EACH ROW EXECUTE FUNCTION public\.fn_equipe_excluida_limpa_mes_aberto\(\)/);
+  });
+
+  it('só o mês em aberto perde comissão e meta de Pix', () => {
+    const limpa = EXCLUIDA.match(/FUNCTION public\.fn_equipe_excluida_limpa_mes_aberto\(\)[\s\S]*?\$function\$;/)![0];
+    const deletes = limpa.match(/DELETE FROM[\s\S]*?;/g)!;
+    expect(deletes).toHaveLength(3);
+    for (const d of deletes) expect(d).toMatch(/public\.fn_mes_texto\(ano, mes\) >= v_corrente/);
+  });
+});
+
+const RECEBIDO = semComentarios(migration('_recebido_do_mes_fechado_le_o_retrato.sql'));
+
+function corpo(nome: string): string {
+  return RECEBIDO.match(new RegExp(String.raw`FUNCTION public\.${nome}\([\s\S]*?\$function\$;`))![0];
+}
+
+describe('recebido do mês fechado lê o retrato (20261029222000)', () => {
+  const EQUIPE = corpo('fn_recebido_por_equipe');
+  const SETOR = corpo('fn_recebido_por_setor');
+
+  it('as duas funções decidem pelo mês fechado COM retrato, por empresa', () => {
+    for (const f of [EQUIPE, SETOR]) {
+      expect(f).toMatch(/retrato AS \(\s*SELECT em\.id AS empresa_id[\s\S]*?public\.fn_mes_fechado\(p_mes\)[\s\S]*?FROM public\.composicao_mes cm/);
+    }
+  });
+
+  it('equipe: cargo, equipe e situação vêm de composicao_mes; quem está na foto não é arquivado', () => {
+    expect(EQUIPE).toMatch(/WHEN cm\.operador_id IS NOT NULL THEN cm\.cargo/);
+    expect(EQUIPE).toMatch(/WHEN cm\.operador_id IS NOT NULL THEN cm\.equipe_id/);
+    expect(EQUIPE).toMatch(/WHEN cm\.operador_id IS NOT NULL THEN FALSE\s+ELSE p\.arquivado/);
+  });
+
+  it('equipe: liderança explícita do retrato (ordem < 100) e alternativo do mês', () => {
+    expect(EQUIPE).toMatch(/FROM public\.composicao_mes_lider ml[\s\S]*?COALESCE\(ml\.ordem, 0\) < 100/);
+    expect(EQUIPE).toMatch(/JOIN public\.composicao_mes_setor cs[\s\S]*?cs\.alternativo IS TRUE/);
+  });
+
+  it('equipe: clone do retrato sem as equipes que a pessoa lidera', () => {
+    expect(EQUIPE).toMatch(/unnest\(COALESCE\(cm\.equipes_clone[\s\S]*?NOT EXISTS \(SELECT 1 FROM lideranca l/);
+  });
+
+  it('nenhuma leitura ao vivo de estrutura vale para empresa com retrato', () => {
+    for (const [f, tabelas] of [
+      [EQUIPE, ['public.equipe_lideres el', 'public.equipes e', 'public.equipe_operadores_clones cl']],
+      [SETOR, ['public.equipe_operadores_clones cl']],
+    ] as const) {
+      for (const t of tabelas) {
+        const trecho = f.slice(f.indexOf(`FROM ${t}`), f.indexOf(`FROM ${t}`) + 400);
+        expect(trecho, t).toContain('NOT IN (SELECT r.empresa_id FROM retrato r)');
+      }
+    }
+    expect(SETOR).toMatch(/FROM public\.perfis p\s+WHERE p\.empresa_id {2}= ANY \(p_empresas\)\s+AND p\.empresa_id NOT IN \(SELECT r\.empresa_id FROM retrato r\)/);
+  });
+
+  it('setor: a chave alternativo do mês, e setor criado depois não some', () => {
+    expect(SETOR).toMatch(/FROM public\.composicao_mes_setor cs\s+WHERE cs\.empresa_id IN \(SELECT r\.empresa_id FROM retrato r\)/);
+    expect(SETOR).toMatch(/FROM public\.setores st[\s\S]*?NOT EXISTS \(SELECT 1 FROM public\.composicao_mes_setor cs/);
+  });
+
+  it('a migration prova que o mês corrente não mudou, e aborta se mudou', () => {
+    expect(RECEBIDO).toContain('CREATE TEMP TABLE _prova_antes');
+    expect(RECEBIDO).toMatch(/IF v_dif > 0 THEN\s+RAISE EXCEPTION 'PROVA/);
   });
 });

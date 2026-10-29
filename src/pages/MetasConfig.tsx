@@ -1040,7 +1040,7 @@ export default function MetasConfig() {
   /*
    * Mês fechado (01/10/2026): metas, dias úteis e comissão de um mês já
    * fechado são só leitura — a mesma régua do cadeado de acordos, com a mesma
-   * saída (super admin ou `ignorar_fechamento_mes`). O banco recusa do mesmo
+   * saída (só o super admin, desde 29/10). O banco recusa do mesmo
    * jeito (20261001130000); aqui é para a tela não oferecer o que não grava.
    */
   const fechamento = useFechamentoMes(`${ano}-${String(mes).padStart(2, "0")}`);

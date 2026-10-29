@@ -646,25 +646,12 @@ export default function AdminEquipes() {
   const [excluindoEquipe, setExcluindoEquipe] = useState(false);
 
   /**
-   * Equipe com comissão ou meta de Pix de mês fechado não sai: o CASCADE
-   * apagaria esse histórico (20261029202000). A pergunta vem ANTES do diálogo
-   * porque a exclusão tira as pessoas da equipe primeiro — barrar só no DELETE
-   * deixaria a equipe de pé e vazia. Sem a migration, a função não existe e o
-   * fluxo segue como antes (o gatilho do banco é quem garante).
+   * Excluir não mexe em mês fechado: o retrato guarda a equipe, e comissão,
+   * meta de Pix e ajuste do mês fechado ficam sem FK para ela
+   * (20261029221000). Só o mês em aberto perde a configuração.
    */
-  async function solicitarExcluirEquipe(equipe: Equipe) {
+  function solicitarExcluirEquipe(equipe: Equipe) {
     if (!isAdmin && equipe.setor_id !== perfil?.setor_id) { toast.error('Você só pode excluir equipes do seu próprio setor.'); return; }
-    const { data: historico, error } = await rpcSemTipo<string | null>(
-      'fn_equipe_historico_fechado', { p_equipe_id: equipe.id },
-    );
-    if (!error && historico) {
-      toast.error(
-        `"${equipe.nome}" tem ${historico} — excluir apagaria esse histórico. `
-        + 'O mês fechado continua guardando a equipe; para tirá-la da operação, deixe-a sem pessoas.',
-        { duration: 9000 },
-      );
-      return;
-    }
     setEquipeParaExcluir(equipe);
   }
 
@@ -1012,7 +999,7 @@ export default function AdminEquipes() {
                       onTirar={p => tirar(p, equipe)}
                       onRenomear={nome => renomearEquipe(equipe, nome)}
                       onAlternarTreino={() => void alternarTreino(equipe)}
-                      onExcluir={() => { void solicitarExcluirEquipe(equipe); }}
+                      onExcluir={() => solicitarExcluirEquipe(equipe)}
                       onCriarSubgrupo={subgruposHabilitados ? nome => criarSubgrupoEm(equipe, nome) : null}
                       onRenomearSubgrupo={renomearSg}
                       onExcluirSubgrupo={sg => void excluirSg(sg)}
