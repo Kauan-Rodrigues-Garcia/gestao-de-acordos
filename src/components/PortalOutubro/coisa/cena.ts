@@ -51,9 +51,9 @@ export const DURA_DO_CLOSE = 8.6;
  * Os tempos casam com a trilha (`trilha.ts`, 29/10/2026): do balão sair do
  * bueiro até ela dançar são uns 7,8 s (subindo + enchendo + nascendo, ~2,7),
  * e ela espera nascida até `FIM_DA_APRESENTACAO` (o «palhaço dançarino»
- * inteiro) para a música da dança não cortar a fala; a dança dura o trecho dela inteiro
- * (`DURA_DA_DANCA`, 28,3 a 42 s do original, pedido de 29/10); babando e
- * encarando, o «we'll float down here».
+ * inteiro) para a música da dança não cortar a fala; a dança dura
+ * `DURA_DA_DANCA` (7 s desde 29/10: o trecho inteiro, de 13,7 s, era
+ * comprido demais); babando e encarando, o «we'll float down here».
  */
 const DURA: Readonly<Partial<Record<FaseDaCena, number>>> = { subindo: 3, enchendo: 2.1, dancando: DURA_DA_DANCA, babando: 1.8, perto: DURA_DO_CLOSE };
 /** O quanto o corpo vai e vem na dança, e quantos rastros ficam atrás. */

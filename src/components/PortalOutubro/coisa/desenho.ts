@@ -307,17 +307,22 @@ export const CANTOS_DA_BOCA: readonly (readonly [number, number])[] = [[18, 29],
 // ── Ela puxando o mural ─────────────────────────────────────────────────────
 //
 // Pedido de 28/10/2026: «não só o braço dele puxando, quero uma animação dele
-// puxando». O corpo inteiro: os dois braços esticados para a direita, as duas
-// luvas fechadas na borda do mural, o tronco jogado para trás (as linhas de
-// cima deslizam para a esquerda, como pixel art inclina) e as pernas
-// arrastando de lado, abrindo e fechando.
+// puxando». O corpo inteiro: o tronco jogado para trás (as linhas de cima
+// deslizam para a esquerda, como pixel art inclina) e as pernas arrastando de
+// lado, abrindo e fechando. Desde 29/10 («faz ele puxando com uma mão e na
+// outra fica segurando um balão») só o braço da direita vai ao mural, dobrado,
+// com a luva fechada na borda; o da esquerda desce do lado do corpo com o
+// punho fechado no fio do balão (o balão em si é do `Puxando.tsx`, que o faz
+// balançar atrás dela).
 
-/** A largura do quadro dela puxando: o corpo e os braços esticados. */
+/** A largura do quadro dela puxando: o corpo e o braço esticado. */
 export const LARGURA_PUXANDO = 71;
 /** Onde o corpo começa no quadro (sobra para o tronco inclinar para trás). */
 export const CORPO_X = 11;
-/** O ponto entre as duas luvas: ali fica a borda do mural. */
+/** O meio da luva: ali fica a borda do mural. */
 export const MAO_PUXANDO: readonly [number, number] = [66, 46];
+/** O punho que segura o fio do balão (o mesmo em todos os quadros). */
+export const MAO_DO_BALAO_PUXANDO: readonly [number, number] = [CORPO_X + 1, 58];
 
 /** Uma perna só, de um lado, deslocada `dx` e erguida `sobe` (o pé sobe junto). */
 function perna(g: Grade, lado: 1 | -1, dx: number, sobe: number) {
@@ -343,21 +348,65 @@ function perna(g: Grade, lado: 1 | -1, dx: number, sobe: number) {
   }
 }
 
+/** A distância de (x, y) ao segmento a–b, e de que lado dele (negativo em cima). */
+function aoSegmento(x: number, y: number, ax: number, ay: number, bx: number, by: number): readonly [number, number] {
+  const dx = bx - ax, dy = by - ay, l = Math.hypot(dx, dy) || 1;
+  const k = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / (l * l)));
+  return [Math.hypot(x - ax - dx * k, y - ay - dy * k), (dx * (y - ay) - dy * (x - ax)) / l];
+}
+
 /**
- * Um braço esticado até a borda: a manga, o babado do punho e a luva fechada.
- * `naFrente`: o braço passa por cima do corpo (o contorno corta o que estiver
- * embaixo); sem ele, a manga sai de dentro da manga bufante, sem risco.
+ * O cotovelo de um braço de dois pedaços de `comp` entre o ombro e o punho,
+ * dobrando para baixo: perto (o tronco vindo para o mural) dobra muito; longe
+ * (o tranco, o tronco para trás) quase estica.
  */
-function bracoEsticado(g: Grade, de: number, y0: number, naFrente: boolean) {
-  const risco = (x: number, y: number) => { if (naFrente || g[y]?.[x] === '.') pintar(g, x, y, 'o'); };
-  for (let x = de - 1; x <= 61; x++) { risco(x, y0 - 1); risco(x, y0 + 6); }
-  for (let y = y0; y <= y0 + 5; y++) {
-    risco(de - 1, y);
-    for (let x = de; x <= 59; x++) {
-      const ch = y === y0 ? 'l' : y === y0 + 4 ? 'G' : y === y0 + 5 ? 'K' : (x + y) % 6 === 0 ? 'G' : 'g';
-      pintar(g, x, y, ch);
+function cotovelo(sx: number, sy: number, px: number, py: number, comp: number): readonly [number, number] {
+  const d = Math.min(2 * comp - 0.01, Math.max(0.01, Math.hypot(px - sx, py - sy)));
+  const ang = Math.atan2(py - sy, px - sx) + Math.acos(d / (2 * comp));
+  return [sx + Math.cos(ang) * comp, sy + Math.sin(ang) * comp];
+}
+
+/** A grossura da manga (o raio, em pixels dela). */
+const MANGA = 2.9;
+
+/**
+ * A manga de um braço do ombro (sx, sy) ao punho (px, py), em dois pedaços
+ * dobrando no cotovelo (pedido de 29/10/2026: «mais reais, dobrando e
+ * segurando o mural, e não apenas retos»). `naFrente`: o braço passa por cima
+ * do corpo (o contorno corta o que estiver embaixo); sem ele, a manga sai de
+ * dentro da manga bufante, sem risco. `luz`: de que lado da manga bate a luz
+ * (1, em cima de um braço indo para a direita; −1, o de fora de um que desce).
+ */
+function mangaDobrada(g: Grade, sx: number, sy: number, px: number, py: number, comp: number, naFrente: boolean, luz: 1 | -1, ateX = Infinity) {
+  const [ex, ey] = cotovelo(sx, sy, px, py, comp);
+  // O lado de dentro da dobra é o contrário de onde o cotovelo foi.
+  const fora = Math.sign((px - sx) * (ey - sy) - (py - sy) * (ex - sx));
+  const x0 = Math.floor(Math.min(sx, ex, px) - MANGA - 1), x1 = Math.min(ateX, Math.ceil(Math.max(sx, ex, px) + MANGA + 1));
+  const ya = Math.floor(Math.min(sy, ey, py) - MANGA - 1), yb = Math.ceil(Math.max(sy, ey, py) + MANGA + 1);
+  for (let y = ya; y <= yb; y++) {
+    for (let x = x0; x <= x1; x++) {
+      const braco = aoSegmento(x, y, sx, sy, ex, ey), antebraco = aoSegmento(x, y, ex, ey, px, py);
+      const [d, cru] = braco[0] < antebraco[0] ? braco : antebraco;
+      const lado = cru * luz;
+      if (d <= MANGA) {
+        // A luz de um lado, a dobra e a costura do outro; por dentro do
+        // cotovelo, o pano franzido fica na sombra.
+        const franze = Math.sign(cru) === -fora && Math.hypot(x - ex, y - ey) < MANGA + 1.6;
+        pintar(g, x, y, franze ? (Math.abs(cru) > MANGA * 0.55 ? 'K' : 'G') : lado < -MANGA * 0.55 ? 'l' : lado > MANGA * 0.7 ? 'K' : lado > MANGA * 0.25 ? 'G' : (x + y) % 6 === 0 ? 'G' : 'g');
+      } else if (d <= MANGA + 1 && (naFrente || g[y]?.[x] === '.')) {
+        pintar(g, x, y, 'o');
+      }
     }
   }
+}
+
+/** O braço que puxa: do ombro até a borda, o babado do punho e a luva fechada na borda. */
+function bracoDoMural(g: Grade, sx: number, sy: number, comp: number, y0: number) {
+  mangaDobrada(g, sx, sy, 59.5, y0 + 2.5, comp, false, 1);
+  // A manga para no punho.
+  for (let y = y0 - 4; y <= y0 + 9; y++) for (let x = 60; x <= 63; x++) if (g[y]?.[x] && 'lgGK'.includes(g[y][x])) g[y][x] = '.';
+  const risco = (x: number, y: number) => { if (g[y]?.[x] === '.') pintar(g, x, y, 'o'); };
+  for (let x = 60; x <= 61; x++) { risco(x, y0 - 2); risco(x, y0 + 7); }
   // O babado do punho, mais largo que a manga.
   for (let y = y0 - 1; y <= y0 + 6; y++) { pintar(g, 60, y, y % 2 ? 'C' : 'c'); pintar(g, 61, y, 'c'); }
   // A luva fechada na borda, separada do punho: os dedos dobrados, um em
@@ -366,9 +415,38 @@ function bracoEsticado(g: Grade, de: number, y0: number, naFrente: boolean) {
   for (let y = y0 - 1; y <= y0 + 5; y++) {
     for (let x = 63; x <= 69; x++) {
       const canto = (y === y0 - 1 || y === y0 + 5) && (x === 63 || x === 69);
-      if (canto) { if (naFrente) pintar(g, x, y, 'o'); continue; }
+      if (canto) continue;
       const dedo = x >= 66 && (y - y0) % 2 === 1;
       pintar(g, x, y, x === 63 || x === 69 || y === y0 + 5 || dedo ? 'W' : 'w');
+    }
+  }
+}
+
+/**
+ * O braço do balão: desce do ombro pelo lado do corpo, o cotovelo para fora,
+ * e o punho fechado no fio (`MAO_DO_BALAO_PUXANDO`), por cima da perna.
+ */
+function bracoDoBalao(g: Grade, sx: number, sy: number) {
+  const [hx, hy] = MAO_DO_BALAO_PUXANDO;
+  mangaDobrada(g, sx, sy, hx + 0.5, hy - 4, 6.5, true, -1);
+  // O babado do punho e a luva fechada.
+  for (let x = hx - 3; x <= hx + 3; x++) { pintar(g, x, hy - 4, 'c'); pintar(g, x, hy - 3, x % 2 ? 'C' : 'c'); }
+  for (let y = hy - 2; y <= hy + 2; y++) {
+    for (let x = hx - 2; x <= hx + 2; x++) {
+      if (Math.abs(x - hx) === 2 && Math.abs(y - hy) === 2) continue;
+      pintar(g, x, y, x === hx + 2 || y === hy + 2 || (y === hy && x > hx - 2) ? 'W' : 'w');
+    }
+  }
+  // O contorno da luva e do babado por cima da perna.
+  for (let y = hy - 5; y <= hy + 3; y++) {
+    for (let x = hx - 4; x <= hx + 4; x++) {
+      const ch = g[y]?.[x];
+      if (!ch || 'wWcC'.includes(ch)) continue;
+      const encosta = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => {
+        const v = g[y + dy]?.[x + dx];
+        return v != null && 'wWcC'.includes(v) && Math.abs(x + dx - hx) <= 3 && y + dy >= hy - 4;
+      });
+      if (encosta && y >= hy - 4) g[y][x] = 'o';
     }
   }
 }
@@ -403,10 +481,12 @@ function montarPuxando(inclina: number, pes: readonly [number, number], sobe: re
       for (let x = 0; x < L; x++) if (s[y][x] !== '.') pintar(g, x + CORPO_X + desvio(y), y + dy, s[y][x]);
     }
   }
-  // O braço da direita sai da manga bufante; o outro vem por trás do corpo
-  // e aparece embaixo dele, as duas luvas juntas na borda.
-  bracoEsticado(g, CORPO_X + 37 + desvio(41), 40 + agacha, false);
-  bracoEsticado(g, CORPO_X + 31 + desvio(48), 47 + agacha, true);
+  // O braço da direita sai da manga bufante até a borda; a luva fica na
+  // altura da borda, o tronco é que sobe e desce. O cotovelo dobra conforme o
+  // tronco: inclinada para trás, o braço quase estica. O da esquerda segura o
+  // fio do balão.
+  bracoDoMural(g, CORPO_X + 38 + desvio(41), 42.5 + agacha, 7.2, 43);
+  bracoDoBalao(g, CORPO_X + 7 + desvio(45), 45 + agacha);
   contornar(g);
   return g.map(l => l.join(''));
 }

@@ -274,7 +274,7 @@ export function ACoisa({ leve, pronto, mural, aoPuxar, aoTerminar }: {
 
   return (
     <>
-      <div className="coisa" style={{ ['--v' as string]: v } as CSSProperties} role="dialog" aria-label="A Coisa">
+      <div className="coisa" style={{ ['--v' as string]: v } as CSSProperties} role="dialog" aria-label="A Coisa" data-portal-anima>
         <div className="coisa-palco">
           <div
             className={`coisa-camera${perto && !leve ? ' coisa-camera-perto' : ''}${fase === 'fim' ? ' coisa-camera-volta' : ''}`}

@@ -871,18 +871,79 @@
 /* Antes do bote ela recua um pouco; no bote quem aparece é o mesmo desenho, grande. */
 .coisa-no-mural-arma { transform: translate(5%, 3%) scale(0.97); }
 .coisa-no-mural-fora { visibility: hidden; }
-/* O clique nela (29/10): o susto, o recuo para dentro da porta e a descida
-   devagar até sumir embaixo; cinco minutos depois, volta subindo. */
+/* O clique nela (29/10): o susto, o rosnado, o recuo para dentro da porta e
+   a descida devagar até sumir embaixo; cinco minutos depois, volta subindo. */
 .coisa-no-mural-clicavel { pointer-events: auto; cursor: pointer; }
-.coisa-no-mural-foge { animation: coisa-foge calc(4.6s / var(--v)) both; }
+/*
+ * A fuga, em 5,6 s (os tempos de `NoMural.tsx`: o rosnado aos 0,65 s, a
+ * descida a 1,5 s): o pulo do susto esticando e voltando amassado, o
+ * estremecer, o recuo para dentro da porta e a descida devagar, balançando.
+ * Só transform; o corpo escurece no canvas e os olhos acesos ficam por cima.
+ */
+.coisa-no-mural-foge { animation: coisa-foge calc(5.6s / var(--v)) both; }
+.coisa-no-mural-foge canvas { animation: coisa-escurece calc(5.6s / var(--v)) both; }
 .coisa-no-mural-sumida { visibility: hidden; }
 .coisa-no-mural-volta { animation: coisa-volta calc(1.8s / var(--v)) cubic-bezier(0.2, 0.7, 0.3, 1) both; }
 @keyframes coisa-foge {
-  0%   { transform: none; animation-timing-function: cubic-bezier(0.2, 1.6, 0.4, 1); }
-  6%   { transform: translate(-3%, -5%) scale(1.06) rotate(-3deg); animation-timing-function: ease-in-out; }
-  20%  { transform: translate(7%, 2%) scale(0.84) rotate(3deg); animation-timing-function: ease-in-out; }
-  28%  { transform: translate(7%, 4%) scale(0.84) rotate(2deg); animation-timing-function: cubic-bezier(0.45, 0, 0.6, 1); }
-  100% { transform: translate(7%, 125%) scale(0.84) rotate(-2deg); filter: brightness(0.35) drop-shadow(-6px 10px 12px rgb(0 0 0 / 0.55)); }
+  0%   { transform: none; animation-timing-function: cubic-bezier(0.2, 1.4, 0.4, 1); }
+  4%   { transform: translate(-2%, -9%) scale(0.96, 1.1) rotate(-3deg); animation-timing-function: ease-in; }
+  8%   { transform: translate(-1%, 2%) scale(1.06, 0.92) rotate(1deg); animation-timing-function: ease-out; }
+  11%  { transform: translate(0, 0) scale(1) rotate(0deg); }
+  13%  { transform: translate(-1.5%, 0) rotate(-4deg); }
+  15%  { transform: translate(1.5%, 0) rotate(-3deg); }
+  17%  { transform: translate(-1%, 0) rotate(-5deg); }
+  19%  { transform: translate(1%, 0) rotate(-3deg); }
+  21%  { transform: translate(-0.5%, 0) rotate(-4deg); }
+  27%  { transform: translate(0, 0) rotate(-3deg); animation-timing-function: cubic-bezier(0.5, 0, 0.3, 1); }
+  38%  { transform: translate(8%, 3%) scale(0.84) rotate(2deg); animation-timing-function: ease-in-out; }
+  52%  { transform: translate(6%, 22%) scale(0.84) rotate(-3deg); animation-timing-function: ease-in-out; }
+  68%  { transform: translate(9%, 52%) scale(0.84) rotate(3deg); animation-timing-function: ease-in-out; }
+  84%  { transform: translate(6%, 88%) scale(0.84) rotate(-2deg); animation-timing-function: ease-in; }
+  100% { transform: translate(8%, 132%) scale(0.84) rotate(1deg); }
+}
+/* O corpo some no escuro enquanto desce (os olhos, não). */
+@keyframes coisa-escurece {
+  0%, 30% { filter: none; }
+  70%, 100% { filter: brightness(0.12); }
+}
+/* Os olhos acesos por cima do corpo escuro: os últimos a sumir, com uma piscada. */
+.coisa-olhos-no-escuro {
+  position: absolute;
+  pointer-events: none;
+  filter: drop-shadow(0 0 6px rgb(255 160 40 / 0.8));
+  animation: coisa-olhos-ficam calc(4.1s / var(--v)) linear both;
+}
+.coisa-olhos-no-escuro svg { display: block; }
+@keyframes coisa-olhos-ficam {
+  0%, 30% { opacity: 0; }
+  45%, 78% { opacity: 1; }
+  80%, 82% { opacity: 0; }
+  84%, 92% { opacity: 1; }
+  100% { opacity: 0; }
+}
+/* A névoa escura que sobe do chão da porta e engole ela. */
+.coisa-porta-nevoa {
+  position: absolute;
+  left: -10%;
+  right: -10%;
+  bottom: -20%;
+  height: 70%;
+  pointer-events: none;
+  /* Forte embaixo e rala em cima: os olhos acesos ainda aparecem através dela. */
+  background: radial-gradient(ellipse 60% 55% at 50% 100%, rgb(4 4 6 / 0.75), rgb(10 10 14 / 0.45) 55%, transparent 80%);
+  animation: coisa-nevoa-sobe calc(5.6s / var(--v)) ease-out both;
+}
+@keyframes coisa-nevoa-sobe {
+  0%, 20% { opacity: 0; transform: translateY(40%) scaleX(0.8); }
+  60%     { opacity: 1; transform: translateY(0) scaleX(1.05); }
+  100%    { opacity: 0.85; transform: translateY(-6%) scaleX(1.15); }
+}
+/* O balão que escapa no susto sobe mais devagar, rodando. */
+.coisa-balao-escapa { animation: coisa-balao-escapa calc(3.4s / var(--v)) cubic-bezier(0.3, 0, 0.7, 0.7) forwards; }
+@keyframes coisa-balao-escapa {
+  0%   { transform: none; }
+  20%  { transform: translate(-18px, -9vh) rotate(-8deg); }
+  100% { transform: translate(-90px, -80vh) rotate(14deg); opacity: 0; }
 }
 @keyframes coisa-volta {
   from { transform: translate(0, 125%); filter: brightness(0.35) drop-shadow(-6px 10px 12px rgb(0 0 0 / 0.55)); }
@@ -1014,7 +1075,11 @@ html.portal-mira, html.portal-mira * { cursor: crosshair !important; }
 .portal-leve .mural-peca, .portal-leve .mural-medalha-viva, .portal-leve .mural-medalha-viva .ins-disco::after,
 .portal-leve .mural-lampada, .portal-leve .mural-derry-falha, .portal-leve .mural-cacho-balao, .portal-leve .coisa-no-mural, .portal-leve .mural-porta, .portal-leve .mural-porta-vao::before { animation: none; }
 /* A fuga do clique é uma animação só de transform: fica no modo leve também. */
-.portal-leve .coisa-no-mural.coisa-no-mural-foge { animation: coisa-foge calc(4.6s / var(--v)) both; }
+.portal-leve .coisa-no-mural.coisa-no-mural-foge { animation: coisa-foge calc(5.6s / var(--v)) both; }
+/* No modo leve o corpo some pela opacidade (o filtro animado pesa) e os olhos ficam sem brilho. */
+.portal-leve .coisa-no-mural-foge canvas { animation: coisa-some-leve calc(5.6s / var(--v)) both; }
+.portal-leve .coisa-olhos-no-escuro { filter: none; }
+@keyframes coisa-some-leve { 0%, 30% { opacity: 1; } 70%, 100% { opacity: 0.15; } }
 .portal-leve .coisa-no-mural.coisa-no-mural-volta { animation: coisa-volta calc(1.8s / var(--v)) ease-out both; }
 .portal-leve .mural-fios path { animation: none; stroke-dashoffset: 0; }
 .portal-leve .enfeite-aranha, .portal-leve .enfeite-aranha *, .portal-leve .enfeite-abobora, .portal-leve .enfeite-abobora *, .portal-leve .mural-chat-digitando span, .portal-leve .mural-poster-quadro * { animation: none !important; }

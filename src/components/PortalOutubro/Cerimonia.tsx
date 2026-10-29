@@ -8,9 +8,12 @@
  * fica no mesmo lugar da árvore do começo ao fim da cena (não recomeça ao
  * passar da abertura para a Coisa nem enquanto o mural entra) e só sai quando
  * o mural chega.
+ *
+ * O volume (`ControleDeSom`) fica por cima de tudo, do começo ao fim.
  */
 import { useEffect, useRef, useState } from 'react';
 import { Abertura } from './Abertura';
+import { ControleDeSom } from './ControleDeSom';
 import { Mural } from './Mural';
 import { ACoisa } from './coisa/ACoisa';
 import { calarSonsDaCoisa } from './coisa/trilha';
@@ -47,6 +50,7 @@ export default function Cerimonia({ tela, leve }: { tela: Exclude<Tela, null>; l
           aoTerminar={() => setPuxadaAcabou(true)}
         />
       )}
+      <ControleDeSom />
     </>
   );
 }

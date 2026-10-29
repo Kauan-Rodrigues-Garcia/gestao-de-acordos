@@ -24,13 +24,22 @@
  * aberto por cima (`pausada`), ela só olha.
  *
  * O clique nela (29/10: «ele terá uma animação que ele irá voltar e irá
- * descendo até sair da tela devagar»): leva um susto, recua para dentro da
- * porta e afunda devagar até sumir embaixo (`foge`); volta subindo depois de
- * `ENTRE_BOTES_MS`, e o bote também espera.
+ * descendo até sair da tela devagar»; melhorada no mesmo dia), em três tempos
+ * (`EtapaDaFuga`):
+ *
+ *   susto    dá um pulo, a boca abre e os olhos acendem; se estava atrás
+ *            do balão, ele escapa e sobe pela parede
+ *   rosna    estremece, entorta a cabeça e mostra os dentes para quem clicou
+ *   afunda   recua para dentro da porta e desce devagar, balançando, rindo
+ *            baixinho; o corpo escurece na névoa que sobe do chão e só os
+ *            olhos continuam acesos, os últimos a sumir
+ *
+ * Volta subindo depois de `ENTRE_BOTES_MS`, e o bote também espera.
  */
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Busto } from './Busto';
-import { ALTURA_DA_CABECONA, LARGURA_DA_CABECONA, meioDaBoca, type PoseDaCabecona } from './cabecona';
+import { ALTURA_DA_CABECONA, CANTO_DOS_OLHOS, LARGURA_DA_CABECONA, PALETA_DA_CABECONA, meioDaBoca, olhosDaCabecona, type PoseDaCabecona } from './cabecona';
+import { tocarSomDaCoisa } from './trilha';
 import { ALTURA_DA_GOELA, LARGURA_DA_GOELA, MEIO_DA_GOELA, PALETA_DA_GOELA, alturaDaGoela, montarGoela } from './goela';
 import { pintarGrade } from './derry';
 import { BALAO, PALETA_DO_BALAO } from './arte';
@@ -46,8 +55,13 @@ const CALMA_MS = 4000;
 /** Uma mordida (ou um clique que a espanta) e ela só volta depois disso. */
 const ENTRE_BOTES_MS = 5 * 60_000;
 /** O susto, o recuo e a descida devagar até sumir (o clique); e a volta, subindo. */
-const FOGE_MS = 4600;
+const FOGE_MS = 5600;
 const VOLTA_MS = 1800;
+/** Os três tempos da fuga e quando cada um começa (casam com `coisa-foge`, em `mural.css`). */
+type EtapaDaFuga = 'susto' | 'rosna' | 'afunda';
+const ROSNA_MS = 650, AFUNDA_MS = 1500;
+/** Os olhos acesos que ficam por último, no escuro. */
+const OLHOS_ACESOS = olhosDaCabecona({ brilho: true, olhar: [0, -1] });
 
 type Pose = 'escondida' | 'espia' | 'torta';
 /** A volta das poses, com quanto cada uma fica. */
@@ -64,6 +78,13 @@ function poseDe(p: Pose, olhar: readonly [number, number]): PoseDaCabecona {
   if (p === 'espia') return { baixa: true, dentes: true, olhar };
   if (p === 'torta') return { inclina: 0.6, dentes: true, olhar };
   return { balao: true, olhar };
+}
+
+/** A cara em cada tempo da fuga (afundando, os olhos no lugar de sempre, para os acesos casarem). */
+function poseDaFuga(e: EtapaDaFuga): PoseDaCabecona {
+  if (e === 'susto') return { brilho: true, queixo: 0.4, olhar: [0, -1] };
+  if (e === 'rosna') return { brilho: true, dentes: true, sangue: true, inclina: -0.5, olhar: [-1, 0] };
+  return { brilho: true, dentes: true, olhar: [0, -1] };
 }
 
 /** No bote os olhos acendem, e a bocarra mostra as luzes mortas lá no fundo. */
@@ -129,6 +150,9 @@ export function ACoisaNoMural({ escala, v, pausada, leve }: {
   const [olhar, setOlhar] = useState<readonly [number, number]>([0, 0]);
   const [bote, setBote] = useState<{ fase: FaseDoBote; x: number; y: number; balao: boolean } | null>(null);
   const [fuga, setFuga] = useState<Fuga | null>(null);
+  const [etapa, setEtapa] = useState<EtapaDaFuga>('susto');
+  /** Estava atrás do balão quando levou o clique: ele escapa. */
+  const [soltouOBalao, setSoltouOBalao] = useState(false);
   const fugaRef = useRef(fuga);
   fugaRef.current = fuga;
   /** Antes disso ela não morde (a calma do começo, depois da mordida, depois do clique). */
@@ -206,11 +230,20 @@ export function ACoisaNoMural({ escala, v, pausada, leve }: {
       volta: [null, VOLTA_MS],
     };
     const [prox, ms] = depois[fuga];
-    const t = window.setTimeout(() => setFuga(prox), ms / vRef.current);
-    return () => window.clearTimeout(t);
+    const ts = [window.setTimeout(() => setFuga(prox), ms / vRef.current)];
+    if (fuga === 'foge') {
+      setEtapa('susto');
+      ts.push(window.setTimeout(() => setEtapa('rosna'), ROSNA_MS / vRef.current));
+      ts.push(window.setTimeout(() => {
+        setEtapa('afunda');
+        tocarSomDaCoisa('risada', vRef.current, 0.55);
+      }, AFUNDA_MS / vRef.current));
+    }
+    return () => ts.forEach(t => window.clearTimeout(t));
   }, [fuga]);
   const espantar = () => {
     if (bote || fuga) return;
+    setSoltouOBalao(POSES[indice][0] === 'escondida');
     setFuga('foge');
     liberada.current = Math.max(liberada.current, performance.now() + (ENTRE_BOTES_MS + VOLTA_MS + CALMA_MS) / vRef.current);
   };
@@ -224,8 +257,9 @@ export function ACoisaNoMural({ escala, v, pausada, leve }: {
   const vaoL = (PORTA.l - PORTA.batente) * escala, vaoA = (PORTA.a - PORTA.batente) * escala;
   const naPorta = !bote || bote.fase === 'arma';
   const pose: PoseDaCabecona = bote?.fase === 'arma' ? poseDoBote('arma')
-    // O susto do clique: os olhos acendem e a boca abre um pouco.
-    : fuga === 'foge' ? { brilho: true, queixo: 0.2, olhar: [0, -1] }
+    : fuga === 'foge' ? poseDaFuga(etapa)
+    // Escondida, o balão escapou: sem ele até a volta.
+    : fuga === 'volta' && soltouOBalao ? poseDe('espia', olhar)
     : poseDe(POSES[indice][0], olhar);
 
   // O bote: o mesmo busto, crescendo da porta até a bocarra ficar em volta do cursor.
@@ -250,8 +284,24 @@ export function ACoisaNoMural({ escala, v, pausada, leve }: {
           onClick={e => { e.stopPropagation(); espantar(); }}
         >
           <Busto pose={pose} tam={tam} />
+          {fuga === 'foge' && etapa === 'afunda' && (
+            <div className="coisa-olhos-no-escuro" style={{ left: CANTO_DOS_OLHOS[0] * tam, top: CANTO_DOS_OLHOS[1] * tam }}>
+              <Pixel linhas={OLHOS_ACESOS} paleta={PALETA_DA_CABECONA} tam={tam} />
+            </div>
+          )}
         </div>
+        {fuga === 'foge' && <span className="coisa-porta-nevoa" style={{ ['--v' as string]: v } as CSSProperties} />}
       </div>
+
+      {fuga === 'foge' && soltouOBalao && !leve && (
+        <div
+          className="coisa-balao-solto coisa-balao-escapa"
+          style={{ left: esquerda + MEIO_DO_BALAO[0] * tam, top: topo + MEIO_DO_BALAO[1] * tam, ['--v' as string]: v } as CSSProperties}
+          aria-hidden
+        >
+          <Pixel linhas={BALAO} paleta={PALETA_DO_BALAO} tam={Math.round(tam * 2.1)} />
+        </div>
+      )}
 
       {bote?.balao && bote.fase !== 'arma' && !leve && (
         <div

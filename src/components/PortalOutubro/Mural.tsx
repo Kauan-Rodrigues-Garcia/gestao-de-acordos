@@ -380,6 +380,7 @@ export function Mural({ leve = false, puxando = false, semEntrada = false, raiz 
       style={{ ['--v' as string]: v } as CSSProperties}
       role="dialog"
       aria-label="Mural de outubro"
+      data-portal-anima
     >
       <div className="mural-caixa" style={{ width: LARGURA, height: ALTURA, transform: `translate(-50%, -50%) scale(${escala})` }}>
         <header className="mural-titulo">

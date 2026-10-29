@@ -43,6 +43,11 @@
 .coisa-puxando-rastro { filter: sepia(1) saturate(5) hue-rotate(-28deg) brightness(0.75) blur(1px); }
 /* A poeira dos pés, as lascas da cortiça e os riscos da arrancada. */
 .coisa-puxando-poeira { filter: none; }
+/* O balão da outra mão e o fio dele (o JS move os dois a cada quadro). */
+.coisa-puxando-balao { transform-origin: 50% 100%; will-change: transform; filter: drop-shadow(-6px 10px 8px rgb(0 0 0 / 0.45)); }
+.coisa-puxando-balao svg { display: block; }
+.coisa-puxando-fio { width: 100vw; height: 100vh; overflow: visible; filter: none; }
+.coisa-puxando-fio path { fill: none; stroke: #cfcfcf; stroke-width: 2; opacity: 0.85; }
 .coisa-canvas {
   position: absolute;
   left: 50%;

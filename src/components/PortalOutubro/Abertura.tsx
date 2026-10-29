@@ -111,12 +111,12 @@ export function Abertura({ aoDesmanchar, aoTerminar, leve }: {
   const estilo = { ['--v' as string]: v } as CSSProperties;
 
   return (
-    <div className={`portal-abertura${leve ? ' portal-leve' : ''}`} style={estilo} role="dialog" aria-label="O mural de outubro está abrindo" data-portal-fora>
+    <div className={`portal-abertura${leve ? ' portal-leve' : ''}`} style={estilo} role="dialog" aria-label="O mural de outubro está abrindo" data-portal-fora data-portal-anima>
       {foto && (
         <TelaQueDesmancha foto={foto} origens={origens} duracaoS={3.4} leve={leve} semente={1958} aoTerminar={aoTerminar} />
       )}
 
-      {etapa !== 'estourou' && <div className="portal-alto-bueiro"><Bueiro acesos seguir={false} tremendo={!leve} /></div>}
+      {etapa !== 'estourou' && <div className="portal-alto-bueiro"><Bueiro acesos seguir={false} tremendo={!leve} leve={leve} /></div>}
 
       {baloes.map((b, i) => (
         <div

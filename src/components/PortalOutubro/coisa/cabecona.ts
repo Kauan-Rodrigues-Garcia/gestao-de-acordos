@@ -550,6 +550,9 @@ const DO_OLHO = new Set(['y', 'Y', 'm', 'L', 'E', 'e']);
  * apenas os olhos»): o mesmo desenho do busto, recortado em volta deles e sem
  * mais nada. A pupila vai com `olhar`; `piscando` apaga; `brilho` acende.
  */
+/** Onde o recorte de `olhosDaCabecona` fica no busto (o canto de cima à esquerda). */
+export const CANTO_DOS_OLHOS: readonly [number, number] = [OLHOS[0] - 7, TOPO + OLHO_Y - 3];
+
 export function olhosDaCabecona(pose: PoseDaCabecona = {}): string[] {
   const g = montarCabecona({ olhar: pose.olhar, brilho: pose.brilho, piscando: pose.piscando, corpo: false });
   const y0 = TOPO + OLHO_Y - 3, x0 = OLHOS[0] - 7, x1 = OLHOS[1] + 7;

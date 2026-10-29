@@ -5,10 +5,12 @@
  * na tecla ao lado (as conchas ficaram lisas, a pedido).
  * O fio está cortado, desfiado no cobre. Quem aperta F no teclado (ou clica
  * na tecla) presta a homenagem: a tecla afunda, o fone balança e os F sobem
- * como num chat. A conta é só desta tela.
+ * como num chat. A conta é só desta tela. Cada F estoura uma bolha (pedido
+ * de 29/10/2026: «um som divertido de bolha estourando»).
  */
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Pixel } from './Bueiro';
+import { tocarBolha } from './coisa/trilha';
 
 const L = 36, A = 31;
 
@@ -63,6 +65,7 @@ export function Fone({ x, y, tam = 4, pausado }: { x: number; y: number; tam?: n
 
   const homenagem = () => {
     const id = proximo.current++;
+    tocarBolha();
     setApertou(n => n + 1);
     setFs(l => [...l.slice(-14), { id, x: Math.round(Math.random() * 120 - 30), giro: Math.round(Math.random() * 16 - 8) }]);
     window.setTimeout(() => setFs(l => l.filter(f => f.id !== id)), 2200);

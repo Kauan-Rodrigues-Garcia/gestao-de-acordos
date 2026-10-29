@@ -5,10 +5,10 @@
  * melhor forma»). O corpo inteiro, por cima do palco e do mural, no mesmo
  * tamanho e no mesmo lugar em que estava na toca:
  *
- *   vira      estica os dois braços para a direita
+ *   vira      estica o braço da direita (a esquerda segura o balão)
  *   corre     dispara de lado até a borda da tela, com o rastro borrado
  *             atrás (a foto dela correndo na caverna)
- *   agarra    fecha as luvas na borda do mural, que aparece com um tranco
+ *   agarra    fecha a luva na borda do mural, que aparece com um tranco
  *             (poeira da cortiça, a tela treme), e treme tomando impulso
  *   trancos   três puxões, cada um mais forte: embala para o mural, joga o
  *             tronco para trás (poeira nos pés, a tela treme) e o mural, que
@@ -22,12 +22,18 @@
  * O mural anda pelo `transform` dele (o elemento vem por `mural`); no fim o
  * transform volta a vazio e `aoTerminar` avisa. Os tempos dividem pela
  * velocidade do mural. No modo leve, sem poeira e sem riscos.
+ *
+ * Desde 29/10/2026 ela puxa com uma mão só («e na outra fica segurando um
+ * balão»): o balão vermelho vai preso no punho da esquerda por uma mola, e
+ * por isso fica para trás quando ela corre, sacode nos trancos e balança
+ * parado.
  */
 import { useEffect, useMemo, useRef, type RefObject } from 'react';
-import { PALETA_DA_COISA } from './arte';
-import { ALTURA_DA_COISA, CORPO_X, LARGURA_PUXANDO, MAO_PUXANDO, PUXANDO } from './desenho';
+import { BALAO, PALETA_DA_COISA, PALETA_DO_BALAO } from './arte';
+import { ALTURA_DA_COISA, CORPO_X, LARGURA_PUXANDO, MAO_DO_BALAO_PUXANDO, MAO_PUXANDO, PUXANDO } from './desenho';
 import { pintarGrade } from './derry';
 import { sorteador } from '../acaso';
+import { Pixel } from '../Bueiro';
 
 const VIRA = 0.3;
 const AGARRA = 0.55;
@@ -57,6 +63,11 @@ const BORDA = 3;
 const RASTROS = 3;
 /** Onde ficam os pés no quadro (x de um pé ao outro, y da sola). */
 const PES = [CORPO_X + 4, CORPO_X + 40, ALTURA_DA_COISA - 1] as const;
+
+/** O fio do balão, em pixels dela: do punho até o nó. */
+const FIO = 22;
+/** O balão (12 × 15): o nó fica no meio, embaixo. */
+const NO_DO_BALAO = [6, 15] as const;
 
 const POEIRA = ['#3b2616', '#5a3a22', '#7a5233', '#9a6e45'];
 const CORTICA = ['#5c4027', '#8b6b4a', '#c9a777'];
@@ -101,6 +112,8 @@ export function ACoisaPuxando({ x, y, px, mural, v, leve, aoTerminar }: {
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const poeiraRef = useRef<HTMLCanvasElement>(null);
+  const balaoRef = useRef<HTMLDivElement>(null);
+  const fioRef = useRef<SVGPathElement>(null);
   const rastros = useRef<(HTMLCanvasElement | null)[]>([]);
   const fim = useRef(aoTerminar);
   fim.current = aoTerminar;
@@ -206,6 +219,27 @@ export function ACoisaPuxando({ x, y, px, mural, v, leve, aoTerminar }: {
     const por = (alvo: HTMLCanvasElement, sx: number, sy: number) => {
       alvo.style.transform = `translate(${Math.round(sx)}px, ${Math.round(sy)}px)`;
     };
+    // O balão: o nó vai atrás de um ponto acima do punho, numa mola.
+    const punho = (sx: number, sy: number) => [sx + (MAO_DO_BALAO_PUXANDO[0] + 0.5) * px, sy + (MAO_DO_BALAO_PUXANDO[1] - 2) * px] as const;
+    let [mx, my] = punho(x0, y);
+    let nx = mx - 1.5 * px, ny = my - FIO * px, nvx = 0, nvy = 0;
+    const balao = (dt: number, t: number) => {
+      const b = balaoRef.current, f = fioRef.current;
+      if (!b || !f || dt <= 0) return;
+      const ax = mx - 1.5 * px + Math.sin(t * 1.7) * px * 1.2, ay = my - FIO * px + Math.sin(t * 2.3) * px * 0.6;
+      nvx += ((ax - nx) * 30 - nvx * 6) * dt;
+      nvy += ((ay - ny) * 30 - nvy * 6) * dt;
+      nx += nvx * dt;
+      ny += nvy * dt;
+      const giro = Math.max(-22, Math.min(22, -nvx * 0.02));
+      b.style.transform = `translate(${Math.round(nx - NO_DO_BALAO[0] * px)}px, ${Math.round(ny - NO_DO_BALAO[1] * px)}px) rotate(${giro.toFixed(1)}deg)`;
+      f.setAttribute('d', `M${mx.toFixed(1)} ${my.toFixed(1)} Q${((mx + nx) / 2 - nvx * 0.03).toFixed(1)} ${((my + ny) / 2).toFixed(1)} ${nx.toFixed(1)} ${ny.toFixed(1)}`);
+    };
+    const semBalao = () => {
+      if (balaoRef.current) balaoRef.current.style.opacity = '0';
+      fioRef.current?.setAttribute('d', '');
+    };
+
     // Por onde ela passou, para o rastro.
     const passou: { q: HTMLCanvasElement; x: number; y: number }[] = [];
     const semRastro = () => {
@@ -214,6 +248,7 @@ export function ACoisaPuxando({ x, y, px, mural, v, leve, aoTerminar }: {
     };
     const mostrar = (q: HTMLCanvasElement, sx: number, sy: number, rastro: number) => {
       pintar(cv, q); por(cv, sx, sy);
+      [mx, my] = punho(sx, sy);
       passou.unshift({ q, x: sx, y: sy });
       passou.length = Math.min(passou.length, RASTROS * 3 + 1);
       rastros.current.forEach((r, i) => {
@@ -306,12 +341,14 @@ export function ACoisaPuxando({ x, y, px, mural, v, leve, aoTerminar }: {
           baque = t;
           cv.style.opacity = '0';
           semRastro();
+          semBalao();
           sacudir(11);
           lascas(0, 30, 1);
           poeiraNosPes(-CORPO_X * px, H - ALTURA_DA_COISA * px, 18);
         }
       }
       pintarPoeira(dt);
+      if (baque < 0) balao(dt, t);
       id = requestAnimationFrame(passo);
     };
     id = requestAnimationFrame(passo);
@@ -333,6 +370,10 @@ export function ACoisaPuxando({ x, y, px, mural, v, leve, aoTerminar }: {
           aria-hidden
         />
       ))}
+      <svg className="coisa-puxando coisa-puxando-fio" aria-hidden><path ref={fioRef} /></svg>
+      <div ref={balaoRef} className="coisa-puxando coisa-puxando-balao" style={{ transform: 'translate(-999px, -999px)' }} aria-hidden>
+        <Pixel linhas={BALAO} paleta={PALETA_DO_BALAO} tam={px} />
+      </div>
       <canvas ref={ref} className="coisa-puxando" width={LARGURA_PUXANDO} height={ALTURA_DA_COISA} style={estilo} aria-hidden />
       {!leve && (
         <canvas ref={poeiraRef} className="coisa-puxando coisa-puxando-poeira" width={gw * FINO} height={gh * FINO} style={{ width: gw * px, height: gh * px }} aria-hidden />
