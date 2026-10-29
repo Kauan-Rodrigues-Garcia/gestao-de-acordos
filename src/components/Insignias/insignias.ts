@@ -236,6 +236,23 @@ export function marcarInsigniasVistas(usuario: string, ids: readonly IdInsignia[
  * aberto neste navegador) = todas que tem são novas: é o aviso de que o álbum
  * existe.
  */
+/**
+ * O super_admin tem todas (Cleber, 29/10/2026): as que ele não ganhou nas
+ * gincanas entram como ganhas hoje, uma vez. Só na barra dele — o álbum
+ * guardado e a lista do pessoal continuam com o que o banco gravou.
+ */
+export function albumLiberado(album: Album | null, usuario: string, agora: string): Album {
+  const base: Album = album ?? { usuario, nome: '', foto: null, setor: null, conquistas: {} };
+  const conquistas = { ...base.conquistas };
+  for (const ins of INSIGNIAS) {
+    conquistas[ins.id] ??= {
+      vezes: 1, primeiraEm: agora, ultimaEm: agora, desenho: null,
+      headshots: 0, melhorMs: null, golpeFinal: false, maiorDano: 0,
+    };
+  }
+  return { ...base, conquistas };
+}
+
 export function novasInsignias(tem: readonly IdInsignia[], vistas: readonly IdInsignia[] | null): IdInsignia[] {
   return tem.filter(id => !(vistas ?? []).includes(id));
 }

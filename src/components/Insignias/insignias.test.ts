@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  INSIGNIAS, TOTAL_INSIGNIAS, albumGuardado, guardarAlbum, insigniaDaCaca, montarAlbuns, novasInsignias, ordenarAlbuns, quantas,
+  INSIGNIAS, TOTAL_INSIGNIAS, albumGuardado, albumLiberado, guardarAlbum, insigniaDaCaca, montarAlbuns, novasInsignias, ordenarAlbuns, quantas,
   type LinhaCaca, type LinhaGolpe,
 } from './insignias';
 
@@ -11,6 +11,18 @@ const caca = (p: Partial<LinhaCaca>): LinhaCaca => ({
 const golpe = (p: Partial<LinhaGolpe>): LinhaGolpe => ({
   usuario: 'ana', nome: 'Ana Souza', foto: null, dano: 120, rodada_id: 1,
   derrotado_em: '2026-10-09T18:00:00Z', golpe_final_por: null, ...p,
+});
+
+describe('super admin: todas liberadas', () => {
+  it('completa o álbum sem mexer no que ele ganhou de verdade', () => {
+    const ana = montarAlbuns([caca({ zumbi: 3 })], [], []).get('ana')!;
+    const liberado = albumLiberado(ana, 'ana', '2026-10-29T12:00:00Z');
+    expect(quantas(liberado)).toBe(TOTAL_INSIGNIAS);
+    expect(liberado.conquistas.zumbi).toEqual(ana.conquistas.zumbi);
+    expect(liberado.conquistas.guerra?.primeiraEm).toBe('2026-10-29T12:00:00Z');
+    expect(quantas(ana)).toBe(1);
+    expect(quantas(albumLiberado(null, 'cleber', 'x'))).toBe(TOTAL_INSIGNIAS);
+  });
 });
 
 describe('álbum de insígnias', () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { montarVisao, moedaTv, nomeCurto, percentualTv, serieAcumulada, tamanhoQueCabe } from './numeros';
-import { alvoDoDiaProprio, campoVisivel, midiaSegura, opcao, rotuloTempo, segundosDaTela, telasValidas, templateDe } from './templates';
+import { alvoDoDiaProprio, campoVisivel, midiaSegura, novaTela, opcao, rotuloTempo, segundosDaTela, segundosDoArquivo, telasValidas, templateDe } from './templates';
 import { numerosDemo } from './demo';
 import { estadoDaTv, situacaoDoPainel } from './apoio';
 import { diferencaDoServidor, telaNoInstante } from './relogio';
@@ -163,6 +163,17 @@ describe('tempo de cada tela', () => {
     expect(segundosDaTela({ segundos: 300 }, 30)).toBe(300);
     expect(segundosDaTela({ segundos: 2 }, 30)).toBe(30);
     expect(segundosDaTela({}, 0)).toBe(20);
+  });
+  it('«duração do arquivo»: o vídeo inteiro + 1 s, entre 5 s e 1 h', () => {
+    expect(segundosDoArquivo(72.4)).toBe(74);
+    expect(segundosDoArquivo(30)).toBe(31);
+    expect(segundosDoArquivo(1.2)).toBe(5);
+    expect(segundosDoArquivo(7200)).toBe(3600);
+    expect(segundosDoArquivo(null)).toBeNull();
+    expect(segundosDoArquivo(Infinity)).toBeNull();
+    expect(novaTela('video').opcoes).toEqual({ tempo_do_arquivo: true });
+    expect(novaTela('imagem').opcoes).toEqual({});
+    expect(opcao<boolean>(novaTela('video'), 'com_som')).toBe(false);
   });
   it('tempo inválido no jsonb vira nulo', () => {
     expect(telasValidas([{ id: 'a', template: 'podio', segundos: 99999 }])[0].segundos).toBeNull();

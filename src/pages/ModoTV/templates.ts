@@ -138,11 +138,14 @@ export const TEMPLATES: Template[] = [
   {
     id: 'video', categoria: 'midia',
     nome: 'Vídeo',
-    descricao: 'Um vídeo curto em laço, sem som.',
+    descricao: 'Um vídeo em tela cheia, com ou sem som.',
+    // Fora dos campos, gravados pelo editor: `duracao_arquivo` (segundos do
+    // vídeo, medidos no envio) e `tempo_do_arquivo` (a tela dura o vídeo).
     campos: [
       { chave: 'url', rotulo: 'Vídeo', tipo: 'midia', padrao: '', aceita: 'video' },
       { chave: 'ajuste', rotulo: 'Encaixe', tipo: 'escolha', padrao: 'contain',
         escolhas: [{ valor: 'contain', rotulo: 'Inteiro' }, { valor: 'cover', rotulo: 'Preencher a tela' }] },
+      { chave: 'com_som', rotulo: 'Tocar o som do vídeo', tipo: 'liga', padrao: false },
     ],
   },
   {
@@ -222,7 +225,8 @@ export function novaTela(template: TemplateId): TelaDoPainel {
   const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto
     ? crypto.randomUUID()
     : `t${Date.now()}${Math.random().toString(16).slice(2)}`;
-  return { id, template, opcoes: {} };
+  // Vídeo nasce com «Duração do arquivo» (Cleber, 29/10).
+  return { id, template, opcoes: template === 'video' ? { tempo_do_arquivo: true } : {} };
 }
 
 /** As telas que vieram do banco, sem o que não dá para desenhar. */
@@ -255,6 +259,17 @@ export function segundosValidos(v: unknown): number | null {
 /** Quanto tempo esta tela fica na TV. */
 export function segundosDaTela(tela: Pick<TelaDoPainel, 'segundos'>, padraoDoPainel: number): number {
   return segundosValidos(tela.segundos) ?? Math.min(SEGUNDOS_MAX, Math.max(SEGUNDOS_MIN, padraoDoPainel || 20));
+}
+
+/**
+ * «Duração do arquivo»: o vídeo inteiro, mais 1 s de folga para ele carregar
+ * na TV, entre 5 s e 1 h. Vai para `segundos` — o relógio do rodízio continua
+ * o mesmo na TV e na prévia. `null` sem duração medida.
+ */
+export function segundosDoArquivo(duracao: unknown): number | null {
+  const n = typeof duracao === 'number' ? duracao : NaN;
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.min(SEGUNDOS_MAX, Math.max(SEGUNDOS_MIN, Math.ceil(n) + 1));
 }
 
 /** As escolhas prontas de tempo. O campo «outro» aceita qualquer valor entre 5 s e 1 h. */

@@ -36,7 +36,7 @@ import {
 import type { AlvoTv, ConexaoTv, NumerosTv, Painel, TelaDoPainel, TemaId, Unidade } from './tipos';
 import {
   CATEGORIAS, SEGUNDOS_MAX, SEGUNDOS_MIN, TEMAS, TEMPLATES, TEMPOS_PRONTOS,
-  campoVisivel, novaTela, opcao, rotuloTempo, segundosDaTela, templateDe, type CampoOpcao,
+  campoVisivel, novaTela, opcao, rotuloTempo, segundosDaTela, segundosDoArquivo, templateDe, type CampoOpcao,
 } from './templates';
 import { CORES } from './TelaTv';
 import { Rodizio } from './Rodizio';
@@ -123,6 +123,38 @@ export function Editor({ painel, alvo, conexoes, aoMudar, aoMudarConexoes }: {
     setR(atual => ({ ...atual, telas: atual.telas.map((t, j) => j === i ? { ...t, ...parcial } : t) }));
   const mudarOpcao = (i: number, opcoes: Record<string, unknown>) =>
     setR(atual => ({ ...atual, telas: atual.telas.map((t, j) => j === i ? { ...t, opcoes: { ...t.opcoes, ...opcoes } } : t) }));
+  const mudarTelaPorId = (id: string, f: (t: TelaDoPainel) => TelaDoPainel) =>
+    setR(atual => ({ ...atual, telas: atual.telas.map(t => t.id === id ? f(t) : t) }));
+
+  /** «Duração do arquivo»: a tela dura o vídeo. Vídeo antigo, sem duração gravada, é medido agora. */
+  const escolherTempoDoArquivo = async (id: string) => {
+    const t = r.telas.find(x => x.id === id);
+    if (!t) return;
+    let duracao = typeof t.opcoes.duracao_arquivo === 'number' ? t.opcoes.duracao_arquivo : null;
+    const url = opcao<string>(t, 'url');
+    if (duracao == null && url) {
+      duracao = await medirVideo(url);
+      if (duracao == null) { toast.error('Não deu para ler a duração do vídeo. Envie o arquivo de novo.'); return; }
+    }
+    const seg = segundosDoArquivo(duracao);
+    mudarTelaPorId(id, x => ({
+      ...x,
+      opcoes: { ...x.opcoes, tempo_do_arquivo: true, ...(duracao != null ? { duracao_arquivo: duracao } : {}) },
+      ...(seg != null ? { segundos: seg } : {}),
+    }));
+  };
+
+  /** Vídeo novo: grava a duração e, com «Duração do arquivo», o tempo da tela vai junto. */
+  const receberVideo = (id: string, url: string, duracao: number | null) => mudarTelaPorId(id, t => {
+    const ligado = t.opcoes.tempo_do_arquivo === true || (t.opcoes.tempo_do_arquivo == null && !t.opcoes.url);
+    const seg = segundosDoArquivo(duracao);
+    return {
+      ...t,
+      opcoes: { ...t.opcoes, url, duracao_arquivo: duracao ?? undefined, tempo_do_arquivo: ligado },
+      ...(ligado && seg != null ? { segundos: seg } : {}),
+    };
+  });
+
   const mover = (i: number, d: -1 | 1) => setR(atual => {
     const j = i + d;
     if (j < 0 || j >= atual.telas.length) return atual;
@@ -229,6 +261,7 @@ export function Editor({ painel, alvo, conexoes, aoMudar, aoMudarConexoes }: {
             numeros={numeros}
             fixarEm={vista === 'edicao' ? sel : null}
             diferencaMs={diferencaMs}
+            semSom={vista !== 'edicao'}
             style={{ width: '100%', aspectRatio: '16 / 9' }}
           />
           <span className={`absolute top-2 left-2 rounded-full px-2.5 py-1 text-[11px] font-semibold text-white ${vista === 'edicao' ? (sujo ? 'bg-amber-600' : 'bg-slate-600') : 'bg-emerald-600'}`}>
@@ -282,7 +315,19 @@ export function Editor({ painel, alvo, conexoes, aoMudar, aoMudarConexoes }: {
                   </div>
                 </div>
                 <div onClick={e => e.stopPropagation()}>
-                  <SeletorTempo valor={t.segundos ?? null} padrao={r.segundos_por_tela} aoMudar={v => mudarTela(i, { segundos: v })} />
+                  {t.template === 'video' ? (
+                    <SeletorTempo
+                      valor={t.segundos ?? null} padrao={r.segundos_por_tela}
+                      arquivo={{
+                        ligado: t.opcoes.tempo_do_arquivo === true,
+                        segundos: segundosDoArquivo(t.opcoes.duracao_arquivo),
+                        aoEscolher: () => { void escolherTempoDoArquivo(t.id); },
+                      }}
+                      aoMudar={v => mudarTelaPorId(t.id, x => ({ ...x, segundos: v, opcoes: { ...x.opcoes, tempo_do_arquivo: false } }))}
+                    />
+                  ) : (
+                    <SeletorTempo valor={t.segundos ?? null} padrao={r.segundos_por_tela} aoMudar={v => mudarTela(i, { segundos: v })} />
+                  )}
                 </div>
                 <Button
                   variant={fixada ? 'secondary' : 'ghost'} size="sm"
@@ -310,7 +355,8 @@ export function Editor({ painel, alvo, conexoes, aoMudar, aoMudarConexoes }: {
               </div>
               {tplSel.campos.filter(campo => campoVisivel(telaSel, campo)).map(campo => (
                 <CampoDaTela key={campo.chave} campo={campo} tela={telaSel} painelId={painel.id}
-                  aoMudar={v => mudarOpcao(sel, { [campo.chave]: v })} />
+                  aoMudar={v => mudarOpcao(sel, { [campo.chave]: v })}
+                  aoEnviarVideo={(url, duracao) => receberVideo(telaSel.id, url, duracao)} />
               ))}
               {!tplSel.campos.length && <p className="text-sm text-muted-foreground">Esta tela não tem opções.</p>}
             </>
@@ -569,14 +615,18 @@ function Segmentado({ valor, opcoes, aoMudar }: {
 /**
  * Escolha de tempo: os prontos, ou «Outro» com minutos e segundos.
  * Com `padrao`, a primeira opção é «Padrão (20 s)» e devolve `null`.
+ * Com `arquivo` (tela de vídeo), a primeira de todas é «Duração do arquivo».
  */
-function SeletorTempo({ valor, padrao, aoMudar }: {
-  valor: number | null; padrao?: number; aoMudar: (v: number | null) => void;
+function SeletorTempo({ valor, padrao, arquivo, aoMudar }: {
+  valor: number | null; padrao?: number;
+  arquivo?: { ligado: boolean; segundos: number | null; aoEscolher: () => void };
+  aoMudar: (v: number | null) => void;
 }) {
   const [outro, setOutro] = useState(false);
   const [min, setMin] = useState('');
   const [seg, setSeg] = useState('');
-  const atual = valor == null ? 'padrao' : TEMPOS_PRONTOS.includes(valor) ? String(valor) : 'custom';
+  const atual = arquivo?.ligado ? 'arquivo'
+    : valor == null ? 'padrao' : TEMPOS_PRONTOS.includes(valor) ? String(valor) : 'custom';
 
   if (outro) {
     const total = (Number(min) || 0) * 60 + (Number(seg) || 0);
@@ -600,7 +650,8 @@ function SeletorTempo({ valor, padrao, aoMudar }: {
       title="Quanto tempo esta tela fica na TV"
       onChange={e => {
         const v = e.target.value;
-        if (v === 'padrao') aoMudar(null);
+        if (v === 'arquivo') arquivo?.aoEscolher();
+        else if (v === 'padrao') aoMudar(null);
         else if (v === 'outro') {
           const base = valor ?? padrao ?? 20;
           setMin(String(Math.floor(base / 60)));
@@ -609,6 +660,11 @@ function SeletorTempo({ valor, padrao, aoMudar }: {
         } else if (v !== 'custom') aoMudar(Number(v));
       }}
     >
+      {arquivo && (
+        <option value="arquivo">
+          Duração do arquivo{arquivo.segundos != null ? ` (${rotuloTempo(arquivo.segundos)})` : ''}
+        </option>
+      )}
       {padrao != null && <option value="padrao">Padrão ({rotuloTempo(padrao)})</option>}
       {TEMPOS_PRONTOS.map(s => <option key={s} value={s}>{rotuloTempo(s)}</option>)}
       {atual === 'custom' && valor != null && <option value="custom">{rotuloTempo(valor)}</option>}
@@ -617,10 +673,37 @@ function SeletorTempo({ valor, padrao, aoMudar }: {
   );
 }
 
+/** A duração de um vídeo (arquivo local ou URL), em segundos; `null` se não der para ler. */
+function medirVideo(origem: File | string): Promise<number | null> {
+  return new Promise(resolve => {
+    const v = document.createElement('video');
+    const src = typeof origem === 'string' ? origem : URL.createObjectURL(origem);
+    let pronto = false;
+    const fim = (d: number | null) => {
+      if (pronto) return;
+      pronto = true;
+      clearTimeout(espera);
+      v.removeAttribute('src');
+      v.load();
+      if (typeof origem !== 'string') URL.revokeObjectURL(src);
+      // WEBM gravado no navegador às vezes diz `Infinity`: sem duração.
+      resolve(d != null && Number.isFinite(d) && d > 0 ? Math.round(d * 100) / 100 : null);
+    };
+    const espera = setTimeout(() => fim(null), 15_000);
+    v.preload = 'metadata';
+    v.muted = true;
+    v.onloadedmetadata = () => fim(v.duration);
+    v.onerror = () => fim(null);
+    v.src = src;
+  });
+}
+
 // ── Um campo de opção ────────────────────────────────────────────────────────
 
-function CampoDaTela({ campo, tela, painelId, aoMudar }: {
+function CampoDaTela({ campo, tela, painelId, aoMudar, aoEnviarVideo }: {
   campo: CampoOpcao; tela: TelaDoPainel; painelId: string; aoMudar: (v: unknown) => void;
+  /** Vídeo enviado: a URL e a duração medida no arquivo (para «Duração do arquivo»). */
+  aoEnviarVideo?: (url: string, duracao: number | null) => void;
 }) {
   const arquivo = useRef<HTMLInputElement>(null);
   const [enviando, setEnviando] = useState(false);
@@ -683,7 +766,14 @@ function CampoDaTela({ campo, tela, painelId, aoMudar }: {
               e.target.value = '';
               if (!f) return;
               setEnviando(true);
-              try { aoMudar(await enviarMidia(painelId, f, campo.aceita)); }
+              try {
+                if (campo.aceita === 'video' && aoEnviarVideo) {
+                  const [url, duracao] = await Promise.all([enviarMidia(painelId, f, 'video'), medirVideo(f)]);
+                  aoEnviarVideo(url, duracao);
+                } else {
+                  aoMudar(await enviarMidia(painelId, f, campo.aceita));
+                }
+              }
               catch (err) { toast.error(err instanceof Error ? err.message : 'Não deu para enviar.'); }
               finally { setEnviando(false); }
             }} />
@@ -692,7 +782,7 @@ function CampoDaTela({ campo, tela, painelId, aoMudar }: {
             {enviando ? 'Enviando…' : v ? 'Trocar arquivo' : campo.aceita === 'imagem' ? 'Escolher imagem' : 'Escolher vídeo'}
           </Button>
           <p className="text-xs text-muted-foreground">
-            {campo.aceita === 'imagem' ? 'PNG, JPG ou WEBP até 8 MB. Ideal 1920×1080.' : 'MP4 até 40 MB. Toca sem som, em laço.'}
+            {campo.aceita === 'imagem' ? 'PNG, JPG ou WEBP até 8 MB. Ideal 1920×1080.' : 'MP4 ou WEBM até 40 MB.'}
           </p>
         </div>
       );

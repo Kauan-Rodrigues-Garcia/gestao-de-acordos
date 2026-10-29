@@ -18,8 +18,8 @@
  * liderança», sem ligação com a equipe que lideram, e quem saía do filtro
  * continuava marcado sem aparecer.
  *
- * Clicar em «Todas as equipes» (ou Limpar) alterna (16/10/2026): desmarca
- * todo mundo; clicando de novo, marca todos os operadores outra vez.
+ * Desde 29/10/2026 tudo começa desmarcado: na carga do setor, na equipe que
+ * entra no filtro e em «Todas as equipes» (ou Limpar). «Marcar todos» marca.
  */
 import { Layers, Loader2, Search, X } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';

@@ -33,7 +33,7 @@ import { Users } from 'lucide-react';
 import { comNovaTentativa } from '@/lib/sobDemanda';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
-  INSIGNIAS, albumGuardado, guardarAlbum, insigniasVistas, marcarInsigniasVistas, novasInsignias,
+  INSIGNIAS, albumGuardado, albumLiberado, guardarAlbum, insigniasVistas, marcarInsigniasVistas, novasInsignias,
   type Album, type IdInsignia,
 } from './insignias';
 import { esquecerAlbuns, lerMeuAlbum } from './banco';
@@ -117,7 +117,12 @@ function Fitas() {
 }
 
 export function BotaoInsignias({ perfilId, souSuperAdmin }: Props) {
-  const album = useMeuAlbum(perfilId);
+  const doBanco = useMeuAlbum(perfilId);
+  const [abriuEm] = useState(() => new Date().toISOString());
+  const album = useMemo(
+    () => (souSuperAdmin && perfilId ? albumLiberado(doBanco, perfilId, abriuEm) : doBanco),
+    [souSuperAdmin, perfilId, doBanco, abriuEm],
+  );
   const [vistas, setVistas] = useState<IdInsignia[] | null>(null);
 
   useEffect(() => { setVistas(perfilId ? insigniasVistas(perfilId) : null); }, [perfilId]);

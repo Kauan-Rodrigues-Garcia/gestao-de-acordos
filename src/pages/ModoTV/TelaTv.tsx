@@ -713,11 +713,43 @@ function Imagem({ tela, c, url }: { tela: TelaDoPainel; c: Cores; url: string | 
   );
 }
 
-function Video({ tela, c, url }: { tela: TelaDoPainel; c: Cores; url: string | null }) {
+/**
+ * O vídeo, com ou sem som. Navegador sem clique na página (o PC da TV recém
+ * ligado) barra vídeo com som: aí toca mudo e solta o som no primeiro clique
+ * ou tecla. Com «duração do arquivo» e rodízio andando, não volta ao começo —
+ * para no último quadro até a próxima tela.
+ */
+function Video({ tela, c, url, parada, semSom }: {
+  tela: TelaDoPainel; c: Cores; url: string | null; parada?: boolean; semSom?: boolean;
+}) {
+  const ref = useRef<HTMLVideoElement>(null);
+  const comSom = !semSom && opcao<boolean>(tela, 'com_som') === true;
+  const laco = parada || opcao<boolean>(tela, 'tempo_do_arquivo') !== true;
+
+  useEffect(() => {
+    const v = ref.current;
+    if (!v || !url) return;
+    v.muted = !comSom;
+    let desfazer: () => void = () => undefined;
+    v.play().catch(() => {
+      if (v.muted) return;
+      v.muted = true;
+      void v.play().catch((): void => undefined);
+      const soltar = () => { desfazer(); v.muted = false; void v.play().catch((): void => undefined); };
+      window.addEventListener('pointerdown', soltar, true);
+      window.addEventListener('keydown', soltar, true);
+      desfazer = () => {
+        window.removeEventListener('pointerdown', soltar, true);
+        window.removeEventListener('keydown', soltar, true);
+      };
+    });
+    return () => desfazer();
+  }, [url, comSom]);
+
   if (!url) return <Aviso texto="Escolha um vídeo para esta tela." c={c} />;
   return (
     <video
-      src={url} autoPlay muted loop playsInline preload="auto"
+      ref={ref} src={url} muted={!comSom} loop={laco} playsInline preload="auto"
       style={{
         position: 'absolute', inset: 0, width: '100%', height: '100%', background: '#000',
         objectFit: opcao<string>(tela, 'ajuste') === 'cover' ? 'cover' : 'contain',
@@ -774,16 +806,20 @@ export interface PropsTelaTv {
   posicao?: { atual: number; total: number };
   atualizadoEm?: string | null;
   mes?: string;
+  /** Sem rodízio andando (tela fixa, uma tela só): o vídeo fica em laço. */
+  parada?: boolean;
+  /** Vídeo sempre mudo (a prévia «Na TV agora» do editor). */
+  semSom?: boolean;
 }
 
-export function TelaTv({ tela, tema, visao, midiaUrl, posicao, atualizadoEm, mes }: PropsTelaTv) {
+export function TelaTv({ tela, tema, visao, midiaUrl, posicao, atualizadoEm, mes, parada, semSom }: PropsTelaTv) {
   const c = CORES[tema];
   const ehMidia = tela.template === 'imagem' || tela.template === 'video';
   const nomeMes = mes ? MESES[Number(mes.slice(5, 7)) - 1] : undefined;
 
   let corpo: ReactNode;
   if (tela.template === 'imagem') corpo = <Imagem tela={tela} c={c} url={midiaUrl} />;
-  else if (tela.template === 'video') corpo = <Video tela={tela} c={c} url={midiaUrl} />;
+  else if (tela.template === 'video') corpo = <Video tela={tela} c={c} url={midiaUrl} parada={parada} semSom={semSom} />;
   else if (tela.template === 'recado') corpo = <Recado tela={tela} c={c} />;
   else if (!visao) corpo = <Aviso texto="Carregando os números…" c={c} />;
   else {

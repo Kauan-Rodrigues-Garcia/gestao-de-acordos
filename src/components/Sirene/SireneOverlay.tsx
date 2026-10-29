@@ -8,7 +8,7 @@
  *
  *   - cada toque (`chave`) toca uma vez por aba;
  *   - com várias abas abertas, a luz aparece em todas e o SOM em uma só
- *     (a primeira que marcar a chave no `localStorage`);
+ *     (a primeira que PODE tocar e marca a chave no `localStorage`);
  *   - nunca presa: some pelo timer da duração, por um vigia com o teto de
  *     60 s, e no «Silenciar». A camada não pega clique, só o botão.
  *
@@ -27,7 +27,7 @@ import { createPortal } from 'react-dom';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { DURACAO_MAX_S, TOLERANCIA_MS, corDaSirene, proximoToque, type CorDaSirene } from './horario';
 import { agoraDoServidor, ouvirTeste, useMinhaSirene } from './sirene';
-import { destravarNoPrimeiroGesto, tocarSom } from './som';
+import { destravarNoPrimeiroGesto, prepararSom, tocarSom } from './som';
 import { semPlacaDeVideo } from '@/components/Halloween/aguenta';
 import './sirene.css';
 
@@ -69,11 +69,26 @@ export function SireneOverlay() {
 
   useEffect(() => { destravarNoPrimeiroGesto(); }, []);
 
-  function tocar(t: NaTela, comSom: boolean) {
+  /** A chave na tela agora: o som que chega atrasado só toca se ela ainda estiver. */
+  const chaveNaTela = useRef<string | null>(null);
+
+  /**
+   * A luz entra na hora; o som, depois de conferir que ESTA aba consegue tocar.
+   * Até 29/10/2026 a primeira aba a disparar ficava com o som mesmo sem áudio
+   * liberado (aba recarregada pelo deploy e sem clique depois) — tocava mudo e
+   * a aba que podia tocar ficava calada. Agora só pega o som quem pode tocá-lo.
+   */
+  function tocar(t: NaTela, disputarSom: boolean) {
     pararSom.current();
-    pararSom.current = comSom ? tocarSom(t.duracaoMs, t.volume) : () => undefined;
+    pararSom.current = () => undefined;
+    chaveNaTela.current = t.chave;
     setSaindo(false);
     setNaTela(t);
+    void prepararSom().then(pode => {
+      if (!pode || chaveNaTela.current !== t.chave) return;
+      if (disputarSom && !ficarComOSom(t.chave)) return;
+      pararSom.current = tocarSom(t.duracaoMs, t.volume);
+    });
   }
 
   // ── Os horários do meu setor ──
@@ -86,7 +101,7 @@ export function SireneOverlay() {
       const atraso = agoraDoServidor() - prox.quando;
       tocados.current.add(prox.chave);
       if (atraso <= TOLERANCIA_MS) {
-        tocar({ chave: prox.chave, cor: prox.cor, duracaoMs: prox.duracaoMs, texto: prox.descricao, volume: prox.volume }, ficarComOSom(prox.chave));
+        tocar({ chave: prox.chave, cor: prox.cor, duracaoMs: prox.duracaoMs, texto: prox.descricao, volume: prox.volume }, true);
       }
       setRodada(r => r + 1);
     }, Math.max(0, falta));
@@ -100,13 +115,13 @@ export function SireneOverlay() {
     if (falta < -TOLERANCIA_MS) return;
     const id = setTimeout(() => {
       tocados.current.add(toque.id);
-      tocar({ chave: toque.id, cor: toque.cor, duracaoMs: toque.duracaoMs, texto: null, volume: toque.volume }, ficarComOSom(toque.id));
+      tocar({ chave: toque.id, cor: toque.cor, duracaoMs: toque.duracaoMs, texto: null, volume: toque.volume }, true);
     }, Math.max(0, falta));
     return () => clearTimeout(id);
   }, [toque]);
 
   // ── O teste: só nesta aba ──
-  useEffect(() => ouvirTeste(p => tocar({ chave: `teste:${Date.now()}`, cor: p.cor, duracaoMs: p.duracaoMs, texto: 'Teste da sirene', volume: p.volume }, true)), []);
+  useEffect(() => ouvirTeste(p => tocar({ chave: `teste:${Date.now()}`, cor: p.cor, duracaoMs: p.duracaoMs, texto: 'Teste da sirene', volume: p.volume }, false)), []);
 
   // ── As saídas: a duração e o vigia ──
   useEffect(() => {
@@ -121,7 +136,7 @@ export function SireneOverlay() {
   // não anima), o timer tira do mesmo jeito — nunca fica um botão invisível.
   useEffect(() => {
     if (!saindo) return;
-    const id = setTimeout(() => { pararSom.current(); setNaTela(null); setSaindo(false); }, 600);
+    const id = setTimeout(() => { chaveNaTela.current = null; pararSom.current(); setNaTela(null); setSaindo(false); }, 600);
     return () => clearTimeout(id);
   }, [saindo]);
 
@@ -129,7 +144,7 @@ export function SireneOverlay() {
 
   if (!naTela) return null;
   const cor = corDaSirene(naTela.cor);
-  const silenciar = () => { pararSom.current(); setSaindo(true); };
+  const silenciar = () => { chaveNaTela.current = null; pararSom.current(); setSaindo(true); };
 
   return createPortal(
     <div

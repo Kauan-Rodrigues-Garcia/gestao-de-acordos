@@ -64,28 +64,21 @@ export function casaEquipes(
 
 /**
  * A marcação depois de trocar as equipes do filtro. Quem saiu do recorte é
- * desmarcado — a campanha vai só para as equipes escolhidas. Os operadores de
- * equipe que entrou chegam marcados (o comum é a equipe inteira mandar); os
- * líderes, desmarcados. Quem já estava no recorte fica como estava.
+ * desmarcado — a campanha vai só para as equipes escolhidas. Quem entra chega
+ * DESMARCADO, operador ou líder (Cleber, 29/10/2026: antes os operadores
+ * chegavam marcados e a campanha ia para quem o líder nem escolheu). Quem já
+ * estava no recorte fica como estava.
  *
- * «Todas as equipes» (ou Limpar) alterna (16/10/2026): com alguém marcado,
- * desmarca todo mundo; sem ninguém, marca de novo todos os operadores — os
- * líderes seguem desmarcados, como na carga do setor.
+ * «Todas as equipes» (ou Limpar) desmarca todo mundo.
  */
 export function marcacaoAoTrocarEquipes(
   operadores: readonly OperadorCampanha[], marcados: ReadonlySet<string>,
   antes: readonly FiltroEquipe[], depois: readonly FiltroEquipe[],
 ): Set<string> {
   const novo = new Set<string>();
-  if (depois.length === 0) {
-    if (operadores.some((o) => marcados.has(o.id))) return novo;
-    for (const o of operadores) if (!o.lider) novo.add(o.id);
-    return novo;
-  }
+  if (depois.length === 0) return novo;
   for (const o of operadores) {
-    if (!casaEquipes(o, depois)) continue;
-    const jaEstava = casaEquipes(o, antes);
-    if (jaEstava ? marcados.has(o.id) : !o.lider) novo.add(o.id);
+    if (casaEquipes(o, depois) && casaEquipes(o, antes) && marcados.has(o.id)) novo.add(o.id);
   }
   return novo;
 }

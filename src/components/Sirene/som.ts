@@ -48,6 +48,25 @@ export function somLiberado(): boolean {
   return contexto?.state === 'running';
 }
 
+/**
+ * Na hora de tocar: o áudio está liberado? Se o contexto estiver suspenso
+ * (aba recarregada pelo deploy, navegador que suspendeu), tenta retomar — o
+ * navegador deixa quando a página já teve gesto. O `resume()` sem permissão
+ * fica pendente para sempre, por isso a espera curta.
+ */
+export async function prepararSom(esperaMs = 400): Promise<boolean> {
+  const ctx = criar();
+  if (!ctx) return false;
+  if (ctx.state === 'running') return true;
+  try {
+    await Promise.race([
+      ctx.resume().catch((): void => undefined),
+      new Promise<void>(r => setTimeout(r, esperaMs)),
+    ]);
+  } catch { /* segue: vale o estado */ }
+  return somLiberado();
+}
+
 const GRAVE = 640;
 const AGUDO = 1480;
 

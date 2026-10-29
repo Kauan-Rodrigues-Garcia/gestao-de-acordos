@@ -29,10 +29,12 @@ export interface PropsRodizio {
   diferencaMs?: number;
   /** Avisa qual tela entrou — a montagem destaca a mesma. */
   aoTrocar?: (indice: number) => void;
+  /** Vídeos sempre mudos. */
+  semSom?: boolean;
   style?: React.CSSProperties;
 }
 
-export function Rodizio({ painel, numeros, fixarEm = null, parado = false, diferencaMs = 0, aoTrocar, style }: PropsRodizio) {
+export function Rodizio({ painel, numeros, fixarEm = null, parado = false, diferencaMs = 0, aoTrocar, semSom, style }: PropsRodizio) {
   const total = painel.telas.length;
   // Sem versão (demonstração, vitrine), o rodízio conta de quando montou.
   const [montouEm] = useState(() => Date.now());
@@ -113,6 +115,8 @@ export function Rodizio({ painel, numeros, fixarEm = null, parado = false, difer
           posicao={fixarEm == null && fixo != null ? undefined : { atual: i, total }}
           atualizadoEm={numeros?.calculado_em}
           mes={numeros?.mes}
+          parada={!rodando}
+          semSom={semSom}
         />
       </div>
     );
