@@ -57,6 +57,8 @@ export interface PoseDaCabecona {
   fogo?: boolean;
   /** Os olhos fechados. */
   piscando?: boolean;
+  /** O quanto as três luzes da bocarra já giraram, em voltas (o close, 29/10). */
+  giro?: number;
 }
 
 type Grade = string[][];
@@ -383,7 +385,7 @@ function bocaFechada(f: Rosto, pose: PoseDaCabecona) {
  * fileiras de dentes cônicos (as de fora claras, as de dentro na luz) e, no
  * fundo, a garganta escura com as luzes mortas.
  */
-function bocarra(g: Grade, f: Rosto, queixo: number) {
+function bocarra(g: Grade, f: Rosto, queixo: number, giro: number) {
   const abre = f.abre;
   const cy = f.topo + BOCA + abre / 2 + 0.5;
   const rx = 8.5 + 7.5 * queixo, ry = abre / 2 + 1.4;
@@ -402,10 +404,14 @@ function bocarra(g: Grade, f: Rosto, queixo: number) {
       pintar(g, x, y, ch);
     }
   }
-  // As três luzes mortas no clarão: duas em cima, uma embaixo, cada uma com o miolo branco.
+  // As três luzes mortas no clarão: duas em cima, uma embaixo, cada uma com o
+  // miolo branco, girando em volta do meio (pedido de 29/10: «as luzes quando
+  // ele abre a boca também girar»).
   if (luz) {
-    const d = Math.max(3, Math.round(rx * 0.24)), h = Math.max(2, Math.round(ry * 0.2));
-    for (const [lx, ly] of [[CX - d, cy - h], [CX + d, cy - h * 0.7], [CX - 0.5, cy + h * 1.2]]) {
+    const d = Math.max(3, Math.round(rx * 0.28)), h = Math.max(2.5, ry * 0.3);
+    const volta = giro * Math.PI * 2;
+    const lugares = [-5 / 6, -1 / 6, 1 / 2].map(k => [CX + Math.cos(k * Math.PI + volta) * d, cy + Math.sin(k * Math.PI + volta) * h] as const);
+    for (const [lx, ly] of lugares) {
       for (const [dx, dy] of [[0, -1], [-1, 0], [1, 0], [0, 1]]) pintar(g, lx + dx, ly + dy, 'E');
       pintar(g, lx, ly, 'L');
     }
@@ -517,7 +523,7 @@ export function montarCabecona(pose: PoseDaCabecona = {}): string[] {
   const f = rosto(h, topo, abre);
   pele(h, f, queixo, !!pose.fogo);
   olhos(f, pose);
-  if (abre > 0) bocarra(h, f, queixo); else bocaFechada(f, pose);
+  if (abre > 0) bocarra(h, f, queixo, pose.giro ?? 0); else bocaFechada(f, pose);
   if (pose.sangue) sangue(f, !!pose.fogo);
   contornar(h);
 

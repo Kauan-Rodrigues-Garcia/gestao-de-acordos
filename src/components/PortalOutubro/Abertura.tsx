@@ -29,6 +29,7 @@ import type { Pixels } from './desmanche';
 import { Bueiro, Pixel } from './Bueiro';
 import { BALAO, PALETA_DO_BALAO } from './coisa/arte';
 import { sorteador } from './acaso';
+import { prepararSonsDaCoisa, tocarSomDaCoisa } from './coisa/trilha';
 
 const SUBIDA_MS = 2000;
 const ESTOURO_MS = 2900;
@@ -85,12 +86,17 @@ export function Abertura({ aoDesmanchar, aoTerminar, leve }: {
 
   useEffect(() => {
     let vivo = true;
+    // O «hello» no bueiro; o golpe da música (2,75 s do trecho) cai no estouro.
+    prepararSonsDaCoisa();
+    tocarSomDaCoisa('ola', v);
     const enche = window.setTimeout(() => setEtapa('enchendo'), SUBIDA_MS / v);
     const espera = new Promise(ok => window.setTimeout(ok, ESTOURO_MS / v));
     Promise.all([fotografar(document.body), espera]).then(([retrato]) => {
       if (!vivo) return;
       setFoto(retrato);
       setEtapa('estourou');
+      // Três estouros bastam para a fileira inteira (14 juntos viram chiado).
+      [0, 190, 400].forEach((ms, i) => window.setTimeout(() => { if (vivo) tocarSomDaCoisa('balao', v, 0.7 - i * 0.15); }, ms / v));
       aoDesmanchar();
     });
     const tecla = (e: KeyboardEvent) => { if (e.key === 'Escape') aoTerminar(); };

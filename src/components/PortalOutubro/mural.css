@@ -872,6 +872,23 @@
 /* Antes do bote ela recua um pouco; no bote quem aparece é o mesmo desenho, grande. */
 .coisa-no-mural-arma { transform: translate(5%, 3%) scale(0.97); }
 .coisa-no-mural-fora { visibility: hidden; }
+/* O clique nela (29/10): o susto, o recuo para dentro da porta e a descida
+   devagar até sumir embaixo; cinco minutos depois, volta subindo. */
+.coisa-no-mural-clicavel { pointer-events: auto; cursor: pointer; }
+.coisa-no-mural-foge { animation: coisa-foge calc(4.6s / var(--v)) both; }
+.coisa-no-mural-sumida { visibility: hidden; }
+.coisa-no-mural-volta { animation: coisa-volta calc(1.8s / var(--v)) cubic-bezier(0.2, 0.7, 0.3, 1) both; }
+@keyframes coisa-foge {
+  0%   { transform: none; animation-timing-function: cubic-bezier(0.2, 1.6, 0.4, 1); }
+  6%   { transform: translate(-3%, -5%) scale(1.06) rotate(-3deg); animation-timing-function: ease-in-out; }
+  20%  { transform: translate(7%, 2%) scale(0.84) rotate(3deg); animation-timing-function: ease-in-out; }
+  28%  { transform: translate(7%, 4%) scale(0.84) rotate(2deg); animation-timing-function: cubic-bezier(0.45, 0, 0.6, 1); }
+  100% { transform: translate(7%, 125%) scale(0.84) rotate(-2deg); filter: brightness(0.35) drop-shadow(-6px 10px 12px rgb(0 0 0 / 0.55)); }
+}
+@keyframes coisa-volta {
+  from { transform: translate(0, 125%); filter: brightness(0.35) drop-shadow(-6px 10px 12px rgb(0 0 0 / 0.55)); }
+  to   { transform: none; }
+}
 @keyframes coisa-sai-do-escuro {
   from { translate: 0 10%; filter: brightness(0); }
   to   { translate: 0 0; }
@@ -910,7 +927,23 @@
 }
 .coisa-bote-salta { animation: coisa-bote-salta calc(0.32s / var(--v)) cubic-bezier(0.55, 0, 0.35, 1.25) both; }
 .coisa-bote-abre { animation: coisa-bote-treme 0.09s steps(2, end) infinite; }
-.coisa-bote-nhac { translate: 0 12px; }
+/* A segunda foto: a boca abrindo e a cabeça indo para trás, pela linha da boca. */
+.coisa-bote-salta canvas,
+.coisa-bote-abre canvas {
+  transform: perspective(900px) rotateX(30deg);
+  transform-origin: 50% 64%;
+  transition: transform calc(0.3s / var(--v)) ease-out;
+}
+/* A terceira foto: a goela do tamanho da tela em volta do cursor. */
+.coisa-goela {
+  position: fixed;
+  z-index: 9;
+  pointer-events: none;
+  transform-origin: 50% 58%;
+  filter: drop-shadow(0 30px 40px rgb(0 0 0 / 0.85));
+  animation: coisa-goela-chega calc(0.2s / var(--v)) cubic-bezier(0.3, 1.4, 0.5, 1) both;
+}
+@keyframes coisa-goela-chega { from { transform: scale(0.55); } }
 .coisa-bote-vai { animation: coisa-bote-vai calc(0.42s / var(--v)) cubic-bezier(0.6, 0, 0.9, 0.5) forwards; }
 @keyframes coisa-bote-salta {
   from { transform: translate(var(--de-x), var(--de-y)) scale(var(--de-s)); }
@@ -925,8 +958,7 @@
 }
 .coisa-bote-leve { animation: none !important; }
 /* O nhac: a parede treme e a tela pisca em vermelho. */
-.mural:has(.coisa-bote-nhac) .mural-caixa,
-.mural:has(.coisa-bote-olha) .mural-caixa { animation: mural-baque calc(0.4s / var(--v)) steps(8, end); }
+.mural:has(.coisa-bote-clarao) .mural-caixa { animation: mural-baque calc(0.4s / var(--v)) steps(8, end); }
 .coisa-bote-clarao {
   position: fixed;
   inset: 0;
@@ -982,5 +1014,8 @@ html.portal-mira, html.portal-mira * { cursor: crosshair !important; }
 
 .portal-leve .mural-peca, .portal-leve .mural-medalha-viva, .portal-leve .mural-medalha-viva .ins-disco::after,
 .portal-leve .mural-lampada, .portal-leve .mural-derry-falha, .portal-leve .mural-cacho-balao, .portal-leve .coisa-no-mural, .portal-leve .mural-porta, .portal-leve .mural-porta-vao::before { animation: none; }
+/* A fuga do clique é uma animação só de transform: fica no modo leve também. */
+.portal-leve .coisa-no-mural.coisa-no-mural-foge { animation: coisa-foge calc(4.6s / var(--v)) both; }
+.portal-leve .coisa-no-mural.coisa-no-mural-volta { animation: coisa-volta calc(1.8s / var(--v)) ease-out both; }
 .portal-leve .mural-fios path { animation: none; stroke-dashoffset: 0; }
 .portal-leve .enfeite-aranha, .portal-leve .enfeite-aranha *, .portal-leve .enfeite-abobora, .portal-leve .enfeite-abobora *, .portal-leve .mural-chat-digitando span, .portal-leve .mural-poster-quadro * { animation: none !important; }

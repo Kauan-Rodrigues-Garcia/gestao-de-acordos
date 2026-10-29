@@ -17,6 +17,11 @@
  *             `aoPuxar` monta o mural fora da tela, `aoTerminar` avisa que
  *             ele chegou)
  *
+ * A trilha (`trilha.ts`, 29/10/2026) vai junto das fases: a apresentação
+ * quando o balão sai do bueiro, o estouro, a música da dança, o «we'll float
+ * down here» babando e encarando, as luzes mortas quando a boca abre e a
+ * risada quando ela sai puxando o mural.
+ *
  * Esc ou o X fecham (voltam ao Gestão).
  */
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from 'react';
@@ -29,6 +34,7 @@ import { FogoDePixel, LuzesMortas } from './LuzesMortas';
 import { ALTURA_DA_CABECONA, meioDaBoca, type PoseDaCabecona } from './cabecona';
 import { fecharTela, useVelocidadeDoMural } from '../estado';
 import { sorteador } from '../acaso';
+import { calarSomDaCoisa, tocarSomDaCoisa, type SomDaCoisa } from './trilha';
 import './coisa.css';
 
 // ── O sangue na tela ────────────────────────────────────────────────────────
@@ -73,18 +79,25 @@ function Mancha({ semente, tam }: { semente: number; tam: number }) {
  *   0 a ENCARA    a cabeça baixa no fogo, encarando por baixo da sobrancelha,
  *                 os olhos em fenda acesos, a baba descendo; o sorriso de
  *                 sangue aparece e a cabeça entorta um pouco
- *   ... + ABRE    a cabeça sobe e a boca abre até o peito, as luzes no fundo;
- *                 a câmera entra nela
+ *   ... + ABRE    a cabeça vai para trás (pedido de 29/10, com a foto dela
+ *                 de baixo: «quando ele abre pra luzes da morte o rosto dele
+ *                 vai para trás») e a boca abre até o peito, as luzes no
+ *                 fundo girando; no fim a câmera entra nela
  *   até o fim     as luzes mortas (`LuzesMortas.tsx`) tomam a tela, e o
  *                 sussurro: «aqui embaixo, todos nós flutuamos»
  */
-const ENCARA = 3.6, ABRE = 1.1;
+/** Encarando até o «yes, we do» da trilha acabar (babando + ENCARA = 5,8 s). */
+const ENCARA = 4, ABRE = 1.1;
 const LUZES = DURA_DO_CLOSE - ENCARA - ABRE + 0.25;
 
 function poseDoClose(t: number): PoseDaCabecona {
   const baba = Math.min(24, Math.round(t * 6));
   const abre = Math.max(0, Math.min(1, (t - ENCARA) / ABRE));
-  if (abre > 0) return { fogo: true, sangue: true, queixo: Math.round(abre * 10) / 10, baba: [Math.max(0, baba - 3), baba] };
+  if (abre > 0) {
+    // As luzes da bocarra giram (uma volta a cada 2,5 s), em passos de pixel.
+    const giro = Math.round(((t - ENCARA) / 2.5) * 24) / 24;
+    return { fogo: true, sangue: true, queixo: Math.round(abre * 10) / 10, giro, olhar: [0, 1], baba: [Math.max(0, baba - 3), baba] };
+  }
   return {
     fogo: true,
     baixa: true,
@@ -98,11 +111,16 @@ function poseDoClose(t: number): PoseDaCabecona {
 
 const BOCA_DO_CLOSE = meioDaBoca({ queixo: 1 });
 
-function CloseNoRosto({ v }: { v: RefObject<number> }) {
+function CloseNoRosto({ v, aoAbrir }: { v: RefObject<number>; aoAbrir: () => void }) {
   const [t, setT] = useState(0);
   const [tam, setTam] = useState(8);
   const abrindo = t > ENCARA;
+  // A câmera só entra na boca quando ela já está quase toda aberta.
+  const entrando = t > ENCARA + ABRE * 0.5;
   const luzes = t > ENCARA + ABRE - 0.25;
+  const abrir = useRef(aoAbrir);
+  abrir.current = aoAbrir;
+  useEffect(() => { if (abrindo) abrir.current(); }, [abrindo]);
   useEffect(() => {
     const medir = () => setTam(Math.max(4, Math.floor((window.innerHeight * 1.02) / ALTURA_DA_CABECONA)));
     medir();
@@ -124,7 +142,7 @@ function CloseNoRosto({ v }: { v: RefObject<number> }) {
       <Busto
         pose={poseDoClose(t)}
         tam={tam}
-        className={`coisa-close-rosto${abrindo ? ' coisa-close-abrindo' : ''}`}
+        className={`coisa-close-rosto${abrindo ? ' coisa-close-pra-tras' : ''}${entrando ? ' coisa-close-abrindo' : ''}`}
         style={{ transformOrigin: `50% ${(BOCA_DO_CLOSE[1] / ALTURA_DA_CABECONA) * 100}%` }}
       />
       {luzes && <LuzesMortas dura={LUZES} v={v} />}
@@ -162,6 +180,10 @@ export function ACoisa({ leve, pronto, mural, aoPuxar, aoTerminar }: {
   const proximoId = useRef(0);
   const puxar = useRef(aoPuxar);
   puxar.current = aoPuxar;
+  const tocar = (som: SomDaCoisa) => { tocarSomDaCoisa(som, vRef.current); };
+  const calar = (som: SomDaCoisa, ms: number) => calarSomDaCoisa(som, ms / vRef.current);
+  const tocarRef = useRef(tocar);
+  tocarRef.current = tocar;
 
   // O palco cobre a tela (como `cover`).
   useEffect(() => {
@@ -196,7 +218,7 @@ export function ACoisa({ leve, pronto, mural, aoPuxar, aoTerminar }: {
     if (!cv) return;
     const c = new CenaDaCoisa(cv, {
       fase: setFase,
-      estouro: () => { setEstourou(n => n + 1); respingarRef.current(leve ? 3 : 6); },
+      estouro: () => { setEstourou(n => n + 1); respingarRef.current(leve ? 3 : 6); tocarRef.current('balao'); },
     }, leve);
     cena.current = c;
     let id = 0, antes = performance.now();
@@ -213,6 +235,13 @@ export function ACoisa({ leve, pronto, mural, aoPuxar, aoTerminar }: {
   // A tela do Gestão saiu: o balão sai do bueiro.
   useEffect(() => { if (pronto) cena.current?.comecarBalao(); }, [pronto]);
 
+  // A trilha, fase a fase (os tempos de `cena.ts` casam com os trechos).
+  useEffect(() => {
+    if (fase === 'subindo') { calar('ola', 500); tocar('apresenta'); }
+    else if (fase === 'dancando') { calar('apresenta', 250); tocar('danca'); }
+    else if (fase === 'babando') { calar('danca', 700); tocar('flutua'); }
+  }, [fase]);
+
   // O close acabou: a câmera volta, um respiro, e ela vai puxar o mural.
   useEffect(() => {
     if (fase !== 'fim') return;
@@ -220,6 +249,8 @@ export function ACoisa({ leve, pronto, mural, aoPuxar, aoTerminar }: {
       cena.current?.sair();
       puxar.current();
       setPuxando(true);
+      calarSomDaCoisa('luzes', 1200 / vRef.current);
+      tocarSomDaCoisa('risada', vRef.current);
     }, PAUSA_NO_FIM_MS / vRef.current);
     return () => window.clearTimeout(t);
   }, [fase]);
@@ -266,7 +297,7 @@ export function ACoisa({ leve, pronto, mural, aoPuxar, aoTerminar }: {
             <p className="coisa-frase">o Palhaço Dançarino</p>
           </div>
         )}
-        {fase === 'perto' && <CloseNoRosto v={vRef} />}
+        {fase === 'perto' && <CloseNoRosto v={vRef} aoAbrir={() => tocar('luzes')} />}
         {(fase === 'perto' || fase === 'fim') && <div key={fase} className="coisa-corte" aria-hidden />}
 
         <button type="button" className="coisa-fechar" onClick={fecharTela} aria-label="Fechar">

@@ -14,14 +14,25 @@
  *
  * O bote: o mouse parado por `PARADO_MS`; ela recua (`arma`), solta o balão e
  * o MESMO busto sai da porta crescendo até o cursor, abrindo a boca no
- * caminho (`salta`); a bocarra aberta em volta dele (`abre`), fecha — nhac —,
- * o mural treme, o cursor some até o mouse mexer de novo e ela volta
- * encolhendo para a porta (`vai`). Só de novo depois que o mouse mexer. Com
- * um sorteio ou o prêmio aberto por cima (`pausada`), ela só olha.
+ * caminho com a cabeça indo para trás (`salta` e `abre`, a segunda foto de
+ * 29/10: a cara de baixo e as presas); aí a boca desencaixa do tamanho da
+ * tela em volta dele, com os anéis de dentinhos girando (`engole`, a terceira
+ * foto: `goela.ts`), fecha — nhac —, o mural treme, o cursor some até o mouse
+ * mexer de novo e ela volta encolhendo para a porta (`vai`). Morde UMA vez e
+ * só de novo depois de `ENTRE_BOTES_MS` (pedido de 29/10: «morder apenas uma
+ * vez o mouse, depois só voltando em 5 minutos»). Com um sorteio ou o prêmio
+ * aberto por cima (`pausada`), ela só olha.
+ *
+ * O clique nela (29/10: «ele terá uma animação que ele irá voltar e irá
+ * descendo até sair da tela devagar»): leva um susto, recua para dentro da
+ * porta e afunda devagar até sumir embaixo (`foge`); volta subindo depois de
+ * `ENTRE_BOTES_MS`, e o bote também espera.
  */
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Busto } from './Busto';
 import { ALTURA_DA_CABECONA, LARGURA_DA_CABECONA, meioDaBoca, type PoseDaCabecona } from './cabecona';
+import { ALTURA_DA_GOELA, LARGURA_DA_GOELA, MEIO_DA_GOELA, PALETA_DA_GOELA, alturaDaGoela, montarGoela } from './goela';
+import { pintarGrade } from './derry';
 import { BALAO, PALETA_DO_BALAO } from './arte';
 import { Pixel } from '../Bueiro';
 
@@ -32,13 +43,22 @@ const NA_PAREDE = { x: 1746, y: 762, tam: 3.3 } as const;
 const PARADO_MS = 3000;
 /** Depois que o mural chega, um tempo antes do primeiro bote. */
 const CALMA_MS = 4000;
+/** Uma mordida (ou um clique que a espanta) e ela só volta depois disso. */
+const ENTRE_BOTES_MS = 5 * 60_000;
+/** O susto, o recuo e a descida devagar até sumir (o clique); e a volta, subindo. */
+const FOGE_MS = 4600;
+const VOLTA_MS = 1800;
 
 type Pose = 'escondida' | 'espia' | 'torta';
 /** A volta das poses, com quanto cada uma fica. */
 const POSES: readonly [Pose, number][] = [['escondida', 9000], ['espia', 3800], ['escondida', 8000], ['torta', 3800]];
 
-type FaseDoBote = 'arma' | 'salta' | 'abre' | 'nhac' | 'olha' | 'vai';
-const BOTE: readonly [FaseDoBote, number][] = [['arma', 220], ['salta', 320], ['abre', 420], ['nhac', 90], ['olha', 750], ['vai', 420]];
+type FaseDoBote = 'arma' | 'salta' | 'abre' | 'engole' | 'nhac' | 'olha' | 'vai';
+const BOTE: readonly [FaseDoBote, number][] = [
+  ['arma', 220], ['salta', 340], ['abre', 320], ['engole', 720], ['nhac', 140], ['olha', 750], ['vai', 420],
+];
+/** O clique: o susto e a descida, sumida esperando, e a volta. */
+type Fuga = 'foge' | 'sumida' | 'volta';
 
 function poseDe(p: Pose, olhar: readonly [number, number]): PoseDaCabecona {
   if (p === 'espia') return { baixa: true, dentes: true, olhar };
@@ -50,13 +70,52 @@ function poseDe(p: Pose, olhar: readonly [number, number]): PoseDaCabecona {
 function poseDoBote(f: FaseDoBote): PoseDaCabecona {
   if (f === 'arma') return { brilho: true, dentes: true, olhar: [-1, -1] };
   if (f === 'salta') return { brilho: true, queixo: 0.5 };
-  if (f === 'abre') return { brilho: true, queixo: 1 };
+  if (f === 'abre') return { brilho: true, queixo: 1, dentes: true };
   return { brilho: true, dentes: true, sangue: true, olhar: [0, 1] };
 }
 
 const BOCA_ABERTA = meioDaBoca({ queixo: 1 });
 /** O meio do balão no busto (`balao` em `cabecona.ts`), de onde ele sobe quando ela o solta. */
 const MEIO_DO_BALAO = [LARGURA_DA_CABECONA / 2 - 2.5, 51] as const;
+
+/** A goela da terceira foto: abre, os anéis giram e, no nhac, fecha de uma vez. */
+function Goela({ fechando, tam, v, leve }: { fechando: boolean; tam: number; v: number; leve: boolean }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const fechandoRef = useRef(fechando);
+  fechandoRef.current = fechando;
+  useEffect(() => {
+    const c = ref.current?.getContext('2d');
+    if (!c) return;
+    let id = 0, t = 0, abre = 0.25, antes = performance.now(), sobra = 0;
+    const pintar = () => {
+      c.clearRect(0, 0, LARGURA_DA_GOELA, ALTURA_DA_GOELA);
+      pintarGrade(c, montarGoela(abre, t), PALETA_DA_GOELA, 0, 0);
+    };
+    const quadro = (agora: number) => {
+      const dt = Math.min(0.05, (agora - antes) / 1000) * v;
+      antes = agora;
+      t += dt;
+      // Abre em ~0,25 s; no nhac fecha em ~0,1 s.
+      abre = fechandoRef.current ? Math.max(0, abre - dt * 10) : Math.min(1, abre + dt * 3.2);
+      // Uns 20 quadros por segundo, como pixel art (no modo leve, 10).
+      sobra += dt;
+      if (sobra >= (leve ? 0.1 : 0.05)) { sobra = 0; pintar(); }
+      id = requestAnimationFrame(quadro);
+    };
+    pintar();
+    id = requestAnimationFrame(quadro);
+    return () => cancelAnimationFrame(id);
+  }, [v, leve]);
+  return (
+    <canvas
+      ref={ref}
+      width={LARGURA_DA_GOELA}
+      height={ALTURA_DA_GOELA}
+      style={{ width: LARGURA_DA_GOELA * tam, height: ALTURA_DA_GOELA * tam, imageRendering: 'pixelated', display: 'block' }}
+      aria-hidden
+    />
+  );
+}
 
 export function ACoisaNoMural({ escala, v, pausada, leve }: {
   /** A escala da parede na tela (a mesma do mural). */
@@ -69,6 +128,11 @@ export function ACoisaNoMural({ escala, v, pausada, leve }: {
   const [indice, setIndice] = useState(0);
   const [olhar, setOlhar] = useState<readonly [number, number]>([0, 0]);
   const [bote, setBote] = useState<{ fase: FaseDoBote; x: number; y: number; balao: boolean } | null>(null);
+  const [fuga, setFuga] = useState<Fuga | null>(null);
+  const fugaRef = useRef(fuga);
+  fugaRef.current = fuga;
+  /** Antes disso ela não morde (a calma do começo, depois da mordida, depois do clique). */
+  const liberada = useRef(0);
   const indiceRef = useRef(indice);
   indiceRef.current = indice;
   const vRef = useRef(v);
@@ -86,7 +150,7 @@ export function ACoisaNoMural({ escala, v, pausada, leve }: {
   // O mouse: os olhos vão atrás; parado, o bote.
   useEffect(() => {
     let mx = -1, my = -1, ultimo = performance.now(), armado = false, id = 0;
-    const chegou = performance.now();
+    liberada.current = performance.now() + CALMA_MS / vRef.current;
     const mover = (e: PointerEvent) => {
       mx = e.clientX; my = e.clientY;
       ultimo = performance.now();
@@ -105,9 +169,10 @@ export function ACoisaNoMural({ escala, v, pausada, leve }: {
     };
     const espiar = window.setInterval(() => {
       const agora = performance.now();
-      if (!armado || pausadaRef.current || agora - chegou < CALMA_MS / vRef.current) return;
+      if (!armado || pausadaRef.current || fugaRef.current || agora < liberada.current) return;
       if (agora - ultimo < PARADO_MS / vRef.current) return;
       armado = false;
+      liberada.current = agora + ENTRE_BOTES_MS / vRef.current;
       setBote({ fase: 'arma', x: mx, y: my, balao: POSES[indiceRef.current][0] === 'escondida' });
     }, 200);
     window.addEventListener('pointermove', mover, { passive: true });
@@ -132,6 +197,24 @@ export function ACoisaNoMural({ escala, v, pausada, leve }: {
     return () => window.clearTimeout(t);
   }, [bote]);
 
+  // O clique: foge afundando, fica sumida e volta subindo.
+  useEffect(() => {
+    if (!fuga) return;
+    const depois: Record<Fuga, [Fuga | null, number]> = {
+      foge: ['sumida', FOGE_MS],
+      sumida: ['volta', ENTRE_BOTES_MS - FOGE_MS],
+      volta: [null, VOLTA_MS],
+    };
+    const [prox, ms] = depois[fuga];
+    const t = window.setTimeout(() => setFuga(prox), ms / vRef.current);
+    return () => window.clearTimeout(t);
+  }, [fuga]);
+  const espantar = () => {
+    if (bote || fuga) return;
+    setFuga('foge');
+    liberada.current = Math.max(liberada.current, performance.now() + (ENTRE_BOTES_MS + VOLTA_MS + CALMA_MS) / vRef.current);
+  };
+
   const W = typeof window === 'undefined' ? 1920 : window.innerWidth;
   const H = typeof window === 'undefined' ? 1080 : window.innerHeight;
   const naTela = (x: number, y: number) => [W / 2 + (x - 960) * escala, H / 2 + (y - 540) * escala] as const;
@@ -140,12 +223,17 @@ export function ACoisaNoMural({ escala, v, pausada, leve }: {
   const [vaoX, vaoY] = naTela(PORTA.x + PORTA.batente, PORTA.y + PORTA.batente);
   const vaoL = (PORTA.l - PORTA.batente) * escala, vaoA = (PORTA.a - PORTA.batente) * escala;
   const naPorta = !bote || bote.fase === 'arma';
-  const pose = bote?.fase === 'arma' ? poseDoBote('arma') : poseDe(POSES[indice][0], olhar);
+  const pose: PoseDaCabecona = bote?.fase === 'arma' ? poseDoBote('arma')
+    // O susto do clique: os olhos acendem e a boca abre um pouco.
+    : fuga === 'foge' ? { brilho: true, queixo: 0.2, olhar: [0, -1] }
+    : poseDe(POSES[indice][0], olhar);
 
   // O bote: o mesmo busto, crescendo da porta até a bocarra ficar em volta do cursor.
   const tamBote = Math.max(4, Math.floor((Math.min(W, H) * 0.95) / ALTURA_DA_CABECONA));
   const alvoX = bote && bote.x >= 0 ? bote.x : W / 2, alvoY = bote && bote.y >= 0 ? bote.y : H / 2;
   const boteX = alvoX - (LARGURA_DA_CABECONA / 2) * tamBote, boteY = alvoY - BOCA_ABERTA[1] * tamBote;
+  // A goela: a boca aberta ocupa uns 90% da altura da tela, o meio no cursor.
+  const tamGoela = Math.max(4, Math.floor((H * 0.9) / (2 * alturaDaGoela(1) + 12)));
   const daPorta = {
     ['--de-x' as string]: `${esquerda - boteX}px`,
     ['--de-y' as string]: `${topo - boteY}px`,
@@ -157,8 +245,9 @@ export function ACoisaNoMural({ escala, v, pausada, leve }: {
       <div className="coisa-na-porta" style={{ left: vaoX, top: vaoY, width: vaoL, height: vaoA }} aria-hidden>
         <div
           ref={raiz}
-          className={`coisa-no-mural${naPorta ? '' : ' coisa-no-mural-fora'}${bote?.fase === 'arma' ? ' coisa-no-mural-arma' : ''}${leve ? '' : ' coisa-no-mural-respira'}`}
+          className={`coisa-no-mural${naPorta ? '' : ' coisa-no-mural-fora'}${bote?.fase === 'arma' ? ' coisa-no-mural-arma' : ''}${leve ? '' : ' coisa-no-mural-respira'}${fuga ? ` coisa-no-mural-${fuga}` : bote ? '' : ' coisa-no-mural-clicavel'}`}
           style={{ left: esquerda - vaoX, top: topo - vaoY, ['--v' as string]: v } as CSSProperties}
+          onClick={e => { e.stopPropagation(); espantar(); }}
         >
           <Busto pose={pose} tam={tam} />
         </div>
@@ -174,7 +263,16 @@ export function ACoisaNoMural({ escala, v, pausada, leve }: {
         </div>
       )}
 
-      {bote && bote.fase !== 'arma' && (
+      {bote && (bote.fase === 'engole' || bote.fase === 'nhac') && (
+        <div
+          className="coisa-goela"
+          style={{ left: alvoX - MEIO_DA_GOELA[0] * tamGoela, top: alvoY - MEIO_DA_GOELA[1] * tamGoela, ['--v' as string]: v } as CSSProperties}
+          aria-hidden
+        >
+          <Goela fechando={bote.fase === 'nhac'} tam={tamGoela} v={v} leve={leve} />
+        </div>
+      )}
+      {bote && bote.fase !== 'arma' && bote.fase !== 'engole' && bote.fase !== 'nhac' && (
         <div
           className={`coisa-bote coisa-bote-${bote.fase}${leve ? ' coisa-bote-leve' : ''}`}
           style={{ left: boteX, top: boteY, ['--v' as string]: v, ...daPorta } as CSSProperties}

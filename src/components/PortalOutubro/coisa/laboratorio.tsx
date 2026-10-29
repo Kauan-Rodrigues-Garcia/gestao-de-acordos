@@ -10,6 +10,7 @@ import { PUXANDO, QUADROS } from './desenho';
 import { PALETA_DA_COISA, PALETA_DA_FURIA, type Paleta } from './arte';
 import { PALETA_DA_CABECONA, PALETA_DO_FOGO, montarCabecona, paletaEmCinza, type PoseDaCabecona } from './cabecona';
 import { pintarGrade } from './derry';
+import { PALETA_DA_GOELA, montarGoela } from './goela';
 
 function Quadro({ linhas, paleta, escala }: { linhas: readonly string[]; paleta: Paleta; escala: number }) {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -40,7 +41,11 @@ const CARAS: readonly [string, PoseDaCabecona, number?][] = [
   ['no fogo, encarando', { fogo: true, baixa: true, sangue: true, dentes: true, baba: [12, 16] }],
   ['no fogo, abrindo', { fogo: true, sangue: true, queixo: 0.5, baba: [6, 9] }],
   ['no fogo, bocarra', { fogo: true, sangue: true, queixo: 1 }],
+  ['no fogo, luzes giradas', { fogo: true, sangue: true, queixo: 1, giro: 0.15 }],
 ];
+
+/** A goela do bote (`goela.ts`): abrindo, aberta e com os anéis girados. */
+const GOELAS: readonly [string, number, number][] = [['fechando', 0.08, 0], ['abrindo', 0.45, 0.3], ['aberta', 1, 0], ['girada', 1, 1.2]];
 
 function Laboratorio() {
   return (
@@ -49,6 +54,13 @@ function Laboratorio() {
         <figure key={nome} style={{ margin: 0 }}>
           <Quadro linhas={montarCabecona(pose)} paleta={paletaEmCinza(cinza ?? 0, pose.fogo ? PALETA_DO_FOGO : PALETA_DA_CABECONA)} escala={4} />
           <figcaption>{nome}</figcaption>
+        </figure>
+      ))}
+      <div style={{ flexBasis: '100%' }} />
+      {GOELAS.map(([nome, abre, giro]) => (
+        <figure key={nome} style={{ margin: 0 }}>
+          <Quadro linhas={montarGoela(abre, giro)} paleta={PALETA_DA_GOELA} escala={4} />
+          <figcaption>goela {nome}</figcaption>
         </figure>
       ))}
       <div style={{ flexBasis: '100%' }} />

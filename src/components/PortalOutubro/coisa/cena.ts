@@ -45,8 +45,14 @@ export const ROSTO: readonly [number, number] = [BASE_X + (L * ESCALA) / 2, BASE
 
 const PASSO_DA_DANCA = 0.15;
 /** O close inteiro (`ACoisa.tsx`): ela encarando, a boca abrindo e as luzes mortas. */
-export const DURA_DO_CLOSE = 8.2;
-const DURA: Readonly<Partial<Record<FaseDaCena, number>>> = { subindo: 2.2, enchendo: 1.6, dancando: 6, babando: 1.8, perto: DURA_DO_CLOSE };
+export const DURA_DO_CLOSE = 8.6;
+/**
+ * Os tempos casam com a trilha (`trilha.ts`, 29/10/2026): do balão sair do
+ * bueiro até ela dançar são uns 7,8 s (subindo + enchendo + nascendo, ~2,7),
+ * o «palhaço dançarino» da apresentação; a dança é o miolo forte da música
+ * (24,0 a 30,4 s do original); babando e encarando, o «we'll float down here».
+ */
+const DURA: Readonly<Partial<Record<FaseDaCena, number>>> = { subindo: 3, enchendo: 2.1, dancando: 6.4, babando: 1.8, perto: DURA_DO_CLOSE };
 /** O quanto o corpo vai e vem na dança, e quantos rastros ficam atrás. */
 const VAI_E_VEM = 5;
 const RASTROS = 3;

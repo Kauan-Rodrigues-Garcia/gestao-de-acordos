@@ -161,8 +161,21 @@
   filter: drop-shadow(0 0 30px rgb(255 120 30 / 0.35));
   transition: transform calc(1.2s / var(--v)) cubic-bezier(0.5, 0, 0.8, 0.4);
 }
-/* A boca abre e a câmera entra nela. */
-.coisa-close-abrindo { transform: scale(2.6); }
+/*
+ * A boca abre e a cabeça vai para trás (a foto dela de baixo, 29/10): o alto
+ * da cabeça some no fundo e o queixo vem para a frente, pela linha da boca.
+ */
+.coisa-close-pra-tras {
+  transform: perspective(1100px) rotateX(32deg) translateY(-3%) scale(1.12);
+  transition-duration: calc(0.55s / var(--v));
+  transition-timing-function: cubic-bezier(0.3, 0, 0.3, 1);
+}
+/* Quase toda aberta: a câmera entra nela. */
+.coisa-close-abrindo {
+  transform: perspective(1100px) rotateX(32deg) scale(2.8);
+  transition-duration: calc(1.2s / var(--v));
+  transition-timing-function: cubic-bezier(0.5, 0, 0.8, 0.4);
+}
 /* As luzes mortas: nascem no fundo da boca e tomam a tela. */
 .coisa-luzes-mortas {
   position: absolute;

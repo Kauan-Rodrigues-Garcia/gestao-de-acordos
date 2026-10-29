@@ -11,6 +11,10 @@
  *                  fundo, as três luzes — duas em cima, uma embaixo. A luz
  *                  cresce, passa pelo vermelho, vira laranja e toma a tela
  *                  inteira num clarão; as faíscas sobem (flutuam).
+ *                  Desde 29/10 («as luzes quando ele abre a boca também
+ *                  girar e serem melhores visualmente») a goela gira em
+ *                  espiral, duas rodas de raios giram uma contra a outra e
+ *                  as três luzes orbitam o meio, com rastro e brilho em cruz.
  *
  * Os dois são um canvas pequeno ampliado em pixel (`image-rendering`), um
  * quadro por `requestAnimationFrame`, e o tempo divide pela velocidade.
@@ -86,10 +90,14 @@ export function FogoDePixel({ v }: { v: RefObject<number> }) {
 
 // ── As luzes mortas ─────────────────────────────────────────────────────────
 
-const LUZ_L = 200;
+const LUZ_L = 300;
 const ANEIS = 15;
 /** Quanto os anéis andam na direção de quem olha, por segundo. */
 const VELOCIDADE_DOS_ANEIS = 1.5;
+/** O giro da goela inteira (radianos por segundo) e a torção da espiral, do fundo até a boca. */
+const GIRO_DA_GOELA = 0.55, ESPIRAL = 1.6;
+/** As voltas das três luzes em volta do meio, por segundo. */
+const ORBITA = 0.22;
 
 type Cor = readonly [number, number, number];
 const misturar = (a: Cor, b: Cor, k: number): Cor => {
@@ -126,8 +134,6 @@ export function LuzesMortas({ dura, v }: {
     const cx = W / 2, cy = H * 0.5;
     const acaso = sorteador(1990);
     const faiscas = Array.from({ length: 46 }, () => ({ x: acaso() * W, y: acaso() * H, vel: 6 + acaso() * 16, fase: acaso() * 6 }));
-    // As três luzes: duas em cima, uma embaixo (como nas fotos).
-    const luzes = [[-7, -5], [7, -3], [-1, 8]] as const;
 
     let t = 0, antes = performance.now(), id = 0;
     const quadro = (agora: number) => {
@@ -142,14 +148,17 @@ export function LuzesMortas({ dura, v }: {
       // Os anéis de carne e dentes, do mais perto (maior) ao mais fundo.
       const aneis = Array.from({ length: ANEIS }, (_, i) => ({ i, z: (((i + t * VELOCIDADE_DOS_ANEIS) % ANEIS) + ANEIS) % ANEIS / ANEIS }))
         .sort((a, b) => b.z - a.z);
+      const rot = t * GIRO_DA_GOELA;
       for (const { i, z } of aneis) {
         const raio = 2 + z ** 2.3 * W * 0.72;
+        // A espiral: o fundo gira na frente da boca.
+        const torce = rot + (1 - z) * ESPIRAL;
         // Perto de quem olha a carne some no escuro; lá no fundo, na luz.
         const naLuz = (1 - z) ** 1.3 * luz;
         const lados = 48;
         c.beginPath();
         for (let j = 0; j <= lados; j++) {
-          const [x, y] = naGoela(cx, cy, raio, (j / lados) * Math.PI * 2);
+          const [x, y] = naGoela(cx, cy, raio, (j / lados) * Math.PI * 2 + torce);
           if (j) c.lineTo(x, y); else c.moveTo(x, y);
         }
         c.fillStyle = css(misturar(CARNE, CARNE_NA_LUZ, naLuz * 0.85));
@@ -161,14 +170,14 @@ export function LuzesMortas({ dura, v }: {
         // O molhado: pontinhos de brilho na carne.
         const brilhos = Math.round(6 + 14 * z);
         for (let j = 0; j < brilhos; j++) {
-          const a = j * 2.39996 + i * 1.3;
+          const a = j * 2.39996 + i * 1.3 + torce;
           const [x, y] = naGoela(cx, cy, raio * (0.9 + 0.08 * Math.sin(j * 5.1)), a);
           c.fillStyle = css(misturar(CARNE_NA_LUZ, OURO, 0.6), 0.25 + naLuz * 0.7);
           c.fillRect(Math.round(x), Math.round(y), 1, 1);
         }
         // Os dentes na beirada, finos e muitos, apontando para dentro; cada anel gira para um lado.
         const n = Math.round(22 + 34 * z);
-        const giro = i * 0.41 + t * 0.16 * (i % 2 ? 1 : -1);
+        const giro = i * 0.41 + t * 0.16 * (i % 2 ? 1 : -1) + torce;
         const dente = misturar(DENTE, DENTE_NA_LUZ, naLuz + 0.15);
         const ponta = misturar(dente, [255, 248, 220], 0.45);
         for (let j = 0; j < n; j++) {
@@ -206,18 +215,69 @@ export function LuzesMortas({ dura, v }: {
       c.fillStyle = g;
       c.fillRect(0, 0, W, H);
 
-      // As três luzes, pulsando, cada uma no seu tempo.
+      c.globalCompositeOperation = 'lighter';
+      // As duas rodas de raios, girando uma contra a outra.
+      const raios = (n: number, giro: number, alfa: number, abertura: number) => {
+        const alcance = W * (0.3 + 0.9 * k);
+        const gr = c.createRadialGradient(cx, cy, 0, cx, cy, alcance);
+        gr.addColorStop(0, css(OURO, alfa));
+        gr.addColorStop(0.6, css(OURO, alfa * 0.35));
+        gr.addColorStop(1, css(OURO, 0));
+        c.beginPath();
+        for (let r = 0; r < n; r++) {
+          const a = (r / n) * Math.PI * 2 + giro;
+          c.moveTo(cx, cy);
+          c.arc(cx, cy, alcance, a - abertura / 2, a + abertura / 2);
+          c.closePath();
+        }
+        c.fillStyle = gr;
+        c.fill();
+      };
+      raios(12, t * 0.55, 0.24 * luz, 0.1);
+      raios(7, -t * 0.85, 0.17 * luz, 0.17);
+
+      // As três luzes orbitando o meio (duas em cima, uma embaixo, no começo),
+      // pulsando cada uma no seu tempo, com o rastro e o brilho em cruz.
       const cresce = 1 + k * 2.4;
-      luzes.forEach(([dx, dy], i) => {
-        const x = cx + dx * cresce * 0.8, y = cy + dy * cresce * 0.8;
+      const volta = t * ORBITA * Math.PI * 2;
+      const lugar = (a: number) => [cx + Math.cos(a) * 7.5 * cresce, cy + Math.sin(a) * 6.5 * cresce] as const;
+      [-5 / 6, -1 / 6, 1 / 2].forEach((ini, i) => {
+        const a = ini * Math.PI + volta;
         const r = (2.6 + Math.sin(t * 7 + i * 2) * 0.5) * cresce;
-        const gl = c.createRadialGradient(x, y, 0, x, y, r * 3.2);
+        for (let p = 7; p >= 1; p--) {
+          const [rx, ry] = lugar(a - p * 0.07);
+          c.fillStyle = css(OURO, 0.1 * (1 - p / 8));
+          c.beginPath();
+          c.arc(rx, ry, r * (1.1 - p * 0.06), 0, Math.PI * 2);
+          c.fill();
+        }
+        const [x, y] = lugar(a);
+        const gl = c.createRadialGradient(x, y, 0, x, y, r * 3.4);
         gl.addColorStop(0, 'rgb(255 255 245 / 1)');
-        gl.addColorStop(0.3, css(OURO, 0.95));
+        gl.addColorStop(0.25, css(OURO, 0.95));
+        gl.addColorStop(0.6, css([255, 120, 40], 0.35));
         gl.addColorStop(1, css(OURO, 0));
         c.fillStyle = gl;
-        c.fillRect(x - r * 3.2, y - r * 3.2, r * 6.4, r * 6.4);
+        c.fillRect(x - r * 3.4, y - r * 3.4, r * 6.8, r * 6.8);
+        // O brilho em cruz, girando ao contrário da órbita.
+        c.save();
+        c.translate(x, y);
+        c.rotate(-t * 1.8 + i);
+        const fio = Math.max(1, r * 0.22);
+        for (const [l, a2] of [[r * 7, 0.55], [r * 4, 0.35]] as const) {
+          const cruz = c.createLinearGradient(-l, 0, l, 0);
+          cruz.addColorStop(0, 'rgb(255 240 200 / 0)');
+          cruz.addColorStop(0.5, `rgb(255 250 225 / ${a2})`);
+          cruz.addColorStop(1, 'rgb(255 240 200 / 0)');
+          c.fillStyle = cruz;
+          c.fillRect(-l, -fio / 2, l * 2, fio);
+          c.rotate(Math.PI / 2);
+          c.fillRect(-l, -fio / 2, l * 2, fio);
+          c.rotate(Math.PI / 4);
+        }
+        c.restore();
       });
+      c.globalCompositeOperation = 'source-over';
 
       // As faíscas subindo: quem olha também vai flutuar.
       for (const f of faiscas) {

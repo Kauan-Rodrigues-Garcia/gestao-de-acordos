@@ -13,6 +13,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Abertura } from './Abertura';
 import { Mural } from './Mural';
 import { ACoisa } from './coisa/ACoisa';
+import { calarSonsDaCoisa } from './coisa/trilha';
 import { abrirCoisa, marcarVisto, puxarMural, type Tela } from './estado';
 import './portal.css';
 
@@ -27,6 +28,9 @@ export default function Cerimonia({ tela, leve }: { tela: Exclude<Tela, null>; l
   const puxando = puxado && !puxadaAcabou;
 
   const comCoisa = tela.modo === 'coisa' || (tela.modo === 'abertura' && palcoEmbaixo) || puxando;
+
+  // Fechou (o X, o Esc): a trilha da Coisa cala junto.
+  useEffect(() => () => calarSonsDaCoisa(), []);
 
   return (
     <>
