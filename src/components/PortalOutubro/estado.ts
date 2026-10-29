@@ -7,6 +7,7 @@
  * num botão até o fim de sábado.
  */
 import { useSyncExternalStore } from 'react';
+import { lerPrevia } from './liberacao';
 
 function criar<T>(inicial: T) {
   let valor = inicial;
@@ -33,6 +34,8 @@ const visto = criar(lerVisto());
 export const useJaViu = visto.useValor;
 
 export function marcarVisto(): void {
+  // A prévia do super_admin (Configurações) não gasta a abertura de verdade.
+  if (lerPrevia()) return;
   try { localStorage.setItem(CHAVE_VISTO, '1'); } catch { /* sem armazenamento: só nesta aba */ }
   visto.mudar(true);
 }

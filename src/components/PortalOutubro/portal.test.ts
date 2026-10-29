@@ -126,3 +126,19 @@ describe('o retrato do mês', () => {
     for (const m of TAMBEM_TEVE) expect(m.texto.length).toBeLessThan(110);
   });
 });
+
+describe('abertura solta pelo botão (29/10)', () => {
+  const H = 3_600_000;
+  const solta = DIAS[4] + 10 * H; // quinta, 10h
+
+  it('o último minuto e a abertura seguem a hora solta, não a de sexta', () => {
+    expect(estadoDoPortal(solta - 60_001, solta).fase).toBe('espreitando');
+    expect(estadoDoPortal(solta - 30_000, solta)).toMatchObject({ fase: 'ultimoMinuto', faltaMs: 30_000 });
+    expect(estadoDoPortal(solta, solta)).toMatchObject({ fase: 'aberto', bilhete: false, balaoACadaMs: null });
+  });
+
+  it('depois de aberta, fica aberta até o fim de sábado', () => {
+    expect(estadoDoPortal(DIAS[5] + 9 * H, solta)).toMatchObject({ fase: 'aberto', contagem: false });
+    expect(estadoDoPortal(FIM, solta).fase).toBe('fora');
+  });
+});

@@ -11,12 +11,16 @@
  *                             depois, o botão para rever o mural
  *
  * A abertura e o mural são outro pedaço (`Cerimonia.tsx`), que só baixa na
- * hora. Fora do `npm run dev` nada disto monta (`PORTAL_LIGADO`).
+ * hora. Quem decide se isto monta é o `Layout`, pela liberação do super_admin
+ * (`liberacao.ts`); a hora da abertura vem de lá também (sexta 16h, ou a
+ * solta pelo botão). Na prévia (só nesta aba, sem estar liberado), só a
+ * abertura e o mural aparecem.
  */
 import { lazy, Suspense, useEffect } from 'react';
-import { PORTAL_LIGADO, estadoDoPortal } from './fases';
+import { estadoDoPortal } from './fases';
 import { agoraDoPortal, useAgoraDoPortal } from './relogio';
 import { abrirAbertura, lerTela, useJaViu, useTela } from './estado';
+import { encerrarPrevia, usePrevia } from './liberacao';
 import { CamadaDoBueiro } from './Bueiro';
 import { Avisos, BotaoRever } from './Avisos';
 import { PainelDoRelogio } from './PainelDoRelogio';
@@ -25,43 +29,61 @@ import { semPlacaDeVideo } from '@/components/Halloween/aguenta';
 import './portal.css';
 
 // As letras das placas (declarar não baixa: só quando um texto as usa).
-if (PORTAL_LIGADO) { carregarFonte(); carregarFontesPixel(); }
+carregarFonte(); carregarFontesPixel();
 
 const Cerimonia = lazy(() => import('./Cerimonia'));
 
-export function PortalDeOutubro({ temaLigado, leve = false }: { temaLigado: boolean; leve?: boolean }) {
+interface Props {
+  temaLigado: boolean;
+  leve?: boolean;
+  /** Liberado para todos (ou no dev). Sem isso, só a prévia. */
+  liberado: boolean;
+  /** A hora da abertura: sexta 16h, ou a solta pelo botão. */
+  abertura: number;
+}
+
+export function PortalDeOutubro({ temaLigado, leve = false, liberado, abertura }: Props) {
   // Relê a hora de segundo em segundo só quando o segundo aparece (a contagem
-  // de sexta e o último minuto); no resto da semana, de 30 em 30 s — a trinca
-  // anda devagar, e reler à toa é trabalho para nada.
+  // de sexta, o último minuto, a abertura chegando); no resto da semana, de
+  // 30 em 30 s — o bueiro anda devagar, e reler à toa é trabalho para nada.
   const precisaDoSegundo = (() => {
-    const e = estadoDoPortal(agoraDoPortal());
-    return e.contagem || e.fase === 'ultimoMinuto' || e.dia === 5;
+    const e = estadoDoPortal(agoraDoPortal(), abertura);
+    return e.contagem || e.fase === 'ultimoMinuto' || e.dia === 5 || (e.faltaMs > 0 && e.faltaMs <= 3 * 60_000);
   })();
   const agora = useAgoraDoPortal(precisaDoSegundo ? 1000 : 30_000);
-  const estado = estadoDoPortal(agora);
+  const estado = estadoDoPortal(agora, abertura);
+  const previa = usePrevia();
   // Máquina sem placa de vídeo: o portal fica parado, como o tema (`Halloween/aguenta.ts`).
   const parado = leve || semPlacaDeVideo();
   const tela = useTela();
   const viu = useJaViu();
 
-  // 16h: a abertura passa, uma vez, quando a aba está à vista.
+  // A prévia: a abertura passa agora, nesta aba; fechou o mural, acabou.
   useEffect(() => {
-    if (!PORTAL_LIGADO || estado.fase !== 'aberto' || viu) return;
+    if (previa && !lerTela()) abrirAbertura();
+  }, [previa]);
+  useEffect(() => {
+    // `lerTela`, não `tela`: no primeiro passo a abertura acabou de entrar no efeito de cima.
+    if (previa && !lerTela()) encerrarPrevia();
+  }, [previa, tela]);
+
+  // Na hora: a abertura passa, uma vez, quando a aba está à vista.
+  useEffect(() => {
+    if (!liberado || estado.fase !== 'aberto' || viu) return;
     const tentar = () => {
       if (document.visibilityState === 'visible' && !lerTela()) abrirAbertura();
     };
     tentar();
     document.addEventListener('visibilitychange', tentar);
     return () => document.removeEventListener('visibilitychange', tentar);
-  }, [estado.fase, viu]);
+  }, [liberado, estado.fase, viu]);
 
-  if (!PORTAL_LIGADO) return null;
-  const espreitando = estado.fase === 'espreitando' || estado.fase === 'ultimoMinuto';
+  const espreitando = liberado && (estado.fase === 'espreitando' || estado.fase === 'ultimoMinuto');
   return (
     <>
       {espreitando && temaLigado && !tela && <CamadaDoBueiro estado={estado} leve={parado} />}
       {espreitando && !tela && <Avisos agora={agora} estado={estado} />}
-      {estado.fase === 'aberto' && viu && !tela && <BotaoRever />}
+      {liberado && estado.fase === 'aberto' && viu && !tela && <BotaoRever />}
       {tela && (
         <Suspense fallback={null}>
           <Cerimonia tela={tela} leve={parado} />

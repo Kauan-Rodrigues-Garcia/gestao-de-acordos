@@ -9,7 +9,8 @@
  *
  * A hora de teste fica no navegador (`localStorage`), para sobreviver ao F5.
  * Fora do `npm run dev` ela não é lida: em produção o portal só conhece a hora
- * certa.
+ * certa — a do banco, quando ele já respondeu (`liberacao.ts` acerta o desvio),
+ * para a abertura solta pelo botão cair no mesmo segundo em todas as telas.
  */
 import { useEffect, useState, useSyncExternalStore } from 'react';
 
@@ -67,9 +68,16 @@ function guardar(s: Simulacao | null): void {
   avisar();
 }
 
+/** relógio do banco − relógio local, em ms (acertado por `liberacao.ts`). */
+let desvioDoBanco = 0;
+
+export function acertarPeloBanco(desvioMs: number): void {
+  desvioDoBanco = desvioMs;
+}
+
 /** A hora do portal agora (ms). */
 export function agoraDoPortal(): number {
-  return simulacao ? horaSimulada(simulacao, Date.now()) : Date.now();
+  return simulacao ? horaSimulada(simulacao, Date.now()) : Date.now() + desvioDoBanco;
 }
 
 export function simulacaoAtual(): Simulacao | null {

@@ -8,6 +8,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import '@/index.css';
 import { PortalDeOutubro } from './PortalDeOutubro';
+import { ABERTURA } from './fases';
 
 function GestaoDeMentira() {
   return (
@@ -30,7 +31,7 @@ function GestaoDeMentira() {
           ))}
         </main>
       </div>
-      <PortalDeOutubro temaLigado />
+      <PortalDeOutubro temaLigado liberado abertura={ABERTURA} />
     </div>
   );
 }

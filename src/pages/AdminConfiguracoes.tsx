@@ -32,6 +32,7 @@ import AdminCargos from '@/components/admin/AdminCargos';
 import ImportarAcordosCard from '@/components/admin/ImportarAcordosCard';
 import RankingQuitacaoConfig from '@/components/admin/RankingQuitacaoConfig';
 import JumpscareConfig from '@/components/admin/JumpscareConfig';
+import MuralOutubroConfig from '@/components/admin/MuralOutubroConfig';
 
 const MIGRATION_SQL = `ALTER TABLE public.acordos
   ADD COLUMN IF NOT EXISTS instituicao TEXT;
@@ -311,6 +312,10 @@ export default function AdminConfiguracoes() {
           {/* ── Jumpscare: imagem em tela cheia para todos num horário (23/10/2026).
               Só super_admin — as funções `fn_jumpscare_*` conferem de novo no banco. */}
           {ehSuperAdmin && <JumpscareConfig />}
+
+          {/* ── Mural de Outubro: liberar para o pessoal e soltar a abertura (29/10/2026).
+              Só super_admin — as funções `fn_mural_outubro_*` conferem de novo no banco. */}
+          {ehSuperAdmin && <MuralOutubroConfig />}
 
           {ehSuperAdmin && <LiberacaoChat />}
 

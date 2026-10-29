@@ -33,10 +33,14 @@
  * fazendo a mesma coisa no mesmo segundo derruba o banco.
  *
  * Puro de propósito: o relógio de teste (`relogio.ts`) passa a hora que quiser.
+ *
+ * ## Quem liga, e a abertura antes da hora (29/10/2026)
+ *
+ * No app de verdade o mural só aparece depois que o super_admin libera, e a
+ * abertura pode ser solta por ele antes de sexta 16h (`liberacao.ts`): aí
+ * `estadoDoPortal` recebe essa hora no lugar de `ABERTURA`. O resto da
+ * semana (o dia, o brilho, os balões) continua saindo do relógio.
  */
-
-/** O portal no app de verdade. Por enquanto só no `npm run dev` (pedido de 26/10: «já faça para o localhost»). */
-export const PORTAL_LIGADO = import.meta.env.DEV;
 
 const HORA = 3_600_000;
 const MINUTO = 60_000;
@@ -104,20 +108,21 @@ function diaDoEvento(agora: number): number {
   return Math.min(6, 1 + Math.floor((agora - DIAS[1]) / (24 * HORA)));
 }
 
-export function estadoDoPortal(agora: number): EstadoDoPortal {
+/** `abertura`: a hora em que a tela desmancha — sexta 16h, ou a solta pelo botão. */
+export function estadoDoPortal(agora: number, abertura: number = ABERTURA): EstadoDoPortal {
   const dia = diaDoEvento(agora);
-  const faltaMs = Math.max(0, ABERTURA - agora);
+  const faltaMs = Math.max(0, abertura - agora);
   const fase: Fase =
     agora < INICIO || agora >= FIM ? 'fora'
-      : agora >= ABERTURA ? 'aberto'
-        : agora >= ULTIMO_MINUTO ? 'ultimoMinuto'
+      : agora >= abertura ? 'aberto'
+        : agora >= abertura - MINUTO ? 'ultimoMinuto'
           : 'espreitando';
   let luz = 0;
   const espreitando = fase === 'espreitando' || fase === 'ultimoMinuto';
   if (espreitando) {
     if (dia === 3) luz = 0.35;
     else if (dia === 4) luz = 0.55;
-    else if (dia === 5) luz = 0.65 + 0.35 * Math.min(1, (agora - DIAS[5]) / (ABERTURA - DIAS[5]));
+    else if (dia === 5) luz = 0.65 + 0.35 * Math.min(1, Math.max(0, (agora - DIAS[5]) / (abertura - DIAS[5])));
   }
   return {
     fase,

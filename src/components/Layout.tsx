@@ -86,7 +86,7 @@ import { SeletorEmpresa } from './SeletorEmpresa';
 import { PainelSobDemanda } from './PainelSobDemanda';
 import { BotaoCalendario } from './Calendario/BotaoCalendario';
 import { BotaoInsignias } from './Insignias/BotaoInsignias';
-import { PORTAL_LIGADO } from './PortalOutubro/fases';
+import { aberturaDe, muralNaTela, useLiberacaoDoMural, usePrevia } from './PortalOutubro/liberacao';
 import { BarraRolagemLateral } from './BarraRolagemLateral';
 import { ligarRolagemLateral } from '@/lib/rolagemLateral';
 import { comNovaTentativa } from '@/lib/sobDemanda';
@@ -129,7 +129,7 @@ const RevoadaHalloween  = lazy(() => carregarHalloween().then(m => ({ default: m
 const SobreposicaoHalloween = lazy(() => carregarHalloween().then(m => ({ default: m.SobreposicaoHalloween })));
 const carregarBoasVindasHalloween = comNovaTentativa(() => import('@/components/Halloween/BoasVindasHalloween'));
 const BoasVindasHalloween = lazy(carregarBoasVindasHalloween);
-// O Portal de Outubro (26–30/10/2026): por enquanto só no `npm run dev`.
+// O Mural de Outubro (26–31/10/2026): só baixa depois que o super_admin libera (`PortalOutubro/liberacao.ts`).
 const PortalDeOutubro = lazy(() => import('@/components/PortalOutubro/PortalDeOutubro').then(m => ({ default: m.PortalDeOutubro })));
 
 /*
@@ -143,6 +143,8 @@ const PortalDeOutubro = lazy(() => import('@/components/PortalOutubro/PortalDeOu
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { perfil, signOut } = useAuth();
   const { empresa, branding } = useEmpresa();
+  const liberacaoDoMural = useLiberacaoDoMural(empresa?.id);
+  const previaDoMural = usePrevia();
   const tenant = useTenant();
   /* Nome e cor pela cidade do setor da pessoa (Birigui BookPlay, Marília PaguePlay). */
   const marca = useMarca();
@@ -1073,8 +1075,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <ChefeDeTeste />
         {/* O «Assistir» e o «Testar só na minha tela» do card da Corrida: aqui, trocar de aba não fecha. */}
         <PalcoDoOrganizador />
-        {/* O Portal de Outubro: o vidro rachando na semana e o mural da sexta, 16h. Ver `PortalOutubro/fases.ts`. */}
-        {PORTAL_LIGADO && <Suspense fallback={null}><PortalDeOutubro temaLigado={halloween} leve={halloweenSoParado} /></Suspense>}
+        {/* O Mural de Outubro: o bueiro na semana e a abertura (sexta 16h, ou solta pelo botão em Configurações). Ver `PortalOutubro/fases.ts`. */}
+        {muralNaTela(liberacaoDoMural, previaDoMural) && (
+          <Suspense fallback={null}>
+            <PortalDeOutubro
+              temaLigado={halloween} leve={halloweenSoParado}
+              liberado={liberacaoDoMural.liberado || import.meta.env.DEV}
+              abertura={aberturaDe(liberacaoDoMural)}
+            />
+          </Suspense>
+        )}
 
         {/* Expand toggle */}
         <button
