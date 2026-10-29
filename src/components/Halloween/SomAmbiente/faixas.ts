@@ -22,8 +22,9 @@
  *              sobre o disco.
  */
 import type { ComponentType } from 'react';
-import { Ghost, ListMusic, Music, Youtube } from 'lucide-react';
-import { ehEmbutida, type FaixaEmbutida, type PlaylistSalva } from './preferencias';
+import { Ghost, ListMusic, Music, Radio, Youtube } from 'lucide-react';
+import { RADIO, ehEmbutida, type FaixaEmbutida, type PlaylistSalva } from './preferencias';
+import type { MusicaRadio } from './radio/conta';
 
 export interface CorFaixa {
   /** Fundo escuro do «Tocando agora». Qualquer cor CSS. */
@@ -163,8 +164,23 @@ export function infoDaPlaylist(p: PlaylistSalva): InfoFaixa {
   };
 }
 
-/** O que mostrar de uma faixa qualquer; `null` se ela não existe mais. */
-export function infoDaFaixa(id: string, playlists: PlaylistSalva[]): InfoFaixa | null {
+const COR_RADIO: CorFaixa = { fundo: 'hsl(262 32% 12%)', destaque: 'hsl(266 85% 68%)' };
+
+/** A rádio: a música no ar, com o estilo; sem música, o nome dela. */
+export function infoDaRadio(m: MusicaRadio | null | undefined): InfoFaixa {
+  if (!m) return { nome: 'Rádio', descricao: 'Todo mundo ouve a mesma música', Icone: Radio, cor: COR_RADIO };
+  return {
+    nome: m.titulo,
+    descricao: [m.canal, m.estilo].filter(Boolean).join(' · ') || 'Rádio',
+    ...(m.capa ? { capa: m.capa } : {}),
+    Icone: Radio,
+    cor: COR_RADIO,
+  };
+}
+
+/** O que mostrar de uma faixa qualquer; `null` se ela não existe mais. `radio`: a música no ar na rádio. */
+export function infoDaFaixa(id: string, playlists: PlaylistSalva[], radio?: MusicaRadio | null): InfoFaixa | null {
+  if (id === RADIO) return infoDaRadio(radio);
   if (ehEmbutida(id)) return EMBUTIDAS[id];
   const p = playlists.find(x => x.id === id);
   return p ? infoDaPlaylist(p) : null;

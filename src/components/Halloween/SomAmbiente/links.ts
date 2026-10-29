@@ -102,8 +102,11 @@ export function chaveDoLink(link: LinkExterno): string {
   return `${link.plataforma}:${link.tipo}:${link.id}`;
 }
 
-/** Endereço do player do YouTube, com a API de mensagens ligada. */
-export function enderecoYoutube(link: LinkExterno, origem: string): string {
+/**
+ * Endereço do player do YouTube, com a API de mensagens ligada. `inicio`: o
+ * segundo de onde o vídeo começa (a rádio entra no meio da música).
+ */
+export function enderecoYoutube(link: LinkExterno, origem: string, inicio = 0): string {
   const p = new URLSearchParams({
     enablejsapi: '1',
     autoplay: '1',
@@ -121,6 +124,7 @@ export function enderecoYoutube(link: LinkExterno, origem: string): string {
   // Vídeo sozinho NÃO repete: quando acaba, o motor passa para a próxima da
   // lista (ou repete, se a pessoa pediu — ver `motor.ts`).
   p.set('loop', '0');
+  if (inicio >= 1) p.set('start', String(Math.floor(inicio)));
   return `https://www.youtube-nocookie.com/embed/${link.id}?${p}`;
 }
 

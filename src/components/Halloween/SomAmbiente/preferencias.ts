@@ -213,6 +213,13 @@ export const PADRAO: PreferenciasSom = {
 
 const chave = (perfilId: string) => `som-ambiente:${perfilId}`;
 
+/**
+ * A rádio (29/10/2026): a mesma música para todo mundo que entrar nela — ver
+ * `radio/radio.ts`. É uma «faixa» como as outras: fica escolhida, e com
+ * «Tocar ao entrar» o sistema já entra na rádio.
+ */
+export const RADIO = 'radio';
+
 export function ehEmbutida(faixa: string): faixa is FaixaEmbutida {
   return (FAIXAS_EMBUTIDAS as readonly string[]).includes(faixa);
 }
@@ -245,7 +252,7 @@ export function normalizar(bruto: unknown): PreferenciasSom {
   const volume = o.v !== VERSAO && lido === VOLUME_PADRAO_ANTIGO ? VOLUME_PADRAO : lido;
 
   const lida = typeof o.faixa === 'string' ? (SUBSTITUTAS[o.faixa] ?? o.faixa) : null;
-  const faixa = lida !== null && (ehEmbutida(lida) || playlists.some(p => p.id === lida))
+  const faixa = lida !== null && (ehEmbutida(lida) || lida === RADIO || playlists.some(p => p.id === lida))
     ? lida
     : PADRAO.faixa;
 

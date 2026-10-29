@@ -130,16 +130,26 @@ export async function buscarMusicas(texto: string, sinal?: AbortSignal): Promise
   const guardado = doCache(termo);
   if (guardado) return guardado;
 
+  const itens = lerResposta(await pedirYoutube('search', {
+    part: 'snippet', type: 'video', videoCategoryId: '10', videoEmbeddable: 'true',
+    maxResults: '10', q: termo,
+  }, sinal));
+  guardar(termo, itens);
+  return itens;
+}
+
+/**
+ * Uma chamada à Data API (`search`, `playlistItems`, `videos`…), já com a
+ * chave e os erros traduzidos. A rádio também usa (`radio/importar.ts`).
+ */
+export async function pedirYoutube(recurso: string, params: Record<string, string>, sinal?: AbortSignal): Promise<unknown> {
   const chave = (import.meta.env.VITE_YOUTUBE_API_KEY as string | undefined)?.trim();
   if (!chave) throw new ErroBusca('A busca do YouTube ainda não foi configurada neste ambiente.', 'sem_chave');
 
-  const p = new URLSearchParams({
-    part: 'snippet', type: 'video', videoCategoryId: '10', videoEmbeddable: 'true',
-    maxResults: '10', q: termo, key: chave,
-  });
+  const p = new URLSearchParams({ ...params, key: chave });
   let resposta: Response;
   try {
-    resposta = await fetch(`https://www.googleapis.com/youtube/v3/search?${p}`, { signal: sinal });
+    resposta = await fetch(`https://www.googleapis.com/youtube/v3/${recurso}?${p}`, { signal: sinal });
   } catch (e) {
     if (e instanceof DOMException && e.name === 'AbortError') throw e;
     throw new ErroBusca('Sem conexão com o YouTube. Confira a internet.', 'rede');
@@ -153,12 +163,13 @@ export async function buscarMusicas(texto: string, sinal?: AbortSignal): Promise
     if (razao === 'quotaExceeded' || razao === 'rateLimitExceeded' || razao === 'dailyLimitExceeded') {
       throw new ErroBusca('O limite diário de buscas do YouTube acabou. Volta amanhã — ou toque algo que já está na lista.', 'cota');
     }
+    if (razao === 'playlistNotFound') {
+      throw new ErroBusca('Essa playlist não existe ou é privada. Deixe-a pública ou não listada.', 'outro');
+    }
     if (resposta.status === 400 || resposta.status === 403) {
       throw new ErroBusca('A chave do YouTube foi recusada. Confira a chave e o domínio liberado nela.', 'chave');
     }
     throw new ErroBusca('O YouTube não respondeu. Tente de novo em instantes.', 'outro');
   }
-  const itens = lerResposta(await resposta.json());
-  guardar(termo, itens);
-  return itens;
+  return resposta.json();
 }

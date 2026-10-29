@@ -36,14 +36,24 @@
  * A mensagem de outubro (Halloween) tem trilha própria: enquanto ela está
  * aberta, `silenciar('halloween')` pausa o som ambiente, e ele volta sozinho
  * quando ela fecha.
+ *
+ * ## A rádio (29/10/2026)
+ *
+ * A faixa `RADIO` toca o que a rádio manda (`radio/radio.ts`): o vídeo no ar,
+ * a partir do ponto em que todo mundo está. Usa o mesmo player do YouTube das
+ * playlists, e a música seguinte entra no mesmo iframe. Só no completo.
  */
 import { useSyncExternalStore } from 'react';
 import { enderecoYoutube, uriSpotify, type LinkExterno } from './links';
 import {
-  ARQUIVOS, FAIXAS_DA_SEQUENCIA, GANHO, MUSICAS, PADRAO, TEMAS_DE_TERROR, ehEmbutida, esquecerPosicao, gravarPosicao, gravarPreferencias,
+  ARQUIVOS, FAIXAS_DA_SEQUENCIA, GANHO, MUSICAS, PADRAO, RADIO, TEMAS_DE_TERROR, ehEmbutida, esquecerPosicao, gravarPosicao, gravarPreferencias,
   lerPosicao, lerPreferencias, linkDaPlaylist,
   type FaixaEmbutida, type PreferenciasSom,
 } from './preferencias';
+import { posicao } from './radio/conta';
+import {
+  agoraBanco, definirOuvindo, desligarRadio, falhouNaRadio, fimNaRadio, ligarRadio, ouvirMusica, pularRadio, radioAgora,
+} from './radio/radio';
 
 export type EstadoSom =
   | 'parado'
@@ -164,6 +174,7 @@ export function iniciarSessao(perfilId: string, completo = false): void {
   if (perfilAtual === perfilId) {
     if (snap.completo !== completo) {
       publicar({ completo, volumeMax, prefs: dentroDosLimites(snap.prefs, completo) });
+      if (!completo) sairDaRadio();
       if (!completo && externo) { soltarExterno(); pausar(); }
       if (audio && !fade && !audio.paused) audio.volume = volumeAlvo();
     }
@@ -445,6 +456,14 @@ interface PlayerExterno {
   pausar(): void;
   volume(v: number): void;
   destruir(): void;
+  /** Só o do YouTube: o vídeo carregado agora. */
+  video?: () => string;
+  /** Só o do YouTube: onde o vídeo está (s), pelo que o player contou por último. */
+  tempo?: () => number | null;
+  /** Só o do YouTube: pular para um ponto. */
+  ir?: (segundos: number) => void;
+  /** Só o do YouTube: trocar de vídeo sem recriar o iframe. */
+  trocar?: (video: string, segundos: number) => void;
 }
 let externo: PlayerExterno | null = null;
 
@@ -515,9 +534,10 @@ export function dentroDoPalco(alvo: EventTarget | null): boolean {
 
 export { ALTURA_PALCO };
 
-function playerYoutube(link: LinkExterno, id: string, minha: number): PlayerExterno {
+function playerYoutube(link: LinkExterno, id: string, minha: number, inicio = 0): PlayerExterno {
+  const radio = id === RADIO;
   const quadroYt = document.createElement('iframe');
-  quadroYt.src = enderecoYoutube(link, window.location.origin);
+  quadroYt.src = enderecoYoutube(link, window.location.origin, inicio);
   quadroYt.title = 'Player do YouTube';
   quadroYt.allow = 'autoplay; encrypted-media; picture-in-picture';
   quadroYt.referrerPolicy = 'strict-origin-when-cross-origin';
@@ -525,6 +545,8 @@ function playerYoutube(link: LinkExterno, id: string, minha: number): PlayerExte
 
   let pronto = false;
   let tentativas = 0;
+  let videoAtual = link.id;
+  let tempoAtual: number | null = null;
   let recusa: ReturnType<typeof setTimeout> | null = null;
   let escuta: ReturnType<typeof setInterval> | null = null;
   const enviar = (msg: Record<string, unknown>) => {
@@ -552,6 +574,12 @@ function playerYoutube(link: LinkExterno, id: string, minha: number): PlayerExte
     }
     if (dado.event === 'onError' && minha === geracaoExterno) {
       const codigo = typeof dado.info === 'number' ? dado.info : 0;
+      // Na rádio, a música que não toca sai do catálogo e entra outra.
+      if (radio && (codigo === 100 || codigo === 101 || codigo === 150)) {
+        publicar({ estado: 'carregando', erro: null });
+        falhouNaRadio();
+        return;
+      }
       publicar({
         estado: 'erro',
         erro: codigo === 100 ? 'Vídeo não encontrado ou privado.'
@@ -563,10 +591,13 @@ function playerYoutube(link: LinkExterno, id: string, minha: number): PlayerExte
     let estadoYt: number | undefined;
     if (dado.event === 'onStateChange' && typeof dado.info === 'number') estadoYt = dado.info;
     if (dado.event === 'infoDelivery' && dado.info && typeof dado.info === 'object') {
-      const ps = (dado.info as { playerState?: unknown }).playerState;
-      if (typeof ps === 'number') estadoYt = ps;
+      const info = dado.info as { playerState?: unknown; currentTime?: unknown };
+      if (typeof info.playerState === 'number') estadoYt = info.playerState;
+      if (typeof info.currentTime === 'number') tempoAtual = info.currentTime;
     }
     if (estadoYt === undefined || minha !== geracaoExterno) return;
+    // Na rádio quem decide a próxima é o sorteio: o fim do vídeo só avisa.
+    if (estadoYt === 0 && radio) { fimNaRadio(); return; }
     // Acabou um vídeo sozinho (uma música da busca): repete ou segue a lista.
     // Playlist inteira do YouTube cuida da própria ordem e fica de fora.
     if (estadoYt === 0 && link.tipo === 'video') {
@@ -574,8 +605,16 @@ function playerYoutube(link: LinkExterno, id: string, minha: number): PlayerExte
       if (snap.prefs.repetir) { comando('seekTo', [0, true]); comando('playVideo'); } else pular(1);
       return;
     }
-    if (estadoYt === 1) { querTocar = true; publicar({ estado: 'tocando', erro: null }); }
-    else if (estadoYt === 2) publicar({ estado: snap.silenciado ? snap.estado : 'pausado' });
+    if (estadoYt === 1) {
+      querTocar = true;
+      publicar({ estado: 'tocando', erro: null });
+      if (radio) definirOuvindo(true);
+    }
+    else if (estadoYt === 2) {
+      publicar({ estado: snap.silenciado ? snap.estado : 'pausado' });
+      // Pausou no próprio player (tecla de mídia): quem não ouve não vira a música.
+      if (radio) definirOuvindo(false);
+    }
     else if (estadoYt === 3 && snap.estado !== 'tocando') publicar({ estado: 'carregando' });
   };
   window.addEventListener('message', aoMensagem);
@@ -596,6 +635,14 @@ function playerYoutube(link: LinkExterno, id: string, minha: number): PlayerExte
     tocar: () => comando('playVideo'),
     pausar: () => comando('pauseVideo'),
     volume: v => comando('setVolume', [v]),
+    video: () => videoAtual,
+    tempo: () => tempoAtual,
+    ir: s => { tempoAtual = s; comando('seekTo', [s, true]); },
+    trocar: (video, s) => {
+      videoAtual = video;
+      tempoAtual = null;
+      comando('loadVideoById', [video, Math.max(0, s)]);
+    },
     destruir: () => {
       if (escuta) clearInterval(escuta);
       if (recusa) clearTimeout(recusa);
@@ -716,6 +763,112 @@ function tocarExterna(faixaId: string, minha: number) {
   publicar({ playerAberto: true });
 }
 
+// ── Rádio ────────────────────────────────────────────────────────────────────
+
+let soltarMusicaDaRadio: (() => void) | null = null;
+let vigiaRadio: ReturnType<typeof setInterval> | null = null;
+
+/**
+ * Quantos segundos o player pode estar fora do ponto da rádio antes de pular
+ * para ele. Abaixo disso, a diferença é do carregamento e não vale o tranco.
+ */
+export const FOLGA_SINCRONIA_S = 3;
+
+/**
+ * Onde o player deveria ir, ou `null` se está bom. Perto do fim não mexe: a
+ * música está acabando e o sorteio já vem. Exportada para teste.
+ */
+export function pontoDeSincronia(tempo: number | null, esperado: number, duracao: number): number | null {
+  if (tempo === null || esperado >= duracao - 2) return null;
+  return Math.abs(tempo - esperado) > FOLGA_SINCRONIA_S ? esperado : null;
+}
+
+function tocarRadio(minha: number) {
+  if (!snap.completo) { publicar({ estado: 'erro', noAr: RADIO, erro: 'A rádio ainda não está liberada para você.' }); return; }
+  if (!soltarMusicaDaRadio) soltarMusicaDaRadio = ouvirMusica(sintonizar);
+  ligarRadio();
+  // Sem gesto ainda (F5 com «Tocar ao entrar»): o player abriria mudo e parado.
+  if (!jaInteragiu()) {
+    publicar({ estado: 'aguardando', noAr: RADIO, erro: null });
+    esperarGesto();
+    return;
+  }
+  if (minha !== geracao) return;
+  definirOuvindo(true);
+  if (!vigiaRadio) vigiaRadio = setInterval(vigiarRadio, 3000);
+  sintonizar();
+}
+
+/** Põe o player no vídeo e no ponto em que a rádio está. Chamar de novo não atrapalha. */
+function sintonizar() {
+  if (snap.prefs.faixa !== RADIO || !querTocar || snap.silenciado || !jaInteragiu()) return;
+  const r = radioAgora();
+  const atual = r.estado?.atual;
+  // Desligada pelo super_admin: solta o player e espera. `querTocar` fica de
+  // pé — quando ligarem, o aviso chega e ela começa sozinha.
+  if (r.estado && !r.estado.no_ar) {
+    soltarExterno();
+    publicar({ estado: 'pausado', noAr: RADIO, erro: null });
+    return;
+  }
+  if (!atual) {
+    if (r.carregando || (!r.estado && !r.erro)) publicar({ estado: 'carregando', noAr: RADIO, erro: null });
+    else publicar({ estado: 'erro', noAr: RADIO, erro: r.erro ?? 'A rádio ainda não tem músicas. Cadastre um estilo na aba Rádio.' });
+    return;
+  }
+  const inicio = posicao(r.estado, agoraBanco());
+  // A música do estado já acabou (rádio parada, ou o sorteio está vindo): não
+  // abre o player nela — a próxima chega em instantes.
+  if (inicio >= atual.duracao_s - 1 && !(externo?.id === RADIO && externo.video?.() === atual.video)) {
+    publicar({ estado: 'carregando', noAr: RADIO, erro: null });
+    return;
+  }
+  if (externo?.id === RADIO && externo.trocar) {
+    if (externo.video?.() !== atual.video) {
+      publicar({ estado: 'carregando', noAr: RADIO, erro: null });
+      externo.trocar(atual.video, inicio);
+      return;
+    }
+    const ponto = pontoDeSincronia(externo.tempo?.() ?? null, inicio, atual.duracao_s);
+    if (ponto !== null) externo.ir?.(ponto);
+    publicar({ noAr: RADIO });
+    externo.tocar();
+    return;
+  }
+  soltarExterno();
+  geracaoExterno++;
+  publicar({ estado: 'carregando', noAr: RADIO, erro: null });
+  externo = playerYoutube(
+    { plataforma: 'youtube', tipo: 'video', id: atual.video, rotulo: 'Rádio' }, RADIO, geracaoExterno, inicio,
+  );
+  publicar({ playerAberto: true });
+}
+
+/**
+ * De 3 em 3 s, enquanto a rádio toca: o player ficou para trás (anúncio,
+ * internet lenta, computador que dormiu)? Volta para o ponto de todo mundo.
+ */
+function vigiarRadio() {
+  if (snap.prefs.faixa !== RADIO || externo?.id !== RADIO) { pararVigiaRadio(); return; }
+  if (snap.estado !== 'tocando' || snap.silenciado) return;
+  const r = radioAgora().estado;
+  if (!r?.atual || externo.video?.() !== r.atual.video) return;
+  const ponto = pontoDeSincronia(externo.tempo?.() ?? null, posicao(r, agoraBanco()), r.atual.duracao_s);
+  if (ponto !== null) externo.ir?.(ponto);
+}
+
+function pararVigiaRadio() {
+  if (vigiaRadio) { clearInterval(vigiaRadio); vigiaRadio = null; }
+}
+
+/** Saiu da rádio (outra faixa, logout): solta a escuta, o vigia e o tópico. */
+function sairDaRadio() {
+  pararVigiaRadio();
+  soltarMusicaDaRadio?.();
+  soltarMusicaDaRadio = null;
+  if (radioAgora().ligada) desligarRadio();
+}
+
 // ── Ações ────────────────────────────────────────────────────────────────────
 
 /** Toca a faixa escolhida (ou troca para `faixa` e toca). */
@@ -727,7 +880,11 @@ export function tocar(faixa?: string): void {
   const minha = ++geracao;
   if (snap.silenciado) { publicar({ estado: 'pausado', noAr: snap.prefs.faixa }); return; }
   const alvo = snap.prefs.faixa;
-  if (ehEmbutida(alvo)) {
+  if (alvo !== RADIO) sairDaRadio();
+  if (alvo === RADIO) {
+    soltarEmbutida();
+    tocarRadio(minha);
+  } else if (ehEmbutida(alvo)) {
     soltarExterno();
     void tocarEmbutida(alvo, minha);
   } else {
@@ -739,6 +896,7 @@ export function tocar(faixa?: string): void {
 export function pausar(): void {
   querTocar = false;
   geracao++;
+  definirOuvindo(false);
   if (externo) externo.pausar();
   pausarEmbutida();
   if (snap.estado !== 'parado') publicar({ estado: 'pausado' });
@@ -756,6 +914,11 @@ export function escolher(faixa: string): void {
 }
 
 export function pular(passo: 1 | -1): void {
+  // Na rádio não tem anterior; a próxima é o «Pular» do super_admin.
+  if (snap.prefs.faixa === RADIO) {
+    if (passo === 1) pularRadio();
+    return;
+  }
   // Para a frente, a fila tem a vez antes da sequência.
   const daFila = passo === 1 ? sairDaFila() : null;
   tocar(daFila ?? vizinha(snap.prefs, snap.prefs.faixa, passo, snap.completo));
@@ -813,10 +976,9 @@ export function definirRepetir(ligado: boolean): void {
 
 export function salvarPlaylists(playlists: PreferenciasSom['playlists'], faixa?: string): void {
   if (!snap.completo) return;
-  const novaFaixa = faixa ?? (ehEmbutida(snap.prefs.faixa) || playlists.some(p => p.id === snap.prefs.faixa)
-    ? snap.prefs.faixa
-    : PADRAO.faixa);
-  const saiuDoAr = snap.noAr && !ehEmbutida(snap.noAr) && !playlists.some(p => p.id === snap.noAr);
+  const fica = (id: string) => ehEmbutida(id) || id === RADIO || playlists.some(p => p.id === id);
+  const novaFaixa = faixa ?? (fica(snap.prefs.faixa) ? snap.prefs.faixa : PADRAO.faixa);
+  const saiuDoAr = snap.noAr && !fica(snap.noAr);
   mudarPrefs({ ...snap.prefs, playlists, faixa: novaFaixa });
   if (snap.fila.some(id => !playlists.some(p => p.id === id))) {
     publicar({ fila: snap.fila.filter(id => playlists.some(p => p.id === id)) });
@@ -834,6 +996,7 @@ export function silenciar(motivo: string): void {
   if (snap.silenciado) return;
   const tocava = querTocar;
   publicar({ silenciado: true, estado: snap.estado === 'tocando' || snap.estado === 'carregando' ? 'pausado' : snap.estado });
+  definirOuvindo(false);
   if (externo) externo.pausar();
   pausarEmbutida();
   querTocar = tocava;
@@ -848,6 +1011,7 @@ export function liberarSilencio(motivo: string): void {
 function pararTudo() {
   querTocar = false;
   geracao++;
+  sairDaRadio();
   soltarExterno();
   soltarEmbutida();
   audio = null;

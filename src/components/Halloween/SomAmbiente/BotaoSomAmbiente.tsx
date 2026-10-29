@@ -33,6 +33,8 @@ import { comNovaTentativa } from '@/lib/sobDemanda';
 import { cn } from '@/lib/utils';
 import { alternar, dentroDoPalco, iniciarSessao, pular, soltarSessao, useSomAmbiente } from './motor';
 import { estiloDaFaixa, infoDaFaixa } from './faixas';
+import { RADIO } from './preferencias';
+import { useRadio } from './radio/radio';
 import { CapaFaixa } from './CapaFaixa';
 import { Equalizador } from './Equalizador';
 import './somAmbiente.css';
@@ -80,11 +82,15 @@ export function BotaoSomAmbiente({ perfilId, completo = false }: {
   }, [noArAgora, pausado, segurar, expandido]);
 
   const faixa = noAr ?? prefs.faixa;
-  const info = infoDaFaixa(faixa, prefs.playlists);
+  const radio = useRadio();
+  const naRadio = faixa === RADIO;
+  const info = infoDaFaixa(faixa, prefs.playlists, radio.estado?.atual);
   const aparece = expandido && !!info;
+  // Na rádio, a votação da próxima aberta e sem o voto da pessoa: o visor avisa.
+  const chamaVoto = naRadio && radio.fase === 'votando' && !radio.meuVoto;
 
   const rotulo = aparece
-    ? `Som ambiente, ${tocando ? 'tocando' : 'pausado'}: ${info.nome}, ${info.descricao}. Abrir o painel`
+    ? `Som ambiente, ${tocando ? 'tocando' : 'pausado'}: ${info.nome}, ${info.descricao}.${chamaVoto ? ' Votação da próxima aberta.' : ''} Abrir o painel`
     : tocando ? 'Som ambiente, tocando' : 'Som ambiente';
 
   const caixa = useRef<HTMLDivElement>(null);
@@ -139,8 +145,13 @@ export function BotaoSomAmbiente({ perfilId, completo = false }: {
                 )}
                 aria-hidden
               >
-                <span className="som-disco" data-pausado={noArAgora ? undefined : ''}>
-                  <CapaFaixa info={info} className="h-8 w-8 rounded-full" icone="h-4 w-4" />
+                <span className="relative shrink-0">
+                  <span className="som-disco" data-pausado={noArAgora ? undefined : ''}>
+                    <CapaFaixa info={info} className="h-8 w-8 rounded-full" icone="h-4 w-4" />
+                  </span>
+                  {chamaVoto && (
+                    <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 animate-pulse rounded-full border-2 border-[color:var(--som-fundo)] bg-amber-400" />
+                  )}
                 </span>
                 <span className="flex min-w-0 flex-1 flex-col gap-1">
                   <span className="truncate text-[12.5px] font-semibold leading-none">{info.nome}</span>
@@ -158,8 +169,9 @@ export function BotaoSomAmbiente({ perfilId, completo = false }: {
             className="absolute inset-y-0 right-2 flex items-center gap-0.5"
           >
             <button
-              type="button" className="som-visor-botao h-6 w-6"
-              onClick={() => pular(-1)} aria-label="Faixa anterior" title="Faixa anterior"
+              type="button" className="som-visor-botao h-6 w-6 disabled:opacity-40"
+              onClick={() => pular(-1)} aria-label="Faixa anterior" title={naRadio ? 'A rádio não volta' : 'Faixa anterior'}
+              disabled={naRadio}
             >
               <SkipBack className="h-3.5 w-3.5 fill-current" />
             </button>
@@ -174,8 +186,11 @@ export function BotaoSomAmbiente({ perfilId, completo = false }: {
                 : <Play className="h-3.5 w-3.5 translate-x-px fill-current" />}
             </button>
             <button
-              type="button" className="som-visor-botao h-6 w-6"
-              onClick={() => pular(1)} aria-label="Próxima faixa" title="Próxima faixa"
+              type="button" className="som-visor-botao h-6 w-6 disabled:opacity-40"
+              onClick={() => pular(1)}
+              aria-label={naRadio ? 'Pular a música da rádio' : 'Próxima faixa'}
+              title={naRadio ? (radio.controla ? 'Pular — sorteia outra para todo mundo' : 'Só o super admin pula') : 'Próxima faixa'}
+              disabled={naRadio && (!radio.controla || radio.ocupada || radio.fase === 'desligada')}
             >
               <SkipForward className="h-3.5 w-3.5 fill-current" />
             </button>
@@ -188,7 +203,11 @@ export function BotaoSomAmbiente({ perfilId, completo = false }: {
         // Folga da borda da tela: a altura disponível que o painel lê
         // (`--radix-popover-content-available-height`) já desconta os 8 px.
         collisionPadding={8}
-        className={cn('max-w-[calc(100vw-16px)] p-0 overflow-hidden', completo ? 'w-[340px]' : 'w-[300px]')}
+        className={cn(
+          'max-w-[calc(100vw-16px)] p-0 overflow-hidden transition-[width] duration-200',
+          // A aba Rádio do super_admin abre larga: o controle mora numa segunda coluna.
+          completo && radio.painelLargo ? 'w-[660px]' : completo ? 'w-[340px]' : 'w-[300px]',
+        )}
         // O player do Spotify/YouTube mora fora do painel (ver `motor.ts`):
         // clicar nele não pode fechar o painel.
         onInteractOutside={e => { if (dentroDoPalco(e.target)) e.preventDefault(); }}

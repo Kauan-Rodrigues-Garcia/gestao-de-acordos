@@ -22,7 +22,7 @@ import { Fragment, useEffect, useRef, useState, type ComponentPropsWithoutRef, t
 import * as SliderPrimitive from '@radix-ui/react-slider';
 import {
   Play, Pause, SkipBack, SkipForward, Repeat, Repeat1, Volume, Volume1, Volume2, VolumeX, X, Loader2,
-  Ghost, ListEnd, ListPlus, Music, Search, Youtube,
+  Ghost, ListEnd, ListPlus, Music, Radio, Search, Youtube,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -35,10 +35,13 @@ import {
   escolher, limparFila, progresso, pular, salvarPlaylists, useSomAmbiente,
 } from './motor';
 import {
-  GENEROS, GENERO_DA_MUSICA, LIMITE_PLAYLISTS, MUSICAS, TEMAS_DE_TERROR, VOLUME_PADRAO, ehEmbutida,
+  GENEROS, GENERO_DA_MUSICA, LIMITE_PLAYLISTS, MUSICAS, RADIO, TEMAS_DE_TERROR, VOLUME_PADRAO, ehEmbutida,
   type Genero, type Musica, type PlaylistSalva,
 } from './preferencias';
 import { EMBUTIDAS, estiloDaFaixa, infoDaFaixa, infoDaPlaylist, type InfoFaixa } from './faixas';
+import { posicao } from './radio/conta';
+import { agoraBanco, useRadio } from './radio/radio';
+import { PainelRadio } from './radio/PainelRadio';
 import { CapaFaixa } from './CapaFaixa';
 import { Equalizador } from './Equalizador';
 import { marcarPontas } from '@/lib/rolagemLateral';
@@ -52,7 +55,9 @@ const mmss = (seg: number) => {
 export function PainelSomAmbiente() {
   const { estado, prefs, silenciado, noAr, playerAberto, completo, volumeMax, erro, fila = [] } = useSomAmbiente();
   const escolhida = prefs.faixa;
-  const info = infoDaFaixa(escolhida, prefs.playlists) ?? EMBUTIDAS.halloween;
+  const radio = useRadio();
+  const naRadio = escolhida === RADIO;
+  const info = infoDaFaixa(escolhida, prefs.playlists, radio.estado?.atual) ?? EMBUTIDAS.halloween;
   const tocando = estado === 'tocando' && !silenciado;
   const carregando = estado === 'carregando';
   const externa = !ehEmbutida(escolhida);
@@ -88,13 +93,15 @@ export function PainelSomAmbiente() {
   const legenda = silenciado
     ? 'Pausado enquanto a mensagem de outubro toca'
     : estado === 'erro' && erro ? erro
-    : carregando ? (externa ? 'Abrindo o player…' : 'Carregando a música…')
+    : naRadio && radio.fase === 'desligada' ? 'Rádio desligada · começa sozinha quando ligarem'
+    : carregando ? (naRadio ? 'Sintonizando a rádio…' : externa ? 'Abrindo o player…' : 'Carregando a música…')
     : estado === 'aguardando' ? (mostrarPalco ? 'Aperte o play no player abaixo' : 'Começa no seu próximo clique na tela')
-    : tocando ? 'Tocando'
-    : estado === 'pausado' ? 'Pausado'
+    : tocando ? (naRadio ? 'Ao vivo' : 'Tocando')
+    : estado === 'pausado' ? (naRadio ? 'Pausado · ao voltar, entra no ponto de todo mundo' : 'Pausado')
     : 'Aperte o play para começar';
 
-  const tipo = externa ? (spotify ? 'Playlist do Spotify' : 'Do YouTube')
+  const tipo = naRadio ? (radio.fase === 'desligada' ? 'Rádio · desligada' : 'Rádio ao vivo')
+    : externa ? (spotify ? 'Playlist do Spotify' : 'Do YouTube')
     : (TEMAS_DE_TERROR as readonly string[]).includes(escolhida) ? 'Tema de terror' : 'Música';
 
   /*
@@ -145,9 +152,10 @@ export function PainelSomAmbiente() {
         </div>
 
         {!externa && <BarraProgresso ativa={noAr === escolhida && estado !== 'parado'} />}
+        {naRadio && <BarraRadio />}
 
         {/* O play fica no centro: «Repetir» de um lado, a mesma largura vazia do outro. */}
-        <div className={cn('grid grid-cols-[36px_1fr_36px] items-center', externa ? 'mt-3' : 'mt-1.5')}>
+        <div className={cn('grid grid-cols-[36px_1fr_36px] items-center', externa && !naRadio ? 'mt-3' : 'mt-1.5')}>
           <button
             type="button"
             className="som-heroi-botao h-9 w-9"
@@ -160,7 +168,10 @@ export function PainelSomAmbiente() {
             {prefs.repetir ? <Repeat1 className="h-4 w-4" /> : <Repeat className="h-4 w-4" />}
           </button>
           <div className="flex items-center justify-center gap-3">
-            <button type="button" className="som-heroi-botao h-10 w-10" onClick={() => pular(-1)} aria-label="Faixa anterior" title="Faixa anterior">
+            <button
+              type="button" className="som-heroi-botao h-10 w-10 disabled:opacity-40" onClick={() => pular(-1)}
+              aria-label="Faixa anterior" title={naRadio ? 'A rádio não volta' : 'Faixa anterior'} disabled={naRadio}
+            >
               <SkipBack className="h-[18px] w-[18px] fill-current" />
             </button>
             <button
@@ -174,7 +185,12 @@ export function PainelSomAmbiente() {
                 : tocando ? <Pause className="h-5 w-5 fill-current" />
                 : <Play className="h-5 w-5 translate-x-px fill-current" />}
             </button>
-            <button type="button" className="som-heroi-botao h-10 w-10" onClick={() => pular(1)} aria-label="Próxima faixa" title="Próxima faixa">
+            <button
+              type="button" className="som-heroi-botao h-10 w-10 disabled:opacity-40" onClick={() => pular(1)}
+              aria-label={naRadio ? 'Pular a música da rádio' : 'Próxima faixa'}
+              title={naRadio ? (radio.controla ? 'Pular — sorteia outra para todo mundo' : 'Só o super admin pula') : 'Próxima faixa'}
+              disabled={naRadio && (!radio.controla || radio.ocupada || radio.fase === 'desligada')}
+            >
               <SkipForward className="h-[18px] w-[18px] fill-current" />
             </button>
           </div>
@@ -231,6 +247,7 @@ export function PainelSomAmbiente() {
         fila={fila}
         noAr={tocando ? noAr : null}
         playlists={completo ? prefs.playlists : null}
+        comRadio={completo}
       />
 
       <label
@@ -283,6 +300,37 @@ function BarraProgresso({ ativa }: { ativa: boolean }) {
 }
 
 /**
+ * Onde a música da rádio está. Não arrasta: a rádio é ao vivo, todo mundo no
+ * mesmo ponto. Anda de segundo em segundo só com o painel aberto.
+ */
+function BarraRadio() {
+  const { estado } = useRadio();
+  const [agora, setAgora] = useState(agoraBanco);
+  useEffect(() => {
+    const id = setInterval(() => setAgora(agoraBanco()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const duracao = estado?.atual?.duracao_s ?? 0;
+  const atual = posicao(estado, agora);
+  return (
+    <div className="mt-3.5">
+      <BarraSom
+        value={[duracao ? Math.min(atual, duracao) : 0]}
+        min={0}
+        max={duracao || 1}
+        step={1}
+        disabled
+        rotulo="Posição na música da rádio"
+      />
+      <div className="som-heroi-fraco mt-0.5 flex justify-between text-[10.5px] tabular-nums">
+        <span>{mmss(atual)}</span>
+        <span>{duracao ? mmss(duracao) : '–:––'}</span>
+      </div>
+    </div>
+  );
+}
+
+/**
  * A barra do «Tocando agora» (posição e volume): fina e branca, como num
  * player; o pino aparece ao passar o mouse e o cheio ganha a cor da capa.
  * O `Slider` do sistema é grosso e na cor do tema — destoaria sobre a capa.
@@ -298,7 +346,7 @@ function BarraSom({ rotulo, className, ...props }: ComponentPropsWithoutRef<type
   );
 }
 
-type Aba = 'temas' | 'musicas' | 'playlists';
+type Aba = 'temas' | 'musicas' | 'playlists' | 'radio';
 
 /**
  * Faixas que aparecem de uma vez; passando disso, a própria lista rola, com a
@@ -338,6 +386,7 @@ const ROTULO_GENERO = Object.fromEntries(GENEROS.map((g) => [g.id, g.rotulo])) a
 const semAcento = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
 
 function abaDaFaixa(id: string): Aba {
+  if (id === RADIO) return 'radio';
   if ((TEMAS_DE_TERROR as readonly string[]).includes(id)) return 'temas';
   if ((MUSICAS as readonly string[]).includes(id)) return 'musicas';
   return 'playlists';
@@ -359,13 +408,15 @@ interface ItemDaLista {
  *
  * `playlists`: as da pessoa; `null` na versão enxuta, que não tem a aba.
  */
-function SeletorFaixas({ escolhida, noAr, playlists, fila }: {
+function SeletorFaixas({ escolhida, noAr, playlists, fila, comRadio = false }: {
   escolhida: string;
   /** Ids na fila, na ordem em que tocam. */
   fila: string[];
   /** O que está tocando de fato (`null` se nada). */
   noAr: string | null;
   playlists: PlaylistSalva[] | null;
+  /** A aba «Rádio» (29/10/2026: só o super_admin, para testar). */
+  comRadio?: boolean;
 }) {
   const listas: Record<Aba, ItemDaLista[]> = {
     temas: TEMAS_DE_TERROR.map(id => ({ id, info: EMBUTIDAS[id] })),
@@ -375,16 +426,18 @@ function SeletorFaixas({ escolhida, noAr, playlists, fila }: {
       info: infoDaPlaylist(p),
       onRemover: () => salvarPlaylists(playlists!.filter(x => x.id !== p.id)),
     })),
+    radio: [],
   };
   const abas: { id: Aba; rotulo: string; Icone: typeof Ghost }[] = [
     { id: 'temas', rotulo: 'Temas', Icone: Ghost },
     { id: 'musicas', rotulo: 'Músicas', Icone: Music },
     ...(playlists ? [{ id: 'playlists' as const, rotulo: 'YouTube', Icone: Youtube }] : []),
+    ...(comRadio ? [{ id: 'radio' as const, rotulo: 'Rádio', Icone: Radio }] : []),
   ];
 
   const abaInicial = () => {
     const a = abaDaFaixa(escolhida);
-    return a === 'playlists' && !playlists ? 'temas' : a;
+    return (a === 'playlists' && !playlists) || (a === 'radio' && !comRadio) ? 'temas' : a;
   };
   const [aba, setAba] = useState<Aba>(abaInicial);
   const [busca, setBusca] = useState('');
@@ -491,11 +544,12 @@ function SeletorFaixas({ escolhida, noAr, playlists, fila }: {
     </div>
   );
   const naAbaYoutube = aba === 'playlists' && !!playlists;
+  const naAbaRadio = aba === 'radio' && comRadio;
 
   return (
     <div
       className="flex min-h-0 flex-col px-3 pb-2 pt-3"
-      style={{ minHeight: minimoDoMeio(temBusca, naAbaYoutube, fila.length, naAbaMusicas) }}
+      style={{ minHeight: minimoDoMeio(temBusca && !naAbaRadio, naAbaYoutube, fila.length, naAbaMusicas) }}
     >
       <div role="tablist" aria-label="Tipo de som" className="flex shrink-0 gap-1 rounded-lg bg-muted p-1">
         {abas.map(a => {
@@ -509,14 +563,16 @@ function SeletorFaixas({ escolhida, noAr, playlists, fila }: {
               aria-selected={ativa}
               onClick={() => trocarAba(a.id)}
               className={cn(
-                'flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors',
+                'flex min-w-0 flex-1 items-center justify-center rounded-md py-1.5 text-xs font-medium transition-colors',
+                // Com a «Rádio», são quatro abas em 340 px: aperta o respiro.
+                abas.length > 3 ? 'gap-1 px-1' : 'gap-1.5 px-2',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                 ativa ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
               )}
             >
               <a.Icone className="h-3.5 w-3.5" />
               {a.rotulo}
-              <span className="tabular-nums opacity-60">{listas[a.id].length}</span>
+              {a.id !== 'radio' && <span className="tabular-nums opacity-60">{listas[a.id].length}</span>}
               {temEscolhida && !ativa && (
                 <span className="h-1.5 w-1.5 rounded-full bg-primary" title="A faixa escolhida está aqui" />
               )}
@@ -590,7 +646,13 @@ function SeletorFaixas({ escolhida, noAr, playlists, fila }: {
         </div>
       )}
 
-      {!naAbaYoutube && caixaDaLista()}
+      {naAbaRadio && (
+        <div role="tabpanel" className="som-lista mt-2 max-h-[460px] min-h-[134px] overflow-y-auto overscroll-contain">
+          <PainelRadio naRadio={escolhida === RADIO} completo={comRadio} />
+        </div>
+      )}
+
+      {!naAbaYoutube && !naAbaRadio && caixaDaLista()}
     </div>
   );
 }
