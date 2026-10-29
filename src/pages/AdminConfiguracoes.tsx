@@ -33,6 +33,7 @@ import ImportarAcordosCard from '@/components/admin/ImportarAcordosCard';
 import RankingQuitacaoConfig from '@/components/admin/RankingQuitacaoConfig';
 import JumpscareConfig from '@/components/admin/JumpscareConfig';
 import MuralOutubroConfig from '@/components/admin/MuralOutubroConfig';
+import SireneConfig from '@/components/admin/SireneConfig';
 
 const MIGRATION_SQL = `ALTER TABLE public.acordos
   ADD COLUMN IF NOT EXISTS instituicao TEXT;
@@ -316,6 +317,10 @@ export default function AdminConfiguracoes() {
           {/* ── Mural de Outubro: liberar para o pessoal e soltar a abertura (29/10/2026).
               Só super_admin — as funções `fn_mural_outubro_*` conferem de novo no banco. */}
           {ehSuperAdmin && <MuralOutubroConfig />}
+
+          {/* ── Sirene: luz e som por horário, cor e setor (29/10/2026). Só
+              super_admin — as funções `fn_sirene_*` conferem de novo no banco. */}
+          {ehSuperAdmin && <SireneConfig />}
 
           {ehSuperAdmin && <LiberacaoChat />}
 
