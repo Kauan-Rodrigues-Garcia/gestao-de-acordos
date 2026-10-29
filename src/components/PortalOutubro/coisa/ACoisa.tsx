@@ -20,7 +20,8 @@
  * A trilha (`trilha.ts`, 29/10/2026) vai junto das fases: a apresentação
  * quando o balão sai do bueiro, o estouro, a música da dança, o «we'll float
  * down here» babando e encarando, as luzes mortas quando a boca abre e a
- * risada quando ela sai puxando o mural.
+ * risada quando ela sai puxando o mural (e, no mural, o tema em laço:
+ * `Mural.tsx`).
  *
  * Esc ou o X fecham (voltam ao Gestão).
  */
@@ -223,7 +224,10 @@ export function ACoisa({ leve, pronto, mural, aoPuxar, aoTerminar }: {
     cena.current = c;
     let id = 0, antes = performance.now();
     const quadro = (agora: number) => {
-      const dt = Math.min(0.05, (agora - antes) / 1000) * vRef.current;
+      // O relógio da cena anda com o da trilha: num PC lento, a 10 quadros por
+      // segundo, ela não fica para trás da música (só um tranco grande, a aba
+      // escondida, é cortado).
+      const dt = Math.min(0.25, (agora - antes) / 1000) * vRef.current;
       antes = agora;
       c.passo(dt);
       id = requestAnimationFrame(quadro);

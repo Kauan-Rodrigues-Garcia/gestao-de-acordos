@@ -37,6 +37,7 @@ import { PodioDasLendas } from '@/components/Insignias/lendas/Lendas';
 import { DATA_DO_RETRATO, GINCANAS, GOLPE_FINAL, LENDAS, PESSOAL, PREMIO_DAS_LENDAS, TAMBEM_TEVE, TOP10, insigniasDe, type Pessoa } from './dados';
 import { fecharTela, useVelocidadeDoMural } from './estado';
 import { ACoisaNoMural } from './coisa/NoMural';
+import { calarSom, prepararSonsDaCoisa, tocarSomDaCoisa } from './coisa/trilha';
 import { ArteDaGincana, ArteGarrafa } from './Artes';
 import { Foco, PremioDasLendas } from './Sorteios';
 import { Rosto } from './Rosto';
@@ -351,6 +352,16 @@ export function Mural({ leve = false, puxando = false, semEntrada = false, raiz 
     window.addEventListener('resize', medir);
     return () => window.removeEventListener('resize', medir);
   }, []);
+
+  // O tema da Coisa em laço enquanto o mural está aberto (pedido de
+  // 29/10/2026: «no mural deixar tocando o tema do It»); puxado, entra quando
+  // ela acaba de puxar. Espera o trecho decodificar para o laço emendar.
+  useEffect(() => {
+    if (puxando) return;
+    let vivo = true, tema: ReturnType<typeof tocarSomDaCoisa> = null;
+    void prepararSonsDaCoisa().then(() => { if (vivo) tema = tocarSomDaCoisa('tema'); });
+    return () => { vivo = false; calarSom(tema, 600); };
+  }, [puxando]);
 
   useEffect(() => {
     const tecla = (e: KeyboardEvent) => { if (e.key === 'Escape' && !focoRef.current) fecharTela(); };

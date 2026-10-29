@@ -24,6 +24,7 @@ import { sorteador } from '../acaso';
 import { pintarPor } from '../cinzas';
 import { ALTURA_DA_COISA, BALAO, LARGURA_DA_COISA, PALETA_DA_COISA, PALETA_DO_BALAO } from './arte';
 import { BABANDO, CANTOS_DA_BOCA, DANCA, QUADROS } from './desenho';
+import { DURA_DA_DANCA } from './trilha';
 import { BUEIRO, CHAO_DA_COISA, COVIL_A, OLHOS_DO_BUEIRO, PALCO_A, PALCO_L, RUA_Y, desenharCovil, desenharDerry, lampada, pintarGrade } from './derry';
 
 export type FaseDaCena = 'espera' | 'subindo' | 'enchendo' | 'nascendo' | 'dancando' | 'babando' | 'perto' | 'fim';
@@ -49,10 +50,11 @@ export const DURA_DO_CLOSE = 8.6;
 /**
  * Os tempos casam com a trilha (`trilha.ts`, 29/10/2026): do balão sair do
  * bueiro até ela dançar são uns 7,8 s (subindo + enchendo + nascendo, ~2,7),
- * o «palhaço dançarino» da apresentação; a dança é o miolo forte da música
- * (24,0 a 30,4 s do original); babando e encarando, o «we'll float down here».
+ * o «palhaço dançarino» da apresentação; a dança dura o trecho dela inteiro
+ * (`DURA_DA_DANCA`, 28,3 a 42 s do original, pedido de 29/10); babando e
+ * encarando, o «we'll float down here».
  */
-const DURA: Readonly<Partial<Record<FaseDaCena, number>>> = { subindo: 3, enchendo: 2.1, dancando: 6.4, babando: 1.8, perto: DURA_DO_CLOSE };
+const DURA: Readonly<Partial<Record<FaseDaCena, number>>> = { subindo: 3, enchendo: 2.1, dancando: DURA_DA_DANCA, babando: 1.8, perto: DURA_DO_CLOSE };
 /** O quanto o corpo vai e vem na dança, e quantos rastros ficam atrás. */
 const VAI_E_VEM = 5;
 const RASTROS = 3;
