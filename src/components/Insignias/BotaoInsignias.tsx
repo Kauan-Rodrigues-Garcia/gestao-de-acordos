@@ -1,13 +1,13 @@
 /**
  * As insígnias das gincanas no topo do app: as medalhas que a pessoa ganhou,
- * penduradas pela fita na borda de cima da barra, e duas «?» das próximas
- * gincanas. Com o mouse em cima, a placa da gincana (`Placas.tsx`). Quem não
+ * penduradas pela fita na borda de cima da barra (as duas «?» das próximas
+ * gincanas saíram em 29/10/2026: não vem outra). Com o mouse em cima, a placa da gincana (`Placas.tsx`). Quem não
  * participou de uma gincana não vê a medalha dela. A regra está em
  * `insignias.ts`.
  *
  * Este arquivo é leve (entra com o Layout): lê o álbum e guarda o lugar. As
  * medalhas trazem os desenhos das gincanas e baixam logo que o app abre
- * (`Estante.tsx`); até lá, as fitas das «?» guardam o lugar.
+ * (`Estante.tsx`).
  *
  * Carregar NA HORA (19/10/2026, «estão demorando para carregar»): a barra
  * começa pelo álbum guardado no navegador (`albumGuardado`) e desenha sem
@@ -103,19 +103,6 @@ function useMeuAlbum(perfilId: string | null | undefined) {
   return album;
 }
 
-/** As fitas das «?» sem a medalha: o lugar enquanto o desenho baixa. */
-function Fitas() {
-  return (
-    <div className="ins-fileira" aria-hidden>
-      {['a', 'b'].map(i => (
-        <div key={i} className="ins-medalha ins-pendurada ins-misterio" style={{ ['--tam' as string]: '24px', ['--fita' as string]: '#5b5566' }}>
-          <div className="ins-fita" />
-        </div>
-      ))}
-    </div>
-  );
-}
-
 export function BotaoInsignias({ perfilId, souSuperAdmin }: Props) {
   const doBanco = useMeuAlbum(perfilId);
   const [abriuEm] = useState(() => new Date().toISOString());
@@ -146,9 +133,9 @@ export function BotaoInsignias({ perfilId, souSuperAdmin }: Props) {
     // zoom alto, as medalhas somem do fim (as «?» primeiro) e nunca ficam por
     // cima do Calendário nem empurram o sair para fora (19/10/2026).
     <div className="flex min-w-0 shrink-[1000] items-center gap-1 self-stretch">
-      {/* Desenha já, com o que tiver (o guardado, ou só as «?»): o pedaço das
-          medalhas começa a baixar aqui, em paralelo com a leitura. */}
-      <Suspense fallback={<Fitas />}>
+      {/* Desenha já, com o que tiver guardado: o pedaço das medalhas começa a
+          baixar aqui, em paralelo com a leitura. */}
+      <Suspense fallback={null}>
         <Estante album={album} novas={novas} aoVer={aoVer} />
       </Suspense>
       {souSuperAdmin && (

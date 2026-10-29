@@ -12,7 +12,7 @@ export type Unidade = 'ho' | 'bruto';
 
 export type TemplateId =
   | 'contagem' | 'barra' | 'anel' | 'hoje' | 'ritmo' | 'placar' | 'grafico'
-  | 'podio' | 'lista'
+  | 'podio' | 'lista' | 'destaque'
   | 'imagem' | 'video' | 'recado';
 
 /** Uma tela do rodízio. `opcoes` é o que o líder ajustou; o resto é padrão. */
@@ -46,6 +46,21 @@ export interface PessoaRanking {
   valor_ho: number;
 }
 
+/**
+ * O 1º de um dia (ou do mês) no setor ou numa equipe (20261029230000).
+ * `escopo` = 'setor' ou o id da equipe; `dia` = 'YYYY-MM-DD' ou 'mes'.
+ */
+export interface DestaqueTv {
+  escopo: string;
+  dia: string;
+  id: string;
+  nome: string;
+  foto: string | null;
+  valor: number;
+  valor_ho: number;
+  pagamentos: number;
+}
+
 /** O pacote de `fn_tv_numeros_calcular`. */
 export interface NumerosTv {
   alvo_nome: string;
@@ -65,6 +80,11 @@ export interface NumerosTv {
   ranking: PessoaRanking[];
   /** Dinheiro de cada dia com movimento (20261027200000). Formato do mês, não o total. */
   serie?: { dia: string; valor: number; valor_ho: number }[];
+  /** A cena «Destaque» (20261029230000). Faltam no cache antigo. */
+  destaques?: DestaqueTv[];
+  equipes?: { id: string; nome: string }[];
+  equipe_id?: string | null;
+  setor_nome?: string;
   calculado_em: string;
   /** Hora do banco na resposta da prévia (20261027190000). */
   agora?: string;

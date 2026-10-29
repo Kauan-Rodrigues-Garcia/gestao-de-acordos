@@ -171,27 +171,3 @@ export function PlacaDaInsignia({ insignia, conquista }: { insignia: Insignia; c
     </div>
   );
 }
-
-// ── A da próxima gincana ────────────────────────────────────────────────────
-
-const PISTAS = [
-  ['Uma nova gincana está a caminho.', 'Quem será o próximo a cair?'],
-  ['Ninguém sabe o que vem por aí.', 'Fique de olho no Gestão.'],
-] as const;
-
-/** A placa das medalhas «?»: o mistério da próxima gincana. */
-export function PlacaMisteriosa({ ordem }: { ordem: number }) {
-  const [a, b] = PISTAS[ordem % PISTAS.length];
-  return (
-    <div className="ins-placa ins-placa-misterio">
-      <div className="ins-placa-arte"><span className="ins-misterio-grande">?</span></div>
-      <div className="ins-placa-texto">
-        {/* A letra de fliperama não tem «Ó» maiúsculo. */}
-        <p className="ins-placa-selo">EM BREVE</p>
-        <p className="ins-placa-nome">Próxima gincana</p>
-        <p className="ins-placa-linha">{a}</p>
-        <p className="ins-placa-linha">{b}</p>
-      </div>
-    </div>
-  );
-}

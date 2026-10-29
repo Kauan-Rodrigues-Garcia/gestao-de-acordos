@@ -57,25 +57,3 @@ export const Medalha = forwardRef<HTMLDivElement, Props>(function Medalha(
     </div>
   );
 });
-
-/**
- * A medalha da próxima gincana, que ainda não existe: fita cinza, face de
- * noite e um «?» dourado. Fica no fim da fileira do topo, puxando a
- * curiosidade (pedido de 19/10/2026: «duas com ? indagando qual será a
- * próxima»).
- */
-export const MedalhaMisteriosa = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement> & { tam: number }>(
-  function MedalhaMisteriosa({ tam, className, style, ...resto }, ref) {
-    return (
-      <div
-        ref={ref}
-        className={cn('ins-medalha ins-pendurada ins-misterio', className)}
-        style={{ ['--tam' as string]: `${tam}px`, ['--fita' as string]: '#5b5566', ...style }}
-        {...resto}
-      >
-        <div className="ins-fita" />
-        <div className="ins-disco"><span className="ins-interrogacao">?</span></div>
-      </div>
-    );
-  },
-);

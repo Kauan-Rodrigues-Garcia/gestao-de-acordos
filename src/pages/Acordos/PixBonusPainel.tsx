@@ -200,7 +200,9 @@ export function PixBonusPainel({
       </div>
 
       <Dialog open={aberto} onOpenChange={v => { setAberto(v); if (!v) setRascunho(null); }}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        {/* Largo (29/10/2026): com vários setores e bônus, a janela estreita
+            cortava os nomes e espremia a lista. */}
+        <DialogContent className="w-[calc(100vw-2rem)] max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Gift className="w-4 h-4 text-success" /> Bônus do Pix
@@ -237,7 +239,7 @@ export function PixBonusPainel({
                     </button>
                   )}
                 </div>
-                <div className="grid gap-1 rounded-lg border border-border p-2">
+                <div className="grid max-h-[40vh] gap-1 overflow-y-auto rounded-lg border border-border p-2 sm:grid-cols-2">
                   {setores.map(s => {
                     const marcado = rascunho.setorIds.includes(s.id);
                     const base = pctDoSetor(s.id);
@@ -247,8 +249,8 @@ export function PixBonusPainel({
                           ...rascunho,
                           setorIds: v ? [...rascunho.setorIds, s.id] : rascunho.setorIds.filter(x => x !== s.id),
                         })} />
-                        <span className="flex-1">{s.nome}</span>
-                        <span className="font-mono text-[11px] text-muted-foreground">
+                        <span className="min-w-0 flex-1 truncate" title={s.nome}>{s.nome}</span>
+                        <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
                           {fmtPctBonus(base)}
                           {marcado && Number.isFinite(pctRascunho) && pctRascunho > 0 && (
                             <> → <strong className="text-success">{fmtPctBonus(base + pctRascunho)}</strong></>
@@ -307,8 +309,8 @@ export function PixBonusPainel({
                     const valendo = bonusVigenteNoDia(b, hoje);
                     const encerrado = b.fim != null && b.fim < hoje;
                     return (
-                      <li key={b.id} className="flex items-start gap-3 px-3 py-2.5">
-                        <div className="flex-1 min-w-0 space-y-0.5">
+                      <li key={b.id} className="flex items-start gap-3 px-4 py-3">
+                        <div className="flex-1 min-w-0 space-y-1.5">
                           <p className="text-sm">
                             <strong className={valendo ? 'text-success' : 'text-foreground'}>+{fmtPctBonus(b.pct)}</strong>{' '}
                             <span className="text-muted-foreground">{periodo(b)}</span>
@@ -316,14 +318,18 @@ export function PixBonusPainel({
                             {encerrado && <span className="ml-2 text-[10px] font-semibold uppercase text-muted-foreground">encerrado</span>}
                             {!b.ativo && <span className="ml-2 text-[10px] font-semibold uppercase text-warning">pausado</span>}
                           </p>
-                          <p className="text-[11px] text-muted-foreground truncate">
-                            {b.setor_ids.map(id => nomeDoSetor[id] ?? 'Outro setor').join(', ')}
-                            {b.descricao && ` · ${b.descricao}`}
-                          </p>
+                          {b.descricao && <p className="text-xs text-foreground/80">{b.descricao}</p>}
+                          <div className="flex flex-wrap gap-1">
+                            {b.setor_ids.map(id => (
+                              <span key={id} className="rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[11px] text-muted-foreground">
+                                {nomeDoSetor[id] ?? 'Outro setor'}
+                              </span>
+                            ))}
+                          </div>
                         </div>
-                        <Switch checked={b.ativo} onCheckedChange={v => alternarAtivo(b, v)}
+                        <Switch className="mt-0.5 shrink-0" checked={b.ativo} onCheckedChange={v => alternarAtivo(b, v)}
                           aria-label="Bônus ativo" title={b.ativo ? 'Pausar' : 'Reativar'} />
-                        <button title="Editar" className="text-muted-foreground hover:text-primary"
+                        <button title="Editar" className="mt-1 shrink-0 text-muted-foreground hover:text-primary"
                           onClick={() => setRascunho({
                             id: b.id,
                             pct: String(b.pct).replace('.', ','),
@@ -335,7 +341,7 @@ export function PixBonusPainel({
                           })}>
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
-                        <button title="Excluir" className="text-muted-foreground hover:text-destructive"
+                        <button title="Excluir" className="mt-1 shrink-0 text-muted-foreground hover:text-destructive"
                           onClick={() => excluir(b)}>
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -344,7 +350,7 @@ export function PixBonusPainel({
                   })}
                 </ul>
               )}
-              <Button size="sm" className="w-full gap-1" onClick={() => setRascunho({
+              <Button size="sm" className="w-full gap-1 sm:ml-auto sm:flex sm:w-auto" onClick={() => setRascunho({
                 ...RASCUNHO_VAZIO(),
                 // Com um setor só para escolher, ele já vem marcado.
                 setorIds: setores.length === 1 ? [setores[0].id] : [],

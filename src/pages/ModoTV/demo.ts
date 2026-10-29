@@ -35,8 +35,25 @@ export function numerosDemo(): NumerosTv {
       valor: valor as number, valor_ho: Math.round((valor as number) * 22.6) / 100,
     })),
     serie: serieDemo(hoje),
+    destaques: destaquesDemo(serieDemo(hoje)),
+    equipes: [{ id: '00000000-0000-4000-8000-000000000001', nome: 'Demonstração' }],
+    equipe_id: null,
+    setor_nome: 'Setor Demonstração',
     calculado_em: new Date().toISOString(),
   };
+}
+
+/** O 1º de cada dia com recebimento e do mês, revezando os nomes do ranking. */
+function destaquesDemo(serie: NonNullable<NumerosTv['serie']>): NonNullable<NumerosTv['destaques']> {
+  const nomes = ['Ana Beatriz Lima', 'Carlos Eduardo Rocha', 'Juliana Prado', 'Marcos Vinícius Teixeira'];
+  const linha = (dia: string, i: number, valor: number) => ({
+    escopo: 'setor', dia, id: `demo-${i}`, nome: nomes[i], foto: null as string | null,
+    valor, valor_ho: Math.round(valor * 22.6) / 100, pagamentos: 6 + ((i * 5) % 9),
+  });
+  return [
+    linha('mes', 0, 41_220.1),
+    ...serie.map((s, k) => linha(s.dia, k % nomes.length, Math.round(s.valor * 0.18 * 100) / 100)),
+  ];
 }
 
 /** Dias úteis com recebimento, fins de semana sem: o formato que o gráfico mostra. */
@@ -71,6 +88,7 @@ export function painelDemo(tema: string | null): Painel {
       { id: 'd7', template: 'podio', opcoes: {} },
       { id: 'd8', template: 'lista', opcoes: { quantidade: '10' } },
       { id: 'd9', template: 'recado', opcoes: { texto: 'Faltam poucos dias. Cada acordo conta!', assinatura: 'Liderança' } },
+      { id: 'd11', template: 'destaque', opcoes: { dia: 'mes' } },
     ],
   };
 }

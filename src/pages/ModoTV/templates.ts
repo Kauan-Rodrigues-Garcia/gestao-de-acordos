@@ -32,7 +32,11 @@ export type CampoOpcao = Condicao & (
   | { chave: string; rotulo: string; tipo: 'numero'; padrao: number | null; dica?: string }
   | { chave: string; rotulo: string; tipo: 'escolha'; padrao: string; escolhas: { valor: string; rotulo: string }[] }
   | { chave: string; rotulo: string; tipo: 'liga'; padrao: boolean }
-  | { chave: string; rotulo: string; tipo: 'midia'; padrao: string; aceita: 'imagem' | 'video' });
+  | { chave: string; rotulo: string; tipo: 'midia'; padrao: string; aceita: 'imagem' | 'video' }
+  /** Uma equipe do setor do painel (o id); a lista vem do pacote de números. */
+  | { chave: string; rotulo: string; tipo: 'equipe'; padrao: string }
+  /** Um dia, «YYYY-MM-DD». */
+  | { chave: string; rotulo: string; tipo: 'data'; padrao: string });
 
 export interface Template {
   id: TemplateId;
@@ -125,6 +129,25 @@ export const TEMPLATES: Template[] = [
     ],
   },
   {
+    // 29/10/2026: o destaque em quadrinho, com a foto grande (`DestaqueGibi.tsx`).
+    id: 'destaque', categoria: 'ranking',
+    nome: 'Destaque em gibi',
+    descricao: 'Quem mais recebeu no dia ou no mês, com a foto bem grande, em quadrinho.',
+    campos: [
+      { chave: 'titulo', rotulo: 'Título (vazio = automático)', tipo: 'texto', padrao: '', max: 28 },
+      { chave: 'escopo', rotulo: 'Destaque de', tipo: 'escolha', padrao: 'setor',
+        escolhas: [{ valor: 'setor', rotulo: 'Setor' }, { valor: 'equipe', rotulo: 'Equipe' }] },
+      { chave: 'equipe_id', rotulo: 'Qual equipe', tipo: 'equipe', padrao: '', quando: { chave: 'escopo', valor: 'equipe' } },
+      { chave: 'dia', rotulo: 'Dia', tipo: 'escolha', padrao: 'anterior',
+        escolhas: [
+          { valor: 'hoje', rotulo: 'Hoje' }, { valor: 'anterior', rotulo: 'Dia anterior' },
+          { valor: 'data', rotulo: 'Outro dia' }, { valor: 'mes', rotulo: 'Mês' },
+        ] },
+      { chave: 'data', rotulo: 'Qual dia', tipo: 'data', padrao: '', quando: { chave: 'dia', valor: 'data' } },
+      { chave: 'mostrar_valor', rotulo: 'Mostrar o valor', tipo: 'liga', padrao: true },
+    ],
+  },
+  {
     id: 'imagem', categoria: 'midia',
     nome: 'Imagem',
     descricao: 'Uma arte, foto ou campanha em tela cheia.',
@@ -188,6 +211,10 @@ export function opcao<T extends string | number | boolean | null>(
       return (typeof bruto === 'boolean' ? bruto : campo.padrao) as T;
     case 'escolha':
       return (campo.escolhas.some(e => e.valor === bruto) ? bruto : campo.padrao) as T;
+    case 'equipe':
+      return (typeof bruto === 'string' && /^[0-9a-f-]{36}$/i.test(bruto) ? bruto : campo.padrao) as T;
+    case 'data':
+      return (typeof bruto === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(bruto) ? bruto : campo.padrao) as T;
   }
 }
 

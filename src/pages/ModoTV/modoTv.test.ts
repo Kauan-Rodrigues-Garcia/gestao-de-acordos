@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { montarVisao, moedaTv, nomeCurto, percentualTv, serieAcumulada, tamanhoQueCabe } from './numeros';
+import { destaqueDaTela, montarVisao, moedaTv, nomeCurto, percentualTv, serieAcumulada, tamanhoQueCabe } from './numeros';
 import { alvoDoDiaProprio, campoVisivel, midiaSegura, novaTela, opcao, rotuloTempo, segundosDaTela, segundosDoArquivo, telasValidas, templateDe } from './templates';
 import { numerosDemo } from './demo';
 import { estadoDaTv, situacaoDoPainel } from './apoio';
@@ -255,5 +255,43 @@ describe('serieAcumulada — o gráfico fecha no total oficial', () => {
     expect(serieAcumulada({ ...n, serie: [{ dia: '2026-10-09', valor: 50, valor_ho: 1 }] }, 'bruto'))
       .toEqual([{ dia: 0, valor: 0 }, { dia: 5, valor: 1_000 }]);
     expect(serieAcumulada({ ...n }, 'ho')).toEqual([{ dia: 0, valor: 0 }, { dia: 5, valor: 226 }]);
+  });
+});
+
+describe('cena Destaque em gibi', () => {
+  const E1 = '11111111-1111-4111-8111-111111111111';
+  const base = { ...numerosDemo(), regra: 'cofen' as const, mes: '2026-10', hoje: '2026-10-29', equipe_id: null, setor_nome: 'Play 1',
+    equipes: [{ id: E1, nome: 'Rosa' }],
+    destaques: [
+      { escopo: 'setor', dia: 'mes', id: 'a', nome: 'Ana Lima', foto: null, valor: 900, valor_ho: 200, pagamentos: 9 },
+      { escopo: 'setor', dia: '2026-10-27', id: 'b', nome: 'Bia', foto: null, valor: 300, valor_ho: 70, pagamentos: 3 },
+      { escopo: 'setor', dia: '2026-10-28', id: 'c', nome: 'Caio', foto: null, valor: 400, valor_ho: 90, pagamentos: 4 },
+      { escopo: E1, dia: '2026-10-28', id: 'd', nome: 'Davi', foto: null, valor: 150, valor_ho: 30, pagamentos: 2 },
+    ] };
+  const tela = (opcoes: Record<string, unknown>) => ({ template: 'destaque' as const, opcoes });
+  const v = montarVisao(base, 'bruto');
+
+  it('dia anterior: o último dia com recebimento antes de hoje', () => {
+    const d = destaqueDaTela(v, tela({}));
+    expect(d.pessoa?.nome).toBe('Caio');
+    expect(d.dia).toBe('2026-10-28');
+    expect(d.onde).toBe('Play 1');
+  });
+  it('mês, dia escolhido, e o valor na unidade do painel (H.O. no Cofen)', () => {
+    expect(destaqueDaTela(v, tela({ dia: 'mes' })).pessoa?.nome).toBe('Ana Lima');
+    expect(destaqueDaTela(v, tela({ dia: 'data', data: '2026-10-27' })).pessoa?.valor).toBe(300);
+    expect(destaqueDaTela(montarVisao(base, 'ho'), tela({ dia: 'data', data: '2026-10-27' })).pessoa?.valor).toBe(70);
+  });
+  it('equipe: a escolhida, ou a do painel; sem nenhuma, pede para escolher', () => {
+    const d = destaqueDaTela(v, tela({ escopo: 'equipe', equipe_id: E1 }));
+    expect(d.pessoa?.nome).toBe('Davi');
+    expect(d.onde).toBe('Equipe Rosa');
+    expect(destaqueDaTela(v, tela({ escopo: 'equipe' })).motivo).toMatch(/Escolha a equipe/);
+    expect(destaqueDaTela(montarVisao({ ...base, equipe_id: E1 }, 'bruto'), tela({ escopo: 'equipe' })).pessoa?.nome).toBe('Davi');
+  });
+  it('sem ninguém: hoje ainda vazio, dia de outro mês', () => {
+    expect(destaqueDaTela(v, tela({ dia: 'hoje' })).pessoa).toBeNull();
+    expect(destaqueDaTela(v, tela({ dia: 'data', data: '2026-09-10' })).motivo).toMatch(/mês atual/);
+    expect(destaqueDaTela(montarVisao({ ...base, destaques: undefined }, 'bruto'), tela({ dia: 'mes' })).pessoa).toBeNull();
   });
 });

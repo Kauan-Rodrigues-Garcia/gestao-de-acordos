@@ -10,11 +10,10 @@
 import { lazy, Suspense } from 'react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { INSIGNIAS, type Album, type IdInsignia, type Insignia, type Conquista } from './insignias';
-import { Medalha, MedalhaMisteriosa } from './Medalha';
+import { Medalha } from './Medalha';
 import { carregarPlacas, prepararPlacas } from './placasSobDemanda';
 
 const PlacaDaInsignia = lazy(() => carregarPlacas().then(m => ({ default: m.PlacaDaInsignia })));
-const PlacaMisteriosa = lazy(() => carregarPlacas().then(m => ({ default: m.PlacaMisteriosa })));
 
 /** O instante entre o hover e a placa baixar (quase nunca visto: ver `prepararPlacas`). */
 function PlacaCarregando() {
@@ -59,10 +58,7 @@ export function MedalhaComPlaca({
 // ── As do topo ──────────────────────────────────────────────────────────────
 //
 // Só as que a pessoa TEM (quem não participou de uma gincana não vê a medalha
-// dela) e, no fim, as da próxima gincana, com «?».
-
-/** Quantas medalhas «?» ficam no fim da fileira. */
-const MISTERIOSAS = 2;
+// dela). As «?» da próxima gincana saíram em 29/10/2026: não vem outra.
 
 interface EstanteProps {
   album: Album | null;
@@ -88,18 +84,6 @@ export function Estante({ album, novas, aoVer }: EstanteProps) {
             nova={novas.includes(ins.id)}
             aoVer={aoVer}
           />
-        ))}
-        {Array.from({ length: MISTERIOSAS }, (_, i) => (
-          <Tooltip key={`misterio-${i}`}>
-            <TooltipTrigger asChild>
-              <MedalhaMisteriosa tam={24} tabIndex={0} role="img" aria-label="Próxima gincana: ainda é segredo" />
-            </TooltipTrigger>
-            <TooltipContent side="bottom" align="start" sideOffset={6} collisionPadding={12} className={SEM_CAIXA}>
-              <Suspense fallback={<PlacaCarregando />}>
-                <PlacaMisteriosa ordem={i} />
-              </Suspense>
-            </TooltipContent>
-          </Tooltip>
         ))}
       </div>
     </TooltipProvider>

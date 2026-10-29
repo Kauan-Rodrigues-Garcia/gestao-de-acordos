@@ -356,7 +356,8 @@ export function Editor({ painel, alvo, conexoes, aoMudar, aoMudarConexoes }: {
               {tplSel.campos.filter(campo => campoVisivel(telaSel, campo)).map(campo => (
                 <CampoDaTela key={campo.chave} campo={campo} tela={telaSel} painelId={painel.id}
                   aoMudar={v => mudarOpcao(sel, { [campo.chave]: v })}
-                  aoEnviarVideo={(url, duracao) => receberVideo(telaSel.id, url, duracao)} />
+                  aoEnviarVideo={(url, duracao) => receberVideo(telaSel.id, url, duracao)}
+                  equipes={numeros?.equipes ?? []} />
               ))}
               {!tplSel.campos.length && <p className="text-sm text-muted-foreground">Esta tela não tem opções.</p>}
             </>
@@ -700,8 +701,10 @@ function medirVideo(origem: File | string): Promise<number | null> {
 
 // ── Um campo de opção ────────────────────────────────────────────────────────
 
-function CampoDaTela({ campo, tela, painelId, aoMudar, aoEnviarVideo }: {
+function CampoDaTela({ campo, tela, painelId, aoMudar, aoEnviarVideo, equipes = [] }: {
   campo: CampoOpcao; tela: TelaDoPainel; painelId: string; aoMudar: (v: unknown) => void;
+  /** As equipes do setor do painel, para o campo «equipe» (vêm do pacote de números). */
+  equipes?: { id: string; nome: string }[];
   /** Vídeo enviado: a URL e a duração medida no arquivo (para «Duração do arquivo»). */
   aoEnviarVideo?: (url: string, duracao: number | null) => void;
 }) {
@@ -728,6 +731,30 @@ function CampoDaTela({ campo, tela, painelId, aoMudar, aoEnviarVideo }: {
           <Input type="number" min={0} step={100} value={v ?? ''} placeholder="Automático"
             onChange={e => aoMudar(e.target.value === '' ? null : Number(e.target.value))} />
           {campo.dica && <p className="text-xs text-muted-foreground">{campo.dica}</p>}
+        </div>
+      );
+    }
+    case 'equipe': {
+      const v = opcao<string>(tela, campo.chave);
+      return (
+        <div className="space-y-1.5">
+          <Label>{campo.rotulo}</Label>
+          <select className="h-9 w-full rounded-md border bg-background px-2 text-sm" value={v}
+            onChange={e => aoMudar(e.target.value)}>
+            <option value="">A equipe do painel</option>
+            {equipes.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
+          </select>
+          {!equipes.length && <p className="text-xs text-muted-foreground">Carregando as equipes do setor…</p>}
+        </div>
+      );
+    }
+    case 'data': {
+      const v = opcao<string>(tela, campo.chave);
+      return (
+        <div className="space-y-1.5">
+          <Label>{campo.rotulo}</Label>
+          <Input type="date" value={v} onChange={e => aoMudar(e.target.value)} />
+          <p className="text-xs text-muted-foreground">Um dia do mês atual.</p>
         </div>
       );
     }
