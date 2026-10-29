@@ -26,9 +26,9 @@
  *
  * Desde 29/10/2026 a oferta NÃO aparece mais (pedido do Kauan: «a pessoa tem
  * que habilitar, e não ser habilitado automaticamente») — o componente fica,
- * desmontado, em `App.tsx`. E o super admin pode desligar o modo leve de todos
- * os computadores de uma vez (`modoLeveZerado.ts`): por isso a hora em que
- * cada máquina ligou o modo fica guardada (`ligadoEm`).
+ * desmontado, em `App.tsx`. E o modo leve foi desligado uma vez em todos os
+ * computadores (`modoLeveZerado.ts`): por isso a hora em que cada máquina
+ * ligou o modo fica guardada (`ligadoEm`) — quem religar depois fica ligado.
  */
 import { useSyncExternalStore } from 'react';
 

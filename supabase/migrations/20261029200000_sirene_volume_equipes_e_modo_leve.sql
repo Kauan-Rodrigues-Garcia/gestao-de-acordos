@@ -1,5 +1,5 @@
 -- ============================================================================
--- Sirene: volume e equipes; e «Desligar o modo leve de todos»
+-- Sirene: volume e equipes; e o modo leve desligado uma vez em todos
 -- 29/10/2026 · pedido do Kauan
 -- ============================================================================
 --
@@ -21,13 +21,16 @@
 --
 -- ## Modo leve (`src/lib/modoLeve.ts`)
 --
--- O modo leve é por computador (`localStorage`). O super admin agora pode
--- desligá-lo em todos de uma vez: `modo_leve_zerado.zerado_em` marca a hora, e
--- cada tela que ligou o modo leve ANTES dessa hora o desliga ao ler. Quem
--- precisar liga de novo no próprio computador, e isso fica valendo.
+-- «Apenas aplique para meio que limpar, e depois eles podem voltar
+-- normalmente.» O modo leve é por computador (`localStorage`); esta migration
+-- grava, UMA vez, a hora da limpeza em `modo_leve_zerado.zerado_em`, e cada
+-- tela que ligou o modo leve ANTES dessa hora o desliga ao ler (quem está com
+-- o app aberto, na hora, pelo aviso). Quem precisar liga de novo no próprio
+-- computador, e isso fica valendo. Sem cartão nem botão.
 --
 -- Nenhuma linha de dado existente muda (as colunas novas nascem com o padrão).
--- Reexecutável.
+-- Reexecutável: rodar de novo NÃO limpa de novo (só grava a hora se estiver
+-- vazia).
 -- ============================================================================
 
 BEGIN;
@@ -226,13 +229,12 @@ GRANT EXECUTE ON FUNCTION public.fn_sirene_tocar(text, uuid[], uuid[], integer, 
 -- ── Modo leve: desligar em todos os computadores ────────────────────────────
 CREATE TABLE IF NOT EXISTS public.modo_leve_zerado (
   id               SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
-  zerado_em        TIMESTAMPTZ,
-  zerado_por_nome  TEXT
+  zerado_em        TIMESTAMPTZ
 );
 
 COMMENT ON TABLE public.modo_leve_zerado IS
-  'Uma linha: quando o super admin desligou o modo leve de todos os computadores. Cada tela que '
-  'ligou o modo leve antes dessa hora o desliga. Escrita só por fn_modo_leve_zerar. Ver 20261029200000.';
+  'Uma linha: quando o modo leve foi desligado em todos os computadores (a limpeza de 29/10/2026). '
+  'Cada tela que ligou o modo leve antes dessa hora o desliga. Gravada por esta migration. Ver 20261029200000.';
 
 INSERT INTO public.modo_leve_zerado (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
 
@@ -274,9 +276,7 @@ STABLE
 SECURITY DEFINER
 SET search_path TO ''
 AS $function$
-  SELECT jsonb_build_object(
-    'zerado_em', z.zerado_em,
-    'zerado_por_nome', CASE WHEN (SELECT public.fn_user_is_super_admin()) THEN z.zerado_por_nome END)
+  SELECT jsonb_build_object('zerado_em', z.zerado_em)
   FROM (SELECT 1) um
   LEFT JOIN public.modo_leve_zerado z ON z.id = 1;
 $function$;
@@ -284,26 +284,8 @@ $function$;
 REVOKE ALL ON FUNCTION public.fn_modo_leve_ler() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.fn_modo_leve_ler() TO authenticated;
 
-CREATE OR REPLACE FUNCTION public.fn_modo_leve_zerar()
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO ''
-AS $function$
-BEGIN
-  IF NOT (SELECT public.fn_user_is_super_admin()) THEN
-    RAISE EXCEPTION 'NAO_AUTORIZADO: só o super_admin desliga o modo leve de todos' USING ERRCODE = '42501';
-  END IF;
-  UPDATE public.modo_leve_zerado
-     SET zerado_em = now(),
-         zerado_por_nome = (SELECT p.nome FROM public.perfis p WHERE p.id = auth.uid())
-   WHERE id = 1;
-  RETURN public.fn_modo_leve_ler();
-END;
-$function$;
-
-REVOKE ALL ON FUNCTION public.fn_modo_leve_zerar() FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.fn_modo_leve_zerar() TO authenticated;
+-- A limpeza: uma vez só. O gatilho acima avisa as telas abertas.
+UPDATE public.modo_leve_zerado SET zerado_em = now() WHERE id = 1 AND zerado_em IS NULL;
 
 -- ── Prova ──────────────────────────────────────────────────────────────────
 DO $prova$
@@ -322,6 +304,9 @@ BEGIN
   IF has_table_privilege('authenticated', 'public.modo_leve_zerado', 'SELECT') THEN
     RAISE EXCEPTION 'modo leve: tabela aberta demais';
   END IF;
+  IF (SELECT zerado_em FROM public.modo_leve_zerado WHERE id = 1) IS NULL THEN
+    RAISE EXCEPTION 'modo leve: faltou gravar a limpeza';
+  END IF;
 END;
 $prova$;
 
@@ -330,7 +315,7 @@ COMMIT;
 NOTIFY pgrst, 'reload schema';
 
 -- ── Para desfazer ──────────────────────────────────────────────────────────
--- DROP FUNCTION IF EXISTS public.fn_modo_leve_zerar(), public.fn_modo_leve_ler();
+-- DROP FUNCTION IF EXISTS public.fn_modo_leve_ler();
 -- DROP TABLE IF EXISTS public.modo_leve_zerado;  DROP FUNCTION IF EXISTS public.fn_modo_leve_avisar();
 -- Reaplicar fn_sirene_ler/painel/salvar/tocar de 20261029160000 (DROP das novas assinaturas antes)
 -- e DROP FUNCTION public.fn_sirene_e_para_mim(uuid[], uuid[]);
