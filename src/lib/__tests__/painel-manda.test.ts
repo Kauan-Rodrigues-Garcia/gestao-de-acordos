@@ -112,7 +112,7 @@ const EXCECOES: Record<string, Excecao> = {
   },
   'components/Chat/BolhaChat.tsx': {
     linhas: 1, familia: 'chave-mestra',
-    motivo: 'a conversa de Autorizações fica DISCRETA para o super_admin (decisão do Cleber em 15/10/2026): sem aviso de pedido novo, sem contar na bolha. Não libera nem tira acesso — quem decide se ele vê a fila e se pode autorizar continua sendo `temPermissao`.',
+    motivo: 'a conversa de Autorizações fica DISCRETA para o super_admin (decisão do Cleber em 15/10/2026): sem aviso de pedido novo, sem contar na bolha. Não libera nem tira acesso — quem decide se ele vê a fila e se pode autorizar continua sendo `temPermissao`. A mesma linha mostra o «Gerenciar grupos» (29/10/2026): o banco deixa o super admin administrar qualquer grupo (`fn_chat_grupo_administro`), e o botão só aparece para quem o banco aceita.',
   },
   'pages/AdminLogs/index.tsx': {
     linhas: 1, familia: 'chave-mestra',

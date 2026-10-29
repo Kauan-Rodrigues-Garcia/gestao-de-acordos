@@ -370,9 +370,13 @@ export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaI
    * Super admin vê a fila, mas não decide no dia a dia (Cleber, 15/10/2026):
    * sem aviso de pedido novo, sem contar na bolha, sem destaque na lista. Ele
    * entra quando quiser conferir.
+   *
+   * O mesmo super admin ganha o «Gerenciar grupos» (29/10/2026): administra
+   * qualquer grupo, que no banco é `fn_chat_grupo_administro` — de novo o
+   * super admin, não uma chave do painel.
    */
-  const autorizacoesDiscretas = perfil?.perfil === 'super_admin';
   const souSuperAdmin = perfil?.perfil === 'super_admin';
+  const autorizacoesDiscretas = souSuperAdmin;
   const autorizacoes = useAutorizacaoPedidos(podeAutorizar && !!perfil?.id);
   const [vendoAutorizacoes, setVendoAutorizacoes] = useState(false);
   const [nomeSetor, setNomeSetor] = useState<string | null>(null);
