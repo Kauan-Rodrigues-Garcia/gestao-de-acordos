@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  JANELA_PEDACO_MS, __resetVersaoParaTestes, perguntarVersao, podeRecarregarPara,
+  JANELA_PEDACO_MS, __resetVersaoParaTestes, ehTelaDeTv, perguntarVersao, podeRecarregarPara,
   podeRecarregarPorPedaco, trocarDeVersaoSePuder, versaoNovaDetectada,
 } from './versaoNova';
 
@@ -40,5 +40,15 @@ describe('perguntarVersao', () => {
 
   it('sem versão nova, trocar de tela não recarrega', () => {
     expect(trocarDeVersaoSePuder()).toBe(false);
+  });
+});
+
+describe('ehTelaDeTv', () => {
+  it('só a TV na parede troca sozinha; a montagem do painel não', () => {
+    expect(ehTelaDeTv('/tv')).toBe(true);
+    expect(ehTelaDeTv('/tv/')).toBe(true);
+    expect(ehTelaDeTv('/modo-tv')).toBe(false);
+    expect(ehTelaDeTv('/tvs')).toBe(false);
+    expect(ehTelaDeTv('/')).toBe(false);
   });
 });

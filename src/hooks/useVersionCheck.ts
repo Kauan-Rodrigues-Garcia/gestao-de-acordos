@@ -9,7 +9,7 @@ import { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
-  INTERVALO_MS, MINIMO_ENTRE_PERGUNTAS_MS, perguntarVersao, recarregarParaVersaoNova,
+  INTERVALO_MS, MINIMO_ENTRE_PERGUNTAS_MS, ehTelaDeTv, perguntarVersao, recarregarParaVersaoNova,
   trocarDeVersaoSePuder, versaoAtual, versaoNovaDetectada,
 } from '@/lib/versaoNova';
 
@@ -28,6 +28,9 @@ function avisar() {
 export function useVersionCheck() {
   const { pathname } = useLocation();
   const rotaAnterior = useRef(pathname);
+  /** Lido na hora da pergunta: a TV troca sozinha, o resto vê o aviso. */
+  const rotaAtual = useRef(pathname);
+  rotaAtual.current = pathname;
 
   useEffect(() => {
     if (versaoAtual() === 'dev') return;
@@ -40,7 +43,10 @@ export function useVersionCheck() {
       if (agora - ultima < MINIMO_ENTRE_PERGUNTAS_MS) return;
       ultima = agora;
       const nova = await perguntarVersao();
-      if (nova && !avisou) { avisou = true; avisar(); }
+      if (!nova) return;
+      // A TV na parede não tem quem aperte «Atualizar»: troca já, sem aviso.
+      if (ehTelaDeTv(rotaAtual.current)) { trocarDeVersaoSePuder(); return; }
+      if (!avisou) { avisou = true; avisar(); }
     }
     const perguntarJa = () => { void perguntar(); };
 
