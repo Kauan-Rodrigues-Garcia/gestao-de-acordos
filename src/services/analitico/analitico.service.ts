@@ -299,8 +299,33 @@ export interface ResultadoImportacao {
    * anteriores a ontem, ou NR+dia que o 59 já trouxe. Ver `linhasDo58NoMesDo59`.
    */
   ignoradasPelo59?: number;
+  /**
+   * Linhas do arquivo que NÃO foram gravadas porque o OUTRO relatório do setor
+   * já trouxe o mesmo NR no mesmo dia: o 994 diante do 58/59, ou o 58 diante do
+   * 994. Ver `PROCEDENCIA_994`.
+   */
+  ignoradasPorOutroRelatorio?: number;
   erros: string[];
 }
+
+/**
+ * A procedência do relatório 994 — a Retenção do Jornada (migration
+ * 20261027210000).
+ *
+ * O Jornada tem dois relatórios no mesmo setor/mês: o 58 (os operadores) e o
+ * 994 (a Retenção, que o 58 descarta). Cada um é o retrato completo do que é
+ * dele, e por isso cada um só remove, reconcilia e sobrepõe a própria
+ * procedência. E um confere o outro: NR+dia que um já gravou o outro não grava
+ * de novo — os dois relatórios podem trazer o mesmo pagamento, e ele contaria
+ * duas vezes.
+ *
+ * Desde 28/10/2026 (20261028150000) o 994 é DONO da Retenção: quem está no 994
+ * do mês é lido só dele, no setor da importação, e a sincronização do 59 não
+ * mexe nessas pessoas. Quem grava é `importarLote994`, não esta função. Aqui
+ * a procedência continua servindo ao 58, que não grava NR+dia do 994.
+ */
+export const PROCEDENCIA_994 = 'relatorio_994';
+export type ProcedenciaImportada = 'relatorio_58' | typeof PROCEDENCIA_994;
 
 type GrupoRelatorioAnalitico = {
   operador_usuario: string;
@@ -376,10 +401,12 @@ const chaveLinhaAnalitico = (r: LinhaRelatorioAnalitico) =>
 export function idsAusentesDoRelatorioMensal(
   existentes: Array<LinhaRelatorioAnalitico & { id: string; procedencia?: string }>,
   relatorio: LinhaRelatorioAnalitico[],
+  /** O 994 também é retrato completo — do que é dele. Ver `PROCEDENCIA_994`. */
+  procedencia: ProcedenciaImportada = 'relatorio_58',
 ): string[] {
   const presentes = new Set(relatorio.map(chaveLinhaAnalitico));
   return existentes
-    .filter(linha => (linha.procedencia ?? 'relatorio_58') === 'relatorio_58')
+    .filter(linha => (linha.procedencia ?? 'relatorio_58') === procedencia)
     .filter(linha => !presentes.has(chaveLinhaAnalitico(linha)))
     .map(linha => linha.id);
 }
@@ -492,6 +519,67 @@ export interface OpcoesImportacaoAnalitico {
    * importações parciais, como as da PaguePlay.
    */
   sincronizarAusentesDoSetor?: boolean;
+  /** De qual relatório vêm as linhas. Padrão: o 58. Ver `PROCEDENCIA_994`. */
+  procedencia?: ProcedenciaImportada;
+}
+
+/**
+ * Um relatório confere o outro: tira do lote o NR+dia que o outro já gravou.
+ *
+ * `jaGravadas` = chaves `codigo::data_pagamento` do outro relatório. Pura, para
+ * o teste fixar a regra sem banco.
+ */
+export function semOQueOutroRelatorioTrouxe<T extends { codigo: string; data_pagamento: string }>(
+  linhas: readonly T[],
+  jaGravadas: ReadonlySet<string>,
+): T[] {
+  return linhas.filter(l => !jaGravadas.has(`${l.codigo}::${l.data_pagamento}`));
+}
+
+/**
+ * NR+dia que o OUTRO relatório do setor já gravou nestes meses.
+ *
+ * Para o 994: tudo o que não é do 994 (58, 59, manual, contribuição) — o 59 é a
+ * autoridade e o 58 chegou antes. Para o 58: só o que é do 994. `null` = a
+ * leitura falhou (quem chama grava sem recortar, como antes).
+ */
+async function nrDiaDoOutroRelatorio(
+  empresaId: string,
+  procedencia: ProcedenciaImportada,
+  meses: readonly string[],
+  codigos: readonly string[],
+): Promise<Set<string> | null> {
+  const chaves = new Set<string>();
+  if (!meses.length || !codigos.length) return chaves;
+  const ler = async (fatia: readonly string[] | null) => paginarParalelo<{ codigo: string; data_pagamento: string }>(async (de, ate) => {
+    let q = supabase
+      .from('analitico_recebimentos')
+      .select('codigo, data_pagamento')
+      .eq('empresa_id', empresaId)
+      .in('mes_referencia', [...meses]);
+    q = procedencia === PROCEDENCIA_994
+      ? q.neq('procedencia', PROCEDENCIA_994)
+      : q.eq('procedencia', PROCEDENCIA_994);
+    if (fatia) q = q.in('codigo', [...fatia]);
+    const r = await q.order('id', { ascending: true }).range(de, ate);
+    return { data: (r.data as unknown as { codigo: string; data_pagamento: string }[]) ?? [], error: r.error?.message ?? null };
+  });
+
+  // O 994 tem poucas linhas: lê pelos NRs dele. O 58 tem milhares, e as linhas
+  // do 994 no mês são poucas: lê todas elas, sem filtro de NR.
+  const fatias: (readonly string[] | null)[] = [];
+  if (procedencia === PROCEDENCIA_994) {
+    const unicos = [...new Set(codigos)];
+    for (let i = 0; i < unicos.length; i += 200) fatias.push(unicos.slice(i, i + 200));
+  } else {
+    fatias.push(null);
+  }
+  for (const fatia of fatias) {
+    const { data, error } = await ler(fatia);
+    if (error) return null;
+    for (const l of data) chaves.add(`${l.codigo}::${l.data_pagamento}`);
+  }
+  return chaves;
 }
 
 /**
@@ -526,8 +614,14 @@ async function importarLoteAnaliticoNoBanco(
     return { inseridos: 0, duplicados: 0, atualizados: 0, removidos: 0, erros: [] };
   }
 
+  const procedencia: ProcedenciaImportada = opcoes.procedencia ?? 'relatorio_58';
+  const eh994 = procedencia === PROCEDENCIA_994;
+
   const todasAsLinhas = linhas.map(l => ({
     empresa_id:      empresaId,
+    // Só o 994 manda a coluna: o 58 segue no padrão do banco ('relatorio_58'),
+    // exatamente como antes da procedência nova.
+    ...(eh994 ? { procedencia: PROCEDENCIA_994 } : {}),
     operador_id:     operadoresMap[l.operador_usuario] ?? null,
     operador_usuario: l.operador_usuario,
     codigo:          normCodigo(l.codigo),
@@ -605,6 +699,9 @@ async function importarLoteAnaliticoNoBanco(
   const mesesDoArquivo = [...new Set(todasAsLinhas.map(r => r.mes_referencia))];
   let sincronizadoPelo59 = false;
   const mesesDo59 = new Set<string>();
+  // O 994 passa por isto igual ao 58: o 59 traz a Retenção no Jornada
+  // (conferido em 27/10/2026, R$ 49.071,25 em outubro) e a sincronização trata
+  // a linha do 994 como a do 58 (20261027220000).
   if (setorImportacaoId) {
     for (const mes of mesesDoArquivo) {
       const { data, error } = await rpcSemTipo<string>('fn_analitico_fonte_do_setor', {
@@ -633,6 +730,21 @@ async function importarLoteAnaliticoNoBanco(
     }
   }
   const ignoradasPelo59 = todasAsLinhas.length - rows.length;
+
+  // Um relatório confere o outro (ver `PROCEDENCIA_994`). Falha de leitura não
+  // trava a importação: grava como antes e a próxima importação confere.
+  let ignoradasPorOutroRelatorio = 0;
+  {
+    const doOutro = await nrDiaDoOutroRelatorio(
+      empresaId, procedencia, mesesDoArquivo, rows.map(r => r.codigo));
+    if (doOutro === null) {
+      console.warn('[analitico] linhas do outro relatório não lidas; o lote grava sem a conferência cruzada.');
+    } else if (doOutro.size > 0) {
+      const antes = rows.length;
+      rows = semOQueOutroRelatorioTrouxe(rows, doOutro);
+      ignoradasPorOutroRelatorio = antes - rows.length;
+    }
+  }
 
   const CHUNK = 200;
   let inseridos = 0;
@@ -663,7 +775,7 @@ async function importarLoteAnaliticoNoBanco(
       categoria: 'importacao',
       severidade: erros.length > 0 ? 'aviso' : 'info',
       descricao:
-        `Importou relatório analítico: ${inseridos} linha(s) nova(s), `
+        `Importou relatório ${eh994 ? '994 (Retenção)' : 'analítico'}: ${inseridos} linha(s) nova(s), `
         + `${duplicados} já existente(s), ${atualizados} reconciliada(s), `
         + `${removidos} ausente(s) removida(s)`
         + (erros.length > 0 ? ` — ${erros.length} problema(s)` : ''),
@@ -690,6 +802,8 @@ async function importarLoteAnaliticoNoBanco(
            reescrevê-las). Fica no log para a pergunta «importei e o número não
            mudou, por quê?» ter resposta sem reproduzir a importação. */
         ignoradas_pelo_59: ignoradasPelo59,
+        procedencia,
+        ignoradas_por_outro_relatorio: ignoradasPorOutroRelatorio,
         primeiros_erros: erros.slice(0, 20),
       },
       usuarioId: importadoPorId,
@@ -870,13 +984,16 @@ async function importarLoteAnaliticoNoBanco(
   if (!leituraCompleta) {
     erros.push('Conferência de valores não executada (falha ao ler o mês). Reimporte para refazê-la.');
     registrarResumo(false);
-    return { inseridos, duplicados, atualizados, removidos, tiposPreenchidos, sincronizadoPelo59, ignoradasPelo59, erros };
+    return { inseridos, duplicados, atualizados, removidos, tiposPreenchidos, sincronizadoPelo59, ignoradasPelo59, ignoradasPorOutroRelatorio, erros };
   }
 
   const dbPorGrupo = new Map<string, ExRow[]>();
   for (const ex of existentes) {
-    // Mês do 59: a linha do 59 é a autoridade e o 58 nunca a ajusta.
-    if (mesesDo59.has(ex.mes_referencia) && (ex.procedencia ?? 'relatorio_58') !== 'relatorio_58') continue;
+    // Mês do 59: a linha do 59 é a autoridade e o 58 (ou o 994) nunca a ajusta.
+    if (mesesDo59.has(ex.mes_referencia) && (ex.procedencia ?? 'relatorio_58') !== procedencia) continue;
+    // 58 e 994 não se ajustam: o 994 só confere linha do 994, e o 58 nunca
+    // mexe nela. Somar as duas compararia o arquivo de um com o banco dos dois.
+    if (((ex.procedencia ?? 'relatorio_58') === PROCEDENCIA_994) !== eh994) continue;
     const k = chaveConferencia(ex);
     if (!alvoPorGrupo.has(k)) continue;
     const lista = dbPorGrupo.get(k);
@@ -960,7 +1077,7 @@ async function importarLoteAnaliticoNoBanco(
       } else {
         // Contra o ARQUIVO inteiro, não contra o recorte gravado: a linha que
         // o 59 já tem continua no relatório e não pode ser dada como ausente.
-        const idsAusentes = idsAusentesDoRelatorioMensal(leituraSetor.data, todasAsLinhas);
+        const idsAusentes = idsAusentesDoRelatorioMensal(leituraSetor.data, todasAsLinhas, procedencia);
         /*
          * Copiar e apagar, numa transação só.
          *
@@ -994,7 +1111,122 @@ async function importarLoteAnaliticoNoBanco(
   }
 
   registrarResumo(true);
-  return { inseridos, duplicados, atualizados, removidos, tiposPreenchidos, sincronizadoPelo59, ignoradasPelo59, erros };
+  return { inseridos, duplicados, atualizados, removidos, tiposPreenchidos, sincronizadoPelo59, ignoradasPelo59, ignoradasPorOutroRelatorio, erros };
+}
+
+// ── 994: o mês da Retenção, inteiro (20261028150000) ─────────────────────────
+
+/** O que `fn_analitico_994_substituir` devolve. */
+interface Retorno994 {
+  inseridas: number;
+  alteradas: number;
+  removidas: number;
+  ignoradas: number;
+  fora_do_mes: number;
+  espelhos: number;
+  valor_antes: number;
+  valor_depois: number;
+}
+
+export interface ResultadoImportacao994 extends ResultadoImportacao {
+  /** Linhas cuja chave já é de outro setor ou de correção manual. */
+  ignoradas: number;
+  /** Linhas de outro mês que o banco não gravou. */
+  foraDoMes: number;
+  /** Pagamentos que o 59 já lançou como extra em outro setor (contam uma vez na empresa). */
+  espelhos: number;
+}
+
+/**
+ * Grava o 994: o mês de cada pessoa do arquivo, no setor da importação, vira o
+ * arquivo inteiro — numa transação, no banco.
+ *
+ * Não passa por `importarLoteAnalitico`: lá o 994 era prévia do 59 («só hoje e
+ * ontem que o 59 não trouxe»), e isso nunca fechava com o ERP — R$ 16 mil no
+ * gestão contra R$ 30 mil no 994 da Jessica em out/2026. Ver a migration.
+ */
+export function importarLote994(...args: Parameters<typeof importarLote994NoBanco>) {
+  return gravandoNoMes(() => importarLote994NoBanco(...args));
+}
+
+async function importarLote994NoBanco(
+  empresaId: string,
+  importadoPorId: string,
+  loteId: string,
+  linhas: LinhaRelatorio[],
+  operadoresMap: OperadorResolvidoMap,
+  setorId: string,
+  /** 'yyyy-MM' */
+  mes: string,
+): Promise<ResultadoImportacao994> {
+  const vazio: ResultadoImportacao994 = {
+    inseridos: 0, duplicados: 0, atualizados: 0, removidos: 0,
+    ignoradas: 0, foraDoMes: 0, espelhos: 0, erros: [],
+  };
+  if (!linhas.length) return vazio;
+
+  const payload = linhas.map(l => ({
+    operador_usuario: l.operador_usuario,
+    operador_id:      operadoresMap[l.operador_usuario] ?? null,
+    codigo:           normCodigo(l.codigo),
+    nome_cliente:     l.nome_cliente || null,
+    forma_pagamento:  l.forma_pagamento,
+    forma_detalhe:    l.forma_detalhe ?? null,
+    valor_recebido:   l.valor_recebido,
+    data_pagamento:   toISO(l.data_pagamento),
+  }));
+
+  const { data, error } = await rpcSemTipo<Retorno994>('fn_analitico_994_substituir', {
+    p_empresa_id: empresaId,
+    p_setor_id:   setorId,
+    p_mes:        `${mes}-01`,
+    p_lote_id:    loteId,
+    p_linhas:     payload,
+  });
+
+  const r = data ?? null;
+  const resultado: ResultadoImportacao994 = error || !r
+    ? { ...vazio, erros: [error?.message ?? 'A importação do 994 não devolveu resultado.'] }
+    : {
+        inseridos:   Number(r.inseridas) || 0,
+        duplicados:  0,
+        atualizados: Number(r.alteradas) || 0,
+        removidos:   Number(r.removidas) || 0,
+        ignoradas:   Number(r.ignoradas) || 0,
+        foraDoMes:   Number(r.fora_do_mes) || 0,
+        espelhos:    Number(r.espelhos) || 0,
+        erros:       [],
+      };
+
+  // O trigger de auditoria não cobre `analitico_recebimentos` (milhares de
+  // linhas por arquivo); o resumo da importação é o evento que fica.
+  void registrarLog({
+    acao: resultado.erros.length > 0 ? 'importacao_falhou' : 'importacao_concluida',
+    categoria: 'importacao',
+    severidade: resultado.erros.length > 0 ? 'aviso' : 'info',
+    descricao:
+      `Importou relatório 994 (Retenção): ${resultado.inseridos} linha(s) nova(s), `
+      + `${resultado.atualizados} atualizada(s), ${resultado.removidos} removida(s)`
+      + (resultado.erros.length > 0 ? ` — ${resultado.erros[0]}` : ''),
+    empresaId,
+    tabela: 'analitico_recebimentos',
+    registroId: loteId,
+    alvoTipo: 'importacao_analitico',
+    alvoRotulo: `Mês ${mes}`,
+    origem: 'importacao',
+    detalhes: {
+      lote_id: loteId,
+      procedencia: PROCEDENCIA_994,
+      setor_importacao_id: setorId,
+      linhas_no_arquivo: linhas.length,
+      operadores: [...new Set(linhas.map(l => l.operador_usuario))],
+      ...(r ?? {}),
+      erro: error?.message ?? null,
+    },
+    usuarioId: importadoPorId,
+  });
+
+  return resultado;
 }
 
 // ── Revínculo de órfãos (operador criado após importação anterior) ────────────
@@ -1819,6 +2051,8 @@ interface LinhaMesAnalitico {
   contribuicao_de_setor_id?: string | null;
   /** Ajuste lançado para uma EQUIPE: sem operador, conta nela e no setor. */
   ajuste_equipe_id?: string | null;
+  /** Espelho do extra da Retenção (20261028150000): não conta na empresa. */
+  espelho_extra?: boolean;
 }
 
 /** A 2ª perna do Integral, gravada pelo 59 no setor que recebeu. */
@@ -1844,8 +2078,10 @@ function limitesDoMes(mes: string): { primeiro: string; fim: string } {
 async function lerMesAnalitico(empresaId: string, mes: string): Promise<MesCarregado> {
   const { primeiro, fim } = limitesDoMes(mes);
 
-  const buscar = async (nivel: 'contribuicao' | 'setor' | 'minimo'): Promise<LinhaMesAnalitico[] | null> => {
-    const cols = nivel === 'contribuicao'
+  const buscar = async (nivel: 'espelho' | 'contribuicao' | 'setor' | 'minimo'): Promise<LinhaMesAnalitico[] | null> => {
+    const cols = nivel === 'espelho'
+      ? 'operador_id, setor_id, importado_por_id, valor_recebido, total_ho, data_pagamento, procedencia, contribuicao_de_setor_id, espelho_extra'
+      : nivel === 'contribuicao'
       ? 'operador_id, setor_id, importado_por_id, valor_recebido, total_ho, data_pagamento, procedencia, contribuicao_de_setor_id'
       : nivel === 'setor'
         ? 'operador_id, setor_id, importado_por_id, valor_recebido, total_ho, data_pagamento'
@@ -1875,9 +2111,10 @@ async function lerMesAnalitico(empresaId: string, mes: string): Promise<MesCarre
     return data;
   };
 
-  // Colunas mais novas primeiro, cada uma com a sua reserva: a da contribuição
-  // (20260914220000) e o setor_id (migration 20260712a).
-  const linhas = (await buscar('contribuicao')) ?? (await buscar('setor')) ?? (await buscar('minimo'));
+  // Colunas mais novas primeiro, cada uma com a sua reserva: o espelho do 994
+  // (20261028150000), a contribuição (20260914220000) e o setor_id (20260712a).
+  const linhas = (await buscar('espelho')) ?? (await buscar('contribuicao'))
+    ?? (await buscar('setor')) ?? (await buscar('minimo'));
 
   const setorDoPerfil = new Map<string, string | null>();
   // A condição era `linhas?.length`. Passou a ser «a leitura funcionou», porque
@@ -2144,6 +2381,8 @@ export interface LinhaRecebidaDia {
   contribuicao_de_setor_id?: string | null;
   /** Ajuste lançado para uma EQUIPE — `linhaNoEscopo`. */
   ajuste_equipe_id?: string | null;
+  /** Espelho do extra da Retenção: conta no setor, não na empresa — `linhaNoEscopo`. */
+  espelho_extra?: boolean;
 }
 
 /**
@@ -2168,6 +2407,7 @@ export async function buscarRecebidoPorDia(
       contribuicao:     ehContribuicao(l),
       contribuicao_de_setor_id: l.contribuicao_de_setor_id ?? null,
       ajuste_equipe_id: l.ajuste_equipe_id ?? null,
+      espelho_extra:    l.espelho_extra === true,
     })),
     error: null,
   };
@@ -3150,6 +3390,11 @@ export interface StatusTabulacaoResultado {
   acordoId: string | null;
   outroOperadorId: string | null;
   outroOperadorNome: string | null;
+  /**
+   * Linha «Extra» do relatório tabulada no acordo DIRETO do colega
+   * (20261028180000). `outroOperador*` é o dono do direto.
+   */
+  extraDoDireto: boolean;
 }
 
 /**
@@ -3170,6 +3415,7 @@ export async function verificarStatusTabulacao(
 ): Promise<StatusTabulacaoResultado> {
   const vazio: StatusTabulacaoResultado = {
     status: 'nao_tabulado', acordoId: null, outroOperadorId: null, outroOperadorNome: null,
+    extraDoDireto: false,
   };
 
   const { data, error } = await rpcSemTipo<{
@@ -3177,6 +3423,7 @@ export async function verificarStatusTabulacao(
     acordo_id?: string | null;
     outro_operador_id?: string | null;
     outro_operador_nome?: string | null;
+    extra_do_direto?: boolean;
     erro?: string;
   }>('fn_analitico_status_tabulacao', { p_linha_id: linhaId });
 
@@ -3194,6 +3441,7 @@ export async function verificarStatusTabulacao(
     acordoId:          data.acordo_id ?? null,
     outroOperadorId:   data.outro_operador_id ?? null,
     outroOperadorNome: data.outro_operador_nome ?? null,
+    extraDoDireto:     data.extra_do_direto === true,
   };
 }
 
@@ -3232,6 +3480,7 @@ type ItemLoteTabulacao = {
   acordo_id?: string | null;
   outro_operador_id?: string | null;
   outro_operador_nome?: string | null;
+  extra_do_direto?: boolean;
 };
 
 async function despacharLoteTabulacao(): Promise<void> {
@@ -3241,6 +3490,7 @@ async function despacharLoteTabulacao(): Promise<void> {
   const ids = [...fila.keys()];
   const vazio: StatusTabulacaoResultado = {
     status: 'nao_tabulado', acordoId: null, outroOperadorId: null, outroOperadorNome: null,
+    extraDoDireto: false,
   };
 
   for (let i = 0; i < ids.length; i += LOTE_TABULACAO_MAX) {
@@ -3268,6 +3518,7 @@ async function despacharLoteTabulacao(): Promise<void> {
             acordoId:          item.acordo_id ?? null,
             outroOperadorId:   item.outro_operador_id ?? null,
             outroOperadorNome: item.outro_operador_nome ?? null,
+            extraDoDireto:     item.extra_do_direto === true,
           }
         : vazio;
       if (item?.status) cacheTabulacao.set(id, { resultado: r, ate });
@@ -3310,6 +3561,8 @@ export type TabularDivergenteResultado =
   | { ok: true; resultado: 'transferido'; acordoId: string; operadorAnteriorNome: string | null; operadorNovoNome: string | null }
   /** O dono da linha já tinha o acordo (DIRETO ou EXTRA) — nada a transferir. */
   | { ok: true; resultado: 'ja_era_seu'; acordoId: string }
+  /** Linha «Extra» do relatório: ligada ao direto do colega, nada transferido (20261028180000). */
+  | { ok: true; resultado: 'extra_do_direto'; acordoId: string; donoDoDiretoNome: string | null }
   /** O acordo sumiu desde que a tela olhou: o código está livre para tabular. */
   | { ok: true; resultado: 'livre' }
   | { ok: false; error: string };
@@ -3342,7 +3595,7 @@ export async function tabularDivergente(linhaId: string): Promise<TabularDiverge
   const { data, error } = await rpcSemTipo<{
     ok: boolean;
     erro?: string;
-    resultado?: 'transferido' | 'ja_era_seu' | 'livre';
+    resultado?: 'transferido' | 'ja_era_seu' | 'livre' | 'extra_do_direto';
     acordo_id?: string;
     operador_anterior_nome?: string | null;
     operador_novo_nome?: string | null;
@@ -3358,6 +3611,12 @@ export async function tabularDivergente(linhaId: string): Promise<TabularDiverge
   if (!data.acordo_id) return { ok: false, error: 'O servidor não devolveu o acordo.' };
   if (data.resultado === 'ja_era_seu') {
     return { ok: true, resultado: 'ja_era_seu', acordoId: data.acordo_id };
+  }
+  if (data.resultado === 'extra_do_direto') {
+    return {
+      ok: true, resultado: 'extra_do_direto', acordoId: data.acordo_id,
+      donoDoDiretoNome: data.operador_anterior_nome ?? null,
+    };
   }
   return {
     ok: true,

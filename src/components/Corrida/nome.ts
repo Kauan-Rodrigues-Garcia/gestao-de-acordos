@@ -6,8 +6,8 @@ export const NOME_CAVALOS = 'Corrida de Cavalos';
 export const nomeDaCorrida = (categoria: 'bichinhos' | 'cavalos'): string => (categoria === 'cavalos' ? NOME_CAVALOS : NOME_CORRIDA);
 
 export const SONS = {
-  /** «Tokyo Drift - Six Days», escolhida pelo Cleber em 21/10/2026: começa 15 s depois do lobby abrir, do 6º segundo da faixa. */
-  lobby: '/sons/corrida/lobby-six-days.mp3',
+  /** «Tokyo Drift & Temperature (Remix)», do Dj Kantik, escolhida pelo Cleber em 27/10/2026: começa 15 s depois do lobby abrir. */
+  lobby: '/sons/corrida/lobby-tokyo-temperature.mp3',
   /** As músicas da corrida (chiptune feito para a gincana, 21/10/2026): uma por corrida, escolhida pelo mapa. */
   corrida: ['/sons/corrida/corrida-turbo.mp3', '/sons/corrida/corrida-nitro.mp3'],
   /** O Tema da Vitória (o da Fórmula 1), os primeiros 77 s: começa 2 s depois de quem venceu cruzar a linha. */

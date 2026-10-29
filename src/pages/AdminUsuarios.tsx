@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useMemo, lazy, Suspense } from 'react';
+import { useEffect, useState, useRef, useMemo, useDeferredValue, lazy, Suspense } from 'react';
 import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { useSearchParams } from 'react-router-dom';
 import { Users, Plus, RefreshCw, Building2, ArrowRightLeft, X, Trash2, Users2, Loader2, Target, PartyPopper, AlertTriangle, UserX, Search, UsersRound, Bot, Download } from 'lucide-react';
@@ -25,6 +25,10 @@ import { HistoricoTransferencias } from '@/components/admin/HistoricoTransferenc
 import { useClonesCross } from '@/hooks/useClonesCross';
 import { PulsoDeUsuarios, type NumerosDoPulso } from '@/components/admin/usuarios/PulsoDeUsuarios';
 import { FichaPessoa } from '@/components/admin/usuarios/FichaPessoa';
+import { PontosDeAtencao } from '@/components/admin/usuarios/PontosDeAtencao';
+import { DialogAfastamento, type PessoaParaAfastar } from '@/components/admin/usuarios/DialogAfastamento';
+import { afastamentoDaVez, rotuloDoAfastamento } from '@/components/admin/usuarios/afastamento';
+import { buscarAfastamentos, encerrarAfastamento, type Afastamento } from '@/services/afastamentos.service';
 import {
   FILTROS_VAZIOS, PENDENCIAS, infoDosSetores, listaEmCsv, passaNosFiltros, temPendencia,
   type ChavePendencia, type ContextoPendencia, type Filtros, type InfoDeSetor, type MarcaDaPessoa,
@@ -43,7 +47,6 @@ import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { usePresence } from '@/hooks/usePresence';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -104,6 +107,18 @@ function casaComBusca(u: Perfil, termo: string): boolean {
   const alvo = normalizarBusca(`${u.nome} ${u.usuario ?? ''} ${u.email ?? ''}`);
   return alvo.includes(termo);
 }
+
+/**
+ * Manutenção que a tela faz ao abrir — arquivar desligados de meses anteriores
+ * e devolver ao ativo quem passou da data de férias — uma vez por empresa por
+ * dia, na sessão.
+ *
+ * As duas são idempotentes e o `pg_cron` já faz o mesmo de madrugada; a tela só
+ * cobre o dia em que ele não rodou. Antes rodavam em fila, empresa por empresa,
+ * a CADA `fetchDados` — e toda edição chama `fetchDados`: salvar um nome
+ * custava quatro RPCs de escrita antes de a lista voltar.
+ */
+const manutencaoFeita = new Set<string>();
 
 /* `UserForm` mora em `DialogUsuario`, junto da janela que o preenche. */
 
@@ -480,6 +495,12 @@ export default function AdminUsuarios() {
      * TODAS as empresas: os desligados da BookPlay aparecendo no Comercial.
      * Só a leitura mais recente grava o resultado.
      */
+    /*
+     * Sem empresa ainda, quem não é super admin não tem o que listar: a leitura
+     * sairia SEM filtro de empresa (tudo o que a RLS deixa ver) e seria
+     * refeita inteira quando a empresa chegasse.
+     */
+    if (!isSuperAdmin && !empresaAtual?.id) return;
     const minhaLeitura = ++leituraAtual.current;
     setLoading(true);
     /*
@@ -494,26 +515,28 @@ export default function AdminUsuarios() {
     const idsDaLista = cobrancaDaLista.length
       ? cobrancaDaLista.map(e => e.id)
       : [((!isSuperAdmin ? empresaAtual?.id : filtroEmpresa) ?? empresaAtual?.id) || ''].filter(Boolean);
-    // Item 5: arquiva desligados de meses anteriores antes de listar (some da lista).
-    for (const empAlvo of idsDaLista) {
-      const pp = cobrancaDaLista.find(e => e.id === empAlvo)?.slug === 'pagueplay' || (!cobrancaDaLista.length && tenant.isPaguePlay);
-      try { await arquivarDesligadosAnteriores(empAlvo, { isPaguePlay: pp }); } catch { /* best-effort */ }
-    }
     /*
-     * Devolve ao ativo quem passou da data de retorno — o `pg_cron` já faz isso
-     * às 00:15, e esta chamada cobre o dia em que ele não rodou. Barata e
-     * idempotente: o WHERE da função só encontra quem ainda está pendente.
+     * Item 5: arquiva desligados de meses anteriores (somem da lista) e devolve
+     * ao ativo quem passou da data de férias — o `pg_cron` já faz isso às
+     * 00:15, e esta chamada cobre o dia em que ele não rodou. Em paralelo, e
+     * uma vez por empresa por dia (ver `manutencaoFeita`). Antes de listar,
+     * para a lista já vir com o resultado.
      */
-    for (const empAlvo of idsDaLista) {
-      try {
-        const voltaram = await encerrarFeriasVencidas(empAlvo);
-        if (voltaram > 0) {
-          toast.info(voltaram === 1
-            ? '1 pessoa voltou de férias e já aparece no analítico.'
-            : `${voltaram} pessoas voltaram de férias e já aparecem no analítico.`);
-        }
-      } catch { /* best-effort */ }
-    }
+    const hojeManutencao = getTodayISO();
+    const pendentes = idsDaLista.filter(id => !manutencaoFeita.has(`${id}:${hojeManutencao}`));
+    await Promise.all(pendentes.map(async empAlvo => {
+      manutencaoFeita.add(`${empAlvo}:${hojeManutencao}`);
+      const pp = cobrancaDaLista.find(e => e.id === empAlvo)?.slug === 'pagueplay' || (!cobrancaDaLista.length && tenant.isPaguePlay);
+      const [, voltaram] = await Promise.all([
+        arquivarDesligadosAnteriores(empAlvo, { isPaguePlay: pp }).catch(() => 0),
+        encerrarFeriasVencidas(empAlvo).catch(() => 0),
+      ]);
+      if (voltaram > 0) {
+        toast.info(voltaram === 1
+          ? '1 pessoa voltou de férias e já aparece no analítico.'
+          : `${voltaram} pessoas voltaram de férias e já aparecem no analítico.`);
+      }
+    }));
     let usuariosData: Perfil[] = [];
     try {
       let usersQuery = supabase
@@ -608,8 +631,11 @@ export default function AdminUsuarios() {
     setLoading(false);
   }
 
+  // `filtroEmpresa` só muda a consulta do super admin; para os outros ele é
+  // preenchido na abertura e só causaria uma segunda leitura idêntica.
+  const filtroQueMudaALista = isSuperAdmin ? filtroEmpresa : '';
   // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchDados é recriada a cada render; incluí-la causaria refetch em loop.
-  useEffect(() => { fetchDados(); }, [empresaAtual?.id, filtroEmpresa, isSuperAdmin, listaDaCobranca]);
+  useEffect(() => { fetchDados(); }, [empresaAtual?.id, filtroQueMudaALista, isSuperAdmin, listaDaCobranca]);
 
   function abrirCriar() {
     setEditando(null);
@@ -854,32 +880,74 @@ export default function AdminUsuarios() {
   }
 
   /*
-   * Férias precisa da data de retorno ANTES de gravar.
+   * Afastar — férias, atestado, licença e o resto num lugar só (27/10/2026).
    *
-   * Este estado é o pedido em espera: o dropdown não grava mais direto quando a
-   * escolha é "férias" — ele abre a caixa, e só o "Confirmar" dela chama
-   * `definirSituacao`. Sem isso a etiqueta nasceria sem prazo e voltaria a ser
-   * o estado sem fim que ninguém desliga.
+   * O dropdown não grava direto quando a escolha é férias ou afastado: abre
+   * `DialogAfastamento`, que pede motivo e volta, e só o «Confirmar» dela
+   * grava (`fn_usuarios_afastar`). Férias continuam com data obrigatória.
    */
-  const [feriasAlvo, setFeriasAlvo] = useState<Perfil | null>(null);
-  const [feriasAte, setFeriasAte]   = useState('');
-  const [salvandoFerias, setSalvandoFerias] = useState(false);
+  const [afastarAlvo, setAfastarAlvo] = useState<PessoaParaAfastar | null>(null);
+  const [afastarTipo, setAfastarTipo] = useState('atestado');
+  /** Sobe quando algo muda a situação: pontos de atenção e etiquetas releem. */
+  const [versaoAfastamentos, setVersaoAfastamentos] = useState(0);
+  const [afastamentosDaTela, setAfastamentosDaTela] = useState<Map<string, Afastamento>>(new Map());
+  /*
+   * As empresas que a lista lê (a cobrança junta duas). Pela CHAVE, e não pelo
+   * array: `empresasDaLista` é um array novo a cada leitura, e os pontos de
+   * atenção releriam a cada salvar mesmo sem nada mudar.
+   */
+  const chaveEmpresasDaTela = (empresasDaLista.length ? empresasDaLista : [empresaAtual?.id ?? ''])
+    .filter(Boolean).sort().join(',');
+  const empresasDaTela = useMemo(
+    () => (chaveEmpresasDaTela ? chaveEmpresasDaTela.split(',') : []),
+    [chaveEmpresasDaTela],
+  );
 
-  /** Amanhã, em 'yyyy-MM-dd'. Voltar hoje ou ontem não é férias. */
-  const minRetorno = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
-    return d.toISOString().slice(0, 10);
-  }, []);
+  useEffect(() => {
+    if (empresasDaTela.length === 0) { setAfastamentosDaTela(new Map()); return; }
+    let vivo = true;
+    void Promise.all(empresasDaTela.map(id => buscarAfastamentos(id))).then(rs => {
+      if (!vivo) return;
+      const hoje = getTodayISO();
+      const porPessoa = new Map<string, Afastamento[]>();
+      for (const a of rs.flatMap(r => r.dado ?? [])) {
+        porPessoa.set(a.operador_id, [...(porPessoa.get(a.operador_id) ?? []), a]);
+      }
+      const daVez = new Map<string, Afastamento>();
+      for (const [id, lista] of porPessoa) {
+        const a = afastamentoDaVez(lista, hoje);
+        if (a) daVez.set(id, a);
+      }
+      setAfastamentosDaTela(daVez);
+    });
+    return () => { vivo = false; };
+  }, [empresasDaTela, versaoAfastamentos]);
 
-  // Item 5: define a situação (ativo/férias/desligado) com efeitos colaterais.
+  function recarregarSituacoes() {
+    fetchDados();
+    setVersaoAfastamentos(v => v + 1);
+  }
+
+  // Item 5: define a situação (ativo/férias/afastado/desligado) com efeitos colaterais.
   async function handleSituacao(u: Perfil, sit: SituacaoUsuario) {
-    if ((u.situacao ?? 'ativo') === sit) return;
-    if (sit === 'ferias') {
-      // Semeia com o retorno anterior quando existe: renovação de férias é o
-      // caso comum, e o mês costuma ser o mesmo.
-      setFeriasAte(u.ferias_ate && u.ferias_ate >= minRetorno ? u.ferias_ate : '');
-      setFeriasAlvo(u);
+    if ((u.situacao ?? 'ativo') === sit && sit !== 'afastado') return;
+    if (sit === 'ferias' || sit === 'afastado') {
+      setAfastarTipo(sit === 'ferias' ? 'ferias' : 'atestado');
+      setAfastarAlvo({ id: u.id, nome: u.nome, empresaId: u.empresa_id || empresaAtual?.id || '' });
+      return;
+    }
+    /*
+     * Voltar para ativo quem tem afastamento em curso ENCERRA o afastamento —
+     * senão o cron da madrugada poria a pessoa de volta em «afastado». Quem
+     * está de férias pela tela antiga (sem linha em `ausencias`) segue pelo
+     * caminho de sempre.
+     */
+    const vigente = afastamentosDaTela.get(u.id);
+    if (sit === 'ativo' && vigente && vigente.inicio <= getTodayISO()) {
+      const r = await encerrarAfastamento(vigente.id);
+      if (!r.ok) { toast.error(r.erro ?? 'Erro ao encerrar o afastamento'); return; }
+      toast.success(`${u.nome} voltou para ativo. ${vigente.rotulo} encerrado ontem.`);
+      recarregarSituacoes();
       return;
     }
     const { error } = await definirSituacao(u.id, sit, {
@@ -891,28 +959,19 @@ export default function AdminUsuarios() {
       sit === 'ativo' ? 'Usuário marcado como ativo'
       : 'Usuário desligado (sem acesso; acordos liberados para retabulação)',
     );
-    fetchDados();
+    recarregarSituacoes();
   }
 
-  async function confirmarFerias() {
-    if (!feriasAlvo || !feriasAte) return;
-    setSalvandoFerias(true);
-    try {
-      const { error } = await definirSituacao(feriasAlvo.id, 'ferias', {
-        empresaId:   empresaAtual?.id ?? null,
-        isPaguePlay: tenant.isPaguePlay,
-        feriasAte,
-      });
-      if (error) { toast.error(error); return; }
-      const [a, m, d] = feriasAte.split('-');
-      toast.success(
-        `${feriasAlvo.nome} está de férias até ${d}/${m}/${a}. `
-        + 'Volta ao normal sozinho no dia seguinte.',
-      );
-      setFeriasAlvo(null);
-      setFeriasAte('');
-      fetchDados();
-    } finally { setSalvandoFerias(false); }
+  /** O «Desligar» dos pontos de atenção: o mesmo caminho do dropdown. */
+  async function desligarPorId(operadorId: string) {
+    const u = usuarios.find(x => x.id === operadorId);
+    if (u) { await handleSituacao(u, 'desligado'); return; }
+    const { error } = await definirSituacao(operadorId, 'desligado', {
+      empresaId: empresaAtual?.id ?? null, isPaguePlay: tenant.isPaguePlay,
+    });
+    if (error) { toast.error('Erro ao desligar'); return; }
+    toast.success('Usuário desligado (sem acesso; acordos liberados para retabulação)');
+    recarregarSituacoes();
   }
 
   // #6: excluir usuário direto do modal Editar.
@@ -1193,6 +1252,7 @@ export default function AdminUsuarios() {
       situacao: {
         ativo: ativos.length,
         ferias: base.filter(u => u.situacao === 'ferias').length,
+        afastado: base.filter(u => u.situacao === 'afastado').length,
         desligado: base.filter(u => u.situacao === 'desligado').length,
       },
       pendencias,
@@ -1234,7 +1294,12 @@ export default function AdminUsuarios() {
     })
     .sort((a, b) => a[1].nomeSetor.localeCompare(b[1].nomeSetor, 'pt-BR'));
 
-  const buscaNormalizada = normalizarBusca(busca);
+  /*
+   * A busca recorta centenas de linhas. Adiada, a caixa responde na hora e a
+   * lista acompanha logo em seguida, sem travar a digitação.
+   */
+  const buscaAdiada = useDeferredValue(busca);
+  const buscaNormalizada = normalizarBusca(buscaAdiada);
 
   const setoresOrdenados: GrupoDeSetor[] = (() => {
     // O filtro entra DEPOIS do agrupamento, e nao antes: o grupo de um setor
@@ -1299,7 +1364,7 @@ export default function AdminUsuarios() {
       nome: u.nome, login: u.usuario ?? '', email: u.email ?? '',
       cargo: PERFIL_LABELS[u.perfil] ?? u.perfil, setor: nomeSetor(u) === '—' ? '' : nomeSetor(u),
       equipe: nomeEquipe(u) ?? '', marca: marcaDe(u) === 'bp' ? 'BookPlay' : marcaDe(u) === 'pp' ? 'PaguePlay' : '',
-      situacao: (u.situacao ?? 'ativo') === 'ferias' ? 'Férias' : (u.situacao ?? 'ativo') === 'desligado' ? 'Desligado' : 'Ativo',
+      situacao: ({ ferias: 'Férias', afastado: 'Afastado', desligado: 'Desligado' } as Record<string, string>)[u.situacao ?? 'ativo'] ?? 'Ativo',
       aprendiz: u.menor_aprendiz ? 'Sim' : 'Não',
     })));
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
@@ -1398,6 +1463,16 @@ export default function AdminUsuarios() {
         {/* ─── Aba: Usuários ─────────────────────────────────────────── */}
         {podeVerUsuarios && <TabsContent value="usuarios" className="flex-1 overflow-y-auto px-6 pb-6 mt-0">
         <div className="us max-w-[1400px] mx-auto space-y-4 pb-20">
+
+          {/* ── Pontos de atenção: ativo e sem abrir o Gestão há dias ─────
+              Quem não pode mudar situação vê a lista, sem os botões. */}
+          <PontosDeAtencao
+            empresaIds={empresasDaTela}
+            podeAgir={podeGerenciarSituacao}
+            versao={versaoAfastamentos}
+            onAfastar={p => { setAfastarTipo('atestado'); setAfastarAlvo(p); }}
+            onDesligar={desligarPorId}
+          />
 
           {/* ── O pulso: online por marca, situação e o que resolver ──────
               Cada número é um filtro. Contam sobre toda a gente que este
@@ -1529,12 +1604,15 @@ export default function AdminUsuarios() {
             </div>
 
             {/* Recolher some durante a busca: lá os grupos ficam abertos à
-                força, e um botão que não faz nada é pior que um botão a menos. */}
-            {setoresParaFiltro.length > 1 && !busca && agrupar === 'setor' && (
+                força, e um botão que não faz nada é pior que um botão a menos.
+                Recolhe os grupos DA TELA, e não as opções do seletor: o seletor
+                deixa de fora setor de sistema e inativo, e por isso o Núcleo e
+                o «Sem setor» ficavam abertos. */}
+            {setoresOrdenados.length > 1 && !busca && agrupar === 'setor' && (
               <Button
                 variant="ghost" size="sm" className="h-9 text-xs"
                 onClick={() => setSetoresRecolhidos(
-                  atual => atual.size ? new Set() : new Set(setoresParaFiltro.map(([sid]) => sid)),
+                  atual => atual.size ? new Set() : new Set(setoresOrdenados.map(g => g.id)),
                 )}
               >
                 {setoresRecolhidos.size ? 'Expandir todos' : 'Minimizar todos'}
@@ -1604,6 +1682,10 @@ export default function AdminUsuarios() {
               onEditar={abrirEditar}
               onTransferir={u => setTransferindo([u])}
               onSituacao={handleSituacao}
+              rotuloAfastamento={u => {
+                const a = afastamentosDaTela.get(u.id);
+                return a ? rotuloDoAfastamento(a, getTodayISO()) : null;
+              }}
               onEntrarComo={entrarComo}
               onVerFoto={setFotoExpandida}
             />
@@ -1801,6 +1883,15 @@ export default function AdminUsuarios() {
         onEditar={u => { setAbertaId(null); abrirEditar(u); }}
         onTransferir={u => { setAbertaId(null); setTransferindo([u]); }}
         onEntrarComo={u => void entrarComo(u)}
+        afastamentos={pessoaAberta && !(pessoaAberta as PerfilComClone)._cloneDe ? {
+          podeAgir: podeGerenciarSituacao,
+          versao: versaoAfastamentos,
+          onAfastar: u => {
+            setAfastarTipo('atestado');
+            setAfastarAlvo({ id: u.id, nome: u.nome, empresaId: u.empresa_id || empresaAtual?.id || '' });
+          },
+          onMudou: recarregarSituacoes,
+        } : undefined}
       />
 
       {/* #6: diálogo de confirmação de exclusão de usuário */}
@@ -1905,62 +1996,15 @@ export default function AdminUsuarios() {
         }}
       />
 
-      {/* ── Férias: a data de retorno é obrigatória ─────────────────────────
-          A caixa existe para que a etiqueta nunca nasça sem prazo. Antes dela,
-          marcar férias era um estado que só outra pessoa desfazia — e ninguém
-          desfazia, porque a falha é silenciosa: quem não volta simplesmente
-          não aparece no analítico. */}
-      <Dialog
-        open={!!feriasAlvo}
-        onOpenChange={o => { if (!o) { setFeriasAlvo(null); setFeriasAte(''); } }}
-      >
-        <DialogContent className="max-w-md" aria-describedby="dlg-ferias-desc">
-          <DialogHeader>
-            <DialogTitle>Marcar férias</DialogTitle>
-            <DialogDescription id="dlg-ferias-desc">
-              Quando <strong>{feriasAlvo?.nome}</strong> volta das férias?
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-3 py-1">
-            <div className="space-y-1.5">
-              <Label htmlFor="ferias-ate" className="text-xs">Último dia de férias</Label>
-              <Input
-                id="ferias-ate"
-                type="date"
-                value={feriasAte}
-                min={minRetorno}
-                onChange={e => setFeriasAte(e.target.value)}
-                className="h-9"
-              />
-            </div>
-            <p className="rounded-lg bg-muted/50 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
-              A etiqueta de férias vale até esse dia. No dia seguinte a situação
-              volta para <strong>ativo</strong> sozinha e a pessoa reaparece no
-              analítico — ninguém precisa lembrar de desligar.
-              <br />
-              Depois disso, a tela de <strong>Metas</strong> avisa que ela esteve
-              fora, até você configurar a próxima meta.
-            </p>
-          </div>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => { setFeriasAlvo(null); setFeriasAte(''); }}
-            >
-              Cancelar
-            </Button>
-            <Button
-              onClick={() => void confirmarFerias()}
-              disabled={!feriasAte || feriasAte < minRetorno || salvandoFerias}
-            >
-              {salvandoFerias && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
-              Confirmar férias
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* ── Afastar: motivo, volta e «tirar das contas» ──────────────────
+          Férias continuam com data obrigatória; o resto pode ser por tempo
+          indeterminado. Ver DialogAfastamento. */}
+      <DialogAfastamento
+        pessoa={afastarAlvo}
+        tipoInicial={afastarTipo}
+        onFechar={() => setAfastarAlvo(null)}
+        onSalvo={recarregarSituacoes}
+      />
 
       {/* Recorte da foto antes do upload */}
       <ModalRecortarFoto

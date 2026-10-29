@@ -31,7 +31,7 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
     vinculosManuais,
     carregarArquivo, confirmarImportacao, cancelar, definirVinculo,
     precisaEscolherSetor, setorImportacao, setSetorEscolhido, setorProprioAlternativo,
-    remocaoPrevista, sincronizaAusentes,
+    remocaoPrevista, sincronizaAusentes, relatorio,
   } = hook;
 
   const { empresa } = useEmpresa();
@@ -168,7 +168,7 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileSpreadsheet className="w-5 h-5 text-primary" />
-              Preview — {preview.mes ? new Date(preview.mes + '-15').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }) : 'Relatório'}
+              {preview.relatorio === '994' ? 'Preview 994 · Retenção' : 'Preview'} — {preview.mes ? new Date(preview.mes + '-15').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }) : 'Relatório'}
             </DialogTitle>
           </DialogHeader>
 
@@ -219,6 +219,47 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
                   linha{preview.retencaoRemovidas !== 1 ? 's' : ''} da equipe de{' '}
                   <strong>Retenção</strong> {preview.retencaoRemovidas !== 1 ? 'foram removidas' : 'foi removida'}{' '}
                   do arquivo — esse recebimento não conta para o Receptivo.
+                </p>
+              </div>
+            )}
+
+            {/* 994: o mês de cada pessoa da Retenção vira o arquivo inteiro.
+                O total por pessoa é o do ERP — é com ele que a conta fecha. */}
+            {preview.resumo994 && (
+              <div className="rounded-lg border border-sky-200 bg-sky-50 dark:bg-sky-950/20 p-3 space-y-1 text-xs text-sky-700 dark:text-sky-300">
+                <p>
+                  Entram só as linhas da equipe de <strong>Retenção</strong> (Sub Grupo do arquivo). O mês de
+                  cada pessoa abaixo passa a ser o do 994, inteiro:
+                </p>
+                <ul className="pl-3">
+                  {Object.entries(preview.resumo994.totalPorOperador)
+                    .sort((a, b) => b[1].valor - a[1].valor)
+                    .map(([op, s]) => (
+                      <li key={op}>
+                        {op}: <strong>{formatBRL(s.valor)}</strong> ({s.linhas} linha{s.linhas !== 1 ? 's' : ''})
+                      </li>
+                    ))}
+                </ul>
+                {preview.resumo994.naDataDoAcordo.linhas > 0 && (
+                  <p>
+                    <strong>{preview.resumo994.naDataDoAcordo.linhas}</strong> com data de pagamento futura entram
+                    na data do acordo ({formatBRL(preview.resumo994.naDataDoAcordo.valor)}).
+                  </p>
+                )}
+                {preview.resumo994.peloCodigoDoAcordo.linhas > 0 && (
+                  <p>
+                    <strong>{preview.resumo994.peloCodigoDoAcordo.linhas}</strong> sem Nr. Doc. entram com o Cód. Acordo
+                    ({formatBRL(preview.resumo994.peloCodigoDoAcordo.valor)}).
+                  </p>
+                )}
+                {preview.resumo994.outraEquipe.linhas > 0 && (
+                  <p>
+                    <strong>{preview.resumo994.outraEquipe.linhas}</strong> de outras equipes ficam fora
+                    ({formatBRL(preview.resumo994.outraEquipe.valor)}) — elas vêm pelo 58/59.
+                  </p>
+                )}
+                <p className="text-[11px] text-sky-700/80 dark:text-sky-300/80">
+                  Extra que o 59 deu a outro setor conta para a Retenção e uma vez só no total da empresa.
                 </p>
               </div>
             )}
@@ -302,7 +343,7 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
               </div>
             )}
 
-            {(preview.colchaoNaMeta.linhas > 0 || preview.linhasColchao.length > 0) && (
+            {!preview.resumo994 && (preview.colchaoNaMeta.linhas > 0 || preview.linhasColchao.length > 0) && (
               <div className="rounded-lg border border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/20 p-3 space-y-1">
                 {preview.colchaoNaMeta.linhas > 0 && (
                   <p className="text-xs text-amber-800 dark:text-amber-300">
@@ -550,16 +591,28 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
       <DialogContent aria-describedby={undefined} className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Upload className="w-5 h-5 text-primary" /> Importar relatório 58 — pagamento mensal
+            <Upload className="w-5 h-5 text-primary" />
+            {relatorio === '994'
+              ? 'Importar relatório 994 — Retenção do Jornada'
+              : 'Importar relatório 58 — pagamento mensal'}
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          <p className="text-sm text-muted-foreground">
-            Selecione o relatório 58 exportado do ERP (Cobradora, Equipe, Cliente, TpDoc, DtPgto, Recebido).
-            Os dados serão mesclados com os existentes — registros duplicados são ignorados.
-            O relatório 945 (recebimento diário da regra Cofen) não entra aqui: ele vai no recorte Dia.
-          </p>
+          {relatorio === '994' ? (
+            <p className="text-sm text-muted-foreground">
+              Selecione o relatório 994 exportado do ERP (Cód. Venda, Nr. Doc., Operador, Data Pagamento,
+              Valor Pagto, Setor Original, Sub Grupo). Entra tudo o que é da equipe de Retenção, e o mês
+              de cada pessoa dela passa a ser o do 994; o resto do Jornada continua como está.
+            </p>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Selecione o relatório 58 exportado do ERP (Cobradora, Equipe, Cliente, TpDoc, DtPgto, Recebido).
+              Os dados serão mesclados com os existentes — registros duplicados são ignorados.
+              O relatório 945 (recebimento diário da regra Cofen) não entra aqui: ele vai no recorte Dia,
+              e o 994 da Retenção tem botão próprio.
+            </p>
+          )}
 
           <label
             className={`

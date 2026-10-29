@@ -128,3 +128,40 @@ export async function editarMensagem(id: string, texto: string | null): Promise<
   if (error) throw error;
   if ((data ?? []).length === 0) throw new CampanhaIndisponivel();
 }
+
+// ── Editar todas (20261028160000) ───────────────────────────────────────────
+
+/** O modelo da parte do operador, para reescrever todas as pendentes. */
+export interface MeuModelo {
+  /** O modelo do líder. NULL nas campanhas sem modelo guardado. */
+  modelo_lider: string | null;
+  /** O que a caixa abre: o modelo dele, se ainda vale, ou o do líder. */
+  modelo: string | null;
+  personalizado: boolean;
+  /** Relatório sem colunas de valor (245): o modelo não pode citar valores. */
+  sem_valores: boolean;
+  /** As variáveis de um cliente da fila, para a prévia. */
+  exemplo: Record<string, string> | null;
+  pendentes: number;
+  /** Pendentes sem variáveis guardadas: não mudam. */
+  pendentes_sem_variaveis: number;
+}
+
+function indisponivel(error: { message?: string } | null): boolean {
+  return !!error?.message?.includes('CF_INDISPONIVEL');
+}
+
+export async function meuModelo(envioId: string): Promise<MeuModelo> {
+  const { data, error } = await db.rpc('fn_campanha_facil_meu_modelo', { p_envio: envioId });
+  if (indisponivel(error)) throw new CampanhaIndisponivel();
+  if (error) throw error;
+  return data as MeuModelo;
+}
+
+/** Refaz todas as pendentes com `modelo`; `null` volta ao do líder. Devolve quantas mudaram. */
+export async function reescreverMinhas(envioId: string, modelo: string | null): Promise<number> {
+  const { data, error } = await db.rpc('fn_campanha_facil_reescrever_minhas', { p_envio: envioId, p_modelo: modelo });
+  if (indisponivel(error)) throw new CampanhaIndisponivel();
+  if (error) throw error;
+  return Number(data) || 0;
+}

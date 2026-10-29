@@ -135,8 +135,15 @@ export async function rpc<T>(nome: string, args?: Record<string, unknown>): Prom
 }
 
 /** Uma mensagem de erro do banco legível para gente («NAO_DA: …» → «…»). */
+/** Erros que chegam a quem corre: o texto do banco fala em «gravada», e só o super admin pode ver essa palavra. */
+const TEXTO_PARA_QUEM_CORRE: Record<string, string> = {
+  ESCOLHA_FECHADA: 'a escolha do bichinho já fechou; ficou o que estava',
+};
+
 export function mensagemDoErro(e: unknown): string {
   const m = e instanceof Error ? e.message : String(e);
+  const codigo = /^([A-Z_]+): /.exec(m)?.[1];
+  if (codigo && TEXTO_PARA_QUEM_CORRE[codigo]) return TEXTO_PARA_QUEM_CORRE[codigo];
   const i = m.indexOf(': ');
   return /^[A-Z_]+: /.test(m) ? m.slice(i + 2) : m;
 }

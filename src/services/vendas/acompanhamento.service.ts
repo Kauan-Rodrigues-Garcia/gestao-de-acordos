@@ -19,6 +19,7 @@
  */
 import { rpcSemTipo, tabelaSemTipo } from '@/lib/supabaseSemTipo';
 import { mensagemDoErro, pareceNaoInstalado } from './erroDoBanco';
+import { semDataDeVolta } from '@/lib/ausencias';
 
 const MIGRATION = '20260915220000_vendas_fase8_feedback_e_ausencias.sql';
 
@@ -98,7 +99,8 @@ export async function buscarPessoas(empresaId: string): Promise<PessoasDoAlcance
     feedbacks:       numOuNulo(l.feedbacks),
     ultimo_feedback: textoOuNulo(l.ultimo_feedback),
     ausente_hoje:    textoOuNulo(l.ausente_hoje),
-    ausente_ate:     textoOuNulo(l.ausente_ate),
+    // Afastamento sem data de volta (aba Usuários) vem como 9999-12-31: sem «até».
+    ausente_ate:     semDataDeVolta(textoOuNulo(l.ausente_ate)) ? null : textoOuNulo(l.ausente_ate),
   }));
 
   return { pessoas, disponivel: true, erro: null };

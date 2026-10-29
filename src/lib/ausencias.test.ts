@@ -8,19 +8,23 @@ import {
 
 const MIGRATIONS = path.resolve(__dirname, '../../supabase/migrations');
 
-function migracaoDaFase8(): string {
-  const arquivo = fs.readdirSync(MIGRATIONS).find(f => f.endsWith('_vendas_fase8_feedback_e_ausencias.sql'));
-  expect(arquivo, 'migration da Fase 8 não encontrada').toBeTruthy();
+function migracao(sufixo: string): string {
+  const arquivo = fs.readdirSync(MIGRATIONS).find(f => f.endsWith(sufixo));
+  expect(arquivo, `migration ${sufixo} não encontrada`).toBeTruthy();
   return fs.readFileSync(path.join(MIGRATIONS, arquivo as string), 'utf8');
+}
+
+/** O bloco `INSERT INTO public.ausencias_tipos ... ON CONFLICT` de uma migration. */
+function insertDeTipos(sql: string): string {
+  const ini = sql.indexOf('INSERT INTO public.ausencias_tipos');
+  return sql.slice(ini, sql.indexOf('ON CONFLICT (tipo) DO NOTHING', ini));
 }
 
 describe('a lista de tipos é a mesma do banco', () => {
   it('cada tipo, rótulo e `abate_meta` do INSERT está aqui, na mesma ordem', () => {
-    const sql = migracaoDaFase8();
-    const bloco = sql.slice(
-      sql.indexOf('INSERT INTO public.ausencias_tipos'),
-      sql.indexOf('ON CONFLICT (tipo) DO NOTHING'),
-    );
+    // A Fase 8 do Comercial criou a lista; os afastamentos de Usuários somaram dois.
+    const bloco = insertDeTipos(migracao('_vendas_fase8_feedback_e_ausencias.sql'))
+      + insertDeTipos(migracao('_afastamentos_e_atencao_de_uso.sql'));
     const doBanco = [...bloco.matchAll(/\('([a-z_]+)',\s*'([^']+)',\s*(true|false),\s*(\d+)\)/g)]
       .map(m => ({ tipo: m[1], rotulo: m[2], abateMeta: m[3] === 'true', ordem: Number(m[4]) }))
       .sort((a, b) => a.ordem - b.ordem)

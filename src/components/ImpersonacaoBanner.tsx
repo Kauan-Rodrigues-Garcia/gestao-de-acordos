@@ -14,6 +14,7 @@ import {
   getImpersonacaoAtiva,
   sairImpersonacao,
   IMPERSONACAO_EVENT,
+  vigiarImpersonacaoEntreAbas,
   type ImpersonacaoAtiva,
 } from '@/services/impersonacao.service';
 
@@ -25,10 +26,11 @@ export function ImpersonacaoBanner() {
     const sync = () => setAtiva(getImpersonacaoAtiva());
     sync();
     window.addEventListener(IMPERSONACAO_EVENT, sync);
-    window.addEventListener('storage', sync);
+    // A faixa monta em toda tela: é ela que faz as outras abas acompanharem.
+    const pararDeVigiar = vigiarImpersonacaoEntreAbas();
     return () => {
       window.removeEventListener(IMPERSONACAO_EVENT, sync);
-      window.removeEventListener('storage', sync);
+      pararDeVigiar();
     };
   }, []);
 

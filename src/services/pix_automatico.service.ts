@@ -9,8 +9,10 @@
  *   • líder+ aprova (trava o % do setor em pct_comissao) ou desaprova
  *   • desaprovado não conta em nenhum total; o dono pode excluir
  *   • % por setor em pix_automatico_config (padrão 0,25)
+ *   • bônus por setor e período em pix_automatico_bonus, carimbado na linha
+ *     (bonus_pct) pelo banco
  *
- * Comissão = valor × pct ÷ 100 (pct 0.25 = 0,25%).
+ * Comissão = valor × (pct + bônus) ÷ 100 (pct 0.25 = 0,25%).
  */
 
 import { supabase } from '@/lib/supabase';
@@ -132,6 +134,12 @@ export interface PixAutoAcordo {
    * depois da migration.
    */
   duplicidade_autorizada?: boolean;
+  /**
+   * Bônus do período (pontos percentuais somados ao % do setor), carimbado
+   * pelo gatilho `trg_pix_bonus_carimbo`. Nulo = sem bônus. Opcional porque a
+   * coluna só existe depois da migration 20261027150000.
+   */
+  bonus_pct?: number | null;
   criado_em: string;
   atualizado_em: string;
 }
@@ -201,12 +209,28 @@ export function normalizarNr(nr: string): string {
   return nr.trim().toLowerCase();
 }
 
-/** Comissão de uma linha: aprovado usa o % travado; pendente usa o % do setor. */
-export function comissaoDe(a: Pick<PixAutoAcordo, 'valor' | 'status' | 'pct_comissao' | 'setor_id'>, pctPorSetor: Record<string, number>): number {
-  const pct = a.status === 'aprovado' && a.pct_comissao != null
+/**
+ * O percentual de uma linha: aprovado usa o % travado; pendente usa o % do
+ * setor. O bônus do período soma por cima nos dois casos — ele não entra em
+ * `pct_comissao`, então o acordo aprovado antes de o bônus ser lançado também
+ * o recebe.
+ */
+export function pctDaLinha(
+  a: Pick<PixAutoAcordo, 'status' | 'pct_comissao' | 'setor_id' | 'bonus_pct'>,
+  pctPorSetor: Record<string, number>,
+): number {
+  const base = a.status === 'aprovado' && a.pct_comissao != null
     ? Number(a.pct_comissao)
     : (a.setor_id != null && pctPorSetor[a.setor_id] != null ? pctPorSetor[a.setor_id] : PIX_AUTO_PCT_PADRAO);
-  return Math.round(Number(a.valor) * pct) / 100; // valor × pct ÷ 100, 2 casas
+  return base + (Number(a.bonus_pct) || 0);
+}
+
+/** Comissão de uma linha: valor × percentual da linha (com bônus) ÷ 100. */
+export function comissaoDe(
+  a: Pick<PixAutoAcordo, 'valor' | 'status' | 'pct_comissao' | 'setor_id' | 'bonus_pct'>,
+  pctPorSetor: Record<string, number>,
+): number {
+  return Math.round(Number(a.valor) * pctDaLinha(a, pctPorSetor)) / 100; // 2 casas
 }
 
 /**
@@ -222,7 +246,7 @@ export function comissaoDe(a: Pick<PixAutoAcordo, 'valor' | 'status' | 'pct_comi
  * Quem paga usa esta; quem mede desempenho usa `comissaoDe`.
  */
 export function valorAPagarDe(
-  a: Pick<PixAutoAcordo, 'valor' | 'status' | 'pct_comissao' | 'setor_id' | 'ajuste_valor'>,
+  a: Pick<PixAutoAcordo, 'valor' | 'status' | 'pct_comissao' | 'setor_id' | 'ajuste_valor' | 'bonus_pct'>,
   pctPorSetor: Record<string, number>,
 ): number {
   const bruto = comissaoDe(a, pctPorSetor) + (Number(a.ajuste_valor) || 0);
@@ -1437,6 +1461,90 @@ export async function upsertConfigPix(p: {
   const { error } = await supabase
     .from('pix_automatico_config')
     .upsert(payload as never, { onConflict: 'empresa_id,setor_id' });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+// ── Bônus por setor e período ──────────────────────────────────────────────
+
+/**
+ * Um bônus de comissão (migration 20261027150000).
+ *
+ * `pct` são pontos percentuais SOMADOS ao % do setor: 0,25 + 0,02 = 0,27. O
+ * banco carimba o bônus em cada acordo cuja data cai no período e cujo setor
+ * participa; a tela só lê o carimbo (`bonus_pct`).
+ */
+export interface PixAutoBonus {
+  id: string;
+  empresa_id: string;
+  pct: number;
+  setor_ids: string[];
+  /** `yyyy-MM-dd`, inclusive. */
+  inicio: string;
+  /** `yyyy-MM-dd`, inclusive. Nulo = sem data para acabar. */
+  fim: string | null;
+  ativo: boolean;
+  descricao: string | null;
+  criado_por: string | null;
+  criado_por_nome: string | null;
+  criado_em: string;
+  atualizado_em: string;
+}
+
+/** O bônus está valendo no dia (`yyyy-MM-dd`)? */
+export function bonusVigenteNoDia(b: Pick<PixAutoBonus, 'ativo' | 'inicio' | 'fim'>, dia: string): boolean {
+  return b.ativo && dia >= b.inicio && (b.fim == null || dia <= b.fim);
+}
+
+/**
+ * Bônus da empresa. Sem a tabela (migration pendente) devolve lista vazia: a
+ * aba segue igual a antes, só sem bônus.
+ */
+export async function fetchBonusPix(empresaId: string): Promise<PixAutoBonus[]> {
+  const { data, error } = await tabelaSemTipo<PixAutoBonus>('pix_automatico_bonus')
+    .select('*')
+    .eq('empresa_id', empresaId)
+    .order('inicio', { ascending: false });
+  if (error) {
+    console.warn('[pix_automatico.service] fetchBonusPix:', error.message);
+    return [];
+  }
+  return ((data as PixAutoBonus[] | null) ?? []).map(b => ({ ...b, pct: Number(b.pct) }));
+}
+
+export async function salvarBonusPix(p: {
+  id?: string;
+  empresaId: string;
+  pct: number;
+  setorIds: string[];
+  inicio: string;
+  fim: string | null;
+  ativo: boolean;
+  descricao: string | null;
+  autorId: string;
+  autorNome: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const payload = {
+    empresa_id: p.empresaId,
+    pct:        p.pct,
+    setor_ids:  p.setorIds,
+    inicio:     p.inicio,
+    fim:        p.fim,
+    ativo:      p.ativo,
+    descricao:  p.descricao,
+  };
+  // A tabela só entra no `database.types` gerado depois da migration.
+  const { error } = p.id
+    ? await supabase.from('pix_automatico_bonus' as never).update(payload as never).eq('id', p.id)
+    : await supabase.from('pix_automatico_bonus' as never).insert({
+        ...payload, criado_por: p.autorId, criado_por_nome: p.autorNome,
+      } as never);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+export async function excluirBonusPix(id: string): Promise<{ ok: boolean; error?: string }> {
+  const { error } = await supabase.from('pix_automatico_bonus' as never).delete().eq('id', id);
   if (error) return { ok: false, error: error.message };
   return { ok: true };
 }

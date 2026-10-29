@@ -24,6 +24,8 @@ import { supabase } from '@/lib/supabase';
 import { rpcSemTipo } from '@/lib/supabaseSemTipo';
 import { invalidarCache, lerComCache } from '@/lib/cacheCurto';
 import { recusadoPeloTamanho, tetoDeUpload } from '@/lib/tetoDeUpload';
+import { comprimirImagem } from '@/lib/comprimirImagem';
+import { getImpersonacaoAtiva } from '@/services/impersonacao.service';
 
 // ── Cliente sem tipo ─────────────────────────────────────────────────────────
 
@@ -870,6 +872,8 @@ export async function enviarMensagem(params: {
 
 /** Confirma que este cliente recebeu as mensagens da conversa. */
 export async function marcarEntregue(conversaId: string, meuId: string): Promise<void> {
+  // «Entrar como» não recebe nem lê pela pessoa: o recado segue novo para ela.
+  if (getImpersonacaoAtiva()) return;
   const { error } = await db('chat_participantes')
     .update({ ultima_entrega_em: new Date().toISOString() })
     .eq('conversa_id', conversaId)
@@ -879,6 +883,7 @@ export async function marcarEntregue(conversaId: string, meuId: string): Promise
 
 /** Marca a conversa como recebida e lida até agora. */
 export async function marcarLido(conversaId: string, meuId: string): Promise<void> {
+  if (getImpersonacaoAtiva()) return;
   const agora = new Date().toISOString();
   const { error } = await db('chat_participantes')
     .update({ ultima_entrega_em: agora, ultima_leitura_em: agora })
@@ -979,10 +984,12 @@ export const LIMITE_ANEXO = 10 * 1024 * 1024;
  * expurgo de CPF que a mesma migration instala.
  */
 export async function subirAnexo(
-  arquivo: File, pasta: string,
+  original: File, pasta: string,
   /** Cargo de quem envia: o super admin não tem teto (`lib/tetoDeUpload.ts`). */
   cargo?: string | null,
 ): Promise<{ anexo: AnexoChat | null; erro: string | null }> {
+  // A foto encolhe antes do teto: a de 12 MB do celular passa a caber.
+  const arquivo = await comprimirImagem(original);
   if (arquivo.size > tetoDeUpload(LIMITE_ANEXO, cargo)) {
     return { anexo: null, erro: `«${arquivo.name}» passa de 10 MB.` };
   }
@@ -995,6 +1002,8 @@ export async function subirAnexo(
 
   const { error } = await supabase.storage.from('chat').upload(caminho, arquivo, {
     contentType: arquivo.type || 'application/octet-stream',
+    // O caminho leva um UUID e o arquivo nunca muda: o navegador pode guardar.
+    cacheControl: '31536000',
     upsert: false,
   });
   if (error) {
@@ -1029,9 +1038,39 @@ const VALIDADE_URL = 3600;
  * Guarda com cinco minutos de folga antes do vencimento real: uma URL que
  * expira enquanto o vídeo toca quebra no meio, e renovar cedo custa nada.
  */
-const assinaturas = new Map<string, { url: string; ate: number }>();
+const CHAVE_ASSINATURAS = 'chat:assinaturas';
+const MAXIMO_GUARDADAS = 400;
+const assinaturas = lerAssinaturasGuardadas();
 const assinaturasEmCurso = new Map<string, Promise<string | null>>();
 const loteAssinaturas = new Map<string, (url: string | null) => void>();
+
+/*
+ * As assinaturas sobrevivem ao F5 (28/10/2026), na sessionStorage da aba.
+ *
+ * A URL assinada muda a cada pedido, e o cache do navegador é por URL: depois
+ * de recarregar, a mesma foto vinha com assinatura nova e era baixada de novo
+ * inteira. Reaproveitando a assinatura que ainda vale, a foto sai do cache do
+ * navegador na hora. Guarda só o caminho e a URL; a aba que fecha leva tudo.
+ */
+function lerAssinaturasGuardadas(): Map<string, { url: string; ate: number }> {
+  const mapa = new Map<string, { url: string; ate: number }>();
+  try {
+    const cru = typeof sessionStorage === 'undefined' ? null : sessionStorage.getItem(CHAVE_ASSINATURAS);
+    const agora = Date.now();
+    for (const [caminho, url, ate] of (cru ? JSON.parse(cru) : []) as [string, string, number][]) {
+      if (typeof url === 'string' && ate > agora) mapa.set(caminho, { url, ate });
+    }
+  } catch { /* sem armazenamento: só o cache da memória */ }
+  return mapa;
+}
+
+function guardarAssinaturas(): void {
+  try {
+    const agora = Date.now();
+    const vivas = [...assinaturas].filter(([, a]) => a.ate > agora).slice(-MAXIMO_GUARDADAS);
+    sessionStorage.setItem(CHAVE_ASSINATURAS, JSON.stringify(vivas.map(([c, a]) => [c, a.url, a.ate])));
+  } catch { /* cheio ou bloqueado: segue sem guardar */ }
+}
 
 export function urlDoAnexoEmCache(caminho: string): string | null {
   if (caminho.startsWith('blob:')) return caminho;
@@ -1069,6 +1108,7 @@ async function assinarLote(): Promise<void> {
       if (url) assinaturas.set(caminho, { url, ate: Date.now() + (VALIDADE_URL - 300) * 1000 });
       resolver(url);
     }
+    guardarAssinaturas();
   } catch {
     for (const resolver of lote.values()) resolver(null);
   }

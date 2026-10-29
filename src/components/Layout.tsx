@@ -69,7 +69,7 @@ import { TemaHalloweenContext, cenaDaRota, temFundo } from '@/components/Hallowe
 import { useModoLeve } from '@/lib/modoLeve';
 import { useHalloweenParado, useVigiaDoHalloween } from '@/components/Halloween/aguenta';
 import { EVENTO_ABRIR_BOAS_VINDAS, pediuBoasVindasNaUrl, temaEsperaACarta, useHalloween } from '@/components/Halloween/preferencia';
-import { getImpersonacaoAtiva } from '@/services/impersonacao.service';
+import { getImpersonacaoAtiva, sairImpersonacao } from '@/services/impersonacao.service';
 import { MarcaHalloween } from '@/components/Halloween/MarcaHalloween';
 import { CrachaPendente } from '@/components/CrachaPendente';
 import { useNotificacoes } from '@/providers/NotificacoesProvider';
@@ -498,6 +498,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const nomeSetor = (perfil?.setores as { nome?: string } | undefined)?.nome || null;
 
   async function handleSignOut() {
+    // No «Entrar como», sair é voltar à conta do super admin (ver `signOut`).
+    if (getImpersonacaoAtiva()) { await sairImpersonacao(); return; }
     await signOut();
     navigate(ROUTE_PATHS.LOGIN);
   }
@@ -520,6 +522,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
    */
   const [abrindoLab, setAbrindoLab] = useState(false);
   const easterEgg = useEasterEggCriadores(() => setAbrindoLab(true));
+  // Fora do ar para todos desde 28/10/2026 (Cleber): só o super admin abre o
+  // Lab. Para os outros o logo volta a ser só o logo.
+  const labLiberado = perfil?.perfil === 'super_admin';
 
   useEffect(() => {
     if (!abrindoLab) return;
@@ -561,16 +566,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             percebe diferença nenhuma (ver `useEasterEggCriadores`). */}
         <button
           type="button"
-          onClick={easterEgg.aoClicar}
+          onClick={labLiberado ? easterEgg.aoClicar : undefined}
           title={branding.appName}
           aria-label={branding.appName}
           className={cn(
             'w-8 h-8 flex-shrink-0 flex items-center justify-center rounded transition-transform',
-            easterEgg.descoberto && 'creators-logo-marca',
+            labLiberado && easterEgg.descoberto && 'creators-logo-marca',
             // Reação progressiva: nada, nada, leve, falha curta, interferência.
-            easterEgg.estagio === 2 && 'scale-105',
-            easterEgg.estagio === 3 && 'creators-logo-eco',
-            easterEgg.estagio === 4 && 'creators-logo-forte',
+            labLiberado && easterEgg.estagio === 2 && 'scale-105',
+            labLiberado && easterEgg.estagio === 3 && 'creators-logo-eco',
+            labLiberado && easterEgg.estagio === 4 && 'creators-logo-forte',
           )}
         >
           {marcaPaguePlay

@@ -21,7 +21,7 @@
  * reimportar o que não é dele.
  */
 import { describe, expect, it } from 'vitest';
-import { idsAusentesDoRelatorioMensal } from './analitico.service';
+import { idsAusentesDoRelatorioMensal, semOQueOutroRelatorioTrouxe } from './analitico.service';
 
 const linha = (
   id: string,
@@ -166,5 +166,39 @@ describe('sincronização do relatório mensal completo', () => {
       const existentes = [linha('antiga', 'ANA', '1')];
       expect(idsAusentesDoRelatorioMensal(existentes, [])).toEqual(['antiga']);
     });
+  });
+
+  /*
+   * O Jornada tem dois relatórios no mesmo setor/mês (migration 20261027210000):
+   * o 58 dos operadores e o 994 da Retenção. Se um apagasse o que não veio nele,
+   * importar o 994 levaria o 58 inteiro, e o 58 seguinte levaria a Retenção.
+   */
+  describe('58 e 994 no mesmo setor', () => {
+    const existentes = [
+      linha('do-58', 'ANA', '1', '2026-10-01', 'boleto_pix', '2026-10-01', 'relatorio_58'),
+      linha('do-994', 'MONICA', '2', '2026-10-01', 'boleto_pix', '2026-10-01', 'relatorio_994'),
+    ];
+
+    it('o 58 não apaga a Retenção', () => {
+      expect(idsAusentesDoRelatorioMensal(existentes, [])).toEqual(['do-58']);
+    });
+
+    it('o 994 só apaga o que é dele', () => {
+      expect(idsAusentesDoRelatorioMensal(existentes, [], 'relatorio_994')).toEqual(['do-994']);
+    });
+  });
+});
+
+describe('um relatório confere o outro', () => {
+  it('tira do lote o NR+dia que o outro relatório já gravou', () => {
+    const lote = [
+      { codigo: '10', data_pagamento: '2026-10-05' },
+      { codigo: '10', data_pagamento: '2026-10-06' },
+      { codigo: '11', data_pagamento: '2026-10-05' },
+    ];
+    expect(semOQueOutroRelatorioTrouxe(lote, new Set(['10::2026-10-05']))).toEqual([
+      { codigo: '10', data_pagamento: '2026-10-06' },
+      { codigo: '11', data_pagamento: '2026-10-05' },
+    ]);
   });
 });

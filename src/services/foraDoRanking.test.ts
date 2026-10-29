@@ -58,6 +58,11 @@ describe('buscarForaDoRanking', () => {
     expect([...await buscarForaDoRanking('emp', '2026-10')].sort()).toEqual(['ferias', 'lider']);
   });
 
+  it('afastado fora das contas sai como férias (20261028100000)', async () => {
+    ctl.perfis.push({ id: 'afastado', situacao: 'afastado', perfil: 'operador' });
+    expect([...await buscarForaDoRanking('emp', '2026-10')].sort()).toEqual(['afastado', 'ferias', 'lider']);
+  });
+
   it('mês fechado: o cargo do retrato manda, não o de hoje', async () => {
     // Em setembro era operador; virou líder em outubro — setembro não muda.
     ctl.retrato = [

@@ -76,7 +76,7 @@ export default function EscolhaBichinho({ corrida, usuario, escolhaAtual, onDepo
           <button type="button" onClick={onDepois} className="text-[13px] text-[#8f9cbd] underline-offset-2 hover:underline">
             {trocando ? 'Fechar' : 'Escolher depois'}
           </button>
-          <small className="text-[12px] text-[#8f9cbd]">Dá para trocar até a corrida ser gravada. Se não escolher, corre um dos três.</small>
+          <small className="text-[12px] text-[#8f9cbd]">Dá para trocar até a largada. Se não escolher, corre um dos três.</small>
         </div>
       </div>
     </div>

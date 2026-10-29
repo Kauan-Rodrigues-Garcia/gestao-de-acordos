@@ -3,8 +3,9 @@
  *
  * O líder libera a campanha na Campanha Fácil; a parte de cada operador chega
  * aqui, uma mensagem por contato. O operador envia direto pelo WhatsApp (Web ou
- * o app do computador), pode editar a mensagem de um contato só, e fica
- * registrado o que já saiu e o que não deu para enviar.
+ * o app do computador), pode editar a mensagem de um contato só ou todas as
+ * pendentes de uma vez (28/10/2026, `EditarTodas.tsx`), e fica registrado o
+ * que já saiu e o que não deu para enviar.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -29,6 +30,7 @@ import { concluida, useCampanhasWhatsapp } from './useCampanhasWhatsapp';
 import { LIMITE_OBSERVACAO } from './campanhasWhatsapp.service';
 import { DialogoMesmaAba, DialogoTrocarApp } from './AjudaWhatsapp';
 import { HistoricoOperador } from './HistoricoOperador';
+import { DialogoEditarTodas } from './EditarTodas';
 import {
   filtrar, proximoPendente, telefoneLegivel, textoDoContato,
   type Contato, type Filtro, type ModoAbrir,
@@ -58,6 +60,7 @@ export default function CampanhasWhatsapp() {
   const [busca, setBusca] = useState('');
   const [limite, setLimite] = useState(POR_PAGINA);
   const [editando, setEditando] = useState<Contato | null>(null);
+  const [editandoTodas, setEditandoTodas] = useState(false);
   const [ajuda, setAjuda] = useState<'mesma-aba' | 'trocar-app' | null>(null);
   const [aba, setAba] = useState<'enviar' | 'historico'>('enviar');
   const lotesAtuais = useMemo(() => new Set(w.campanhas.map((c) => c.lote_id)), [w.campanhas]);
@@ -207,6 +210,13 @@ export default function CampanhasWhatsapp() {
                         {w.selecionada.repasse && ' · repasse de quem faltou'}
                       </p>
                     </div>
+                    <div className="flex flex-wrap gap-2">
+                    {contagem.pendentes > 0 && (
+                      <Button variant="outline" className="gap-2" onClick={() => setEditandoTodas(true)}
+                              title="Mudar o texto de todas as mensagens pendentes de uma vez">
+                        <Pencil className="h-4 w-4" /> Editar todas
+                      </Button>
+                    )}
                     <Button
                       className="gap-2 bg-emerald-600 text-white hover:bg-emerald-700"
                       disabled={!proximo}
@@ -216,6 +226,7 @@ export default function CampanhasWhatsapp() {
                       <Send className="h-4 w-4" />
                       {proximo ? 'Enviar a próxima' : contagem.pendentes > 0 ? 'Pendentes sem número' : 'Tudo enviado'}
                     </Button>
+                    </div>
                   </div>
 
                   <div className="space-y-1.5">
@@ -306,6 +317,13 @@ export default function CampanhasWhatsapp() {
           onFechar={() => setEditando(null)}
           onSalvar={async (texto) => { await w.salvarMensagem(editando, texto); setEditando(null); }}
           onCopiou={() => w.marcarEnviada(editando)}
+        />
+      )}
+      {editandoTodas && w.selecionada && (
+        <DialogoEditarTodas
+          envioId={w.selecionada.id}
+          onFechar={() => setEditandoTodas(false)}
+          onSalvar={w.reescreverTodas}
         />
       )}
       {ajuda === 'mesma-aba' && <DialogoMesmaAba instalado={w.mesmaAba} onFechar={() => setAjuda(null)} />}

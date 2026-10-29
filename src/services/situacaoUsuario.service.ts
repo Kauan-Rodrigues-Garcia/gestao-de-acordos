@@ -1,7 +1,11 @@
 /**
  * situacaoUsuario.service.ts — situação operacional do usuário (item 5).
  *
- * ativo | ferias | desligado.
+ * ativo | ferias | afastado | desligado.
+ *
+ * AFASTADO (20261028100000) é afastamento «fora das contas» em curso, lançado
+ * pela aba Usuários (`afastamentos.service`). Para ranking e quartil vale o
+ * mesmo que férias — a regra mora em `situacaoForaDasContas`.
  *
  * FÉRIAS some de ranking e quartil (filtro na aplicação); o recebimento não é
  * filtrado, então os totais de setor/equipe seguem inteiros.
@@ -12,6 +16,7 @@
  */
 import { supabase } from '@/lib/supabase';
 import type { SituacaoUsuario } from '@/lib/supabase';
+import { situacaoForaDasContas } from '@/lib/situacao';
 import { ehMesAtual } from '@/lib/mesReferencia';
 import { contaNoRecebimento } from '@/lib/index';
 import { tabelaSemTipo, rpcSemTipo } from '@/lib/supabaseSemTipo';
@@ -223,14 +228,14 @@ export async function buscarSituacaoOperadores(
 /**
  * IDs que devem sumir de ranking e quartil.
  *
- * So FERIAS. Desligado ficava aqui e sumia no ato — mas quem foi desligado
+ * So FERIAS e AFASTADO. Desligado ficava aqui e sumia no ato — mas quem foi desligado
  * neste mes trabalhou nele, e o numero e da equipe ate a virada. A partir do
  * dia 1 a pessoa e ARQUIVADA e nem chega ate aqui: some antes, na consulta de
  * operadores. Ver a migration 20260831160000.
  */
 export function idsOcultosRankingQuartil(mapa: Record<string, SituacaoUsuario>): Set<string> {
   const s = new Set<string>();
-  for (const [id, sit] of Object.entries(mapa)) if (sit === 'ferias') s.add(id);
+  for (const [id, sit] of Object.entries(mapa)) if (situacaoForaDasContas(sit)) s.add(id);
   return s;
 }
 
@@ -259,7 +264,7 @@ export function cargoForaDoRanking(cargo: string | null | undefined): boolean {
 export async function buscarForaDoRanking(empresaId: string, mes?: string | null): Promise<Set<string>> {
   const fora = new Set<string>();
   const marcar = (id: string, situacao: string | null, cargo: string | null) => {
-    if (situacao === 'ferias' || cargoForaDoRanking(cargo)) fora.add(id);
+    if (situacaoForaDasContas(situacao) || cargoForaDoRanking(cargo)) fora.add(id);
   };
 
   if (mes && !ehMesAtual(mes)) {

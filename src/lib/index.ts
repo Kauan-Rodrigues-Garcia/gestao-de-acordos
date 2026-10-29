@@ -3,6 +3,12 @@ import { CARGOS_DERIVADOS } from './cargos';
 import type { PerfilUsuario } from './supabase';
 import { varianteDoSlug } from './variante';
 import { regraDaSessao } from './regraDoSetor';
+/**
+ * Quem monta painel de TV (Modo TV 2): líder, elite e acima — Cleber, 27/10/2026.
+ * O super admin entra sempre. Mesma régua de `fn_tv_alvo_no_meu_alcance`.
+ */
+export const CARGOS_MODO_TV: readonly string[] = ['lider', 'elite', 'gerencia', 'diretoria', 'administrador'];
+
 export const ROUTE_PATHS = {
   LOGIN: '/login',
   REGISTRO: '/registro',
@@ -22,6 +28,14 @@ export const ROUTE_PATHS = {
   PAINEL_LIDER: '/lider',
   PAINEL_LIDER_OPERADOR: '/lider/operador/:id',
   PAINEL_DIRETORIA: '/diretoria',
+  /** Modo TV 2 (27/10/2026): a montagem do painel. Atrás do login. */
+  MODO_TV: '/modo-tv',
+  /**
+   * A TV na parede. SEM login, de propósito: o que abre o painel é o token do
+   * pareamento, guardado só no navegador da TV (`fn_tv_ver`). O endereço sozinho
+   * não mostra nada além de um código.
+   */
+  TV_PALCO: '/tv',
   ADMIN_USUARIOS: '/admin/usuarios',
   ADMIN_SETORES: '/admin/setores',
   ADMIN_EQUIPES: '/admin/equipes',

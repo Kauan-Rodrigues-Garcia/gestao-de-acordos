@@ -44,6 +44,8 @@ export interface LinhaAnaliticoDia {
   /** Contribuição Receptivo do 59: conta no setor, não na empresa. */
   contribuicao?: boolean;
   contribuicao_de_setor_id?: string | null;
+  /** Espelho do extra da Retenção (994): conta no setor, não na empresa. */
+  espelho_extra?: boolean;
 }
 
 export interface AcordoDoDia {
@@ -113,6 +115,8 @@ const IDS_POR_PEDIDO = 100;
 
 const COLUNAS_DIA =
   'data_pagamento, valor_recebido, total_ho, operador_id, setor_id, procedencia, contribuicao_de_setor_id';
+/** Com o espelho do 994 (20261028150000). Sem a migration, cai em `COLUNAS_DIA`. */
+const COLUNAS_DIA_ESPELHO = `${COLUNAS_DIA}, espelho_extra`;
 
 /**
  * Lê o analítico de um intervalo, paginando até o fim.
@@ -134,37 +138,48 @@ export async function buscarAnaliticoPeriodo(params: {
   const { empresaId, de, ate } = params;
   const recorte = recorteDoPeriodo(params.escopo, params.operadorId);
 
-  const base = () => supabase
+  if (recorte.tipo === 'pessoas' && recorte.operadores.length === 0) return { linhas: [], erro: null };
+
+  const base = (colunas: string) => supabase
     .from('analitico_recebimentos')
-    .select(COLUNAS_DIA)
+    .select(colunas)
     .eq('empresa_id', empresaId)
     .gte('data_pagamento', de)
     .lte('data_pagamento', ate);
 
   type Crua = LinhaAnaliticoDia & { procedencia?: string };
-  // Ordem total pela PK: sem ela as páginas se sobrepõem e o total muda a cada
-  // abertura do painel. Contrato de `paginarParalelo`.
-  const ler = (filtrar: (q: ReturnType<typeof base>) => ReturnType<typeof base>) =>
-    paginarParalelo<Crua>(async (deLinha, ateLinha) => {
-      const r = await filtrar(base()).order('id', { ascending: true }).range(deLinha, ateLinha);
-      return { data: (r.data as unknown as Crua[]) ?? [], error: r.error?.message ?? null };
-    });
+  type Leitura = { data: Crua[]; error: string | null };
 
-  let leituras: Array<{ data: Crua[]; error: string | null }>;
-  if (recorte.tipo === 'operador') {
-    leituras = [await ler(q => q.eq('operador_id', recorte.operadorId))];
-  } else if (recorte.tipo === 'pessoas') {
-    if (recorte.operadores.length === 0) return { linhas: [], erro: null };
-    const fatias: string[][] = [];
-    for (let i = 0; i < recorte.operadores.length; i += IDS_POR_PEDIDO) {
-      fatias.push(recorte.operadores.slice(i, i + IDS_POR_PEDIDO));
+  const lerCom = async (colunas: string): Promise<Leitura[]> => {
+    // Ordem total pela PK: sem ela as páginas se sobrepõem e o total muda a cada
+    // abertura do painel. Contrato de `paginarParalelo`.
+    const ler = (filtrar: (q: ReturnType<typeof base>) => ReturnType<typeof base>) =>
+      paginarParalelo<Crua>(async (deLinha, ateLinha) => {
+        const r = await filtrar(base(colunas)).order('id', { ascending: true }).range(deLinha, ateLinha);
+        return { data: (r.data as unknown as Crua[]) ?? [], error: r.error?.message ?? null };
+      });
+
+    if (recorte.tipo === 'operador') {
+      return [await ler(q => q.eq('operador_id', recorte.operadorId))];
     }
-    leituras = await Promise.all(fatias.map(ids => ler(q => q.in('operador_id', ids))));
-  } else if (recorte.tipo === 'empresa') {
-    // `neq` sozinho descartaria a linha com procedência nula.
-    leituras = [await ler(q => q.or('procedencia.is.null,procedencia.neq.contribuicao_59'))];
-  } else {
-    leituras = [await ler(q => q)];
+    if (recorte.tipo === 'pessoas') {
+      const fatias: string[][] = [];
+      for (let i = 0; i < recorte.operadores.length; i += IDS_POR_PEDIDO) {
+        fatias.push(recorte.operadores.slice(i, i + IDS_POR_PEDIDO));
+      }
+      return Promise.all(fatias.map(ids => ler(q => q.in('operador_id', ids))));
+    }
+    if (recorte.tipo === 'empresa') {
+      // `neq` sozinho descartaria a linha com procedência nula. O espelho do
+      // 994 sai em `linhaNoEscopo`.
+      return [await ler(q => q.or('procedencia.is.null,procedencia.neq.contribuicao_59'))];
+    }
+    return [await ler(q => q)];
+  };
+
+  let leituras = await lerCom(COLUNAS_DIA_ESPELHO);
+  if (leituras.some(l => l.error && /espelho_extra/.test(l.error))) {
+    leituras = await lerCom(COLUNAS_DIA);
   }
 
   const comErro = leituras.find(l => l.error);

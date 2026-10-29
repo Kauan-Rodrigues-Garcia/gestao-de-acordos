@@ -33,6 +33,8 @@ let MOINHO = { x: 280, y: LONGE_ }, CORVO = { x: 314, y: LONGE_ };
 let TRECHOS = [], PANTANO = [], BRUXAS = [], FANTASMAS = [], RETRATOS = [], SAIDA = { x: 280, y: 0 };
 /* peças novas: zonas de força (gravidade zero, correnteza, bolhas, gêiser) e a chuva de lava */
 let ZONAS = [], GEISERES = [], CHUVA = null, MODO_PORTAO = 'contagem', MODO_CALD = 'contagem';
+/* peças da corrida especial: canhões que lançam a alma longe e teletransportes (ver MAPA_ESPECIAL) */
+let CANHOES = [], PORTAIS = [], SAIDAS = {};
 const RITMO_PORTAO = 5.2, ABERTO_PORTAO = 1.6, RITMO_CALD = 3.4;
 const segs = [], pegs = [], spins = [], maos = [], teias = [], morcegosPousados = [];
 let MAPA = null, SK = null;
@@ -230,15 +232,61 @@ const BLOCOS = {
     for (let k = 0; k < 7; k++) for (const x of (k % 2 ? [40, 190, 340, 500] : [115, 265, 415])) peg(x, y0 + 120 + k * 95, 8, 'osso');
     return y0 + 380;
   } },
+  /* ---- as peças da corrida especial (27/10/2026) ---- */
+  // canhões: quem cai na boca é lançado por cima do campo de pinos e cai lá embaixo; quem passa entre eles desce pinos
+  canhoes: { len: 1100, monta(y0) {
+    trecho(y0, 'canhoes');
+    for (let k = 0; k < 3; k++) for (let x = k % 2 ? 46 : 0; x <= W; x += 92) peg(x, y0 + 30 + k * 42, 8, 'osso');
+    const yc = y0 + 210;
+    for (const x of [95, 280, 465]) { CANHOES.push({ x, y: yc, alvoY: y0 + 1010 }); peg(x, yc + 12, 15, 'canhao'); }
+    for (let k = 0, y = yc + 100; y <= y0 + 870; y += 62, k++) {
+      const bumper = k % 4 === 3;
+      for (let x = k % 2 ? 35 : 0; x <= W; x += 70) peg(x, y, bumper ? 12 : 8, bumper ? 'cristal' : 'lapide', bumper ? { bumper: true, kick: 320 } : undefined);
+    }
+    seg(0, y0 + 905, 140, y0 + 950, 'pedra'); seg(W, y0 + 905, W - 140, y0 + 950, 'pedra');
+    return y0 + 400;
+  } },
+  // luvas de boxe: saem da parede de tempo em tempo e empurram a alma para o outro lado
+  luvas: { len: 860, monta(y0) {
+    trecho(y0, 'luvas');
+    for (let k = 0; k < 5; k++) {
+      const y = y0 + 90 + 155 * k, lado = k % 2 ? 1 : -1;
+      spins.push({ tipo: 'luva', lado, cx: lado < 0 ? 0 : W, cy: y, L: 22, A: 280, per: 2.6, fase: k * 0.83 });
+      for (const x of (k % 2 ? [40, 130] : [W - 40, W - 130])) peg(x, y + 4, 9, 'lapide');
+      for (const x of (k % 2 ? [90, 250, 410] : [150, 310, 470])) peg(x, y + 78, 8, 'osso');
+    }
+    return y0 + 400;
+  } },
+  // mesa de pinball: funis que levam a dois flipers que batem sozinhos, com bumpers redondos em cima
+  flipers: { len: 900, monta(y0) {
+    trecho(y0, 'flipers');
+    for (let k = 0; k < 3; k++) {
+      const y = y0 + 230 + k * 280, fase = k * 0.55;
+      seg(0, y - 130, 176, y - 6, 'ferro'); seg(W, y - 130, W - 176, y - 6, 'ferro');
+      spins.push({ tipo: 'flipper', cx: 184, cy: y, L: 74, rest: 0.42, dir: 1, per: 1.7, fase });
+      spins.push({ tipo: 'flipper', cx: W - 184, cy: y, L: 74, rest: 0.42, dir: -1, per: 1.7, fase: fase + 0.12 });
+      for (const [x, dy] of [[110, -185], [280, -200], [450, -185]]) peg(x, y + dy, 14, 'abobora', { bumper: true, kick: 380 });
+    }
+    return y0 + 300;
+  } },
+  // teletransporte: quem entra num portal sai no atalho, no meio do trecho ou lá atrás (no máximo 3 vezes, 1 volta)
+  portais: { len: 1000, monta(y0) {
+    trecho(y0, 'portais');
+    for (const [x, y] of [[110, 230], [280, 300], [450, 230], [170, 660], [390, 660]]) PORTAIS.push({ x, y: y0 + y, r: 20 });
+    SAIDAS = { volta: { x: 280, y: y0 + 70, r: 20 }, meio: { x: 280, y: y0 + 470, r: 20 }, atalho: { x: 280, y: y0 + 935, r: 20 } };
+    for (let k = 0, y = y0 + 120; y <= y0 + 880; y += 66, k++) for (let x = k % 2 ? 40 : 0; x <= W; x += 80) peg(x, y, 8, 'lapide');
+    return y0 + 500;
+  } },
 };
 
 function distSeg(x, y, s) { const dx = s.x2 - s.x1, dy = s.y2 - s.y1; let u = ((x - s.x1) * dx + (y - s.y1) * dy) / (dx * dx + dy * dy); u = clamp(u, 0, 1); return Math.hypot(x - (s.x1 + u * dx), y - (s.y1 + u * dy)); }
 let PECAS = [];
 function carregaMapa(id) {
-  MAPA = MAPAS.find(m => m.id === id) || MAPAS[0]; SK = SKINS[MAPA.id];
+  MAPA = mapaPorId(id) || MAPAS[0]; SK = SKINS[MAPA.id];
   for (const a of [segs, pegs, spins, maos, teias, morcegosPousados]) a.length = 0;
   DIV_Y0 = DIV_Y1 = ALC_Y = CALD_Y = LONGE_; FANT_Y = [LONGE_, LONGE_]; TEIA_Y = [LONGE_, LONGE_]; MOINHO = { x: 280, y: LONGE_ }; CORVO = { x: 314, y: LONGE_ };
   TRECHOS = [{ y: -200, tipo: 'largada' }]; PANTANO = []; BRUXAS = []; FANTASMAS = []; RETRATOS = []; ZONAS = []; GEISERES = []; CHUVA = null;
+  CANHOES = []; PORTAIS = []; SAIDAS = {};
   MODO_PORTAO = (MAPA.modos && MAPA.modos.portao) || 'contagem'; MODO_CALD = (MAPA.modos && MAPA.modos.cald) || 'contagem';
   seg(0, PORTAO_Y, W, PORTAO_Y, 'portao', 4);
   let y = 270; PECAS = [];
@@ -253,9 +301,12 @@ function carregaMapa(id) {
     for (const s of segs) { if (s.tipo === 'portao') continue; const gap = distSeg(p.x, p.y, s) - p.r - s.e, encosta = s.tipo === 'parede' || s.tipo === 'muro'; if (encosta ? (gap > 0 && gap < 2 * R + 2) : gap < 2 * R + 2) { fora = true; break; } }
     for (const s of spins) {
       if (s.tipo === 'barra') { if (Math.abs(p.y - s.cy) < p.r + 2 * R + 10 && Math.abs(p.x - s.cx) < s.A + s.L + p.r + 2 * R) fora = true; }
+      else if (s.tipo === 'luva') { if (Math.abs(p.y - s.cy) < s.L + p.r + 2 * R + 6 && (s.lado < 0 ? p.x < s.A + 60 : p.x > W - s.A - 60)) fora = true; }
       else if (s.tipo !== 'gangorra' && Math.hypot(p.x - s.cx, p.y - s.cy) < s.L + p.r + 2 * R + 4) fora = true;
     }
     for (const g of GEISERES) if (Math.abs(p.x - g.x) < 26 + p.r + R && p.y > g.y - g.alt - 10 && p.y < g.y + 20) fora = true;
+    if (p.tipo !== 'canhao') for (const cn of CANHOES) if (Math.hypot(p.x - cn.x, p.y - cn.y) < 46 + p.r + 2 * R) fora = true;
+    for (const pt of [...PORTAIS, ...Object.values(SAIDAS)]) if (Math.hypot(p.x - pt.x, p.y - pt.y) < pt.r + p.r + 2 * R + 4) fora = true;
     if (fora) pegs.splice(i, 1);
   }
   for (const s of segs) if (s.tipo === 'galho') { for (const f of [0.35, 0.7]) morcegosPousados.push({ x: s.x1 + (s.x2 - s.x1) * f, y: s.y1 + (s.y2 - s.y1) * f + 9 }); }
@@ -272,11 +323,36 @@ function anguloSpin(s, T, fz) {
   if (s.tipo === 'gangorra') { const ph = T * s.f + fz.gangorra; return [s.amp * Math.sin(ph), s.amp * s.f * Math.cos(ph)]; }
   return [fz.spins[s.grupo] + s.off + s.w * T, s.w];
 }
+/* o soco (luva) e a batida (fliper) ao longo do ciclo: [quanto saiu, de 0 a 1; a velocidade disso, por segundo] */
+function socoPerfil(ph) {
+  if (ph < 1.3) return [0, 0];
+  if (ph < 1.48) return [(ph - 1.3) / 0.18, 1 / 0.18];
+  if (ph < 1.9) return [1, 0];
+  if (ph < 2.6) return [1 - (ph - 1.9) / 0.7, -1 / 0.7];
+  return [0, 0];
+}
+function flipPerfil(ph) {
+  if (ph < 0.09) return [ph / 0.09, 1 / 0.09];
+  if (ph < 0.35) return [1, 0];
+  if (ph < 0.6) return [1 - (ph - 0.35) / 0.25, -1 / 0.25];
+  return [0, 0];
+}
 /* onde está cada peça que se mexe: as mesmas contas na gravação e no desenho */
 function geoSpin(s, T, fz) {
   const ex = fz.extra || 0;
   if (s.tipo === 'barra') { const ph = T * s.f + s.fase + ex, x = s.cx + s.A * Math.sin(ph); return { x1: x - s.L, y1: s.cy, x2: x + s.L, y2: s.cy, w: 0, cx: x, cy: s.cy, tvx: s.A * s.f * Math.cos(ph), tvy: 0, a: 0 }; }
   if (s.tipo === 'pendulo') { const ph = T * s.f + s.fase + ex, a = s.A * Math.sin(ph), w = s.A * s.f * Math.cos(ph); return { x1: s.cx, y1: s.cy, x2: s.cx + Math.sin(a) * s.L, y2: s.cy + Math.cos(a) * s.L, w: -w, cx: s.cx, cy: s.cy, tvx: 0, tvy: 0, a }; }
+  // luva: o punho é um segmento em pé que sai da parede (`a` é quanto ele saiu, de 0 a 1). Parada, fica
+  // dentro da parede: rente a ela, espremia contra a parede quem caía ali e o jogava para fora da pista.
+  if (s.tipo === 'luva') {
+    const ph = ((T + s.fase + ex * 0.3) % s.per + s.per) % s.per, [e, ve] = socoPerfil(ph), hx = s.lado < 0 ? -12 + e * s.A : W + 12 - e * s.A;
+    return { x1: hx, y1: s.cy - s.L, x2: hx, y2: s.cy + s.L, w: 0, cx: hx, cy: s.cy, tvx: -s.lado * ve * s.A, tvy: 0, a: e };
+  }
+  // fliper: gira no pino, da posição de descanso (ponta para baixo) até a de batida (ponta para cima)
+  if (s.tipo === 'flipper') {
+    const ph = ((T + s.fase + ex * 0.2) % s.per + s.per) % s.per, [e, ve] = flipPerfil(ph), a = s.rest * (1 - 2 * e);
+    return { x1: s.cx, y1: s.cy, x2: s.cx + Math.cos(a) * s.L * s.dir, y2: s.cy + Math.sin(a) * s.L, w: -2 * s.rest * ve * s.dir, cx: s.cx, cy: s.cy, tvx: 0, tvy: 0, a: e };
+  }
   const [a, w] = anguloSpin(s, T, fz), dx = Math.cos(a) * s.L, dy = Math.sin(a) * s.L;
   return { x1: s.cx - dx, y1: s.cy - dy, x2: s.cx + dx, y2: s.cy + dy, w, cx: s.cx, cy: s.cy, tvx: 0, tvy: 0, a };
 }
@@ -312,7 +388,7 @@ function criarGravacao(seed, pessoas) {
   const rec = {
     seed, mapa: MAPA.id, fps: FPS, n, dono: bolas.map(b => b.dono), est: bolas.map(b => b.est), nomes: pessoas.map(p => p.nome), setores: pessoas.map(p => p.setor || ''), voce: pessoas.findIndex(p => p.voce), portaoN: PN, caldN: CN, portaoModo: MODO_PORTAO, caldModo: MODO_CALD,
     fz, raios, X: [], Y: [], F: [], frames: 0, tFim: new Float32Array(n), ordem: new Int16Array(n), tAbre: 3, vencedor: -1, tVenc: 0, foto: null,
-    pocoes: [], gosmas: [], eventos: [], narr: [], alcapao: [], caldeirao: [], corvoT: Infinity, morcegoT: morcegosPousados.map(() => Infinity), dur: 0,
+    pocoes: [], gosmas: [], eventos: [], narr: [], alcapao: [], caldeirao: [], voos: [], tiros: [], corvoT: Infinity, morcegoT: morcegosPousados.map(() => Infinity), dur: 0,
     metricas: { maxQueda: 0, ondeQueda: 0, presos: 0, quedas: [], presosPos: [], lideres: [], ordens: [] },
   };
   let t = 0, passoN = 0, estado = 'contagem', ordem = 0, tFim = 0, acabou = false;
@@ -328,7 +404,7 @@ function criarGravacao(seed, pessoas) {
   const podeNarrar = () => { if (t - ultEvento < 1.6) return false; ultEvento = t; return true; };
   const narrar = txt => rec.narr.push({ t, txt });
   const ev = (tipo, x, y, o) => rec.eventos.push(Object.assign({ t, tipo, x, y }, o || {}));
-  const ativa = b => !b.preso && b.sumido <= t;
+  const ativa = b => !b.preso && b.sumido <= t && !b.voo;
   const toca = b => { if (estado === 'corrida' && b.y - b.toqueY > 150) rec.metricas.quedas.push([Math.round(b.x), Math.round(b.toqueY), Math.round(b.y)]); b.toqueY = b.y; };
   const ladoNome = x => SK.lados[x < DIV_X ? 0 : 1];
 
@@ -404,8 +480,15 @@ function criarGravacao(seed, pessoas) {
       }
       spins.forEach((s, i) => {
         const g = geos[i]; if (b.y < Math.min(g.y1, g.y2) - 20 || b.y > Math.max(g.y1, g.y2) + 20) return;
-        const imp = bateSeg(b, g.x1, g.y1, g.x2, g.y2, s.tipo === 'moinho' || s.tipo === 'barra' || s.tipo === 'pendulo' ? 5 : 3, g.w, g.cx, g.cy, g.tvx, g.tvy);
+        const esp = s.tipo === 'luva' ? 9 : s.tipo === 'flipper' ? 6 : s.tipo === 'moinho' || s.tipo === 'barra' || s.tipo === 'pendulo' ? 5 : 3;
+        // o punho só bate para a frente: voltando, ele empurrava contra a parede quem estava em cima do braço
+        if (s.tipo === 'luva' && (b.x - g.cx) * -s.lado < 0) { bateSeg(b, s.lado < 0 ? 0 : W, s.cy, g.cx, s.cy, 4, 0, 0, 0); return; }
+        const imp = bateSeg(b, g.x1, g.y1, g.x2, g.y2, esp, g.w, g.cx, g.cy, g.tvx, g.tvy);
         if (imp > 200 && (s.tipo === 'foice' || s.tipo === 'pendulo')) { b.tonta = t + 1.1; ev('faisca', b.x, b.y); }
+        else if (s.tipo === 'luva') {
+          bateSeg(b, s.lado < 0 ? 0 : W, s.cy, g.cx, s.cy, 4, 0, 0, 0); // o braço (a mola) também é chão
+          if (imp > 300 && g.tvx * -s.lado > 0) { b.tonta = t + 0.9; ev('soco', b.x, b.y); if (destaque(b.dono) && podeNarrar()) narrar(TX.soco(alma(b.dono))); }
+        } else if (s.tipo === 'flipper' && imp > 250) { ev('flip', b.x, b.y); if (destaque(b.dono) && rng() < 0.3 && podeNarrar()) narrar(TX.flip(alma(b.dono))); }
       });
     }
     const ord = bolas.filter(ativa).sort((a, b) => a.y - b.y);
@@ -529,6 +612,24 @@ function criarGravacao(seed, pessoas) {
         rec.pocoes.push(reg); pocoes.push({ x: reg.x0, y: reg.y0, vx: reg.vx, vy: reg.vy, tipo: reg.tipo, vida: 0, reg });
       }
     }
+    // canhões: atira um por vez, quem está na fila; o voo é uma parábola feita na conta (passa por cima de tudo)
+    CANHOES.forEach((cn, ci) => {
+      if (!cn.fila || !cn.fila.length || t < cn.tiro) return;
+      const i = cn.fila.shift(), b = bolas[i];
+      const tx = clamp(cn.x + (rng() - .5) * 380, 50, W - 50), dur = 0.9 + rng() * 0.35, ang = clamp((tx - cn.x) / 420, -0.8, 0.8);
+      b.voo = { t0: t, t1: t + dur, x0: cn.x + Math.sin(ang) * 34, y0: cn.y - 34, x1: tx, y1: cn.alvoY, alto: 230 + rng() * 120 };
+      b.sumido = t; b.x = b.voo.x0; b.y = b.voo.y0; b.vx = b.vy = 0;
+      rec.voos.push([i, t, t + dur]); rec.tiros.push([ci, t, ang]);
+      ev('canhao', b.x, b.y);
+      if (destaque(b.dono) && podeNarrar()) narrar(TX.canhao(alma(b.dono)));
+      cn.tiro = t + 0.5;
+    });
+    for (const b of bolas) {
+      if (!b.voo) continue;
+      const v = b.voo, u = clamp((t - v.t0) / (v.t1 - v.t0), 0, 1);
+      b.x = v.x0 + (v.x1 - v.x0) * u; b.y = v.y0 + (v.y1 - v.y0) * u - v.alto * 4 * u * (1 - u); b.toqueY = b.y;
+      if (u >= 1) { b.voo = null; b.vx = (v.x1 - v.x0) / (v.t1 - v.t0) * 0.25; b.vy = 260; b.imune = t + 1; ev('pouso', b.x, b.y); }
+    }
     for (let i = 0; i < SUB; i++) subpasso(t - STEP + (i + 1) * DT);
 
     for (const p of pocoes) {
@@ -555,6 +656,32 @@ function criarGravacao(seed, pessoas) {
         b.sumido = Infinity; b.x = W / 2 + (rng() - .5) * 116; b.y = CALD_Y + 40; b.vx = b.vy = 0;
         cald.push(b);
         if (caldDesde < 0) { caldDesde = t; if (podeNarrar()) narrar(MODO_CALD === 'ritmo' && TX.caldRitmo ? TX.caldRitmo(cap(alma(b.dono))) : TX.caldPrimeiro(cap(alma(b.dono)), CN)); }
+        continue;
+      }
+      // canhão: quem cai na boca entra na fila e some lá dentro até a vez dele
+      let carregou = false;
+      for (const cn of CANHOES) {
+        const dx = b.x - cn.x, dy = b.y - (cn.y - 16);
+        if (dx * dx + dy * dy >= 22 * 22 || b.vy < -60) continue;
+        const i = bolas.indexOf(b);
+        cn.fila = cn.fila || []; if (!cn.fila.length) cn.tiro = Math.max(cn.tiro || 0, t + 0.6);
+        cn.fila.push(i); b.sumido = Infinity; b.x = cn.x; b.y = cn.y; b.vx = b.vy = 0;
+        ev('carrega', cn.x, cn.y - 22, { cor: b.est.cor }); carregou = true; break;
+      }
+      if (carregou) continue;
+      // teletransporte: some 0,4 s e aparece no atalho, no meio ou lá atrás
+      if ((b.portN || 0) < 3 && !(b.portaT > t)) for (const p of PORTAIS) {
+        const dx = b.x - p.x, dy = b.y - p.y; if (dx * dx + dy * dy >= (p.r + 2) ** 2) continue;
+        b.portN = (b.portN || 0) + 1;
+        const r = rng(); let tipo = r < 0.45 ? 'atalho' : r < 0.8 ? 'meio' : 'volta';
+        if (tipo === 'volta' && b.voltas >= 1) tipo = 'meio';
+        if (tipo === 'volta') b.voltas++;
+        const s = SAIDAS[tipo];
+        ev('portal', p.x, p.y, { cor: b.est.cor });
+        b.sumido = t + 0.4; b.x = s.x + (rng() - .5) * 20; b.y = s.y; b.vx = (rng() - .5) * 160; b.vy = 80; b.portaT = t + 1.5; b.toqueY = b.y;
+        rec.eventos.push({ t: t + 0.4, tipo: 'portalSai', x: s.x, y: s.y, cor: b.est.cor });
+        if (destaque(b.dono) && podeNarrar()) narrar(tipo === 'atalho' ? TX.atalho(cap(alma(b.dono))) : tipo === 'volta' ? TX.volta(cap(alma(b.dono))) : TX.portal(cap(alma(b.dono))));
+        break;
       }
     }
     const erupcao = MODO_CALD === 'ritmo' && faseCald(t, fz) < faseCald(t - STEP, fz);
@@ -602,7 +729,7 @@ function criarGravacao(seed, pessoas) {
     if (passoN % 2 === 0) {
       for (const b of bolas) {
         rec.X.push(Math.round(b.x * 4)); rec.Y.push(Math.round(b.y * 2));
-        rec.F.push((b.preso ? 1 : 0) | (b.sumido > t ? 2 : 0) | (b.tonta > t ? 4 : 0) | (b.grudada > t ? 8 : 0) | (b.medo > t ? 16 : 0) | (b.parado > 0.7 ? 32 : 0));
+        rec.F.push((b.preso ? 1 : 0) | (b.sumido > t ? 2 : 0) | (b.tonta > t ? 4 : 0) | (b.grudada > t ? 8 : 0) | (b.medo > t ? 16 : 0) | (b.parado > 0.7 ? 32 : 0) | (b.voo ? 64 : 0));
       }
       rec.frames++;
       if (rec.corvoT === Infinity && bolas.some(b => Math.abs(b.x - CORVO.x) < 90 && Math.abs(b.y - CORVO.y) < 70)) rec.corvoT = t;
@@ -651,6 +778,143 @@ function rankingV() {
 const trechoDe = y => { let k = 0; TRECHOS.forEach((p, i) => { if (y >= p.y) k = i; }); return k; };
 const ondeDe = o => { const k = trechoDe(o.y); if (TRECHOS[k].tipo === 'caminhos') return SK.ladosCurtos[o.x < DIV_X ? 0 : 1]; return TRECHOS[k].curto; };
 
+/* ================= os lances (27/10/2026): o locutor, a reta final e o chip de quem torce ================= */
+/* Tirados da gravação na hora de reproduzir (valem também para as corridas já gravadas): a posição de cada
+   um a cada 0,1 s, a entrada do líder na reta final e o cabeça a cabeça dos dois da frente. É conta só
+   sobre `rec`, então toda tela vê o mesmo lance no mesmo T. A posição do chip só muda quando fica 0,5 s
+   parada: no meio do bolo ela trocava a cada quadro e o chip piscava sem parar. */
+const LANCE_DT = 0.1, LANCE_ESTAVEL = 5, COLADO_PX = 60, RETA_S = 6;
+let LANCES = null, palpiteId = null;
+function montarLances(r) {
+  const n = r.n, nd = r.nomes.length, passo = Math.max(1, Math.round(r.fps * LANCE_DT)), ks = Math.floor((r.frames - 1) / passo) + 1;
+  // a reta final são os últimos 6 s antes do vencedor cruzar (a última peça sozinha durava de 1 a 5 s)
+  const retaT = r.vencedor >= 0 ? Math.max(3.5, r.tVenc - RETA_S) : Infinity;
+  const bruto = new Int16Array(ks * nd), pos = new Int16Array(ks * nd), colado = new Uint8Array(ks), melhor = new Float64Array(nd);
+  for (let s = 0; s < ks; s++) {
+    const k = s * passo, t = k / r.fps; melhor.fill(-Infinity);
+    for (let i = 0; i < n; i++) {
+      const fim = r.tFim[i] > 0 && t >= r.tFim[i] ? r.ordem[i] : 0, p = fim ? 1e6 - fim : r.Y[k * n + i] / 2, d = r.dono[i];
+      if (p > melhor[d]) melhor[d] = p;
+    }
+    const ordem = Array.from({ length: nd }, (_, d) => d).sort((a, b) => melhor[b] - melhor[a]);
+    ordem.forEach((d, i) => { bruto[s * nd + d] = i + 1; });
+    const l1 = melhor[ordem[0]], l2 = nd > 1 ? melhor[ordem[1]] : -Infinity;
+    colado[s] = t >= retaT && l1 < 1e5 && l1 - l2 < COLADO_PX ? 1 : 0;
+  }
+  for (let d = 0; d < nd; d++) {
+    let atual = bruto[d], cand = atual, desde = 0;
+    for (let s = 0; s < ks; s++) {
+      const b = bruto[s * nd + d];
+      if (b !== cand) { cand = b; desde = s; }
+      if (cand !== atual && s - desde + 1 >= LANCE_ESTAVEL) atual = cand;
+      pos[s * nd + d] = atual;
+    }
+  }
+  // «cabeça a cabeça»: os dois da frente colados por 0,3 s na reta final; no máximo 2, com 5 s entre eles
+  const cabeca = [];
+  for (let s = 2; s < ks; s++) {
+    const t = (s - 2) * passo / r.fps;
+    if (colado[s] && colado[s - 1] && colado[s - 2] && !(s > 2 && colado[s - 3]) && t > retaT + 1.8 && (!cabeca.length || t - cabeca[cabeca.length - 1] > 5) && cabeca.length < 2) cabeca.push(t);
+  }
+  const est = Array.from({ length: nd }, (_, d) => r.est[r.dono.indexOf(d)]);
+  return { dt: passo / r.fps, ks, nd, pos, colado, retaT, cabeca, est, foto: !!(r.foto && r.foto.d2 >= 0 && r.foto.t2 - r.foto.t1 < 0.3) };
+}
+const amostraL = t => clamp(Math.round(t / LANCES.dt), 0, LANCES.ks - 1);
+const posEm = (d, t) => LANCES.pos[amostraL(t) * LANCES.nd + d];
+const coladoEm = t => !!LANCES.colado[amostraL(t)];
+const fonteHud = (px, n) => px ? `${n * 0.5}px "Press Start 2P", monospace` : `${n}px ${SK.fonte}`;
+function cabeTexto(c, txt, maxW) {
+  if (c.measureText(txt).width <= maxW) return txt;
+  while (txt.length > 1 && c.measureText(txt + '…').width > maxW) txt = txt.slice(0, -1);
+  return txt + '…';
+}
+/** A faixa grande do meio da tela («RETA FINAL!»): entra crescendo, fica 1,4 s e some. */
+function faixaLance(c, px, txt, t0, tam, cor) {
+  const u = T - t0; if (u < 0 || u > 1.8) return;
+  const a = Math.min(1, u * 6, (1.8 - u) * 3), s = u < 0.2 ? 1.6 - 0.6 * (1 - Math.pow(1 - u / 0.2, 3)) : 1, y = ch * 0.34;
+  c.globalAlpha = a;
+  c.fillStyle = 'rgba(16,12,21,.62)'; c.fillRect(0, y - tam * 0.8, cw, tam * 1.6);
+  c.fillStyle = cor; c.fillRect(0, y - tam * 0.8, cw, 3); c.fillRect(0, y + tam * 0.8 - 3, cw, 3);
+  c.save(); c.translate(cw / 2, y); c.scale(s, s);
+  c.textAlign = 'center'; c.textBaseline = 'middle'; c.font = fonteHud(px, Math.min(tam, cw / (txt.length * 0.62)));
+  c.fillStyle = cor; c.fillText(txt, 0, 2);
+  c.restore(); c.globalAlpha = 1; c.textAlign = 'left'; c.textBaseline = 'alphabetic';
+}
+/** O chip do canto: a posição de quem você acompanha, com a seta do que mudou nos últimos 3 s. */
+function chipLance(c, px, hud, y, rotulo, d) {
+  const p = posEm(d, T), mud = posEm(d, T - 3) - p, pisca = posEm(d, T - 0.5) !== p, est = LANCES.est[d];
+  c.font = `600 ${px ? 8 : 11}px ${hud}`;
+  const rot = cabeTexto(c, rotulo, Math.max(80, cw * 0.32)), wr = c.measureText(rot).width;
+  c.font = `700 ${px ? 11 : 16}px ${hud}`;
+  const tp = `${p}º`, wp = c.measureText(tp).width;
+  c.font = `500 ${px ? 7 : 10}px ${hud}`;
+  const td = ` de ${LANCES.nd}`, wd = c.measureText(td).width;
+  // a seta é desenhada (a fonte de pixel não tem ▲▼)
+  const ts = mud ? String(Math.abs(mud)) : '', ws = ts ? c.measureText(ts).width + 22 : 0;
+  const w = 46 + wr + 8 + wp + wd + ws + 12, h = 30, x = 12;
+  c.fillStyle = 'rgba(16,12,21,.82)'; rr(c, x, y, w, h, 8); c.fill();
+  if (pisca) { c.strokeStyle = mud >= 0 ? '#5ee08a' : '#ff6b6b'; c.lineWidth = 2; rr(c, x, y, w, h, 8); c.stroke(); }
+  c.fillStyle = est.cor; c.fillRect(x, y + 6, 3, h - 12);
+  desenhaAlma(c, x + 20, y + h / 2 + 1, 9, est, { expr: mud < 0 ? 'medo' : 'feliz', t: T, lx: 0, ly: 0 });
+  let xx = x + 46; c.textBaseline = 'middle';
+  c.font = `600 ${px ? 8 : 11}px ${hud}`; c.fillStyle = '#c8bcd6'; c.fillText(rot, xx, y + h / 2 + 1); xx += wr + 8;
+  c.font = `700 ${px ? 11 : 16}px ${hud}`; c.fillStyle = p <= 3 ? SK.cor.destaque : '#efe6d4'; c.fillText(tp, xx, y + h / 2 + 1); xx += wp;
+  c.font = `500 ${px ? 7 : 10}px ${hud}`; c.fillStyle = 'rgba(239,230,212,.6)'; c.fillText(td, xx, y + h / 2 + 2); xx += wd + 10;
+  if (ts) {
+    const cy = y + h / 2; c.fillStyle = mud > 0 ? '#5ee08a' : '#ff6b6b';
+    c.beginPath(); if (mud > 0) { c.moveTo(xx, cy + 4); c.lineTo(xx + 10, cy + 4); c.lineTo(xx + 5, cy - 4); } else { c.moveTo(xx, cy - 4); c.lineTo(xx + 10, cy - 4); c.lineTo(xx + 5, cy + 4); }
+    c.closePath(); c.fill(); c.fillText(ts, xx + 13, cy + 1);
+  }
+  c.textBaseline = 'alphabetic';
+}
+/** Tudo dos lances por cima da corrida. Fora da festa: o replay e o vídeo do fim ficam limpos. */
+function desenhaLances(c, px, hud, venceu) {
+  if (!LANCES || festa || T < 3) return;
+  const fimLance = rec.vencedor >= 0 ? rec.tVenc : Infinity;
+  // o coração da reta final: a borda pulsa enquanto os dois da frente estão colados
+  if (T < fimLance && coladoEm(T)) {
+    const bat = performance.now() / 650 % 1, a = 0.16 + 0.22 * Math.max(0, 1 - bat * 3.5);
+    const g = c.createRadialGradient(cw / 2, ch / 2, Math.min(cw, ch) * 0.3, cw / 2, ch / 2, Math.max(cw, ch) * 0.72);
+    g.addColorStop(0, 'rgba(255,59,59,0)'); g.addColorStop(1, `rgba(255,59,59,${a})`); c.fillStyle = g; c.fillRect(0, 0, cw, ch);
+  }
+  // o locutor: a última frase da gravação, por 3,5 s, no alto (sai na câmera lenta e na faixa do vencedor)
+  if (escala >= 0.6 && !venceu && T - 3 > 0.8) {
+    let nn = null; for (let k = rec.narr.length - 1; k >= 0; k--) if (rec.narr[k].t <= T) { nn = rec.narr[k]; break; }
+    const age = nn ? T - nn.t : 9;
+    if (age < 3.5) {
+      c.globalAlpha = Math.min(1, age * 6, (3.5 - age) * 3);
+      c.font = `600 ${px ? 8 : 12}px ${hud}`;
+      const txt = cabeTexto(c, nn.txt, Math.max(150, cw - 250)), tw = c.measureText(txt).width, bx = cw / 2 - tw / 2 - 14;
+      c.fillStyle = 'rgba(16,12,21,.8)'; rr(c, bx, 12, tw + 28, 26, 13); c.fill();
+      c.fillStyle = SK.cor.destaque; circ(c, bx + 10, 25, 3); c.fill();
+      c.fillStyle = '#efe6d4'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(txt, cw / 2 + 4, 26);
+      c.textAlign = 'left'; c.textBaseline = 'alphabetic'; c.globalAlpha = 1;
+    }
+  }
+  faixaLance(c, px, 'RETA FINAL!', LANCES.retaT, 56, SK.cor.destaque);
+  for (const t0 of LANCES.cabeca) faixaLance(c, px, 'CABEÇA A CABEÇA!', t0, 44, '#ff6b6b');
+  // os chips: o seu bichinho e, para quem palpitou, o escolhido (some na faixa do vencedor)
+  if (!venceu) {
+    let y = ch - 14 - 30;
+    if (rec.voce >= 0) { chipLance(c, px, hud, y, 'VOCÊ', rec.voce); y -= 36; }
+    const dp = palpiteId ? (rec.ids || []).indexOf(palpiteId) : -1;
+    if (dp >= 0 && dp !== rec.voce) chipLance(c, px, hud, y, `PALPITE · ${rec.nomes[dp]}`, dp);
+  }
+}
+/* Os sons dos lances, no relógio da corrida (quem chega atrasado ou pula não ouve o que já passou). */
+let proxBatida = 0, ultChipSom = 0;
+function sonsDosLances(antes, agoraT) {
+  if (!LANCES || !tocando || agoraT <= antes || agoraT - antes > 0.5) return;
+  if (antes < LANCES.retaT && agoraT >= LANCES.retaT) som.reta();
+  for (const t0 of LANCES.cabeca) if (antes < t0 && agoraT >= t0) som.torcida();
+  const agoraMs = performance.now();
+  if ((rec.vencedor < 0 || agoraT < rec.tVenc) && coladoEm(agoraT) && agoraMs >= proxBatida) { som.coracao(); proxBatida = agoraMs + 650; }
+  if (rec.voce >= 0 && agoraT >= 3 && agoraMs - ultChipSom > 1500) {
+    const p0 = posEm(rec.voce, antes), p1 = posEm(rec.voce, agoraT);
+    if (p1 !== p0) { ultChipSom = agoraMs; if (p1 < p0) som.sobe(); else som.cai(); }
+  }
+}
+
 /* ================= o placar (o React desenha o painel) ================= */
 const fmtC = s => { s = Math.max(0, s); return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`; };
 const fmt = s => { s = Math.max(0, s); const m = Math.floor(s / 60), r = s - m * 60; return `${m}:${r < 10 ? '0' : ''}${r.toFixed(3).replace('.', ',')}`; };
@@ -661,12 +925,23 @@ const setTocando = v => { tocando = v; };
 /* ================= os seis mapas ================= */
 const MAPAS = [
   { id: 'halloween', nome: 'Noite Assombrada', tema: 'Halloween', desc: 'O clássico: cemitério, mansão dos fantasmas, moinho do Ceifador, e o portão e o caldeirão que juntam a turma antes de soltar.', blocos: ['lapides', 'forquilha', 'portao', 'salao', 'ponte', 'moinho', 'caldeirao', 'teias', 'fliper'] },
-  { id: 'pixel', nome: 'Caça Pixelada', tema: 'Pixel art', desc: 'Oito bits, com os zumbis e as bruxas da caça. Sem nenhuma espera: blocos-mola que jogam o bichinho para cima e plataformas que andam de um lado para o outro.', blocos: ['lapides', 'molas', 'ponte', 'forquilha', 'plataformas', 'salao', 'moinho', 'fliper'], pixel: true },
+  { id: 'pixel', nome: 'Caça Pixelada', tema: 'Pixel art', desc: 'Oito bits, com os zumbis e as bruxas da caça: blocos-mola que jogam o bichinho para cima, plataformas que andam de um lado para o outro e, antes da fase final, o caldeirão da Chefona, que junta a turma e solta em ordem sorteada.', blocos: ['lapides', 'molas', 'ponte', 'forquilha', 'plataformas', 'salao', 'moinho', 'caldeirao', 'fliper'], pixel: true },
   { id: 'mar', nome: 'Naufrágio', tema: 'Fundo do mar', desc: 'Uma correnteza que empurra de lado e troca de sentido, colunas de bolhas que seguram a queda, águas-vivas e a concha gigante.', blocos: ['lapides', 'correntes', 'salao', 'forquilha', 'caldeirao', 'teias', 'moinho', 'fliper'] },
   { id: 'espaco', nome: 'Estação Cósmica', tema: 'Espaço', desc: 'Um trecho de gravidade zero, onde os bichinhos flutuam e um redemoinho leva de um lado para o outro, e satélites que andam. Sem espera.', blocos: ['lapides', 'forquilha', 'orbita', 'plataformas', 'salao', 'moinho', 'fliper'] },
   { id: 'templo', nome: 'Templo Perdido', tema: 'Selva', desc: 'O rio puxa os bichinhos e troca de sentido, lâminas de pêndulo balançam e a porta de pedra abre sozinha a cada 5 segundos, sem esperar ninguém.', blocos: ['lapides', 'esteiras', 'forquilha', 'pendulos', 'portao', 'salao', 'teias', 'fliper'], modos: { portao: 'ritmo' } },
   { id: 'vulcao', nome: 'Vulcão do Dragão', tema: 'Vulcão', desc: 'Chuva de lava, gêiseres que jogam os bichinhos para o alto, dragõezinhos cuspindo fogo e uma cratera que entra em erupção a cada 3 segundos.', blocos: ['lapides', 'chuva', 'forquilha', 'geiseres', 'moinho', 'caldeirao', 'ponte', 'fliper'], modos: { cald: 'ritmo' } },
 ];
+/* A corrida especial (27/10/2026): fora da roleta. Só sai quando o super admin pede (`gravar({ especial: true })`).
+   É o mapa grande, em pixel art de fliperama, com as peças que só ele tem: canhões que lançam o bichinho por cima
+   do campo de pinos, luvas de boxe que socam da parede, a mesa de pinball e o teletransporte; e quase todas as
+   peças dos outros mapas, uma atrás da outra. A única espera é o caldeirão antes da fase final (27/10/2026): sem
+   ele, o líder abria e a corrida estava decidida uns 18 s antes da linha. */
+const MAPA_ESPECIAL = {
+  id: 'arcade', nome: 'Fliperama Turbo', tema: 'Corrida especial', especial: true, pixel: true,
+  desc: 'O mapa grande da corrida especial: canhões, luvas de boxe, pinball, teletransporte, discos voadores e o resto das peças dos outros mapas, com o caldeirão da Chefona antes da fase final.',
+  blocos: ['lapides', 'canhoes', 'molas', 'luvas', 'forquilha', 'flipers', 'plataformas', 'portais', 'salao', 'geiseres', 'pendulos', 'canhoes', 'esteiras', 'moinho', 'caldeirao', 'fliper'],
+};
+const mapaPorId = id => MAPAS.find(m => m.id === id) || (id === MAPA_ESPECIAL.id ? MAPA_ESPECIAL : null);
 
 /* ================= desenho: peças comuns a todos os mapas ================= */
 const SOMBRA = 'rgba(0,0,0,.34)', SX = 5, SY = 6;
@@ -1205,6 +1480,10 @@ const TXT_PADRAO = {
   caldRitmo: a => `${a} caiu primeiro. A erupção vem em segundos`,
   atalho: a => `O caldeirão mandou ${a} por um atalho!`,
   volta: a => `O caldeirão devolveu ${a} lá para trás`,
+  canhao: a => `BUM! O canhão lançou ${a} lá na frente`,
+  soco: a => `POW! A luva de boxe mandou ${a} para o outro lado`,
+  flip: a => `O fliper jogou ${a} para cima`,
+  portal: a => `${a} entrou no teletransporte e saiu no meio do caminho`,
 };
 const CORES_PADRAO = {
   portao: ['#3b3443', '#5b5468', '#8c84a0'], alcapao: ['#2b2733', '#8c84a0'], pilar: ['#4a4254', '#6a6175'], chama: '#ffd27a', placa: ['#2b2431', '', '#efe6d4'],
@@ -2099,6 +2378,233 @@ SKINS.vulcao = skin({
 });
 
 
+/* ================= Fliperama Turbo: a corrida especial, em pixel art de fliperama ================= */
+/* Cultura pop dos fliperamas dos anos 80 e 90, sem personagem de ninguém: os desenhos são daqui. */
+const ALIEN_PX = [
+  ['....g..g....', '.....gg.....', '...gggggg...', '..gkkggkkg..', '..gkwggkwg..', '.gggggggggg.', 'g.gg.gg.gg.g', 'g..g....g..g'],
+  ['....g..g....', '.....gg.....', '...gggggg...', '..gkkggkkg..', '..gwkggwkg..', '.gggggggggg.', '.g.gg..gg.g.', 'g..........g'],
+];
+const PAL_ALIEN = { g: '#5cff8a', k: '#0c1a10', w: '#ffffff' };
+const OVNI_PX = ['.....cccc.....', '....cwwccc....', '...cccccccc...', '.mmmmmmmmmmmm.', 'mmymmymmymmymm', '.mmmmmmmmmmmm.', '...o......o...'];
+const PAL_OVNI = { c: '#5ff0f0', w: '#ffffff', m: '#c040d8', y: '#ffe14d', o: '#2a1040' };
+const CORACAO_PX = ['.rr.rr.', 'rwrrrrr', 'rrrrrrr', '.rrrrr.', '..rrr..', '...r...'];
+const PAL_CORACAO = { r: '#ff4d6d', w: '#ffd0da' };
+const JOIA_PX = ['..oooo..', '.oLmmdo.', 'oLmmmmdo', 'ommmmmdo', '.ommmdo.', '..oddo..', '...oo...'];
+const PAL_JOIA = { o: '#10203a', L: '#e8ffff', m: '#5ff0f0', d: '#2a8ab0' };
+const PAL_JOIA_B = { o: '#2a0a3a', L: '#ffe8ff', m: '#ff7ae8', d: '#a030b0' };
+const NEON = ['#5ff0f0', '#ff4fd8', '#ffe14d', '#5cff8a'];
+const PAL_FANT_NEON = NEON.map(w => ({ o: '#1a1030', w, k: '#141020', m: '#141020' }));
+/* a ficha girando: a largura acompanha o cosseno, como uma moeda de pé */
+function ficha(c, x, y, r, ph) {
+  const w = Math.max(2, Math.abs(Math.cos(T * 3 + ph)) * r * 2);
+  c.fillStyle = '#6a3a00'; c.fillRect(x - w / 2 - 1, y - r - 1, w + 2, 2 * r + 2);
+  c.fillStyle = '#ffc93c'; c.fillRect(x - w / 2, y - r, w, 2 * r);
+  c.fillStyle = '#fff2a0'; c.fillRect(x - w / 2, y - r, Math.max(1, w * 0.3), 2 * r);
+  if (w > r) { c.fillStyle = '#c88a10'; c.fillRect(x - 1, y - r * 0.5, 2, r); }
+}
+/* a fita cassete (as pedras grandes com recado) */
+function fitaCassete(c, p) {
+  const x = p.x, y = p.y, w = 42, h = 28;
+  c.fillStyle = '#1a1030'; c.fillRect(x - w / 2 - 1, y - h / 2 - 1, w + 2, h + 2);
+  c.fillStyle = '#3a3a5a'; c.fillRect(x - w / 2, y - h / 2, w, h);
+  c.fillStyle = '#ffe14d'; c.fillRect(x - w / 2 + 3, y - h / 2 + 3, w - 6, 11);
+  c.fillStyle = '#1a1030'; c.font = '4px "Press Start 2P", monospace'; c.textAlign = 'center';
+  c.fillText(p.txt[0], x, y - h / 2 + 8); if (p.txt[1]) c.fillText(p.txt[1], x, y - h / 2 + 13); c.textAlign = 'left';
+  c.fillStyle = '#10101c'; c.fillRect(x - 12, y + 1, 24, 9);
+  for (const sg of [-1, 1]) { c.fillStyle = '#e8e8f0'; c.fillRect(x + sg * 7 - 3, y + 3, 6, 6); c.fillStyle = '#1a1030'; c.fillRect(x + sg * 7 - 1, y + 5, 2, 2); }
+}
+/* o bumper do pinball: anéis de neon que acendem quando alguém passa perto */
+function bumperPinball(c, p) {
+  if (p.brilho > .1) brilho(c, () => luz(c, p.x, p.y, 30 + p.brilho * 22, '#ff4fd8', 0.12 + 0.25 * p.brilho));
+  c.fillStyle = '#1a1030'; circ(c, p.x, p.y, p.r + 2); c.fill();
+  c.fillStyle = p.brilho > .5 ? '#ff7ae8' : '#c040d8'; circ(c, p.x, p.y, p.r); c.fill();
+  c.fillStyle = '#ffe14d'; circ(c, p.x, p.y, p.r * 0.6); c.fill();
+  c.fillStyle = '#fff6c0'; estrela(c, p.x, p.y, p.r * 0.45, p.r * 0.2, 5, T * 2); c.fill();
+}
+/* o canhão: rodas, cano que mira, o tranco do tiro e quantos bichinhos estão esperando dentro */
+function canhaoEm(c, x, y, ang, recuo, flash, carga) {
+  c.fillStyle = '#1a1030'; c.fillRect(x - 30, y + 18, 60, 10); c.fillStyle = '#ffe14d'; for (let k = 0; k < 6; k++) c.fillRect(x - 28 + k * 10, y + 20, 5, 3);
+  c.save(); c.translate(x, y + 6); c.rotate(ang); c.translate(0, recuo * 7);
+  c.fillStyle = '#1a1030'; c.fillRect(-15, -48, 30, 50);
+  c.fillStyle = '#3a4a8a'; c.fillRect(-13, -44, 26, 44); c.fillStyle = '#6a84d8'; c.fillRect(-13, -44, 7, 44);
+  c.fillStyle = '#ff4fd8'; c.fillRect(-13, -14, 26, 5); c.fillRect(-13, -36, 26, 5);
+  c.fillStyle = '#5ff0f0'; c.fillRect(-17, -50, 34, 8); c.fillStyle = '#0a0614'; c.fillRect(-10, -50, 20, 4);
+  if (flash > 0) brilho(c, () => luz(c, 0, -54, 40, '#ffe14d', 0.8 * flash));
+  c.restore();
+  for (const sg of [-1, 1]) { c.fillStyle = '#1a1030'; circ(c, x + sg * 17, y + 16, 11); c.fill(); c.fillStyle = '#8a6a3a'; circ(c, x + sg * 17, y + 16, 8); c.fill(); c.fillStyle = '#ffe14d'; c.fillRect(x + sg * 17 - 1, y + 9, 2, 14); c.fillRect(x + sg * 17 - 7, y + 15, 14, 2); }
+  if (carga > 0) {
+    c.fillStyle = '#1a1030'; c.fillRect(x + 20, y - 46, 26, 14); c.fillStyle = '#ffe14d'; c.font = '7px "Press Start 2P", monospace'; c.fillText(`x${carga}`, x + 23, y - 36);
+  }
+}
+/* a luva de boxe: a mola sai da parede e o punho vai na ponta */
+function luvaEm(c, x0, hx, y, dir, e) {
+  c.fillStyle = '#2a2440'; c.fillRect(dir > 0 ? x0 : x0 - 12, y - 18, 12, 36);
+  c.strokeStyle = '#c8c8d8'; c.lineWidth = 3; c.beginPath(); c.moveTo(x0, y);
+  const n = 9; for (let i = 1; i < n; i++) c.lineTo(x0 + (hx - x0) * i / n, y + (i % 2 ? -7 : 7)); c.lineTo(hx, y); c.stroke();
+  c.fillStyle = '#f2f2f2'; c.fillRect(hx - dir * 22 - 4, y - 13, 8, 26);
+  c.fillStyle = '#7a0a10'; c.fillRect(hx - 15, y - 22, 30, 44);
+  c.fillStyle = '#e8322e'; c.fillRect(hx - 13, y - 20, 26, 40);
+  c.fillStyle = '#ff7a6a'; c.fillRect(hx - 9, y - 17, 8, 6);
+  c.fillStyle = '#b81e1c'; c.fillRect(hx - (dir > 0 ? 13 : -5), y + 4, 8, 12);
+  if (e > 0.98) { c.fillStyle = '#ffe14d'; c.font = '8px "Press Start 2P", monospace'; c.textAlign = 'center'; c.fillText('POW!', hx + dir * 34, y - 18); c.textAlign = 'left'; }
+}
+function desenhaLuva(c, s, g) { luvaEm(c, s.lado < 0 ? 0 : W, g.cx, s.cy, -s.lado, g.a); }
+function desenhaFlipper(c, s, g) {
+  c.lineCap = 'round';
+  c.strokeStyle = '#1a1030'; c.lineWidth = 16; c.beginPath(); c.moveTo(g.x1, g.y1); c.lineTo(g.x2, g.y2); c.stroke();
+  c.strokeStyle = s.dir > 0 ? '#ff4fd8' : '#5ff0f0'; c.lineWidth = 11; c.stroke();
+  c.strokeStyle = 'rgba(255,255,255,.55)'; c.lineWidth = 3; c.beginPath(); c.moveTo(g.x1, g.y1 - 2); c.lineTo(g.x2, g.y2 - 2); c.stroke();
+  c.fillStyle = '#ffe14d'; circ(c, s.cx, s.cy, 6); c.fill(); c.fillStyle = '#1a1030'; circ(c, s.cx, s.cy, 2.4); c.fill();
+  if (g.a > 0.5) brilho(c, () => luz(c, g.x2, g.y2, 22, s.dir > 0 ? '#ff4fd8' : '#5ff0f0', 0.35));
+}
+function desenhaCanhao(c, cn, ci) {
+  let ang = Math.sin(T * 1.6 + ci * 2) * 0.35, recuo = 0, flash = 0;
+  for (const [k, t0, a] of (rec.tiros || [])) {
+    if (k !== ci || t0 > T) continue;
+    const d = T - t0; if (d >= 1) continue;
+    ang = d < 0.6 ? a : a + (ang - a) * (d - 0.6) / 0.4;
+    recuo = d < 0.1 ? d / 0.1 : Math.max(0, 1 - (d - 0.1) / 0.3); flash = Math.max(0, 1 - d / 0.15);
+  }
+  let carga = 0; for (const o of vb) if ((o.f & 2) && Math.abs(o.x - cn.x) < 0.5 && Math.abs(o.y - cn.y) < 0.5) carga++;
+  canhaoEm(c, cn.x, cn.y, ang, recuo, flash, carga);
+}
+function desenhaPortais(c) {
+  for (const p of PORTAIS) {
+    portalPadrao(c, { x: p.x, y: p.y, r: p.r, tipo: 'normal' });
+    c.fillStyle = '#ffffff'; c.font = '9px "Press Start 2P", monospace'; c.textAlign = 'center'; c.fillText('?', p.x, p.y + 4); c.textAlign = 'left';
+  }
+  for (const [tipo, s] of Object.entries(SAIDAS)) { c.globalAlpha = 0.7; portalPadrao(c, { x: s.x, y: s.y, r: s.r * 0.8, tipo: tipo === 'meio' ? 'normal' : tipo }); c.globalAlpha = 1; }
+}
+/* quanto o bichinho cresce no voo do canhão (ele passa por cima da pista, «vindo para a tela») */
+function escalaVoo(o) {
+  if (!(o.f & 64) || !rec.voos) return 1;
+  for (const [i, a, b] of rec.voos) if (i === o.i && T >= a && T <= b) return 1 + 0.7 * Math.sin(Math.PI * (T - a) / (b - a));
+  return 1;
+}
+SKINS.arcade = skin(Object.assign({}, SKINS.pixel, {
+  nomes: {
+    largada: ['Insert Coin', 'Insert Coin', 'ao'], lapides: ['Chuva de Fichas', 'Fichas', 'à'], canhoes: ['Canhões de 8 Bits', 'Canhões', 'aos'], molas: ['Pula-Pula Pixel', 'Pula-pula', 'ao'],
+    luvas: ['Corredor do Nocaute', 'Nocaute', 'ao'], encruzilhada: ['Seleção de Fase', 'Seleção', 'à'], caminhos: ['Os dois mundos', 'Mundos', 'aos'], flipers: ['Mesa de Pinball', 'Pinball', 'à'],
+    plataformas: ['Plataformas Móveis', 'Plataformas', 'às'], portais: ['Zona de Teletransporte', 'Teletransporte', 'à'], salao: ['Labirinto dos Fantasminhas', 'Labirinto', 'ao'],
+    geiseres: ['Jatos de Ar', 'Jatos', 'aos'], pendulos: ['Bolas de Demolição', 'Demolição', 'às'], esteiras: ['Esteiras da Fábrica', 'Esteiras', 'às'], moinho: ['Roda do Fliperama', 'Roda', 'à'], caldeirao: ['Caldeirão da Chefona', 'Caldeirão', 'ao'], fliper: ['Fase Final', 'Fase final', 'à'],
+  },
+  lados: ['a Fase dos Invasores', 'a Fase Bônus'], ladosCurtos: ['Invasores', 'Bônus'], ladosPlaca: ['Fase dos Invasores', 'Fase Bônus'],
+  bg: {
+    largada: ['#1a0a3a', '#08041a'], lapides: ['#22104a', '#0c0620'], canhoes: ['#0e1a4a', '#060a22'], molas: ['#3a0e4a', '#14061e'], luvas: ['#4a0e1e', '#1a060c'], encruzilhada: ['#10204a', '#060c22'],
+    caminhos: ['#0a3a3a', '#041818'], flipers: ['#3a0a40', '#16041a'], plataformas: ['#102a4a', '#061222'], portais: ['#1a0a4a', '#0a0420'], salao: ['#0a0a3a', '#04041a'], geiseres: ['#0a2a40', '#04121c'],
+    pendulos: ['#2a1a3a', '#100a18'], esteiras: ['#1a2a1a', '#0a120a'], moinho: ['#3a1030', '#160612'], fliper: ['#40102a', '#180410'], portao: ['#1a0a3a', '#08041a'], ponte: ['#1a0a3a', '#08041a'], caldeirao: ['#1a0a3a', '#08041a'], teias: ['#1a0a3a', '#08041a'], chuva: ['#1a0a3a', '#08041a'], correntes: ['#1a0a3a', '#08041a'], orbita: ['#1a0a3a', '#08041a'],
+  },
+  epitafios: [['INSERT', 'COIN'], ['HIGH', 'SCORE'], ['PRESS', 'START'], ['COMBO', 'x3'], ['1UP', ''], ['META', 'BATIDA']],
+  txt: {
+    abriu: () => 'PRESS START! É a corrida especial. Boa sorte, bichinhos.', explosao: a => `Tiro de laser! ${a} voou longe`, gosma: a => `${a} grudou na gosma do disco voador`,
+    mira: a => `O disco voador mirou ${a}...`, mao: a => `A garra da máquina de pelúcia pegou ${a}!`, janela: (a, l) => `${a} trocou para ${l}`, gangorra: (n, l) => `A seleção de fase mandou ${n} para ${l}`,
+    atalho: a => `${a} achou um atalho no teletransporte!`, volta: a => `O teletransporte mandou ${a} lá para trás`,
+  },
+  cor: {
+    placaT: ['#1a0a3a', '#ff4fd8', '#5ff0f0', '#5a4a7a'], chegada: ['#5ff0f0', '#1a0a3a', '#ff4fd8', '#ffe14d', '#5a4a7a'], placa: ['#1a0a3a', '', '#5ff0f0'], portal: ['#ff4fd8', '#5ff0f0'],
+    zona: ['#5cff8a', '#c8ff96'], mancha: '#5cff8a', destaque: '#5ff0f0', lider: '#ffe14d', parede: ['#0e0626', '#3a1a70'], longe: 'rgba(8,2,26,.6)',
+    explosao: ['#ff4fd8', '#5ff0f0', '#ffffff', '#ffe14d'], gosma: ['#5cff8a', '#2ac060', '#c8ff96'], anelExplosao: '#ff4fd8', anelGosma: '#5cff8a',
+    bumper: { cristal: ['#e8ffff', '#5ff0f0'], abobora: ['#ffe14d', '#ff4fd8'] }, chegadaConfete: NEON, faisca: ['#ffffff', '#5ff0f0', '#ffe14d'], fumaca: ['rgba(200,190,230,.6)', 'rgba(140,130,170,.6)'],
+  },
+  segCores: { ferro: ['#0a0620', '#3a4aa0', '#5ff0f0', 9], galho: ['#0a0620', '#8a2a9a', '#ff4fd8', 9], raiz: ['#0a0620', '#2a8a4a', '#5cff8a', 9], muro: ['#0a0620', '#4a3a8a', '#b8a8ff', 11], ponte: ['#0a0620', '#a06a20', '#ffe14d', 10], pedra: ['#0a0620', '#5a5a8a', '#c8c8ff', 9] },
+  segExtra(c, s) {
+    const L = Math.hypot(s.x2 - s.x1, s.y2 - s.y1), n = Math.floor(L / 12);
+    for (let i = 1; i < n; i++) { const [x, y] = pontoEm(s, i / n); c.fillStyle = (Math.floor(T * 6) + i) % 4 === 0 ? '#ffe14d' : 'rgba(0,0,0,.4)'; c.fillRect(Math.round(x) - 1, Math.round(y) - 1, 2, 2); }
+  },
+  caldTxt: 'CARREGANDO', chegadaTxt: 'GAME CLEAR!', esperando: 'Os bichinhos esperam a ficha cair.', bu: 'BU!',
+  ceu(c, info) {
+    estrelasPadrao(c, info, '#bff6ff', true);
+    // o sol de neon dos anos 80, com as faixas escuras que descem
+    const sx = cw * 0.72, sy = 128 - Math.min(info.camY, 15000) * 0.003, r = 58;
+    brilho(c, () => luz(c, sx, sy, 130, '#ff4fd8', info.piscaLua ? 0.45 : 0.25));
+    c.save(); c.beginPath(); circ(c, sx, sy, r); c.clip();
+    const g = c.createLinearGradient(0, sy - r, 0, sy + r); g.addColorStop(0, '#ffe14d'); g.addColorStop(0.55, '#ff7a5a'); g.addColorStop(1, '#ff4fd8'); c.fillStyle = g; c.fillRect(sx - r, sy - r, 2 * r, 2 * r);
+    c.fillStyle = '#140a2a'; for (let k = 0; k < 6; k++) c.fillRect(sx - r, sy + 2 + k * 10 + (T * 5) % 10, 2 * r, 1.5 + k * 0.9);
+    c.restore();
+    // os invasores marchando no céu (abaixo do relógio e do nome do trecho, que ficam no canto de cima)
+    const q = Math.floor(T * 2) % 2, ox = Math.sin(T * 0.45) * 50, oy = 96 - Math.min(info.camY, 15000) * 0.002;
+    for (let i = 0; i < 6; i++) for (let j = 0; j < 2; j++) pinta(c, sprite('alien' + q, ALIEN_PX[q], PAL_ALIEN), cw * 0.3 + ox + i * 40, oy + j * 28, 2);
+    const per = cw + 400, x = ((T * 46) % per) - 200; pinta(c, sprite('ovni', OVNI_PX, PAL_OVNI), x, 170 + Math.sin(T * 1.2) * 18, 3);
+    return 0;
+  },
+  longe(c, tipo, base, off, rs) {
+    const bloco = (x, y, w, h) => c.fillRect(Math.round(x / 6) * 6, Math.round(y / 6) * 6, Math.round(w / 6) * 6, Math.round(h / 6) * 6);
+    // gabinetes de fliperama ao longe, com a tela piscando
+    rs.slice(0, 8).forEach(([a, b], k) => {
+      const x = a * cw, h = 70 + b * 60; c.fillStyle = SK.cor.longe;
+      bloco(x - 18, base - h, 36, h + 300); bloco(x - 24, base - h - 12, 48, 14);
+      c.fillStyle = rgba(NEON[k % 4], 0.22 + 0.14 * Math.sin(T * 3 + k)); bloco(x - 12, base - h + 12, 24, 18);
+    });
+    // o chão de grade neon
+    c.strokeStyle = 'rgba(255,79,216,.22)'; c.lineWidth = 1;
+    for (let k = 0; k < 7; k++) { const y = base + 12 + k * k * 6; c.beginPath(); c.moveTo(0, y); c.lineTo(cw, y); c.stroke(); }
+    for (let k = -9; k <= 9; k++) { c.beginPath(); c.moveTo(cw / 2 + k * 30, base + 12); c.lineTo(cw / 2 + k * 150, base + 320); c.stroke(); }
+    c.fillStyle = SK.cor.longe;
+  },
+  largada(c) {
+    c.fillStyle = 'rgba(95,240,240,.05)';
+    for (let y = -100, row = 0; y < PORTAO_Y; y += 20, row++) for (let x = row % 2 ? 0 : -20; x < W; x += 40) c.fillRect(x + 1, y + 1, 38, 18);
+    tituloLargada(c, '#5ff0f0', '#ff4fd8');
+    if (Math.floor(T * 2.5) % 2 === 0) { c.fillStyle = '#ffe14d'; c.font = '10px "Press Start 2P", monospace'; c.textAlign = 'center'; c.fillText('INSERT COIN', W / 2, 20); c.textAlign = 'left'; }
+    luzesLargada(c, (c2, vx, vy, lean) => {
+      c2.fillStyle = '#2a1a50'; c2.fillRect(vx - 4, vy + 2, 8, 14);
+      const cor = NEON[Math.floor(T * 3 + vx) % 4]; c2.fillStyle = cor; c2.fillRect(vx - 5 + lean * 4, vy - 7, 10, 10);
+      brilho(c2, () => luz(c2, vx, vy - 2, 56, cor, 0.2));
+    });
+  },
+  // a garra da máquina de pelúcia desce, pega e solta
+  mao(c, m, alt, fecha) {
+    c.fillStyle = '#2a1a50'; c.fillRect(m.x - 12, m.y + 3, 24, 6); c.fillStyle = '#ff4fd8'; c.fillRect(m.x - 8, m.y + 3, 16, 2);
+    if (alt <= 0.02) return;
+    const cy = m.y - 14 - (1 - alt) * 40;
+    c.strokeStyle = '#c8c8d8'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(m.x, m.y - 120); c.lineTo(m.x, cy - 10); c.stroke();
+    c.fillStyle = '#ffe14d'; c.fillRect(m.x - 7, cy - 14, 14, 7);
+    c.strokeStyle = '#e0e0f0'; c.lineWidth = 2.5; c.lineCap = 'round';
+    const ab = fecha ? 5 : 12;
+    for (const sg of [-1, 1]) { c.beginPath(); c.moveTo(m.x + sg * 4, cy - 7); c.lineTo(m.x + sg * ab, cy + 4); c.lineTo(m.x + sg * (ab - 5), cy + 13); c.stroke(); }
+  },
+  fantasma(c, fx, fy, fase, alvo, i) {
+    const d = alvo ? Math.hypot(alvo.x - fx, alvo.y - fy) : 99;
+    if (d < 46 && T - fantasmaBu[i] > 2.4) fantasmaBu[i] = T;
+    const q = Math.floor(T * 4 + fase) % 2, cor = i % 4;
+    brilho(c, () => luz(c, fx, fy, 46, NEON[cor], 0.22));
+    pinta(c, sprite('fantN' + cor + q, FANT_PX[q], PAL_FANT_NEON[cor]), fx, fy, 2.8, alvo && alvo.x < fx);
+    balaoBu(c, fx, fy, i, 'BU!', '#ffffff');
+  },
+  // o disco voador que atira laser (no lugar da bruxa)
+  bruxa(c, wx, wy, dir, riso) {
+    const dr = T - riso; if (dr >= 0 && dr < 0.3) brilho(c, () => { c.fillStyle = 'rgba(95,240,240,.35)'; c.fillRect(wx - 10, wy + 8, 20, 60); });
+    pinta(c, sprite('ovni', OVNI_PX, PAL_OVNI), wx, wy + Math.round(Math.sin(T * 6)) * 2, 2.6, dir < 0);
+    textoRiso(c, wx, wy, riso, 'pew pew!', '#5ff0f0');
+  },
+  pocao(c, x, y, tipo) {
+    if (tipo === 'gosma') { brilho(c, () => luz(c, x, y, 14, '#5cff8a', .5)); c.fillStyle = '#5cff8a'; c.fillRect(x - 4, y - 4, 8, 8); c.fillStyle = '#c8ff96'; c.fillRect(x - 2, y - 3, 3, 3); return; }
+    brilho(c, () => luz(c, x, y, 16, '#ff4fd8', .7));
+    c.fillStyle = '#ff4fd8'; c.fillRect(x - 2, y - 12, 4, 14); c.fillStyle = '#ffffff'; c.fillRect(x - 1, y - 10, 2, 10);
+  },
+  pegs(c, vis, dtR) {
+    for (const p of pegs) {
+      if (p.y < vis.y0 - 30 || p.y > vis.y1 + 30) continue;
+      if (p.tipo === 'lapide') ficha(c, p.x, p.y, p.r + 1, p.x * 0.07 + p.y * 0.01);
+      else if (p.tipo === 'osso') pinta(c, sprite('coracao', CORACAO_PX, PAL_CORACAO), p.x, p.y, 2.4);
+      else if (p.tipo === 'monte') { c.fillStyle = '#2a1a50'; c.fillRect(p.x - 9, p.y - 2, 18, 8); }
+      else if (p.tipo === 'lapideG') fitaCassete(c, p);
+      else if (p.tipo === 'cristal') {
+        p.brilho = Math.max(0, p.brilho - dtR * 2.5);
+        pinta(c, sprite(p.bumper ? 'joiaB' : 'joia', JOIA_PX, p.bumper ? PAL_JOIA_B : PAL_JOIA), p.x, p.y, 3.4);
+        if (p.bumper) { c.strokeStyle = `rgba(255,122,232,${0.5 + p.brilho * 0.5})`; c.lineWidth = 2 + p.brilho * 2; c.strokeRect(p.x - p.r - 3, p.y - p.r - 3, p.r * 2 + 6, p.r * 2 + 6); }
+        if (p.brilho > 0 || p.bumper) brilho(c, () => luz(c, p.x, p.y, 34, '#5ff0f0', 0.1 + p.brilho * 0.3));
+      } else if (p.tipo === 'abobora') { p.brilho = Math.max(pertoDeAlguem(p), p.brilho - dtR * 0.8); bumperPinball(c, p); }
+    }
+  },
+  ambiente(vis, dt) {
+    if (Math.random() < dt * 6) solta(1, Math.random() * W, vis.y1, { v: 6, vy: -46, vida: 3, cor: NEON, tam: 1.6, forma: 'q', arr: .995 });
+  },
+  // a capa do mapa na roleta: o canhão e a luva de boxe, além do que todo mapa mostra
+  cartaoExtra(c) { canhaoEm(c, 330, 150, -0.5, 0, 0, 0); luvaEm(c, 0, 70, 160, 1, 1); },
+}));
+
+
 /* ================= desenho das peças novas (molas, plataformas, esteiras, pêndulos, zonas) ================= */
 const PECA_PADRAO = {
   mola: ['#ff8a2b', '#ffd84d', '#6a6a7a'], barra: ['#2a2430', '#8a7aa0', '#d8c8f0'], esteira: ['#1a1a24', '#3a3a4a', '#ffd84d'],
@@ -2203,6 +2709,15 @@ SKINS.templo.pendulo = (c, s, g) => {
 };
 SKINS.vulcao.peca = { geiser: ['rgba(255,200,110,.95)', 'rgba(255,90,20,0)', '#2a1612'], barra: ['#1a0e0a', '#5a3a2a', '#ff8a2b'] };
 SKINS.halloween.peca = {};
+SKINS.arcade.peca = {
+  mola: ['#ff4fd8', '#ffe14d', '#5ff0f0'], barra: ['#0a0620', '#3a4aa0', '#5ff0f0'], esteira: ['#0a0620', '#2a2a6a', '#5cff8a'],
+  pendulo: ['#2a2440', '#8a7aa0', '#ffe14d'], geiser: ['rgba(190,250,255,.9)', 'rgba(95,240,240,0)', '#2a1a50'],
+};
+// a bola de demolição: uma esfera de 8 bits com o brilho de neon
+SKINS.arcade.pendulo = (c, s, g) => {
+  c.fillStyle = '#0a0620'; circ(c, g.x2, g.y2, 15); c.fill(); c.fillStyle = '#3a3a5a'; circ(c, g.x2, g.y2, 13); c.fill();
+  c.fillStyle = '#8a8ab0'; c.fillRect(g.x2 - 8, g.y2 - 8, 6, 5); c.fillStyle = '#ff4fd8'; c.fillRect(g.x2 - 13, g.y2 - 1, 26, 3);
+};
 
 
 /* ================= efeitos (partículas) ================= */
@@ -2242,6 +2757,13 @@ function efeitos(vis) {
     else if (e.tipo === 'mola') solta(10, e.x, e.y, { v: 160, vy: -140, vida: .45, cor: pc('mola').slice(0, 2), tam: 2, g: 400, luz: true });
     else if (e.tipo === 'geiser') { solta(26, e.x, e.y - 10, { v: 120, vy: -420, vida: .8, cor: [pc('geiser')[0], k.poeira], tam: 2.6, g: 500, arr: .96 }); shake = Math.max(shake, 2); }
     else if (e.tipo === 'chegada') solta(80, e.x, e.y, { v: 360, vy: -200, vida: 1.4, cor: k.chegadaConfete, tam: 2.8, g: 420, forma: 'q', arr: .97 });
+    // as peças da corrida especial
+    else if (e.tipo === 'canhao') { solta(28, e.x, e.y, { v: 200, vy: -140, vida: .8, cor: k.fumaca, tam: 3.5, g: -40, arr: .93 }); solta(16, e.x, e.y, { v: 320, vida: .3, cor: k.faisca, tam: 1.8, luz: true }); aneis.push({ x: e.x, y: e.y, t0: T, cor: '#ffe14d' }); shake = Math.max(shake, 6); }
+    else if (e.tipo === 'soco') { solta(12, e.x, e.y, { v: 220, vida: .45, cor: ['#ffe14d', '#ffffff', '#ff5a5a'], tam: 2.2, forma: 'q', luz: true }); shake = Math.max(shake, 4); }
+    else if (e.tipo === 'flip') solta(6, e.x, e.y, { v: 140, vida: .3, cor: k.faisca, tam: 1.5, luz: true });
+    else if (e.tipo === 'portal' || e.tipo === 'portalSai') { solta(18, e.x, e.y, { v: 140, vida: .5, cor: [...k.portal, e.cor], tam: 2, forma: 'q', luz: true }); aneis.push({ x: e.x, y: e.y, t0: T, cor: k.portal[0] }); }
+    else if (e.tipo === 'pouso') solta(12, e.x, e.y, { v: 110, vy: -60, vida: .5, cor: k.poeira, tam: 2.4, g: 300 });
+    else if (e.tipo === 'carrega') solta(8, e.x, e.y, { v: 80, vy: -80, vida: .4, cor: [e.cor, '#ffffff'], tam: 2, luz: true });
   }
 }
 
@@ -2329,6 +2851,7 @@ function desenhar(dtR) {
     SK.teia(c, w, presa, aranhas[i]);
   });
   desenhaZonas(c, vis, fz);
+  if (PORTAIS.length) desenhaPortais(c);
 
   // sombras na parede do fundo
   c.lineCap = 'round';
@@ -2355,8 +2878,10 @@ function desenhar(dtR) {
   maos.forEach((m, i) => { if (m.y < vis.y0 - 40 || m.y > vis.y1 + 40) return; const fecha = vb.some(o => (o.f & 1) && Math.abs(o.x - m.x) < 2 && Math.abs(o.y - m.y) < 30); SK.mao(c, m, altMao(i, T, fz), fecha, fz.maos[i]); });
   spins.forEach(s => {
     if (s.cy + s.L < vis.y0 || s.cy - s.L > vis.y1) return; const g = geoSpin(s, T, fz);
-    if (s.tipo === 'barra') desenhaBarra(c, s, g); else if (s.tipo === 'pendulo') desenhaPendulo(c, s, g); else SK.spin(c, s, g.a, g.w);
+    if (s.tipo === 'barra') desenhaBarra(c, s, g); else if (s.tipo === 'pendulo') desenhaPendulo(c, s, g);
+    else if (s.tipo === 'luva') desenhaLuva(c, s, g); else if (s.tipo === 'flipper') desenhaFlipper(c, s, g); else SK.spin(c, s, g.a, g.w);
   });
+  CANHOES.forEach((cn, ci) => { if (cn.y + 60 < vis.y0 || cn.y - 90 > vis.y1) return; desenhaCanhao(c, cn, ci); });
 
   // almas
   const vivos = rk.filter(r => !r.b.fim), ultimo = T >= 3 && vivos.length > 3 ? vivos[vivos.length - 1] : null;
@@ -2382,7 +2907,7 @@ function desenhar(dtR) {
     const sp = Math.hypot(o.vx, o.vy);
     const olha = T < 3 ? { x: 0, y: -1 } : sp > 30 ? { x: o.vx / sp, y: o.vy / sp } : { x: 0, y: 0 };
     const ph = o.i * 1.37;
-    desenhaAlma(c, o.x, o.y, R, o.est, { expr: expressao(o, lider), lx: olha.x, ly: olha.y, t: T + ph, inc: clamp(o.vx / 1000, -0.35, 0.35), pisca: ((T + ph) % 3.3) < 0.11 });
+    desenhaAlma(c, o.x, o.y, R * escalaVoo(o), o.est, { expr: expressao(o, lider), lx: olha.x, ly: olha.y, t: T + ph, inc: clamp(o.vx / 1000, -0.35, 0.35), pisca: ((T + ph) % 3.3) < 0.11 });
     if (ultimo && ultimo.b === o) {
       c.strokeStyle = '#6b6158'; c.lineWidth = .8; c.beginPath(); c.moveTo(o.x + 7, o.y - 7); c.lineTo(o.x + 14, o.y + 1); c.stroke();
       brilho(c, () => luz(c, o.x + 14, o.y + 5, 16, '#ff5a3c', 0.5));
@@ -2480,7 +3005,7 @@ function desenhar(dtR) {
   c3.font = `500 ${px ? 7 : 10}px ${hud}`; c3.fillStyle = 'rgba(239,230,212,.55)'; c3.textAlign = 'right'; c3.fillText(MAPA.nome.toUpperCase(), cw - 28, ch - 14); c3.textAlign = 'left';
   if (escala < 0.6) {
     c3.font = `600 ${px ? 9 : 12}px ${hud}`; c3.textAlign = 'center'; c3.fillStyle = 'rgba(16,12,21,.75)'; rr(c3, cw / 2 - 74, 14, 148, 24, 12); c3.fill();
-    c3.fillStyle = SK.cor.destaque; c3.fillText('● CÂMERA LENTA', cw / 2, 30); c3.textAlign = 'left';
+    c3.fillStyle = SK.cor.destaque; c3.fillText(LANCES && LANCES.foto ? '● VAI DAR FOTO!' : '● CÂMERA LENTA', cw / 2, 30); c3.textAlign = 'left';
     c3.fillStyle = 'rgba(0,0,0,.25)'; c3.fillRect(0, 0, cw, 22); c3.fillRect(0, ch - 22, cw, 22);
   }
   const fonteGrande = n => px ? `${n * 0.5}px "Press Start 2P", monospace` : `${n}px ${SK.fonte}`;
@@ -2539,6 +3064,7 @@ function desenhar(dtR) {
     c3.font = '500 11px "IBM Plex Mono", monospace'; c3.fillText(`+${(foto.t2 - foto.t1).toFixed(3).replace('.', ',')} s`, tx, by + 114);
     c3.globalAlpha = 1;
   }
+  desenhaLances(c3, px, hud, venceu);
   if (flash > 0) { c3.fillStyle = `rgba(235,228,255,${flash})`; c3.fillRect(0, 0, cw, ch); }
 }
 
@@ -2548,8 +3074,8 @@ Object.assign(SKINS.mar, { fonte: '"Pirata One", Georgia, serif', fontePlaca: '"
 Object.assign(SKINS.espaco, { fonte: '"Orbitron", "IBM Plex Mono", sans-serif', fontePlaca: '"Orbitron", "IBM Plex Mono", sans-serif' });
 Object.assign(SKINS.templo, { fonte: '"Cinzel Decorative", Georgia, serif', fontePlaca: '"Cinzel Decorative", Georgia, serif' });
 Object.assign(SKINS.vulcao, { fonte: '"Metal Mania", Georgia, serif', fontePlaca: '"Metal Mania", Georgia, serif' });
-const TIMBRE = { halloween: 'triangle', pixel: 'square', mar: 'sine', espaco: 'sawtooth', templo: 'triangle', vulcao: 'square' };
-const RARIDADE = { halloween: '#ff8a2b', pixel: '#b08af5', mar: '#4cb8ff', espaco: '#ff4fd8', templo: '#ffd84d', vulcao: '#ff3b3b' };
+const TIMBRE = { halloween: 'triangle', pixel: 'square', mar: 'sine', espaco: 'sawtooth', templo: 'triangle', vulcao: 'square', arcade: 'square' };
+const RARIDADE = { halloween: '#ff8a2b', pixel: '#b08af5', mar: '#4cb8ff', espaco: '#ff4fd8', templo: '#ffd84d', vulcao: '#ff3b3b', arcade: '#5ff0f0' };
 
 /* ================= som (sintetizado na hora, sem arquivos) ================= */
 const som = {
@@ -2584,7 +3110,7 @@ const som = {
   notas(lista, passo, o) { lista.forEach((f, i) => this.tom(f, o.dur || passo * 1.6, Object.assign({}, o, { q: (o.q || 0) + i * passo }))); },
   evento(e) {
     if (!this.ok() || vel > 2) return;
-    const agora = performance.now(), lim = { bumper: 70, cospe: 90, faisca: 120, terra: 200, toque: 9e9, poeira: 9e9, engole: 120 }[e.tipo] ?? 60;
+    const agora = performance.now(), lim = { bumper: 70, cospe: 90, faisca: 120, terra: 200, toque: 9e9, poeira: 9e9, engole: 120, canhao: 120, soco: 90, flip: 80, portal: 100, portalSai: 100, pouso: 120, carrega: 90 }[e.tipo] ?? 60;
     if (agora - (this.ult[e.tipo] || 0) < lim) return; this.ult[e.tipo] = agora;
     const tb = TIMBRE[MAPA.id];
     if (e.tipo === 'bumper') this.tom(820 + Math.random() * 500, 0.07, { tipo: tb, vol: 0.045 });
@@ -2598,6 +3124,13 @@ const som = {
     else if (e.tipo === 'mola') this.tom(240, 0.18, { f2: 760, vol: 0.06, tipo: 'triangle' });
     else if (e.tipo === 'geiser') this.ruido(0.6, { vol: 0.12, atk: 0.04, filtro: { tipo: 'highpass', f: 900, f2: 2600 } });
     else if (e.tipo === 'chegada') this.notas([523, 659, 784, 1047, 784, 1047], 0.11, { tipo: tb, vol: 0.09, dur: 0.3 });
+    else if (e.tipo === 'canhao') { this.ruido(0.6, { vol: 0.24, filtro: { f: 900, f2: 90 } }); this.tom(140, 0.4, { f2: 40, vol: 0.28 }); }
+    else if (e.tipo === 'soco') { this.tom(180, 0.12, { f2: 70, vol: 0.2, tipo: 'square' }); this.ruido(0.1, { vol: 0.12, filtro: { f: 1500 } }); }
+    else if (e.tipo === 'flip') this.tom(320, 0.06, { f2: 140, vol: 0.08, tipo: 'square' });
+    else if (e.tipo === 'portal') this.tom(300, 0.25, { f2: 1600, vol: 0.06, tipo: 'square' });
+    else if (e.tipo === 'portalSai') this.tom(1600, 0.2, { f2: 400, vol: 0.05, tipo: 'square' });
+    else if (e.tipo === 'pouso') this.ruido(0.15, { vol: 0.08, filtro: { f: 400 } });
+    else if (e.tipo === 'carrega') this.tom(600, 0.1, { f2: 200, vol: 0.05, tipo: 'square' });
   },
   contagem(n) {
     if (n > 3) { this.tom(520, 0.1, { tipo: 'square', vol: 0.05 }); this.tom(95, 0.3, { f2: 50, vol: 0.22 }); }
@@ -2608,6 +3141,11 @@ const som = {
   pop() { this.tom(880 + Math.random() * 400, 0.06, { tipo: 'triangle', vol: 0.03 }); },
   bip(final) { const tb = TIMBRE[MAPA.id]; if (final) { this.tom(880, 0.5, { tipo: tb, vol: 0.14 }); this.tom(1320, 0.5, { tipo: 'sine', vol: 0.07 }); } else this.tom(587, 0.16, { tipo: tb, vol: 0.12 }); },
   tique(k) { this.tom(1400 + (k % 2) * 300, 0.035, { tipo: 'square', vol: 0.05 }); this.ruido(0.025, { vol: 0.05, filtro: { tipo: 'highpass', f: 3000 } }); },
+  // os lances da reta final e do chip
+  reta() { this.ruido(1.6, { vol: 0.12, atk: 0.3, filtro: { tipo: 'bandpass', f: 400, f2: 2400, q: 1.2 } }); this.notas([523, 659, 784, 1047], 0.08, { tipo: TIMBRE[MAPA.id], vol: 0.07, dur: 0.35 }); },
+  coracao() { this.tom(64, 0.15, { f2: 40, vol: 0.3 }); this.tom(58, 0.15, { f2: 38, vol: 0.22, q: 0.18 }); },
+  sobe() { this.notas([660, 990], 0.07, { tipo: 'triangle', vol: 0.05, dur: 0.14 }); },
+  cai() { this.notas([440, 294], 0.08, { tipo: 'triangle', vol: 0.04, dur: 0.16 }); },
   pouso() { this.tom(110, 0.6, { f2: 48, vol: 0.32 }); this.ruido(0.7, { vol: 0.18, filtro: { f: 2400, f2: 200 } }); this.notas([392, 523, 659, 784], 0.05, { tipo: 'triangle', vol: 0.07, dur: 1.1 }); },
 };
 const SOM_INTRO = {
@@ -2643,6 +3181,14 @@ const SOM_INTRO = {
     som.tom(240, 0.9, { q: 1.6, f2: 90, tipo: 'sawtooth', vol: 0.07, filtro: { f: 900 } });
     for (let k = 0; k < 12; k++) som.ruido(0.03, { q: 1.2 + Math.random() * 2, vol: 0.06, filtro: { tipo: 'highpass', f: 2000 } });
   },
+  arcade() {
+    // a ficha caindo, o «liga» da TV de tubo e um arpejo de 8 bits
+    som.tom(988, 0.08, { tipo: 'square', vol: 0.06 }); som.tom(1319, 0.3, { q: 0.08, tipo: 'square', vol: 0.06 });
+    som.ruido(0.35, { q: 0.1, vol: 0.08, filtro: { tipo: 'highpass', f: 3000 } });
+    som.notas([523, 659, 784, 1047, 784, 1047, 1319, 1568], 0.09, { q: 0.6, tipo: 'square', vol: 0.05, dur: 0.1 });
+    for (const f of [262, 330, 392]) som.tom(f, 0.8, { q: 1.4, tipo: 'triangle', vol: 0.05 });
+    som.notas([1568, 2093], 0.1, { q: 2.5, tipo: 'square', vol: 0.05, dur: 0.3 });
+  },
 };
 
 /* ================= cartões dos mapas (a roleta e a galeria usam os mesmos) ================= */
@@ -2668,6 +3214,7 @@ function cartao(id, w, h) {
     sk.bruxa(c, 300, 66, -1, -9);
     fantasmaBu[0] = -9; sk.fantasma(c, 110, 84, 0, { x: 160, y: 150 }, 0);
     const mods = [{ cor: '#ff6fb5', modelo: 'gato', acessorio: 'laco' }, { cor: '#7fd3ff', modelo: 'classica', acessorio: 'oculos' }, { cor: '#ffd84d', modelo: 'coelho', acessorio: 'nenhum' }, { cor: '#8fe36b', modelo: 'polvo', acessorio: 'coroa' }];
+    if (sk.cartaoExtra) sk.cartaoExtra(c);
     [[170, 156, 'feliz'], [214, 128, 'medo'], [248, 170, 'normal'], [140, 190, 'tonta']].forEach(([x, y, expr], i) => desenhaAlma(c, x, y, 13, mods[i], { expr, t: i, lx: .4, ly: .3 }));
     c.restore();
   } catch (e) { }
@@ -2721,7 +3268,7 @@ const BOLHAS = Array.from({ length: 80 }, () => ({ x: rFixo(), v: 160 + rFixo() 
 const WARP = Array.from({ length: 180 }, () => ({ a: rFixo() * 6.28, r0: 10 + rFixo() * 60 }));
 function tituloIntro(c, w, h, id, t0, t, o = {}) {
   const u = clamp((t - t0) / 0.5, 0, 1); if (u <= 0) return;
-  const m = MAPAS.find(x => x.id === id);
+  const m = mapaPorId(id);
   let tam = Math.min(w / (SKINS[id].pixel ? 9 : 8.2), 92);
   c.save(); c.font = fonteMapa(id, tam); const larg = c.measureText(m.nome).width; if (larg > w * 0.86) tam *= w * 0.86 / larg;
   tam *= easeBack(u);
@@ -2827,6 +3374,27 @@ const INTRO = {
     const fogo = c.createLinearGradient(0, h * .38, 0, h * .54); fogo.addColorStop(0, '#fff2b0'); fogo.addColorStop(.5, '#ff8a2b'); fogo.addColorStop(1, '#c8201a');
     tituloIntro(c, w, h, 'vulcao', 1.35, t, { cor: fogo, brilho: '#ff5a10' });
     prontas(c, w, h, t, 'vulcao');
+  },
+  // a TV de tubo liga (uma linha que abre), os invasores marcham e o nome é digitado letra a letra
+  arcade(c, w, h, t, img) {
+    c.fillStyle = '#05030c'; c.fillRect(0, 0, w, h);
+    const ab = clamp((t - 0.1) / 0.35, 0, 1), hh = Math.max(2, h * easeOut4(ab));
+    c.save(); c.beginPath(); c.rect(0, h / 2 - hh / 2, w, hh); c.clip();
+    c.imageSmoothingEnabled = false; capa(c, img, w, h, 1.04 + t * 0.02, 1);
+    c.fillStyle = 'rgba(8,4,24,.55)'; c.fillRect(0, 0, w, h);
+    const q = Math.floor(t * 3) % 2, ox = Math.sin(t * 1.4) * w * 0.06;
+    for (let i = 0; i < 8; i++) for (let j = 0; j < 2; j++) pinta(c, sprite('alien' + q, ALIEN_PX[q], PAL_ALIEN), w * 0.14 + ox + i * w * 0.1, h * 0.14 + j * 34, 3);
+    pinta(c, sprite('ovni', OVNI_PX, PAL_OVNI), -120 + t * (w + 240) / DUR.intro, h * 0.72 + Math.sin(t * 4) * 8, 5);
+    c.restore();
+    if (ab < 1) { c.fillStyle = `rgba(230,250,255,${1 - ab})`; c.fillRect(0, h / 2 - 1.5, w, 3); }
+    c.fillStyle = 'rgba(0,0,0,.25)'; for (let y = 0; y < h; y += 3) c.fillRect(0, y, w, 1);
+    const nome = 'FLIPERAMA TURBO', n = clamp(Math.floor((t - 0.55) / 0.06), 0, nome.length);
+    if (n !== INTRO.arcade.n) { if (n > (INTRO.arcade.n || 0)) som.tom(880 + n * 30, 0.04, { tipo: 'square', vol: 0.04 }); INTRO.arcade.n = n; }
+    const fs = Math.min(w / 16, 40); c.font = `${fs}px "Press Start 2P", monospace`; c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillStyle = '#ff4fd8'; c.fillText(nome.slice(0, n), w / 2 + 4, h * .46 + 4); c.fillStyle = '#5ff0f0'; c.fillText(nome.slice(0, n), w / 2, h * .46);
+    if (n === nome.length && Math.floor(t * 3) % 2 === 0) { c.font = '12px "Press Start 2P", monospace'; c.fillStyle = '#ffe14d'; c.fillText('★ CORRIDA ESPECIAL ★', w / 2, h * .46 + fs * 1.4); }
+    c.textAlign = 'left'; c.textBaseline = 'alphabetic';
+    prontas(c, w, h, t, 'arcade');
   },
 };
 
@@ -3554,7 +4122,7 @@ function desenhaContagem(c, w, h, t, agora) {
 }
 const easeCaixa = u => 1 - Math.pow(1 - clamp(u, 0, 1), 4.6);
 function itemCaixa(c, x, y, iw, ih, id) {
-  const cor = RARIDADE[id], m = MAPAS.find(q => q.id === id), imgH = ih * 0.68;
+  const cor = RARIDADE[id], m = mapaPorId(id), imgH = ih * 0.68;
   c.fillStyle = '#16101e'; rr(c, x, y, iw, ih, 8); c.fill();
   c.save(); rr(c, x, y, iw, ih, 8); c.clip();
   const img = cartaoDe(id), s = Math.max(iw / img.width, imgH / img.height); c.drawImage(img, x + (iw - img.width * s) / 2, y + (imgH - img.height * s) / 2, img.width * s, img.height * s);
@@ -3572,8 +4140,10 @@ function desenhaCaixa(c, w, h, u, sh, foco, agora) {
   const g = c.createRadialGradient(w / 2, h * .5, 20, w / 2, h * .5, w * .8); g.addColorStop(0, '#1b2748'); g.addColorStop(1, '#070a16'); c.fillStyle = g; c.fillRect(0, 0, w, h);
   c.strokeStyle = 'rgba(255,255,255,.025)'; c.lineWidth = 1; for (let x = -h; x < w; x += 18) { c.beginPath(); c.moveTo(x, 0); c.lineTo(x + h, h); c.stroke(); }
   luzes(c, w, h, agora * (foco ? 6 : 2 + (1 - u) * 14), ['#ff8a2b', '#b08af5', '#ffd84d']);
-  c.textAlign = 'center'; c.fillStyle = '#ffd84d'; c.font = `${Math.min(42, w / 14)}px ${FONTE_GP}`; c.fillText(foco ? 'Mapa sorteado!' : 'Caixa dos Mapas', w / 2, h * 0.2 + 6);
-  c.font = `700 13px ${FONTE_GPC}`; c.fillStyle = '#9fb0d8'; c.fillText(foco ? MAPAS.find(m => m.id === sh.mapa).tema.toUpperCase() : 'SORTEIO DO MAPA DA CORRIDA', w / 2, h * 0.2 + 26); c.textAlign = 'left';
+  // na corrida especial a roleta passa pelos mapas de sempre e para no Fliperama Turbo
+  const especial = sh.mapa === MAPA_ESPECIAL.id;
+  c.textAlign = 'center'; c.fillStyle = especial && foco ? '#5ff0f0' : '#ffd84d'; c.font = `${Math.min(42, w / 14)}px ${FONTE_GP}`; c.fillText(foco ? (especial ? 'Corrida especial!' : 'Mapa sorteado!') : 'Caixa dos Mapas', w / 2, h * 0.2 + 6);
+  c.font = `700 13px ${FONTE_GPC}`; c.fillStyle = '#9fb0d8'; c.fillText(foco ? (especial ? 'O MAPA GRANDE, SÓ DA ESPECIAL' : mapaPorId(sh.mapa).tema.toUpperCase()) : 'SORTEIO DO MAPA DA CORRIDA', w / 2, h * 0.2 + 26); c.textAlign = 'left';
   const iw = clamp(w * 0.24, 118, 196), ih = iw * 0.86, gap = 6, passo = iw + gap, cy = h * 0.54, y0 = cy - ih / 2;
   const alvo = CAIXA_WIN * passo + iw * sh.parada - w / 2, off = alvo * easeCaixa(u);
   const k = Math.floor((off + w / 2) / passo); if (k !== sh.tique && !foco) { sh.tique = k; som.tique(k); sh.tiqueEm = agora; }
@@ -3665,16 +4235,28 @@ function desenhaShow(tl, agora, dt) {
 }
 let SHOW_ATUAL = { mapa: 'halloween', faixa: [], parada: 0.5, tique: -1 };
 
-/* ================= a música: o lobby (15 s depois de abrir, 10% subindo rápido até 20%), a da corrida e o Tema da Vitória ================= */
-// LOBBY_INICIO: a faixa do lobby começa (e volta, no loop) do 6º segundo, pedido do Cleber em 21/10/2026
-const LOBBY_ATRASO = 15, LOBBY_SUBIDA = 6, LOBBY_INICIO = 6, VOL_TETO = 0.2;
-// a música da corrida entra no «já» (T = 3, depois dos três bipes), um pouco abaixo do teto para os efeitos aparecerem
-const CORRIDA_LARGA = 3, CORRIDA_VOL = 0.8;
+/* ================= a música: o lobby (15 s depois de abrir, 15% subindo rápido até 30%), a da corrida e o Tema da Vitória ================= */
+// LOBBY_INICIO: de que segundo a faixa do lobby começa (e volta, no loop); a de 27/10/2026 vai do começo
+// O volume é a fração do som cheio (a barra do player mostra isso em %). VOL_PADRAO: o lobby chega a 30%
+// (pedido do Cleber em 27/10/2026) e dali a pessoa sobe até 100% ou abaixa.
+const LOBBY_ATRASO = 15, LOBBY_SUBIDA = 6, LOBBY_INICIO = 0, VOL_TETO = 1, VOL_PADRAO = 0.3;
+// a música da corrida entra no «já» (T = 3, depois dos três bipes), baixa para os efeitos aparecerem
+const CORRIDA_LARGA = 3, CORRIDA_VOL = 0.16;
 const faixaCorrida = () => { const l = opcoes.sons.corrida || []; return l.length ? l[hashStr(String((rec && rec.mapa) || CORRIDA.mapa || '')) % l.length] : null; };
 const volVitoria = s => s < 15 ? 0.25 : s < 17 ? 0.25 - 0.10 * (s - 15) / 2 : 0.15;
-let prefs = { max: VOL_TETO, mudo: false };
-try { const p = JSON.parse(localStorage.getItem('corrida-volume') || 'null'); if (p && typeof p.max === 'number') prefs = { max: clamp(p.max, 0, VOL_TETO), mudo: !!p.mudo }; } catch (e) { }
-const salvaPrefs = () => { try { localStorage.setItem('corrida-volume', JSON.stringify(prefs)); } catch (e) { } };
+let prefs = { max: VOL_PADRAO, mudo: false };
+// A corrida e a vitória ficam no volume de antes com a barra no padrão; o volume escolhido escala as duas.
+const escalaVol = () => prefs.max / VOL_PADRAO;
+try {
+  const p = JSON.parse(localStorage.getItem('corrida-volume-2') || 'null');
+  if (p && typeof p.max === 'number') prefs = { max: clamp(p.max, 0, VOL_TETO), mudo: !!p.mudo };
+  else {
+    // a régua antiga ia até 0,2 (= 100% na barra): quem tinha abaixado continua na mesma proporção do padrão novo
+    const v = JSON.parse(localStorage.getItem('corrida-volume') || 'null');
+    if (v && typeof v.max === 'number') prefs = { max: clamp(v.max / 0.2, 0, 1) * VOL_PADRAO, mudo: !!v.mudo };
+  }
+} catch (e) { }
+const salvaPrefs = () => { try { localStorage.setItem('corrida-volume-2', JSON.stringify(prefs)); } catch (e) { } };
 const musica = {
   lobby: null, vitoria: null, corrida: null, ganhoL: null, ganhoV: null, ganhoC: null, analisador: null, bins: null, ligada: false,
   criar() {
@@ -3721,12 +4303,12 @@ const musica = {
     const pL = agora - (CORRIDA.abertaEm + LOBBY_ATRASO);
     const naLobby = entrei && CORRIDA.abertaEm && (tl.tela === 'lobby' || (tl.tela === 'show' && tl.t < 2.5));
     L.toca = !!naLobby && pL >= 0;
-    const rampa = Math.min(prefs.max, 0.10 + 0.10 * clamp(pL / LOBBY_SUBIDA, 0, 1));
+    const rampa = prefs.max * (0.5 + 0.5 * clamp(pL / LOBBY_SUBIDA, 0, 1));
     L.vol = tl.tela === 'show' ? rampa * clamp(1 - tl.t / 2.5, 0, 1) : rampa;
     const naFesta = entrei && (tl.tela === 'video' || tl.tela === 'festa') && tl.ef < FESTA_MUSICA;
-    V.toca = !!naFesta; V.vol = naFesta ? volVitoria(tl.ef) * (prefs.max / VOL_TETO) : 0;
+    V.toca = !!naFesta; V.vol = naFesta ? Math.min(1, volVitoria(tl.ef) * escalaVol()) : 0;
     const C = this.estadoC, pC = tl.tela === 'corrida' ? tl.T - CORRIDA_LARGA : -1;
-    C.toca = !!entrei && pC >= 0; C.vol = prefs.max * CORRIDA_VOL;
+    C.toca = !!entrei && pC >= 0; C.vol = Math.min(1, CORRIDA_VOL * escalaVol());
     if (!this.lobby && (L.toca || V.toca || C.toca)) this.criar();
     const dL = this.lobby && isFinite(this.lobby.duration) && this.lobby.duration > LOBBY_INICIO + 1 ? this.lobby.duration - LOBBY_INICIO : 0;
     this.ajusta(this.lobby, this.ganhoL, L, LOBBY_INICIO + (dL ? Math.max(0, pL) % dL : Math.max(0, pL)), 0);
@@ -3745,7 +4327,7 @@ const musica = {
     if (!this.analisador || !this.estadoL.toca || prefs.mudo || !this.lobby || this.lobby.paused) return null;
     this.analisador.getByteFrequencyData(this.bins);
     // As barras acompanham o volume escolhido (20/10/2026): som baixo, barras baixas.
-    const nivel = 0.25 + 0.75 * clamp(this.estadoL.vol / VOL_TETO, 0, 1);
+    const nivel = 0.25 + 0.75 * clamp(this.estadoL.vol / VOL_PADRAO, 0, 1);
     const lo = 1, hi = Math.floor(this.bins.length * 0.72);
     return Array.from({ length: n }, (_, i) => {
       const a = Math.floor(lo * Math.pow(hi / lo, i / n)), b = Math.max(a + 1, Math.floor(lo * Math.pow(hi / lo, (i + 1) / n)));
@@ -3839,6 +4421,7 @@ function quadro() {
       const antes = T; T = novoT; ultT = novoT;
       for (const k of [1, 2]) if (antes < k && T >= k) som.bip(false);
       if (antes < 3 && T >= 3) som.bip(true);
+      sonsDosLances(antes, T);
       desenhar(Math.max(0, T - antes));
     } else if (tl.tela === 'video') {
       quadroVideo(tl);
@@ -3893,9 +4476,9 @@ function avisaPainel(tl) {
 
 /* ================= ler e preparar a gravação de uma corrida ================= */
 function prepararGravacao(r, extra) {
-  if (!r) { rec = null; return; }
+  if (!r) { rec = null; LANCES = null; return; }
   if (!MAPA || MAPA.id !== r.mapa) carregaMapa(r.mapa);
-  rec = r; rec.voce = (rec.ids || []).indexOf(EU);
+  rec = r; rec.voce = (rec.ids || []).indexOf(EU); LANCES = montarLances(r);
   CORRIDA.semente = r.seed; CORRIDA.mapa = r.mapa;
   SHOW_ATUAL = { mapa: r.mapa, faixa: extra.faixa, parada: extra.parada, tique: -1 };
   vb.length = 0; buscar(0); ultT = -1; festaViva = null;
@@ -3903,11 +4486,12 @@ function prepararGravacao(r, extra) {
 
 /* ================= a gravação (no navegador do super admin) ================= */
 const pausa = () => new Promise(r => setTimeout(r, 0));
-async function gravar({ pessoas, premio, aoProgresso = () => { }, cancelado = () => false }) {
+async function gravar({ pessoas, premio, especial = false, aoProgresso = () => { }, cancelado = () => false }) {
   if (!pessoas || pessoas.length < 2) throw new Error('A corrida precisa de pelo menos 2 pessoas correndo.');
   pararGravacao = false;
   const semente = 1000 + Math.floor(Math.random() * 99000), rg = mulberry32(semente ^ 0x5bd1e995);
-  const mapa = MAPAS[Math.floor(rg() * MAPAS.length)].id, faixa = geraFaixa(rg, mapa), parada = 0.16 + rg() * 0.68;
+  // a especial não entra no sorteio: o sorteio corre igual (a semente segue a mesma) e o mapa grande toma o lugar
+  const sorteado = MAPAS[Math.floor(rg() * MAPAS.length)].id, mapa = especial ? MAPA_ESPECIAL.id : sorteado, faixa = geraFaixa(rg, mapa), parada = 0.16 + rg() * 0.68;
   carregaMapa(mapa);
   // a narração é a mesma para todo mundo: ninguém é «você» na gravação
   const lista = pessoas.map(p => ({ nome: p.nome, setor: p.setor || 'Sem setor', almas: 1, estilos: [p.est], voce: false }));
@@ -3976,6 +4560,8 @@ return {
   ligarEq(elementos) { eqBarras = Array.from(elementos || []); eqParado = true; },
   /** A câmera da corrida: seguir uma pessoa (id) ou o líder (null). */
   seguir(id) { const i = id && rec ? (rec.ids || []).indexOf(id) : -1; seguirPedido = i; if (!festa) seguir = i; },
+  /** O palpite de quem assiste (o id de quem ele escolheu): vira o chip «PALPITE» no canto da corrida. */
+  setPalpite(id) { palpiteId = id || null; },
   gravar,
   podeGravarVideo,
   /** As fontes chegaram: redesenha o que estava guardado com a fonte provisória. */

@@ -30,7 +30,8 @@
 
 export type TipoAusencia =
   | 'ferias' | 'atestado' | 'inss' | 'banco_de_horas' | 'abono'
-  | 'declaracao' | 'licenca' | 'falta' | 'suspensao' | 'outros';
+  | 'declaracao' | 'licenca' | 'falta' | 'suspensao' | 'outros'
+  | 'licenca_maternidade' | 'licenca_paternidade';
 
 export interface MetaTipoAusencia {
   tipo: TipoAusencia;
@@ -57,7 +58,23 @@ export const TIPOS_AUSENCIA: readonly MetaTipoAusencia[] = [
   { tipo: 'falta',          rotulo: 'Falta',          abateMeta: false },
   { tipo: 'suspensao',      rotulo: 'Suspensão',      abateMeta: false },
   { tipo: 'outros',         rotulo: 'Outros',         abateMeta: false },
+  // Os afastamentos da aba Usuários (20261028100000).
+  { tipo: 'licenca_maternidade', rotulo: 'Licença-maternidade', abateMeta: true },
+  { tipo: 'licenca_paternidade', rotulo: 'Licença-paternidade', abateMeta: true },
 ] as const;
+
+/**
+ * «Tempo indeterminado» no banco: `fim = 9999-12-31`, e não `NULL`.
+ *
+ * As funções do Comercial conferem sobreposição com `fim >= inicio` e recortam
+ * o mês com `LEAST(fim, ...)`. Com a data-sentinela, um afastamento sem volta
+ * continua bloqueando um atestado lançado por cima. Ver 20261028100000.
+ */
+export const FIM_SEM_VOLTA = '9999-12-31';
+
+export function semDataDeVolta(fim: string | null | undefined): boolean {
+  return !fim || fim >= FIM_SEM_VOLTA;
+}
 
 const POR_TIPO: Record<string, MetaTipoAusencia> =
   Object.fromEntries(TIPOS_AUSENCIA.map(t => [t.tipo, t]));
@@ -177,6 +194,7 @@ function diaMes(iso: string): string {
  * linha seria ruído.
  */
 export function rotuloDoPeriodo(a: Pick<PeriodoAusencia, 'inicio' | 'fim' | 'meio_periodo'>): string {
+  if (semDataDeVolta(a.fim)) return `desde ${diaMes(a.inicio)}, sem data de volta`;
   if (a.inicio === a.fim) {
     return diaMes(a.inicio) + (a.meio_periodo ? ' (meio período)' : '');
   }

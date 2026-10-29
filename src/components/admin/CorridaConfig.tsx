@@ -9,6 +9,12 @@
  *   3. Gravar: este navegador simula a corrida e grava a festa em vídeo.
  *   4. Largar: todo mundo vê a largada do lobby, o sorteio do mapa e a corrida juntos.
  *
+ * A corrida especial (27/10/2026): a terceira escolha do alto do card, «⚡ Especial».
+ * No banco é uma corrida de bichinhos; o que muda é a gravação, que sai no mapa
+ * grande (Fliperama Turbo) em vez do sorteado. A marca fica neste navegador
+ * (`Corrida/especial.ts`) e o interruptor «Corrida especial» troca até gravar. Na
+ * votação, se ganharem os bichinhos, a corrida que nasce é a especial.
+ *
  * Mais: o card de divulgação (avisar quem você quiser que vem aí uma corrida)
  * e o «Testar», que roda uma corrida inteira só na sua tela, sem banco.
  *
@@ -33,7 +39,7 @@
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { Ban, Eye, Flag, FlaskConical, Megaphone, PartyPopper, Play, RefreshCw, Send, Shuffle, Trophy, Video, Vote } from 'lucide-react';
+import { Ban, Eye, Flag, FlaskConical, Megaphone, PartyPopper, Play, RefreshCw, Send, Shuffle, Trophy, Video, Vote, Zap } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -51,6 +57,7 @@ import { assistirComoOrganizador, testarComoOrganizador } from '@/components/Cor
 import { TesteDoChefe } from '@/components/Corrida/guerra/TesteDoChefe';
 import { agoraBanco, categoriaDe, mensagemDoErro, segundos, type Categoria, type EnqueteJson } from '@/components/Corrida/banco';
 import { destravarAudio, NOME_CORRIDA } from '@/components/Corrida/nome';
+import { corridaEhEspecial, ehMapaEspecial, marcarEspecial, NOME_ESPECIAL } from '@/components/Corrida/especial';
 import { TEMAS, type TemaLobby } from '@/components/Corrida/lobbies/cena';
 
 const CardDivulgacao = lazy(() => import('@/components/Corrida/CardDivulgacao'));
@@ -71,7 +78,9 @@ const BICHO: Record<Categoria, { um: string; uns: string; max: number }> = {
   bichinhos: { um: 'bichinho', uns: 'bichinhos', max: 300 },
   cavalos: { um: 'cavalo', uns: 'cavalos', max: 24 },
 };
-const CATEGORIAS: Array<[Categoria, string]> = [['bichinhos', '🐾 Bichinhos'], ['cavalos', '🐎 Cavalos']];
+/** O alto do card: as duas categorias do banco e a especial (uma corrida de bichinhos no mapa grande). */
+type Escolha = Categoria | 'especial';
+const CATEGORIAS: Array<[Escolha, string]> = [['bichinhos', '🐾 Bichinhos'], ['cavalos', '🐎 Cavalos'], ['especial', '⚡ Especial']];
 const faltaMigration = (e: unknown) => /fn_corrida_|PGRST202|schema cache/.test(String(e));
 
 type Confirmacao = { titulo: string; texto: string; acao: () => Promise<void>; perigo?: boolean } | null;
@@ -90,7 +99,11 @@ export default function CorridaConfig() {
   const [gravando, setGravando] = useState<{ f: number; etapa: string } | null>(null);
   const cancelarGravacao = useRef(false);
   const [confirmar, setConfirmar] = useState<Confirmacao>(null);
-  const [escolhida, setEscolhida] = useState<Categoria>('bichinhos');
+  const [escolhida, setEscolhida] = useState<Escolha>('bichinhos');
+  const escolhidaAgora = useRef<Escolha>(escolhida);
+  escolhidaAgora.current = escolhida;
+  // A da corrida em andamento: a marca deste navegador, ou o mapa que já está na gravação.
+  const [especialDaCorrida, setEspecialDaCorrida] = useState(false);
   const [div, setDiv] = useState({ ...DIVULGACAO_PADRAO.bichinhos, premio: '', dias: 3, alvos: new Set<string>() });
   const [divAberta, setDivAberta] = useState(false);
   const [previa, setPrevia] = useState(false);
@@ -125,8 +138,14 @@ export default function CorridaConfig() {
   const emAndamento = !!corrida && ['preparando', 'aberta', 'correndo'].includes(corrida.estado);
   const gravada = !!corrida?.gravada_em;
   // A categoria: a da corrida em andamento (não muda no meio); senão, a escolhida no alto do card.
-  const categoria: Categoria = emAndamento ? categoriaDe(corrida) : escolhida;
+  const categoria: Categoria = emAndamento ? categoriaDe(corrida) : escolhida === 'especial' ? 'bichinhos' : escolhida;
   const bicho = BICHO[categoria], cavalos = categoria === 'cavalos';
+  const especial = emAndamento ? !cavalos && especialDaCorrida : escolhida === 'especial';
+  const escolhaVista: Escolha = especial ? 'especial' : categoria;
+  useEffect(() => {
+    setEspecialDaCorrida(!!corrida && (corridaEhEspecial(corrida.id) || ehMapaEspecial(corrida.gravacao?.mapa)));
+  }, [corrida?.id, corrida?.gravacao?.mapa]); // eslint-disable-line react-hooks/exhaustive-deps
+  const trocarEspecial = (sim: boolean) => { if (!corrida) return; marcarEspecial(corrida.id, sim); setEspecialDaCorrida(sim); };
   const ETAPAS = [['preparando', `Escolhendo ${bicho.uns}`], ['aberta', 'Lobby aberto'], ['gravada', 'Gravada'], ['correndo', 'Correndo'], ['encerrada', 'Encerrada']] as const;
   const etapa = !corrida ? -1 : corrida.estado === 'encerrada' || corrida.estado === 'cancelada' ? 4 : corrida.estado === 'correndo' ? 3 : gravada ? 2 : corrida.estado === 'aberta' ? 1 : 0;
   const pessoasDaCorrida = useMemo(() => painel?.pessoas ?? [], [painel]);
@@ -162,7 +181,10 @@ export default function CorridaConfig() {
     // O cenário do lobby é coisa dos bichinhos; a de cavalos tem o paddock.
     if (cat === 'bichinhos' && p.corrida && (p.corrida.tema ?? 'f1') !== tema) p = await definirTema(p.corrida.id, tema);
     if (abrir && p.corrida) p = await abrirCorrida(p.corrida.id);
-    setEscolhida(cat);
+    // A especial é uma corrida de bichinhos com a marca: a gravação sai no mapa grande.
+    const ehEspecial = cat === 'bichinhos' && escolhidaAgora.current === 'especial';
+    if (p.corrida) { marcarEspecial(p.corrida.id, ehEspecial); setEspecialDaCorrida(ehEspecial); }
+    setEscolhida(ehEspecial ? 'especial' : cat);
     setMontando(false);
     return p;
   };
@@ -239,7 +261,7 @@ export default function CorridaConfig() {
         p = await gravarCorridaCavalos(corrida, (f, e) => setGravando({ f, etapa: e }), () => cancelarGravacao.current);
         if (p) { setPainel(p); toast.success('Corrida gravada!', { description: 'Os cavalos estão na largada. Já dá para largar.' }); }
       } else {
-        p = await gravarCorrida(corrida, pessoasDaCorrida, (f, e) => setGravando({ f, etapa: e }), () => cancelarGravacao.current);
+        p = await gravarCorrida(corrida, pessoasDaCorrida, (f, e) => setGravando({ f, etapa: e }), () => cancelarGravacao.current, especial);
         if (p) { setPainel(p); toast.success('Corrida gravada!', { description: p.corrida?.gravacao?.video ? 'A corrida e a festa em vídeo estão prontas. Já dá para largar.' : 'Este navegador não grava vídeo: a festa vai ser desenhada em cada tela. Já dá para largar.' }); }
       }
     } catch (e) { toast.error('A gravação falhou', { description: mensagemDoErro(e) }); void recarregar(); }
@@ -263,7 +285,7 @@ export default function CorridaConfig() {
 
   const statusTxt = !corrida ? 'Nenhuma corrida ainda.' : corrida.estado === 'preparando'
     ? `${corrida.escolheram} de ${corrida.corredores} escolheram o ${bicho.um}. ${cavalos ? 'Quem não escolher ganha um cavalo livre, sorteado.' : 'Quem não escolher corre com um dos três.'}`
-    : corrida.estado === 'aberta' ? (gravada ? `Gravada e pronta. ${corrida.no_lobby} de ${corrida.chamados} no lobby. ${cavalos ? 'O resultado está na gravação: nem você vê antes.' : 'O mapa está na gravação: nem você vê antes.'}` : `Lobby aberto: ${corrida.no_lobby} de ${corrida.chamados} entraram. Grave para liberar a largada.`)
+    : corrida.estado === 'aberta' ? (gravada ? `Gravada e pronta. ${corrida.no_lobby} de ${corrida.chamados} no lobby. ${cavalos ? 'O resultado está na gravação: nem você vê antes.' : especial ? `É a corrida especial, no ${NOME_ESPECIAL}: o resultado está na gravação.` : 'O mapa está na gravação: nem você vê antes.'}` : `Lobby aberto: ${corrida.no_lobby} de ${corrida.chamados} entraram. Grave para liberar a largada.`)
       : corrida.estado === 'correndo' ? `Correndo agora para ${corrida.no_lobby} pessoas.` : corrida.estado === 'encerrada' ? `Encerrada${corrida.vencedor_nome ? `: ${corrida.vencedor_nome}${vencedorSetor ? ` (${vencedorSetor})` : ''} venceu` : ''}.` : 'Cancelada.';
 
   return (
@@ -274,7 +296,7 @@ export default function CorridaConfig() {
             <CardTitle className="flex items-center gap-2 text-base"><Flag className="h-4 w-4 text-amber-500" /> {NOME_CORRIDA}</CardTitle>
             <p className="mt-1 text-xs text-muted-foreground">O sorteio em forma de corrida: cada pessoa escolhida corre com um {bicho.um}, quem cruzar primeiro leva o prêmio. Todo mundo assiste junto, no mesmo segundo.</p>
           </div>
-          <Button size="sm" variant="outline" className="gap-1.5" onClick={() => { destravarAudio(); testarComoOrganizador({ cavalos, premio: premio || corrida?.premio || 'R$ 30', tema: montando ? tema : corrida?.tema ?? tema }); }}>
+          <Button size="sm" variant="outline" className="gap-1.5" onClick={() => { destravarAudio(); testarComoOrganizador({ cavalos, especial, premio: premio || corrida?.premio || 'R$ 30', tema: montando ? tema : corrida?.tema ?? tema }); }}>
             <FlaskConical className="h-3.5 w-3.5" /> Testar só na minha tela
           </Button>
         </div>
@@ -282,13 +304,14 @@ export default function CorridaConfig() {
         <div className="mt-2 flex flex-wrap items-center gap-2 text-xs" role="radiogroup" aria-label="Qual corrida">
           <span className="font-semibold">Corrida:</span>
           {CATEGORIAS.map(([c, rotulo]) => (
-            <button key={c} type="button" role="radio" aria-checked={categoria === c} disabled={emAndamento || montando}
+            <button key={c} type="button" role="radio" aria-checked={escolhaVista === c} disabled={emAndamento || montando}
               onClick={() => setEscolhida(c)}
-              className={cn('rounded-full border px-3 py-1 disabled:cursor-not-allowed', categoria === c ? 'border-amber-500 bg-amber-500/15 font-semibold' : 'hover:border-amber-500/60 disabled:opacity-50')}>
+              className={cn('rounded-full border px-3 py-1 disabled:cursor-not-allowed', escolhaVista === c ? 'border-amber-500 bg-amber-500/15 font-semibold' : 'hover:border-amber-500/60 disabled:opacity-50')}>
               {rotulo}
             </button>
           ))}
-          {emAndamento && <span className="text-muted-foreground">(a corrida em andamento é de {bicho.uns})</span>}
+          {emAndamento && <span className="text-muted-foreground">(a corrida em andamento é de {bicho.uns}{especial ? ', especial' : ''})</span>}
+          {!emAndamento && especial && <span className="w-full text-muted-foreground">Corrida de bichinhos no mapa grande, o {NOME_ESPECIAL}: canhões que lançam o bichinho, luvas de boxe, pinball, teletransporte e as peças dos outros mapas. Na votação, se ganharem os bichinhos, sai a especial.</span>}
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -320,6 +343,13 @@ export default function CorridaConfig() {
           </div>
         )}
 
+        {/* A corrida especial (27/10/2026): dá para ligar e desligar até gravar. */}
+        {corrida && emAndamento && !cavalos && !gravada && (
+          <label className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-xs">
+            <span><span className="flex items-center gap-1.5 font-semibold"><Zap className="h-3.5 w-3.5 text-amber-500" /> Corrida especial</span><span className="text-muted-foreground">Grava no mapa grande ({NOME_ESPECIAL}), em vez do sorteio. Vale para a gravação feita neste navegador.</span></span>
+            <Switch checked={especial} disabled={ocupado || !!gravando} onCheckedChange={trocarEspecial} />
+          </label>
+        )}
         {/* A Guerra na Corrida (23/10/2026): só na de cavalos, e só antes da largada. */}
         {corrida && emAndamento && cavalos && !corrida.inicia_em && <InterruptorGuerra corridaId={corrida.id} travado={montando} />}
         {/* O chefe da guerra sozinho, sem corrida e sem banco (como o teste da chefona da Bruxa). */}

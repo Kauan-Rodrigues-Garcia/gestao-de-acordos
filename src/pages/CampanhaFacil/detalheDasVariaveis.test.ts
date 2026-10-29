@@ -69,7 +69,8 @@ describe('prévia', () => {
   });
 
   it('a lista das variáveis em reais é exatamente a das que saem com «R$»', () => {
-    const emReais = Object.entries(exemplo.variaveis).filter(([, v]) => v.startsWith('R$')).map(([k]) => k).sort();
+    // As parceladas saem «12x de R$ …» (27/10/2026): também levam o «R$».
+    const emReais = Object.entries(exemplo.variaveis).filter(([, v]) => /^(\d+x de )?R\$/.test(v)).map(([k]) => k).sort();
     expect([...VARIAVEIS_EM_REAIS].sort()).toEqual(emReais);
   });
 

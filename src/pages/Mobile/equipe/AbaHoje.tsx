@@ -65,7 +65,7 @@ export function AbaHoje({
     for (const l of linhas ?? []) {
       if (l.data_pagamento !== hojeISO || !l.operador_id) continue;
       if (!linhaNoEscopo({ operador_id: l.operador_id, setor_id: l.setor_id, contribuicao: l.contribuicao,
-        contribuicao_de_setor_id: l.contribuicao_de_setor_id }, alvo)) continue;
+        contribuicao_de_setor_id: l.contribuicao_de_setor_id, espelho_extra: l.espelho_extra }, alvo)) continue;
       const v = Number(l.valor_recebido) || 0;
       total += v;
       porOperador.set(l.operador_id, (porOperador.get(l.operador_id) ?? 0) + v);

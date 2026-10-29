@@ -40,7 +40,7 @@ import { useProfissional }          from '@/hooks/useProfissional';
 import { ModalAdicionarParcela }    from '@/components/ModalAdicionarParcela';
 import { adicionarParcelasAoGrupo, type NovaParcelaInput } from '@/services/parcelas.service';
 import {
-  ehFormaRecorrente, erroVencimentoRecorrente, nomeDaFormaRecorrente,
+  ehFormaRecorrente, erroVencimentoRecorrente, nomeDaFormaRecorrente, recorrenteSeguraONr,
 } from '@/lib/formasRecorrentes';
 import { useCargoPermissoes }       from '@/hooks/useCargoPermissoes';
 import { niveisLiberados }          from '@/lib/permissoes-escopo';
@@ -526,7 +526,22 @@ export function AcordoNovoInline({
         // — removido em 13/10/2026.
         const conflitoFinal = await verificarNrRegistro(nrParaVerificar, empresa.id, campoCampo);
 
-        if (conflitoFinal) {
+        // O acordo que segura o NR, quando ele é MEU (só na BookPlay).
+        const { data: acordoMeu } = conflitoFinal && !isPaguePlay && conflitoFinal.operadorId === perfil.id
+          ? await supabase
+              .from('acordos')
+              .select('*, perfis(id, nome, email, perfil, setor_id)')
+              .eq('id', conflitoFinal.acordoId)
+              .maybeSingle()
+          : { data: null };
+        // Recorrente meu, pago ou de mês anterior, não segura mais o NR
+        // (28/10/2026): o acordo novo segue a gravação normal, e a trava do NR
+        // passa para ele. Ver `recorrenteSeguraONr`.
+        const nrLiberadoPeloRecorrente = !!acordoMeu
+          && ehFormaRecorrente((acordoMeu as Acordo).tipo)
+          && !recorrenteSeguraONr(acordoMeu as Acordo, getTodayISO());
+
+        if (conflitoFinal && !nrLiberadoPeloRecorrente) {
           if (conflitoFinal.operadorId === perfil.id) {
             // BookPlay: NR do próprio operador abre a oferta de adicionar os
             // dados preenchidos como nova parcela do acordo existente
@@ -539,15 +554,12 @@ export function AcordoNovoInline({
                * O modal abre com a forma recorrente e cobra as travas: uma
                * parcela, valor TOTAL confirmado, data do mês corrente. Ao
                * gravar, o NR vai para a aba Pix Automático.
+               *
+               * O caminho inverso também fica fechado: o acordo recorrente
+               * existente do mês, em aberto, não recebe parcela — não há
+               * reparcelamento (22/09/2026). `ModalAdicionarParcela` recusa
+               * o mesmo. `acordoMeu` foi lido acima.
                */
-              const { data: acordoMeu } = await supabase
-                .from('acordos')
-                .select('*, perfis(id, nome, email, perfil, setor_id)')
-                .eq('id', conflitoFinal.acordoId)
-                .maybeSingle();
-              // O caminho inverso também fica fechado: o acordo recorrente
-              // existente não recebe parcela — não há reparcelamento
-              // (22/09/2026). `ModalAdicionarParcela` recusa o mesmo.
               if (acordoMeu && ehFormaRecorrente((acordoMeu as Acordo).tipo)) {
                 toast.error(
                   `${label} "${nrParaVerificar}" já é seu num acordo de `

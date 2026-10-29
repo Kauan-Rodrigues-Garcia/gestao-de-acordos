@@ -36,6 +36,7 @@
  */
 
 import { rpcSemTipo } from '@/lib/supabaseSemTipo';
+import { supabase } from '@/lib/supabase';
 
 export interface DiaRemovido {
   dia: string;
@@ -132,6 +133,51 @@ export async function preverRemocao(
     valor: Number(d.valor ?? 0) || 0,
   }));
 
+  return {
+    linhas: porDia.reduce((s, d) => s + d.linhas, 0),
+    valor:  porDia.reduce((s, d) => s + d.valor, 0),
+    porDia,
+  };
+}
+
+/**
+ * O que o 994 tiraria do setor — a mesma pergunta, para a Retenção.
+ *
+ * O 994 é dono do mês de quem vem nele (20261028150000): sai toda linha dessas
+ * pessoas no setor/mês que não está no arquivo — inclusive a que o 59 gravou
+ * antes do primeiro 994 do mês. Só a correção manual fica. São poucas linhas,
+ * então a conta é feita aqui, pela mesma `chaveDaLinha` da importação.
+ */
+export async function preverRemocao994(
+  empresaId: string,
+  setorId: string | null,
+  mes: string,
+  chaves: readonly string[],
+  /** Quem veio no arquivo: o mês dessas pessoas é o que o 994 substitui. */
+  operadores: readonly string[],
+): Promise<RemocaoPrevista | null> {
+  if (!setorId || !/^\d{4}-\d{2}$/.test(mes) || operadores.length === 0) return null;
+
+  const { data, error } = await supabase
+    .from('analitico_recebimentos')
+    .select('operador_usuario, codigo, data_pagamento, forma_pagamento, valor_recebido')
+    .eq('empresa_id', empresaId)
+    .eq('setor_id', setorId)
+    .eq('mes_referencia', `${mes}-01`)
+    .in('operador_usuario', [...operadores])
+    .neq('procedencia', 'manual');
+  if (error) throw new Error(error.message);
+
+  const presentes = new Set(chaves);
+  const dias = new Map<string, DiaRemovido>();
+  for (const l of (data ?? []) as { operador_usuario: string; codigo: string; data_pagamento: string; forma_pagamento: string; valor_recebido: unknown }[]) {
+    if (presentes.has(chaveDaLinha(l.operador_usuario, l.codigo, l.data_pagamento, l.forma_pagamento))) continue;
+    const d = dias.get(l.data_pagamento) ?? { dia: l.data_pagamento, linhas: 0, valor: 0 };
+    d.linhas++;
+    d.valor += Number(l.valor_recebido ?? 0) || 0;
+    dias.set(l.data_pagamento, d);
+  }
+  const porDia = [...dias.values()].sort((a, b) => a.dia.localeCompare(b.dia));
   return {
     linhas: porDia.reduce((s, d) => s + d.linhas, 0),
     valor:  porDia.reduce((s, d) => s + d.valor, 0),

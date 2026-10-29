@@ -787,6 +787,21 @@ export const PERMISSOES: PermissaoMeta[] = [
     grupo: 'Importações', padrao: LIDERANCA,
   },
   {
+    /*
+     * O botão do 994 (a Retenção do Jornada, 27/10/2026). Chave própria porque
+     * o relatório é de um setor só: com `importar_analitico` ele aparecia para
+     * a liderança de todos. Nasce desligado — liga-se para quem importa a
+     * Retenção, por cargo ou por pessoa.
+     */
+    key: 'importar_analitico_retencao', label: 'Importar 994 · Retenção',
+    descricao: 'Ver o botão e subir o relatório 994 da Retenção do Jornada no Analítico',
+    grupo: 'Importações', tenants: ['bookplay'], padrao: {},
+    depende: {
+      chaves: ['importar_analitico'],
+      motivo: 'O 994 grava no Analítico: sem «Importar relatório Analítico» o botão aparece e a gravação é recusada.',
+    },
+  },
+  {
     key: 'importar_diario', label: 'Importar Recebimento diário',
     descricao: 'Subir o relatório diário de recebimentos do ERP',
     grupo: 'Importações', padrao: LIDERANCA,

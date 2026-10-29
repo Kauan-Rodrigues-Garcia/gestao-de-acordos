@@ -17,6 +17,7 @@ import { toast } from 'sonner';
 import {
   resolverOperadores,
   importarLoteAnalitico,
+  importarLote994,
   revincularOrfaosAnalitico,
   notificarImportacaoAnalitico,
   atualizarResumoMensal,
@@ -39,6 +40,7 @@ import {
   chaveDaLinha,
   diaISO,
   preverRemocao,
+  preverRemocao994,
   arquivoComecaNoInicioDoMes,
   type RemocaoPrevista,
 } from '@/services/analitico/remocaoPrevista';
@@ -87,7 +89,25 @@ export interface PreviewImport {
   mudancaDeColunas: MudancaDeColunas | null;
   /** O cabeçalho lido, normalizado. Registrado quando a importação é confirmada. */
   assinatura: string[];
+  /** Qual relatório é: o 58 ou o 994 da Retenção do Jornada. */
+  relatorio: RelatorioDoImport;
+  /** Só no 994: o que a prévia precisa dizer (ver `ResultadoParse994`). */
+  resumo994?: {
+    /** O total do arquivo por pessoa — o número do ERP. */
+    totalPorOperador:   Record<string, SomaLinhas>;
+    /** Pagamento com data futura, lançado na data do acordo. */
+    naDataDoAcordo:     SomaLinhas;
+    /** Linha sem Nr. Doc., gravada com o Cód. Acordo. */
+    peloCodigoDoAcordo: SomaLinhas;
+    /** Linhas de outros subgrupos, que vêm pelo 58/59. */
+    outraEquipe:        SomaLinhas;
+  };
 }
+
+interface SomaLinhas { linhas: number; valor: number }
+
+/** O 58 (pagamento mensal) ou o 994 (Retenção do Jornada) — ver `PROCEDENCIA_994`. */
+export type RelatorioDoImport = '58' | '994';
 
 
 /** Soma pagamentos/valores por operador de duas listas (inseridos + revinculados). */
@@ -117,6 +137,12 @@ export function useAnaliticoImport() {
 
   // Vínculos manuais definidos pelo usuário no preview: username_arquivo → perfil_id
   const [vinculosManuais, setVinculosManuais] = useState<Record<string, string>>({});
+
+  /**
+   * Qual relatório o botão abriu. Cada um tem o seu parser, e cada parser
+   * recusa o arquivo do outro com o caminho certo na mensagem.
+   */
+  const [relatorio, setRelatorio] = useState<RelatorioDoImport>('58');
 
   /**
    * O que a sincronização mensal vai APAGAR se este arquivo for confirmado.
@@ -183,6 +209,10 @@ export function useAnaliticoImport() {
    */
   const sincronizaAusentes = !!preview && (
     !tenant.isPaguePlay
+    // O 994 é o retrato do mês da Retenção e só remove linha do 994. A folga
+    // do início do mês não serve aqui: três pessoas podem não receber nada
+    // nos primeiros dias, e a remoção nunca aconteceria.
+    || preview.relatorio === '994'
     || arquivoComecaNoInicioDoMes(preview.linhas.map(l => l.data_pagamento), preview.mes)
   );
 
@@ -205,7 +235,10 @@ export function useAnaliticoImport() {
     const chaves = preview.linhas.map(l => chaveDaLinha(
       l.operador_usuario, l.codigo, diaISO(l.data_pagamento), l.forma_pagamento,
     ));
-    preverRemocao(empresa.id, setorImportacao, preview.mes, chaves)
+    (preview.relatorio === '994'
+      ? preverRemocao994(empresa.id, setorImportacao, preview.mes, chaves,
+          [...new Set(preview.linhas.map(l => l.operador_usuario))])
+      : preverRemocao(empresa.id, setorImportacao, preview.mes, chaves))
       .then(r => { if (!cancelado) setRemocaoPrevista(r); })
       // Falhar a previsão não pode impedir a importação — o aviso é um extra,
       // e ficar sem importar o relatório do dia é pior que importar sem ele.
@@ -242,6 +275,55 @@ export function useAnaliticoImport() {
     setEstado('parsing');
     setErroGeral(null);
     setVinculosManuais({});
+
+    // ── 994: a Retenção do Jornada, só para o Analítico ──────────────────────
+    // Não alimenta o Recebimento diário: o diário da BookPlay sai do 58, e o
+    // 994 não traz a hora nem a tabulação que ele mostra.
+    if (relatorio === '994') {
+      const { parseRelatorio994 } = await import('@/services/relatorio994/relatorio994Parser');
+      const {
+        cabecalho, linhas, totalPorOperador, naDataDoAcordo, peloCodigoDoAcordo, fora, erros,
+      } = await parseRelatorio994(file);
+      if (!linhas.length) {
+        setErroGeral(
+          erros.length
+            ? erros.join('\n')
+            : fora.outraEquipe.linhas > 0
+              ? `Nenhuma linha da Retenção a importar: as ${fora.outraEquipe.linhas} linhas são de outras equipes.`
+              : 'Nenhuma linha válida encontrada no arquivo.',
+        );
+        setEstado('error');
+        return;
+      }
+      const usuarios = [...new Set(linhas.map(l => l.operador_usuario))];
+      const { map, matches, todosPerfis } = await resolverOperadores(empresa.id, usuarios);
+      const meses = linhas.map(l => `${l.data_pagamento.getFullYear()}-${String(l.data_pagamento.getMonth() + 1).padStart(2, '0')}`);
+      const contagem = meses.reduce<Record<string, number>>((acc, m) => { acc[m] = (acc[m] ?? 0) + 1; return acc; }, {});
+      const colunas = await conferirColunas(empresa.id, 'analitico_994', cabecalho);
+
+      setPreview({
+        linhasTotais:     linhas.length,
+        linhasNovas:      linhas.length,
+        duplicadasEst:    0,
+        operadoresNaoEncontrados: usuarios.filter(u => map[u] === null),
+        errosParse:       erros,
+        linhas,
+        linhasColchao:    [],
+        colchaoNaMeta:    { linhas: 0, valor: 0 },
+        operadoresMap:    map,
+        matches,
+        todosPerfis,
+        loteId:           crypto.randomUUID(),
+        mes:              Object.entries(contagem).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '',
+        retencaoRemovidas: 0,
+        mudancaDeColunas: colunas.mudanca,
+        assinatura:       colunas.assinatura,
+        relatorio:        '994',
+        resumo994:        { totalPorOperador, naDataDoAcordo, peloCodigoDoAcordo, outraEquipe: fora.outraEquipe },
+      });
+      setEstado('preview');
+      return;
+    }
 
     // ── BookPlay: um relatório alimenta Analítico + Diário + Colchão ─────────
     if (!tenant.isPaguePlay) {
@@ -302,6 +384,7 @@ export function useAnaliticoImport() {
         retencaoRemovidas,
         mudancaDeColunas: colunasBP.mudanca,
         assinatura:       colunasBP.assinatura,
+        relatorio:        '58',
       });
       setEstado('preview');
       return;
@@ -363,9 +446,10 @@ export function useAnaliticoImport() {
       retencaoRemovidas,
       mudancaDeColunas: colunasPP.mudanca,
       assinatura:       colunasPP.assinatura,
+      relatorio:        '58',
     });
     setEstado('preview');
-  }, [empresa?.id, tenant.isPaguePlay, conferirColunas]);
+  }, [empresa?.id, tenant.isPaguePlay, conferirColunas, relatorio]);
 
   const definirVinculo = useCallback((usuarioArquivo: string, perfilId: string | null) => {
     setVinculosManuais(prev => {
@@ -389,9 +473,24 @@ export function useAnaliticoImport() {
       mapFinal[usuario] = perfilId;
     }
 
+    // 994: o mês de quem veio no arquivo é trocado pelo arquivo inteiro, no
+    // banco, numa transação (`importarLote994`). Sem setor não há o que trocar.
+    const eh994 = preview.relatorio === '994';
+    if (eh994 && !setorImportacao) {
+      setErroGeral('Escolha o setor do 994 antes de importar.');
+      setEstado('preview');
+      return;
+    }
+
     // O Colchão fora da meta não é gravado: a aba que o acompanhava saiu em
     // 21/10/2026. A regra continua — o parser já o tirou de `preview.linhas`.
-    const res = await importarLoteAnalitico(
+    const res994 = eh994
+      ? await importarLote994(
+          empresa.id, perfil.id, preview.loteId, preview.linhas, mapFinal,
+          setorImportacao as string, preview.mes,
+        )
+      : null;
+    const res = res994 ?? await importarLoteAnalitico(
       empresa.id,
       perfil.id,
       preview.loteId,
@@ -406,7 +505,7 @@ export function useAnaliticoImport() {
       // mesmo setor/mês as linhas que sumiram da origem (ou que o ERP passou
       // para outro operador). Na regra Cofen, só quando o arquivo começa no
       // início do mês — ver `sincronizaAusentes`.
-      { sincronizarAusentesDoSetor: sincronizaAusentes },
+      { sincronizarAusentesDoSetor: sincronizaAusentes, procedencia: 'relatorio_58' },
     );
 
     /*
@@ -421,9 +520,37 @@ export function useAnaliticoImport() {
     if (preview.assinatura.length > 0) {
       void registrarAssinatura(
         empresa.id,
-        tenant.isPaguePlay ? 'analitico_pagueplay' : 'analitico_bookplay',
+        preview.relatorio === '994'
+          ? 'analitico_994'
+          : tenant.isPaguePlay ? 'analitico_pagueplay' : 'analitico_bookplay',
         preview.assinatura,
       ).catch(() => { /* aviso não pode derrubar importação concluída */ });
+    }
+
+    const ignoradasPorOutro = res.ignoradasPorOutroRelatorio ?? 0;
+    if (ignoradasPorOutro > 0) {
+      toast.info(
+        `${ignoradasPorOutro} pagamento${ignoradasPorOutro !== 1 ? 's' : ''} não ${ignoradasPorOutro !== 1 ? 'entraram' : 'entrou'}: `
+        + `o mesmo NR no mesmo dia já veio pelo 994 da Retenção e contaria duas vezes.`,
+        { duration: 9000 },
+      );
+    }
+
+    if (res994) {
+      const { espelhos, ignoradas, foraDoMes } = res994;
+      const avisos: string[] = [];
+      if (espelhos > 0) {
+        avisos.push(`${espelhos} pagamento${espelhos !== 1 ? 's são' : ' é'} extra de outro setor pelo 59: `
+          + 'conta para a Retenção e uma vez só no total da empresa.');
+      }
+      if (ignoradas > 0) {
+        avisos.push(`${ignoradas} linha${ignoradas !== 1 ? 's' : ''} não ${ignoradas !== 1 ? 'entraram' : 'entrou'}: `
+          + 'o mesmo pagamento já está em outro setor ou numa correção manual.');
+      }
+      if (foraDoMes > 0) {
+        avisos.push(`${foraDoMes} linha${foraDoMes !== 1 ? 's' : ''} de outro mês não ${foraDoMes !== 1 ? 'entraram' : 'entrou'}.`);
+      }
+      if (avisos.length) toast.info(avisos.join(' '), { duration: 10000 });
     }
 
     // Revincula linhas órfãs de operadores criados após uma importação anterior.
@@ -460,7 +587,7 @@ export function useAnaliticoImport() {
       );
     }
 
-    if (res.atualizados > 0) {
+    if (res.atualizados > 0 && !eh994) {
       toast.success(
         `${res.atualizados} recebimento${res.atualizados !== 1 ? 's' : ''} ` +
         `${res.atualizados !== 1 ? 'tiveram os valores atualizados' : 'teve o valor atualizado'} ` +
@@ -506,7 +633,7 @@ export function useAnaliticoImport() {
       const revDiario = await revincularOrfaosDiario(empresa.id, preview.dia, mapFinal);
       const notifsDiario = mesclarNovosPorOperador(resDiario.novosPorOperador, revDiario.novosPorOperador);
       await notificarImportacaoDiario(empresa.id, preview.dia, notifsDiario);
-    } else if (preview.linhas.length > 0) {
+    } else if (preview.linhas.length > 0 && preview.relatorio !== '994') {
       // ── PaguePlay: sincroniza acordos de cartão com mesmo operador ──
       const { atualizados } = await sincronizarCartoesPagos(empresa.id, preview.mes);
       if (atualizados > 0) {
@@ -560,6 +687,9 @@ export function useAnaliticoImport() {
     confirmarImportacao,
     definirVinculo,
     cancelar,
+    /** Qual relatório o modal importa: o botão escolhe antes de abrir. */
+    relatorio,
+    setRelatorio,
     // Setor da importação (BookPlay)
     precisaEscolherSetor,
     setorImportacao,

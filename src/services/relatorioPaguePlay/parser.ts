@@ -1,5 +1,5 @@
 import { read, utils, SSF } from '@e965/xlsx';
-import { identificarRelatorio, MSG_58_NO_LUGAR_DO_945 } from '@/services/relatorio945/identificar';
+import { identificarRelatorio, MSG_58_NO_LUGAR_DO_945, MSG_994_NO_LUGAR_DO_945 } from '@/services/relatorio945/identificar';
 import { CAMPOS_VALOR, centavos, somarValores, zerarValores, type DiarioDaBaixa, type Modalidade, type Pagamento, type RelatorioLido, type Valores } from './modelo';
 
 const normalizar = (v: unknown) => String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -76,6 +76,7 @@ export function lerLinhas(rows: unknown[][]): RelatorioLido {
   // O relatório errado tem mensagem própria: «coluna idbaixa ausente» não
   // diz a quem importou o 58 que o arquivo é outro.
   if (identificarRelatorio(rows[0] ?? []) === '58') throw new Error(MSG_58_NO_LUGAR_DO_945);
+  if (identificarRelatorio(rows[0] ?? []) === '994') throw new Error(MSG_994_NO_LUGAR_DO_945);
   const headers = (rows[0] ?? []).map(normalizar);
   const coluna = (nomes: string[], obrigatoria = true) => {
     const matches = headers.flatMap((h, i) => nomes.includes(h) ? [i] : []);
@@ -182,6 +183,7 @@ export function lerArquivo(buffer: ArrayBuffer): RelatorioLido {
   const abas = wb.SheetNames.map(n => utils.sheet_to_json<unknown[]>(wb.Sheets[n], { header: 1, defval: null, raw: true }));
   const candidatas = abas.filter(rows => (rows[0] ?? []).some(v => normalizar(v) === 'idbaixa'));
   if (!candidatas.length && abas.some(rows => identificarRelatorio(rows[0] ?? []) === '58')) throw new Error(MSG_58_NO_LUGAR_DO_945);
+  if (!candidatas.length && abas.some(rows => identificarRelatorio(rows[0] ?? []) === '994')) throw new Error(MSG_994_NO_LUGAR_DO_945);
   if (candidatas.length !== 1) throw new Error('O arquivo deve conter exatamente uma aba do relatório 945.');
   return lerLinhas(candidatas[0]);
 }

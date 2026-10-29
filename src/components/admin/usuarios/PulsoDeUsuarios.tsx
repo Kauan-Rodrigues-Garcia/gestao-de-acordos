@@ -16,9 +16,10 @@ import type { SituacaoUsuario } from '@/lib/supabase';
 import { PENDENCIAS, type ChavePendencia, type FiltroSituacao, type MarcaDaPessoa } from './modelo';
 
 const COR_SITUACAO: Record<SituacaoUsuario, string> = {
-  ativo: 'var(--success)', ferias: 'var(--warning)', desligado: 'var(--destructive)',
+  ativo: 'var(--success)', ferias: 'var(--warning)', afastado: 'var(--info)', desligado: 'var(--destructive)',
 };
-const ROTULO_SITUACAO: Record<SituacaoUsuario, string> = { ativo: 'Ativos', ferias: 'De férias', desligado: 'Desligados' };
+const ROTULO_SITUACAO: Record<SituacaoUsuario, string> = { ativo: 'Ativos', ferias: 'De férias', afastado: 'Afastados', desligado: 'Desligados' };
+const ORDEM_SITUACAO = ['ativo', 'ferias', 'afastado', 'desligado'] as const;
 const COR_TOM = { ruim: 'var(--destructive)', alerta: 'var(--warning)', info: 'var(--primary)' } as const;
 
 export interface NumerosDoPulso {
@@ -67,11 +68,11 @@ export const PulsoDeUsuarios = memo(function PulsoDeUsuarios({ n, marca, situaca
         </div>
         {totalSit > 0 && (
           <div className="us-barra-sit" aria-hidden="true">
-            {(['ativo', 'ferias', 'desligado'] as const).map(s => <i key={s} style={{ flexGrow: n.situacao[s], background: COR_SITUACAO[s] }} />)}
+            {ORDEM_SITUACAO.map(s => <i key={s} style={{ flexGrow: n.situacao[s], background: COR_SITUACAO[s] }} />)}
           </div>
         )}
         <div className="us-sits">
-          {(['ativo', 'ferias', 'desligado'] as const).map(s => (
+          {ORDEM_SITUACAO.map(s => (
             <button key={s} type="button" className="us-sit" style={{ ['--s' as string]: COR_SITUACAO[s] }} aria-pressed={situacao === s}
               onClick={() => onSituacao(situacao === s ? null : s)}>
               <small><span className="us-ponto" style={{ background: COR_SITUACAO[s] }} />{ROTULO_SITUACAO[s]}</small>

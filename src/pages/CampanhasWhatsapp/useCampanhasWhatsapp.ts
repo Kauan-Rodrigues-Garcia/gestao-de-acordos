@@ -29,7 +29,7 @@ import {
 } from '@/pages/CampanhaFacil/jaRecebeu';
 import {
   CampanhaIndisponivel, avaliarCampanha, definirStatus, editarMensagem, listarContatos, minhasAvaliacoes,
-  observarCampanha, type Avaliacao,
+  observarCampanha, reescreverMinhas, type Avaliacao,
 } from './campanhasWhatsapp.service';
 import {
   contar, linkWhatsApp, textoDoContato,
@@ -338,10 +338,36 @@ export function useCampanhasWhatsapp() {
       'Não foi possível salvar a mensagem. Tente de novo.');
   }, [alterar]);
 
+  /**
+   * Reescreve TODAS as pendentes da campanha aberta a partir de um modelo
+   * (20261028160000); `null` volta ao modelo do líder. O banco refaz o texto
+   * de cada cliente, e a lista é relida para mostrar o resultado.
+   */
+  const reescreverTodas = useCallback(async (modelo: string | null): Promise<boolean> => {
+    if (!selecionadaId) return false;
+    try {
+      const n = await reescreverMinhas(selecionadaId, modelo);
+      setContatos(await listarContatos(selecionadaId));
+      toast.success(modelo === null
+        ? 'Pronto: as pendentes voltaram à mensagem do líder.'
+        : `Pronto: ${n.toLocaleString('pt-BR')} ${n === 1 ? 'mensagem pendente reescrita' : 'mensagens pendentes reescritas'}.`);
+      return true;
+    } catch (err) {
+      if (err instanceof CampanhaIndisponivel) {
+        toast.warning(err.message);
+        void recarregar();
+        return false;
+      }
+      console.error('[CampanhasWhatsapp] reescrever todas:', err);
+      toast.error('Não foi possível salvar as mensagens. Tente de novo.');
+      return false;
+    }
+  }, [selecionadaId, recarregar]);
+
   return {
     perfilId, carregando, campanhas, paraEnviar, selecionada, selecionar, recarregar,
     contatos, carregandoContatos, contagem, recebidos,
-    modo, setModo, mesmaAba, enviar, copiar, marcarEnviada, marcar, salvarMensagem,
+    modo, setModo, mesmaAba, enviar, copiar, marcarEnviada, marcar, salvarMensagem, reescreverTodas,
     avaliacoes, avaliar, observacoes, observar,
   };
 }

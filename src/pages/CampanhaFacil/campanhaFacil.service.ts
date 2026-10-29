@@ -9,7 +9,7 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
-import type { Discounts } from './lib/campaign-core';
+import { CampaignCore, type Discounts } from './lib/campaign-core';
 
 /** Para o que nasceu depois dos tipos gerados (favoritas, `pix_automatico`, `setor_id`). */
 const dbSemTipos = supabase as unknown as SupabaseClient;
@@ -31,7 +31,7 @@ export interface CampanhaDesconto {
   discounts: Discounts;
 }
 
-const DISCOUNT_KEYS: (keyof Discounts)[] = ['overdue', 'settlement', 'interest', 'bundle', 'annual', 'pix_automatico'];
+const DISCOUNT_KEYS: (keyof Discounts)[] = ['overdue', 'settlement', 'interest', 'bundle', 'annual', 'pix_automatico', 'cartao_recorrente'];
 
 function toDiscounts(row: Record<string, unknown>): Discounts {
   return {
@@ -41,7 +41,19 @@ function toDiscounts(row: Record<string, unknown>): Discounts {
     bundle: Number(row.bundle) || 0,
     annual: Number(row.annual) || 0,
     pix_automatico: Number(row.pix_automatico) || 0,
+    // Configuração salva antes do Cartão Recorrente (27/10/2026): o padrão.
+    cartao_recorrente: row.cartao_recorrente == null ? CampaignCore.DEFAULT_DISCOUNTS.cartao_recorrente : Number(row.cartao_recorrente) || 0,
   };
+}
+
+/**
+ * A coluna `cartao_recorrente` (20261027120000) ainda não existe no banco: o
+ * front novo pode entrar no ar antes da migration. Sem isto, a lista de
+ * mensagens não carregava — ela vem junto com os descontos.
+ */
+const COLUNA_NOVA = 'cartao_recorrente';
+function faltaColunaNova(error: { code?: string; message?: string } | null): boolean {
+  return !!error && (error.code === '42703' || error.code === 'PGRST204') && String(error.message ?? '').includes(COLUNA_NOVA);
 }
 
 // ─── Mensagens adicionadas ───────────────────────────────────────────────────
@@ -98,14 +110,17 @@ export async function excluirMensagem(id: string): Promise<void> {
 // ─── Configurações de desconto ───────────────────────────────────────────────
 
 export async function fetchDescontos(empresaId: string, setorId: string): Promise<CampanhaDesconto[]> {
-  // `pix_automatico` (20261009180000) nasceu depois dos tipos gerados.
-  const { data, error } = await dbSemTipos
+  // `pix_automatico` (20261009180000) e `cartao_recorrente` (20261027120000)
+  // nasceram depois dos tipos gerados.
+  const buscar = (colunas: string) => dbSemTipos
     .from('campanha_facil_descontos')
-    .select('id, nome, overdue, settlement, interest, bundle, annual, pix_automatico')
+    .select(`id, nome, overdue, settlement, interest, bundle, annual, pix_automatico${colunas}`)
     .eq('empresa_id', empresaId).eq('setor_id', setorId)
     .order('nome', { ascending: true });
+  let { data, error } = await buscar(`, ${COLUNA_NOVA}`);
+  if (faltaColunaNova(error)) ({ data, error } = await buscar(''));
   if (error) throw error;
-  return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
+  return ((data ?? []) as unknown as Record<string, unknown>[]).map((row) => ({
     id: row.id as string,
     nome: row.nome as string,
     discounts: toDiscounts(row as Record<string, unknown>),
@@ -135,21 +150,27 @@ export async function salvarDesconto(params: {
     .limit(1);
   if (buscaErro) throw buscaErro;
 
+  const semColunaNova = () => Object.fromEntries(Object.entries(valores).filter(([k]) => k !== COLUNA_NOVA));
+
   const existente = existentes?.[0];
   if (existente) {
-    const { error } = await supabase
+    const atualizar = (v: Record<string, unknown>) => dbSemTipos
       .from('campanha_facil_descontos')
-      .update({ nome: params.nome, ...valores, atualizado_em: new Date().toISOString() })
+      .update({ nome: params.nome, ...v, atualizado_em: new Date().toISOString() })
       .eq('id', existente.id);
+    let { error } = await atualizar(valores);
+    if (faltaColunaNova(error)) ({ error } = await atualizar(semColunaNova()));
     if (error) throw error;
     return { id: existente.id as string, atualizado: true };
   }
 
-  const { data, error } = await dbSemTipos
+  const inserir = (v: Record<string, unknown>) => dbSemTipos
     .from('campanha_facil_descontos')
-    .insert({ empresa_id: params.empresaId, setor_id: params.setorId, nome: params.nome, criado_por: params.criadoPor, ...valores })
+    .insert({ empresa_id: params.empresaId, setor_id: params.setorId, nome: params.nome, criado_por: params.criadoPor, ...v })
     .select('id')
     .single();
+  let { data, error } = await inserir(valores);
+  if (faltaColunaNova(error)) ({ data, error } = await inserir(semColunaNova()));
   if (error) throw error;
   return { id: data.id as string, atualizado: false };
 }
