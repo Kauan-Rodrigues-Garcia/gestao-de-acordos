@@ -27,7 +27,7 @@
  * qualquer jeito.
  */
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
-import { MessageCircle, Minus, Maximize2, Minimize2, Loader2, X } from 'lucide-react';
+import { MessageCircle, Minus, Maximize2, Minimize2, Loader2, X, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
@@ -82,6 +82,7 @@ const DisparoDialog      = lazy(() => carregarJanela().then(m => ({ default: m.D
 const NovaConversaDialog = lazy(() => carregarJanela().then(m => ({ default: m.NovaConversaDialog })));
 const NovoGrupoDialog    = lazy(() => carregarJanela().then(m => ({ default: m.NovoGrupoDialog })));
 const ConfigGrupoDialog  = lazy(() => carregarJanela().then(m => ({ default: m.ConfigGrupoDialog })));
+const GruposTodosDialog  = lazy(() => carregarJanela().then(m => ({ default: m.GruposTodosDialog })));
 const GaleriaDialog      = lazy(() => carregarJanela().then(m => ({ default: m.GaleriaDialog })));
 const BoasVindasChat     = lazy(() => carregarJanela().then(m => ({ default: m.BoasVindasChat })));
 const PainelAutorizacoes = lazy(() => carregarJanela().then(m => ({ default: m.PainelAutorizacoes })));
@@ -169,6 +170,8 @@ export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaI
   const [novoGrupo, setNovoGrupo] = useState(false);
   /** Painel de configuracoes do grupo aberto. */
   const [configGrupo, setConfigGrupo] = useState(false);
+  /** «Gerenciar grupos» do super admin: todos os grupos, mesmo os em que não está. */
+  const [gruposTodos, setGruposTodos] = useState(false);
   /*
    * A galeria aberta pelo menu da LISTA.
    *
@@ -369,6 +372,7 @@ export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaI
    * entra quando quiser conferir.
    */
   const autorizacoesDiscretas = perfil?.perfil === 'super_admin';
+  const souSuperAdmin = perfil?.perfil === 'super_admin';
   const autorizacoes = useAutorizacaoPedidos(podeAutorizar && !!perfil?.id);
   const [vendoAutorizacoes, setVendoAutorizacoes] = useState(false);
   const [nomeSetor, setNomeSetor] = useState<string | null>(null);
@@ -741,6 +745,18 @@ export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaI
               🖥️
             </button>
           )}
+          {/* «Gerenciar grupos» (29/10/2026): o super admin administra qualquer
+              grupo, mesmo sem estar nele — sem ler as mensagens. */}
+          {souSuperAdmin && (
+            <button
+              onClick={() => setGruposTodos(true)}
+              className="rounded p-1.5 hover:bg-muted transition-colors"
+              title="Gerenciar grupos"
+              aria-label="Gerenciar todos os grupos"
+            >
+              <Users className="w-3.5 h-3.5" />
+            </button>
+          )}
           {/* No celular a janela já é a tela inteira: não há o que aumentar. */}
           {!celular && (
             <button onClick={() => setExpandido(e => !e)}
@@ -879,10 +895,20 @@ export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaI
           aberto={configGrupo}
           conversa={conversaAtual}
           meuId={perfil?.id ?? ''}
+          superAdmin={souSuperAdmin}
           onFechar={() => setConfigGrupo(false)}
           onMudou={() => chat.recarregar()}
           onSai={() => { chat.abrir(null); chat.recarregar(); }}
           onApagar={() => void apagar(conversaAtual.id)}
+        />
+      )}
+
+      {souSuperAdmin && gruposTodos && (
+        <GruposTodosDialog
+          aberto={gruposTodos}
+          meuId={perfil?.id ?? ''}
+          onFechar={() => setGruposTodos(false)}
+          onMudou={() => chat.recarregar()}
         />
       )}
 
