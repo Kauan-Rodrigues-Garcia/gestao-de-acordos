@@ -20,6 +20,11 @@
  *              mouse passa na foto dos zumbis ou das bruxas, eles invadem
  *              (`Invasao.tsx`)
  *
+ * Pelo botão da barra (`soVisual`, pedido de 29/10/2026: «abrir apenas o
+ * visual do mural, sem os bichos aparecendo na tela com interação de matar,
+ * somente os do mural fixos mesmo»): sem as invasões dos zumbis e das bruxas,
+ * e a Coisa fica na porta só olhando, sem o bote.
+ *
  * Na primeira vez o mural entra puxado pela Coisa, que dançou antes dele
  * (`puxando`: arrastado por ela, sem pregar as peças de novo; o baque da
  * chegada é dela, em `coisa/Puxando.tsx`). Ela fica no canto olhando o mouse e dá o bote se ele parar
@@ -140,13 +145,13 @@ function VaralNaCorda({ tam, largura, queda, ids = INSIGNIAS.map(i => i.id), nov
 const INVADE: Partial<Record<IdInsignia, Invasor>> = { zumbi: 'zumbi', bruxas: 'bruxa' };
 
 function FotoDaGincana({ id, x, y, giro, vez, invadir }: {
-  id: IdInsignia; x: number; y: number; giro: number; vez: number; invadir: (t: Invasor) => void;
+  id: IdInsignia; x: number; y: number; giro: number; vez: number; invadir: ((t: Invasor) => void) | null;
 }) {
   const g = GINCANAS.find(o => o.id === id)!;
   const ins = INSIGNIAS.find(i => i.id === id)!;
-  const invasor = INVADE[id];
+  const invasor = invadir ? INVADE[id] : undefined;
   return (
-    <Peca x={x} y={y} l={LARGURA_DA_FOTO} giro={giro} vez={vez} className="mural-foto" aoPassar={invasor && (() => invadir(invasor))}>
+    <Peca x={x} y={y} l={LARGURA_DA_FOTO} giro={giro} vez={vez} className="mural-foto" aoPassar={invasor && invadir ? () => invadir(invasor) : undefined}>
       <div className="mural-foto-quadro" style={{ ['--fita' as string]: FITA[id] } as CSSProperties}>
         <ArteDaGincana id={id} fator={0.62} />
         <span className="mural-foto-data">{DATA[id]}</span>
@@ -325,12 +330,14 @@ function fio([x0, y0]: readonly [number, number], [x1, y1]: readonly [number, nu
   return `M${x0} ${y0} Q${mx} ${my} ${x1} ${y1}`;
 }
 
-export function Mural({ leve = false, puxando = false, semEntrada = false, raiz }: {
+export function Mural({ leve = false, puxando = false, semEntrada = false, soVisual = false, raiz }: {
   leve?: boolean;
   /** Entrando arrastado pela Coisa (o fim da cena). */
   puxando?: boolean;
   /** As peças já estão pregadas (o mural que volta puxado). */
   semEntrada?: boolean;
+  /** Pelo botão da barra: sem invasões e sem o bote da Coisa. */
+  soVisual?: boolean;
   raiz?: Ref<HTMLDivElement>;
 }) {
   const v = useVelocidadeDoMural();
@@ -397,7 +404,7 @@ export function Mural({ leve = false, puxando = false, semEntrada = false, raiz 
         <Teia x={1920} y={0} tam={170} canto="sd" />
         <Teia x={0} y={1080} tam={150} canto="ie" />
 
-        {FOTOS.map((f, i) => <FotoDaGincana key={f.id} {...f} vez={i + 1} invadir={invadir} />)}
+        {FOTOS.map((f, i) => <FotoDaGincana key={f.id} {...f} vez={i + 1} invadir={soVisual ? null : invadir} />)}
         <Teia x={50} y={180} tam={74} canto="se" />
 
         {/* O recorte do jornal. */}
@@ -499,7 +506,7 @@ export function Mural({ leve = false, puxando = false, semEntrada = false, raiz 
         </Foco>
       )}
 
-      {!puxando && <ACoisaNoMural escala={escala} v={v} pausada={!!foco} leve={leve} />}
+      {!puxando && <ACoisaNoMural escala={escala} v={v} pausada={!!foco} leve={leve} semBote={soVisual} />}
 
       <button type="button" className="portal-fechar" onClick={fecharTela} aria-label="Fechar o mural"><X /></button>
     </div>

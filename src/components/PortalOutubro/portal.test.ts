@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { ABERTURA, DIAS, FIM, INICIO, emSaoPaulo, estadoDoPortal, partesEmSaoPaulo, relogioDaContagem } from './fases';
+import {
+  ABERTURA, BARCO_ANTES_DA_ABERTURA_MS, CONTAGEM_FINAL_MS, DIAS, FIM, INICIO, MAO_SAI_MS, emSaoPaulo, estadoDoPortal,
+  partesEmSaoPaulo, relogioDaContagem,
+} from './fases';
 import { horaSimulada, rebasear, type Simulacao } from './relogio';
 import { freio, montarFita, sortearComPeso } from './sorteio';
 import { LENDAS, PESSOAL, TAMBEM_TEVE, TOP10 } from './dados';
@@ -27,10 +30,12 @@ describe('as fases da semana (hora de São Paulo)', () => {
     expect(estadoDoPortal(DIAS[5] + 10 * H)).toMatchObject({ dia: 5, tremor: true, bilhete: false, contagem: true, faltaMs: 6 * H });
   });
 
-  it('o último minuto, a abertura em ponto e o sábado com o mural', () => {
-    expect(estadoDoPortal(ABERTURA - 60_001).fase).toBe('espreitando');
-    expect(estadoDoPortal(ABERTURA - 60_000).fase).toBe('ultimoMinuto');
-    expect(estadoDoPortal(ABERTURA - 1).fase).toBe('ultimoMinuto');
+  it('o final (o barco e os 2 minutos), a abertura em ponto e o sábado com o mural', () => {
+    const barco = ABERTURA - BARCO_ANTES_DA_ABERTURA_MS;
+    expect(estadoDoPortal(barco - 1)).toMatchObject({ fase: 'espreitando', noFinalMs: null, contagem: true });
+    expect(estadoDoPortal(barco)).toMatchObject({ fase: 'final', noFinalMs: 0, contagem: false });
+    expect(estadoDoPortal(ABERTURA - CONTAGEM_FINAL_MS)).toMatchObject({ fase: 'final', noFinalMs: MAO_SAI_MS, faltaMs: CONTAGEM_FINAL_MS });
+    expect(estadoDoPortal(ABERTURA - 1).fase).toBe('final');
     expect(estadoDoPortal(ABERTURA)).toMatchObject({ fase: 'aberto', faltaMs: 0, tremor: false, contagem: false });
     expect(estadoDoPortal(emSaoPaulo(2026, 10, 31, 20))).toMatchObject({ fase: 'aberto', dia: 6 });
   });
@@ -60,14 +65,12 @@ describe('os balões do bueiro', () => {
 
   it('fora da semana e com o mural aberto, nenhum balão nem barquinho', () => {
     expect(estadoDoPortal(DIAS[1] - 1).balaoACadaMs).toBeNull();
-    expect(estadoDoPortal(ABERTURA).balaoACadaMs).toBeNull();
-    expect(estadoDoPortal(ABERTURA).barcoACadaMs).toBeNull();
+    expect(estadoDoPortal(ABERTURA)).toMatchObject({ balaoACadaMs: null, noFinalMs: null });
   });
 
-  it('o barquinho cai mais vezes a cada dia', () => {
-    const b = (t: number) => estadoDoPortal(t).barcoACadaMs!;
-    expect(b(DIAS[1] + 9 * H)).toBeGreaterThan(b(DIAS[5] + 9 * H));
-    expect(b(ABERTURA - 30 * 60_000)).toBe(3 * 60_000);
+  it('o barquinho cai uma vez só: no começo do final', () => {
+    expect(estadoDoPortal(DIAS[5] + 9 * H).noFinalMs).toBeNull();
+    expect(estadoDoPortal(ABERTURA - CONTAGEM_FINAL_MS - 1000).noFinalMs).toBe(MAO_SAI_MS - 1000);
   });
 });
 
@@ -131,9 +134,9 @@ describe('abertura solta pelo botão (29/10)', () => {
   const H = 3_600_000;
   const solta = DIAS[4] + 10 * H; // quinta, 10h
 
-  it('o último minuto e a abertura seguem a hora solta, não a de sexta', () => {
-    expect(estadoDoPortal(solta - 60_001, solta).fase).toBe('espreitando');
-    expect(estadoDoPortal(solta - 30_000, solta)).toMatchObject({ fase: 'ultimoMinuto', faltaMs: 30_000 });
+  it('o final e a abertura seguem a hora solta, não a de sexta', () => {
+    expect(estadoDoPortal(solta - BARCO_ANTES_DA_ABERTURA_MS - 1, solta).fase).toBe('espreitando');
+    expect(estadoDoPortal(solta - 30_000, solta)).toMatchObject({ fase: 'final', faltaMs: 30_000 });
     expect(estadoDoPortal(solta, solta)).toMatchObject({ fase: 'aberto', bilhete: false, balaoACadaMs: null });
   });
 

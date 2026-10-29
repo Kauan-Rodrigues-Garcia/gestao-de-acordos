@@ -15,15 +15,25 @@
  *
  *   seg 26  o bueiro aparece no alto da tela, com os olhos piscando lá
  *           dentro (e seguindo o mouse); de vez em quando um balão vermelho
- *           aparece em algum canto da tela (não estoura), e um barquinho de
- *           papel desce a borda e cai no bueiro
- *   ter 27  os balões e o barquinho vêm mais vezes
+ *           aparece em algum canto da tela (não estoura)
+ *   ter 27  os balões vêm mais vezes
  *   qua 28  o bueiro começa a brilhar por dentro, mais a cada dia
  *   qui 29  o bueiro treme de vez em quando; «Amanhã, às 16h.»
  *   sex 30  a contagem, e os balões quase sem parar perto da hora;
  *           às 16h os olhos acendem, um balão sobe até o meio da tela,
  *           estoura, a tela desmancha e o mural aparece
  *   sáb 31  o mural fica para rever o dia todo; depois, nada
+ *
+ * ## O final: o barco, a mão e a contagem (pedido de 29/10/2026)
+ *
+ * O barquinho cai no bueiro UMA vez só, e é o começo da revelação: «quando o
+ * barco cair no bueiro, a mão sai segurando e começa uma contagem de 2
+ * minutos com a mensagem informando que o mural será liberado, e com a opção
+ * de participar». A fase `final` vai de `BARCO_ANTES_DA_ABERTURA_MS` antes da
+ * abertura até ela: os primeiros `MAO_SAI_MS` são o barco boiando e caindo, o
+ * resto é a mão segurando o barco e a contagem (`CONTAGEM_FINAL_MS`). Quem
+ * clicou em «Participar» ganha a abertura quando zera; os outros, o botão do
+ * mural na barra de cima (`PortalDeOutubro.tsx`).
  *
  * ## Só o relógio
  *
@@ -67,8 +77,12 @@ export function partesEmSaoPaulo(ms: number) {
 export const INICIO = emSaoPaulo(2026, 10, 26);
 /** O balão sobe do bueiro, estoura, a tela desmancha e o mural aparece. */
 export const ABERTURA = emSaoPaulo(2026, 10, 30, 16);
-/** O último minuto: a contagem vai para o meio da tela e a tela treme sem parar. */
-export const ULTIMO_MINUTO = ABERTURA - MINUTO;
+/** Do barquinho aparecer até a mão sair do bueiro com ele (o barco boia 9 s e cai). */
+export const MAO_SAI_MS = 9_600;
+/** A contagem com a mão segurando o barco, até a abertura. */
+export const CONTAGEM_FINAL_MS = 2 * MINUTO;
+/** Quando o barquinho aparece, antes da abertura: o começo da fase `final`. */
+export const BARCO_ANTES_DA_ABERTURA_MS = CONTAGEM_FINAL_MS + MAO_SAI_MS;
 /** Até quando o mural fica para rever (o sábado inteiro). */
 export const FIM = emSaoPaulo(2026, 11, 1);
 
@@ -81,7 +95,7 @@ export const DIAS: Readonly<Record<1 | 2 | 3 | 4 | 5, number>> = {
   5: emSaoPaulo(2026, 10, 30),
 };
 
-export type Fase = 'fora' | 'espreitando' | 'ultimoMinuto' | 'aberto';
+export type Fase = 'fora' | 'espreitando' | 'final' | 'aberto';
 
 export interface EstadoDoPortal {
   fase: Fase;
@@ -93,8 +107,8 @@ export interface EstadoDoPortal {
   tremor: boolean;
   /** De quanto em quanto tempo (da hora do portal) aparece um balão na tela; `null` fora da semana. */
   balaoACadaMs: number | null;
-  /** De quanto em quanto tempo o barquinho de papel cai no bueiro; `null` fora da semana. */
-  barcoACadaMs: number | null;
+  /** Na fase `final`: quanto já passou desde que o barquinho apareceu (ms); `null` fora dela. */
+  noFinalMs: number | null;
   /** «Amanhã, às 16h.» (quinta). */
   bilhete: boolean;
   /** A contagem regressiva (sexta, até abrir). */
@@ -115,10 +129,10 @@ export function estadoDoPortal(agora: number, abertura: number = ABERTURA): Esta
   const fase: Fase =
     agora < INICIO || agora >= FIM ? 'fora'
       : agora >= abertura ? 'aberto'
-        : agora >= abertura - MINUTO ? 'ultimoMinuto'
+        : agora >= abertura - BARCO_ANTES_DA_ABERTURA_MS ? 'final'
           : 'espreitando';
   let luz = 0;
-  const espreitando = fase === 'espreitando' || fase === 'ultimoMinuto';
+  const espreitando = fase === 'espreitando' || fase === 'final';
   if (espreitando) {
     if (dia === 3) luz = 0.35;
     else if (dia === 4) luz = 0.55;
@@ -130,20 +144,18 @@ export function estadoDoPortal(agora: number, abertura: number = ABERTURA): Esta
     luz,
     tremor: espreitando && dia >= 4,
     balaoACadaMs: espreitando ? intervaloDosBaloes(dia, faltaMs) : null,
-    barcoACadaMs: espreitando ? (faltaMs <= HORA ? 3 * MINUTO : (BARCOS[dia] ?? 30) * MINUTO) : null,
-    bilhete: espreitando && dia === 4,
-    contagem: espreitando && dia === 5,
+    noFinalMs: fase === 'final' ? agora - (abertura - BARCO_ANTES_DA_ABERTURA_MS) : null,
+    bilhete: fase === 'espreitando' && dia === 4,
+    contagem: fase === 'espreitando' && dia === 5,
     faltaMs,
   };
 }
 
 /** Os balões: mais vezes a cada dia, e quase sem parar na última hora. */
 const BALOES: Readonly<Record<number, number>> = { 1: 40, 2: 25, 3: 15, 4: 10, 5: 6 };
-/** O barquinho caindo no bueiro (minutos). */
-const BARCOS: Readonly<Record<number, number>> = { 1: 30, 2: 25, 3: 20, 4: 15, 5: 10 };
 
 function intervaloDosBaloes(dia: number, faltaMs: number): number {
-  if (faltaMs <= MINUTO) return 15_000;
+  if (faltaMs <= BARCO_ANTES_DA_ABERTURA_MS) return 15_000;
   if (faltaMs <= HORA) return 2 * MINUTO;
   return (BALOES[dia] ?? 40) * MINUTO;
 }
@@ -168,6 +180,6 @@ export function dataCurta(ms: number): string {
 export const NOME_DA_FASE: Readonly<Record<Fase, string>> = {
   fora: 'fora da semana',
   espreitando: 'a Coisa espreita',
-  ultimoMinuto: 'último minuto',
+  final: 'o barco e a contagem',
   aberto: 'mural aberto',
 };

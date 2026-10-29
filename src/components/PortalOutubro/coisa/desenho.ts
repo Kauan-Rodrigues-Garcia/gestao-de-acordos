@@ -348,12 +348,16 @@ function perna(g: Grade, lado: 1 | -1, dx: number, sobe: number) {
   }
 }
 
-/** A distância de (x, y) ao segmento a–b, e de que lado dele (negativo em cima). */
-function aoSegmento(x: number, y: number, ax: number, ay: number, bx: number, by: number): readonly [number, number] {
+/** A distância de (x, y) ao segmento a–b, de que lado dele (negativo em cima) e o caminho do ponto mais perto até (x, y). */
+function aoSegmento(x: number, y: number, ax: number, ay: number, bx: number, by: number): readonly [number, number, number, number] {
   const dx = bx - ax, dy = by - ay, l = Math.hypot(dx, dy) || 1;
   const k = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / (l * l)));
-  return [Math.hypot(x - ax - dx * k, y - ay - dy * k), (dx * (y - ay) - dy * (x - ax)) / l];
+  const ox = x - ax - dx * k, oy = y - ay - dy * k;
+  return [Math.hypot(ox, oy), (dx * (y - ay) - dy * (x - ax)) / l, ox, oy];
 }
+
+/** De onde vem a luz na manga (de cima, um tico da esquerda), normalizado. */
+const LUZ = [-0.45, -0.89] as const;
 
 /**
  * O cotovelo de um braço de dois pedaços de `comp` entre o ombro e o punho,
@@ -372,39 +376,53 @@ const MANGA = 2.9;
 /**
  * A manga de um braço do ombro (sx, sy) ao punho (px, py), em dois pedaços
  * dobrando no cotovelo (pedido de 29/10/2026: «mais reais, dobrando e
- * segurando o mural, e não apenas retos»). `naFrente`: o braço passa por cima
- * do corpo (o contorno corta o que estiver embaixo); sem ele, a manga sai de
- * dentro da manga bufante, sem risco. `luz`: de que lado da manga bate a luz
- * (1, em cima de um braço indo para a direita; −1, o de fora de um que desce).
+ * segurando o mural, e não apenas retos»). A luz é a de um cilindro, vinda
+ * de cima (`LUZ`), e por dentro do cotovelo o pano franze na sombra.
+ * `naFrente`: o braço passa por cima do corpo (o contorno corta o que estiver
+ * embaixo); sem ele, o braço fica ATRÁS do que já está pintado — sai de
+ * baixo da manga bufante, pela borda dela, com o risco separando os dois
+ * (até 29/10 ele era pintado por cima e parecia um cano saindo do meio da
+ * manga).
  */
-function mangaDobrada(g: Grade, sx: number, sy: number, px: number, py: number, comp: number, naFrente: boolean, luz: 1 | -1, ateX = Infinity) {
+function mangaDobrada(g: Grade, sx: number, sy: number, px: number, py: number, comp: number, naFrente: boolean, ateX = Infinity) {
   const [ex, ey] = cotovelo(sx, sy, px, py, comp);
   // O lado de dentro da dobra é o contrário de onde o cotovelo foi.
   const fora = Math.sign((px - sx) * (ey - sy) - (py - sy) * (ex - sx));
   const x0 = Math.floor(Math.min(sx, ex, px) - MANGA - 1), x1 = Math.min(ateX, Math.ceil(Math.max(sx, ex, px) + MANGA + 1));
   const ya = Math.floor(Math.min(sy, ey, py) - MANGA - 1), yb = Math.ceil(Math.max(sy, ey, py) + MANGA + 1);
+  const meus = new Set<string>();
   for (let y = ya; y <= yb; y++) {
     for (let x = x0; x <= x1; x++) {
+      const livre = g[y]?.[x] === '.';
       const braco = aoSegmento(x, y, sx, sy, ex, ey), antebraco = aoSegmento(x, y, ex, ey, px, py);
-      const [d, cru] = braco[0] < antebraco[0] ? braco : antebraco;
-      const lado = cru * luz;
+      const [d, cru, ox, oy] = braco[0] < antebraco[0] ? braco : antebraco;
       if (d <= MANGA) {
-        // A luz de um lado, a dobra e a costura do outro; por dentro do
-        // cotovelo, o pano franzido fica na sombra.
-        const franze = Math.sign(cru) === -fora && Math.hypot(x - ex, y - ey) < MANGA + 1.6;
-        pintar(g, x, y, franze ? (Math.abs(cru) > MANGA * 0.55 ? 'K' : 'G') : lado < -MANGA * 0.55 ? 'l' : lado > MANGA * 0.7 ? 'K' : lado > MANGA * 0.25 ? 'G' : (x + y) % 6 === 0 ? 'G' : 'g');
-      } else if (d <= MANGA + 1 && (naFrente || g[y]?.[x] === '.')) {
+        if (!naFrente && !livre) continue;
+        const s = d > 0 ? ((ox * LUZ[0] + oy * LUZ[1]) / d) * Math.min(1, d / MANGA) : 0;
+        const franze = Math.sign(cru) === -fora && Math.hypot(x - ex, y - ey) < MANGA + 1.4;
+        pintar(g, x, y, franze ? (s < 0 ? 'K' : 'G') : s > 0.55 ? 'l' : s < -0.7 ? 'K' : s < -0.25 ? 'G' : (x + 2 * y) % 7 === 0 ? 'G' : 'g');
+        meus.add(`${x},${y}`);
+      } else if (d <= MANGA + 1 && (naFrente || livre)) {
         pintar(g, x, y, 'o');
       }
     }
+  }
+  // Atrás do corpo: o risco onde o braço encosta nele (a borda da manga bufante).
+  if (naFrente) return;
+  for (const chave of meus) {
+    const [x, y] = chave.split(',').map(Number);
+    const encosta = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => {
+      const c = g[y + dy]?.[x + dx];
+      return c != null && c !== '.' && c !== 'o' && !meus.has(`${x + dx},${y + dy}`);
+    });
+    if (encosta) g[y][x] = 'o';
   }
 }
 
 /** O braço que puxa: do ombro até a borda, o babado do punho e a luva fechada na borda. */
 function bracoDoMural(g: Grade, sx: number, sy: number, comp: number, y0: number) {
-  mangaDobrada(g, sx, sy, 59.5, y0 + 2.5, comp, false, 1);
   // A manga para no punho.
-  for (let y = y0 - 4; y <= y0 + 9; y++) for (let x = 60; x <= 63; x++) if (g[y]?.[x] && 'lgGK'.includes(g[y][x])) g[y][x] = '.';
+  mangaDobrada(g, sx, sy, 59.5, y0 + 2.5, comp, false, 59);
   const risco = (x: number, y: number) => { if (g[y]?.[x] === '.') pintar(g, x, y, 'o'); };
   for (let x = 60; x <= 61; x++) { risco(x, y0 - 2); risco(x, y0 + 7); }
   // O babado do punho, mais largo que a manga.
@@ -428,7 +446,7 @@ function bracoDoMural(g: Grade, sx: number, sy: number, comp: number, y0: number
  */
 function bracoDoBalao(g: Grade, sx: number, sy: number) {
   const [hx, hy] = MAO_DO_BALAO_PUXANDO;
-  mangaDobrada(g, sx, sy, hx + 0.5, hy - 4, 6.5, true, -1);
+  mangaDobrada(g, sx, sy, hx + 0.5, hy - 4, 6.5, false);
   // O babado do punho e a luva fechada.
   for (let x = hx - 3; x <= hx + 3; x++) { pintar(g, x, hy - 4, 'c'); pintar(g, x, hy - 3, x % 2 ? 'C' : 'c'); }
   for (let y = hy - 2; y <= hy + 2; y++) {

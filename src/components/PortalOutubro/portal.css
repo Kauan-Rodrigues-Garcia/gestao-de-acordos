@@ -9,7 +9,8 @@
 .portal-camada-bueiro,
 .portal-alto-bueiro,
 .portal-aviso,
-.portal-aviso-centro,
+.portal-final,
+.portal-botao-do-mural,
 .portal-abertura {
   --noite: #0d100f;
   --noite-2: #121815;
@@ -41,121 +42,51 @@
   pointer-events: none;
 }
 /*
- * O pedaço quebrado da barra de cima (`Bueiro.tsx`). Só `transform` e
- * `opacity` se mexem: nada de filtro nem de mistura de cor animados, que
- * custam a tela inteira num PC sem placa de vídeo.
+ * O pedaço quebrado da barra de cima, em pixel art (`Bueiro.tsx`,
+ * `pixelDoBueiro.ts`): canvas em pixel grande. Pelo CSS só `transform` e
+ * `opacity` se mexem; as névoas são canvas que repintam a ~10 quadros por
+ * segundo.
  */
-.portal-bueiro {
-  position: relative;
-  /* As rachaduras, os cacos e a borda na cor da barra (`bg-card`), no tema que estiver. */
-  color: var(--foreground);
-}
-/* Ele aparece de dentro da névoa (`portal-bueiro-nevoa`). */
+.portal-px { display: block; image-rendering: pixelated; }
+.portal-bueiro { position: relative; }
+/* Ele aparece de dentro da névoa (`portal-bueiro-chegada`). */
 .portal-bueiro-surge { position: absolute; inset: 0; animation: portal-bueiro-surge 1.6s ease-out 0.35s both; }
 @keyframes portal-bueiro-surge { from { opacity: 0; } }
-.portal-bueiro-arte { position: absolute; inset: 0; display: block; overflow: visible; }
-.portal-bueiro-rachas path { fill: none; stroke: currentColor; stroke-width: 1; stroke-linecap: round; stroke-linejoin: round; opacity: 0.32; }
-.portal-bueiro-caco { fill: var(--card); stroke: var(--border); stroke-width: 1; }
-.portal-bueiro-borda { fill: none; stroke: var(--border); stroke-width: 4; stroke-linejoin: round; }
+.portal-bueiro-arte { position: absolute; left: 0; top: 0; }
+.portal-bueiro-chegada { position: absolute; top: 0; pointer-events: none; }
 
-/* A boca de lobo por dentro: o escuro, com a cor dos olhos (amarelo; vermelho com a mão fora). */
-.portal-bueiro-boca {
-  --olho-1: #fff1a6; --olho-2: #f2b62a; --olho-3: #7a4306; --olho-halo: #ffb52e;
-  position: absolute;
-  overflow: hidden;
-  pointer-events: none;
-  background: radial-gradient(ellipse 60% 140% at 50% 30%, #0b0c0d, #000 75%);
-}
-.portal-bueiro-vermelho .portal-bueiro-boca { --olho-1: #ffb3a6; --olho-2: #e3141f; --olho-3: #4c0006; --olho-halo: #ff1e1e; }
+/* A boca de lobo por dentro: a brasa, os olhos e a névoa preta, um canvas em cima do outro. */
+.portal-bueiro-boca { position: absolute; overflow: hidden; pointer-events: none; background: #000; }
+.portal-bueiro-boca > canvas { position: absolute; left: 0; top: 0; }
 /* A brasa lá dentro (de quarta em diante): pulsa só na opacidade. */
-.portal-bueiro-brasa {
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(ellipse 55% 100% at 50% 100%, #9a0c12, transparent 75%);
-  opacity: calc(var(--luz) * 0.55);
-  animation: portal-brasa 3.2s ease-in-out infinite alternate;
-}
-@keyframes portal-brasa { to { opacity: calc(var(--luz) * 0.95); } }
-.portal-bueiro-aceso .portal-bueiro-brasa { opacity: 0.6; animation: none; }
-/* Os olhos lá no fundo: a íris, a pupila que segue o mouse e a piscada. */
-.portal-olhos { position: absolute; inset: 0; display: block; }
-.portal-olho-c1 { stop-color: var(--olho-1); transition: stop-color 0.7s; }
-.portal-olho-c2 { stop-color: var(--olho-2); transition: stop-color 0.7s; }
-.portal-olho-c3 { stop-color: var(--olho-3); transition: stop-color 0.7s; }
-.portal-olho-halo { stop-color: var(--olho-halo); transition: stop-color 0.7s; }
-.portal-olho-luz { opacity: 0.3; transition: opacity 0.7s; }
-.portal-bueiro-aceso .portal-olho-luz, .portal-bueiro-vermelho .portal-olho-luz { opacity: 0.65; }
-.portal-olho { transform-box: fill-box; transform-origin: 50% 60%; transition: transform 70ms; }
-.portal-olhos-piscando .portal-olho { transform: scaleY(0.08); }
-.portal-pupila { transition: transform 0.25s ease-out; }
-/* A névoa preta passando na frente dos olhos: some e volta, devagar. */
-.portal-bueiro-breu {
-  position: absolute;
-  height: 22px;
-  border-radius: 50%;
-  background: radial-gradient(closest-side, rgb(0 0 0 / 0.85), rgb(0 0 0 / 0.45) 55%, transparent);
-  animation: portal-breu var(--dura) ease-in-out var(--atraso) infinite alternate;
-}
-@keyframes portal-breu {
-  from { transform: translateX(-22px) scaleX(0.9); opacity: 0.45; }
-  to   { transform: translateX(26px) scaleX(1.15); opacity: 0.9; }
-}
-/* A sombra da boca por cima: o fundo some no escuro e os olhos ficam lá atrás. */
-.portal-bueiro-fundo {
-  position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(rgb(0 0 0 / 0.92), rgb(0 0 0 / 0) 50%),
-    linear-gradient(90deg, rgb(0 0 0 / 0.85), transparent 18%, transparent 82%, rgb(0 0 0 / 0.85));
-}
-/* O bafo escuro que escapa pela boca e escorre pela guia. */
-.portal-bueiro-bafo {
-  position: absolute;
-  left: 60px;
-  top: 40px;
-  width: 140px;
-  height: 26px;
-  pointer-events: none;
-  background: radial-gradient(closest-side, rgb(8 8 10 / 0.55), transparent);
-  animation: portal-bafo 6s ease-in-out infinite;
-}
-@keyframes portal-bafo {
-  0%   { transform: translateY(-4px) scale(0.7, 0.6); opacity: 0; }
-  40%  { opacity: 0.9; }
-  100% { transform: translateY(14px) scale(1.35, 1.1); opacity: 0; }
-}
-/* A névoa em que ele aparece: as nuvens incham e se desfazem. */
-.portal-bueiro-nevoa { position: absolute; inset: 0; pointer-events: none; }
-.portal-bueiro-nevoa span {
-  position: absolute;
-  height: 60px;
-  translate: -50% -50%;
-  border-radius: 50%;
-  background: radial-gradient(closest-side, rgb(26 27 31 / 0.92), rgb(26 27 31 / 0.5) 50%, transparent);
-  opacity: 0;
-  animation: portal-nevoa-entra 2.8s ease-out var(--atraso) both;
-}
-@keyframes portal-nevoa-entra {
-  0%   { opacity: 0; transform: scale(0.4); }
-  25%  { opacity: 1; transform: scale(0.9); }
-  100% { opacity: 0; transform: scale(1.7) translateY(6px); }
-}
+.portal-bueiro-brasa { opacity: calc(var(--luz) * 0.6); animation: portal-brasa 3.2s ease-in-out infinite alternate; }
+@keyframes portal-brasa { to { opacity: calc(var(--luz) * 1); } }
+.portal-bueiro-aceso .portal-bueiro-brasa { opacity: 0.7; animation: none; }
+/* Com a mão para fora, a brasa baixa: os olhos vermelhos sumiam em cima dela. */
+.portal-bueiro-vermelho .portal-bueiro-brasa { opacity: calc(var(--luz) * 0.25); animation: none; transition: opacity 0.7s; }
 
 /*
- * A mão dela (`MaoComOBarco`): sai do escuro da boca com o barco, por cima
- * da guia, e fica oferecendo, balançando; depois volta. A caixa corta só o
- * que está acima da boca (o braço lá dentro, no bueiro).
+ * A mão dela (`montarMao`): sai do escuro da boca com o barco, por cima da
+ * guia, e fica oferecendo, balançando. A caixa começa na boca e corta só o
+ * que está acima dela (o braço lá dentro).
  */
-.portal-bueiro-mao { position: absolute; left: 54px; top: 17px; width: 170px; height: 170px; overflow: hidden; pointer-events: none; }
-.portal-mao { position: absolute; left: -8px; top: 0; transform: translateY(-150px); }
+.portal-bueiro-mao { position: absolute; left: 54px; top: 18px; width: 170px; height: 170px; overflow: hidden; pointer-events: none; }
+.portal-mao { position: absolute; left: 4px; top: 0; transform: translateY(-110px); }
 .portal-bueiro-mao-sai .portal-mao { animation: portal-mao-sai 1.4s cubic-bezier(0.2, 0.8, 0.3, 1) forwards; }
 .portal-bueiro-mao-volta .portal-mao { transform: none; animation: portal-mao-volta 1.2s cubic-bezier(0.6, 0, 0.8, 0.4) forwards; }
-@keyframes portal-mao-sai { from { transform: translateY(-150px); } to { transform: none; } }
-@keyframes portal-mao-volta { to { transform: translateY(-150px); } }
-.portal-mao-arte { display: block; transform-origin: 28px 0; animation: portal-mao-oferece 2.6s ease-in-out 1.4s infinite alternate; }
-@keyframes portal-mao-oferece { to { transform: rotate(4deg) translateY(3px); } }
-/* O escuro da boca por cima do braço: ele vem lá de dentro. */
-.portal-bueiro-mao-breu { position: absolute; left: 0; top: 0; width: 44px; height: 28px; background: linear-gradient(#000 40%, rgb(0 0 0 / 0.6) 75%, rgb(0 0 0 / 0)); }
+@keyframes portal-mao-sai { from { transform: translateY(-110px); } to { transform: none; } }
+@keyframes portal-mao-volta { to { transform: translateY(-110px); } }
+.portal-mao-arte { transform-origin: 17px 0; animation: portal-mao-oferece 2.6s steps(4, end) 1.4s infinite alternate; }
+@keyframes portal-mao-oferece { to { transform: rotate(3deg) translateY(3px); } }
+/* O escuro da boca por cima do braço, em degraus: ele vem lá de dentro. */
+.portal-bueiro-mao-breu {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 48px;
+  height: 27px;
+  background: linear-gradient(#000 0 9px, rgb(0 0 0 / 0.75) 9px 15px, rgb(0 0 0 / 0.45) 15px 21px, rgb(0 0 0 / 0.2) 21px 27px);
+}
 
 /* Quinta e sexta: treme de vez em quando (um pouco a cada 9 s). */
 .portal-bueiro-treme { animation: portal-bueiro-treme 9s steps(1, end) infinite; }
@@ -207,17 +138,17 @@
  * «ele tem que passar pela frente»), e dentro da boca inclina e cai no
  * escuro, sumindo atrás da beira. Os dois barcos (o de fora e o de dentro,
  * `portal-barco-cai`) andam na mesma conta, 9 s, e trocam no mesmo lugar:
- * a boca começa em 50vw − 76 px e a beira dela fica a 43 px do alto.
+ * a boca começa em 50vw − 78 px e a beira dela fica a 45 px do alto.
  */
 .portal-barco-na-agua { position: fixed; inset: 0; z-index: 47; pointer-events: none; }
 .portal-agua {
   position: fixed;
   top: 42px;
   left: 0;
-  width: calc(50vw - 66px);
-  height: 2px;
-  background: rgb(150 200 222 / 0.5);
-  box-shadow: 0 1px 0 rgb(20 50 70 / 0.35);
+  width: calc(50vw - 72px);
+  height: 3px;
+  background: rgb(150 200 222 / 0.55);
+  box-shadow: 0 3px 0 rgb(20 50 70 / 0.3);
   transform-origin: 0 50%;
   animation: portal-agua 9s linear forwards;
 }
@@ -225,8 +156,8 @@
   content: '';
   position: absolute;
   inset: 0;
-  background: repeating-linear-gradient(90deg, transparent 0 40px, rgb(235 248 255 / 0.8) 40px 46px, transparent 46px 90px);
-  animation: portal-agua-corre 1.2s linear infinite;
+  background: repeating-linear-gradient(90deg, transparent 0 42px, rgb(235 248 255 / 0.85) 42px 48px, transparent 48px 90px);
+  animation: portal-agua-corre 1.2s steps(15, end) infinite;
 }
 @keyframes portal-agua {
   0%   { transform: scaleX(0); opacity: 1; }
@@ -238,21 +169,21 @@
 
 .portal-barco-desce {
   position: fixed;
-  top: 26px;
+  top: 27px;
   left: 0;
-  filter: drop-shadow(0 2px 1.5px rgb(0 0 0 / 0.4));
+  filter: drop-shadow(0 3px 0 rgb(0 0 0 / 0.3));
   animation: portal-barco-desce 9s forwards;
 }
-.portal-barco-desce svg, .portal-barco-cai svg { display: block; animation: portal-barco-boia 1.1s ease-in-out infinite alternate; }
+.portal-barco-desce svg, .portal-barco-cai svg { display: block; animation: portal-barco-boia 1.1s steps(3, end) infinite alternate; }
 @keyframes portal-barco-desce {
   0%          { transform: translateX(-60px); animation-timing-function: linear; }
-  58%         { transform: translateX(calc(50vw - 210px)); animation-timing-function: ease-out; }
-  80%         { transform: translateX(calc(50vw - 70px)); opacity: 1; }
-  80.1%, 100% { transform: translateX(calc(50vw - 70px)); opacity: 0; }
+  58%         { transform: translateX(calc(50vw - 216px)); animation-timing-function: ease-out; }
+  80%         { transform: translateX(calc(50vw - 72px)); opacity: 1; }
+  80.1%, 100% { transform: translateX(calc(50vw - 72px)); opacity: 0; }
 }
 @keyframes portal-barco-boia {
-  from { translate: 0 0; rotate: -4deg; }
-  to   { translate: 0 1px; rotate: 4deg; }
+  from { translate: 0 0; rotate: -3deg; }
+  to   { translate: 0 3px; rotate: 3deg; }
 }
 
 /* Dentro da boca: o barco toma o lugar do de fora, inclina e cai atrás da beira. */
@@ -276,10 +207,10 @@
   left: 0;
   bottom: 0;
   width: 44px;
-  height: 2px;
-  background: repeating-linear-gradient(90deg, rgb(150 200 222 / 0.55) 0 6px, rgb(235 248 255 / 0.8) 6px 9px, rgb(150 200 222 / 0.55) 9px 16px);
+  height: 3px;
+  background: repeating-linear-gradient(90deg, rgb(150 200 222 / 0.55) 0 6px, rgb(235 248 255 / 0.8) 6px 9px, rgb(150 200 222 / 0.55) 9px 18px);
   opacity: 0;
-  animation: portal-agua-entra 9s linear forwards, portal-agua-corre 1.2s linear infinite;
+  animation: portal-agua-entra 9s linear forwards, portal-agua-corre 1.2s steps(15, end) infinite;
 }
 @keyframes portal-agua-entra { 0%, 9% { opacity: 0; } 12%, 92% { opacity: 1; } 100% { opacity: 0; } }
 .portal-leve .portal-agua::after, .portal-leve .portal-barco-desce svg { animation: none; }
@@ -319,36 +250,64 @@
 }
 .portal-bilhete { animation: portal-aparece 0.6s steps(6, end); }
 .portal-bilhete .portal-aviso-texto { font-size: 17px; color: var(--laranja); }
-.portal-rever { pointer-events: auto; cursor: pointer; }
-.portal-rever:hover { filter: brightness(1.15); }
 @keyframes portal-aparece { from { opacity: 0; transform: translate(-50%, -8px); } }
 
-.portal-aviso-centro {
+/*
+ * O final (`ContagemFinal`): embaixo da mão com o barco, a mensagem, os 2
+ * minutos e o «Participar». Só o botão pega clique.
+ */
+.portal-final {
   position: fixed;
-  inset: 0;
+  top: 168px;
+  left: 50%;
   z-index: 46;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 18px;
+  gap: 8px;
+  width: min(420px, calc(100vw - 32px));
+  padding: 16px 20px 18px;
+  text-align: center;
   pointer-events: none;
-  color: var(--texto);
+  transform: translateX(-50%);
+  animation: portal-final-entra 0.5s steps(5, end) both;
 }
-.portal-aviso-centro .portal-aviso-texto {
-  font-family: 'Pixelify Sans', ui-monospace, monospace;
-  font-size: 28px;
-  padding: 6px 18px;
-  background: rgb(13 16 15 / 0.85);
-}
-.portal-aviso-grande {
+@keyframes portal-final-entra { from { opacity: 0; transform: translate(-50%, -12px); } }
+.portal-final-selo { font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--apagado); }
+.portal-final-texto { font-size: 22px; color: var(--texto); }
+.portal-final-tempo {
   font-family: 'Press Start 2P', ui-monospace, monospace;
-  font-size: 96px;
+  font-size: 34px;
   color: var(--laranja);
-  text-shadow: 8px 8px 0 #000;
-  animation: portal-bate 1s steps(2, end) infinite;
+  text-shadow: 4px 4px 0 #000;
+  font-variant-numeric: tabular-nums;
 }
-@keyframes portal-bate { 50% { transform: scale(1.06); } }
+.portal-final-botao { margin-top: 6px; pointer-events: auto; animation: portal-final-chama 1.2s steps(2, end) infinite; }
+@keyframes portal-final-chama { 50% { transform: translateY(-3px); } }
+.portal-final-nota, .portal-final-dentro { font-size: 14px; line-height: 1.35; color: var(--apagado); }
+.portal-final-dentro { color: var(--verde); font-size: 16px; }
+
+/* O botão do mural na barra de cima (depois da revelação): pequeno, no meio. */
+.portal-botao-do-mural {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  z-index: 46;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 12px;
+  color: var(--texto);
+  font-family: 'Pixelify Sans', ui-monospace, monospace;
+  font-size: 14px;
+  background: var(--noite);
+  box-shadow: 0 -2px 0 0 var(--laranja), 0 2px 0 0 var(--laranja), -2px 0 0 0 var(--laranja), 2px 0 0 0 var(--laranja);
+  transform: translateX(-50%);
+  cursor: pointer;
+}
+.portal-botao-do-mural:hover { color: #fff; background: #1a1f1c; }
+.portal-botao-do-mural svg { display: block; }
 
 .portal-titulo {
   font-family: 'Creepster', 'Pixelify Sans', cursive;
@@ -465,7 +424,7 @@
 /* Modo leve (máquina sem placa de vídeo, ou o tema recolhido): nada pisca. */
 .portal-leve .portal-premio-acao,
 .portal-leve .portal-bueiro-brasa,
-.portal-leve .portal-aviso-grande { animation: none !important; }
+.portal-leve .portal-final-botao { animation: none !important; }
 .portal-leve .portal-confete { display: none; }
 
 .portal-pular, .portal-fechar {

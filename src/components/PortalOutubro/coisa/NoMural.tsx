@@ -138,12 +138,14 @@ function Goela({ fechando, tam, v, leve }: { fechando: boolean; tam: number; v: 
   );
 }
 
-export function ACoisaNoMural({ escala, v, pausada, leve }: {
+export function ACoisaNoMural({ escala, v, pausada, leve, semBote = false }: {
   /** A escala da parede na tela (a mesma do mural). */
   escala: number;
   v: number;
   pausada: boolean;
   leve: boolean;
+  /** Só o visual do mural (o botão da barra): ela olha, mas não morde. */
+  semBote?: boolean;
 }) {
   const raiz = useRef<HTMLDivElement>(null);
   const [indice, setIndice] = useState(0);
@@ -161,8 +163,8 @@ export function ACoisaNoMural({ escala, v, pausada, leve }: {
   indiceRef.current = indice;
   const vRef = useRef(v);
   vRef.current = v;
-  const pausadaRef = useRef(pausada);
-  pausadaRef.current = pausada;
+  const pausadaRef = useRef(pausada || semBote);
+  pausadaRef.current = pausada || semBote;
 
   // A volta das poses (parada durante o bote).
   useEffect(() => {

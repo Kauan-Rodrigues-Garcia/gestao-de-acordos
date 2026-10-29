@@ -3,8 +3,8 @@
  * se o mural está aberto, a velocidade do mural e (só no teste) quem das
  * Lendas já clicou.
  *
- * Tudo no navegador. A abertura passa UMA vez por pessoa; depois o mural fica
- * num botão até o fim de sábado.
+ * Tudo no navegador. A abertura passa UMA vez por pessoa, para quem clicou
+ * em «Participar»; depois o mural fica num botão até o fim de sábado.
  */
 import { useSyncExternalStore } from 'react';
 import { lerPrevia } from './liberacao';
@@ -46,12 +46,42 @@ export function esquecerVisto(): void {
   visto.mudar(false);
 }
 
+// ── Quem vai participar da revelação ────────────────────────────────────────
+//
+// Pedido de 29/10/2026: na contagem dos 2 minutos, «a opção de participar:
+// para quem participar, ao terminar a contagem a animação de revelação
+// continua»; quem não participa ganha só o botão do mural, depois. Fica no
+// navegador, como o «já viu».
+
+const CHAVE_PARTICIPA = 'portal-outubro:participa';
+
+function lerParticipa(): boolean {
+  try { return localStorage.getItem(CHAVE_PARTICIPA) === '1'; } catch { return false; }
+}
+
+const participa = criar(lerParticipa());
+
+export const useParticipa = participa.useValor;
+export const participando = participa.ler;
+
+export function participar(): void {
+  try { localStorage.setItem(CHAVE_PARTICIPA, '1'); } catch { /* sem armazenamento: só nesta aba */ }
+  participa.mudar(true);
+}
+
+/** Do painel de teste: volta a não participar. */
+export function esquecerParticipacao(): void {
+  try { localStorage.removeItem(CHAVE_PARTICIPA); } catch { /* idem */ }
+  participa.mudar(false);
+}
+
 // ── O mural na tela ─────────────────────────────────────────────────────────
 
 /**
  * A ordem da primeira vez (pedido de 28/10/2026: a Coisa vem ANTES do mural,
  * dançando): a abertura, a Coisa e o mural `puxado` por ela para a tela. No
- * «Rever», só o mural — com ela escondida no canto.
+ * botão da barra, só o visual do mural (29/10: «sem os bichos aparecendo na
+ * tela com interação de matar, somente os do mural fixos mesmo»).
  */
 export type Tela = null | { modo: 'abertura' } | { modo: 'coisa' } | { modo: 'mural'; puxado?: boolean };
 
@@ -62,7 +92,7 @@ export const lerTela = tela.ler;
 
 /** A abertura inteira (a tela desmanchando, a Coisa e o mural). */
 export function abrirAbertura(): void { tela.mudar({ modo: 'abertura' }); }
-/** Direto no mural (o «Rever o mural»). */
+/** Direto no mural, só o visual (o botão da barra). */
 export function abrirMural(): void { tela.mudar({ modo: 'mural' }); }
 /** O fim da cena: o mural entra, puxado pela Coisa. */
 export function puxarMural(): void { tela.mudar({ modo: 'mural', puxado: true }); }

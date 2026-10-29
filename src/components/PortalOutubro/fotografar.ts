@@ -6,7 +6,11 @@
  * (`TelaQueDesmancha.tsx`).
  *
  * Quem não deve sair no retrato (o painel de teste, os balões, a própria
- * abertura) leva o atributo `data-portal-fora`.
+ * abertura) leva o atributo `data-portal-fora`. Os iframes ficam sempre de
+ * fora: o html2canvas copia a página num iframe dele, e o player do YouTube
+ * do som ambiente, copiado, carregava e tocava menos de um segundo da música
+ * até o retrato acabar (29/10/2026: «do nada tocou um pedaço da música do
+ * Veigh»). No retrato ele nem aparecia — o html2canvas não pinta iframe.
  */
 import { desenharComHtml2canvas } from '@/lib/copiarImagem';
 import type { Pixels } from './desmanche';
@@ -64,7 +68,8 @@ export async function fotografar(alvo: HTMLElement = document.body): Promise<Pix
         windowWidth: window.innerWidth,
         windowHeight: window.innerHeight,
         ...(corpo ? { x: window.scrollX, y: window.scrollY } : {}),
-        ignoreElements: el => el instanceof HTMLElement && el.dataset.portalFora != null,
+        ignoreElements: el => el.tagName === 'IFRAME' || el.tagName === 'AUDIO' || el.tagName === 'VIDEO'
+          || (el instanceof HTMLElement && (el.dataset.portalFora != null || el.hasAttribute('data-som-ambiente-palco'))),
         // O html2canvas pinta sombra interna como bloco cheio: a moldura escura
         // da parede virava faixa preta e o fundo das fotos, a cor da fita.
         onclone: doc => {

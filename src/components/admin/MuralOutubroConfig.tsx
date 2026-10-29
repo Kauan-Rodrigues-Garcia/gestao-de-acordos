@@ -4,11 +4,13 @@
  *
  *   Liberar para o pessoal   o bueiro e os avisos aparecem para todos, no
  *                            ponto da semana em que estamos
- *   Soltar a abertura agora  1 minuto de contagem grande e a tela desmancha
- *                            para todos ao mesmo tempo; sem isso, abre
- *                            sozinho sexta 30/10, 16h
- *   Ver o bueiro em mim      o bueiro, os balões e o barquinho, só nesta aba,
- *                            com balões a cada poucos segundos, até parar
+ *   Soltar a abertura agora  em 2 min 30 s (migration 20261029233000): o
+ *                            barquinho cai no bueiro, a mão sai com ele e os
+ *                            2 minutos com o «Participar»; quem participou vê
+ *                            a tela desmanchar, os outros ganham o botão do
+ *                            mural na barra. Sem isso, sexta 30/10, 16h
+ *   Ver o bueiro em mim      o bueiro, os balões e o barquinho com a mão, só
+ *                            nesta aba, a cada poucos segundos, até parar
  *   Ver a abertura em mim    só nesta aba, nada gravado, não gasta a vez
  *
  * Só super_admin — as funções `fn_mural_outubro_*` conferem de novo no banco.
@@ -34,11 +36,11 @@ import { useAgoraDoPortal } from '@/components/PortalOutubro/relogio';
 /** O que o pessoal vê agora, em uma frase. */
 function oQueAparece(e: EstadoDoPortal): string {
   if (e.fase === 'fora') return e.dia === 0 ? 'A semana do mural ainda não começou.' : 'O mural já acabou (fim de sábado).';
-  if (e.fase === 'aberto') return 'O mural está aberto: quem ainda não viu ganha a abertura ao voltar para a aba; depois, o botão «Rever o mural».';
-  if (e.fase === 'ultimoMinuto') return `A contagem grande no meio da tela: abre em ${relogioDaContagem(e.faltaMs)}.`;
+  if (e.fase === 'aberto') return 'O mural está aberto: quem participou e ainda não viu ganha a abertura ao voltar para a aba; os outros, o botão «Mural de outubro» na barra.';
+  if (e.fase === 'final') return `O barquinho caiu e a mão saiu com ele: a contagem com o «Participar», revela em ${relogioDaContagem(e.faltaMs)}.`;
   switch (e.dia) {
-    case 1: case 2: return 'O bueiro no alto da tela com os olhos, e de vez em quando um balão e o barquinho.';
-    case 3: return 'O bueiro começa a brilhar por dentro; balões e barquinho mais vezes.';
+    case 1: case 2: return 'O bueiro no alto da tela com os olhos, e de vez em quando um balão.';
+    case 3: return 'O bueiro começa a brilhar por dentro; balões mais vezes.';
     case 4: return 'O bueiro treme e aparece o bilhete «Amanhã, às 16h.»';
     case 5: return `A contagem «O mural abre em ${relogioDaContagem(e.faltaMs)}», e balões quase sem parar perto da hora.`;
     default: return '';
@@ -148,7 +150,7 @@ export default function MuralOutubroConfig() {
             <AlertDialogDescription>
               {pergunta === 'liberar' && `Todo mundo logado, nas duas empresas, passa a ver o mural da semana. Hoje: ${oQueAparece(estado)}`}
               {pergunta === 'recolher' && 'O bueiro, os avisos e o botão do mural somem da tela de todos. Dá para liberar de novo depois.'}
-              {pergunta === 'soltar' && 'Em 1 minuto, para todo mundo logado: a contagem grande no meio da tela, a tela desmancha e o mural aparece. Quem estiver em outra aba vê ao voltar. Também libera o mural, se ainda não estiver.'}
+              {pergunta === 'soltar' && 'Para todo mundo logado: daqui a uns 20 segundos o barquinho cai no bueiro, a mão sai com ele e começam os 2 minutos com o botão «Participar». Quando zera, quem participou vê a tela desmanchar e o mural; os outros ganham o botão do mural na barra. Também libera o mural, se ainda não estiver.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -159,7 +161,7 @@ export default function MuralOutubroConfig() {
                 e.preventDefault();
                 if (pergunta === 'liberar') void fazer(() => liberarMural(true), 'Mural liberado para o pessoal.', 'Não foi possível liberar');
                 if (pergunta === 'recolher') void fazer(() => liberarMural(false), 'Mural recolhido.', 'Não foi possível recolher');
-                if (pergunta === 'soltar') void fazer(soltarAbertura, 'Abertura solta: começa em 1 minuto.', 'Não foi possível soltar');
+                if (pergunta === 'soltar') void fazer(soltarAbertura, 'Abertura solta: o barquinho cai em instantes.', 'Não foi possível soltar');
               }}
             >
               {enviando ? 'Enviando…' : pergunta === 'recolher' ? 'Recolher' : pergunta === 'soltar' ? 'Soltar agora' : 'Liberar agora'}

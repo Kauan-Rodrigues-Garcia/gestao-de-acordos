@@ -9,9 +9,13 @@
  * passar da abertura para a Coisa nem enquanto o mural entra) e só sai quando
  * o mural chega.
  *
- * O volume (`ControleDeSom`) fica por cima de tudo, do começo ao fim.
+ * O volume (`ControleDeSom`) fica por cima de tudo, do começo ao fim. E o
+ * som ambiente do Gestão (a rádio, as músicas do player) pausa enquanto isto
+ * está aberto e volta sozinho ao fechar (29/10/2026: «não pode ocorrer essas
+ * interferências»).
  */
 import { useEffect, useRef, useState } from 'react';
+import { liberarSilencio, silenciar } from '@/components/Halloween/SomAmbiente/motor';
 import { Abertura } from './Abertura';
 import { ControleDeSom } from './ControleDeSom';
 import { Mural } from './Mural';
@@ -32,12 +36,15 @@ export default function Cerimonia({ tela, leve }: { tela: Exclude<Tela, null>; l
 
   const comCoisa = tela.modo === 'coisa' || (tela.modo === 'abertura' && palcoEmbaixo) || puxando;
 
-  // Fechou (o X, o Esc): a trilha da Coisa cala junto.
-  useEffect(() => () => calarSonsDaCoisa(), []);
+  // Abriu: o som ambiente pausa. Fechou (o X, o Esc): a trilha da Coisa cala junto e ele volta.
+  useEffect(() => {
+    silenciar('mural-outubro');
+    return () => { calarSonsDaCoisa(); liberarSilencio('mural-outubro'); };
+  }, []);
 
   return (
     <>
-      {tela.modo === 'mural' && <Mural raiz={mural} leve={leve} puxando={puxando} semEntrada={puxado} />}
+      {tela.modo === 'mural' && <Mural raiz={mural} leve={leve} puxando={puxando} semEntrada={puxado} soVisual={!puxado} />}
       {tela.modo === 'abertura' && (
         <Abertura leve={leve} aoDesmanchar={() => setPalcoEmbaixo(true)} aoTerminar={() => { marcarVisto(); abrirCoisa(); }} />
       )}

@@ -57,16 +57,33 @@ import { useSyncExternalStore } from 'react';
 
 export type SomDaCoisa = 'ola' | 'balao' | 'apresenta' | 'danca' | 'flutua' | 'luzes' | 'risada' | 'tema';
 
+/**
+ * A mixagem (29/10/2026: «faz uma correção dos sons e mixagem melhor»): o
+ * ganho de cada trecho sai do volume medido dele (o RMS da metade mais alta,
+ * em janelas de 0,4 s, decodificado no Chromium) até o alvo do papel dele:
+ *
+ *   trecho      medido   alvo    as falas na frente, a música da cena logo
+ *   apresenta   −22,6    −20     atrás, os efeitos no meio e o tema do mural
+ *   flutua      −16,8    −20     bem embaixo de tudo (ele toca o tempo todo
+ *   danca       −18,8    −22     e abaixa sozinho quando outro som entra:
+ *   luzes       −22,3    −22     `abaixarOTema`)
+ *   ola         −14,9    −21
+ *   balao       −16,3    −22
+ *   risada      −12,5    −22
+ *   tema        −12,1    −26
+ */
 const VOLUME: Readonly<Record<SomDaCoisa, number>> = {
-  ola: 0.75,
-  balao: 0.9,
-  apresenta: 1,
-  danca: 0.8,
-  flutua: 1,
-  luzes: 0.85,
-  risada: 0.9,
-  tema: 0.45,
+  ola: 0.5,
+  balao: 0.52,
+  apresenta: 1.35,
+  danca: 0.69,
+  flutua: 0.69,
+  luzes: 1.03,
+  risada: 0.33,
+  tema: 0.2,
 };
+/** Um trecho tocado antes do navegador liberar o som só sai se a liberação vier em até isto. */
+const ATRASO_MAX_MS = 400;
 
 /** Quanto dura a dança (a fase `dancando` em `cena.ts`): a metade do trecho, que tem 13,68 s. */
 export const DURA_DA_DANCA = 7;
@@ -89,25 +106,35 @@ const ultimo = new Map<SomDaCoisa, { som: Tocando; em: number }>();
 const REPETIDO_MS = 150;
 
 let contexto: AudioContext | null = null;
-/** O volume geral no Web Audio: todo trecho passa por ele. */
+/**
+ * A saída: todo trecho entra no compressor (que segura os picos quando dois
+ * se encontram, como os estouros em cima do «hello») e depois no volume
+ * geral, já no fim, para o compressor trabalhar igual em qualquer volume.
+ */
 let mestre: GainNode | null = null;
+let entrada: AudioNode | null = null;
+/** O tema tocando agora, para abaixar quando outro som entra. */
+let temaNoAr: { ganho: GainNode; vol: number } | null = null;
 const prontos = new Map<SomDaCoisa, AudioBuffer>();
 
 // ── O volume geral ──────────────────────────────────────────────────────────
 
-const CHAVE_VOLUME = 'portal-outubro:volume';
+/** A chave mudou em 29/10/2026 com o padrão novo: quem mexeu antes volta para 25%. */
+const CHAVE_VOLUME = 'portal-outubro:volume:2';
+/** O volume de quem nunca mexeu (pedido de 29/10/2026: «o volume padrão agora será 25%»). */
+export const VOLUME_PADRAO = 0.25;
 
 function lerVolume(): number {
   try {
     const cru = localStorage.getItem(CHAVE_VOLUME);
     const n = Number(cru);
-    return cru === null || !Number.isFinite(n) ? 1 : Math.max(0, Math.min(1, n));
+    return cru === null || !Number.isFinite(n) ? VOLUME_PADRAO : Math.max(0, Math.min(1, n));
   } catch {
-    return 1;
+    return VOLUME_PADRAO;
   }
 }
 
-let volume = typeof window === 'undefined' ? 1 : lerVolume();
+let volume = typeof window === 'undefined' ? VOLUME_PADRAO : lerVolume();
 const ouvintesDoVolume = new Set<() => void>();
 /** Os `<audio>` tocando, com o volume de cada um antes do geral. */
 const audios = new Map<HTMLAudioElement, number>();
@@ -121,12 +148,12 @@ export function mudarVolumeDoPortal(v: number): void {
   volume = Math.max(0, Math.min(1, v));
   try { localStorage.setItem(CHAVE_VOLUME, String(volume)); } catch { /* sem armazenamento: vale até fechar */ }
   if (mestre && contexto) mestre.gain.setTargetAtTime(volume, contexto.currentTime, 0.03);
-  for (const [a, base] of audios) a.volume = base * volume;
+  for (const [a, base] of audios) a.volume = Math.min(1, base * volume);
   for (const o of ouvintesDoVolume) o();
 }
 
 export function useVolumeDoPortal(): number {
-  return useSyncExternalStore(o => { ouvintesDoVolume.add(o); return () => { ouvintesDoVolume.delete(o); }; }, () => volume, () => 1);
+  return useSyncExternalStore(o => { ouvintesDoVolume.add(o); return () => { ouvintesDoVolume.delete(o); }; }, () => volume, () => VOLUME_PADRAO);
 }
 /** O download de cada trecho (resolve decodificado ou não). */
 const baixando = new Map<SomDaCoisa, Promise<void>>();
@@ -144,7 +171,40 @@ function oContexto(): AudioContext | null {
   mestre = contexto.createGain();
   mestre.gain.value = volume;
   mestre.connect(contexto.destination);
+  try {
+    const comp = contexto.createDynamicsCompressor();
+    comp.threshold.value = -18;
+    comp.knee.value = 12;
+    comp.ratio.value = 3;
+    comp.attack.value = 0.005;
+    comp.release.value = 0.25;
+    comp.connect(mestre);
+    entrada = comp;
+  } catch {
+    entrada = mestre;
+  }
   return contexto;
+}
+
+/**
+ * Destrava o som do navegador dentro de um clique (o «Participar»): a
+ * revelação começa dois minutos depois, sem clique nenhum, e precisa dele já
+ * liberado. Também começa a baixar os trechos.
+ */
+export function destravarSom(): void {
+  const ctx = oContexto();
+  if (ctx && ctx.state !== 'running') void ctx.resume().catch(() => {});
+  void prepararSonsDaCoisa();
+}
+
+/** Abaixa o tema enquanto outro som toca (`ms`), e ele volta devagar. */
+function abaixarOTema(ctx: AudioContext, ms: number) {
+  if (!temaNoAr) return;
+  const { ganho, vol } = temaNoAr, agora = ctx.currentTime;
+  ganho.gain.cancelScheduledValues(agora);
+  ganho.gain.setValueAtTime(ganho.gain.value, agora);
+  ganho.gain.setTargetAtTime(vol * 0.4, agora, 0.06);
+  ganho.gain.setTargetAtTime(vol, agora + ms / 1000, 0.45);
 }
 
 /**
@@ -167,36 +227,59 @@ export function prepararSonsDaCoisa(): Promise<void> {
   })).then(() => {});
 }
 
-/** Pelo Web Audio: começa na hora, e o laço emenda sem buraco. */
+/**
+ * Pelo Web Audio: começa na hora, e o laço emenda sem buraco. Com o som
+ * ainda travado pelo navegador, o trecho só sai se destravar logo
+ * (`ATRASO_MAX_MS`); senão fica mudo. Antes, os trechos pedidos com o som
+ * travado ficavam na fila e saíam todos juntos no primeiro clique.
+ */
 function tocarDecodificado(ctx: AudioContext, buf: AudioBuffer, vol: number, v: number, laco: boolean): Tocando {
-  if (ctx.state === 'suspended') void ctx.resume().catch(() => {});
   const fonte = ctx.createBufferSource();
   fonte.buffer = buf;
   fonte.loop = laco;
   if (laco) { fonte.loopStart = LACO_DO_TEMA.de; fonte.loopEnd = LACO_DO_TEMA.ate; }
-  fonte.playbackRate.value = Math.max(0.5, Math.min(4, v));
+  const rate = Math.max(0.5, Math.min(4, v));
+  fonte.playbackRate.value = rate;
   const ganho = ctx.createGain();
   ganho.gain.value = vol;
-  fonte.connect(ganho).connect(mestre ?? ctx.destination);
+  fonte.connect(ganho).connect(entrada ?? ctx.destination);
+  let calado = false, comecou = false;
   const som: Tocando = {
     calar(ms) {
+      calado = true;
+      tocando.delete(som);
+      if (temaNoAr?.ganho === ganho) temaNoAr = null;
+      if (!comecou) return;
       const agora = ctx.currentTime, s = Math.max(0.01, ms / 1000);
       ganho.gain.cancelScheduledValues(agora);
       ganho.gain.setValueAtTime(ganho.gain.value, agora);
       ganho.gain.linearRampToValueAtTime(0, agora + s);
       try { fonte.stop(agora + s); } catch { /* já parou */ }
-      tocando.delete(som);
     },
   };
-  fonte.onended = () => tocando.delete(som);
-  fonte.start();
+  fonte.onended = () => { tocando.delete(som); if (temaNoAr?.ganho === ganho) temaNoAr = null; };
+  const comecar = () => {
+    if (calado) return;
+    comecou = true;
+    if (laco) temaNoAr = { ganho, vol };
+    else abaixarOTema(ctx, (buf.duration / rate) * 1000);
+    try { fonte.start(); } catch { tocando.delete(som); }
+  };
+  if (ctx.state === 'running') comecar();
+  else {
+    const pedido = performance.now();
+    ctx.resume().then(
+      () => { if (laco || performance.now() - pedido < ATRASO_MAX_MS) comecar(); else som.calar(0); },
+      () => som.calar(0),
+    );
+  }
   return som;
 }
 
 /** Pelo `<audio>`, quando o trecho ainda não foi decodificado. */
 function tocarPeloAudio(som: SomDaCoisa, vol: number, v: number, laco: boolean): Tocando {
   const a = new Audio(arquivo(som));
-  a.volume = vol * volume;
+  a.volume = Math.min(1, vol * volume);
   audios.set(a, vol);
   a.playbackRate = Math.max(0.5, Math.min(4, v));
   // O `<audio>` não tem início de laço: o `timeupdate` (a cada ~0,25 s) pula
@@ -232,11 +315,11 @@ function tocarPeloAudio(som: SomDaCoisa, vol: number, v: number, laco: boolean):
 }
 
 /** Toca um trecho do começo (o `tema` fica em laço até calar); devolve para calar depois. */
-export function tocarSomDaCoisa(som: SomDaCoisa, v = 1, volume = 1): Tocando | null {
+export function tocarSomDaCoisa(som: SomDaCoisa, v = 1, ganho = 1): Tocando | null {
   if (typeof Audio === 'undefined') return null;
   const antes = ultimo.get(som);
   if (antes && performance.now() - antes.em < REPETIDO_MS) return antes.som;
-  const vol = Math.max(0, Math.min(1, VOLUME[som] * volume));
+  const vol = Math.max(0, Math.min(1.5, VOLUME[som] * ganho));
   const laco = som === 'tema';
   try {
     const buf = prontos.get(som);
@@ -267,18 +350,21 @@ export function calarSomDaCoisa(som: SomDaCoisa, ms = 400): void {
  */
 export function tocarBolha(): void {
   const ctx = oContexto();
-  if (!ctx || !mestre) return;
+  const saida = entrada ?? mestre;
+  if (!ctx || !saida) return;
+  // A bolha vem de um clique ou de uma tecla: o som já pode tocar.
   if (ctx.state === 'suspended') void ctx.resume().catch(() => {});
   try {
+    abaixarOTema(ctx, 160);
     const t = ctx.currentTime, tom = 380 + Math.random() * 260;
     const osc = ctx.createOscillator(), ganho = ctx.createGain();
     osc.type = 'sine';
     osc.frequency.setValueAtTime(tom, t);
     osc.frequency.exponentialRampToValueAtTime(tom * 3.2, t + 0.07);
     ganho.gain.setValueAtTime(0.0001, t);
-    ganho.gain.exponentialRampToValueAtTime(0.5, t + 0.006);
+    ganho.gain.exponentialRampToValueAtTime(0.35, t + 0.006);
     ganho.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
-    osc.connect(ganho).connect(mestre);
+    osc.connect(ganho).connect(saida);
     osc.start(t);
     osc.stop(t + 0.15);
     // O estalo: um chiado curtinho, só nos agudos.
@@ -289,8 +375,8 @@ export function tocarBolha(): void {
     estalo.buffer = buf;
     agudo.type = 'highpass';
     agudo.frequency.value = 2200;
-    ganhoDoEstalo.gain.value = 0.18;
-    estalo.connect(agudo).connect(ganhoDoEstalo).connect(mestre);
+    ganhoDoEstalo.gain.value = 0.12;
+    estalo.connect(agudo).connect(ganhoDoEstalo).connect(saida);
     estalo.start(t);
   } catch { /* o som é reforço */ }
 }

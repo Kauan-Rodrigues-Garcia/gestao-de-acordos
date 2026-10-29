@@ -12,11 +12,11 @@
  * - «Relógio real» desliga tudo isso.
  */
 import { useState } from 'react';
-import { ABERTURA, DIAS, FIM, NOME_DA_FASE, dataCurta, emSaoPaulo, estadoDoPortal } from './fases';
+import { ABERTURA, BARCO_ANTES_DA_ABERTURA_MS, DIAS, FIM, NOME_DA_FASE, dataCurta, emSaoPaulo, estadoDoPortal } from './fases';
 import { irPara, mudarVelocidade, pausar, useAgoraDoPortal, useSimulacao, voltarAoReal } from './relogio';
 import {
-  VELOCIDADES_DO_MURAL, abrirAbertura, abrirCoisa, abrirMural, esquecerVisto, mudarVelocidadeDoMural, useJaViu,
-  useVelocidadeDoMural, zerarCliquesDasLendas,
+  VELOCIDADES_DO_MURAL, abrirAbertura, abrirCoisa, abrirMural, esquecerParticipacao, esquecerVisto, mudarVelocidadeDoMural,
+  useJaViu, useParticipa, useVelocidadeDoMural, zerarCliquesDasLendas,
 } from './estado';
 
 const VELOCIDADES: readonly [number, string][] = [[1, '1×'], [60, '1 min/s'], [600, '10 min/s'], [3600, '1 h/s'], [14400, '4 h/s']];
@@ -27,6 +27,7 @@ const ATALHOS: readonly [string, number][] = [
   ['Qua 9h', DIAS[3] + 9 * 3_600_000],
   ['Qui 9h', DIAS[4] + 9 * 3_600_000],
   ['Sex 9h', DIAS[5] + 9 * 3_600_000],
+  ['O barco (15:57:47)', ABERTURA - BARCO_ANTES_DA_ABERTURA_MS - 3_000],
   ['Sex 15:59:30', ABERTURA - 30_000],
   ['Sex 16h', ABERTURA],
 ];
@@ -39,6 +40,7 @@ export function PainelDoRelogio() {
   const s = useSimulacao();
   const agora = useAgoraDoPortal(500);
   const viu = useJaViu();
+  const participa = useParticipa();
   const vMural = useVelocidadeDoMural();
   const estado = estadoDoPortal(agora);
 
@@ -78,6 +80,7 @@ export function PainelDoRelogio() {
         <button type="button" onClick={abrirMural}>Só o mural</button>
         <button type="button" onClick={abrirCoisa}>A Coisa agora</button>
         <button type="button" onClick={esquecerVisto} disabled={!viu}>Esquecer que vi</button>
+        <button type="button" onClick={esquecerParticipacao} disabled={!participa}>Não participar</button>
         <button type="button" onClick={zerarCliquesDasLendas}>Zerar cliques</button>
       </div>
       <div className="portal-painel-linha">

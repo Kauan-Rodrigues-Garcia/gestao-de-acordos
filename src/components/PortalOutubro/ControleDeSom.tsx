@@ -7,12 +7,12 @@
  */
 import { useRef } from 'react';
 import { Volume1, Volume2, VolumeX } from 'lucide-react';
-import { mudarVolumeDoPortal, useVolumeDoPortal } from './coisa/trilha';
+import { VOLUME_PADRAO, mudarVolumeDoPortal, useVolumeDoPortal } from './coisa/trilha';
 
 export function ControleDeSom() {
   const volume = useVolumeDoPortal();
   /** O volume de antes de tirar o som, para devolver. */
-  const antes = useRef(volume > 0 ? volume : 1);
+  const antes = useRef(volume > 0 ? volume : VOLUME_PADRAO);
   const Icone = volume === 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2;
   return (
     <div className="portal-som" data-portal-anima data-portal-fora>
