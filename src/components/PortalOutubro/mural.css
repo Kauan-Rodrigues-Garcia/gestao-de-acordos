@@ -790,8 +790,7 @@
 .mural-sem-entrada .mural-porta,
 .mural-sem-entrada .mural-fone { animation: none; }
 .mural-sem-entrada .mural-fios path { animation: none; stroke-dashoffset: 0; }
-/* Chegou: a parede bate, as peças sacodem. */
-.mural-baque .mural-caixa { animation: mural-baque calc(0.5s / var(--v)) steps(8, end); }
+/* A parede bate e as peças sacodem (o bote da Coisa no mural). */
 @keyframes mural-baque {
   0%   { translate: -10px 3px; }
   25%  { translate: 7px -2px; }

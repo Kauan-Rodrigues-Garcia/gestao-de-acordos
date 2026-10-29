@@ -67,7 +67,7 @@ function Laboratorio() {
       {QUADROS.map((q, i) => <Quadro key={i} linhas={q.linhas} paleta={PALETA_DA_COISA} escala={i === 0 ? 6 : 3} />)}
       <Quadro linhas={QUADROS[0].linhas} paleta={PALETA_DA_FURIA} escala={4} />
       <div style={{ flexBasis: '100%' }} />
-      {[...PUXANDO.anda, PUXANDO.firma, ...PUXANDO.puxa].map((linhas, i) => <Quadro key={`p${i}`} linhas={linhas} paleta={PALETA_DA_COISA} escala={3} />)}
+      {[...PUXANDO.anda, PUXANDO.firma, PUXANDO.prepara, ...PUXANDO.puxa, PUXANDO.agachada].map((linhas, i) => <Quadro key={`p${i}`} linhas={linhas} paleta={PALETA_DA_COISA} escala={3} />)}
     </div>
   );
 }

@@ -41,6 +41,8 @@
 }
 /* O rastro borrado da corrida (a foto dela na caverna): vermelho, sem sombra. */
 .coisa-puxando-rastro { filter: sepia(1) saturate(5) hue-rotate(-28deg) brightness(0.75) blur(1px); }
+/* A poeira dos pés, as lascas da cortiça e os riscos da arrancada. */
+.coisa-puxando-poeira { filter: none; }
 .coisa-canvas {
   position: absolute;
   left: 50%;

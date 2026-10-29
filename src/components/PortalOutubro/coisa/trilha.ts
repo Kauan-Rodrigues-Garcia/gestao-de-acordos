@@ -26,9 +26,15 @@
  *   luzes      «Pennywise Dance and The Dead Lights»  64,60 a 74,10 s  as luzes
  *              mortas, com as crianças flutuando
  *   risada     «IT Pennywise laugh sound effect»       0,15 a 5,00 s
- *   tema       «It Pennywise theme music»              2,03 a 18,03 s  a música
- *              inteira, sem o golpe e o silêncio do começo: 16,00 s certos,
- *              que emendam no laço enquanto o mural está aberto
+ *   tema       «Soundtrack It (Theme Song - Epic Music)»  0 a 96,95 s  (pedido
+ *              de 29/10: «no final fica sem música, extenda»): o original
+ *              some aos 97 s (silêncio até 102,5 s). Os 33–49 s voltam iguais
+ *              aos 81–97 s, 1,47× mais altos; então o fim desce até esse
+ *              volume nos últimos 3 s, funde em 0,3 s no que antecede os
+ *              48,95 s e o laço (`LACO_DO_TEMA`) volta para lá: a primeira
+ *              vez toca do começo, depois repete 48,95–96,95 s sem buraco.
+ *              Depois do fim há 1 s de folga (o começo do laço), para o
+ *              `<audio>`, que pula atrasado
  *
  * Os trechos tocam pelo Web Audio, já decodificados (`prepararSonsDaCoisa`):
  * sem a espera de baixar e abrir o mp3 na hora, o som sai no quadro em que a
@@ -54,6 +60,9 @@ const VOLUME: Readonly<Record<SomDaCoisa, number>> = {
 
 /** Quanto dura o trecho da dança (a fase `dancando` em `cena.ts` dura isso). */
 export const DURA_DA_DANCA = 13.68;
+
+/** O laço do tema, em segundos do arquivo: chegou no fim, volta ao começo. */
+export const LACO_DO_TEMA = { de: 48.95, ate: 96.95 } as const;
 
 /** Um trecho tocando: dá para abaixar até calar. */
 export interface Tocando {
@@ -110,6 +119,7 @@ function tocarDecodificado(ctx: AudioContext, buf: AudioBuffer, vol: number, v: 
   const fonte = ctx.createBufferSource();
   fonte.buffer = buf;
   fonte.loop = laco;
+  if (laco) { fonte.loopStart = LACO_DO_TEMA.de; fonte.loopEnd = LACO_DO_TEMA.ate; }
   fonte.playbackRate.value = Math.max(0.5, Math.min(4, v));
   const ganho = ctx.createGain();
   ganho.gain.value = vol;
@@ -133,8 +143,21 @@ function tocarDecodificado(ctx: AudioContext, buf: AudioBuffer, vol: number, v: 
 function tocarPeloAudio(som: SomDaCoisa, vol: number, v: number, laco: boolean): Tocando {
   const a = new Audio(arquivo(som));
   a.volume = vol;
-  a.loop = laco;
   a.playbackRate = Math.max(0.5, Math.min(4, v));
+  // O `<audio>` não tem início de laço: o `timeupdate` (a cada ~0,25 s) pula
+  // de volta, e a folga depois do fim cobre o atraso.
+  const pular = () => {
+    if (a.currentTime >= LACO_DO_TEMA.ate) a.currentTime -= LACO_DO_TEMA.ate - LACO_DO_TEMA.de;
+  };
+  if (laco) {
+    a.addEventListener('timeupdate', pular);
+    // Passou da folga (aba em segundo plano): retoma do começo do laço.
+    a.addEventListener('ended', () => {
+      if (!tocando.has(t)) return;
+      a.currentTime = LACO_DO_TEMA.de;
+      void a.play().catch(() => tocando.delete(t));
+    });
+  }
   const t: Tocando = {
     calar(ms) {
       tocando.delete(t);
@@ -147,7 +170,7 @@ function tocarPeloAudio(som: SomDaCoisa, vol: number, v: number, laco: boolean):
       }, 40);
     },
   };
-  a.addEventListener('ended', () => tocando.delete(t), { once: true });
+  if (!laco) a.addEventListener('ended', () => tocando.delete(t), { once: true });
   void a.play().catch(() => tocando.delete(t));
   return t;
 }

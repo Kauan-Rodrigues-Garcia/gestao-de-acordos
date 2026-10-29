@@ -64,7 +64,7 @@ describe('a arte da Coisa', () => {
   });
 
   it('ela puxando: os quadros no mesmo tamanho, com cor, e a luva no ponto da borda', () => {
-    const todos = [...PUXANDO.anda, PUXANDO.firma, ...PUXANDO.puxa];
+    const todos = [...PUXANDO.anda, PUXANDO.firma, PUXANDO.prepara, ...PUXANDO.puxa, PUXANDO.agachada];
     for (const q of todos) {
       expect(q).toHaveLength(ALTURA_DA_COISA);
       expect(q.every(l => l.length === LARGURA_PUXANDO)).toBe(true);

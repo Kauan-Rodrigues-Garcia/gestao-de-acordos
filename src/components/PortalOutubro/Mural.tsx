@@ -21,8 +21,8 @@
  *              (`Invasao.tsx`)
  *
  * Na primeira vez o mural entra puxado pela Coisa, que dançou antes dele
- * (`puxando`: arrastado por ela, sem pregar as peças de novo, e com o baque
- * no fim). Ela fica no canto olhando o mouse e dá o bote se ele parar
+ * (`puxando`: arrastado por ela, sem pregar as peças de novo; o baque da
+ * chegada é dela, em `coisa/Puxando.tsx`). Ela fica no canto olhando o mouse e dá o bote se ele parar
  * (`coisa/NoMural.tsx`).
  *
  * A parede é desenhada em 1920 × 1080 e encolhe ou cresce para caber na tela;
@@ -376,7 +376,7 @@ export function Mural({ leve = false, puxando = false, semEntrada = false, raiz 
   return (
     <div
       ref={raiz}
-      className={`mural${leve ? ' portal-leve' : ''}${puxando ? ' mural-puxado' : ''}${semEntrada ? ' mural-sem-entrada' : ''}${semEntrada && !puxando && !leve ? ' mural-baque' : ''}`}
+      className={`mural${leve ? ' portal-leve' : ''}${puxando ? ' mural-puxado' : ''}${semEntrada ? ' mural-sem-entrada' : ''}`}
       style={{ ['--v' as string]: v } as CSSProperties}
       role="dialog"
       aria-label="Mural de outubro"

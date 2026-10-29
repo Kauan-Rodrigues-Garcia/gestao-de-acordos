@@ -310,7 +310,7 @@ export function ACoisa({ leve, pronto, mural, aoPuxar, aoTerminar }: {
       </div>
 
       {puxando && (
-        <ACoisaPuxando x={cx} y={cy} px={ESCALA * tela.escala} mural={mural} v={vRef} aoTerminar={aoTerminar} />
+        <ACoisaPuxando x={cx} y={cy} px={ESCALA * tela.escala} mural={mural} v={vRef} leve={leve} aoTerminar={aoTerminar} />
       )}
     </>
   );

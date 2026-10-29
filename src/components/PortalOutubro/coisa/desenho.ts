@@ -373,11 +373,14 @@ function bracoEsticado(g: Grade, de: number, y0: number, naFrente: boolean) {
   }
 }
 
+/** A primeira linha abaixo da faixa da cintura: dali para baixo, as pernas. */
+const CINTURA = 57;
+
 /**
  * Um quadro dela puxando. `inclina` (0 a 1) joga o tronco para trás; `pes`
  * são os deslocamentos das duas pernas e `sobe`, quanto cada pé sai do chão.
  */
-function montarPuxando(inclina: number, pes: readonly [number, number], sobe: readonly [number, number], cabecaDx: number, boca: 'sorriso' | 'aberta' = 'sorriso'): readonly string[] {
+function montarPuxando(inclina: number, pes: readonly [number, number], sobe: readonly [number, number], cabecaDx: number, boca: 'sorriso' | 'aberta' = 'sorriso', agacha = 0): readonly string[] {
   const s = grade();
   cabelo(s, cabecaDx);
   gola(s);
@@ -392,13 +395,18 @@ function montarPuxando(inclina: number, pes: readonly [number, number], sobe: re
 
   const desvio = (y: number) => -Math.round(inclina * Math.max(0, 56 - y) * 0.18);
   const g = grade(LARGURA_PUXANDO);
-  for (let y = 0; y < A; y++) {
-    for (let x = 0; x < L; x++) if (s[y][x] !== '.') pintar(g, x + CORPO_X + desvio(y), y, s[y][x]);
+  // As pernas primeiro; da cintura para cima vem depois, `agacha` mais baixo.
+  for (const parte of ['pernas', 'corpo'] as const) {
+    for (let y = 0; y < A; y++) {
+      if ((y < CINTURA) !== (parte === 'corpo')) continue;
+      const dy = parte === 'corpo' ? agacha : 0;
+      for (let x = 0; x < L; x++) if (s[y][x] !== '.') pintar(g, x + CORPO_X + desvio(y), y + dy, s[y][x]);
+    }
   }
   // O braço da direita sai da manga bufante; o outro vem por trás do corpo
   // e aparece embaixo dele, as duas luvas juntas na borda.
-  bracoEsticado(g, CORPO_X + 37 + desvio(41), 40, false);
-  bracoEsticado(g, CORPO_X + 31 + desvio(48), 47, true);
+  bracoEsticado(g, CORPO_X + 37 + desvio(41), 40 + agacha, false);
+  bracoEsticado(g, CORPO_X + 31 + desvio(48), 47 + agacha, true);
   contornar(g);
   return g.map(l => l.join(''));
 }
@@ -407,7 +415,9 @@ function montarPuxando(inclina: number, pes: readonly [number, number], sobe: re
  * Os quadros dela puxando:
  *   `anda`   o tronco reto, indo de lado até a borda (as pernas abrem e fecham)
  *   `firma`  agarrada, o pé da frente fincado, já tomando impulso
+ *   `prepara` o embalo antes de cada tranco: o tronco vem para o mural
  *   `puxa`   o tranco: o tronco todo para trás, arrastando os pés
+ *   `agachada` antes de arrancar: joelhos dobrados, toda para trás, a boca aberta
  */
 export const PUXANDO = {
   anda: [
@@ -417,6 +427,8 @@ export const PUXANDO = {
     montarPuxando(0, [0, 0], [0, 3], 1),
   ],
   firma: montarPuxando(0.45, [-4, 4], [0, 0], 1, 'aberta'),
+  prepara: montarPuxando(-0.25, [-2, 5], [0, 0], 2),
+  agachada: montarPuxando(1, [-6, 3], [0, 0], -1, 'aberta', 2),
   puxa: [
     montarPuxando(1, [-5, 2], [0, 0], -1, 'aberta'),
     montarPuxando(1, [-2, 2], [3, 0], -1, 'aberta'),
