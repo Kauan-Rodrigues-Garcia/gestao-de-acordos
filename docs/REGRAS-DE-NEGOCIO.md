@@ -1711,6 +1711,29 @@ foi criado depois sem pagamento.
 diário, Pix, ajuste, comissão) é recusado no banco (`20261001120000`): a
 exclusão apagaria ou desvincularia números já fechados. O caminho é **Desligar**.
 
+#### Auditoria de fechamento — fase 1 (29/10/2026)
+
+**O retrato guarda também a configuração** (`20261029200000`): regra, cidade e
+tipo do setor; treinamento da equipe; se o cargo conta no recebimento e se a
+pessoa é robô; e, em `composicao_mes_config`, `empresas.config` (H.O.), cargos,
+critério do ranking, `pix_automatico_config` e o vínculo carteira → setor/equipe
+do 59. A config **nunca** é gravada para mês fechado. Meses fechados antes disso
+têm essas colunas nulas («não guardado»): quem lê cai na tabela de hoje.
+
+**Modo TV:** `tv_paineis_mes` guarda cada painel (telas, tema, alvo) e o pacote
+de números do último congelamento. O congelamento roda às 23:50 **e** às 23:59.
+
+**Selo do fechamento** (`20261029201000`): dia 1º às 00:02 (antes de arquivar
+os desligados), `fechamento_mes` + `fechamento_mes_numeros` gravam recebido,
+H.O., pagamentos e meta de cada setor, equipe e operador do mês que fechou. O
+selo **nunca** é alterado nem apagado; correção = versão nova, só super admin,
+com motivo (`fn_fechamento_mes_selar`), e só se algum número mudou. Setembro e
+antes não têm selo.
+
+**Excluir equipe** com comissão ou meta de Pix de mês fechado é recusado para
+todos, super admin incluído (`20261029202000`) — o CASCADE apagaria o histórico.
+A meta de Pix ganhou a trava de mês fechado que faltava.
+
 ---
 
 ## 13. Módulos auxiliares
