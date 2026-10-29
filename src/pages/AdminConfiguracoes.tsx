@@ -32,6 +32,7 @@ import AdminCargos from '@/components/admin/AdminCargos';
 import ImportarAcordosCard from '@/components/admin/ImportarAcordosCard';
 import RankingQuitacaoConfig from '@/components/admin/RankingQuitacaoConfig';
 import JumpscareConfig from '@/components/admin/JumpscareConfig';
+import SireneConfig from '@/components/admin/SireneConfig';
 
 const MIGRATION_SQL = `ALTER TABLE public.acordos
   ADD COLUMN IF NOT EXISTS instituicao TEXT;
@@ -311,6 +312,10 @@ export default function AdminConfiguracoes() {
           {/* ── Jumpscare: imagem em tela cheia para todos num horário (23/10/2026).
               Só super_admin — as funções `fn_jumpscare_*` conferem de novo no banco. */}
           {ehSuperAdmin && <JumpscareConfig />}
+
+          {/* ── Sirene: luz e som por horário, cor e setor (29/10/2026). Só
+              super_admin — as funções `fn_sirene_*` conferem de novo no banco. */}
+          {ehSuperAdmin && <SireneConfig />}
 
           {ehSuperAdmin && <LiberacaoChat />}
 

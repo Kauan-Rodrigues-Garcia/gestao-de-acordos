@@ -78,6 +78,7 @@ import { useEasterEggCriadores, DURACAO_ESCURECIMENTO_MS } from '@/hooks/useEast
 // só onde ela é criada. Só a aba de criação mudou de lugar.
 import { ComemoracaoOverlay } from './comemoracao/ComemoracaoOverlay';
 import { JumpscareOverlay } from './Jumpscare/JumpscareOverlay';
+import { SireneOverlay } from './Sirene/SireneOverlay';
 import { useTermoUso } from '@/hooks/useTermoUso';
 import { useMarcarAtrasados } from '@/hooks/useMarcarAtrasados';
 import { ChatplayOnboardingModal } from './ChatplayOnboardingModal';
@@ -1172,6 +1173,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* Jumpscare — a imagem agendada em Configurações > Geral: tela cheia
           para todos por ≈0,3 s. Não pega clique e some sozinha sempre. */}
       <JumpscareOverlay />
+      {/* A sirene (29/10/2026): luz e som nos horários do setor. Ver `Sirene/sirene.ts`. */}
+      <SireneOverlay />
 
       {/* Troca de senha 1x */}
       {perfil?.id && (
