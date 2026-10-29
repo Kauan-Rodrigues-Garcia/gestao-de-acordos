@@ -1334,8 +1334,29 @@ function AvisoDeSistema({
   const dados = (m.sistema_dados ?? {}) as Record<string, string | boolean | null>;
   const alvo = typeof dados.quem_nome === 'string' ? dados.quem_nome : 'alguém';
 
+  /*
+   * Sem autor: o que o super admin configura não leva o nome dele (29/10/2026,
+   * migration 20261029180000). A frase vai para a voz passiva — «Alguém
+   * adicionou Fulano» soaria como mistério, e não é.
+   */
   let frase: React.ReactNode;
-  switch (m.sistema) {
+  if (!m.autor_id && m.sistema !== 'saiu') {
+    switch (m.sistema) {
+      case 'criou':     frase = <>Grupo <strong>{String(dados.nome ?? '')}</strong> criado</>; break;
+      case 'entrou':    frase = <>{alvo} foi adicionado ao grupo</>; break;
+      case 'removido':  frase = <>{alvo} foi removido do grupo</>; break;
+      case 'promovido': frase = <>{alvo} agora administra o grupo</>; break;
+      case 'rebaixado': frase = <>{alvo} deixou de administrar o grupo</>; break;
+      case 'nome':      frase = <>O nome do grupo mudou para <strong>{String(dados.para ?? '')}</strong></>; break;
+      case 'escrita':   frase = dados.travado
+        ? <>Agora só a liderança escreve neste grupo</>
+        : <>A escrita foi liberada para todos</>; break;
+      case 'foto':      frase = String(dados.para ?? '')
+        ? <>A foto do grupo mudou</>
+        : <>A foto do grupo foi removida</>; break;
+      default:          frase = <>O grupo foi alterado</>;
+    }
+  } else switch (m.sistema) {
     case 'criou':    frase = <>{nomeDoAutor} criou o grupo <strong>{String(dados.nome ?? '')}</strong></>; break;
     case 'entrou':   frase = <>{nomeDoAutor} adicionou {alvo}</>; break;
     case 'removido': frase = <>{nomeDoAutor} removeu {alvo}</>; break;

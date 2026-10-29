@@ -34,8 +34,21 @@ import {
   type AgendamentoNoPainel, type Painel, type Rascunho,
 } from '@/components/Sirene/sirene';
 
-const NOVO: Rascunho = {
-  id: null, hora: '09:00', dias: [1, 2, 3, 4, 5], cor: 'policia', setor_ids: [],
+/**
+ * Para quem toca: «todos» ou a lista de setores. No banco, «todos» é a lista
+ * vazia — por isso a tela guarda as duas coisas separadas: desmarcar «Todos»
+ * deixa a lista vazia para escolher, e lista vazia não se salva.
+ */
+type Alvo = 'todos' | string[];
+
+const paraBanco = (alvo: Alvo): string[] => (alvo === 'todos' ? [] : alvo);
+const doBanco = (ids: string[]): Alvo => (ids.length === 0 ? 'todos' : ids);
+const semSetor = (alvo: Alvo) => alvo !== 'todos' && alvo.length === 0;
+
+type RascunhoNaTela = Omit<Rascunho, 'setor_ids'> & { alvo: Alvo };
+
+const NOVO: RascunhoNaTela = {
+  id: null, hora: '09:00', dias: [1, 2, 3, 4, 5], cor: 'policia', alvo: [],
   duracao_s: DURACAO_PADRAO_S, ativo: true, descricao: '',
 };
 
@@ -69,13 +82,14 @@ function EscolhaDeCor({ valor, onMudar }: { valor: CorDaSirene; onMudar: (c: Cor
 }
 
 function EscolhaDeSetores({ setores, valor, onMudar }: {
-  setores: SetorResumo[]; valor: string[]; onMudar: (ids: string[]) => void;
+  setores: SetorResumo[]; valor: Alvo; onMudar: (alvo: Alvo) => void;
 }) {
-  const todos = valor.length === 0;
+  const todos = valor === 'todos';
+  const marcados = todos ? [] : valor;
   return (
     <div className="space-y-1">
       <label className="flex items-center gap-2 text-xs font-medium">
-        <Checkbox checked={todos} onCheckedChange={v => onMudar(v ? [] : setores.map(s => s.id))} />
+        <Checkbox checked={todos} onCheckedChange={v => onMudar(v ? 'todos' : [])} />
         Todos os setores
       </label>
       {!todos && (
@@ -83,20 +97,23 @@ function EscolhaDeSetores({ setores, valor, onMudar }: {
           {setores.map(s => (
             <label key={s.id} className="flex items-center gap-2 text-xs">
               <Checkbox
-                checked={valor.includes(s.id)}
-                onCheckedChange={v => onMudar(v ? [...valor, s.id] : valor.filter(x => x !== s.id))}
+                checked={marcados.includes(s.id)}
+                onCheckedChange={v => onMudar(v ? [...marcados, s.id] : marcados.filter(x => x !== s.id))}
               />
               <span className="truncate">{s.nome}</span>
             </label>
           ))}
+          {marcados.length === 0 && (
+            <p className="col-span-2 text-[11px] text-muted-foreground">Marque quem ouve a sirene.</p>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-function nomesDosSetores(ids: string[], setores: SetorResumo[]): string {
-  if (ids.length === 0) return 'Todos os setores';
+function nomesDosSetores(ids: Alvo, setores: SetorResumo[]): string {
+  if (ids === 'todos' || ids.length === 0) return 'Todos os setores';
   return ids.map(id => setores.find(s => s.id === id)?.nome ?? 'setor de outra empresa').join(', ');
 }
 
@@ -109,12 +126,12 @@ export default function SireneConfig() {
 
   // Tocar agora
   const [corAgora, setCorAgora] = useState<CorDaSirene>('policia');
-  const [setoresAgora, setSetoresAgora] = useState<string[]>([]);
+  const [setoresAgora, setSetoresAgora] = useState<Alvo>([]);
   const [duracaoAgora, setDuracaoAgora] = useState(String(DURACAO_PADRAO_S));
   const [confirmando, setConfirmando] = useState(false);
 
   // Horário sendo criado ou editado
-  const [rascunho, setRascunho] = useState<Rascunho | null>(null);
+  const [rascunho, setRascunho] = useState<RascunhoNaTela | null>(null);
 
   const recarregar = () => {
     void lerPainelDaSirene().then(r => { setPainel(r.painel); setErro(r.erro); });
@@ -123,7 +140,7 @@ export default function SireneConfig() {
 
   async function tocar() {
     setEnviando(true);
-    const r = await tocarAgora(corAgora, setoresAgora, Number(duracaoAgora));
+    const r = await tocarAgora(corAgora, paraBanco(setoresAgora), Number(duracaoAgora));
     setEnviando(false);
     setConfirmando(false);
     if (r.erro) { toast.error('Não foi possível tocar a sirene', { description: r.erro }); return; }
@@ -134,8 +151,10 @@ export default function SireneConfig() {
   async function salvar() {
     if (!rascunho) return;
     if (rascunho.dias.length === 0) { toast.error('Escolha pelo menos um dia.'); return; }
+    if (semSetor(rascunho.alvo)) { toast.error('Escolha os setores, ou marque «Todos os setores».'); return; }
     setEnviando(true);
-    const { erro: falha } = await salvarAgendamento(rascunho);
+    const { alvo, ...resto } = rascunho;
+    const { erro: falha } = await salvarAgendamento({ ...resto, setor_ids: paraBanco(alvo) });
     setEnviando(false);
     if (falha) { toast.error('Não foi possível salvar', { description: falha }); return; }
     toast.success(rascunho.id ? 'Horário atualizado.' : 'Horário criado.');
@@ -185,7 +204,7 @@ export default function SireneConfig() {
                 value={duracaoAgora} onChange={e => setDuracaoAgora(e.target.value)} className="h-8 w-20 text-sm"
               />
             </div>
-            <Button size="sm" className="gap-1.5" disabled={enviando} onClick={() => setConfirmando(true)}>
+            <Button size="sm" className="gap-1.5" disabled={enviando || semSetor(setoresAgora)} onClick={() => setConfirmando(true)}>
               <Play className="w-3.5 h-3.5" /> Tocar agora
             </Button>
             <Button size="sm" variant="outline" className="gap-1.5" onClick={() => testarEmMim(corAgora, Number(duracaoAgora))}>
@@ -249,8 +268,8 @@ export default function SireneConfig() {
                 })}
               </div>
               <EscolhaDeCor valor={rascunho.cor} onMudar={cor => setRascunho({ ...rascunho, cor })} />
-              <EscolhaDeSetores setores={setores} valor={rascunho.setor_ids}
-                                onMudar={ids => setRascunho({ ...rascunho, setor_ids: ids })} />
+              <EscolhaDeSetores setores={setores} valor={rascunho.alvo}
+                                onMudar={alvo => setRascunho({ ...rascunho, alvo })} />
               <div className="flex gap-2">
                 <Button size="sm" disabled={enviando || !rascunho.hora} onClick={() => void salvar()} className="gap-1.5">
                   {enviando && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Salvar
@@ -281,7 +300,7 @@ export default function SireneConfig() {
                   </div>
                   <Switch checked={a.ativo} onCheckedChange={v => void alternarAtivo(a, v)} aria-label="Ligado" />
                   <button type="button" title="Editar" aria-label="Editar horário"
-                          onClick={() => setRascunho({ ...a, descricao: a.descricao ?? '' })}
+                          onClick={() => setRascunho({ ...a, alvo: doBanco(a.setor_ids), descricao: a.descricao ?? '' })}
                           className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
                     <Pencil className="w-3.5 h-3.5" />
                   </button>

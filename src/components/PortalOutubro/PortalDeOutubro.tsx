@@ -17,10 +17,10 @@
  * abertura e o mural aparecem.
  */
 import { lazy, Suspense, useEffect } from 'react';
-import { estadoDoPortal } from './fases';
+import { DIAS, estadoDoPortal } from './fases';
 import { agoraDoPortal, useAgoraDoPortal } from './relogio';
 import { abrirAbertura, lerTela, useJaViu, useTela } from './estado';
-import { encerrarPrevia, usePrevia } from './liberacao';
+import { BALAO_NA_PREVIA_MS, BARCO_NA_PREVIA_MS, encerrarPrevia, usePrevia, usePreviaDoBueiro } from './liberacao';
 import { CamadaDoBueiro } from './Bueiro';
 import { Avisos, BotaoRever } from './Avisos';
 import { PainelDoRelogio } from './PainelDoRelogio';
@@ -79,9 +79,22 @@ export function PortalDeOutubro({ temaLigado, leve = false, liberado, abertura }
   }, [liberado, estado.fase, viu]);
 
   const espreitando = liberado && (estado.fase === 'espreitando' || estado.fase === 'ultimoMinuto');
+
+  // A prévia do bueiro (só nesta aba): o dia de hoje se for semana do mural,
+  // senão uma quinta; balões e barquinho bem mais vezes. Com ou sem o tema.
+  const previaDoBueiro = usePreviaDoBueiro();
+  const estadoDaPrevia = previaDoBueiro
+    ? {
+        ...(estado.fase === 'espreitando' ? estado : estadoDoPortal(DIAS[4] + 10 * 3_600_000)),
+        balaoACadaMs: BALAO_NA_PREVIA_MS,
+        barcoACadaMs: BARCO_NA_PREVIA_MS,
+      }
+    : null;
+
   return (
     <>
-      {espreitando && temaLigado && !tela && <CamadaDoBueiro estado={estado} leve={parado} />}
+      {estadoDaPrevia && !tela && <CamadaDoBueiro estado={estadoDaPrevia} leve={parado} />}
+      {!estadoDaPrevia && espreitando && temaLigado && !tela && <CamadaDoBueiro estado={estado} leve={parado} />}
       {espreitando && !tela && <Avisos agora={agora} estado={estado} />}
       {liberado && estado.fase === 'aberto' && viu && !tela && <BotaoRever />}
       {tela && (

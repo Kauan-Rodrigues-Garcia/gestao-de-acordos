@@ -7,6 +7,8 @@
  *   Soltar a abertura agora  1 minuto de contagem grande e a tela desmancha
  *                            para todos ao mesmo tempo; sem isso, abre
  *                            sozinho sexta 30/10, 16h
+ *   Ver o bueiro em mim      o bueiro, os balões e o barquinho, só nesta aba,
+ *                            com balões a cada poucos segundos, até parar
  *   Ver a abertura em mim    só nesta aba, nada gravado, não gasta a vez
  *
  * Só super_admin — as funções `fn_mural_outubro_*` conferem de novo no banco.
@@ -23,7 +25,8 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import {
-  aberturaDe, cancelarAbertura, liberarMural, soltarAbertura, useLiberacaoDoMural, verPrevia,
+  aberturaDe, alternarPreviaDoBueiro, cancelarAbertura, liberarMural, soltarAbertura, useLiberacaoDoMural,
+  usePreviaDoBueiro, verPrevia,
 } from '@/components/PortalOutubro/liberacao';
 import { dataCurta, estadoDoPortal, relogioDaContagem, type EstadoDoPortal } from '@/components/PortalOutubro/fases';
 import { useAgoraDoPortal } from '@/components/PortalOutubro/relogio';
@@ -53,6 +56,7 @@ export default function MuralOutubroConfig() {
   const estado = estadoDoPortal(agora, aberturaDe(lib));
   const [pergunta, setPergunta] = useState<Pergunta>(null);
   const [enviando, setEnviando] = useState(false);
+  const previaDoBueiro = usePreviaDoBueiro();
 
   const solta = lib.abreEm !== null;
   const soltaPendente = solta && estado.fase !== 'aberto';
@@ -124,6 +128,9 @@ export default function MuralOutubroConfig() {
               <Play className="w-3.5 h-3.5" /> Soltar a abertura agora
             </Button>
           )}
+          <Button size="sm" variant="outline" onClick={alternarPreviaDoBueiro} className="gap-1.5">
+            <Eye className="w-3.5 h-3.5" /> {previaDoBueiro ? 'Parar a prévia do bueiro' : 'Ver o bueiro só em mim'}
+          </Button>
           <Button size="sm" variant="outline" onClick={verPrevia} className="gap-1.5">
             <Eye className="w-3.5 h-3.5" /> Ver a abertura só em mim
           </Button>

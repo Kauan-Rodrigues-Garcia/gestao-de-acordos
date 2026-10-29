@@ -109,7 +109,7 @@ export function useLiberacaoDoMural(empresaId: string | null | undefined): Liber
 
 /** O mural monta nesta tela? (liberado, ou no dev, ou na prévia — e antes do fim de sábado). */
 export function muralNaTela(l: Liberacao, previa: boolean): boolean {
-  if (previa) return true;
+  if (previa || previaDoBueiro) return true;
   if (agoraDoServidor() >= FIM) return false;
   return l.liberado || import.meta.env.DEV;
 }
@@ -131,6 +131,29 @@ export function usePrevia(): boolean {
 /** A abertura inteira só nesta tela, sem marcar que a pessoa já viu. */
 export function verPrevia(): void { previa = true; for (const o of ouvintesDaPrevia) o(); }
 export function encerrarPrevia(): void { previa = false; for (const o of ouvintesDaPrevia) o(); }
+
+// ── A prévia do bueiro (29/10/2026): o bueiro, os balões e o barquinho ──────
+//
+// Só nesta aba, nada gravado, até desligar. Os balões e o barquinho vêm bem
+// mais vezes do que na semana de verdade, para dar para ver tudo em segundos.
+
+let previaDoBueiro = false;
+
+export function usePreviaDoBueiro(): boolean {
+  return useSyncExternalStore(
+    o => { ouvintesDaPrevia.add(o); return () => { ouvintesDaPrevia.delete(o); }; },
+    () => previaDoBueiro,
+  );
+}
+
+export function alternarPreviaDoBueiro(): void {
+  previaDoBueiro = !previaDoBueiro;
+  for (const o of ouvintesDaPrevia) o();
+}
+
+/** Na prévia: um balão a cada ~8 s e o barquinho a cada 30 s. */
+export const BALAO_NA_PREVIA_MS = 8_000;
+export const BARCO_NA_PREVIA_MS = 30_000;
 
 // ── O cartão de Configurações (só o super_admin passa no banco) ──────────────
 

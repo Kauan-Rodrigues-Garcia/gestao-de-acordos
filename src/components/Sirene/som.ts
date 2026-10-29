@@ -51,11 +51,16 @@ export function somLiberado(): boolean {
 const GRAVE = 640;
 const AGUDO = 1480;
 
+/** O volume da primeira versão (29/10/2026), que conta como 100%. */
+const VOLUME_CHEIO = 0.22;
+/** A sirene toca a 50% (pedido do Kauan, 29/10/2026). */
+export const VOLUME_DA_SIRENE = 0.5;
+
 /**
  * Toca a sirene por `duracaoMs`. Devolve a função que para antes da hora.
  * Sem áudio liberado, não faz nada (e devolve uma função vazia).
  */
-export function tocarSom(duracaoMs: number, volume = 0.22): () => void {
+export function tocarSom(duracaoMs: number, volume = VOLUME_CHEIO * VOLUME_DA_SIRENE): () => void {
   const ctx = criar();
   if (!ctx || ctx.state !== 'running') return () => undefined;
 
