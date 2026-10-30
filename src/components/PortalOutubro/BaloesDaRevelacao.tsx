@@ -8,7 +8,7 @@
  *   T − 30 s … T − 6 s   (só para quem participou) um a um, cada balão sobe de
  *                        baixo da tela, como os outros, e para no lugar dele, boiando:
  *                        sobe e desce e balança com o fio junto
- *   T − 4 s              o retrato da tela já é tirado (`anteciparFoto`):
+ *   T − 8 s              o retrato da tela já é tirado (`anteciparFoto`):
  *                        no zero a tela desmancha sem esperar
  *   T − 2,75 s           o «hello» (`ola`): o golpe da música dele cai no zero
  *   T − 0,9 s            enchem aos trancos, tremendo

@@ -25,7 +25,7 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useVelocidadeDoMural } from './estado';
 import { TelaQueDesmancha } from './TelaQueDesmancha';
-import { fotografar } from './fotografar';
+import { cortina, fotografar } from './fotografar';
 import type { Pixels } from './desmanche';
 import { Bueiro } from './Bueiro';
 import { BalaoNaTela } from './BaloesDaRevelacao';
@@ -35,6 +35,8 @@ import { sorteador } from './acaso';
 
 const SUBIDA_MS = 2000;
 const ESTOURO_MS = 2900;
+/** Quanto o estouro ainda espera o retrato da tela, depois da hora dele. */
+const FOLGA_DO_RETRATO_MS = 600;
 
 export function Abertura({ aoDesmanchar, aoTerminar, leve }: {
   /** O retrato está por cima: o palco da Coisa pode montar embaixo. */
@@ -63,8 +65,15 @@ export function Abertura({ aoDesmanchar, aoTerminar, leve }: {
       tocarSomDaCoisa('ola', v);
       ts.push(window.setTimeout(() => setEtapa('enchendo'), SUBIDA_MS / v));
     }
-    const retrato = (chegaram && fotoAntecipada()) || fotografar(document.body);
-    const espera = new Promise(ok => window.setTimeout(ok, chegaram ? 0 : ESTOURO_MS / v));
+    // O estouro não espera o retrato além da conta: no Gestão de verdade ele
+    // pode levar segundos (ou falhar), e aí desmancha a cortina escura no lugar.
+    const pedido = (chegaram && fotoAntecipada()) || fotografar(document.body);
+    const esperaMs = chegaram ? 0 : ESTOURO_MS / v;
+    const retrato = Promise.race([
+      pedido,
+      new Promise<Pixels>(ok => window.setTimeout(() => ok(cortina()), esperaMs + FOLGA_DO_RETRATO_MS)),
+    ]);
+    const espera = new Promise(ok => window.setTimeout(ok, esperaMs));
     Promise.all([retrato, espera]).then(([pixels]) => {
       if (!vivo) return;
       setFoto(pixels);

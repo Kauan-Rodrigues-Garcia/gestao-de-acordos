@@ -16,7 +16,7 @@ import { desenharComHtml2canvas } from '@/lib/copiarImagem';
 import type { Pixels } from './desmanche';
 
 export const BLOCO = 4;
-/** O retrato demora no máximo isso; passou, a tela desmancha lisa. */
+/** O retrato demora no máximo isso; passou, desmancha a cortina escura. */
 const ESPERA_MAX_MS = 5000;
 
 /** A cor que o html2canvas lê (rgb): o tema escreve em `oklch`, e o pixel converte. */
@@ -39,16 +39,37 @@ function corDoFundo(el: HTMLElement): string {
   return '#0d100f';
 }
 
-/** Sem retrato (deu erro ou demorou): a cor do fundo, com um granulado. */
-function telaLisa(w: number, h: number, cor: string): Pixels {
+/**
+ * Sem retrato (deu erro, demorou ou veio vazio): uma cortina escura,
+ * granulada, que desmancha do mesmo jeito. Até 30/10/2026 era a cor do fundo
+ * da página — no tema claro, a tela inteira ficava branca no estouro dos
+ * balões («ao explodir os balões tá ficando toda branca a tela»).
+ */
+export function cortina(w = Math.ceil(window.innerWidth / BLOCO), h = Math.ceil(window.innerHeight / BLOCO)): Pixels {
   const cv = document.createElement('canvas');
   cv.width = w; cv.height = h;
   const c = cv.getContext('2d')!;
-  c.fillStyle = cor;
+  c.fillStyle = '#0d0809';
   c.fillRect(0, 0, w, h);
-  c.fillStyle = 'rgba(255, 255, 255, 0.05)';
-  for (let i = 0; i < (w * h) / 9; i++) c.fillRect(Math.floor(Math.random() * w), Math.floor(Math.random() * h), 1, 1);
+  c.fillStyle = 'rgba(120, 12, 20, 0.35)';
+  for (let i = 0; i < (w * h) / 7; i++) c.fillRect(Math.floor(Math.random() * w), Math.floor(Math.random() * h), 1, 1);
   return c.getImageData(0, 0, w, h);
+}
+
+/**
+ * O retrato saiu, mas vazio? (o html2canvas às vezes falha calado e devolve
+ * tudo de uma cor só): pela variação do brilho de uma amostra dos pixels.
+ */
+export function retratoVazio(px: Pixels): boolean {
+  const d = px.data;
+  let n = 0, soma = 0, soma2 = 0;
+  for (let i = 0; i < d.length; i += 4 * 7) {
+    const l = 0.3 * d[i] + 0.59 * d[i + 1] + 0.11 * d[i + 2];
+    n++; soma += l; soma2 += l * l;
+  }
+  if (!n) return true;
+  const media = soma / n;
+  return Math.sqrt(Math.max(0, soma2 / n - media * media)) < 4;
 }
 
 /** O retrato da tela (ou de `alvo`, do tamanho da tela), em pixel grande. */
@@ -80,15 +101,24 @@ export async function fotografar(alvo: HTMLElement = document.body): Promise<Pix
       }).catch((): null => null),
       new Promise<null>(ok => window.setTimeout(() => ok(null), ESPERA_MAX_MS)),
     ]);
-    if (!retrato) return telaLisa(w, h, fundo);
+    if (!retrato) {
+      console.warn('[mural] o retrato da tela não saiu a tempo: a cortina escura no lugar');
+      return cortina(w, h);
+    }
     const cv = document.createElement('canvas');
     cv.width = w; cv.height = h;
     const c = cv.getContext('2d', { willReadFrequently: true })!;
     c.fillStyle = fundo;
     c.fillRect(0, 0, w, h);
     c.drawImage(retrato, 0, 0, w, h);
-    return c.getImageData(0, 0, w, h);
-  } catch {
-    return telaLisa(w, h, fundo);
+    const pixels = c.getImageData(0, 0, w, h);
+    if (retratoVazio(pixels)) {
+      console.warn('[mural] o retrato da tela veio vazio: a cortina escura no lugar');
+      return cortina(w, h);
+    }
+    return pixels;
+  } catch (e) {
+    console.warn('[mural] o retrato da tela falhou: a cortina escura no lugar', e);
+    return cortina(w, h);
   }
 }

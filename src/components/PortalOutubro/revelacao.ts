@@ -21,8 +21,8 @@ export const SUBIDA_RAPIDA_S = 1.7;
 export const OLA_ANTES_MS = 2_750;
 /** Enchem quando faltam isso. */
 export const ENCHE_ANTES_MS = 900;
-/** O retrato da tela, quando faltam isso. */
-export const FOTO_ANTES_MS = 4_000;
+/** O retrato da tela, quando faltam isso: com folga, porque no Gestão de verdade ele pode levar segundos. */
+export const FOTO_ANTES_MS = 8_000;
 
 export interface BalaoDaRevelacao {
   /** Onde ele para, em fração da tela. */
