@@ -112,8 +112,8 @@ describe('o sorteio', () => {
 });
 
 describe('o retrato do mês', () => {
-  it('174 pessoas, top 10, e as três Lendas com as cinco', () => {
-    expect(PESSOAL).toHaveLength(174);
+  it('173 pessoas, top 10, e as três Lendas com as cinco', () => {
+    expect(PESSOAL).toHaveLength(173);
     expect(TOP10).toHaveLength(10);
     expect(LENDAS.map(l => l.nome)).toEqual(['Erika Eduarda', 'Ayslan Silva', 'Nicole Pacheco']);
     expect(PESSOAL.map(p => p.posicao)).toEqual(PESSOAL.map((_, i) => i + 1));

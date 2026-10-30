@@ -6,7 +6,8 @@
  *
  *   - o ranking: a pontuação das medalhas (`Insignias/pontuacao.ts`), lida do
  *     banco em 26/10/2026 com a autorização do Kauan. 174 pessoas têm pelo
- *     menos uma insígnia. No empate de pontos, a ordem é a do nome (o app
+ *     menos uma insígnia; o Joao Miguel (10º, 460) saiu em 30/10 porque não
+ *     é mais da empresa, e quem vinha atrás subiu uma posição. No empate de pontos, a ordem é a do nome (o app
  *     desempata por quem completou antes: pode trocar a ordem DENTRO de um
  *     empate). Antes de sexta, ler de novo e trocar esta lista;
  *   - as gincanas: o que está escrito no próprio código e nas artes já feitas
@@ -41,171 +42,170 @@ const LISTA = `
 7|Debora Portela da Silva|Receptivo|4|465
 8|Isabella Rocha|Play 2|4|465
 9|Pedro Pugina Verdinasse|Receptivo|4|465
-10|Joao Miguel|Play 2|4|460
-11|Thamires Souza|Play 2|4|450
-12|Igor Rocha|Play 2|3|405
-13|Amanda Paulo|Receptivo|3|360
-14|Fernanda Mata|Play 2|3|360
-15|Heloisa Lima|Receptivo|3|360
-16|Jose Victor Tavares|Receptivo|3|360
-17|Otavio Cestini|Play 2|3|360
-18|Eduardo Melo|Receptivo|3|355
-19|Nanci Moreira|Receptivo|3|355
-20|Poliana Shueter|Play 2|3|355
-21|Wilson Junior|Playmix|3|350
-22|Helton Paulino Roldon|Playmix|3|345
-23|Maria C Silva|Play 2|3|345
-24|Eduardo Naia|Play 3|2|290
-25|Agatha Rocha|Receptivo|2|260
-26|Matheus Costa|Receptivo|2|255
-27|Ana Clara Da Silva Sena|Receptivo|2|240
-28|Analimasilva|Play Mix Marília|2|240
-29|Andressa Aires|Play 3|2|240
-30|Breno Henrique Pereira Macarini|Play 3|2|240
-31|Carolina Murai|Play 1|2|240
-32|Daniela Reis|Play 2|2|240
-33|Debora Renata Souza|Play 1|2|240
-34|Emilly Oliveira|Play 2|2|240
-35|Erica Carvalho|Play 1|2|240
-36|Eriele Monteiro|Receptivo|2|240
-37|Gabriela Farias|Play 1|2|240
-38|Gustavo Nunes|Playmix|2|240
-39|Isabeli Ferreira|Play 3|2|240
-40|Joao Garcia|Playmix|2|240
-41|Joao V Santos|Conecta Play|2|240
-42|Juliana dos Santos Mello|Playmix|2|240
-43|Juliana Spereira|Play 1|2|240
-44|Laura|Playmix|2|240
-45|Luana Marchi Polo|Play 1|2|240
-46|Maria E Pereira|Playmix|2|240
-47|Mario Mantovani|Playmix|2|240
-48|Pedro Alves|Playmix|2|240
-49|Poliana Varjao|Play Mix Marília|2|240
-50|Quezia Vitoreli|Playmix|2|240
-51|Rayane Estevan|Play 2|2|240
-52|Thayna Izidro|Play 3|2|240
-53|Thayra Ferreira Silva|Play 2|2|240
-54|Elisandra Raquel|Play Mix Marília|2|235
-55|Layra Carini|Receptivo|2|235
-56|Leticia Andrade|Receptivo|2|235
-57|Sophia Costa|Conecta Play|2|235
-58|Alexia Silva|Play 2|2|230
-59|Diemily Da Silva|Play 3|2|230
-60|Isabele Barros|Play 2|2|230
-61|Kauane Azevedo|Conecta Play|2|230
-62|Brenda Ferreira|Play 5|2|225
-63|Bruna Xavier|Play Mix Marília|2|225
-64|Caio Shimite|Conecta Play|2|225
-65|Cleber Junior||2|225
-66|Gabriely Alves|Receptivo|2|225
-67|Julia Caetano|Play 1|2|225
-68|Leonardo Nunes Keppler|Play 2|2|225
-69|Maria V Souza|Play 5|2|225
-70|Sthefanny Moraes|Play 3|2|225
-71|Aline Rodrigues|Play 2|1|120
-72|Alisson Santana|Playmix|1|120
-73|Amabelly Santos|Conecta Play|1|120
-74|Amanda Alcasa|Play 5|1|120
-75|Amanda D Silva|Play 2|1|120
-76|Amanda Laisa|Play 3|1|120
-77|Ana Dias|Play 1|1|120
-78|Ana Gaiarin|Playmix|1|120
-79|Ana Paula Rodrigues|Play 3|1|120
-80|André Brandao|Play 3|1|120
-81|André Honorato||1|120
-82|Andreina Fratucci|Play 1|1|120
-83|Andressa Santos|Play 3|1|120
-84|Beatriz Reis|Play 3|1|120
-85|Beatriz Rodrigues|Receptivo|1|120
-86|Benjamin Ayala|Play 3|1|120
-87|Bianca Oliveira|Play 5|1|120
-88|Bianca Santelli Santos|Play 3|1|120
-89|Bianca Santera|Play 3|1|120
-90|Bruna Justimiano Ribeiro|Conecta Play|1|120
-91|Camila Ribeiro|Play 1|1|120
-92|Camilly Carvalho|Play 2|1|120
-93|Camilly Pereira|Play 1|1|120
-94|Caroline Valverde|Conecta Play|1|120
-95|Daniele Andrade|Playmix|1|120
-96|Debora Sobrinho|Conecta Play|1|120
-97|Douglas Faria|Playmix|1|120
-98|Elen Peralta Dos Santos|Play 3|1|120
-99|Emily Jardim|Play 1|1|120
-100|Fatima Tinareli|Playmix|1|120
-101|Francieli Silva|Playmix|1|120
-102|Gabriel Martin|Manutenção|1|120
-103|Gabriela Gonçalves|Play 3|1|120
-104|Gabrieli Oliveira|Play 3|1|120
-105|Giovana Souza|Conecta Play|1|120
-106|Giovanni Fagundes|Play 1|1|120
-107|Hayla Teixeira|Receptivo|1|120
-108|Heloisa Camilo|Receptivo|1|120
-109|Igor Eduardo Da Cruz Theodoro|Play 3|1|120
-110|Ingrid Nascimento|Play 2|1|120
-111|Isabela Sobrinho|Play Mix Marília|1|120
-112|Jacqueline Nascimento|Play 5|1|120
-113|Jaqueline Barbosa|Play 1|1|120
-114|Jaqueline Silva|Play Mix Marília|1|120
-115|Jessica Lucena|Play 3|1|120
-116|João Santos|Play Mix Marília|1|120
-117|Joyce Rosseto|Play Mix Marília|1|120
-118|Julia Barboza|Play 1|1|120
-119|Juliana Bellinati|Playmix|1|120
-120|Juliana Vitoria|Play 3|1|120
-121|Karina Silva|Play 1|1|120
-122|Karina Teixeira|Play Mix Marília|1|120
-123|Kauan Rodrigues||1|120
-124|Kaue Nadai|Conecta Play|1|120
-125|Laiza Daniele|Play 1|1|120
-126|Larissa Vieira|Play 2|1|120
-127|Leticia Kerlia|Play 3|1|120
-128|Leticia Peres|Play 2|1|120
-129|Luana Barrios|Play 3|1|120
-130|Lucila Silva|Playmix|1|120
-131|Luiz Silva|Play 3|1|120
-132|Marco Santos|Play 1|1|120
-133|Maria Eduarda Da Silva Pereira|Play 3|1|120
-134|Maria Segura|Play 2|1|120
-135|Mariha Rodrigues|Play 2|1|120
-136|Maryellen Araujo|Play Mix Marília|1|120
-137|Matheus Gonçalves de Souza|Receptivo|1|120
-138|Micaela Souza|Play 1|1|120
-139|Mirella Arias|Conecta Play|1|120
-140|Mirelly Marinho|Play Mix Marília|1|120
-141|Noemi Santos|Play 3|1|120
-142|Pamella Medeiros|Playmix|1|120
-143|Paola Souza|Play 1|1|120
-144|Pedro Souza|Play Mix Marília|1|120
-145|Rafaela Lisboa|Play Mix Marília|1|120
-146|Raiana Reis|Play 1|1|120
-147|Raquel Priscila|Play 1|1|120
-148|Rayssa Oliveira|Conecta Play|1|120
-149|Renata Cardoso Silva|Play 3|1|120
-150|Rodrigo Defalqui|Play 3|1|120
-151|Rosane Piona|Play 2|1|120
-152|Rosineide Mendes|Play 1|1|120
-153|Samara Chamarelli|Treinamento|1|120
-154|Sarah Inocencio|Playmix|1|120
-155|Shakira Santos|Play 1|1|120
-156|Silva Beatriz|Conecta Play|1|120
-157|Silvia Alves|Play Mix Marília|1|120
-158|Stefany Souza|Playmix|1|120
-159|Stella Nascimento|Play 2|1|120
-160|Stephanie Fagundes|Conecta Play|1|120
-161|Tassiane Viana|Conecta Play|1|120
-162|Thaina Couto|Play 2|1|120
-163|Thais Mayara|Conecta Play|1|120
-164|Thaís Rodrigues|Play Mix Marília|1|120
-165|Thais Venturin|Play 1|1|120
-166|Thalia Souza|Play 1|1|120
-167|Thalita Angelo|Play 1|1|120
-168|Thauany Moura|Conecta Play|1|120
-169|Tiago Henrique|Playmix|1|120
-170|Vinicius Manculi|Play 5|1|120
-171|Daniel Fagundes|Play Mix Marília|1|115
-172|Gabriela Santana|Play Mix Marília|1|115
-173|Maria Oliveira|Play Mix Marília|1|115
-174|Mirian Barbosa|Play 2|1|115
+10|Thamires Souza|Play 2|4|450
+11|Igor Rocha|Play 2|3|405
+12|Amanda Paulo|Receptivo|3|360
+13|Fernanda Mata|Play 2|3|360
+14|Heloisa Lima|Receptivo|3|360
+15|Jose Victor Tavares|Receptivo|3|360
+16|Otavio Cestini|Play 2|3|360
+17|Eduardo Melo|Receptivo|3|355
+18|Nanci Moreira|Receptivo|3|355
+19|Poliana Shueter|Play 2|3|355
+20|Wilson Junior|Playmix|3|350
+21|Helton Paulino Roldon|Playmix|3|345
+22|Maria C Silva|Play 2|3|345
+23|Eduardo Naia|Play 3|2|290
+24|Agatha Rocha|Receptivo|2|260
+25|Matheus Costa|Receptivo|2|255
+26|Ana Clara Da Silva Sena|Receptivo|2|240
+27|Analimasilva|Play Mix Marília|2|240
+28|Andressa Aires|Play 3|2|240
+29|Breno Henrique Pereira Macarini|Play 3|2|240
+30|Carolina Murai|Play 1|2|240
+31|Daniela Reis|Play 2|2|240
+32|Debora Renata Souza|Play 1|2|240
+33|Emilly Oliveira|Play 2|2|240
+34|Erica Carvalho|Play 1|2|240
+35|Eriele Monteiro|Receptivo|2|240
+36|Gabriela Farias|Play 1|2|240
+37|Gustavo Nunes|Playmix|2|240
+38|Isabeli Ferreira|Play 3|2|240
+39|Joao Garcia|Playmix|2|240
+40|Joao V Santos|Conecta Play|2|240
+41|Juliana dos Santos Mello|Playmix|2|240
+42|Juliana Spereira|Play 1|2|240
+43|Laura|Playmix|2|240
+44|Luana Marchi Polo|Play 1|2|240
+45|Maria E Pereira|Playmix|2|240
+46|Mario Mantovani|Playmix|2|240
+47|Pedro Alves|Playmix|2|240
+48|Poliana Varjao|Play Mix Marília|2|240
+49|Quezia Vitoreli|Playmix|2|240
+50|Rayane Estevan|Play 2|2|240
+51|Thayna Izidro|Play 3|2|240
+52|Thayra Ferreira Silva|Play 2|2|240
+53|Elisandra Raquel|Play Mix Marília|2|235
+54|Layra Carini|Receptivo|2|235
+55|Leticia Andrade|Receptivo|2|235
+56|Sophia Costa|Conecta Play|2|235
+57|Alexia Silva|Play 2|2|230
+58|Diemily Da Silva|Play 3|2|230
+59|Isabele Barros|Play 2|2|230
+60|Kauane Azevedo|Conecta Play|2|230
+61|Brenda Ferreira|Play 5|2|225
+62|Bruna Xavier|Play Mix Marília|2|225
+63|Caio Shimite|Conecta Play|2|225
+64|Cleber Junior||2|225
+65|Gabriely Alves|Receptivo|2|225
+66|Julia Caetano|Play 1|2|225
+67|Leonardo Nunes Keppler|Play 2|2|225
+68|Maria V Souza|Play 5|2|225
+69|Sthefanny Moraes|Play 3|2|225
+70|Aline Rodrigues|Play 2|1|120
+71|Alisson Santana|Playmix|1|120
+72|Amabelly Santos|Conecta Play|1|120
+73|Amanda Alcasa|Play 5|1|120
+74|Amanda D Silva|Play 2|1|120
+75|Amanda Laisa|Play 3|1|120
+76|Ana Dias|Play 1|1|120
+77|Ana Gaiarin|Playmix|1|120
+78|Ana Paula Rodrigues|Play 3|1|120
+79|André Brandao|Play 3|1|120
+80|André Honorato||1|120
+81|Andreina Fratucci|Play 1|1|120
+82|Andressa Santos|Play 3|1|120
+83|Beatriz Reis|Play 3|1|120
+84|Beatriz Rodrigues|Receptivo|1|120
+85|Benjamin Ayala|Play 3|1|120
+86|Bianca Oliveira|Play 5|1|120
+87|Bianca Santelli Santos|Play 3|1|120
+88|Bianca Santera|Play 3|1|120
+89|Bruna Justimiano Ribeiro|Conecta Play|1|120
+90|Camila Ribeiro|Play 1|1|120
+91|Camilly Carvalho|Play 2|1|120
+92|Camilly Pereira|Play 1|1|120
+93|Caroline Valverde|Conecta Play|1|120
+94|Daniele Andrade|Playmix|1|120
+95|Debora Sobrinho|Conecta Play|1|120
+96|Douglas Faria|Playmix|1|120
+97|Elen Peralta Dos Santos|Play 3|1|120
+98|Emily Jardim|Play 1|1|120
+99|Fatima Tinareli|Playmix|1|120
+100|Francieli Silva|Playmix|1|120
+101|Gabriel Martin|Manutenção|1|120
+102|Gabriela Gonçalves|Play 3|1|120
+103|Gabrieli Oliveira|Play 3|1|120
+104|Giovana Souza|Conecta Play|1|120
+105|Giovanni Fagundes|Play 1|1|120
+106|Hayla Teixeira|Receptivo|1|120
+107|Heloisa Camilo|Receptivo|1|120
+108|Igor Eduardo Da Cruz Theodoro|Play 3|1|120
+109|Ingrid Nascimento|Play 2|1|120
+110|Isabela Sobrinho|Play Mix Marília|1|120
+111|Jacqueline Nascimento|Play 5|1|120
+112|Jaqueline Barbosa|Play 1|1|120
+113|Jaqueline Silva|Play Mix Marília|1|120
+114|Jessica Lucena|Play 3|1|120
+115|João Santos|Play Mix Marília|1|120
+116|Joyce Rosseto|Play Mix Marília|1|120
+117|Julia Barboza|Play 1|1|120
+118|Juliana Bellinati|Playmix|1|120
+119|Juliana Vitoria|Play 3|1|120
+120|Karina Silva|Play 1|1|120
+121|Karina Teixeira|Play Mix Marília|1|120
+122|Kauan Rodrigues||1|120
+123|Kaue Nadai|Conecta Play|1|120
+124|Laiza Daniele|Play 1|1|120
+125|Larissa Vieira|Play 2|1|120
+126|Leticia Kerlia|Play 3|1|120
+127|Leticia Peres|Play 2|1|120
+128|Luana Barrios|Play 3|1|120
+129|Lucila Silva|Playmix|1|120
+130|Luiz Silva|Play 3|1|120
+131|Marco Santos|Play 1|1|120
+132|Maria Eduarda Da Silva Pereira|Play 3|1|120
+133|Maria Segura|Play 2|1|120
+134|Mariha Rodrigues|Play 2|1|120
+135|Maryellen Araujo|Play Mix Marília|1|120
+136|Matheus Gonçalves de Souza|Receptivo|1|120
+137|Micaela Souza|Play 1|1|120
+138|Mirella Arias|Conecta Play|1|120
+139|Mirelly Marinho|Play Mix Marília|1|120
+140|Noemi Santos|Play 3|1|120
+141|Pamella Medeiros|Playmix|1|120
+142|Paola Souza|Play 1|1|120
+143|Pedro Souza|Play Mix Marília|1|120
+144|Rafaela Lisboa|Play Mix Marília|1|120
+145|Raiana Reis|Play 1|1|120
+146|Raquel Priscila|Play 1|1|120
+147|Rayssa Oliveira|Conecta Play|1|120
+148|Renata Cardoso Silva|Play 3|1|120
+149|Rodrigo Defalqui|Play 3|1|120
+150|Rosane Piona|Play 2|1|120
+151|Rosineide Mendes|Play 1|1|120
+152|Samara Chamarelli|Treinamento|1|120
+153|Sarah Inocencio|Playmix|1|120
+154|Shakira Santos|Play 1|1|120
+155|Silva Beatriz|Conecta Play|1|120
+156|Silvia Alves|Play Mix Marília|1|120
+157|Stefany Souza|Playmix|1|120
+158|Stella Nascimento|Play 2|1|120
+159|Stephanie Fagundes|Conecta Play|1|120
+160|Tassiane Viana|Conecta Play|1|120
+161|Thaina Couto|Play 2|1|120
+162|Thais Mayara|Conecta Play|1|120
+163|Thaís Rodrigues|Play Mix Marília|1|120
+164|Thais Venturin|Play 1|1|120
+165|Thalia Souza|Play 1|1|120
+166|Thalita Angelo|Play 1|1|120
+167|Thauany Moura|Conecta Play|1|120
+168|Tiago Henrique|Playmix|1|120
+169|Vinicius Manculi|Play 5|1|120
+170|Daniel Fagundes|Play Mix Marília|1|115
+171|Gabriela Santana|Play Mix Marília|1|115
+172|Maria Oliveira|Play Mix Marília|1|115
+173|Mirian Barbosa|Play 2|1|115
 `;
 
 /**
@@ -225,7 +225,6 @@ const DO_TOP: Readonly<Record<string, { foto: string | null; tem: readonly IdIns
   'Debora Portela da Silva': { foto: `${AVATAR}827b8e43-675a-46ee-b9d5-bdfe28d8d038.jpg?t=1784056577162`, tem: ['zumbi', 'reiDoPop', 'pantano', 'guerra'] },
   'Isabella Rocha': { foto: `${AVATAR}8b58aa13-ce96-4f22-8d97-a88faa2f1cdf.jpg?t=1790624396709`, tem: ['reiDoPop', 'bruxas', 'pantano', 'guerra'] },
   'Pedro Pugina Verdinasse': { foto: null, tem: ['zumbi', 'reiDoPop', 'pantano', 'guerra'] },
-  'Joao Miguel': { foto: null, tem: ['zumbi', 'reiDoPop', 'bruxas', 'pantano'] },
 };
 
 export const PESSOAL: readonly Pessoa[] = LISTA.trim().split('\n').map(linha => {
