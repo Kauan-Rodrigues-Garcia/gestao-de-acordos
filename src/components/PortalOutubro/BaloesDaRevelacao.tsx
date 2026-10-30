@@ -5,8 +5,8 @@
  * contagem os balões já vão aparecendo na tela e se juntando no local certo
  * deles»):
  *
- *   T − 30 s … T − 6 s   (só para quem participou) um a um, cada balão voa do
- *                        seu canto num arco e para no lugar dele, boiando:
+ *   T − 30 s … T − 6 s   (só para quem participou) um a um, cada balão sobe de
+ *                        baixo da tela, como os outros, e para no lugar dele, boiando:
  *                        sobe e desce e balança com o fio junto
  *   T − 4 s              o retrato da tela já é tirado (`anteciparFoto`):
  *                        no zero a tela desmancha sem esperar
@@ -25,12 +25,25 @@ import { Pixel } from './Bueiro';
 import { tocarSomDaCoisa } from './coisa/trilha';
 import { useVelocidadeDoMural } from './estado';
 import {
-  CACOS, CHEGADA_S, ENCHE_ANTES_MS, ENTRE_ESTOUROS_MS, FOTO_ANTES_MS, OLA_ANTES_MS, QUANTOS, QUANTOS_LEVE, VOO_S,
+  CACOS, CHEGADA_S, ENCHE_ANTES_MS, ENTRE_ESTOUROS_MS, FOTO_ANTES_MS, OLA_ANTES_MS, QUANTOS, QUANTOS_LEVE,
   anteciparFoto, marcarChegada, montarBaloes, type BalaoDaRevelacao, type EtapaDoBalao,
 } from './revelacao';
 
-/** Um balão: o voo até o lugar, boiando com o fio, enchendo, estourando. `chegaS`: o atraso do voo (negativo: já chegou). */
-export function BalaoNaTela({ b, etapa, chegaS, leve }: { b: BalaoDaRevelacao; etapa: EtapaDoBalao; chegaS: number; leve: boolean }) {
+/** As faíscas do estouro: pontinhos que saem rápido do meio (no lugar do clarão branco, até 30/10). */
+const FAISCAS = Array.from({ length: 8 }, (_, i) => {
+  const a = (i / 8) * Math.PI * 2;
+  const r = i % 2 ? 26 : 38;
+  return [Math.round(Math.cos(a) * r), Math.round(Math.sin(a) * r)] as const;
+});
+
+/**
+ * Um balão: sobe de baixo da tela até o lugar dele, boiando com o fio, enche
+ * e estoura. `chegaS`: quando começa a subir (negativo: já está subindo, ou já
+ * chegou); `sobeS`: quanto leva subindo (o dele, se não vier).
+ */
+export function BalaoNaTela({ b, etapa, chegaS, sobeS = b.sobe, leve }: {
+  b: BalaoDaRevelacao; etapa: EtapaDoBalao; chegaS: number; sobeS?: number; leve: boolean;
+}) {
   // Onde fica o nó do balão, em relação ao lugar dele (o corpo sobe 30% da altura).
   const alto = 15 * b.tam, fio = 54;
   const no = alto - 0.3 * (alto + fio);
@@ -40,8 +53,10 @@ export function BalaoNaTela({ b, etapa, chegaS, leve }: { b: BalaoDaRevelacao; e
       style={{
         left: `${b.para[0] * 100}vw`,
         top: `${b.para[1] * 100}vh`,
-        ['--de-x' as string]: `${(b.de[0] - b.para[0]) * 100}vw`,
-        ['--de-y' as string]: `${(b.de[1] - b.para[1]) * 100}vh`,
+        // De baixo da tela (com o fio inteiro escondido) até o lugar.
+        ['--de-baixo' as string]: `calc(${(1 - b.para[1]) * 100}vh + ${alto + fio + 40}px)`,
+        ['--deriva' as string]: `${b.deriva}px`,
+        ['--sobe' as string]: `${sobeS}s`,
         ['--chega' as string]: `${chegaS}s`,
         ['--fase' as string]: `${-b.fase}s`,
         ['--ritmo' as string]: b.ritmo,
@@ -57,7 +72,9 @@ export function BalaoNaTela({ b, etapa, chegaS, leve }: { b: BalaoDaRevelacao; e
       </div>
       {etapa === 'estourou' && (
         <div className="portal-rev-estouro">
-          <span className="portal-rev-clarao" />
+          {FAISCAS.map(([x, y], k) => (
+            <span key={`f${k}`} className="portal-rev-faisca" style={{ ['--fx' as string]: `${x}px`, ['--fy' as string]: `${y}px` } as CSSProperties} />
+          ))}
           <span className="portal-rev-anel" />
           {(leve ? CACOS.slice(0, 6) : CACOS).map((c, k) => (
             <span
@@ -106,7 +123,7 @@ export function BaloesChegando({ faltaMs, leve }: { faltaMs: number; leve: boole
   return (
     <div className="portal-baloes-chegando" style={{ ['--v' as string]: v } as CSSProperties} data-portal-fora data-portal-anima aria-hidden>
       {baloes.map((b, i) => (
-        <BalaoNaTela key={i} b={b} etapa={etapa} chegaS={CHEGADA_S - b.chega - VOO_S - desde} leve={leve} />
+        <BalaoNaTela key={i} b={b} etapa={etapa} chegaS={CHEGADA_S - b.chega - b.sobe - desde} leve={leve} />
       ))}
     </div>
   );

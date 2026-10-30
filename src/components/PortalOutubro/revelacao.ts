@@ -13,8 +13,10 @@ export const QUANTOS = 14, QUANTOS_LEVE = 6, ENTRE_ESTOUROS_MS = 70;
 export const CHEGADA_S = 30;
 /** O último chega quando faltam isso. */
 const ULTIMO_CHEGA_S = 6;
-/** Quanto dura o voo de cada um. */
-export const VOO_S = 1.8;
+/** A subida de cada um, de baixo da tela até o lugar dele (entre isso e mais 2,5 s). */
+const SUBIDA_S = 6;
+/** A subida curta de quem chega depois (a abertura do jeito de antes, que estoura em 2,9 s). */
+export const SUBIDA_RAPIDA_S = 1.7;
 /** O «hello» começa quando faltam isso: o golpe da música (2,75 s do trecho) cai no zero. */
 export const OLA_ANTES_MS = 2_750;
 /** Enchem quando faltam isso. */
@@ -23,44 +25,49 @@ export const ENCHE_ANTES_MS = 900;
 export const FOTO_ANTES_MS = 4_000;
 
 export interface BalaoDaRevelacao {
-  /** De onde sai e onde para, em fração da tela. */
-  de: readonly [number, number];
+  /** Onde ele para, em fração da tela. */
   para: readonly [number, number];
   tam: number;
   /** A vez do estouro (0 = o primeiro). */
   vez: number;
   /** Quantos segundos antes do zero ele termina de chegar. */
   chega: number;
+  /** Quanto leva subindo, de baixo da tela até o lugar (s). */
+  sobe: number;
+  /** O tanto que ele vem de lado enquanto sobe (px): não sobe em linha reta. */
+  deriva: number;
   /** O jeito de boiar de cada um: a fase (s) e o ritmo. */
   fase: number;
   ritmo: number;
 }
 
-/** Os cantos e as beiradas de onde eles saem (um pouco para fora da tela). */
-const SAIDAS: readonly (readonly [number, number])[] = [
-  [-0.08, -0.1], [0.5, -0.14], [1.08, -0.1], [1.1, 0.5], [1.08, 1.12], [0.5, 1.16], [-0.08, 1.12], [-0.1, 0.5],
-];
-
-/** Os lugares saem de uma semente: todo mundo vê os mesmos. */
+/**
+ * Os lugares saem de uma semente: todo mundo vê os mesmos. Desde 30/10/2026
+ * eles sobem de baixo da tela, como os outros balões, e vão parando
+ * espalhados (pedido: «os balões aparecem de baixo para cima, como se
+ * estivessem subindo normalmente, e vão parando e ficando aglomerados»; antes
+ * vinham dos cantos num arco e pareciam surgir do nada).
+ */
 export function montarBaloes(n: number): BalaoDaRevelacao[] {
   const acaso = sorteador(1958);
   const ordem = Array.from({ length: n }, (_, i) => i);
   for (let i = n - 1; i > 0; i--) { const j = Math.floor(acaso() * (i + 1)); [ordem[i], ordem[j]] = [ordem[j], ordem[i]]; }
   return Array.from({ length: n }, (_, i) => {
-    const de = SAIDAS[i % SAIDAS.length];
     // Para no caminho para o meio, espalhado (sem empilhar no centro).
     const ang = (i / n) * Math.PI * 2 + acaso() * 0.4;
     const raio = 0.16 + acaso() * 0.2;
     const para = [0.5 + Math.cos(ang) * raio * 1.25, 0.5 + Math.sin(ang) * raio] as const;
-    // Chegam na ordem do estouro, do primeiro (faltando 28 s) ao último (6 s).
+    const tam = 5 + Math.floor(acaso() * 4);
+    const folga = acaso() - 0.5, fase = acaso() * 3, ritmo = 0.85 + acaso() * 0.35;
+    const sobe = SUBIDA_S + acaso() * 2.5;
+    const deriva = Math.round((acaso() - 0.5) * 140);
+    // Chegam na ordem do estouro: o primeiro sai lá de baixo quando faltam
+    // 30 s, o último para no lugar faltando 6 s.
     const k = n > 1 ? ordem[i] / (n - 1) : 0;
+    const primeiro = CHEGADA_S - sobe;
     return {
-      de, para,
-      tam: 5 + Math.floor(acaso() * 4),
-      vez: ordem[i],
-      chega: CHEGADA_S - VOO_S - k * (CHEGADA_S - VOO_S - ULTIMO_CHEGA_S) + (acaso() - 0.5),
-      fase: acaso() * 3,
-      ritmo: 0.85 + acaso() * 0.35,
+      para, tam, vez: ordem[i], sobe, deriva, fase, ritmo,
+      chega: Math.max(ULTIMO_CHEGA_S, primeiro - k * (primeiro - ULTIMO_CHEGA_S) + folga),
     };
   });
 }

@@ -11,7 +11,7 @@
  *
  * Quem chega depois (a aba estava escondida no zero), do jeito de antes:
  *
- *   0,0 s   os balões saem dos cantos e das beiradas, cada um no seu tempo,
+ *   0,0 s   os balões sobem de baixo da tela, depressa, cada um no seu tempo,
  *           e boiam onde pararam; o «hello»; o retrato da tela
  *   2,0 s   enchem e tremem
  *   2,9 s   (ou quando o retrato fica pronto) estouram em sequência
@@ -29,7 +29,7 @@ import { fotografar } from './fotografar';
 import type { Pixels } from './desmanche';
 import { Bueiro } from './Bueiro';
 import { BalaoNaTela } from './BaloesDaRevelacao';
-import { QUANTOS, QUANTOS_LEVE, chegaramAgora, fotoAntecipada, montarBaloes, type EtapaDoBalao } from './revelacao';
+import { QUANTOS, QUANTOS_LEVE, SUBIDA_RAPIDA_S, chegaramAgora, fotoAntecipada, montarBaloes, type EtapaDoBalao } from './revelacao';
 import { prepararSonsDaCoisa, tocarSomDaCoisa } from './coisa/trilha';
 import { sorteador } from './acaso';
 
@@ -91,7 +91,7 @@ export function Abertura({ aoDesmanchar, aoTerminar, leve }: {
       {etapa !== 'estourou' && <div className="portal-alto-bueiro"><Bueiro acesos seguir={false} tremendo={!leve} leve={leve} /></div>}
 
       {baloes.map((b, i) => (
-        <BalaoNaTela key={i} b={b} etapa={etapa} chegaS={chegaram ? -60 : entradas[i]} leve={leve} />
+        <BalaoNaTela key={i} b={b} etapa={etapa} chegaS={chegaram ? -60 : entradas[i]} sobeS={chegaram ? b.sobe : SUBIDA_RAPIDA_S} leve={leve} />
       ))}
       {etapa === 'estourou' && <div className="portal-clarao portal-clarao-vermelho" aria-hidden />}
     </div>

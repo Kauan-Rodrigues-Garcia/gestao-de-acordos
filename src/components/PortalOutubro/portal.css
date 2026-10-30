@@ -389,12 +389,14 @@
   overflow: hidden;
 }
 /*
- * Os balões da revelação (`BaloesDaRevelacao.tsx`): cada um sai do seu canto
- * (`--de-x`, `--de-y`) num voo em arco e para no lugar dele, boiando — sobe e
- * desce e balança com o fio junto, cada um no seu ritmo; enchem aos trancos,
- * tremendo; e estouram na vez deles (`--estoura`): amassa num quadro, o
- * clarão, o anel, os pedaços de borracha voando e caindo, e o fio caindo
- * sozinho.
+ * Os balões da revelação (`BaloesDaRevelacao.tsx`): cada um sobe de baixo da
+ * tela, como os outros balões (`--de-baixo`, vindo um tico de lado:
+ * `--deriva`), vai freando e para no lugar dele, boiando — sobe e desce e
+ * balança com o fio junto, cada um no seu ritmo; enchem aos trancos,
+ * tremendo; e estouram na vez deles (`--estoura`): amassa num quadro, as
+ * faíscas, o anel, os pedaços de borracha voando e caindo, e o fio caindo
+ * sozinho. (Até 30/10 vinham dos cantos num arco e pareciam surgir do nada,
+ * e cada estouro acendia um quadrado branco.)
  */
 .portal-baloes-chegando { position: fixed; inset: 0; z-index: 9004; pointer-events: none; overflow: hidden; }
 .portal-rev-balao {
@@ -402,11 +404,10 @@
   z-index: 2;
   width: 0;
   height: 0;
-  animation: portal-rev-voa calc(1.8s / var(--v)) cubic-bezier(0.25, 0.8, 0.35, 1) calc(var(--chega) / var(--v)) both;
+  animation: portal-rev-sobe calc(var(--sobe) / var(--v)) cubic-bezier(0.3, 0.6, 0.4, 1) calc(var(--chega) / var(--v)) both;
 }
-@keyframes portal-rev-voa {
-  from { transform: translate(var(--de-x), var(--de-y)); }
-  55%  { transform: translate(calc(var(--de-x) * 0.15), calc(var(--de-y) * 0.15 - 40px)); }
+@keyframes portal-rev-sobe {
+  from { transform: translate(var(--deriva), var(--de-baixo)); }
   to   { transform: none; }
 }
 .portal-rev-corpo {
@@ -449,29 +450,37 @@
 }
 .portal-rev-estouro { position: absolute; left: 0; top: 0; }
 .portal-rev-estouro > span { position: absolute; opacity: 0; }
-.portal-rev-clarao {
-  left: -34px;
-  top: -34px;
-  width: 68px;
-  height: 68px;
-  background: #fff3e8;
-  box-shadow: 0 0 0 10px #ff5a4a;
-  animation: portal-rev-clarao calc(0.2s / var(--v)) steps(3, end) calc(var(--estoura) / var(--v)) both;
+/* As faíscas: pontinhos vermelho-claros saindo rápido do meio. */
+.portal-rev-faisca {
+  left: -3px;
+  top: -3px;
+  width: 6px;
+  height: 6px;
+  background: #ff8f8a;
+  animation: portal-rev-faisca calc(0.28s / var(--v)) steps(4, end) calc(var(--estoura) / var(--v)) both;
 }
-@keyframes portal-rev-clarao {
-  0%   { opacity: 1; transform: scale(0.3); }
-  100% { opacity: 0; transform: scale(1.3); }
+.portal-rev-faisca:nth-child(even) { width: 4px; height: 4px; background: #d9121c; }
+/*
+ * As peças do estouro começam invisíveis (0%) e só acendem na vez delas
+ * (1%): com o atraso de cada balão, o primeiro quadro fica na tela esperando,
+ * e acendido deixava um ponto no meio do balão e um segundo fio torto.
+ */
+@keyframes portal-rev-faisca {
+  0%   { opacity: 0; transform: translate(0, 0); }
+  1%   { opacity: 1; transform: translate(0, 0); }
+  100% { opacity: 0; transform: translate(var(--fx), var(--fy)); }
 }
 .portal-rev-anel {
-  left: -70px;
-  top: -70px;
-  width: 140px;
-  height: 140px;
-  border: 6px solid #d9121c;
+  left: -50px;
+  top: -50px;
+  width: 100px;
+  height: 100px;
+  border: 4px solid rgb(217 18 28 / 0.7);
   animation: portal-rev-anel calc(0.45s / var(--v)) steps(5, end) calc(var(--estoura) / var(--v)) both;
 }
 @keyframes portal-rev-anel {
-  0%   { opacity: 1; transform: scale(0.2); }
+  0%   { opacity: 0; transform: scale(0.2); }
+  1%   { opacity: 1; transform: scale(0.2); }
   100% { opacity: 0; transform: scale(1.8); }
 }
 /* Os pedaços de borracha: voam para fora, giram e caem. */
@@ -485,7 +494,8 @@
 .portal-rev-caco:nth-child(3n) { background: #8f0a16; }
 .portal-rev-caco:nth-child(4n) { background: #ff5a4a; }
 @keyframes portal-rev-caco {
-  0%   { opacity: 1; transform: translate(0, 0) rotate(0deg); animation-timing-function: cubic-bezier(0.1, 0.8, 0.3, 1); }
+  0%   { opacity: 0; transform: translate(0, 0) rotate(0deg); }
+  1%   { opacity: 1; transform: translate(0, 0) rotate(0deg); animation-timing-function: cubic-bezier(0.1, 0.8, 0.3, 1); }
   35%  { opacity: 1; transform: translate(var(--cx), var(--cy)) rotate(calc(var(--gira) * 0.5)); animation-timing-function: cubic-bezier(0.5, 0, 0.9, 0.6); }
   100% { opacity: 0; transform: translate(calc(var(--cx) * 1.2), calc(var(--cy) + 150px)) rotate(var(--gira)); }
 }
@@ -499,7 +509,8 @@
   animation: portal-rev-fio-cai calc(1s / var(--v)) cubic-bezier(0.5, 0, 0.9, 0.5) calc(var(--estoura) / var(--v)) both;
 }
 @keyframes portal-rev-fio-cai {
-  0%   { opacity: 0.85; transform: translateY(0) rotate(0deg); }
+  0%   { opacity: 0; transform: translateY(0) rotate(0deg); }
+  1%   { opacity: 0.85; transform: translateY(0) rotate(0deg); }
   100% { opacity: 0; transform: translateY(160px) rotate(35deg) scaleY(0.6); }
 }
 
@@ -511,7 +522,9 @@
   animation: portal-some calc(600ms / var(--v)) ease-out forwards;
   pointer-events: none;
 }
-.portal-clarao-vermelho { background: #c3121b; }
+/* O vermelho do estouro, na tela inteira: só um sopro (cheio, ele ofuscava). */
+.portal-clarao-vermelho { background: #c3121b; animation: portal-clarao-sopro calc(500ms / var(--v)) ease-out forwards; }
+@keyframes portal-clarao-sopro { from { opacity: 0.3; } to { opacity: 0; } }
 @keyframes portal-some { to { opacity: 0; } }
 @keyframes portal-pisca { 50% { opacity: 0.15; } }
 @keyframes portal-sobe { from { opacity: 0; translate: 0 16px; } }
