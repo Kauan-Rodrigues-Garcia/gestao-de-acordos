@@ -14,7 +14,16 @@ import type { MinhaPartida } from '../tipos';
 
 const CartelasDoJogador = lazy(() => import('./CartelasDoJogador'));
 
-export function BingoNoSistema({ perfilId }: { perfilId: string | null | undefined }) {
+/** A releitura de segurança, com a aba à vista. */
+const RELER_MS = 90_000;
+/** Foco e visibilidade disparam juntos: uma leitura basta. */
+const RELER_MINIMO_MS = 15_000;
+
+export function BingoNoSistema({ perfilId, somenteVer = false }: {
+  perfilId: string | null | undefined;
+  /** «Entrar como»: a cartela aparece, mas não marca nem grita pela pessoa. */
+  somenteVer?: boolean;
+}) {
   const [partidas, setPartidas] = useState<MinhaPartida[]>([]);
 
   const ler = useCallback(() => {
@@ -34,12 +43,33 @@ export function BingoNoSistema({ perfilId }: { perfilId: string | null | undefin
     );
   }, [perfilId, ler]);
 
+  // A rede de segurança do convite: se o aviso se perder (canal caído, aba
+  // dormindo), a cartela aparece quando a aba volta à vista ou na volta
+  // seguinte do relógio. Aba escondida não pergunta.
+  useEffect(() => {
+    if (!perfilId) return;
+    let ultima = Date.now();
+    const talvez = () => {
+      if (document.visibilityState !== 'visible' || Date.now() - ultima < RELER_MINIMO_MS) return;
+      ultima = Date.now();
+      ler();
+    };
+    const t = setInterval(talvez, RELER_MS);
+    document.addEventListener('visibilitychange', talvez);
+    window.addEventListener('focus', talvez);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener('visibilitychange', talvez);
+      window.removeEventListener('focus', talvez);
+    };
+  }, [perfilId, ler]);
+
   const sumir = useCallback((id: string) => setPartidas(ps => ps.filter(p => p.partida.id !== id)), []);
 
   if (!perfilId || !partidas.length) return null;
   return (
     <Suspense fallback={null}>
-      <CartelasDoJogador partidas={partidas} perfilId={perfilId} aoSumir={sumir} />
+      <CartelasDoJogador partidas={partidas} perfilId={perfilId} somenteVer={somenteVer} aoSumir={sumir} />
     </Suspense>
   );
 }

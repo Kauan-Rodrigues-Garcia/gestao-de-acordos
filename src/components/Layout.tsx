@@ -1199,8 +1199,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <SireneOverlay />
 
       {/* O Bingo do Modo TV (30/10/2026): a cartela de quem está numa partida.
-          Durante «Entrar como» não aparece — o grito não age pela pessoa. */}
-      <BingoNoSistema perfilId={getImpersonacaoAtiva() ? null : perfil?.id} />
+          Durante «Entrar como» aparece só para ver — o grito não age pela pessoa. */}
+      <BingoNoSistema perfilId={perfil?.id} somenteVer={!!getImpersonacaoAtiva()} />
 
       {/* Troca de senha 1x */}
       {perfil?.id && (

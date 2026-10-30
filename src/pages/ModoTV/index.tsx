@@ -10,7 +10,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { Gamepad2, Monitor, Plus, Tv } from 'lucide-react';
+import { Dices, Gamepad2, Monitor, Plus, Tv } from 'lucide-react';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,7 +24,10 @@ import {
 import type { AlvoTv, ConexaoTv, Painel } from './tipos';
 import { criarPainel, listarAlvos, listarConexoes, listarPaineis, semMigration } from './servico';
 import { Editor } from './Editor';
-import { CentralDeJogos } from './bingo/Central';
+import { CentralDeJogos, SeloBingoNoAr } from './bingo/Central';
+import { resumoDosPaineis } from './bingo/servico';
+import { TOTAL_PEDRAS } from './bingo/regras';
+import type { ResumoDoPainel } from './bingo/tipos';
 import { chaveAlvo, estadoDaTv, rotuloAlvo, tvLigada } from './apoio';
 
 export default function ModoTV() {
@@ -37,6 +40,7 @@ export default function ModoTV() {
   const [faltaMigration, setFaltaMigration] = useState(false);
   const [criando, setCriando] = useState(false);
   const [aba, setAba] = useState<'paineis' | 'jogos'>('paineis');
+  const [resumo, setResumo] = useState<Map<string, ResumoDoPainel>>(new Map());
 
   const recarregar = useCallback(async () => {
     if (!empresa?.id) return;
@@ -71,6 +75,26 @@ export default function ModoTV() {
     }, 5_000);
     return () => clearInterval(t);
   }, [atualizarConexoes]);
+
+  // O jogo no ar de cada TV, nas duas abas: na lista de painéis o líder vê que
+  // a TV está no bingo sem abrir a Central. Leitura pequena, de 15 em 15 s.
+  const lerResumo = useCallback(() => {
+    if (!empresa?.id) return;
+    // Sem a migration do Bingo, fica quieto: o Modo TV segue sem jogo.
+    resumoDosPaineis(empresa.id).then(r => setResumo(new Map(r.map(x => [x.painel_id, x]))), () => {});
+  }, [empresa?.id]);
+
+  useEffect(() => {
+    if (!paineis.length) return;
+    lerResumo();
+    const t = setInterval(() => { if (document.visibilityState === 'visible') lerResumo(); }, 15_000);
+    return () => clearInterval(t);
+  }, [lerResumo, paineis.length]);
+
+  const tvsDoPainel = useCallback((p: Painel) => {
+    const tvs = conexoes.filter(c => c.painel_id === p.id);
+    return { total: tvs.length, ligadas: tvs.filter(c => tvLigada(estadoDaTv(c, p.atualizado_em))).length };
+  }, [conexoes]);
 
   // Cada setor com os seus painéis, e as equipes dentro do setor: nada misturado.
   const grupos = useMemo(() => {
@@ -122,10 +146,14 @@ export default function ModoTV() {
           </div>
         )}
 
-        {aba === 'jogos' && !faltaMigration && paineis.length > 0 && empresa?.id && (
+        {aba === 'jogos' && !faltaMigration && paineis.length > 0 && (
           <CentralDeJogos
-            empresaId={empresa.id}
             grupos={grupos}
+            painelId={selecionado}
+            aoEscolher={setSelecionado}
+            resumo={resumo}
+            aoMudar={lerResumo}
+            tvs={tvsDoPainel}
             rotulo={p => {
               const a = alvoPorChave.get(chaveAlvo({ setor_id: p.setor_id!, equipe_id: p.equipe_id ?? null }));
               return a?.equipe_id ? `Equipe ${a.equipe_nome}` : 'Setor inteiro';
@@ -165,8 +193,8 @@ export default function ModoTV() {
               <div key={g.setorId} className="space-y-2">
               <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground px-1">{g.nome}</div>
               {g.paineis.map(p => {
-                const tvs = conexoes.filter(c => c.painel_id === p.id);
-                const online = tvs.filter(c => tvLigada(estadoDaTv(c, p.atualizado_em))).length;
+                const { total, ligadas: online } = tvsDoPainel(p);
+                const jogo = resumo.get(p.id)?.aberta;
                 const alvo = alvoPorChave.get(chaveAlvo({ setor_id: p.setor_id!, equipe_id: p.equipe_id ?? null }));
                 return (
                   <button
@@ -178,9 +206,10 @@ export default function ModoTV() {
                     <div className="text-xs text-muted-foreground truncate">{alvo?.equipe_id ? `Equipe ${alvo.equipe_nome}` : 'Setor inteiro'}</div>
                     <div className="text-xs mt-1.5 flex items-center gap-1.5">
                       <span className={`h-2 w-2 rounded-full ${online ? 'bg-emerald-500' : 'bg-muted-foreground/40'}`} />
-                      {tvs.length ? `${online} de ${tvs.length} TV${tvs.length > 1 ? 's' : ''} ligada${tvs.length > 1 ? 's' : ''}` : 'Sem TV conectada'}
+                      {total ? `${online} de ${total} TV${total > 1 ? 's' : ''} ligada${total > 1 ? 's' : ''}` : 'Sem TV conectada'}
                       <span className="text-muted-foreground">· {p.telas.length} tela{p.telas.length === 1 ? '' : 's'}</span>
                     </div>
+                    {jogo && <SeloBingoNoAr pedras={jogo.pedras} jogando={jogo.participantes} />}
                   </button>
                 );
               })}
@@ -189,14 +218,23 @@ export default function ModoTV() {
             </nav>
 
             {painel && (
-              <Editor
-                key={painel.id}
-                painel={painel}
-                alvo={alvoDoPainel}
-                conexoes={conexoes.filter(c => c.painel_id === painel.id)}
-                aoMudar={recarregar}
-                aoMudarConexoes={atualizarConexoes}
-              />
+              <div className="space-y-4 min-w-0">
+                {resumo.get(painel.id)?.aberta && (
+                  <AvisoBingoNoAr
+                    jogo={resumo.get(painel.id)!.aberta!}
+                    tvs={tvsDoPainel(painel)}
+                    aoAbrir={() => setAba('jogos')}
+                  />
+                )}
+                <Editor
+                  key={painel.id}
+                  painel={painel}
+                  alvo={alvoDoPainel}
+                  conexoes={conexoes.filter(c => c.painel_id === painel.id)}
+                  aoMudar={recarregar}
+                  aoMudarConexoes={atualizarConexoes}
+                />
+              </div>
             )}
           </div>
         )}
@@ -209,6 +247,35 @@ export default function ModoTV() {
         aoFechar={() => setCriando(false)}
         aoCriar={async (id) => { setCriando(false); await recarregar(); setSelecionado(id); }}
       />
+    </div>
+  );
+}
+
+/**
+ * A faixa em cima do editor: com a partida aberta, a TV mostra o bingo e o
+ * rodízio fica parado até encerrar. Sem TV ligada, o jogo corre sem parede.
+ */
+function AvisoBingoNoAr({ jogo, tvs, aoAbrir }: {
+  jogo: NonNullable<ResumoDoPainel['aberta']>;
+  tvs: { total: number; ligadas: number };
+  aoAbrir: () => void;
+}) {
+  const semTv = tvs.ligadas === 0;
+  return (
+    <div className={`flex flex-wrap items-center gap-3 rounded-xl border p-3 text-sm ${semTv ? 'border-amber-500/50 bg-amber-500/10' : 'border-emerald-500/50 bg-emerald-500/10'}`}>
+      <span className={`rounded-lg p-2 text-white ${semTv ? 'bg-amber-500' : 'bg-emerald-600'}`}><Dices className="h-4 w-4" /></span>
+      <div className="min-w-0 flex-1">
+        <div className="font-semibold">
+          {semTv
+            ? 'Bingo aberto, mas nenhuma TV deste painel está ligada'
+            : `A TV está transmitindo o Bingo agora${tvs.total > 1 ? ` (${tvs.ligadas} de ${tvs.total} TVs)` : ''}`}
+        </div>
+        <div className="text-xs text-muted-foreground">
+          Pedra {jogo.pedras} de {TOTAL_PEDRAS} · {jogo.participantes} jogando{jogo.criada_por ? ` · aberto por ${jogo.criada_por}` : ''}.
+          {' '}As telas do rodízio voltam quando a partida for encerrada.
+        </div>
+      </div>
+      <Button size="sm" variant="outline" onClick={aoAbrir}><Gamepad2 className="h-4 w-4 mr-1.5" />Abrir na Central de jogos</Button>
     </div>
   );
 }

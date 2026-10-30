@@ -34,13 +34,13 @@ const PEDRA_NA_TELA_MS = 6500;
 const FESTA_MS = 15_000;
 const CHECAGEM_AUTO_MS = 5_000;
 
-export default function CartelasDoJogador({ partidas, perfilId, aoSumir }: {
-  partidas: MinhaPartida[]; perfilId: string; aoSumir: (id: string) => void;
+export default function CartelasDoJogador({ partidas, perfilId, somenteVer, aoSumir }: {
+  partidas: MinhaPartida[]; perfilId: string; somenteVer: boolean; aoSumir: (id: string) => void;
 }) {
   return (
     <>
       {partidas.map((p, i) => (
-        <CartelaDoJogador key={p.partida.id} inicial={p} perfilId={perfilId} indice={i} aoSumir={aoSumir} />
+        <CartelaDoJogador key={p.partida.id} inicial={p} perfilId={perfilId} somenteVer={somenteVer} indice={i} aoSumir={aoSumir} />
       ))}
     </>
   );
@@ -66,8 +66,8 @@ function gravarLiga(chave: string, v: boolean): void {
 
 // ── Uma partida ──────────────────────────────────────────────────────────────
 
-function CartelaDoJogador({ inicial, perfilId, indice, aoSumir }: {
-  inicial: MinhaPartida; perfilId: string; indice: number; aoSumir: (id: string) => void;
+function CartelaDoJogador({ inicial, perfilId, somenteVer, indice, aoSumir }: {
+  inicial: MinhaPartida; perfilId: string; somenteVer: boolean; indice: number; aoSumir: (id: string) => void;
 }) {
   const id = inicial.partida.id;
   const chave = `bingo:${id}:${perfilId}`;
@@ -261,12 +261,18 @@ function CartelaDoJogador({ inicial, perfilId, indice, aoSumir }: {
           </div>
 
           <div className="flex justify-center">
-            <Cartela tema={tema} numeros={estado.numeros} marcadas={marcadas} auto={auto} celula={50} aoTocar={encerrada ? undefined : tocar} />
+            <Cartela tema={tema} numeros={estado.numeros} marcadas={marcadas} auto={auto} celula={50} aoTocar={encerrada || somenteVer ? undefined : tocar} />
           </div>
+
+          {somenteVer && (
+            <div className="mt-2 rounded-lg bg-black/10 px-2.5 py-1.5 text-[11px] leading-snug">
+              Você está vendo a cartela pelo «Entrar como». Marcar e gritar ficam com a pessoa.
+            </div>
+          )}
 
           <button
             type="button"
-            disabled={!acende || gritando || encerrada}
+            disabled={!acende || gritando || encerrada || somenteVer}
             onClick={fazerGrito}
             className={`bingo-botao mt-3 w-full rounded-2xl py-2.5 text-xl font-bold ${acende ? 'bingo-chama' : 'opacity-50'}`}
             style={{

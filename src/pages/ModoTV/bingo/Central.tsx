@@ -30,7 +30,7 @@ import {
 } from './regras';
 import {
   comemorar, criarPartida, encerrarPartida, incluirParticipantes, lerControle, listarCandidatos,
-  mudarAutomatico, partidaDoPainel, resumoDosPaineis, sortearPedra,
+  mudarAutomatico, partidaDoPainel, sortearPedra,
 } from './servico';
 import { TEMAS_BINGO, useTemaBingo } from './temas';
 import type { TemaBingo } from './temas/contrato';
@@ -38,43 +38,55 @@ import type { CandidatoBingo, CartelaNoControle, ControleBingo, ResumoDoPainel, 
 
 export interface GrupoDePaineis { setorId: string; nome: string; paineis: Painel[] }
 
+export interface TvsDoPainel { total: number; ligadas: number }
+
+/** O selo «Bingo no ar» do card do painel, nas duas abas do Modo TV. */
+export function SeloBingoNoAr({ pedras, jogando }: { pedras: number; jogando: number }) {
+  return (
+    <div className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
+      <PontoAoVivo />
+      <span className="truncate">Bingo no ar · {pedras}/{TOTAL_PEDRAS} · {jogando} jogando</span>
+    </div>
+  );
+}
+
+function PontoAoVivo({ cor = 'bg-emerald-500' }: { cor?: string }) {
+  return (
+    <span className="relative flex h-2 w-2 shrink-0">
+      <span className={`absolute inline-flex h-full w-full rounded-full opacity-75 motion-safe:animate-ping ${cor}`} />
+      <span className={`relative inline-flex h-2 w-2 rounded-full ${cor}`} />
+    </span>
+  );
+}
+
 /**
  * A mesma divisão da aba Painéis: cada setor com as TVs dele, e em cada TV o
  * jogo no ar e os anteriores. Quem enxerga o quê é o banco
  * (`fn_bingo_resumo` só devolve os painéis do meu alcance): o líder vê o
  * setor dele; a cúpula e o super admin, todos, sem misturar.
+ *
+ * O resumo e o painel escolhido moram na página (`ModoTV/index.tsx`): a aba
+ * Painéis mostra o mesmo «Bingo no ar», e trocar de aba não perde a TV.
  */
-export function CentralDeJogos({ empresaId, grupos, rotulo }: {
-  empresaId: string;
+export function CentralDeJogos({ grupos, rotulo, painelId, aoEscolher, resumo, aoMudar, tvs }: {
   grupos: GrupoDePaineis[];
   /** «Setor inteiro» / «Equipe Rosa». */
   rotulo: (p: Painel) => string;
+  painelId: string | null;
+  aoEscolher: (id: string) => void;
+  resumo: Map<string, ResumoDoPainel>;
+  /** Relê o resumo (abriu, encerrou ou incluiu). */
+  aoMudar: () => void;
+  tvs: (p: Painel) => TvsDoPainel;
 }) {
   const todos = useMemo(() => grupos.flatMap(g => g.paineis), [grupos]);
-  const [painelId, setPainelId] = useState<string | null>(todos[0]?.id ?? null);
-  const [resumo, setResumo] = useState<Map<string, ResumoDoPainel>>(new Map());
-
-  useEffect(() => {
-    if (!painelId || !todos.some(p => p.id === painelId)) setPainelId(todos[0]?.id ?? null);
-  }, [todos, painelId]);
-
-  const lerResumo = useCallback(() => {
-    resumoDosPaineis(empresaId).then(r => setResumo(new Map(r.map(x => [x.painel_id, x]))), () => {});
-  }, [empresaId]);
-
-  // O status de cada TV anda sozinho com a tela à vista: uma leitura pequena a cada 15 s.
-  useEffect(() => {
-    lerResumo();
-    const t = setInterval(() => { if (document.visibilityState === 'visible') lerResumo(); }, 15_000);
-    return () => clearInterval(t);
-  }, [lerResumo]);
 
   if (!todos.length) {
     return <p className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">Crie um painel de TV primeiro: o jogo passa na TV dele.</p>;
   }
 
-  const painel = todos.find(p => p.id === painelId) ?? null;
-  const doPainel = painelId ? resumo.get(painelId) : undefined;
+  const painel = todos.find(p => p.id === painelId) ?? todos[0];
+  const doPainel = resumo.get(painel.id);
 
   return (
     <div className="grid gap-6 lg:grid-cols-[260px_1fr]">
@@ -85,16 +97,18 @@ export function CentralDeJogos({ empresaId, grupos, rotulo }: {
             {g.paineis.map(p => {
               const r = resumo.get(p.id);
               return (
-                <button key={p.id} type="button" onClick={() => setPainelId(p.id)}
-                  className={`w-full text-left rounded-xl border p-3 transition-colors ${p.id === painelId ? 'border-primary bg-primary/5' : 'hover:bg-accent'}`}>
+                <button key={p.id} type="button" onClick={() => aoEscolher(p.id)}
+                  className={`w-full text-left rounded-xl border p-3 transition-colors ${p.id === painel.id ? 'border-primary bg-primary/5' : 'hover:bg-accent'}`}>
                   <div className="font-semibold truncate">{p.nome}</div>
                   <div className="text-xs text-muted-foreground truncate">{rotulo(p)}</div>
-                  <div className="text-xs mt-1.5 flex items-center gap-1.5">
-                    <span className={`h-2 w-2 rounded-full ${r?.aberta ? 'bg-emerald-500 animate-pulse' : 'bg-muted-foreground/40'}`} />
-                    {r?.aberta
-                      ? <>Bingo no ar · {r.aberta.pedras}/{TOTAL_PEDRAS} · {r.aberta.participantes} jogando</>
-                      : <span className="text-muted-foreground">Sem jogo agora{r?.anteriores.length ? ` · ${r.anteriores.length} anterior${r.anteriores.length > 1 ? 'es' : ''}` : ''}</span>}
-                  </div>
+                  {r?.aberta
+                    ? <SeloBingoNoAr pedras={r.aberta.pedras} jogando={r.aberta.participantes} />
+                    : (
+                      <div className="text-xs mt-1.5 flex items-center gap-1.5 text-muted-foreground">
+                        <span className="h-2 w-2 rounded-full bg-muted-foreground/40" />
+                        Sem jogo agora{r?.anteriores.length ? ` · ${r.anteriores.length} anterior${r.anteriores.length > 1 ? 'es' : ''}` : ''}
+                      </div>
+                    )}
                 </button>
               );
             })}
@@ -102,26 +116,24 @@ export function CentralDeJogos({ empresaId, grupos, rotulo }: {
         ))}
       </nav>
 
-      {painel && (
-        <div className="space-y-5 min-w-0">
-          <div>
-            <h2 className="text-lg font-semibold">{painel.nome}</h2>
-            <p className="text-sm text-muted-foreground">
-              {grupos.find(g => g.paineis.includes(painel))?.nome} · {rotulo(painel)}. Só jogam pessoas daqui, e só quem você escolher.
-            </p>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-3">
-            <CardJogo icone={<Dices className="h-5 w-5" />} nome="Bingo" texto="Cartela na tela de cada um, sorteio na TV." ativo />
-            <CardJogo icone={<Sparkles className="h-5 w-5" />} nome="Roleta" texto="Em breve." />
-            <CardJogo icone={<Users className="h-5 w-5" />} nome="Sorteio de pessoa" texto="Em breve." />
-          </div>
-
-          <BingoDoPainel key={painel.id} painelId={painel.id} aoMudar={lerResumo} />
-
-          <JogosAnteriores anteriores={doPainel?.anteriores ?? []} />
+      <div className="space-y-5 min-w-0">
+        <div>
+          <h2 className="text-lg font-semibold">{painel.nome}</h2>
+          <p className="text-sm text-muted-foreground">
+            {grupos.find(g => g.paineis.includes(painel))?.nome} · {rotulo(painel)}. Só jogam pessoas daqui, e só quem você escolher.
+          </p>
         </div>
-      )}
+
+        <div className="grid gap-3 sm:grid-cols-3">
+          <CardJogo icone={<Dices className="h-5 w-5" />} nome="Bingo" texto="Cartela na tela de cada um, sorteio na TV." ativo />
+          <CardJogo icone={<Sparkles className="h-5 w-5" />} nome="Roleta" texto="Em breve." />
+          <CardJogo icone={<Users className="h-5 w-5" />} nome="Sorteio de pessoa" texto="Em breve." />
+        </div>
+
+        <BingoDoPainel key={painel.id} painelId={painel.id} tvs={tvs(painel)} aoMudar={aoMudar} />
+
+        <JogosAnteriores anteriores={doPainel?.anteriores ?? []} />
+      </div>
     </div>
   );
 }
@@ -159,7 +171,7 @@ function CardJogo({ icone, nome, texto, ativo }: { icone: React.ReactNode; nome:
 
 // ── O bingo de um painel ─────────────────────────────────────────────────────
 
-function BingoDoPainel({ painelId, aoMudar }: { painelId: string; aoMudar: () => void }) {
+function BingoDoPainel({ painelId, tvs, aoMudar }: { painelId: string; tvs: TvsDoPainel; aoMudar: () => void }) {
   const [controle, setControle] = useState<ControleBingo | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [faltaMigration, setFaltaMigration] = useState(false);
@@ -189,7 +201,37 @@ function BingoDoPainel({ painelId, aoMudar }: { painelId: string; aoMudar: () =>
     );
   }
   if (!controle) return <NovaPartida painelId={painelId} aoCriar={() => { void ler(); aoMudar(); }} />;
-  return <PartidaEmJogo inicial={controle} aoEncerrar={() => { setControle(null); aoMudar(); }} />;
+  return <PartidaEmJogo inicial={controle} tvs={tvs} aoEncerrar={() => { setControle(null); aoMudar(); }} aoMudar={aoMudar} />;
+}
+
+/** A faixa de cima da partida: a TV está mostrando o jogo — ou não há TV ligada para mostrar. */
+function FaixaAoVivo({ tvs }: { tvs: TvsDoPainel }) {
+  if (!tvs.ligadas) {
+    return (
+      <div className="flex items-center gap-2.5 rounded-xl border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-sm">
+        <PontoAoVivo cor="bg-amber-500" />
+        <span>
+          <b>Nenhuma TV deste painel está ligada.</b>{' '}
+          <span className="text-muted-foreground">
+            {tvs.total ? 'As cartelas funcionam, mas ninguém vê o sorteio na parede.' : 'Conecte uma TV na aba Painéis para o sorteio aparecer na parede.'}
+          </span>
+        </span>
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center gap-2.5 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm">
+      <span className="inline-flex items-center gap-1.5 rounded-md bg-red-600 px-2 py-0.5 text-[11px] font-bold tracking-wider text-white">
+        <PontoAoVivo cor="bg-white" />AO VIVO
+      </span>
+      <span>
+        <b>A TV está transmitindo este bingo.</b>{' '}
+        <span className="text-muted-foreground">
+          {tvs.total > 1 ? `${tvs.ligadas} de ${tvs.total} TVs ligadas. ` : ''}O rodízio de telas volta quando você encerrar.
+        </span>
+      </span>
+    </div>
+  );
 }
 
 // ── Criar ────────────────────────────────────────────────────────────────────
@@ -338,7 +380,9 @@ function PreviaDoTema({ id }: { id: TemaBingoId }) {
 
 // ── Em jogo ──────────────────────────────────────────────────────────────────
 
-function PartidaEmJogo({ inicial, aoEncerrar }: { inicial: ControleBingo; aoEncerrar: () => void }) {
+function PartidaEmJogo({ inicial, tvs, aoEncerrar, aoMudar }: {
+  inicial: ControleBingo; tvs: TvsDoPainel; aoEncerrar: () => void; aoMudar: () => void;
+}) {
   const [c, setC] = useState(inicial);
   const cRef = useRef(c);
   cRef.current = c;
@@ -430,6 +474,8 @@ function PartidaEmJogo({ inicial, aoEncerrar }: { inicial: ControleBingo; aoEnce
 
   return (
     <div className="space-y-5">
+      <FaixaAoVivo tvs={tvs} />
+
       {/* O sorteio */}
       <div className="rounded-2xl p-4 sm:p-5 flex flex-wrap items-center gap-5" style={{ background: tema.fundoTv, color: tema.texto, fontFamily: tema.familia }}>
         <div className="flex items-center gap-4">
@@ -511,7 +557,7 @@ function PartidaEmJogo({ inicial, aoEncerrar }: { inicial: ControleBingo; aoEnce
       </Dialog>
 
       <DialogComemorar aberto={comemorando} controle={c} tema={tema} aoFechar={() => setComemorando(false)} aoComemorar={reler} />
-      <DialogIncluir aberto={incluindo} controle={c} aoFechar={() => setIncluindo(false)} aoIncluir={reler} />
+      <DialogIncluir aberto={incluindo} controle={c} aoFechar={() => setIncluindo(false)} aoIncluir={() => { void reler(); aoMudar(); }} />
     </div>
   );
 }
