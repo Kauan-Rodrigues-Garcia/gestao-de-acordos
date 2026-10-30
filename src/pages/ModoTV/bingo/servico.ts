@@ -7,7 +7,7 @@
  */
 import { supabase } from '@/lib/supabase';
 import type {
-  CandidatoBingo, ControleBingo, EstadoBingo, MinhaPartida, TemaBingoId, TipoVitoria,
+  CandidatoBingo, ControleBingo, EstadoBingo, MinhaPartida, ResumoDoPainel, TemaBingoId, TipoVitoria,
 } from './tipos';
 
 interface Erro { message: string }
@@ -21,6 +21,10 @@ async function rpc<T>(nome: string, args: Record<string, unknown> = {}): Promise
 }
 
 // ── Controle (líder) ─────────────────────────────────────────────────────────
+
+/** Os painéis que eu alcanço, com o jogo no ar e os anteriores de cada um. */
+export const resumoDosPaineis = async (empresaId: string) =>
+  (await rpc<ResumoDoPainel[] | null>('fn_bingo_resumo', { p_empresa: empresaId })) ?? [];
 
 export const listarCandidatos = async (painelId: string) =>
   (await rpc<CandidatoBingo[] | null>('fn_bingo_candidatos', { p_painel: painelId })) ?? [];

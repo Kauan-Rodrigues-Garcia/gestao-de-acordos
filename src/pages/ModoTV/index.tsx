@@ -122,7 +122,16 @@ export default function ModoTV() {
           </div>
         )}
 
-        {aba === 'jogos' && !faltaMigration && paineis.length > 0 && <CentralDeJogos paineis={paineis} />}
+        {aba === 'jogos' && !faltaMigration && paineis.length > 0 && empresa?.id && (
+          <CentralDeJogos
+            empresaId={empresa.id}
+            grupos={grupos}
+            rotulo={p => {
+              const a = alvoPorChave.get(chaveAlvo({ setor_id: p.setor_id!, equipe_id: p.equipe_id ?? null }));
+              return a?.equipe_id ? `Equipe ${a.equipe_nome}` : 'Setor inteiro';
+            }}
+          />
+        )}
 
         {faltaMigration && (
           <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-5 text-sm">

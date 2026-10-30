@@ -226,6 +226,8 @@ AS $function$
    WHERE tp.id = p_painel
      AND p.ativo
      AND NOT COALESCE(p.robo, FALSE)
+     -- Quem está fora não recebe cartela (nem o «plim» quando voltar).
+     AND COALESCE(p.situacao, '') NOT IN ('ferias', 'afastado')
      AND (CASE WHEN tp.equipe_id IS NULL
                THEN p.setor_id = tp.setor_id OR e.setor_id = tp.setor_id
                ELSE p.equipe_id = tp.equipe_id
@@ -445,6 +447,59 @@ BEGIN
     SELECT jsonb_agg(jsonb_build_object('id', x.id, 'nome', x.nome, 'foto', x.foto,
                                         'equipe_id', x.equipe_id, 'equipe_nome', x.equipe_nome) ORDER BY x.nome)
       FROM public.fn_bingo_pessoas_do_painel(p_painel) x), '[]'::JSONB);
+END;
+$function$;
+
+/**
+ * A visão da central, por painel: o jogo no ar (se houver) e os últimos 10
+ * encerrados, com quem criou e quem ganhou. Só os painéis que eu alcanço —
+ * o líder vê os do setor dele; a cúpula e o super admin, os de todos,
+ * separados por setor na tela.
+ */
+CREATE OR REPLACE FUNCTION public.fn_bingo_resumo(p_empresa UUID)
+RETURNS JSONB
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path TO public, pg_temp
+AS $function$
+BEGIN
+  RETURN COALESCE((
+    SELECT jsonb_agg(jsonb_build_object(
+      'painel_id', tp.id,
+      'aberta', (
+        SELECT jsonb_build_object(
+          'id', bp.id, 'tema', bp.tema, 'criada_em', bp.criada_em, 'criada_por', pf.nome,
+          'participantes', (SELECT COUNT(*) FROM public.bingo_cartelas c WHERE c.partida_id = bp.id),
+          'pedras', (SELECT COUNT(*) FROM public.bingo_pedras pd WHERE pd.partida_id = bp.id),
+          'gritos', (SELECT COUNT(*) FROM public.bingo_cartelas c WHERE c.partida_id = bp.id AND c.gritou_em IS NOT NULL))
+          FROM public.bingo_partidas bp
+          LEFT JOIN public.perfis pf ON pf.id = bp.criada_por
+         WHERE bp.painel_id = tp.id AND bp.estado = 'aberta'),
+      'anteriores', COALESCE((
+        SELECT jsonb_agg(s.item ORDER BY s.criada_em DESC)
+          FROM (
+            SELECT bp.criada_em, jsonb_build_object(
+                     'id', bp.id, 'tema', bp.tema, 'criada_em', bp.criada_em, 'encerrada_em', bp.encerrada_em,
+                     'criada_por', pf.nome,
+                     'participantes', (SELECT COUNT(*) FROM public.bingo_cartelas c WHERE c.partida_id = bp.id),
+                     'pedras', (SELECT COUNT(*) FROM public.bingo_pedras pd WHERE pd.partida_id = bp.id),
+                     'ganhadores', COALESCE((
+                       SELECT jsonb_agg(DISTINCT p.nome)
+                         FROM public.bingo_vitorias v
+                         JOIN public.bingo_vitoria_ganhadores g ON g.vitoria_id = v.id
+                         JOIN public.perfis p ON p.id = g.perfil_id
+                        WHERE v.partida_id = bp.id), '[]'::JSONB)) AS item
+              FROM public.bingo_partidas bp
+              LEFT JOIN public.perfis pf ON pf.id = bp.criada_por
+             WHERE bp.painel_id = tp.id AND bp.estado = 'encerrada'
+             ORDER BY bp.criada_em DESC
+             LIMIT 10
+          ) s), '[]'::JSONB)))
+      FROM public.tv_paineis tp
+     WHERE tp.empresa_id = p_empresa
+       AND public.fn_tv_alvo_no_meu_alcance(tp.setor_id, tp.equipe_id)
+  ), '[]'::JSONB);
 END;
 $function$;
 
@@ -795,7 +850,7 @@ $function$;
 -- ── 6. Grants ────────────────────────────────────────────────────────────────
 
 REVOKE ALL ON FUNCTION
-  public.fn_bingo_candidatos(UUID), public.fn_bingo_do_painel(UUID),
+  public.fn_bingo_candidatos(UUID), public.fn_bingo_do_painel(UUID), public.fn_bingo_resumo(UUID),
   public.fn_bingo_criar(UUID, TEXT, UUID[], INTEGER, TEXT, TEXT, BOOLEAN),
   public.fn_bingo_incluir(UUID, UUID[]), public.fn_bingo_sortear(UUID, BOOLEAN),
   public.fn_bingo_automatico(UUID, INTEGER, BOOLEAN), public.fn_bingo_controle(UUID),
@@ -805,7 +860,7 @@ REVOKE ALL ON FUNCTION
   FROM PUBLIC, anon, authenticated;
 
 GRANT EXECUTE ON FUNCTION
-  public.fn_bingo_candidatos(UUID), public.fn_bingo_do_painel(UUID),
+  public.fn_bingo_candidatos(UUID), public.fn_bingo_do_painel(UUID), public.fn_bingo_resumo(UUID),
   public.fn_bingo_criar(UUID, TEXT, UUID[], INTEGER, TEXT, TEXT, BOOLEAN),
   public.fn_bingo_incluir(UUID, UUID[]), public.fn_bingo_sortear(UUID, BOOLEAN),
   public.fn_bingo_automatico(UUID, INTEGER, BOOLEAN), public.fn_bingo_controle(UUID),

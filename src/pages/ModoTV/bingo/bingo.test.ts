@@ -157,6 +157,22 @@ describe('a migration casa com o front', () => {
     }
   });
 
+  it('só quem foi escolhido recebe: férias e afastado fora, convite só para quem ganhou cartela', () => {
+    const pessoas = sql.slice(sql.indexOf('FUNCTION public.fn_bingo_pessoas_do_painel'), sql.indexOf('FUNCTION public.fn_bingo_avisar'));
+    expect(pessoas).toContain("NOT IN ('ferias', 'afastado')");
+    expect(pessoas).toContain('p.ativo');
+    // O convite vai para a lista que `fn_bingo_dar_cartelas` devolveu, nunca para o pedido cru.
+    expect(sql).toContain('PERFORM public.fn_bingo_convidar(v_id, v_novos);');
+    expect(sql).toContain('PERFORM public.fn_bingo_convidar(p_partida, v_novos);');
+    // O canal da partida só abre para quem tem cartela nela ou controla o painel.
+    expect(sql).toMatch(/bingo_cartelas c WHERE c\.partida_id = v_id AND c\.perfil_id = auth\.uid\(\)\)\s+OR public\.fn_bingo_controla\(v_id\)/);
+  });
+
+  it('o resumo da central só traz os painéis do meu alcance', () => {
+    const resumo = sql.slice(sql.indexOf('FUNCTION public.fn_bingo_resumo'), sql.indexOf('FUNCTION public.fn_bingo_do_painel'));
+    expect(resumo).toContain('public.fn_tv_alvo_no_meu_alcance(tp.setor_id, tp.equipe_id)');
+  });
+
   it('as tabelas não têm acesso direto', () => {
     expect(sql).toMatch(/REVOKE ALL ON public\.bingo_partidas, public\.bingo_cartelas, public\.bingo_pedras,\s+public\.bingo_vitorias, public\.bingo_vitoria_ganhadores FROM anon, authenticated;/);
     expect(sql).not.toMatch(/CREATE POLICY \w+ ON public\.bingo_/);

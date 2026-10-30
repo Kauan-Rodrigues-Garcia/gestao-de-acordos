@@ -87,6 +87,19 @@ export interface CandidatoBingo {
   equipe_nome: string | null;
 }
 
+/** `fn_bingo_resumo`: o que cada painel tem, para a central separada por setor. */
+export interface ResumoDoPainel {
+  painel_id: string;
+  aberta: {
+    id: string; tema: TemaBingoId; criada_em: string; criada_por: string | null;
+    participantes: number; pedras: number; gritos: number;
+  } | null;
+  anteriores: {
+    id: string; tema: TemaBingoId; criada_em: string; encerrada_em: string | null; criada_por: string | null;
+    participantes: number; pedras: number; ganhadores: string[];
+  }[];
+}
+
 /** O aviso que chega pelo canal da partida, da TV e pelo pessoal. */
 export type AvisoBingo =
   | { tipo: 'pedra'; partida: string; ordem: number; numero: number }
