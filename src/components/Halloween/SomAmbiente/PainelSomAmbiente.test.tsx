@@ -24,7 +24,7 @@ vi.mock('./motor', async () => {
       () => motor.snap,
     ),
     escolher: motor.escolher,
-    alternar: nada, ancorarPalco: nada, buscar: nada, definirRepetir: nada, definirTocarAoEntrar: nada,
+    alternar: nada, ancorarPalco: nada, buscar: nada, definirRepetir: nada, definirTocarAoEntrar: nada, definirVideoFixo: nada,
     definirVolume: nada, pular: nada, salvarPlaylists: nada, progresso: () => null,
   };
 });

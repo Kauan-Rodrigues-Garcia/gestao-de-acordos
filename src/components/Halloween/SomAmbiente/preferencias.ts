@@ -189,6 +189,12 @@ export interface PreferenciasSom {
    * playlist, e voltam à primeira do grupo (músicas ou temas) depois da última.
    */
   repetir: boolean;
+  /**
+   * O vídeo do YouTube (ou o player do Spotify) fica num quadrinho no canto da
+   * tela com o painel fechado (pedido do Cleber, 30/10/2026). Desligado, fechar
+   * o painel esconde o vídeo e o som continua.
+   */
+  videoFixo: boolean;
   playlists: PlaylistSalva[];
 }
 
@@ -208,6 +214,7 @@ export const PADRAO: PreferenciasSom = {
   volume: VOLUME_PADRAO,
   tocarAoEntrar: false,
   repetir: false,
+  videoFixo: false,
   playlists: [],
 };
 
@@ -256,7 +263,10 @@ export function normalizar(bruto: unknown): PreferenciasSom {
     ? lida
     : PADRAO.faixa;
 
-  return { faixa, volume, tocarAoEntrar: o.tocarAoEntrar === true, repetir: o.repetir === true, playlists };
+  return {
+    faixa, volume, tocarAoEntrar: o.tocarAoEntrar === true, repetir: o.repetir === true,
+    videoFixo: o.videoFixo === true, playlists,
+  };
 }
 
 export function lerPreferencias(perfilId: string): PreferenciasSom {

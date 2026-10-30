@@ -22,7 +22,7 @@ import { Fragment, useEffect, useRef, useState, type ComponentPropsWithoutRef, t
 import * as SliderPrimitive from '@radix-ui/react-slider';
 import {
   Play, Pause, SkipBack, SkipForward, Repeat, Repeat1, Volume, Volume1, Volume2, VolumeX, X, Loader2,
-  Ghost, ListEnd, ListPlus, Music, Radio, Search, Youtube,
+  Ghost, ListEnd, ListPlus, Music, Pin, PinOff, Radio, Search, Youtube,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,7 +31,7 @@ import { cn } from '@/lib/utils';
 import { chaveDoLink, lerLink } from './links';
 import { ErroBusca, buscaConfigurada, buscarMusicas, urlDoVideo, type ResultadoYoutube } from './youtube';
 import {
-  ALTURA_PALCO, adicionarNaFila, alternar, ancorarPalco, buscar, definirRepetir, definirTocarAoEntrar, definirVolume,
+  ALTURA_PALCO, adicionarNaFila, alternar, ancorarPalco, buscar, definirRepetir, definirTocarAoEntrar, definirVideoFixo, definirVolume,
   escolher, limparFila, progresso, pular, salvarPlaylists, useSomAmbiente,
 } from './motor';
 import {
@@ -66,11 +66,12 @@ export function PainelSomAmbiente() {
   // O espaço do player externo. O iframe não mora aqui (ver `motor.ts`): o
   // motor o encaixa por cima deste retângulo enquanto o painel está aberto.
   const palco = useRef<HTMLDivElement>(null);
-  // O YouTube toca só o som: o vídeo fica escondido (o motor o mantém vivo fora
-  // da tela). Só reaparece se o navegador recusar o autoplay — aí a pessoa
-  // precisa apertar o play nele. O Spotify mostra o player sempre.
+  // YouTube e Spotify mostram o player com o painel aberto — o vídeo voltou a
+  // aparecer a pedido do Cleber (30/10/2026); de 13/10 até então ele ficava
+  // escondido, tocando só o som. A rádio segue só com o som: o vídeo dela só
+  // aparece se o navegador recusar o autoplay, para a pessoa apertar o play.
   const mostrarPalco = externa && noAr === escolhida && playerAberto
-    && (spotify || estado === 'aguardando');
+    && (!naRadio || estado === 'aguardando');
   useEffect(() => {
     ancorarPalco(mostrarPalco ? palco.current : null);
     return () => ancorarPalco(null);
@@ -238,6 +239,19 @@ export function PainelSomAmbiente() {
             style={{ height: ALTURA_PALCO }}
             aria-hidden
           />
+          {/* Fixo, o vídeo continua num quadrinho no canto ao fechar o painel. */}
+          <button
+            type="button"
+            onClick={() => definirVideoFixo(!prefs.videoFixo)}
+            aria-pressed={prefs.videoFixo}
+            className="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground"
+            title={prefs.videoFixo
+              ? 'O vídeo fica no canto da tela ao fechar o player — clique para soltar'
+              : 'Deixar o vídeo no canto da tela mesmo com o player fechado'}
+          >
+            {prefs.videoFixo ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
+            {prefs.videoFixo ? 'Vídeo fixo na tela — soltar' : 'Fixar vídeo na tela'}
+          </button>
         </div>
       )}
 

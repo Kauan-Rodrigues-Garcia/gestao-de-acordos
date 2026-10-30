@@ -123,6 +123,9 @@ const ouvintes = new Set<() => void>();
 
 function publicar(parcial: Partial<InstantaneoSom>) {
   snap = { ...snap, ...parcial };
+  // Painel fechado: é o estado (player aberto, vídeo fixo) que diz se o palco
+  // fica no canto ou fora da tela. Aberto, quem posiciona é `acompanharAncora`.
+  if (!ancora) posicionarPalco();
   for (const o of ouvintes) {
     try { o(); } catch { /* quem ouve não derruba o motor */ }
   }
@@ -446,8 +449,12 @@ export function buscar(segundos: number): void {
 
 const ALTURA_PALCO = 152;
 let palco: HTMLDivElement | null = null;
+/** O «×» do vídeo fixo, dentro do palco: os players trocam só o próprio filho. */
+let botaoSoltar: HTMLButtonElement | null = null;
 let ancora: HTMLElement | null = null;
 let quadro = 0;
+/** Margem do vídeo fixo até o canto da tela. */
+const MARGEM_FIXO = 16;
 
 interface PlayerExterno {
   link: LinkExterno;
@@ -475,6 +482,20 @@ function garantirPalco(): HTMLDivElement {
   Object.assign(palco.style, {
     position: 'fixed', zIndex: '60', overflow: 'hidden', borderRadius: '12px',
   } satisfies Partial<CSSStyleDeclaration>);
+
+  botaoSoltar = document.createElement('button');
+  botaoSoltar.type = 'button';
+  botaoSoltar.textContent = '×';
+  botaoSoltar.title = 'Soltar o vídeo (a música continua)';
+  botaoSoltar.setAttribute('aria-label', 'Soltar o vídeo da tela');
+  Object.assign(botaoSoltar.style, {
+    position: 'absolute', top: '6px', right: '6px', zIndex: '1', display: 'none',
+    width: '24px', height: '24px', borderRadius: '999px', border: '0', cursor: 'pointer',
+    background: 'rgb(0 0 0 / 0.65)', color: '#fff', fontSize: '16px', lineHeight: '24px',
+  } satisfies Partial<CSSStyleDeclaration>);
+  botaoSoltar.addEventListener('click', () => definirVideoFixo(false));
+  palco.appendChild(botaoSoltar);
+
   document.body.appendChild(palco);
   posicionarPalco();
   return palco;
@@ -483,6 +504,22 @@ function garantirPalco(): HTMLDivElement {
 function posicionarPalco() {
   if (!palco) return;
   const r = ancora?.isConnected ? ancora.getBoundingClientRect() : null;
+  const fixo = !(r && r.width > 0) && snap.prefs.videoFixo && !!externo && snap.playerAberto;
+  if (botaoSoltar) botaoSoltar.style.display = fixo ? '' : 'none';
+  if (fixo) {
+    // Painel fechado com o vídeo fixo: um quadrinho 16:9 no canto inferior
+    // esquerdo — o direito é do chat.
+    Object.assign(palco.style, {
+      left: `${MARGEM_FIXO}px`, top: '', bottom: `${MARGEM_FIXO}px`,
+      width: `${Math.round(ALTURA_PALCO * 16 / 9)}px`, height: `${ALTURA_PALCO}px`,
+      clipPath: '', pointerEvents: 'auto', opacity: '1',
+      boxShadow: '0 10px 30px rgb(0 0 0 / 0.35)',
+    });
+    palco.setAttribute('aria-hidden', 'false');
+    return;
+  }
+  palco.style.bottom = '';
+  palco.style.boxShadow = '';
   if (r && r.width > 0) {
     /*
      * O palco é `fixed` no `body`, fora do painel — então o painel não o
@@ -967,6 +1004,12 @@ export function definirVolume(volume: number): void {
 
 export function definirTocarAoEntrar(ligado: boolean): void {
   mudarPrefs({ ...snap.prefs, tocarAoEntrar: ligado });
+}
+
+/** O vídeo fica num quadrinho no canto da tela mesmo com o painel fechado. */
+export function definirVideoFixo(ligado: boolean): void {
+  if (ligado === snap.prefs.videoFixo) return;
+  mudarPrefs({ ...snap.prefs, videoFixo: ligado });
 }
 
 export function definirRepetir(ligado: boolean): void {

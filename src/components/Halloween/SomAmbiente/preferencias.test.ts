@@ -18,8 +18,8 @@ describe('preferências do Som ambiente', () => {
   });
 
   it('grava e lê por pessoa', () => {
-    gravarPreferencias('p1', { faixa: 'saw', volume: 55, tocarAoEntrar: true, repetir: true, playlists: [] });
-    expect(lerPreferencias('p1')).toMatchObject({ faixa: 'saw', volume: 55, tocarAoEntrar: true, repetir: true });
+    gravarPreferencias('p1', { faixa: 'saw', volume: 55, tocarAoEntrar: true, repetir: true, videoFixo: true, playlists: [] });
+    expect(lerPreferencias('p1')).toMatchObject({ faixa: 'saw', volume: 55, tocarAoEntrar: true, repetir: true, videoFixo: true });
     expect(lerPreferencias('p2')).toEqual(PADRAO);
   });
 
