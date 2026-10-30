@@ -11,6 +11,9 @@
 --     quem está logada (auth.uid()) e recusa todo o resto;
 --   - quando a terceira clica, o banco sorteia UMA vez (random(), as três com
 --     a mesma chance) e grava; todas as telas mostram o mesmo ganhador;
+--   - a roleta gira AO MESMO TEMPO em todas as telas: 10 s depois do sorteio
+--     (`gira_em`, pela hora do banco), com a contagem na tela. Os 10 s cobrem
+--     a releitura de cada tela (4 s) com folga;
 --   - o super_admin pode zerar (cliques e ganhador), se der algo errado.
 --
 -- Quem é cada Lenda: o top 3 do retrato de 26/10 (`PortalOutubro/dados.ts`,
@@ -23,7 +26,8 @@
 -- janela do prêmio está aberta. Sem broadcast: não mexe no sinal de ninguém.
 --
 -- Nenhuma linha de dado existente muda. Reexecutável (não apaga cliques já
--- feitos).
+-- feitos): se a primeira versão deste arquivo já foi colada, colar de novo só
+-- troca `fn_mural_lendas_ler` (que ganhou `agora` e `gira_em`).
 -- ============================================================================
 
 BEGIN;
@@ -54,8 +58,9 @@ REVOKE ALL ON public.mural_outubro_lendas FROM anon, authenticated;
 GRANT ALL ON public.mural_outubro_lendas TO service_role;
 
 -- ── Ler ──────────────────────────────────────────────────────────────────────
--- { lendas: [{posicao, clicou}], eu: posição de quem chama (ou null),
---   ganhador: posição (ou null) }
+-- { agora: hora do banco, lendas: [{posicao, clicou}], eu: posição de quem
+--   chama (ou null), ganhador: posição (ou null), gira_em: quando a roleta
+--   gira em todas as telas (10 s depois do sorteio, ou null) }
 CREATE OR REPLACE FUNCTION public.fn_mural_lendas_ler()
 RETURNS jsonb
 LANGUAGE sql
@@ -64,11 +69,13 @@ SECURITY DEFINER
 SET search_path TO ''
 AS $function$
   SELECT jsonb_build_object(
+    'agora',    now(),
     'lendas',   coalesce((SELECT jsonb_agg(jsonb_build_object('posicao', l.posicao, 'clicou', l.clicou_em IS NOT NULL)
                                    ORDER BY l.posicao)
                             FROM public.mural_outubro_lendas l), '[]'::jsonb),
     'eu',       (SELECT l.posicao FROM public.mural_outubro_lendas l WHERE l.perfil_id = auth.uid()),
-    'ganhador', (SELECT l.posicao FROM public.mural_outubro_lendas l WHERE l.ganhou_em IS NOT NULL));
+    'ganhador', (SELECT l.posicao FROM public.mural_outubro_lendas l WHERE l.ganhou_em IS NOT NULL),
+    'gira_em',  (SELECT l.ganhou_em + interval '10 seconds' FROM public.mural_outubro_lendas l WHERE l.ganhou_em IS NOT NULL));
 $function$;
 
 REVOKE ALL ON FUNCTION public.fn_mural_lendas_ler() FROM PUBLIC, anon;

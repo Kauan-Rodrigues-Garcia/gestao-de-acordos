@@ -3,13 +3,13 @@
  * das Lendas, que é a garrafa (28/10: as três clicam, a garrafa aparece, a
  * roleta revela quem ganhou e o ganhador sai no mesmo «Quem levou» do
  * sorteio de antes). 30/10: só as três clicam, cada uma na própria tela, e o
- * banco sorteia uma vez só (`premio.ts`); todo mundo vê o mesmo ganhador.
+ * banco sorteia uma vez só (`premio.ts`); todo mundo vê o mesmo ganhador,
+ * e a roleta gira ao mesmo tempo em todas as telas, 10 s depois do sorteio.
  */
 import { useEffect, useState, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { LENDAS, PREMIO_DAS_LENDAS, type Pessoa } from './dados';
-import { useVelocidadeDoMural } from './estado';
-import { usePremioDasLendas } from './premio';
+import { DURA_DA_ROLETA_MS, agoraDoPremio, usePremioDasLendas } from './premio';
 import { ArteGarrafa } from './Artes';
 import { Confete, Roleta } from './Roleta';
 import { plural } from './texto';
@@ -43,14 +43,43 @@ function Vencedor({ p, premio }: { p: Pessoa; premio: string }) {
   );
 }
 
+/**
+ * Quem chega depois de a roleta começar: ainda gira, mais curta (para no
+ * mesmo instante das outras telas), se faltarem pelo menos estes ms; senão,
+ * vai direto para «Quem levou».
+ */
+const MINIMO_PARA_GIRAR_MS = 4_000;
+
 export function PremioDasLendas() {
-  const v = useVelocidadeDoMural();
   const premio = usePremioDasLendas();
-  const { clicou, ganhador } = premio;
+  const { clicou, ganhador, giraEm } = premio;
   const todas = LENDAS.every(l => clicou.has(l.posicao));
-  const [girando, setGirando] = useState(false);
-  const [ganhou, setGanhou] = useState<number | null>(null);
   const indiceDoGanhador = LENDAS.findIndex(l => l.posicao === ganhador);
+  const [revelacao, setRevelacao] = useState<null | { modo: 'girando'; duraMs: number } | { modo: 'resultado' }>(null);
+  const [parou, setParou] = useState(false);
+  const [agora, setAgora] = useState(agoraDoPremio);
+  const esperando = indiceDoGanhador >= 0 && giraEm != null && revelacao === null;
+
+  // A contagem até `giraEm`, pela hora do banco.
+  useEffect(() => {
+    if (!esperando) return;
+    const t = setInterval(() => setAgora(agoraDoPremio()), 200);
+    return () => clearInterval(t);
+  }, [esperando]);
+
+  // Chegou a hora: gira (o resto do tempo, para parar junto com as outras telas) ou mostra o resultado.
+  useEffect(() => {
+    if (!esperando || giraEm == null || agora < giraEm) return;
+    const resta = giraEm + DURA_DA_ROLETA_MS - agora;
+    setRevelacao(resta >= MINIMO_PARA_GIRAR_MS ? { modo: 'girando', duraMs: resta } : { modo: 'resultado' });
+  }, [esperando, agora, giraEm]);
+
+  // O super_admin zerou: volta ao começo.
+  useEffect(() => {
+    if (ganhador == null) { setRevelacao(null); setParou(false); }
+  }, [ganhador]);
+
+  const segundos = giraEm == null ? 0 : Math.max(1, Math.ceil((giraEm - agora) / 1000));
   const nomes = LENDAS.map(l => l.nome.split(' ')[0]);
   const quem = `${nomes.slice(0, -1).join(', ')} e ${nomes[nomes.length - 1]}`;
   return (
@@ -91,21 +120,24 @@ export function PremioDasLendas() {
           </p>
         </>
       )}
-      {todas && indiceDoGanhador < 0 && <p className="portal-frase">Sorteando…</p>}
-      {todas && indiceDoGanhador >= 0 && !girando && (
+      {todas && (indiceDoGanhador < 0 || giraEm == null) && <p className="portal-frase">Sorteando…</p>}
+      {esperando && (
         <div className="portal-garrafa">
           <ArteGarrafa />
           <div>
             <p className="portal-frase">{PREMIO_DAS_LENDAS.descricao}</p>
             <p className="portal-garrafa-regra">{LENDAS.map(l => l.nome).join(' · ')}</p>
-            <button type="button" className="portal-botao" onClick={() => setGirando(true)}>Girar a roleta</button>
+            <p className="portal-titulo portal-titulo-medio" aria-live="polite">A roleta gira em {segundos}</p>
+            <p className="portal-frase">Ao mesmo tempo, na tela de todo mundo.</p>
           </div>
         </div>
       )}
-      {todas && indiceDoGanhador >= 0 && girando && (
+      {indiceDoGanhador >= 0 && revelacao && (
         <div className="portal-sorteio">
-          <Roleta itens={LENDAS} ganhador={indiceDoGanhador} duracaoMs={6000 / v} aoParar={() => setGanhou(indiceDoGanhador)} />
-          {ganhou != null && <Vencedor p={LENDAS[ganhou]} premio={PREMIO_DAS_LENDAS.titulo} />}
+          {revelacao.modo === 'girando' && (
+            <Roleta itens={LENDAS} ganhador={indiceDoGanhador} duracaoMs={revelacao.duraMs} aoParar={() => setParou(true)} />
+          )}
+          {(revelacao.modo === 'resultado' || parou) && <Vencedor p={LENDAS[indiceDoGanhador]} premio={PREMIO_DAS_LENDAS.titulo} />}
         </div>
       )}
       {premio.erro && <p className="portal-rodape-ato">{premio.erro}</p>}
