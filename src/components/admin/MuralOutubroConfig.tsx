@@ -12,6 +12,8 @@
  *   Ver o bueiro em mim      o bueiro, os balões e o barquinho com a mão, só
  *                            nesta aba, a cada poucos segundos, até parar
  *   Ver a abertura em mim    só nesta aba, nada gravado, não gasta a vez
+ *   O prêmio das Lendas      quem das três já clicou e quem ganhou (sorteio
+ *                            do banco, 20261030120000); «Zerar» apaga os dois
  *
  * Só super_admin — as funções `fn_mural_outubro_*` conferem de novo no banco.
  * Ver `PortalOutubro/liberacao.ts`.
@@ -32,6 +34,8 @@ import {
 } from '@/components/PortalOutubro/liberacao';
 import { dataCurta, estadoDoPortal, relogioDaContagem, type EstadoDoPortal } from '@/components/PortalOutubro/fases';
 import { useAgoraDoPortal } from '@/components/PortalOutubro/relogio';
+import { usePremioDasLendas, zerarPremioDasLendas } from '@/components/PortalOutubro/premio';
+import { LENDAS } from '@/components/PortalOutubro/dados';
 
 /** O que o pessoal vê agora, em uma frase. */
 function oQueAparece(e: EstadoDoPortal): string {
@@ -49,7 +53,7 @@ function oQueAparece(e: EstadoDoPortal): string {
 
 const DIA_DA_SEMANA = ['', 'segunda (dia 1 de 5)', 'terça (dia 2 de 5)', 'quarta (dia 3 de 5)', 'quinta (dia 4 de 5)', 'sexta (dia 5 de 5)', 'sábado'];
 
-type Pergunta = null | 'liberar' | 'recolher' | 'soltar';
+type Pergunta = null | 'liberar' | 'recolher' | 'soltar' | 'zerar';
 
 export default function MuralOutubroConfig() {
   const { empresa } = useEmpresa();
@@ -59,6 +63,8 @@ export default function MuralOutubroConfig() {
   const [pergunta, setPergunta] = useState<Pergunta>(null);
   const [enviando, setEnviando] = useState(false);
   const previaDoBueiro = usePreviaDoBueiro();
+  const premio = usePremioDasLendas();
+  const ganhadora = LENDAS.find(l => l.posicao === premio.ganhador);
 
   const solta = lib.abreEm !== null;
   const soltaPendente = solta && estado.fase !== 'aberto';
@@ -137,6 +143,27 @@ export default function MuralOutubroConfig() {
             <Eye className="w-3.5 h-3.5" /> Ver a abertura só em mim
           </Button>
         </div>
+
+        <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-xs space-y-1">
+          <p className="font-medium">O prêmio das Lendas</p>
+          {premio.erro ? (
+            <p className="text-warning">{premio.erro}</p>
+          ) : (
+            <>
+              <p className="text-muted-foreground">
+                Só as três clicam, cada uma na própria tela. {LENDAS.map(l => `${l.nome}: ${premio.clicou.has(l.posicao) ? 'clicou' : 'ainda não'}`).join(' · ')}
+              </p>
+              <p className={ganhadora ? 'text-success font-medium' : 'text-muted-foreground'}>
+                {ganhadora ? `Sorteado pelo banco: ${ganhadora.nome}.` : 'O banco sorteia quando a terceira clicar.'}
+              </p>
+            </>
+          )}
+          {(premio.clicou.size > 0 || ganhadora) && (
+            <Button size="sm" variant="outline" onClick={() => setPergunta('zerar')} disabled={enviando} className="gap-1.5 mt-1">
+              <Undo2 className="w-3.5 h-3.5" /> Zerar o prêmio
+            </Button>
+          )}
+        </div>
       </CardContent>
 
       <AlertDialog open={pergunta !== null} onOpenChange={v => { if (!v && !enviando) setPergunta(null); }}>
@@ -146,9 +173,11 @@ export default function MuralOutubroConfig() {
               {pergunta === 'liberar' && 'Liberar o mural para o pessoal?'}
               {pergunta === 'recolher' && 'Recolher o mural?'}
               {pergunta === 'soltar' && 'Soltar a abertura para todos?'}
+              {pergunta === 'zerar' && 'Zerar o prêmio das Lendas?'}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {pergunta === 'liberar' && `Todo mundo logado, nas duas empresas, passa a ver o mural da semana. Hoje: ${oQueAparece(estado)}`}
+              {pergunta === 'zerar' && 'Apaga os cliques das três e o ganhador sorteado. Elas precisam clicar de novo, e o banco sorteia outra vez.'}
               {pergunta === 'recolher' && 'O bueiro, os avisos e o botão do mural somem da tela de todos. Dá para liberar de novo depois.'}
               {pergunta === 'soltar' && 'Para todo mundo logado: daqui a uns 20 segundos o barquinho cai no bueiro, a mão sai com ele e começam os 2 minutos com o botão «Participar». Quando zera, quem participou vê a tela desmanchar e o mural; os outros ganham o botão do mural na barra. Também libera o mural, se ainda não estiver.'}
             </AlertDialogDescription>
@@ -161,10 +190,11 @@ export default function MuralOutubroConfig() {
                 e.preventDefault();
                 if (pergunta === 'liberar') void fazer(() => liberarMural(true), 'Mural liberado para o pessoal.', 'Não foi possível liberar');
                 if (pergunta === 'recolher') void fazer(() => liberarMural(false), 'Mural recolhido.', 'Não foi possível recolher');
+                if (pergunta === 'zerar') void fazer(zerarPremioDasLendas, 'Prêmio das Lendas zerado.', 'Não foi possível zerar');
                 if (pergunta === 'soltar') void fazer(soltarAbertura, 'Abertura solta: o barquinho cai em instantes.', 'Não foi possível soltar');
               }}
             >
-              {enviando ? 'Enviando…' : pergunta === 'recolher' ? 'Recolher' : pergunta === 'soltar' ? 'Soltar agora' : 'Liberar agora'}
+              {enviando ? 'Enviando…' : pergunta === 'recolher' ? 'Recolher' : pergunta === 'zerar' ? 'Zerar' : pergunta === 'soltar' ? 'Soltar agora' : 'Liberar agora'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

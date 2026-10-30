@@ -9,6 +9,10 @@ import { createRoot } from 'react-dom/client';
 import '@/index.css';
 import { PortalDeOutubro } from './PortalDeOutubro';
 import { ABERTURA } from './fases';
+import { usarPremioDeTeste } from './premio';
+
+// Sem login: o prêmio das Lendas fica de mentira, no navegador.
+usarPremioDeTeste();
 
 function GestaoDeMentira() {
   return (

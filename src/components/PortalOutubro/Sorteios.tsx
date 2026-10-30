@@ -1,17 +1,17 @@
 /**
  * Sorteios.tsx — o que abre por cima do mural quando alguém clica: o prêmio
  * das Lendas, que é a garrafa (28/10: as três clicam, a garrafa aparece, a
- * roleta sorteia entre elas e o ganhador sai no mesmo «Quem levou» do
- * sorteio de antes). De teste, no navegador: no dia o resultado vem de um
- * lugar só, e todo mundo vê o mesmo.
+ * roleta revela quem ganhou e o ganhador sai no mesmo «Quem levou» do
+ * sorteio de antes). 30/10: só as três clicam, cada uma na própria tela, e o
+ * banco sorteia uma vez só (`premio.ts`); todo mundo vê o mesmo ganhador.
  */
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { LENDAS, PREMIO_DAS_LENDAS, type Pessoa } from './dados';
-import { clicarLenda, useCliquesDasLendas, useVelocidadeDoMural } from './estado';
+import { useVelocidadeDoMural } from './estado';
+import { usePremioDasLendas } from './premio';
 import { ArteGarrafa } from './Artes';
 import { Confete, Roleta } from './Roleta';
-import { sortearComPeso } from './sorteio';
 import { plural } from './texto';
 import { Rosto } from './Rosto';
 
@@ -45,37 +45,54 @@ function Vencedor({ p, premio }: { p: Pessoa; premio: string }) {
 
 export function PremioDasLendas() {
   const v = useVelocidadeDoMural();
-  const cliques = useCliquesDasLendas();
-  const todas = LENDAS.every(l => cliques.has(l.posicao));
+  const premio = usePremioDasLendas();
+  const { clicou, ganhador } = premio;
+  const todas = LENDAS.every(l => clicou.has(l.posicao));
   const [girando, setGirando] = useState(false);
   const [ganhou, setGanhou] = useState<number | null>(null);
-  const ganhador = useMemo(() => sortearComPeso(LENDAS, () => 1), []);
+  const indiceDoGanhador = LENDAS.findIndex(l => l.posicao === ganhador);
+  const nomes = LENDAS.map(l => l.nome.split(' ')[0]);
+  const quem = `${nomes.slice(0, -1).join(', ')} e ${nomes[nomes.length - 1]}`;
   return (
     <div className="mural-sorteio">
       <p className="portal-selo">O prêmio das Lendas</p>
       <h2 className="portal-titulo portal-titulo-medio">{todas ? PREMIO_DAS_LENDAS.titulo : 'Só para as Lendas'}</h2>
       {!todas && (
         <>
-          <p className="portal-frase">Quando as três clicarem, o prêmio aparece.</p>
+          <p className="portal-frase">
+            {premio.souLenda && !premio.deTeste
+              ? 'Clique no seu card. Quando as três clicarem, o prêmio aparece.'
+              : 'Quando as três clicarem, o prêmio aparece.'}
+          </p>
           <div className="portal-premio-cards">
-            {LENDAS.map(p => (
-              <button
-                key={p.posicao}
-                type="button"
-                className={`portal-premio-card portal-lugar-${p.posicao}${cliques.has(p.posicao) ? ' portal-premio-liberou' : ''}`}
-                onClick={() => clicarLenda(p.posicao)}
-                disabled={cliques.has(p.posicao)}
-              >
-                <Rosto p={p} />
-                <span className="portal-premio-nome">{p.nome}</span>
-                <span className="portal-premio-acao">{cliques.has(p.posicao) ? 'Liberou' : 'Clique para liberar'}</span>
-              </button>
-            ))}
+            {LENDAS.map(p => {
+              const ja = clicou.has(p.posicao);
+              const pode = premio.podeClicar(p.posicao);
+              return (
+                <button
+                  key={p.posicao}
+                  type="button"
+                  className={`portal-premio-card portal-lugar-${p.posicao}${ja ? ' portal-premio-liberou' : ''}`}
+                  onClick={() => void premio.clicar(p.posicao)}
+                  disabled={ja || !pode || premio.enviando || !premio.carregado}
+                >
+                  <Rosto p={p} />
+                  <span className="portal-premio-nome">{p.nome}</span>
+                  <span className="portal-premio-acao">{ja ? 'Liberou' : pode ? 'Clique para liberar' : 'Esperando ela clicar'}</span>
+                </button>
+              );
+            })}
           </div>
-          <p className="portal-rodape-ato">{plural(LENDAS.length - cliques.size, 'falta', 'faltam')} · teste: aqui qualquer um clica pelas três; no dia, cada uma clica na própria tela</p>
+          <p className="portal-rodape-ato">
+            {plural(LENDAS.length - clicou.size, 'falta', 'faltam')}
+            {premio.deTeste
+              ? ' · teste: aqui qualquer um clica pelas três; no app, cada uma clica na própria tela'
+              : ` · só ${quem} liberam, cada uma na própria tela`}
+          </p>
         </>
       )}
-      {todas && !girando && (
+      {todas && indiceDoGanhador < 0 && <p className="portal-frase">Sorteando…</p>}
+      {todas && indiceDoGanhador >= 0 && !girando && (
         <div className="portal-garrafa">
           <ArteGarrafa />
           <div>
@@ -85,13 +102,20 @@ export function PremioDasLendas() {
           </div>
         </div>
       )}
-      {todas && girando && (
+      {todas && indiceDoGanhador >= 0 && girando && (
         <div className="portal-sorteio">
-          <Roleta itens={LENDAS} ganhador={ganhador} duracaoMs={6000 / v} aoParar={() => setGanhou(ganhador)} />
+          <Roleta itens={LENDAS} ganhador={indiceDoGanhador} duracaoMs={6000 / v} aoParar={() => setGanhou(indiceDoGanhador)} />
           {ganhou != null && <Vencedor p={LENDAS[ganhou]} premio={PREMIO_DAS_LENDAS.titulo} />}
         </div>
       )}
-      {todas && <p className="portal-rodape-ato">Sorteio de teste, no navegador. No dia o resultado vem de um lugar só, e todo mundo vê o mesmo.</p>}
+      {premio.erro && <p className="portal-rodape-ato">{premio.erro}</p>}
+      {todas && (
+        <p className="portal-rodape-ato">
+          {premio.deTeste
+            ? 'Sorteio de teste, no navegador.'
+            : 'Sorteado uma vez só, no banco: a roleta de todo mundo para no mesmo nome.'}
+        </p>
+      )}
     </div>
   );
 }

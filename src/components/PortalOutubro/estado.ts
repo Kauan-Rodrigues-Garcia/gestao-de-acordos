@@ -110,8 +110,8 @@ export const mudarVelocidadeDoMural = velocidade.mudar;
 
 // ── Os cliques das Lendas (teste) ───────────────────────────────────────────
 //
-// No dia, cada uma das três clica na própria tela, e o banco junta os três
-// cliques. Aqui é de mentira: clicar no card de qualquer uma conta.
+// Só no laboratório (`usarPremioDeTeste`): clicar no card de qualquer uma
+// conta. No app, os cliques são do banco (`premio.ts`).
 
 const cliques = criar<ReadonlySet<number>>(new Set());
 export const useCliquesDasLendas = cliques.useValor;
