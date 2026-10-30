@@ -6,13 +6,13 @@
  * Configurações > Geral (`admin/MuralOutubroConfig.tsx`):
  *
  *   «Liberar para o pessoal»  o mural liga para todos; sem a revelação
- *                             começada, ainda não aparece nada (`fases.ts`)
+ *                             começada, o bueiro fica na tela esperando, sem
+ *                             relógio (`fases.ts`, 30/10/2026)
  *   «Começar a revelação»     a abertura fica daqui a 5 minutos (hora do
  *                             banco, migration 20261029235000), para todos:
  *                             o bueiro, a água, o barco, a mão, o
  *                             «Participar» e a revelação (e libera junto)
- *   nada começado             a revelação é a de sempre: o bueiro às 15h55
- *                             de sexta 30/10, a abertura às 16h
+ *   nada começado             o bueiro esperando; nada começa sozinho
  *
  * O banco avisa pelo sinal `permissoes` (o caminho do jumpscare) e cada tela
  * relê. Este arquivo é leve de propósito: o `Layout` o carrega sempre, e o
@@ -24,7 +24,7 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { supabase } from '@/lib/supabase';
 import { assinarSinal } from '@/lib/sinais';
-import { ABERTURA, BARCO_ANTES_DA_ABERTURA_MS, FIM, JANELA_MS } from './fases';
+import { BARCO_ANTES_DA_ABERTURA_MS, FIM, JANELA_MS } from './fases';
 import { acertarPeloBanco } from './relogio';
 
 export interface Liberacao {
@@ -85,9 +85,9 @@ export function agoraDoServidor(): number {
   return Date.now() + desvioMs;
 }
 
-/** A hora da abertura em vigor: a solta pelo botão, ou sexta 16h. */
-export function aberturaDe(l: Liberacao): number {
-  return l.abreEm ?? ABERTURA;
+/** A hora da abertura solta pelo botão, ou `null`: o bueiro esperando (`fases.ts`, `aguardando`). */
+export function aberturaDe(l: Liberacao): number | null {
+  return l.abreEm;
 }
 
 /** A liberação atual. Escuta o sinal da empresa em que a pessoa está. */

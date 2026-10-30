@@ -16,6 +16,12 @@
  * cena só, que começa no botão do super_admin (ou 5 minutos antes de sexta,
  * 16h) e dura `JANELA_MS`:
  *
+ *   aguardando   liberado e a revelação ainda não começada: o bueiro fica na
+ *                tela, com os olhos e os balões, sem relógio nenhum, até o
+ *                botão (pedido do Cleber, 30/10/2026: «enquanto tá liberado,
+ *                deixa lá a animação do bueiro aparecendo pra todo mundo; só
+ *                começa o timer dos 5 minutos quando a gente começar a
+ *                revelação»). Sexta 16h não começa mais sozinha
  *   espreitando  o bueiro aparece na névoa, com o relógio pequeno em cima
  *                («O mural abre em 04:59») e os balões subindo
  *   final        faltando 2 min 45 s, a água vem escorrendo devagar pela
@@ -104,7 +110,7 @@ export const DIAS: Readonly<Record<1 | 2 | 3 | 4 | 5, number>> = {
   5: emSaoPaulo(2026, 10, 30),
 };
 
-export type Fase = 'fora' | 'espreitando' | 'final' | 'revelando' | 'aberto';
+export type Fase = 'fora' | 'aguardando' | 'espreitando' | 'final' | 'revelando' | 'aberto';
 
 export interface EstadoDoPortal {
   fase: Fase;
@@ -118,17 +124,37 @@ export interface EstadoDoPortal {
   balaoACadaMs: number | null;
   /** Na fase `final`: quanto já passou desde que a água começou (ms); `null` fora dela. */
   noFinalMs: number | null;
-  /** Quanto falta para abrir (ms; 0 depois). */
+  /** Quanto falta para abrir (ms; 0 depois; `Infinity` aguardando o botão). */
   faltaMs: number;
 }
+
+/** A brasa e os balões do bueiro esperando: os do começo dos 5 minutos, para o botão não dar salto. */
+const LUZ_ESPERANDO = 0.35;
+const BALAO_ESPERANDO_MS = 20_000;
 
 function diaDoEvento(agora: number): number {
   if (agora < DIAS[1]) return 0;
   return Math.min(6, 1 + Math.floor((agora - DIAS[1]) / (24 * HORA)));
 }
 
-/** `abertura`: a hora em que a tela desmancha — 5 minutos depois do botão, ou sexta 16h. */
-export function estadoDoPortal(agora: number, abertura: number = ABERTURA): EstadoDoPortal {
+/**
+ * `abertura`: a hora em que a tela desmancha — 5 minutos depois do botão (o
+ * padrão, sexta 16h, é o do laboratório e dos testes). `null`: a revelação não
+ * começou, e o bueiro fica esperando (`aguardando`) até o fim de sábado.
+ */
+export function estadoDoPortal(agora: number, abertura: number | null = ABERTURA): EstadoDoPortal {
+  if (abertura === null) {
+    const fora = agora >= FIM;
+    return {
+      fase: fora ? 'fora' : 'aguardando',
+      dia: diaDoEvento(agora),
+      luz: fora ? 0 : LUZ_ESPERANDO,
+      tremor: false,
+      balaoACadaMs: fora ? null : BALAO_ESPERANDO_MS,
+      noFinalMs: null,
+      faltaMs: fora ? 0 : Infinity,
+    };
+  }
   const faltaMs = Math.max(0, abertura - agora);
   const fase: Fase =
     agora >= FIM ? 'fora'
@@ -141,9 +167,9 @@ export function estadoDoPortal(agora: number, abertura: number = ABERTURA): Esta
   return {
     fase,
     dia: diaDoEvento(agora),
-    luz: comBueiro ? 0.35 + 0.65 * Math.min(1, Math.max(0, 1 - faltaMs / JANELA_MS)) : 0,
+    luz: comBueiro ? LUZ_ESPERANDO + (1 - LUZ_ESPERANDO) * Math.min(1, Math.max(0, 1 - faltaMs / JANELA_MS)) : 0,
     tremor: fase === 'final',
-    balaoACadaMs: fase === 'espreitando' ? 20_000 : fase === 'final' ? 12_000 : null,
+    balaoACadaMs: fase === 'espreitando' ? BALAO_ESPERANDO_MS : fase === 'final' ? 12_000 : null,
     noFinalMs: fase === 'final' ? agora - (abertura - BARCO_ANTES_DA_ABERTURA_MS) : null,
     faltaMs,
   };
@@ -168,6 +194,7 @@ export function dataCurta(ms: number): string {
 
 export const NOME_DA_FASE: Readonly<Record<Fase, string>> = {
   fora: 'sem o bueiro',
+  aguardando: 'o bueiro esperando a revelação',
   espreitando: 'o bueiro',
   final: 'a água, o barco e o «Participar»',
   revelando: 'a revelação',

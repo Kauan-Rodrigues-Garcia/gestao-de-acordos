@@ -2,16 +2,16 @@
  * MuralOutubroConfig.tsx — o cartão de Configurações > Geral que liga o Mural
  * de Outubro para o pessoal e começa a revelação (29/10/2026).
  *
- *   Liberar para o pessoal   o mural liga para todos (sem a revelação, ainda
- *                            não aparece nada na tela de ninguém)
+ *   Liberar para o pessoal   o mural liga para todos (sem a revelação, o
+ *                            bueiro fica na tela esperando, sem relógio)
  *   Começar a revelação      os 5 minutos, para todos (migration
  *                            20261029235000): o bueiro com o relógio pequeno,
  *                            faltando 2 min 45 s a água, o barco e a mão, nos
  *                            2 minutos o «Participar» do lado do bueiro; quem
  *                            participou vê a revelação, e quando ela acaba o
- *                            mural abre para todos. Sem isso, sexta 30/10:
- *                            o bueiro às 15h55, a abertura às 16h
- *   Desfazer a revelação     volta para sexta 16h (para testar de novo)
+ *                            mural abre para todos. Sem isso, nada começa
+ *                            sozinho (30/10/2026)
+ *   Desfazer a revelação     o bueiro volta a esperar (para testar de novo)
  *   Ver o bueiro em mim      o bueiro, os balões e a água com o barco e a mão,
  *                            só nesta aba, a cada minuto, até parar
  *   Ver a abertura em mim    só nesta aba, nada gravado, não gasta a vez
@@ -46,7 +46,8 @@ import { LENDAS } from '@/components/PortalOutubro/dados';
 /** O que o pessoal vê agora, em uma frase. */
 function oQueAparece(e: EstadoDoPortal, agora: number): string {
   switch (e.fase) {
-    case 'fora': return agora >= FIM ? 'O mural já acabou (fim de sábado).' : 'Nada ainda: a revelação começa no botão (ou sexta, 15h55).';
+    case 'fora': return agora >= FIM ? 'O mural já acabou (fim de sábado).' : 'Nada ainda.';
+    case 'aguardando': return 'O bueiro esperando, sem relógio (com o tema de Halloween ligado): os 5 minutos só começam no botão.';
     case 'espreitando': return `O bueiro e o relógio pequeno: abre em ${relogioDaContagem(e.faltaMs)}.`;
     case 'final': return `A água, o barco, a mão e o «Participar» do lado do bueiro: abre em ${relogioDaContagem(e.faltaMs)}.`;
     case 'revelando': return 'A revelação passando para quem participou; o mural abre para os outros quando ela acabar.';
@@ -95,7 +96,7 @@ export default function MuralOutubroConfig() {
           A retrospectiva das gincanas. A revelação dura 5 minutos, para todo mundo ao mesmo tempo: o bueiro
           com o relógio pequeno, faltando 2 min 45 s a água e o barquinho, nos 2 minutos a mão com o barco e o
           «Participar» do lado do bueiro; quem participou vê a revelação, e quando ela acaba o mural abre para
-          todos. Começa no botão abaixo — ou sozinha, sexta 30/10, com a abertura às 16h.
+          todos. Liberado, o bueiro fica na tela esperando, sem relógio; os 5 minutos só começam no botão abaixo.
         </p>
 
         <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-xs space-y-1">
@@ -130,13 +131,13 @@ export default function MuralOutubroConfig() {
           {solta ? (
             <Button
               size="sm" variant="outline" disabled={enviando} className="gap-1.5"
-              onClick={() => void fazer(cancelarAbertura, 'Revelação desfeita: volta para sexta, 16h.', 'Não foi possível desfazer')}
+              onClick={() => void fazer(cancelarAbertura, 'Revelação desfeita: o bueiro volta a esperar.', 'Não foi possível desfazer')}
             >
-              {enviando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Undo2 className="w-3.5 h-3.5" />} {soltaPendente ? 'Cancelar a revelação' : 'Desfazer a revelação (volta para sexta, 16h)'}
+              {enviando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Undo2 className="w-3.5 h-3.5" />} {soltaPendente ? 'Cancelar a revelação' : 'Desfazer a revelação (o bueiro volta a esperar)'}
             </Button>
           ) : (
             <Button
-              size="sm" onClick={() => setPergunta('soltar')} disabled={enviando || acabou || estado.fase !== 'fora'}
+              size="sm" onClick={() => setPergunta('soltar')} disabled={enviando || acabou || estado.fase !== 'aguardando'}
               className="gap-1.5"
             >
               <Play className="w-3.5 h-3.5" /> Começar a revelação (5 min)

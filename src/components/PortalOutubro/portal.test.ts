@@ -135,3 +135,17 @@ describe('a revelação começada pelo botão (29/10)', () => {
     expect(estadoDoPortal(FIM, solta).fase).toBe('fora');
   });
 });
+
+describe('liberado, sem a revelação começada (30/10)', () => {
+  it('o bueiro fica esperando, sem relógio, e sexta 16h não começa sozinha', () => {
+    for (const t of [DIAS[5] + 14 * 3_600_000, ABERTURA, ABERTURA + REVELACAO_MS]) {
+      expect(estadoDoPortal(t, null)).toMatchObject({ fase: 'aguardando', tremor: false, noFinalMs: null, faltaMs: Infinity });
+    }
+    expect(estadoDoPortal(ABERTURA, null).balaoACadaMs).toBe(estadoDoPortal(ABERTURA - JANELA_MS).balaoACadaMs);
+    expect(estadoDoPortal(FIM, null)).toMatchObject({ fase: 'fora', balaoACadaMs: null });
+  });
+
+  it('o botão emenda sem salto: a brasa esperando é a do começo dos 5 minutos', () => {
+    expect(estadoDoPortal(ABERTURA, null).luz).toBeCloseTo(estadoDoPortal(ABERTURA - JANELA_MS).luz);
+  });
+});

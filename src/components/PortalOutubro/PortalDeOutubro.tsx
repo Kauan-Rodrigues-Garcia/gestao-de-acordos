@@ -2,6 +2,8 @@
  * PortalDeOutubro.tsx — a peça que o `Layout` monta: decide, pela hora do
  * portal (`fases.ts`), o que aparece.
  *
+ *   aguardando           liberado, sem a revelação começada: o bueiro com os
+ *                        olhos e os balões, sem relógio, até o botão (30/10/2026)
  *   espreitando / final  os 5 minutos: o bueiro com os olhos e os balões
  *                        (com o tema de Halloween ligado: quem desligou os
  *                        enfeites não vê) e o relógio pequeno (para todos);
@@ -45,8 +47,8 @@ interface Props {
   leve?: boolean;
   /** Liberado para todos (ou no dev). Sem isso, só a prévia. */
   liberado: boolean;
-  /** A hora da abertura: sexta 16h, ou a solta pelo botão. */
-  abertura: number;
+  /** A hora da abertura solta pelo botão; `null`: o bueiro esperando, sem relógio. */
+  abertura: number | null;
 }
 
 /**
@@ -105,11 +107,14 @@ export function PortalDeOutubro({ temaLigado, leve = false, liberado: liberadoDe
     if (!liberado || !final || viu || !participa) return;
     const t = window.setTimeout(() => {
       if (document.visibilityState === 'visible' && !lerTela()) abrirAbertura();
-    }, Math.max(0, abertura - agoraDoPortal()));
+    }, Math.max(0, (abertura ?? 0) - agoraDoPortal()));
     return () => window.clearTimeout(t);
   }, [liberado, final, viu, participa, abertura]);
 
   const espreitando = liberado && (estado.fase === 'espreitando' || estado.fase === 'final');
+  // O bueiro na tela: esperando o botão, ou nos 5 minutos. A mesma camada
+  // segue montada quando o botão começa a revelação (o bueiro não chega de novo).
+  const comBueiro = espreitando || (liberado && estado.fase === 'aguardando');
   // Do «Participar» em diante, os balões ao acaso só para quem participou, e
   // só até os da revelação começarem a chegar (29/10/2026).
   const noConvite = final && (estado.noFinalMs ?? 0) >= AGUA_MS;
@@ -125,10 +130,11 @@ export function PortalDeOutubro({ temaLigado, leve = false, liberado: liberadoDe
 
   return (
     <>
-      {estadoDaPrevia && !tela && <CamadaDoBueiro estado={estadoDaPrevia} abertura={abertura} leve={parado} barcoNaPreviaMs={BARCO_NA_PREVIA_MS} />}
+      {/* Sem a revelação começada, a hora da abertura não importa ao bueiro (o barco só vem no `final`). */}
+      {estadoDaPrevia && !tela && <CamadaDoBueiro estado={estadoDaPrevia} abertura={abertura ?? ABERTURA} leve={parado} barcoNaPreviaMs={BARCO_NA_PREVIA_MS} />}
       {/* A chave do ensaio remonta o bueiro: ele chega de novo, com a névoa. */}
-      {!estadoDaPrevia && espreitando && (temaLigado || ensaio) && !tela && (
-        <CamadaDoBueiro key={ensaio?.inicio ?? 'semana'} estado={estadoDaCamada} abertura={abertura} leve={parado} />
+      {!estadoDaPrevia && comBueiro && (temaLigado || ensaio) && !tela && (
+        <CamadaDoBueiro key={ensaio?.inicio ?? 'semana'} estado={estadoDaCamada} abertura={abertura ?? ABERTURA} leve={parado} />
       )}
       {espreitando && !tela && <Avisos estado={estado} />}
       {/* Quem participou: os balões da revelação chegando, um a um, até o zero. */}
