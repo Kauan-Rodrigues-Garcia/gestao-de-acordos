@@ -2075,6 +2075,44 @@ function limitesDoMes(mes: string): { primeiro: string; fim: string } {
   return { primeiro: primeiroDiaDoMes(mes), fim: ultimoDiaDoMes(mes) };
 }
 
+/**
+ * O mês de `analitico_recebimentos` numa requisição (20261030150000).
+ *
+ * A leitura paginada por `range` refaz o mês inteiro a cada página — o OFFSET
+ * filtra e ordena tudo antes de pular —, e o mês da BookPlay são 16 páginas:
+ * 15% do tempo do banco na auditoria de 30/10/2026. A função devolve o mês num
+ * JSON só, com a mesma RLS (é invocadora), as mesmas colunas e a mesma ordem.
+ *
+ * `null` = use a paginação: a função não existe (banco sem a migration) ou a
+ * chamada falhou. Função ausente não é perguntada de novo até recarregar a
+ * página, para não somar um 404 a cada leitura.
+ */
+let funcaoDoMesAusente = false;
+
+async function lerMesPelaFuncao<T>(
+  empresaId: string,
+  inicio: string,
+  fim: string,
+  operadores?: readonly string[],
+): Promise<T[] | null> {
+  if (funcaoDoMesAusente) return null;
+  try {
+    const { data, error } = await rpcSemTipo<T[]>('fn_analitico_mes_linhas', {
+      p_empresa_id: empresaId,
+      p_inicio:     inicio,
+      p_fim:        fim,
+      ...(operadores ? { p_operadores: [...operadores] } : {}),
+    });
+    if (error) {
+      if (/fn_analitico_mes_linhas|does not exist|schema cache|PGRST202/i.test(error.message)) funcaoDoMesAusente = true;
+      return null;
+    }
+    return Array.isArray(data) ? data : null;
+  } catch {
+    return null;
+  }
+}
+
 async function lerMesAnalitico(empresaId: string, mes: string): Promise<MesCarregado> {
   const { primeiro, fim } = limitesDoMes(mes);
 
@@ -2111,9 +2149,11 @@ async function lerMesAnalitico(empresaId: string, mes: string): Promise<MesCarre
     return data;
   };
 
-  // Colunas mais novas primeiro, cada uma com a sua reserva: o espelho do 994
+  // O mês numa leitura só (20261030150000). Sem a função, a paginação de antes:
+  // colunas mais novas primeiro, cada uma com a sua reserva — o espelho do 994
   // (20261028150000), a contribuição (20260914220000) e o setor_id (20260712a).
-  const linhas = (await buscar('espelho')) ?? (await buscar('contribuicao'))
+  const linhas = (await lerMesPelaFuncao<LinhaMesAnalitico>(empresaId, primeiro, fim))
+    ?? (await buscar('espelho')) ?? (await buscar('contribuicao'))
     ?? (await buscar('setor')) ?? (await buscar('minimo'));
 
   const setorDoPerfil = new Map<string, string | null>();
@@ -2437,9 +2477,9 @@ export async function buscarRecebidoPorDiaDosOperadores(
   const fim = `${mes}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
   const ids = [...operadorIds];
 
-  const { data, error } = await paginarParalelo<{
-    operador_id: string | null; setor_id: string | null; valor_recebido: number; data_pagamento: string;
-  }>(async (de, ate) => {
+  type LinhaDia = { operador_id: string | null; setor_id: string | null; valor_recebido: number; data_pagamento: string };
+  const pelaFuncao = await lerMesPelaFuncao<LinhaDia>(empresaId, inicio, fim, ids);
+  const { data, error } = pelaFuncao ? { data: pelaFuncao, error: null } : await paginarParalelo<LinhaDia>(async (de, ate) => {
     const r = await supabase
       .from('analitico_recebimentos')
       .select('operador_id, setor_id, valor_recebido, data_pagamento')

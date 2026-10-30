@@ -63,6 +63,7 @@ import type { AnaliticoDashboardLinha, AnaliticoRecebimento } from '@/lib/supaba
 import { rpcSemTipo } from '@/lib/supabaseSemTipo';
 import { primeiroDiaDoMes, ultimoDiaDoMes } from '@/lib/mesReferencia';
 import { invalidarCache, lerComCache } from '@/lib/cacheCurto';
+import { prefixoCacheDoSinal } from '@/lib/sinais';
 import { ROTULO_AJUSTE } from '@/lib/formasPagamento';
 
 /**
@@ -273,7 +274,7 @@ async function nomesDasEquipes(
  */
 export async function ajustesDoMes(empresaId: string, mes: string): Promise<AjusteDoDia[]> {
   const linhas = await lerComCache(
-    `${PREFIXO_SOMAS_AJUSTE}${empresaId}:${mes}`,
+    `${prefixoCacheDoSinal('ajustes', empresaId)}${mes}`,
     VALIDADE_SOMAS_AJUSTE_MS,
     async (): Promise<AjusteDoDia[] | null> => {
       const { data, error } = await rpcSemTipo<Record<string, unknown>[]>('fn_ajustes_recebimento', {
@@ -468,15 +469,18 @@ export async function listarEventos(ajusteId: string): Promise<EventoAjuste[]> {
 // ── Escrita ──────────────────────────────────────────────────────────────────
 
 /**
- * Quanto tempo as somas dos ajustes valem guardadas. Curto: é dinheiro no card.
- * Quem lança, edita ou cancela descarta na hora (`invalidarSomasDeAjuste`), e
- * as telas que ouvem `analitico_ajustes_manuais` também.
+ * Quanto tempo as somas dos ajustes valem guardadas. Quem lança, edita ou
+ * cancela descarta na hora (`invalidarSomasDeAjuste`), e o sinal `ajustes`
+ * derruba a guardada ao CHEGAR (`prefixoCacheDoSinal`) em toda aba que o ouve.
+ *
+ * Era 20 s: ~11 mil leituras por dia de `fn_ajustes_recebimento` a 86 ms, ~9%
+ * do banco na auditoria de 30/10/2026 — para uma tabela que muda poucas vezes
+ * no mês. Tela que não ouve o sinal vê o ajuste de outra pessoa em até 2 min.
  */
-export const VALIDADE_SOMAS_AJUSTE_MS = 20 * 1000;
-const PREFIXO_SOMAS_AJUSTE = 'ajustes-somas:';
+export const VALIDADE_SOMAS_AJUSTE_MS = 2 * 60 * 1000;
 
 export function invalidarSomasDeAjuste(): void {
-  invalidarCache(PREFIXO_SOMAS_AJUSTE);
+  invalidarCache(prefixoCacheDoSinal('ajustes'));
 }
 
 export async function lancarAjuste(params: {

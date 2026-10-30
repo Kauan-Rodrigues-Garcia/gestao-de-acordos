@@ -21,6 +21,7 @@ import { ehMesAtual } from '@/lib/mesReferencia';
 import { contaNoRecebimento } from '@/lib/index';
 import { tabelaSemTipo, rpcSemTipo } from '@/lib/supabaseSemTipo';
 import { invalidarComposicaoEquipes } from '@/services/analitico/composicaoCache';
+import { invalidarCache, lerComCache } from '@/lib/cacheCurto';
 
 /**
  * Define a situação de um usuário, ajustando os efeitos colaterais:
@@ -83,8 +84,10 @@ export async function definirSituacao(
    */
   const { error } = await supabase.from('perfis').update(patch).eq('id', perfilId);
   if (error) return { error: error.message };
-  // A situação entra na composição de equipes guardada (`composicaoCache.ts`).
+  // A situação entra na composição de equipes guardada (`composicaoCache.ts`)
+  // e em quem fica fora do ranking.
   invalidarComposicaoEquipes();
+  invalidarCache(PREFIXO_FORA_DO_RANKING);
 
   /*
    * Os vinculos NAO sao soltos aqui desde 31/08/2026.
@@ -262,6 +265,22 @@ export function cargoForaDoRanking(cargo: string | null | undefined): boolean {
  * como `buscarSituacaoOperadores`; o corrente, o cadastro.
  */
 export async function buscarForaDoRanking(empresaId: string, mes?: string | null): Promise<Set<string>> {
+  // Guardada por 5 min (auditoria 30/10/2026: ~3,4 mil leituras por dia de
+  // `perfis` inteira, uma por abertura da aba Ranking). `definirSituacao`
+  // descarta na hora. Cópia: quem recebe pode mexer no conjunto.
+  // Falha não fica guardada: `lerForaDoRanking` rejeita e a resposta é vazia,
+  // como antes.
+  const fora = await lerComCache(
+    `${PREFIXO_FORA_DO_RANKING}${empresaId}:${mes ?? ''}`,
+    5 * 60_000,
+    () => lerForaDoRanking(empresaId, mes),
+  ).catch(() => new Set<string>());
+  return new Set(fora);
+}
+
+const PREFIXO_FORA_DO_RANKING = 'fora-do-ranking:';
+
+async function lerForaDoRanking(empresaId: string, mes?: string | null): Promise<Set<string>> {
   const fora = new Set<string>();
   const marcar = (id: string, situacao: string | null, cargo: string | null) => {
     if (situacaoForaDasContas(situacao) || cargoForaDoRanking(cargo)) fora.add(id);
@@ -281,7 +300,7 @@ export async function buscarForaDoRanking(empresaId: string, mes?: string | null
     .from('perfis')
     .select('id, situacao, perfil')
     .eq('empresa_id', empresaId);
-  if (error || !data) return fora;
+  if (error || !data) throw new Error(error?.message ?? 'sem resposta');
   for (const p of data as { id: string; situacao: string | null; perfil: string | null }[]) {
     marcar(p.id, p.situacao, p.perfil);
   }
