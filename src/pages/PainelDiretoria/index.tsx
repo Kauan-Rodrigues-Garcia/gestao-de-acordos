@@ -380,7 +380,11 @@ export default function PainelDiretoria() {
 
   // `usaPainel59` e a aba moraram aqui até 17/09/2026; subiram para antes dos
   // hooks do painel antigo, que agora dependem deles para saber se buscam.
-  const podeVerRelatorioPP = isPP && temPermissao('ver_painel_diretoria') && temPermissao('painel_diretoria_escopo_todos_setores');
+  // Os relatórios da regra Cofen moram na PaguePlay: quem vê o Painel
+  // Diretoria dela vê e importa (30/10/2026; antes pedia também o escopo de
+  // todos os setores). O banco confere o mesmo (`fn_pp_relatorio_acesso`,
+  // 20261030233000).
+  const podeVerRelatorioPP = isPP && temPermissao('ver_painel_diretoria');
   /*
    * O botão «Atualizar» do cabeçalho para as abas do 59. Um contador em vez de
    * uma função de recarga vinda de baixo: cada aba busca dentro dela mesma, e
