@@ -170,16 +170,26 @@ export function useAnaliticoImport() {
   // relatório na verdade é de outro setor (Play 4/5). Ele deve escolher o setor
   // de ORIGEM e a importação carimba esse setor — como se alguém dele tivesse
   // importado. Setor alternativo não é o dono das linhas.
-  const [setorProprioAlternativo, setSetorProprioAlternativo] = useState(false);
+  //
+  // `null` = ainda não se sabe. Enquanto isso o seletor aparece: antes o valor
+  // nascia `false`, e quem confirmasse antes da consulta voltar (ou com ela
+  // falhando) carimbava o relatório no PRÓPRIO alternativo, sem ver o seletor.
+  // Decide pelo setor, não pela empresa (CLAUDE.md): alternativo da PaguePlay
+  // também não tem relatório próprio.
+  const [setorProprioAlternativo, setSetorProprioAlternativo] = useState<boolean | null>(null);
   useEffect(() => {
-    if (tenant.isPaguePlay || !setorAutomatico) { setSetorProprioAlternativo(false); return; }
+    if (!setorAutomatico) { setSetorProprioAlternativo(false); return; }
+    setSetorProprioAlternativo(null);
     let cancel = false;
     supabase.from('setores').select('alternativo').eq('id', setorAutomatico).maybeSingle()
-      .then(({ data }) => {
-        if (!cancel) setSetorProprioAlternativo(!!(data as { alternativo?: boolean } | null)?.alternativo);
+      .then(({ data, error }) => {
+        if (cancel) return;
+        // Sem resposta, pede o setor: escolher a mais é inofensivo, carimbar o
+        // alternativo não.
+        setSetorProprioAlternativo(error ? true : !!(data as { alternativo?: boolean } | null)?.alternativo);
       });
     return () => { cancel = true; };
-  }, [tenant.isPaguePlay, setorAutomatico]);
+  }, [setorAutomatico]);
 
   /**
    * Quando o importador tem que escolher o setor:
@@ -194,7 +204,7 @@ export function useAnaliticoImport() {
    * `null`), o que jogava os órfãos no setor de quem importou por fallback —
    * agora eles caem no setor que o relatório realmente é.
    */
-  const usarSetorEscolhido = !setorAutomatico || setorProprioAlternativo || veTodosSetores;
+  const usarSetorEscolhido = !setorAutomatico || setorProprioAlternativo !== false || veTodosSetores;
   const setorImportacao = usarSetorEscolhido ? setorEscolhido : setorAutomatico;
   /** true quando o modal precisa exibir o seletor de setor. */
   const precisaEscolherSetor = usarSetorEscolhido;
@@ -695,7 +705,7 @@ export function useAnaliticoImport() {
     setorImportacao,
     setSetorEscolhido,
     /** true quando o importador é de um setor alternativo (escolhe o setor de origem). */
-    setorProprioAlternativo,
+    setorProprioAlternativo: setorProprioAlternativo === true,
     /** O que a sincronização mensal vai apagar. `null` = nada a prever. */
     remocaoPrevista,
     /** A importação vai remover o que não veio no arquivo (ver acima). */
