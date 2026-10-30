@@ -4,12 +4,14 @@
  *
  * O tamanho vem de `celula` (px); o resto escala junto. Marcar é só pintar:
  * quem decide se vale é o banco, no grito.
+ *
+ * Sem `prefers-reduced-motion`, como o resto do Bingo (ver `BingoTv.tsx`).
  */
 import type { CSSProperties } from 'react';
 import { ESTRELA, LETRAS } from './regras';
 import type { TemaBingo } from './temas/contrato';
 
-export function Cartela({ tema, numeros, marcadas, auto, vence, sorte, celula = 56, aoTocar, rotulo }: {
+export function Cartela({ tema, numeros, marcadas, auto, vence, sorte, celula = 56, aoTocar, rotulo, provaAtrasoMs }: {
   tema: TemaBingo;
   numeros: number[];
   /** O que vale como marcado (à mão, ou as pedras sorteadas na visão do líder). */
@@ -23,10 +25,14 @@ export function Cartela({ tema, numeros, marcadas, auto, vence, sorte, celula = 
   celula?: number;
   aoTocar?: (numero: number) => void;
   rotulo?: string;
+  /** Na comemoração: a linha vencedora acende casa a casa, a partir daqui. */
+  provaAtrasoMs?: number;
 }) {
   const c = tema.cartela;
   const k = celula / 56;
   const gap = Math.max(3, Math.round(5 * k));
+  // A ordem de cada casa na linha vencedora, para acender uma atrás da outra.
+  const ordemNaProva = new Map((vence ?? []).map((indice, ordem) => [indice, ordem]));
   const venceSet = new Set(vence ?? []);
   const sorteSet = new Set(sorte ?? []);
   const fonte = Math.round(celula * 0.42 * tema.escalaNumero);
@@ -53,6 +59,12 @@ export function Cartela({ tema, numeros, marcadas, auto, vence, sorte, celula = 
           const estrela = i === ESTRELA || n === 0;
           const marcada = estrela || marcadas.has(n);
           const peloSistema = !estrela && !marcadas.has(n) && !!auto?.has(n);
+          const ordem = ordemNaProva.get(i);
+          const animacao = provaAtrasoMs != null && ordem != null
+            ? `bingo-prova 520ms ease-out ${provaAtrasoMs + ordem * 120}ms both`
+            : marcada && !estrela && aoTocar ? 'bingo-marca 380ms ease-out'
+            : peloSistema ? 'bingo-auto 600ms ease-out'
+            : undefined;
           const estilo: CSSProperties = {
             width: celula, height: celula, display: 'flex', alignItems: 'center', justifyContent: 'center',
             borderRadius: `${c.raioCelula}%`, fontSize: fonte, fontWeight: 700, position: 'relative',
@@ -61,15 +73,16 @@ export function Cartela({ tema, numeros, marcadas, auto, vence, sorte, celula = 
             boxShadow: venceSet.has(i)
               ? `0 0 0 ${Math.max(3, Math.round(4 * k))}px ${c.vence}, 0 0 ${Math.round(18 * k)}px ${c.vence}`
               : sorteSet.has(n) ? `0 0 0 ${Math.max(2, Math.round(3 * k))}px ${c.sorte}` : undefined,
-            transition: 'background 220ms ease, color 220ms ease',
-            animation: marcada && !estrela && aoTocar ? 'bingo-marca 320ms cubic-bezier(.3,1.6,.5,1)' : undefined,
+            transition: 'background-color 220ms ease, color 220ms ease, transform 140ms ease',
+            animation: animacao,
             cursor: aoTocar && !estrela ? 'pointer' : undefined,
             border: peloSistema ? `${Math.max(2, Math.round(2 * k))}px dashed ${c.autoTexto}` : undefined,
             userSelect: 'none',
+            ['--bingo-foco' as string]: c.sorte,
           };
           const conteudo = estrela ? '★' : n;
           return aoTocar && !estrela ? (
-            <button key={i} type="button" style={estilo} onClick={() => aoTocar(n)} aria-pressed={marcada || peloSistema}>
+            <button key={i} type="button" className="bingo-celula" style={estilo} onClick={() => aoTocar(n)} aria-pressed={marcada || peloSistema}>
               {conteudo}
             </button>
           ) : (
@@ -77,7 +90,14 @@ export function Cartela({ tema, numeros, marcadas, auto, vence, sorte, celula = 
           );
         })}
       </div>
-      <style>{'@keyframes bingo-marca { 0% { transform: scale(.6) } 100% { transform: scale(1) } }'}</style>
+      <style>{`
+        @keyframes bingo-marca { 0% { transform: scale(.72) } 55% { transform: scale(1.1) } 100% { transform: none } }
+        @keyframes bingo-auto { from { opacity: .2; transform: scale(.88) } to { opacity: 1; transform: none } }
+        @keyframes bingo-prova { 0% { transform: none } 45% { transform: scale(1.16) } 100% { transform: none } }
+        .bingo-celula:hover { transform: translateY(-2px); }
+        .bingo-celula:active { transform: scale(.92); }
+        .bingo-celula:focus-visible { outline: 3px solid var(--bingo-foco); outline-offset: 2px; }
+      `}</style>
     </div>
   );
 }

@@ -13,6 +13,10 @@
  *
  * As marcações moram neste navegador (`localStorage`) e só vão ao banco no
  * grito: nada de chamada por clique.
+ *
+ * Sem `prefers-reduced-motion` e fora do modo leve (`data-bingo-anima`), pelo
+ * mesmo motivo da TV (ver `BingoTv.tsx`): a pedra que surge e o botão que
+ * chama são o aviso de que é a vez da pessoa. Só transform e opacidade.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -210,22 +214,26 @@ function CartelaDoJogador({ inicial, perfilId, indice, aoSumir }: {
       {!aberta && (
         <button
           type="button"
+          data-bingo-anima
           onClick={() => setAberta(true)}
-          className="fixed z-[60] flex items-center gap-2.5 rounded-full pl-1.5 pr-4 py-1.5 shadow-lg transition-transform hover:scale-105"
+          className="bingo-aba fixed z-[60] flex items-center gap-2.5 rounded-full pl-1.5 pr-4 py-1.5 shadow-lg"
           style={{ left: 20, bottom: base, background: tema.aba.fundo, color: tema.aba.texto, fontFamily: tema.familia }}
           aria-label="Abrir a cartela de bingo"
         >
-          {ultima != null ? <tema.Bola numero={ultima} tamanho={40} /> : <span className="h-10 w-10 rounded-full bg-white/30" />}
+          {ultima != null
+            ? <span key={ultima} className="bingo-troca"><tema.Bola numero={ultima} tamanho={40} /></span>
+            : <span className="h-10 w-10 rounded-full bg-white/30" />}
           <span className="text-sm font-bold leading-tight text-left">
             BINGO<br /><span className="font-semibold opacity-90">{estado.pedras.length}/{TOTAL_PEDRAS}</span>
           </span>
-          {acende && <span className="ml-1 rounded-full bg-white px-2 py-0.5 text-xs font-bold animate-pulse" style={{ color: tema.aba.fundo }}>GRITE!</span>}
+          {acende && <span className="bingo-chip ml-1 rounded-full bg-white px-2 py-0.5 text-xs font-bold" style={{ color: tema.aba.fundo }}>GRITE!</span>}
         </button>
       )}
 
       {aberta && (
         <div
-          className="fixed z-[60] rounded-3xl shadow-2xl p-3.5 w-[340px] max-w-[calc(100vw-24px)]"
+          data-bingo-anima
+          className="bingo-painel fixed z-[60] rounded-3xl shadow-2xl p-3.5 w-[340px] max-w-[calc(100vw-24px)]"
           style={{ left: 12, bottom: base - 8, background: tema.fundoTv, color: tema.texto, fontFamily: tema.familia }}
           role="dialog"
           aria-label="Sua cartela de bingo"
@@ -247,7 +255,7 @@ function CartelaDoJogador({ inicial, perfilId, indice, aoSumir }: {
 
           <div className="flex items-center gap-1.5 mb-2.5 min-h-[40px]">
             {estado.pedras.slice(-5).reverse().map((n, i) => (
-              <div key={n} style={{ opacity: 1 - i * 0.15 }}><tema.Bola numero={n} tamanho={i === 0 ? 40 : 32} /></div>
+              <div key={n} className="bingo-desliza" style={{ opacity: 1 - i * 0.15, transition: 'opacity 300ms ease' }}><tema.Bola numero={n} tamanho={i === 0 ? 40 : 32} /></div>
             ))}
             {!estado.pedras.length && <span className="text-sm" style={{ color: tema.suave }}>Aguardando a primeira pedra…</span>}
           </div>
@@ -260,8 +268,11 @@ function CartelaDoJogador({ inicial, perfilId, indice, aoSumir }: {
             type="button"
             disabled={!acende || gritando || encerrada}
             onClick={fazerGrito}
-            className={`mt-3 w-full rounded-2xl py-2.5 text-xl font-bold transition-transform ${acende ? 'animate-pulse hover:scale-[1.02]' : 'opacity-50'}`}
-            style={{ background: tema.botao.fundo, color: tema.botao.texto, boxShadow: `0 5px 0 ${tema.botao.sombra}`, fontFamily: tema.familia }}
+            className={`bingo-botao mt-3 w-full rounded-2xl py-2.5 text-xl font-bold ${acende ? 'bingo-chama' : 'opacity-50'}`}
+            style={{
+              background: tema.botao.fundo, color: tema.botao.texto, fontFamily: tema.familia,
+              ['--bingo-sombra' as string]: tema.botao.sombra, ['--bingo-brilho' as string]: tema.botao.fundo,
+            }}
           >
             {feito === 'cheia' ? 'BINGO!' : feito === 'quina' ? 'QUINA!' : 'BINGO!'}
           </button>
@@ -277,29 +288,90 @@ function CartelaDoJogador({ inicial, perfilId, indice, aoSumir }: {
           </div>
         </div>
       )}
-      <style>{`
-        @keyframes bingo-brilha { 0%, 100% { filter: drop-shadow(0 0 4px #fff8); } 50% { filter: drop-shadow(0 0 22px #fff) brightness(1.15); } }
-        @keyframes bingo-cai { from { transform: translateY(-120%) scale(.6); opacity: 0 } to { transform: none; opacity: 1 } }
-        @keyframes bingo-vai { to { opacity: 0; transform: scale(.8) } }
-      `}</style>
+      <style>{ESTILOS}</style>
     </>
   );
 }
+
+const SUAVE = 'cubic-bezier(.22,1,.36,1)';
+const SAI_MS = 500;
+
+const ESTILOS = `
+@keyframes bingo-cai { 0% { transform: translateY(-110%) scale(.7); opacity: 0 } 60% { transform: translateY(6%) scale(1.03); opacity: 1 } 80% { transform: translateY(-2%) } 100% { transform: none; opacity: 1 } }
+@keyframes bingo-vai { to { opacity: 0; transform: translateY(-12px) scale(.92) } }
+@keyframes bingo-entra-lado { from { opacity: 0; transform: translateX(12px) } to { opacity: 1; transform: none } }
+@keyframes bingo-halo { from { transform: scale(.7); opacity: .8 } to { transform: scale(1.7); opacity: 0 } }
+@keyframes bingo-balanca { 0%, 100% { transform: rotate(0) } 25% { transform: rotate(-7deg) } 75% { transform: rotate(7deg) } }
+@keyframes bingo-abre { from { opacity: 0; transform: translateY(14px) scale(.96) } to { opacity: 1; transform: none } }
+@keyframes bingo-desliza-j { from { opacity: 0; transform: translateX(-14px) scale(.7) } to { transform: none } }
+@keyframes bingo-bate { 0%, 100% { transform: scale(1) } 50% { transform: scale(1.12) } }
+@keyframes bingo-chama { from { transform: scale(1); opacity: .9 } to { transform: scale(1.04, 1.3); opacity: 0 } }
+@keyframes bingo-confete {
+  0%   { transform: translate(0, 0) rotate(0); opacity: 1 }
+  85%  { opacity: 1 }
+  100% { transform: translate(var(--dx), 340px) rotate(var(--giro)); opacity: 0 }
+}
+
+.bingo-aba { animation: bingo-abre 380ms ${SUAVE} backwards; transition: transform 160ms ease; transform-origin: bottom left; }
+.bingo-aba:hover { transform: translateY(-2px) scale(1.04); }
+.bingo-aba:active { transform: scale(.97); }
+.bingo-painel { animation: bingo-abre 320ms ${SUAVE} both; transform-origin: bottom left; }
+.bingo-troca { display: inline-flex; animation: bingo-cai 500ms ease-out both; }
+.bingo-desliza { animation: bingo-desliza-j 420ms ${SUAVE} both; }
+.bingo-chip { display: inline-block; animation: bingo-bate 1.1s ease-in-out infinite; }
+
+/* O botão de apertar: afunda no clique como botão de verdade. */
+.bingo-botao { position: relative; box-shadow: 0 5px 0 var(--bingo-sombra); transition: transform 120ms ease, box-shadow 120ms ease, opacity 200ms ease; }
+.bingo-botao:not(:disabled):hover { transform: translateY(-1px); box-shadow: 0 6px 0 var(--bingo-sombra); }
+.bingo-botao:not(:disabled):active { transform: translateY(3px); box-shadow: 0 2px 0 var(--bingo-sombra); }
+/* Fechou uma linha: um anel sai do botão, de leve, até a pessoa gritar. */
+.bingo-chama::after {
+  content: ''; position: absolute; inset: -2px; border-radius: inherit; pointer-events: none;
+  border: 3px solid var(--bingo-brilho); animation: bingo-chama 1.4s ease-out infinite;
+}
+`;
 
 /** A pedra nova, num canto de cima, brilhando. Não pega clique. */
 function PedraNova({ numero, tema }: { numero: number; tema: TemaBingo }) {
   return (
     <div
+      data-bingo-anima
       className="fixed z-[60] pointer-events-none flex items-center gap-2"
-      style={{ top: 72, right: 24, animation: `bingo-cai 600ms cubic-bezier(.2,.9,.3,1.2) both, bingo-vai 600ms ease-in ${PEDRA_NA_TELA_MS - 600}ms forwards` }}
+      style={{ top: 72, right: 24, animation: `bingo-cai 650ms ease-out both, bingo-vai ${SAI_MS}ms ease-in ${PEDRA_NA_TELA_MS - SAI_MS}ms forwards` }}
       aria-live="polite"
     >
-      <span className="rounded-full px-3 py-1 text-sm font-bold shadow" style={{ background: tema.aba.fundo, color: tema.aba.texto, fontFamily: tema.familia }}>
+      <span className="rounded-full px-3 py-1 text-sm font-bold shadow" style={{ background: tema.aba.fundo, color: tema.aba.texto, fontFamily: tema.familia, animation: `bingo-entra-lado 400ms ${SUAVE} 250ms both` }}>
         Saiu!
       </span>
-      <div style={{ animation: 'bingo-brilha 0.9s ease-in-out 6' }}>
-        <tema.Bola numero={numero} tamanho={84} brilho />
+      <div style={{ position: 'relative' }}>
+        {/* O halo na cor do tema, que pulsa por trás: chama o olho sem piscar a tela. */}
+        <span aria-hidden style={{
+          position: 'absolute', inset: 0, borderRadius: '50%',
+          background: `radial-gradient(circle, ${tema.destaque}aa 0%, ${tema.destaque}00 70%)`,
+          animation: 'bingo-halo 1.3s ease-out 400ms 4 both',
+        }} />
+        <div style={{ position: 'relative', animation: 'bingo-balanca 700ms ease-in-out 650ms 2' }}>
+          <tema.Bola numero={numero} tamanho={84} brilho />
+        </div>
       </div>
+    </div>
+  );
+}
+
+/** Confete de uma vez só, nas cores do tema, por cima da comemoração. */
+function Confete({ tema }: { tema: TemaBingo }) {
+  const cores = [tema.destaque, tema.botao.fundo, tema.cartela.marcaFundo, tema.cartela.estrelaFundo];
+  return (
+    <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden rounded-3xl">
+      {Array.from({ length: 28 }, (_, i) => (
+        <span key={i} style={{
+          position: 'absolute', top: -14, left: `${(i * 37 + 7) % 100}%`,
+          width: i % 3 ? 8 : 6, height: i % 3 ? 14 : 6, borderRadius: i % 3 ? 2 : '50%',
+          background: cores[i % cores.length],
+          ['--dx' as string]: `${((i * 53) % 120) - 60}px`, ['--giro' as string]: `${(i % 2 ? 1 : -1) * (360 + (i % 5) * 140)}deg`,
+          animation: `bingo-confete ${1.6 + (i % 5) * 0.25}s cubic-bezier(.3,.6,.6,1) ${(i % 7) * 0.09}s both`,
+        } as React.CSSProperties} />
+      ))}
     </div>
   );
 }
@@ -310,21 +382,25 @@ function FestaDoJogador({ vitoria, estado, tema, perfilId, aoFechar }: {
   const sorteadas = new Set(estado.pedras);
   const souEu = vitoria.ganhadores.some(g => g.perfil_id === perfilId);
   return (
-    <div className="fixed z-[61] left-1/2 top-20 -translate-x-1/2 rounded-3xl shadow-2xl p-5 w-[min(720px,calc(100vw-24px))]"
-      style={{ background: tema.fundoTv, color: tema.texto, fontFamily: tema.familia, animation: 'bingo-cai 600ms cubic-bezier(.2,.9,.3,1.2) both' }}
+    <div data-bingo-anima className="fixed z-[61] left-1/2 top-20 -translate-x-1/2 rounded-3xl shadow-2xl p-5 w-[min(720px,calc(100vw-24px))]"
+      style={{
+        background: tema.fundoTv, color: tema.texto, fontFamily: tema.familia,
+        animation: `bingo-abre 450ms ${SUAVE} both, bingo-vai ${SAI_MS}ms ease-in ${FESTA_MS - SAI_MS}ms forwards`,
+      }}
       role="dialog" aria-label="Comemoração do bingo">
+      <Confete tema={tema} />
       <button type="button" onClick={aoFechar} className="absolute right-3 top-3 rounded-full p-1.5 hover:bg-black/10" aria-label="Fechar">
         <X className="h-4 w-4" />
       </button>
-      <div className="text-center">
-        <div className="font-bold" style={{ fontSize: 44 * tema.escalaNumero, color: tema.destaque }}>{nomeDaVitoria(vitoria.tipo)}!</div>
-        <div className="font-semibold">{souEu ? 'Você ganhou! 🎉' : vitoria.tipo === 'cheia' ? tema.frases.cheia : tema.frases.quina}</div>
+      <div className="relative text-center">
+        <div className="font-bold" style={{ fontSize: 44 * tema.escalaNumero, color: tema.destaque, animation: 'bingo-cai 650ms ease-out 150ms both' }}>{nomeDaVitoria(vitoria.tipo)}!</div>
+        <div className="font-semibold" style={{ animation: `bingo-abre 450ms ${SUAVE} 350ms both` }}>{souEu ? 'Você ganhou! 🎉' : vitoria.tipo === 'cheia' ? tema.frases.cheia : tema.frases.quina}</div>
       </div>
-      <div className="mt-4 flex flex-wrap justify-center gap-5">
-        {vitoria.ganhadores.slice(0, 4).map(g => (
-          <div key={g.perfil_id} className="flex flex-col items-center gap-2">
+      <div className="relative mt-4 flex flex-wrap justify-center gap-5">
+        {vitoria.ganhadores.slice(0, 4).map((g, i) => (
+          <div key={g.perfil_id} className="flex flex-col items-center gap-2" style={{ animation: `bingo-abre 450ms ${SUAVE} ${450 + i * 150}ms both` }}>
             <div className="font-bold text-sm">{g.nome.split(' ')[0]}</div>
-            <Cartela tema={tema} numeros={g.numeros} marcadas={sorteadas} vence={g.padrao ?? padrao(g.numeros, sorteadas, vitoria.tipo) ?? []} celula={30} />
+            <Cartela tema={tema} numeros={g.numeros} marcadas={sorteadas} vence={g.padrao ?? padrao(g.numeros, sorteadas, vitoria.tipo) ?? []} celula={30} provaAtrasoMs={900 + i * 150} />
           </div>
         ))}
       </div>

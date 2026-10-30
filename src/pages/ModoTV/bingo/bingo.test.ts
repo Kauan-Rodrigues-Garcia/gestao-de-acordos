@@ -200,3 +200,23 @@ describe('a migration casa com o front', () => {
     expect(sql).not.toMatch(/CREATE POLICY \w+ ON public\.bingo_/);
   });
 });
+
+describe('o movimento', () => {
+  // Máquina corporativa com «Efeitos de animação» desligado responde
+  // `reduce`: o Bingo parado não mostra sorteio nenhum (ver `BingoTv.tsx`).
+  const arquivos = ['BingoTv.tsx', 'Cartela.tsx', 'jogador/CartelasDoJogador.tsx'];
+
+  it('nenhuma peça do motor obedece a prefers-reduced-motion', () => {
+    for (const a of arquivos) {
+      const fonte = readFileSync(resolve(__dirname, a), 'utf8');
+      expect(fonte, a).not.toMatch(/@media\s*\(prefers-reduced-motion/);
+      expect(fonte, a).not.toContain('matchMedia');
+    }
+  });
+
+  it('o modo leve deixa o Bingo animar', () => {
+    const css = readFileSync(resolve(__dirname, '../../../index.css'), 'utf8');
+    expect(css).toContain('[data-bingo-anima], [data-bingo-anima] *');
+    expect(readFileSync(resolve(__dirname, 'BingoTv.tsx'), 'utf8')).toContain('data-bingo-anima');
+  });
+});

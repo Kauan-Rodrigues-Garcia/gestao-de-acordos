@@ -1160,10 +1160,14 @@
    pesa (`.portal-leve`, e o `leve` dos componentes) e anima só transform e
    opacidade.
 
+   O Bingo (`data-bingo-anima`) também, pelo mesmo pedido (30/10/2026): sem a
+   máquina girando e a pedra surgindo não há sorteio. Ele anima só transform e
+   opacidade (ver `pages/ModoTV/bingo/BingoTv.tsx`).
+
    ─────────────────────────────────────────────────────────────────────────── */
-html[data-leve] *:not([data-portal-anima], [data-portal-anima] *),
-html[data-leve] *:not([data-portal-anima], [data-portal-anima] *)::before,
-html[data-leve] *:not([data-portal-anima], [data-portal-anima] *)::after {
+html[data-leve] *:not([data-portal-anima], [data-portal-anima] *, [data-bingo-anima], [data-bingo-anima] *),
+html[data-leve] *:not([data-portal-anima], [data-portal-anima] *, [data-bingo-anima], [data-bingo-anima] *)::before,
+html[data-leve] *:not([data-portal-anima], [data-portal-anima] *, [data-bingo-anima], [data-bingo-anima] *)::after {
   animation-duration: 1ms !important;
   animation-delay: 0ms !important;
   animation-iteration-count: 1 !important;

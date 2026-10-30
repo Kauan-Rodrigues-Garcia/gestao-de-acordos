@@ -75,12 +75,12 @@ function Festa() {
       {Array.from({ length: 14 }, (_, i) => (
         <span key={`b${i}`} style={{
           position: 'absolute', left: `${(i * 53) % 100}%`, top: `${(i * 37) % 90}%`, fontSize: 40, color: '#fff3c4',
-          textShadow: '0 0 14px #fff3c4', animation: `rpg-brilho 1.2s ease-in-out ${(i % 6) * 0.2}s infinite`,
+          textShadow: '0 0 14px #fff3c4', animation: `rpg-faisca 1.2s ease-in-out ${(i % 6) * 0.2}s infinite`,
         }}>✦</span>
       ))}
       <style>{`
         @keyframes rpg-moeda { from { transform: translateY(0) rotateY(0) } to { transform: translateY(1260px) rotateY(1080deg) } }
-        @keyframes rpg-brilho { 0%, 100% { opacity: .2; transform: scale(.6) } 50% { opacity: 1; transform: scale(1.2) } }
+        @keyframes rpg-faisca { 0%, 100% { opacity: .2; transform: scale(.6) } 50% { opacity: 1; transform: scale(1.2) } }
       `}</style>
     </div>
   );
