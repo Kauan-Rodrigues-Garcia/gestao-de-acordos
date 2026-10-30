@@ -27,7 +27,7 @@ export function VinculoTag({ acordo, size = 'xs' }: Props) {
   // - OU for um acordo Direto que possui um operador vinculado (vinculo_operador_id)
   const isDireto = (a.tipo_vinculo === 'direto' || !a.tipo_vinculo);
   // Vale como evidência de vínculo o id OU o nome do par. Na prática os dois são
-  // gravados juntos (e limpos juntos, em tratarExclusaoVinculo), mas exigir só o
+  // gravados juntos (e limpos juntos, pelo gatilho `trg_vinculo_par_del`), mas exigir só o
   // id fazia uma linha gravada pela metade esconder um vínculo que existe — e a
   // tag é informativa, então errar para o lado de mostrar é o lado seguro.
   const temVinculoExtra =

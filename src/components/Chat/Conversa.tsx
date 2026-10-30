@@ -47,6 +47,7 @@ import { VisualizadorMidia } from './VisualizadorMidia';
 import { InfoGrupoPainel } from './InfoGrupoPainel';
 import { PerfilContatoPainel } from './PerfilContatoPainel';
 import { StatusMensagem } from './StatusMensagem';
+import { CardAcordoVinculado } from './CardAcordoVinculado';
 import { estadoMensagem } from './estadoMensagem';
 
 /** A quantos px do topo a página anterior começa a ser pedida. */
@@ -858,10 +859,14 @@ export function Conversa({
                     </span>
                   </div>
                 )}
-                <AvisoDeSistema
-                  m={m}
-                  nomeDoAutor={m.autor_id === euNaTela ? 'Você' : (autores.get(m.autor_id ?? '') ?? 'Alguém')}
-                />
+                {m.sistema === 'acordo_vinculo' ? (
+                  <CardAcordoVinculado m={m} meuId={euNaTela} />
+                ) : (
+                  <AvisoDeSistema
+                    m={m}
+                    nomeDoAutor={m.autor_id === euNaTela ? 'Você' : (autores.get(m.autor_id ?? '') ?? 'Alguém')}
+                  />
+                )}
               </div>
             );
           }

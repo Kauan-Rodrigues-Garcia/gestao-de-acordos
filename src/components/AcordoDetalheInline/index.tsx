@@ -176,18 +176,7 @@ export function AcordoDetalheInline({
       toast.success('Parcela marcada como paga!');
       const parcelaAtualizada = { ...p, status: 'pago' as const, data_pagamento: dataPagamento, vencimento: dataPagamento };
       setRegistrosReais(prev => prev.map(x => x.id === p.id ? parcelaAtualizada : x));
-      if (acordoLocal.tipo_vinculo === 'extra' || acordoLocal.vinculo_operador_id) {
-        await supabase.rpc('fn_sync_par_vinculo', {
-          p_acordo_id:    p.id,
-          p_valor:        p.valor,
-          p_vencimento:   dataPagamento,
-          p_nome_cliente: p.nome_cliente,
-          p_tipo:         p.tipo,
-          p_whatsapp:     p.whatsapp,
-          p_parcelas:     p.parcelas,
-          p_status:       'pago',
-        });
-      }
+      // O par Direto↔Extra acompanha no banco (`trg_vinculo_par_upd`).
       // Reagenda a próxima parcela de acordos parcelados — vale para os dois
       // tenants (PaguePlay e BookPlay usam a mesma lógica em handleReagendar).
       // Se a próxima parcela já existe (adicionada manualmente), não reabre.

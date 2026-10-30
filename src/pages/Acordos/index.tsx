@@ -41,7 +41,6 @@ import { cn } from '@/lib/utils';
 import { type ItemFila } from '@/components/ModalFilaWhatsApp';
 import { liberarNrPorAcordoId }  from '@/services/nr_registros.service';
 import { enviarParaLixeira }     from '@/services/lixeira.service';
-import { tratarExclusaoVinculo } from '@/services/tratarExclusaoVinculo';
 import { registrarLog }          from '@/services/logs.service';
 import { deduplicarVinculados, temVisaoAmpla, type AcordoComVinculo } from '@/lib/deduplicarVinculados';
 import { emGruposParalelos } from '@/lib/emGruposParalelos';
@@ -266,6 +265,16 @@ export default function Acordos() {
     }
   }, [mesEstaBloqueado]);
 
+  /** `?acordo=<id>`: a lista mostra só este acordo, até a pessoa sair. */
+  const acordoFoco = searchParams.get('acordo');
+  function sairDoAcordoFoco() {
+    setSearchParams(atual => {
+      const params = new URLSearchParams(atual);
+      params.delete('acordo');
+      return params;
+    }, { replace: true });
+  }
+
   const highlightParam = searchParams.get('highlight');
   useEffect(() => {
     if (!highlightParam) return;
@@ -325,7 +334,11 @@ export default function Acordos() {
   const bpMesInicio = (!isPP && mesFiltro) ? primeiroDiaDoMes(mesFiltro) : undefined;
   const bpMesFim    = (!isPP && mesFiltro) ? ultimoDiaDoMes(mesFiltro)   : undefined;
 
-  const { acordos, totalCount, loading, refetch, patchAcordo, removeAcordo, addAcordo, realtimeStatus } = useAcordos({
+  const { acordos, totalCount, loading, refetch, patchAcordo, removeAcordo, addAcordo, realtimeStatus } = useAcordos(acordoFoco ? {
+    // Um acordo só, vindo do card do chat ou da notificação: os filtros da
+    // tela (mês, aba, operador) esconderiam o de outro mês ou outro status.
+    ids: [acordoFoco], page: 1, perPage: PER_PAGE,
+  } : {
     busca:        buscaConsulta || undefined,
     status:       statusFiltro,
     tipo:         filtroTipo && filtroTipo !== 'all' ? filtroTipo : undefined,
@@ -683,9 +696,8 @@ export default function Acordos() {
     }
     setConfirmandoExclusao(null);
     setExcluindoId(a.id);
-    try {
-      await tratarExclusaoVinculo({ acordo: a, isPaguePlay: isPP, operadorExecutorNome: perfil?.nome ?? perfil?.email ?? null });
-    } catch (e) { console.warn('[excluirAcordo] tratarExclusaoVinculo falhou:', e); }
+    // O par Direto/Extra é tratado no banco, no próprio DELETE
+    // (`trg_vinculo_par_del`, migration 20261030235500).
     await enviarParaLixeira({ acordo: a, motivo: 'exclusao_manual', operadorNome: perfil?.nome ?? perfil?.email ?? undefined });
     const { error } = await supabase.from('acordos').delete().eq('id', a.id);
     if (error) {
@@ -727,8 +739,6 @@ export default function Acordos() {
       setExcluindoId(id);
       const acordo = porId.get(id);
       if (acordo) {
-        try { await tratarExclusaoVinculo({ acordo, isPaguePlay: isPP, operadorExecutorNome: perfil?.nome ?? perfil?.email ?? null }); }
-        catch (e) { console.warn('[excluirSelecionados] tratarExclusaoVinculo falhou:', e); }
         await enviarParaLixeira({ acordo, motivo: 'exclusao_manual', operadorNome: perfil?.nome ?? perfil?.email ?? undefined });
       }
       const { error } = await supabase.from('acordos').delete().eq('id', id);
@@ -806,6 +816,9 @@ export default function Acordos() {
   const visaoAmpla = temVisaoAmpla(perfil?.perfil);
 
   const acordosParaExibir = useMemo<AcordoComVinculo[]>(() => {
+    // O acordo pedido aparece como é, sem o filtro de vínculo nem a dedução
+    // do par — o EXTRA de alguém é exatamente o que o card mandou abrir.
+    if (acordoFoco) return acordos;
     let base: AcordoComVinculo[] = acordos;
     if (usuarioTemLogicaDiretoExtra && filtroVinculo !== 'todos') {
       base = base.filter(a => (a.tipo_vinculo ?? 'direto') === filtroVinculo);
@@ -838,7 +851,7 @@ export default function Acordos() {
       if (!aHoje && bHoje) return 1;
       return 0;
     });
-  }, [acordos, visaoAmpla, usuarioTemLogicaDiretoExtra, filtroVinculo, isPP, hoje]);
+  }, [acordos, acordoFoco, visaoAmpla, usuarioTemLogicaDiretoExtra, filtroVinculo, isPP, hoje]);
 
   if (isPP) return <Navigate to="/" replace />;
   if (linkAntigoDoPix) {
@@ -1003,6 +1016,15 @@ export default function Acordos() {
 
         {/* Âncora de scroll */}
         <div ref={novoInlineRef} />
+
+        {acordoFoco && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs">
+            <span>Mostrando só o acordo que você abriu pelo aviso.</span>
+            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={sairDoAcordoFoco}>
+              Ver todos os acordos
+            </Button>
+          </div>
+        )}
 
         {/* Tabela */}
         <Card className="border-border" data-tour="tabela-acordos">

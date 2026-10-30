@@ -9,8 +9,8 @@
  *      um operador que saiu da empresa:
  *        • acordos DELE perdem `vinculo_operador_*`;
  *        • acordos de OUTROS que apontavam pra ele perdem a referência e, se
- *          eram EXTRA, são promovidos a DIRETO (mesma regra de
- *          `tratarExclusaoVinculo`) — inclusive assumindo o NR.
+ *          eram EXTRA, são promovidos a DIRETO (mesma regra do gatilho
+ *          `trg_vinculo_par_del`) — inclusive assumindo o NR.
  *
  *   2. NA HORA DE TABULAR (`transferirAcordoDeDesligado`)
  *      Se o NR/Código está preso a um desligado, a tabulação do novo operador
@@ -22,7 +22,7 @@
  * desligado antes desta funcionalidade existir, sem precisar de backfill, e
  * não há flag que possa ficar desatualizada.
  *
- * Ver 20260723c_status_usuario.sql e [[tratarExclusaoVinculo]].
+ * Ver 20260723c_status_usuario.sql e 20261030235500_vinculo_par_sincronizado.sql.
  */
 import { supabase, type Acordo, type SituacaoUsuario } from '@/lib/supabase';
 import { criarNotificacao } from '@/services/notificacoes.service';

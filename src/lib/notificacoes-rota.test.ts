@@ -29,17 +29,17 @@ describe('rotaDaNotificacao — coluna `rota` (produtores novos)', () => {
 });
 
 describe('rotaDaNotificacao — acordo tem precedência', () => {
-  it('PaguePlay manda para o dashboard com highlight', () => {
+  it('PaguePlay manda para o dashboard filtrado no acordo', () => {
     expect(rotaDaNotificacao({ ...base, titulo: 'Acordo transferido', acordo_id: 'abc' }, true))
-      .toBe('/?highlight=abc');
+      .toBe('/?acordo=abc');
   });
   it('BookPlay manda para /acordos', () => {
     expect(rotaDaNotificacao({ ...base, titulo: 'Acordo transferido', acordo_id: 'abc' }, false))
-      .toBe('/acordos?highlight=abc');
+      .toBe('/acordos?acordo=abc');
   });
   it('acordo vence a rota gravada — é o destino mais específico', () => {
     expect(rotaDaNotificacao({ titulo: 'x', rota: ROTA_ANALITICO, acordo_id: 'abc' }, true))
-      .toBe('/?highlight=abc');
+      .toBe('/?acordo=abc');
   });
 });
 

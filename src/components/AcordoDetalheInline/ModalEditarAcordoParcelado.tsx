@@ -246,21 +246,8 @@ export function ModalEditarAcordoParcelado({
         } as Acordo;
       });
 
-      // Espelha no par Direto↔Extra, como o resto das telas de parcela faz.
-      if ((acordo.tipo_vinculo === 'extra' || acordo.vinculo_operador_id) && paraGravar.length) {
-        const primeira = paraGravar[0];
-        await supabase.rpc('fn_sync_par_vinculo', {
-          p_acordo_id:    acordo.id,
-          p_valor:        parseCurrencyInput(primeira.valor),
-          p_vencimento:   primeira.vencimento,
-          p_nome_cliente: acordo.nome_cliente,
-          p_tipo:         primeira.tipo,
-          p_whatsapp:     acordo.whatsapp ?? null,
-          p_parcelas:     acordo.parcelas,
-          p_status:       acordo.status,
-        });
-      }
-
+      // O par Direto↔Extra acompanha cada parcela no banco
+      // (`trg_vinculo_par_upd`, migration 20261030235500).
       toast.success('Parcelas registradas atualizadas!');
       onSaved(atualizadas);
       onClose();

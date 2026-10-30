@@ -25,6 +25,11 @@ export interface FiltrosAcordo {
   status_exceto?: string[];
   /** Mostra so acordos que carregam ao menos uma destas tags. */
   tag_ids?: string[];
+  /**
+   * So estes acordos. E o «ver acordo» do card do chat e da notificacao: a
+   * lista abre com a linha exata, e nao com a pagina onde ela talvez esteja.
+   */
+  ids?: string[];
   tipo?: string;
   operador_id?: string;
   setor_id?: string;
@@ -134,7 +139,10 @@ export async function fetchAcordos(filtros?: FiltrosAcordo): Promise<{ data: Aco
   // Quando há filtro de intervalo de mês usa a tabela direta (sem dedup).
   // Sem filtro de data usa a view deduplicada (DISTINCT ON por grupo).
   // Usa a tabela direta quando há filtro de intervalo de mês OU filtro de data exata
-  const hasMonthRange = !!(filtros?.data_inicio && filtros?.data_fim) || !!filtros?.vencimento;
+  // `ids` também vai à tabela direta: a view deduplicada mostra uma linha por
+  // grupo, e a parcela pedida pode não ser a que ela escolhe.
+  const hasMonthRange = !!(filtros?.data_inicio && filtros?.data_fim) || !!filtros?.vencimento
+    || !!filtros?.ids?.length;
   // 'acordos' | 'acordos_deduplicados' como union em .from() faz o supabase-js
   // tentar resolver o tipo contra as duas tabelas ao mesmo tempo (instanciação
   // excessivamente profunda). Ambas têm as mesmas colunas/relacionamentos —
@@ -177,6 +185,7 @@ export async function fetchAcordos(filtros?: FiltrosAcordo): Promise<{ data: Aco
     // `overlaps` = interseccao nao vazia entre o array da coluna e o filtro,
     // que e o que "tem esta tag" significa num campo multivalorado.
     if (filtros?.tag_ids?.length) q = q.overlaps('tag_ids', filtros.tag_ids);
+    if (filtros?.ids?.length) q = q.in('id', filtros.ids);
     const busca = filtros?.busca ? buscaParaFiltro(filtros.busca) : '';
     if (busca) {
       q = q.or(

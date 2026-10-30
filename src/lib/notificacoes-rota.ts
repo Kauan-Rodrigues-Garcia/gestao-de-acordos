@@ -112,18 +112,28 @@ function rotaLegadaDaCampanha(rota: string): string {
 }
 
 /**
+ * A lista de acordos filtrada num acordo só (`?acordo=`).
+ *
+ * Era `?highlight=`, que adivinhava a página e piscava a linha por 0,8 s — o
+ * acordo de outro mês ou de outro status não aparecia (30/10/2026).
+ *
+ * @param isPaguePlay na PaguePlay a lista de acordos é o próprio dashboard, no
+ *   BookPlay é `/acordos`.
+ */
+export function rotaDoAcordo(acordoId: string, isPaguePlay: boolean): string {
+  const id = encodeURIComponent(acordoId);
+  return isPaguePlay
+    ? `${ROUTE_PATHS.DASHBOARD}?acordo=${id}`
+    : `${ROUTE_PATHS.ACORDOS}?acordo=${id}`;
+}
+
+/**
  * Caminho interno para onde a notificação leva, ou `null` se não houver destino.
  *
- * @param isPaguePlay muda só o destino de acordo: na PaguePlay a lista de
- *   acordos é o próprio dashboard, no BookPlay é `/acordos`.
+ * @param isPaguePlay muda só o destino de acordo — ver `rotaDoAcordo`.
  */
 export function rotaDaNotificacao(n: Alvo, isPaguePlay: boolean): string | null {
-  if (n.acordo_id) {
-    const id = encodeURIComponent(n.acordo_id);
-    return isPaguePlay
-      ? `${ROUTE_PATHS.DASHBOARD}?highlight=${id}`
-      : `${ROUTE_PATHS.ACORDOS}?highlight=${id}`;
-  }
+  if (n.acordo_id) return rotaDoAcordo(n.acordo_id, isPaguePlay);
   // Notificação de antes de 07/10/2026: leva à mesma aba.
   if (n.rota?.startsWith(PREFIXO_ROTA_ENVIO_CAMPANHA)) return rotaLegadaDaCampanha(n.rota);
   // A rota do banco só vale se for interna; sendo externa, ainda resta o

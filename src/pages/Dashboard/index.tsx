@@ -31,7 +31,6 @@ import { toast } from 'sonner';
 import type { ItemFila } from '@/components/ModalFilaWhatsApp';
 import { liberarNrPorAcordoId } from '@/services/nr_registros.service';
 import { enviarParaLixeira } from '@/services/lixeira.service';
-import { tratarExclusaoVinculo } from '@/services/tratarExclusaoVinculo';
 import { registrarLog } from '@/services/logs.service';
 import { AnalyticsPanel } from '@/components/AnalyticsPanel';
 import { useSetoresEquipes } from '@/hooks/useSetoresEquipes';
@@ -339,8 +338,21 @@ export default function Dashboard() {
     }
   }, [novoInlineAbertoTabela]);
 
+  /** `?acordo=<id>` (card do chat, notificação): a lista mostra só este acordo. */
+  const acordoFoco = searchParams.get('acordo');
+  function sairDoAcordoFoco() {
+    setSearchParams(atual => {
+      const params = new URLSearchParams(atual);
+      params.delete('acordo');
+      return params;
+    }, { replace: true });
+  }
+
   const { acordos, totalCount, loading, atualizando, refetch, patchAcordo, removeAcordo, addAcordo, realtimeStatus } = useAcordos(
-    isPP ? {
+    isPP && acordoFoco ? {
+      // Os filtros da tela (mês, aba, visão) esconderiam o acordo de outro mês.
+      ids: [acordoFoco], page: 1, perPage: PER_PAGE,
+    } : isPP ? {
       busca:        buscaConsulta || undefined,
       status:       statusFiltroComputed,
       tipo:         filtroTipo && filtroTipo !== 'all' ? filtroTipo : undefined,
@@ -374,6 +386,8 @@ export default function Dashboard() {
   const parcelasExistentes = useParcelasExistentes(acordos, empresa?.id);
 
   const acordosOrdenados = useMemo<AcordoComVinculo[]>(() => {
+    // O acordo pedido aparece como é, sem filtro de vínculo nem dedução do par.
+    if (acordoFoco) return acordos;
     let base: AcordoComVinculo[] = acordos;
     if (usuarioTemLogicaDiretoExtra && filtroVinculo !== 'todos') {
       base = base.filter(a => (a.tipo_vinculo ?? 'direto') === filtroVinculo);
@@ -405,7 +419,7 @@ export default function Dashboard() {
   // no BookPlay. Sem ele na lista, trocar de empresa sem que `acordos` mude
   // devolvia a lista deduplicada pela chave da empresa anterior. Não é
   // hipótese: o efeito da linha 235, neste mesmo arquivo, já o declarava.
-  }, [acordos, usuarioTemLogicaDiretoExtra, filtroVinculo, visaoAmpla, hoje, isPP]);
+  }, [acordos, acordoFoco, usuarioTemLogicaDiretoExtra, filtroVinculo, visaoAmpla, hoje, isPP]);
 
   useEffect(() => {
     if (!isPP) return;
@@ -584,15 +598,7 @@ export default function Dashboard() {
       guardarPagoDesfazivel(id, {
         statusAnterior, vencimentoAnterior, dataPagamentoAnterior: acordo.data_pagamento ?? null,
       });
-      if (acordo.vinculo_operador_id || acordo.tipo_vinculo === 'extra') {
-        supabase.rpc('fn_sync_par_vinculo', {
-          p_acordo_id: id, p_valor: acordo.valor, p_vencimento: dataPagamento,
-          p_nome_cliente: acordo.nome_cliente, p_tipo: acordo.tipo,
-          p_whatsapp: acordo.whatsapp ?? null, p_parcelas: acordo.parcelas, p_status: 'pago',
-        }).then(({ error: rpcErr }) => {
-          if (rpcErr) console.warn('[marcarComoPago] sync par falhou:', rpcErr.message);
-        });
-      }
+      // O par Direto↔Extra acompanha no banco (`trg_vinculo_par_upd`).
       // Mesma regra do botão (`services/reagendamento`), inclusive a conferência
       // de que a próxima parcela ainda não existe. Antes daqui o gate era
       // `isPP && ...`: na BookPlay marcar pago nunca oferecia o reagendamento.
@@ -624,16 +630,7 @@ export default function Dashboard() {
       vencimento: antes.vencimentoAnterior,
       data_pagamento: antes.dataPagamentoAnterior,
     });
-    // O par Direto↔Extra volta junto, como foi junto no «pago».
-    if (acordo.vinculo_operador_id || acordo.tipo_vinculo === 'extra') {
-      supabase.rpc('fn_sync_par_vinculo', {
-        p_acordo_id: acordo.id, p_valor: acordo.valor, p_vencimento: antes.vencimentoAnterior,
-        p_nome_cliente: acordo.nome_cliente, p_tipo: acordo.tipo,
-        p_whatsapp: acordo.whatsapp ?? null, p_parcelas: acordo.parcelas, p_status: antes.statusAnterior,
-      }).then(({ error: rpcErr }) => {
-        if (rpcErr) console.warn('[desfazerPago] sync par falhou:', rpcErr.message);
-      });
-    }
+    // O par Direto↔Extra volta junto no banco, como foi junto no «pago».
     toast.success('Pagamento desfeito: o acordo voltou ao status de antes.');
   }
 
@@ -684,9 +681,8 @@ export default function Dashboard() {
   async function excluirAcordo(a: Acordo) {
     setConfirmandoExclusao(null);
     setExcluindoId(a.id);
-    try {
-      await tratarExclusaoVinculo({ acordo: a, isPaguePlay: isPP, operadorExecutorNome: perfil?.nome ?? perfil?.email ?? null });
-    } catch (e) { console.warn('[Dashboard.excluirAcordo] tratarExclusaoVinculo falhou:', e); }
+    // O par Direto/Extra é tratado no banco, no próprio DELETE
+    // (`trg_vinculo_par_del`, migration 20261030235500).
     await enviarParaLixeira({ acordo: a, motivo: 'exclusao_manual', operadorNome: perfil?.nome ?? perfil?.email ?? undefined });
     const { error } = await supabase.from('acordos').delete().eq('id', a.id);
     if (error) { toast.error('Erro ao excluir acordo: ' + error.message); }
@@ -706,9 +702,6 @@ export default function Dashboard() {
     const acordosParaExcluir = acordos.filter(a => ids.includes(a.id));
     setExcluindoId('__lote__');
     try {
-      await Promise.allSettled(acordosParaExcluir.map(acordo =>
-        tratarExclusaoVinculo({ acordo, isPaguePlay: isPP, operadorExecutorNome: perfil?.nome ?? perfil?.email ?? null }),
-      ));
       await Promise.allSettled(acordosParaExcluir.map(acordo =>
         enviarParaLixeira({ acordo, motivo: 'exclusao_manual', operadorNome: perfil?.nome ?? perfil?.email ?? undefined }),
       ));
@@ -870,6 +863,15 @@ export default function Dashboard() {
             />
 
             <div ref={novoInlineRef} />
+
+            {acordoFoco && (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs">
+                <span>Mostrando só o acordo que você abriu pelo aviso.</span>
+                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={sairDoAcordoFoco}>
+                  Ver todos os acordos
+                </Button>
+              </div>
+            )}
 
             <Card className="border-border" data-tour="tabela-acordos">
               <CardContent className="p-0">
