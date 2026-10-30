@@ -1,7 +1,6 @@
 /**
- * Bueiro.tsx — a semana antes do mural (pedidos de 27/10/2026, no lugar do
- * vidro rachando): um bueiro no alto da tela, no meio, com a Coisa lá dentro.
- * Até sexta, 16h (`fases.ts`).
+ * Bueiro.tsx — os 5 minutos antes do mural (pedidos de 27 a 29/10/2026): um
+ * bueiro no alto da tela, no meio, com a Coisa lá dentro (`fases.ts`).
  *
  *   - é um pedaço quebrado da barra de cima, em pixel art (29/10: «todos os
  *     desenhos vão ser pixel art»): o desenho é de `pixelDoBueiro.ts`, pintado
@@ -10,15 +9,16 @@
  *     (um canvas pontilhado que anda a ~10 quadros por segundo). Seguem o
  *     mouse e piscam; na abertura, acendem;
  *   - quando ele aparece, sai de dentro de uma névoa, também em pixel;
- *   - de quarta em diante a boca brilha em brasa por dentro, mais a cada dia
- *     (`luz`); quinta e sexta ele treme de vez em quando (`tremor`);
+ *   - a boca brilha em brasa por dentro, mais a cada minuto (`luz`), e no
+ *     final ele treme de vez em quando (`tremor`);
  *   - balões vermelhos sobem de baixo da tela, em lugares e horas ao acaso,
- *     mais vezes a cada dia. Não estouram: nada aqui pega clique;
- *   - o barquinho cai UMA vez só, no começo do final (`fases.ts`): vem
- *     boiando pela barra, por cima da guia, cai na boca, e a mão dela sai com
- *     ele, oferecendo, os olhos vermelhos — e fica até a abertura, com a
- *     contagem (`Avisos.tsx`). Quem chega no meio vê do ponto em que está.
- *     Na prévia do super_admin ele vem a cada 30 s, e a mão volta.
+ *     com o fio balançando junto. Não estouram: nada aqui pega clique;
+ *   - faltando 2 min 45 s, a água escorre devagar pela barra até a boca; o
+ *     barquinho vem boiando nela, por cima da guia, cai na boca, e a mão dela
+ *     sai com ele, oferecendo, os olhos vermelhos — inteira para fora
+ *     exatamente nos 2 minutos, e fica até a abertura (o «Participar» é do
+ *     `Avisos.tsx`). Quem chega no meio vê do ponto em que está. Na prévia do
+ *     super_admin isso vem a cada minuto, e a mão volta.
  *
  * Fica abaixo dos diálogos do app (z 45). Só `transform` e `opacity` se
  * mexem pelo CSS; os canvas repintam pouco. Anima também no modo leve
@@ -26,7 +26,7 @@
  * balão sobe reto e as névoas têm menos nuvens e menos quadros.
  */
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { BARCO_ANTES_DA_ABERTURA_MS, MAO_SAI_MS, type EstadoDoPortal } from './fases';
+import { AGUA_MS, BARCO_ANTES_DA_ABERTURA_MS, MAO_SAI_MS, type EstadoDoPortal } from './fases';
 import { agoraDoPortal } from './relogio';
 import { BALAO, BARCO, PALETA_DO_BALAO, PALETA_DO_BARCO } from './coisa/arte';
 import { pintarGrade } from './coisa/derry';
@@ -286,7 +286,7 @@ export function Bueiro({ luz = 0, seguir = true, acesos = false, tremendo = fals
   return (
     <div
       ref={raiz}
-      className={`portal-bueiro${acesos ? ' portal-bueiro-aceso' : ''}${tremendo ? ' portal-bueiro-treme' : ''}${mao ? ' portal-bueiro-vermelho' : ''}`}
+      className={`portal-bueiro${acesos ? ' portal-bueiro-aceso' : ''}${tremendo ? ' portal-bueiro-treme' : ''}${mao ? ' portal-bueiro-vermelho' : ''}${leve ? ' portal-bueiro-leve' : ''}`}
       style={{ width: LARGURA_DO_BUEIRO * PX, height: ALTURA_DO_BUEIRO * PX, ['--luz' as string]: luz } as CSSProperties}
       aria-hidden
     >
@@ -298,7 +298,7 @@ export function Bueiro({ luz = 0, seguir = true, acesos = false, tremendo = fals
           <Grade linhas={BRASA} paleta={PALETA_DA_BRASA} className="portal-bueiro-brasa" />
           <Grade linhas={olhos} paleta={corDosOlhos} className="portal-bueiro-olhos" />
           <Nevoa l={BOCA.l} a={BOCA.a} passoMs={leve ? 200 : 100} densidade={breu} cor={corDoBreu} className="portal-bueiro-breu" />
-          {barco !== null && jaMs < 9000 && (
+          {barco !== null && (
             <div key={barco}>
               <span className="portal-bueiro-agua-entra" style={atraso(jaMs)} />
               <div className="portal-barco-cai" style={atraso(jaMs)}><Pixel linhas={BARCO} paleta={PALETA_DO_BARCO} tam={PX} /></div>
@@ -308,11 +308,11 @@ export function Bueiro({ luz = 0, seguir = true, acesos = false, tremendo = fals
 
         {/* A mão dela com o barco: sai pela boca, por cima da guia. */}
         {mao && (
-          <div className={`portal-bueiro-mao portal-bueiro-mao-${mao}`}>
-            <div className="portal-mao" style={mao === 'sai' ? atraso(jaMs - MAO_SAI_MS) : undefined}>
-              <Grade linhas={MAO} paleta={PALETA_DA_MAO} className="portal-mao-arte" style={{ width: LARGURA_DA_MAO * PX, height: ALTURA_DA_MAO * PX }} />
-            </div>
-            <span className="portal-bueiro-mao-breu" />
+          <div
+            className={`portal-mao portal-mao-${mao}`}
+            style={{ left: (BOCA.x + 3) * PX, top: (BOCA.y - 1) * PX, width: LARGURA_DA_MAO * PX, height: ALTURA_DA_MAO * PX, ...(mao === 'sai' ? atraso(jaMs - MAO_SAI_MS) : {}) }}
+          >
+            <Grade linhas={MAO} paleta={PALETA_DA_MAO} className="portal-mao-arte" />
           </div>
         )}
       </div>
@@ -330,27 +330,18 @@ export function Bueiro({ luz = 0, seguir = true, acesos = false, tremendo = fals
 
 interface Balao { id: number; x: number; desvio: number; tam: number; sobe: number; atraso: number }
 
-/**
- * De quanto em quanto tempo sobe um balão, em média: o intervalo do dia
- * (`balaoACadaMs`, 40 min na segunda, 6 na sexta) era raro demais para ver;
- * aqui ele vira de 1 min (segunda) a 12 s (sexta, e no fim da contagem).
- */
-function mediaDosBaloes(intervaloDoDia: number): number {
-  return Math.max(12_000, Math.min(60_000, intervaloDoDia / 40));
-}
-
 /** Os balões sobem de baixo, cada um num lugar, num tamanho e numa velocidade; às vezes dois juntos. */
-function useBaloes(intervaloDoDia: number | null) {
+function useBaloes(media: number | null) {
   const [baloes, setBaloes] = useState<Balao[]>([]);
+  // Fora do efeito: quando o ritmo muda (o final), os que já sobem não repetem o número.
+  const proximo = useRef(0);
   useEffect(() => {
-    if (!intervaloDoDia) return;
-    const media = mediaDosBaloes(intervaloDoDia);
+    if (!media) return;
     const ts: number[] = [];
-    let id = 0;
     const soltar = () => {
       const quantos = Math.random() < 0.2 ? 2 : 1;
       const novos = Array.from({ length: quantos }, (_, i) => ({
-        id: ++id,
+        id: ++proximo.current,
         x: 4 + Math.random() * 92,
         desvio: Math.round((Math.random() - 0.5) * 320),
         tam: 4 + Math.floor(Math.random() * 3),
@@ -364,7 +355,7 @@ function useBaloes(intervaloDoDia: number | null) {
     };
     ts.push(window.setTimeout(soltar, media * (0.2 + Math.random() * 0.6)));
     return () => ts.forEach(t => window.clearTimeout(t));
-  }, [intervaloDoDia]);
+  }, [media]);
   return baloes;
 }
 
@@ -389,8 +380,8 @@ function useVezes(intervalo: number | null, aoVirar: (vez: number, agora: number
   }, [intervalo]);
 }
 
-/** Na prévia: a mão volta para o escuro e acabou. */
-const MAO_VOLTA_NA_PREVIA_MS = 17_600, BARCO_ACABA_NA_PREVIA_MS = 19_000;
+/** Na prévia: a mão fica uns segundos, volta para o escuro e acabou. */
+const MAO_VOLTA_NA_PREVIA_MS = AGUA_MS + 8_000, BARCO_ACABA_NA_PREVIA_MS = AGUA_MS + 9_400;
 
 /**
  * O barquinho do final: monta quando a fase `final` começa (ou no meio dela,
@@ -444,21 +435,23 @@ export function CamadaDoBueiro({ estado, abertura, leve, barcoNaPreviaMs = null 
   const { barco, jaMs, mao } = useBarco(abertura, estado.fase === 'final', barcoNaPreviaMs);
 
   return (
-    <div className="portal-camada-bueiro" data-portal-anima aria-hidden>
+    <div className="portal-camada-bueiro" data-portal-anima data-portal-fora aria-hidden>
       {baloes.map(b => (
         <div
           key={b.id}
           className={`portal-balao-ao-acaso${leve ? ' portal-balao-reto' : ''}`}
           style={{ left: `${b.x}vw`, ['--desvio' as string]: `${b.desvio}px`, ['--sobe' as string]: `${b.sobe}s`, ['--atraso' as string]: `${b.atraso}s` } as CSSProperties}
         >
-          <Pixel linhas={BALAO} paleta={PALETA_DO_BALAO} tam={b.tam} />
-          <span className="portal-balao-fio" />
+          <div className="portal-balao-corpo">
+            <Pixel linhas={BALAO} paleta={PALETA_DO_BALAO} tam={b.tam} />
+            <span className="portal-balao-fio" />
+          </div>
         </div>
       ))}
       <div className="portal-alto-bueiro">
         <Bueiro luz={estado.luz} seguir={!leve} tremendo={estado.tremor && !leve} barco={barco} jaMs={jaMs} mao={mao} leve={leve} />
       </div>
-      {barco !== null && jaMs < 9000 && (
+      {barco !== null && (
         <div key={barco} className={`portal-barco-na-agua${leve ? ' portal-leve' : ''}`}>
           <span className="portal-agua" style={{ animationDelay: `${-jaMs}ms` }} />
           <div className="portal-barco-desce" style={{ animationDelay: `${-jaMs}ms` }}><Pixel linhas={BARCO} paleta={PALETA_DO_BARCO} tam={PX} /></div>

@@ -12,11 +12,11 @@
  * - «Relógio real» desliga tudo isso.
  */
 import { useState } from 'react';
-import { ABERTURA, BARCO_ANTES_DA_ABERTURA_MS, DIAS, FIM, NOME_DA_FASE, dataCurta, emSaoPaulo, estadoDoPortal } from './fases';
+import { ABERTURA, BARCO_ANTES_DA_ABERTURA_MS, DIAS, FIM, JANELA_MS, NOME_DA_FASE, dataCurta, emSaoPaulo, estadoDoPortal } from './fases';
 import { irPara, mudarVelocidade, pausar, useAgoraDoPortal, useSimulacao, voltarAoReal } from './relogio';
 import {
-  VELOCIDADES_DO_MURAL, abrirAbertura, abrirCoisa, abrirMural, esquecerParticipacao, esquecerVisto, mudarVelocidadeDoMural,
-  useJaViu, useParticipa, useVelocidadeDoMural, zerarCliquesDasLendas,
+  VELOCIDADES_DO_MURAL, abrirAbertura, abrirCoisa, abrirMural, comecarEnsaio, esquecerParticipacao, esquecerVisto,
+  mudarVelocidadeDoMural, useJaViu, useParticipa, useVelocidadeDoMural, zerarCliquesDasLendas,
 } from './estado';
 
 const VELOCIDADES: readonly [number, string][] = [[1, '1×'], [60, '1 min/s'], [600, '10 min/s'], [3600, '1 h/s'], [14400, '4 h/s']];
@@ -27,7 +27,8 @@ const ATALHOS: readonly [string, number][] = [
   ['Qua 9h', DIAS[3] + 9 * 3_600_000],
   ['Qui 9h', DIAS[4] + 9 * 3_600_000],
   ['Sex 9h', DIAS[5] + 9 * 3_600_000],
-  ['O barco (15:57:47)', ABERTURA - BARCO_ANTES_DA_ABERTURA_MS - 3_000],
+  ['O bueiro (15:55)', ABERTURA - JANELA_MS],
+  ['A água (15:57:12)', ABERTURA - BARCO_ANTES_DA_ABERTURA_MS - 3_000],
   ['Sex 15:59:30', ABERTURA - 30_000],
   ['Sex 16h', ABERTURA],
 ];
@@ -76,6 +77,7 @@ export function PainelDoRelogio() {
         ))}
       </div>
       <div className="portal-painel-linha">
+        <button type="button" onClick={comecarEnsaio}>Ensaio completo</button>
         <button type="button" onClick={abrirAbertura}>Abertura agora</button>
         <button type="button" onClick={abrirMural}>Só o mural</button>
         <button type="button" onClick={abrirCoisa}>A Coisa agora</button>

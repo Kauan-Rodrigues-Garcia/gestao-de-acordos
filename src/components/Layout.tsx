@@ -88,7 +88,7 @@ import { SeletorEmpresa } from './SeletorEmpresa';
 import { PainelSobDemanda } from './PainelSobDemanda';
 import { BotaoCalendario } from './Calendario/BotaoCalendario';
 import { BotaoInsignias } from './Insignias/BotaoInsignias';
-import { aberturaDe, muralNaTela, useLiberacaoDoMural, usePrevia, usePreviaDoBueiro } from './PortalOutubro/liberacao';
+import { aberturaDe, muralNaTela, useEnsaio as useEnsaioDoMural, useLiberacaoDoMural, usePrevia, usePreviaDoBueiro } from './PortalOutubro/liberacao';
 import { BarraRolagemLateral } from './BarraRolagemLateral';
 import { ligarRolagemLateral } from '@/lib/rolagemLateral';
 import { comNovaTentativa } from '@/lib/sobDemanda';
@@ -149,8 +149,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   // O super admin pode desligar o modo leve de todos (29/10/2026). Ver `lib/modoLeveZerado.ts`.
   useModoLeveZeradoPeloAdmin(empresa?.id);
   const previaDoMural = usePrevia();
-  // Lida aqui só para o Layout redesenhar quando a prévia do bueiro liga/desliga.
+  // Lidas aqui só para o Layout redesenhar quando a prévia do bueiro ou o ensaio ligam/desligam.
   usePreviaDoBueiro();
+  useEnsaioDoMural();
   const tenant = useTenant();
   /* Nome e cor pela cidade do setor da pessoa (Birigui BookPlay, Marília PaguePlay). */
   const marca = useMarca();

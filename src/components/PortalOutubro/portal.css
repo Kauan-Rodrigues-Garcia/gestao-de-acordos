@@ -9,7 +9,7 @@
 .portal-camada-bueiro,
 .portal-alto-bueiro,
 .portal-aviso,
-.portal-final,
+.portal-convite,
 .portal-botao-do-mural,
 .portal-abertura {
   --noite: #0d100f;
@@ -66,27 +66,26 @@
 .portal-bueiro-vermelho .portal-bueiro-brasa { opacity: calc(var(--luz) * 0.25); animation: none; transition: opacity 0.7s; }
 
 /*
- * A mão dela (`montarMao`): sai do escuro da boca com o barco, por cima da
- * guia, e fica oferecendo, balançando. A caixa começa na boca e corta só o
- * que está acima dela (o braço lá dentro).
+ * A mão dela (`montarMao`): vem lá do fundo da boca, saindo do escuro (cresce
+ * um tico e acende em degraus), e fica na beira da guia oferecendo o barco,
+ * subindo e descendo devagar. Como na cena do filme: ela não sai do bueiro.
  */
-.portal-bueiro-mao { position: absolute; left: 54px; top: 18px; width: 170px; height: 170px; overflow: hidden; pointer-events: none; }
-.portal-mao { position: absolute; left: 4px; top: 0; transform: translateY(-110px); }
-.portal-bueiro-mao-sai .portal-mao { animation: portal-mao-sai 1.4s cubic-bezier(0.2, 0.8, 0.3, 1) forwards; }
-.portal-bueiro-mao-volta .portal-mao { transform: none; animation: portal-mao-volta 1.2s cubic-bezier(0.6, 0, 0.8, 0.4) forwards; }
-@keyframes portal-mao-sai { from { transform: translateY(-110px); } to { transform: none; } }
-@keyframes portal-mao-volta { to { transform: translateY(-110px); } }
-.portal-mao-arte { transform-origin: 17px 0; animation: portal-mao-oferece 2.6s steps(4, end) 1.4s infinite alternate; }
-@keyframes portal-mao-oferece { to { transform: rotate(3deg) translateY(3px); } }
-/* O escuro da boca por cima do braço, em degraus: ele vem lá de dentro. */
-.portal-bueiro-mao-breu {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 48px;
-  height: 27px;
-  background: linear-gradient(#000 0 9px, rgb(0 0 0 / 0.75) 9px 15px, rgb(0 0 0 / 0.45) 15px 21px, rgb(0 0 0 / 0.2) 21px 27px);
+.portal-mao { position: absolute; pointer-events: none; transform-origin: 50% 100%; }
+.portal-mao-sai { animation: portal-mao-sai 1.4s steps(7, end) both; }
+.portal-mao-volta { animation: portal-mao-volta 1.2s steps(6, end) both; }
+@keyframes portal-mao-sai {
+  from { transform: translateY(-9px) scale(0.75); opacity: 0; filter: brightness(0); }
+  40%  { opacity: 1; filter: brightness(0.25); }
+  to   { transform: none; opacity: 1; filter: none; }
 }
+@keyframes portal-mao-volta {
+  from { transform: none; opacity: 1; filter: none; }
+  to   { transform: translateY(-9px) scale(0.75); opacity: 0; filter: brightness(0); }
+}
+.portal-mao-arte { animation: portal-mao-oferece 2.4s steps(2, end) 1.4s infinite alternate; }
+@keyframes portal-mao-oferece { to { transform: translateY(3px); } }
+.portal-bueiro-leve .portal-mao-sai { animation-name: portal-mao-sai-leve; }
+@keyframes portal-mao-sai-leve { from { transform: translateY(-9px) scale(0.75); opacity: 0; } }
 
 /* Quinta e sexta: treme de vez em quando (um pouco a cada 9 s). */
 .portal-bueiro-treme { animation: portal-bueiro-treme 9s steps(1, end) infinite; }
@@ -109,36 +108,51 @@
   90% { transform: translate(1px, 1px); }
 }
 
-/* O balão que aparece num lugar ao acaso e sobe devagar até sumir (não estoura). */
+/*
+ * O balão que aparece num lugar ao acaso e sobe devagar até sumir (não
+ * estoura). Balança o balão e o fio juntos, girando no meio do balão: o fio
+ * vai atrás, como rabo (até 29/10 só o balão balançava e o fio ficava parado
+ * no ar).
+ */
 .portal-balao-ao-acaso {
   position: fixed;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
   filter: drop-shadow(0 6px 6px rgb(0 0 0 / 0.35));
   /* Sai de baixo da tela e sobe até sumir em cima (cada um na sua velocidade). */
   top: 100vh;
   animation: portal-balao-aparece var(--sobe, 16s) linear var(--atraso, 0s) both;
 }
-.portal-balao-ao-acaso svg { display: block; animation: portal-balao-balanca 2.4s ease-in-out infinite alternate; }
+.portal-balao-corpo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform-origin: 50% 22%;
+  animation: portal-balao-balanca 2.4s ease-in-out infinite alternate;
+}
+.portal-balao-corpo svg { display: block; }
 .portal-balao-fio { width: 2px; height: 70px; background: #cfcfcf; opacity: 0.8; }
-.portal-balao-reto svg { animation: none; }
+.portal-balao-reto .portal-balao-corpo { animation: none; }
 @keyframes portal-balao-aparece {
   from { transform: translate(0, 0); }
   to   { transform: translate(var(--desvio), calc(-100vh - 260px)); }
 }
 @keyframes portal-balao-balanca {
-  from { translate: -14px 0; rotate: -5deg; }
-  to   { translate: 14px 0; rotate: 5deg; }
+  from { translate: -14px 0; rotate: -6deg; }
+  to   { translate: 14px 0; rotate: 6deg; }
 }
 
 /*
- * O barquinho: um filete de água corre pela barra até a boca do bueiro; o
- * barco vem boiando nele, devagar no fim, POR CIMA da guia (29/10/2026:
- * «ele tem que passar pela frente»), e dentro da boca inclina e cai no
- * escuro, sumindo atrás da beira. Os dois barcos (o de fora e o de dentro,
- * `portal-barco-cai`) andam na mesma conta, 9 s, e trocam no mesmo lugar:
- * a boca começa em 50vw − 78 px e a beira dela fica a 45 px do alto.
+ * A água e o barquinho do final, em 45 s (`AGUA_MS`, `fases.ts`; pedido de
+ * 29/10/2026: «a água tá chegando muito rápido, vai escorrendo aos poucos
+ * até chegar no bueiro»):
+ *
+ *    0–25 s     a água escorre pela barra, devagar, até a boca
+ *   25–39 s     o barquinho vem boiando nela, POR CIMA da guia
+ *   39–43,6 s   dentro da boca ele inclina e cai atrás da beira
+ *   43,6–45 s   a mão sai com ele (`Bueiro.tsx`) — inteira nos 2 minutos
+ *
+ * Os dois barcos (o de fora e o de dentro, `portal-barco-cai`) trocam no
+ * mesmo lugar: a boca começa em 50vw − 78 px e a beira dela fica a 45 px do
+ * alto. Quem chega no meio entra no ponto certo (o atraso negativo).
  */
 .portal-barco-na-agua { position: fixed; inset: 0; z-index: 47; pointer-events: none; }
 .portal-agua {
@@ -150,7 +164,7 @@
   background: rgb(150 200 222 / 0.55);
   box-shadow: 0 3px 0 rgb(20 50 70 / 0.3);
   transform-origin: 0 50%;
-  animation: portal-agua 9s linear forwards;
+  animation: portal-agua 45s steps(90, end) both;
 }
 .portal-agua::after {
   content: '';
@@ -160,10 +174,8 @@
   animation: portal-agua-corre 1.2s steps(15, end) infinite;
 }
 @keyframes portal-agua {
-  0%   { transform: scaleX(0); opacity: 1; }
-  10%  { transform: scaleX(1); opacity: 1; }
-  90%  { transform: scaleX(1); opacity: 1; }
-  100% { transform: scaleX(1); opacity: 0; }
+  0%           { transform: scaleX(0); }
+  55.6%, 100%  { transform: scaleX(1); }
 }
 @keyframes portal-agua-corre { from { background-position: 0 0; } to { background-position: 90px 0; } }
 
@@ -172,14 +184,15 @@
   top: 27px;
   left: 0;
   filter: drop-shadow(0 3px 0 rgb(0 0 0 / 0.3));
-  animation: portal-barco-desce 9s forwards;
+  animation: portal-barco-desce 45s both;
 }
 .portal-barco-desce svg, .portal-barco-cai svg { display: block; animation: portal-barco-boia 1.1s steps(3, end) infinite alternate; }
 @keyframes portal-barco-desce {
-  0%          { transform: translateX(-60px); animation-timing-function: linear; }
-  58%         { transform: translateX(calc(50vw - 216px)); animation-timing-function: ease-out; }
-  80%         { transform: translateX(calc(50vw - 72px)); opacity: 1; }
-  80.1%, 100% { transform: translateX(calc(50vw - 72px)); opacity: 0; }
+  0%, 55.5%     { transform: translateX(-60px); opacity: 0; }
+  55.6%         { transform: translateX(-60px); opacity: 1; animation-timing-function: linear; }
+  80%           { transform: translateX(calc(50vw - 216px)); opacity: 1; animation-timing-function: ease-out; }
+  86.6%         { transform: translateX(calc(50vw - 72px)); opacity: 1; }
+  86.7%, 100%   { transform: translateX(calc(50vw - 72px)); opacity: 0; }
 }
 @keyframes portal-barco-boia {
   from { translate: 0 0; rotate: -3deg; }
@@ -193,15 +206,15 @@
   top: 9px;
   opacity: 0;
   transform-origin: 80% 100%;
-  animation: portal-barco-cai 9s linear forwards;
+  animation: portal-barco-cai 45s linear both;
 }
 @keyframes portal-barco-cai {
-  0%, 80% { opacity: 0; transform: none; }
-  80.1%   { opacity: 1; transform: none; animation-timing-function: ease-in; }
-  89%     { opacity: 1; transform: translate(8px, 1px) rotate(16deg); animation-timing-function: ease-in; }
-  100%    { opacity: 0.25; transform: translate(16px, 24px) rotate(58deg); }
+  0%, 86.6% { opacity: 0; transform: none; }
+  86.7%     { opacity: 1; transform: none; animation-timing-function: ease-in; }
+  92%       { opacity: 1; transform: translate(8px, 1px) rotate(16deg); animation-timing-function: ease-in; }
+  96.9%, 100% { opacity: 0.25; transform: translate(16px, 24px) rotate(58deg); }
 }
-/* A água entrando pela beira da boca, enquanto ele vem. */
+/* A água entrando pela beira da boca, quando chega. */
 .portal-bueiro-agua-entra {
   position: absolute;
   left: 0;
@@ -210,9 +223,9 @@
   height: 3px;
   background: repeating-linear-gradient(90deg, rgb(150 200 222 / 0.55) 0 6px, rgb(235 248 255 / 0.8) 6px 9px, rgb(150 200 222 / 0.55) 9px 18px);
   opacity: 0;
-  animation: portal-agua-entra 9s linear forwards, portal-agua-corre 1.2s steps(15, end) infinite;
+  animation: portal-agua-entra 45s linear both, portal-agua-corre 1.2s steps(15, end) infinite;
 }
-@keyframes portal-agua-entra { 0%, 9% { opacity: 0; } 12%, 92% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes portal-agua-entra { 0%, 54% { opacity: 0; } 56%, 100% { opacity: 1; } }
 .portal-leve .portal-agua::after, .portal-leve .portal-barco-desce svg { animation: none; }
 .portal-leve .portal-barco-desce { filter: none; }
 
@@ -253,39 +266,77 @@
 @keyframes portal-aparece { from { opacity: 0; transform: translate(-50%, -8px); } }
 
 /*
- * O final (`ContagemFinal`): embaixo da mão com o barco, a mensagem, os 2
- * minutos e o «Participar». Só o botão pega clique.
+ * O convite dos 2 minutos (`Convite`): pequeno, na barra, do lado direito do
+ * bueiro — o relógio, o «Participar» e o X — para não atrapalhar quem não
+ * vai participar. Só os botões pegam clique.
  */
-.portal-final {
+.portal-convite {
   position: fixed;
-  top: 168px;
-  left: 50%;
+  top: 12px;
+  left: calc(50% + 140px);
   z-index: 46;
   display: flex;
-  flex-direction: column;
   align-items: center;
   gap: 8px;
-  width: min(420px, calc(100vw - 32px));
-  padding: 16px 20px 18px;
-  text-align: center;
+  height: 32px;
+  padding: 0 4px 0 10px;
+  color: var(--texto);
+  font-family: 'Pixelify Sans', ui-monospace, monospace;
+  font-size: 13px;
+  white-space: nowrap;
+  background: var(--noite);
+  box-shadow: 0 -2px 0 0 var(--laranja), 0 2px 0 0 var(--laranja), -2px 0 0 0 var(--laranja), 2px 0 0 0 var(--laranja);
   pointer-events: none;
-  transform: translateX(-50%);
-  animation: portal-final-entra 0.5s steps(5, end) both;
+  animation: portal-convite-entra 0.4s steps(4, end) both;
 }
-@keyframes portal-final-entra { from { opacity: 0; transform: translate(-50%, -12px); } }
-.portal-final-selo { font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--apagado); }
-.portal-final-texto { font-size: 22px; color: var(--texto); }
-.portal-final-tempo {
+@keyframes portal-convite-entra { from { opacity: 0; transform: translateX(-8px); } }
+.portal-convite-tempo {
   font-family: 'Press Start 2P', ui-monospace, monospace;
-  font-size: 34px;
+  font-size: 11px;
   color: var(--laranja);
-  text-shadow: 4px 4px 0 #000;
+  text-shadow: 2px 2px 0 #000;
   font-variant-numeric: tabular-nums;
 }
-.portal-final-botao { margin-top: 6px; pointer-events: auto; animation: portal-final-chama 1.2s steps(2, end) infinite; }
-@keyframes portal-final-chama { 50% { transform: translateY(-3px); } }
-.portal-final-nota, .portal-final-dentro { font-size: 14px; line-height: 1.35; color: var(--apagado); }
-.portal-final-dentro { color: var(--verde); font-size: 16px; }
+.portal-convite-botao {
+  padding: 3px 10px;
+  color: #160800;
+  background: var(--laranja);
+  box-shadow: 0 2px 0 0 #b0520a;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.portal-convite-botao:hover { filter: brightness(1.12); }
+.portal-convite-dentro { color: var(--verde); animation: portal-convite-entra 0.4s steps(4, end) both; }
+.portal-convite-fechar {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  color: var(--apagado);
+  cursor: pointer;
+  pointer-events: auto;
+}
+.portal-convite-fechar:hover { color: #fff; }
+.portal-convite-fechar svg { width: 14px; height: 14px; }
+
+/* O ensaio do super_admin: em que ponto está e o «Parar», por cima de tudo. */
+.portal-ensaio {
+  position: fixed;
+  left: 20px;
+  bottom: 16px;
+  z-index: 9700;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 6px 6px 12px;
+  color: #ece5d0;
+  font-family: 'Pixelify Sans', ui-monospace, monospace;
+  font-size: 13px;
+  background: rgb(13 16 15 / 0.92);
+  box-shadow: 0 -2px 0 0 #ff8a1f, 0 2px 0 0 #ff8a1f, -2px 0 0 0 #ff8a1f, 2px 0 0 0 #ff8a1f;
+}
+.portal-ensaio button { padding: 4px 10px; color: #160800; background: #ff8a1f; cursor: pointer; }
+.portal-ensaio button:hover { filter: brightness(1.1); }
 
 /* O botão do mural na barra de cima (depois da revelação): pequeno, no meio. */
 .portal-botao-do-mural {
@@ -338,76 +389,120 @@
   overflow: hidden;
 }
 /*
- * Os balões da abertura: cada um sai do seu canto (`--de-x`, `--de-y`),
- * para onde foi sorteado e boia; enchem tremendo; e estouram na vez deles
- * (`--estoura`), com o anel e os cacos.
+ * Os balões da revelação (`BaloesDaRevelacao.tsx`): cada um sai do seu canto
+ * (`--de-x`, `--de-y`) num voo em arco e para no lugar dele, boiando — sobe e
+ * desce e balança com o fio junto, cada um no seu ritmo; enchem aos trancos,
+ * tremendo; e estouram na vez deles (`--estoura`): amassa num quadro, o
+ * clarão, o anel, os pedaços de borracha voando e caindo, e o fio caindo
+ * sozinho.
  */
-.portal-abertura-balao {
+.portal-baloes-chegando { position: fixed; inset: 0; z-index: 9004; pointer-events: none; overflow: hidden; }
+.portal-rev-balao {
   position: fixed;
   z-index: 2;
   width: 0;
   height: 0;
-  animation: portal-abertura-entra calc(1.7s / var(--v)) cubic-bezier(0.2, 0.7, 0.3, 1) calc(var(--atraso) / var(--v)) both;
+  animation: portal-rev-voa calc(1.8s / var(--v)) cubic-bezier(0.25, 0.8, 0.35, 1) calc(var(--chega) / var(--v)) both;
 }
-@keyframes portal-abertura-entra { from { transform: translate(var(--de-x), var(--de-y)); } }
-.portal-abertura-balao-corpo {
+@keyframes portal-rev-voa {
+  from { transform: translate(var(--de-x), var(--de-y)); }
+  55%  { transform: translate(calc(var(--de-x) * 0.15), calc(var(--de-y) * 0.15 - 40px)); }
+  to   { transform: none; }
+}
+.portal-rev-corpo {
   position: absolute;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
   translate: -50% -30%;
   transform-origin: 50% 30%;
   filter: drop-shadow(0 12px 14px rgb(0 0 0 / 0.5));
-  animation: portal-abertura-boia 1.3s ease-in-out var(--atraso) infinite alternate;
 }
-.portal-abertura-balao-corpo svg { display: block; }
-.portal-abertura-balao-corpo .portal-balao-fio { height: 54px; }
-@keyframes portal-abertura-boia { from { rotate: -6deg; } to { rotate: 6deg; } }
-.portal-abertura-enchendo .portal-abertura-balao-corpo {
-  animation:
-    portal-abertura-enche calc(0.9s / var(--v)) steps(9, end) forwards,
-    portal-abertura-treme 0.08s steps(2, end) infinite;
+.portal-rev-flutua {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform-origin: 50% 22%;
+  animation: portal-rev-flutua calc(3.4s * var(--ritmo, 1)) ease-in-out var(--fase, 0s) infinite;
 }
-@keyframes portal-abertura-enche { to { scale: 1.6; } }
-@keyframes portal-abertura-treme { from { rotate: -4deg; } to { rotate: 4deg; } }
-.portal-abertura-estourou .portal-abertura-balao-corpo {
-  animation: portal-abertura-estoura calc(0.12s / var(--v)) steps(2, end) calc(var(--estoura) / var(--v)) both;
+.portal-rev-flutua svg { display: block; }
+.portal-rev-flutua .portal-balao-fio { height: 54px; }
+@keyframes portal-rev-flutua {
+  0%, 100% { transform: translateY(0) rotate(-4deg); }
+  25%      { transform: translateY(-7px) rotate(1deg); }
+  50%      { transform: translateY(-2px) rotate(5deg); }
+  75%      { transform: translateY(-9px) rotate(0deg); }
 }
-@keyframes portal-abertura-estoura {
-  from { scale: 1.6; opacity: 1; }
-  to   { scale: 2.3; opacity: 0; }
+/* Enchendo: cresce aos trancos, tremendo; cheio, fica grande tremendo. */
+.portal-rev-enchendo .portal-rev-corpo {
+  animation: portal-rev-enche calc(0.9s / var(--v)) steps(9, end) both, portal-rev-treme 0.07s steps(2, end) infinite;
 }
-.portal-abertura-estouro { position: absolute; left: 0; top: 0; }
-.portal-abertura-anel {
-  position: absolute;
+.portal-rev-cheio .portal-rev-corpo { scale: 1.6; animation: portal-rev-treme 0.07s steps(2, end) infinite; }
+@keyframes portal-rev-enche { from { scale: 1; } to { scale: 1.6; } }
+@keyframes portal-rev-treme { from { rotate: -3deg; } to { rotate: 3deg; } }
+/* Estourou: amassa num quadro e some. */
+.portal-rev-estourou .portal-rev-corpo {
+  scale: 1.6;
+  animation: portal-rev-estoura calc(0.14s / var(--v)) steps(2, end) calc(var(--estoura) / var(--v)) both;
+}
+@keyframes portal-rev-estoura {
+  0%   { scale: 1.6; opacity: 1; }
+  50%  { scale: 1.9 1.4; opacity: 1; }
+  100% { scale: 2.2; opacity: 0; }
+}
+.portal-rev-estouro { position: absolute; left: 0; top: 0; }
+.portal-rev-estouro > span { position: absolute; opacity: 0; }
+.portal-rev-clarao {
+  left: -34px;
+  top: -34px;
+  width: 68px;
+  height: 68px;
+  background: #fff3e8;
+  box-shadow: 0 0 0 10px #ff5a4a;
+  animation: portal-rev-clarao calc(0.2s / var(--v)) steps(3, end) calc(var(--estoura) / var(--v)) both;
+}
+@keyframes portal-rev-clarao {
+  0%   { opacity: 1; transform: scale(0.3); }
+  100% { opacity: 0; transform: scale(1.3); }
+}
+.portal-rev-anel {
   left: -70px;
   top: -70px;
   width: 140px;
   height: 140px;
-  border: 8px solid #d9121c;
-  animation: portal-abertura-anel calc(0.45s / var(--v)) steps(5, end) calc(var(--estoura) / var(--v)) both;
+  border: 6px solid #d9121c;
+  animation: portal-rev-anel calc(0.45s / var(--v)) steps(5, end) calc(var(--estoura) / var(--v)) both;
 }
-@keyframes portal-abertura-anel {
-  0%   { opacity: 0; transform: scale(0.2); }
-  1%   { opacity: 1; transform: scale(0.2); }
-  100% { opacity: 0; transform: scale(1.7); }
+@keyframes portal-rev-anel {
+  0%   { opacity: 1; transform: scale(0.2); }
+  100% { opacity: 0; transform: scale(1.8); }
 }
-.portal-abertura-caco {
-  position: absolute;
+/* Os pedaços de borracha: voam para fora, giram e caem. */
+.portal-rev-caco {
   left: -6px;
   top: -6px;
-  width: 12px;
-  height: 12px;
   background: #d9121c;
-  box-shadow: inset -3px -3px 0 #7e070e;
-  animation: portal-abertura-caco calc(0.6s / var(--v)) cubic-bezier(0.2, 0.7, 0.5, 1) calc(var(--estoura) / var(--v)) both;
+  box-shadow: inset -2px -2px 0 #7e070e;
+  animation: portal-rev-caco calc(0.95s / var(--v)) linear calc(var(--estoura) / var(--v)) both;
 }
-.portal-abertura-caco:nth-child(odd) { width: 8px; height: 8px; background: #8f0a16; }
-@keyframes portal-abertura-caco {
-  0%   { opacity: 0; transform: translate(0, 0); }
-  1%   { opacity: 1; transform: translate(0, 0); }
-  100% { opacity: 0; transform: translate(var(--cx), calc(var(--cy) + 60px)) rotate(90deg); }
+.portal-rev-caco:nth-child(3n) { background: #8f0a16; }
+.portal-rev-caco:nth-child(4n) { background: #ff5a4a; }
+@keyframes portal-rev-caco {
+  0%   { opacity: 1; transform: translate(0, 0) rotate(0deg); animation-timing-function: cubic-bezier(0.1, 0.8, 0.3, 1); }
+  35%  { opacity: 1; transform: translate(var(--cx), var(--cy)) rotate(calc(var(--gira) * 0.5)); animation-timing-function: cubic-bezier(0.5, 0, 0.9, 0.6); }
+  100% { opacity: 0; transform: translate(calc(var(--cx) * 1.2), calc(var(--cy) + 150px)) rotate(var(--gira)); }
 }
+/* O fio sozinho, caindo e enrolando. */
+.portal-rev-fio-cai {
+  left: -1px;
+  width: 2px;
+  height: 54px;
+  background: #cfcfcf;
+  transform-origin: 50% 0;
+  animation: portal-rev-fio-cai calc(1s / var(--v)) cubic-bezier(0.5, 0, 0.9, 0.5) calc(var(--estoura) / var(--v)) both;
+}
+@keyframes portal-rev-fio-cai {
+  0%   { opacity: 0.85; transform: translateY(0) rotate(0deg); }
+  100% { opacity: 0; transform: translateY(160px) rotate(35deg) scaleY(0.6); }
+}
+
 
 .portal-clarao {
   position: absolute;
@@ -424,10 +519,10 @@
 /* Modo leve (máquina sem placa de vídeo, ou o tema recolhido): nada pisca. */
 .portal-leve .portal-premio-acao,
 .portal-leve .portal-bueiro-brasa,
-.portal-leve .portal-final-botao { animation: none !important; }
+.portal-leve .portal-convite { animation: none !important; }
 .portal-leve .portal-confete { display: none; }
 
-.portal-pular, .portal-fechar {
+.portal-fechar {
   position: absolute;
   z-index: 3;
   color: var(--texto);
@@ -437,36 +532,63 @@
   box-shadow: 0 -2px 0 0 var(--apagado), 0 2px 0 0 var(--apagado), -2px 0 0 0 var(--apagado), 2px 0 0 0 var(--apagado);
   cursor: pointer;
 }
-.portal-pular { right: 28px; bottom: 28px; padding: 6px 16px; }
+.portal-fechar:hover { color: #fff; }
 
-/* O volume (`ControleDeSom.tsx`): por cima da abertura, da Coisa e do mural. */
+/*
+ * O volume (`ControleDeSom.tsx`): no alto, à esquerda, por cima da abertura,
+ * da Coisa e do mural (30/10/2026: «transferido para a parte superior»); na
+ * animação, com o X ao lado e a pergunta antes de pular. `embutido`: dentro do
+ * convite da contagem, sem moldura.
+ */
 .portal-som {
   --texto: #ece5d0;
   --apagado: #9aa69f;
   --laranja: #ff8a1f;
   position: fixed;
   left: 20px;
-  bottom: 20px;
+  top: 16px;
   z-index: 9600;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
+  padding: 6px 6px 6px 10px;
   color: var(--texto);
   font-family: 'Pixelify Sans', ui-monospace, monospace;
   font-size: 13px;
-  background: rgb(13 16 15 / 0.85);
+  background: rgb(13 16 15 / 0.88);
   box-shadow: 0 -2px 0 0 var(--apagado), 0 2px 0 0 var(--apagado), -2px 0 0 0 var(--apagado), 2px 0 0 0 var(--apagado);
-  opacity: 0.55;
-  transition: opacity 0.2s;
 }
-.portal-som:hover, .portal-som:focus-within { opacity: 1; }
-.portal-som-botao { display: grid; place-items: center; color: inherit; cursor: pointer; }
-.portal-som-botao:hover { color: #fff; }
+/* No mural (sem o X), meio apagado até o mouse passar: não cobre o letreiro de Derry. */
+.portal-som-quieto { opacity: 0.45; transition: opacity 0.2s; }
+.portal-som-quieto:hover, .portal-som-quieto:focus-within { opacity: 1; }
+.portal-som-embutido { position: static; padding: 0 0 0 4px; background: none; box-shadow: none; gap: 6px; }
+.portal-som-embutido .portal-som-barra { width: 64px; }
+.portal-som-botao, .portal-som-pular { display: grid; place-items: center; color: inherit; cursor: pointer; }
+.portal-som-botao:hover, .portal-som-pular:hover { color: #fff; }
 .portal-som-botao svg { width: 18px; height: 18px; }
 .portal-som-barra { width: 96px; accent-color: var(--laranja); cursor: pointer; }
 .portal-som-numero { min-width: 3.2em; text-align: right; font-variant-numeric: tabular-nums; }
-.portal-pular:hover, .portal-fechar:hover { color: #fff; }
+.portal-som-pular { width: 26px; height: 26px; margin-left: 2px; border-left: 2px solid rgb(154 166 159 / 0.4); color: var(--apagado); }
+.portal-som-pular svg { width: 16px; height: 16px; }
+/* A pergunta antes de pular, logo embaixo. */
+.portal-som-confirma {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 10px);
+  width: 260px;
+  padding: 12px 14px;
+  background: rgb(13 16 15 / 0.96);
+  box-shadow: 0 -2px 0 0 var(--laranja), 0 2px 0 0 var(--laranja), -2px 0 0 0 var(--laranja), 2px 0 0 0 var(--laranja), 0 10px 24px rgb(0 0 0 / 0.5);
+  animation: portal-convite-entra 0.3s steps(3, end) both;
+}
+.portal-som-confirma-titulo { font-size: 17px; color: var(--laranja); }
+.portal-som-confirma-texto { margin-top: 4px; font-size: 13px; line-height: 1.35; color: var(--apagado); }
+.portal-som-confirma-botoes { display: flex; gap: 8px; margin-top: 12px; }
+.portal-som-confirma-sim, .portal-som-confirma-nao { padding: 4px 12px; cursor: pointer; }
+.portal-som-confirma-sim { color: #160800; background: var(--laranja); box-shadow: 0 2px 0 0 #b0520a; }
+.portal-som-confirma-sim:hover { filter: brightness(1.12); }
+.portal-som-confirma-nao { color: var(--texto); box-shadow: inset 0 0 0 2px rgb(154 166 159 / 0.5); }
+.portal-som-confirma-nao:hover { color: #fff; }
 
 /* ── O que o mural usa das insígnias e do ranking ────────────────────────── */
 

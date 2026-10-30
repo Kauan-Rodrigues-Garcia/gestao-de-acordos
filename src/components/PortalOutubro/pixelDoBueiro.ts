@@ -223,8 +223,8 @@ export function paletaDosOlhos(vermelho: boolean, aceso = false): Readonly<Recor
 
 // ── A mão com o barco ───────────────────────────────────────────────────────
 
-export const LARGURA_DA_MAO = 28;
-export const ALTURA_DA_MAO = 32;
+export const LARGURA_DA_MAO = 24;
+export const ALTURA_DA_MAO = 15;
 
 /** O barco de perto, na mão (o da água, `BARCO`, é pequeno demais para ler entre os dedos). */
 const BARCO_NA_MAO: readonly string[] = [
@@ -240,61 +240,50 @@ const BARCO_NA_MAO: readonly string[] = [
 ];
 
 /**
- * A mão dela saindo do bueiro com o barco: o braço desce da boca (a manga
- * cinza-azulada com a luz do lado de fora e as dobras), o babado do punho, e
- * a luva branca de palma para cima, oferecendo: o barco em cima da palma, o
- * polegar fechado num lado do casco e os três dedos no outro. A paleta é a
- * da Coisa (`PALETA_DA_MAO`), com o papel do barco em `p`/`P`.
+ * A mão dela oferecendo o barco, na beira da boca (refeita em 29/10/2026 com
+ * a cena do filme como referência: o palhaço fica no escuro, lá dentro, e
+ * estende o barco ali mesmo, na guia — não pendura o braço para fora). De
+ * frente: a luva branca de palma para cima apoiada na beira, o barco em pé em
+ * cima dela, a ponta dos quatro dedos fechando na frente do casco, o polegar
+ * no bico do lado, e o babado do punho e a manga sumindo no escuro atrás do
+ * barco. A paleta é a da Coisa (`PALETA_DA_MAO`), com o papel em `p`/`P`.
  */
 export function montarMao(): string[] {
   const g = grade(LARGURA_DA_MAO, ALTURA_DA_MAO);
-  // O braço: a manga sai fina da boca e vai bufando até o punho, curvando
-  // um tico para a frente; a luz do lado de fora e as dobras na diagonal.
-  for (let y = 0; y <= 19; y++) {
-    const cx = 5.5 + (y / 19) ** 2 * 1.5, meia = 2.8 + (y / 19) * 0.9;
-    for (let x = 0; x < LARGURA_DA_MAO; x++) {
-      const dx = x + 0.5 - cx;
-      if (Math.abs(dx) > meia) continue;
-      let ch = dx < -meia + 0.9 ? 'l' : dx > meia - 0.9 ? 'K' : dx > meia * 0.35 ? 'G' : 'g';
-      if (Math.abs(dx) < meia - 0.9 && (y - Math.round(dx)) % 6 === 0) ch = 'G';
-      pintar(g, x, y, ch);
-    }
-  }
-  // O babado do punho, em pregas.
-  for (let y = 17; y <= 24; y++) {
-    for (let x = 0; x < 16; x++) {
-      const d = ((x + 0.5 - 7.5) / 6.8) ** 2 + ((y + 0.5 - 21) / 3) ** 2;
-      if (d > 1) continue;
-      pintar(g, x, y, y <= 18 ? 'C' : d > 0.6 && y >= 22 ? (x % 2 ? 'D' : 'C') : x % 3 === 0 ? 'C' : 'c');
-    }
-  }
-  // O pulso e a palma, virada para cima, com a sombra embaixo.
-  for (let y = 22; y <= 25; y++) for (let x = 8; x <= 12; x++) pintar(g, x, y, x === 12 ? 'W' : 'w');
-  for (let y = 23; y <= 30; y++) {
-    for (let x = 8; x < 25; x++) {
-      const ey = (y + 0.5 - 26.5) / 3.3, ex = (x + 0.5 - 16) / 7;
-      if (ex * ex + ey * ey > 1) continue;
-      pintar(g, x, y, ey > 0.5 ? 'W' : 'w');
-    }
-  }
-  // O barco em cima da palma, inteiro à vista.
-  BARCO_NA_MAO.forEach((linhaDoBarco, y) => [...linhaDoBarco].forEach((ch, x) => {
-    if (ch !== '.') pintar(g, 9 + x, 14 + y, ch);
-  }));
-  // Os dedos subindo pelo casco (com o contorno por cima do barco) e o polegar do outro lado.
-  const dedo = (x0: number, y0: number, l: number, a: number, deitado: boolean) => {
-    for (let y = y0 - 1; y <= y0 + a; y++) for (let x = x0 - 1; x <= x0 + l; x++) {
-      const fora = y < y0 || y >= y0 + a || x < x0 || x >= x0 + l;
-      const canto = (y === y0 - 1 || y === y0 + a) && (x === x0 - 1 || x === x0 + l);
-      if (canto) continue;
-      if (fora) { if (!'wW'.includes(g[y]?.[x] ?? 'w')) pintar(g, x, y, 'o'); continue; }
-      pintar(g, x, y, (deitado ? y === y0 + a - 1 : x === x0 + l - 1) ? 'W' : 'w');
+  const elipse = (cx: number, cy: number, rx: number, ry: number, cor: (ey: number, x: number) => string) => {
+    for (let y = 0; y < ALTURA_DA_MAO; y++) for (let x = 0; x < LARGURA_DA_MAO; x++) {
+      const ex = (x + 0.5 - cx) / rx, ey = (y + 0.5 - cy) / ry;
+      if (ex * ex + ey * ey <= 1) pintar(g, x, y, cor(ey, x));
     }
   };
-  dedo(21, 19, 3, 2, true);
-  dedo(22, 21, 3, 2, true);
-  dedo(21, 23, 3, 2, true);
-  dedo(8, 19, 2, 5, false);
+  // Atrás do barco, no escuro: a manga e o babado do punho, de onde a mão vem.
+  elipse(3, 6.5, 3.2, 3.5, ey => (ey < -0.2 ? 'K' : 'G'));
+  elipse(5.5, 9, 4.6, 2.4, (ey, x) => (ey > 0.4 ? (x % 2 ? 'D' : 'C') : x % 3 === 0 ? 'D' : 'C'));
+  // A palma, para cima, apoiada na beira; a sombra embaixo.
+  elipse(12.5, 10.5, 8.6, 2.9, ey => (ey > 0.35 ? 'W' : 'w'));
+  // O barco em pé em cima da palma.
+  BARCO_NA_MAO.forEach((linhaDoBarco, y) => [...linhaDoBarco].forEach((ch, x) => {
+    if (ch !== '.') pintar(g, 5 + x, y, ch);
+  }));
+  // A ponta dos dedos fechando na frente do casco, e o polegar no bico do lado
+  // (cada um com o próprio contorno por cima do barco).
+  const dedo = (x0: number, y0: number, l: number, a: number) => {
+    for (let y = y0 - 1; y <= y0 + a; y++) for (let x = x0 - 1; x <= x0 + l; x++) {
+      const fora = y < y0 || y >= y0 + a || x < x0 || x >= x0 + l;
+      const canto = (y === y0 - 1 || y >= y0 + a) && (x === x0 - 1 || x === x0 + l);
+      if (canto || y >= y0 + a) continue;
+      // Em cima, o contorno não come o casco: só onde não tem nada.
+      if (fora) { if (y < y0 ? g[y]?.[x] === '.' : !'wW'.includes(g[y]?.[x] ?? 'w')) pintar(g, x, y, 'o'); continue; }
+      pintar(g, x, y, x === x0 + l - 1 ? 'W' : 'w');
+    }
+  };
+  // Os dedos curtos, de ponta redonda, só na parte de baixo do casco (o casco aparece em cima).
+  for (const x of [6, 10, 14, 18]) {
+    dedo(x, 7, 3, 2);
+    pintar(g, x, 7, 'o');
+    pintar(g, x + 2, 7, 'o');
+  }
+  dedo(3, 4, 2, 5);
   // O contorno de tudo.
   const marcar: [number, number][] = [];
   for (let y = 0; y < ALTURA_DA_MAO; y++) {
@@ -309,8 +298,8 @@ export function montarMao(): string[] {
 
 export const PALETA_DA_MAO: Readonly<Record<string, string>> = {
   o: '#0b0a10',
-  g: '#93a5b3', G: '#617482', l: '#c0ced8', K: '#3a4752',
-  c: '#e3dbc6', C: '#b2a68b', D: '#7a6f58',
+  G: '#4a5966', K: '#232b33',
+  C: '#8c826d', D: '#5c5444',
   w: '#f2efe8', W: '#bdb7ad',
   p: '#ebe3c1', P: '#b8ad86',
 };

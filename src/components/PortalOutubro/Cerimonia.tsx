@@ -9,7 +9,8 @@
  * passar da abertura para a Coisa nem enquanto o mural entra) e só sai quando
  * o mural chega.
  *
- * O volume (`ControleDeSom`) fica por cima de tudo, do começo ao fim. E o
+ * O volume (`ControleDeSom`) fica por cima de tudo, no alto, do começo ao
+ * fim; durante a animação, com o X para pular direto ao mural. E o
  * som ambiente do Gestão (a rádio, as músicas do player) pausa enquanto isto
  * está aberto e volta sozinho ao fechar (29/10/2026: «não pode ocorrer essas
  * interferências»).
@@ -29,6 +30,8 @@ export default function Cerimonia({ tela, leve }: { tela: Exclude<Tela, null>; l
   // A tela do Gestão já está desmanchando: o palco monta embaixo dela.
   const [palcoEmbaixo, setPalcoEmbaixo] = useState(false);
   const puxado = tela.modo === 'mural' && !!tela.puxado;
+  // Pulou a animação: o mesmo mural de quem assistiu, sem a puxada.
+  const completo = puxado || (tela.modo === 'mural' && !!tela.pulou);
   // O palco fica embaixo enquanto o mural entra puxado.
   const [puxadaAcabou, setPuxadaAcabou] = useState(false);
   useEffect(() => { if (!puxado) setPuxadaAcabou(false); }, [puxado]);
@@ -44,7 +47,7 @@ export default function Cerimonia({ tela, leve }: { tela: Exclude<Tela, null>; l
 
   return (
     <>
-      {tela.modo === 'mural' && <Mural raiz={mural} leve={leve} puxando={puxando} semEntrada={puxado} soVisual={!puxado} />}
+      {tela.modo === 'mural' && <Mural raiz={mural} leve={leve} puxando={puxando} semEntrada={completo} soVisual={!completo} />}
       {tela.modo === 'abertura' && (
         <Abertura leve={leve} aoDesmanchar={() => setPalcoEmbaixo(true)} aoTerminar={() => { marcarVisto(); abrirCoisa(); }} />
       )}
@@ -57,7 +60,8 @@ export default function Cerimonia({ tela, leve }: { tela: Exclude<Tela, null>; l
           aoTerminar={() => setPuxadaAcabou(true)}
         />
       )}
-      <ControleDeSom />
+      {/* Na animação (até o mural chegar), o X ao lado do volume pula para o mural. */}
+      <ControleDeSom pular={tela.modo !== 'mural' || puxando} />
     </>
   );
 }

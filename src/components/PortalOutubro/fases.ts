@@ -1,55 +1,49 @@
 /**
  * fases.ts — o calendário do Portal de Outubro: o que o Gestão mostra em cada
- * momento da semana de 26 a 30/10/2026.
+ * momento da revelação do mural.
  *
  * ## O pedido (Kauan, 26/10/2026)
  *
- * «De dia em dia quebrando, e no dia abrisse um portal ou mural mostrando o
- * que foi feito no mês: o Rei do Pop, a bruxa, o cavalo; um ranking de quem
- * teve a maior pontuação de medalhas; e um sorteio de uma garrafa.» A
- * comemoração é na sexta, 30/10, porque o dia 31 (Halloween) cai no sábado.
+ * «Um portal ou mural mostrando o que foi feito no mês: o Rei do Pop, a
+ * bruxa, o cavalo; um ranking de quem teve a maior pontuação de medalhas; e
+ * um sorteio de uma garrafa.» A comemoração é na sexta, 30/10, porque o dia
+ * 31 (Halloween) cai no sábado.
  *
- * Em 27/10 o vidro rachando virou o bueiro da Coisa: «em vez das rachaduras
- * subirá um balão, aonde terá meio que um esgoto, aonde ficará só os olhos
- * do IT até ser o dia».
+ * ## A revelação: 5 minutos (pedido do Cleber, 29/10/2026)
  *
- *   seg 26  o bueiro aparece no alto da tela, com os olhos piscando lá
- *           dentro (e seguindo o mouse); de vez em quando um balão vermelho
- *           aparece em algum canto da tela (não estoura)
- *   ter 27  os balões vêm mais vezes
- *   qua 28  o bueiro começa a brilhar por dentro, mais a cada dia
- *   qui 29  o bueiro treme de vez em quando; «Amanhã, às 16h.»
- *   sex 30  a contagem, e os balões quase sem parar perto da hora;
- *           às 16h os olhos acendem, um balão sobe até o meio da tela,
- *           estoura, a tela desmancha e o mural aparece
- *   sáb 31  o mural fica para rever o dia todo; depois, nada
+ * «Esquece tudo do jeito que é hoje.» Até 29/10 o bueiro ficava a semana
+ * inteira na tela e o barquinho caía de tempos em tempos; agora tudo é uma
+ * cena só, que começa no botão do super_admin (ou 5 minutos antes de sexta,
+ * 16h) e dura `JANELA_MS`:
  *
- * ## O final: o barco, a mão e a contagem (pedido de 29/10/2026)
- *
- * O barquinho cai no bueiro UMA vez só, e é o começo da revelação: «quando o
- * barco cair no bueiro, a mão sai segurando e começa uma contagem de 2
- * minutos com a mensagem informando que o mural será liberado, e com a opção
- * de participar». A fase `final` vai de `BARCO_ANTES_DA_ABERTURA_MS` antes da
- * abertura até ela: os primeiros `MAO_SAI_MS` são o barco boiando e caindo, o
- * resto é a mão segurando o barco e a contagem (`CONTAGEM_FINAL_MS`). Quem
- * clicou em «Participar» ganha a abertura quando zera; os outros, o botão do
- * mural na barra de cima (`PortalDeOutubro.tsx`).
+ *   espreitando  o bueiro aparece na névoa, com o relógio pequeno em cima
+ *                («O mural abre em 04:59») e os balões subindo
+ *   final        faltando 2 min 45 s, a água vem escorrendo devagar pela
+ *                barra até o bueiro (`AGUA_MS`); quando chega, vem o
+ *                barquinho, que cai na boca, e a mão sai com ele —
+ *                inteira para fora exatamente nos 2 minutos. Aí o relógio
+ *                pequeno e o «Participar» ficam do lado do bueiro, com o X
+ *                para fechar (quem fecha fica só com o bueiro)
+ *   revelando    zerou: quem participou vê a abertura (a tela desmancha, a
+ *                Coisa, o mural puxado). Os outros não veem nada ainda
+ *   aberto       a revelação acabou (`REVELACAO_MS`): o botão do mural na
+ *                barra de cima aparece para todo mundo, até o fim de sábado
  *
  * ## Só o relógio
  *
  * Nada aqui lê o banco: a fase sai da hora (de São Paulo, UTC−3 o ano todo —
- * o Brasil não tem horário de verão desde 2019). Às 16h ninguém pergunta nada
- * ao servidor: a lição da gargalhada da bruxa (15/10/2026) é que todo mundo
- * fazendo a mesma coisa no mesmo segundo derruba o banco.
+ * o Brasil não tem horário de verão desde 2019). Na hora ninguém pergunta
+ * nada ao servidor: a lição da gargalhada da bruxa (15/10/2026) é que todo
+ * mundo fazendo a mesma coisa no mesmo segundo derruba o banco.
  *
  * Puro de propósito: o relógio de teste (`relogio.ts`) passa a hora que quiser.
  *
- * ## Quem liga, e a abertura antes da hora (29/10/2026)
+ * ## Quem liga
  *
  * No app de verdade o mural só aparece depois que o super_admin libera, e a
- * abertura pode ser solta por ele antes de sexta 16h (`liberacao.ts`): aí
- * `estadoDoPortal` recebe essa hora no lugar de `ABERTURA`. O resto da
- * semana (o dia, o brilho, os balões) continua saindo do relógio.
+ * revelação começa no botão dele (`liberacao.ts`: a abertura fica 5 minutos
+ * depois do clique) — `estadoDoPortal` recebe essa hora no lugar de
+ * `ABERTURA`.
  */
 
 const HORA = 3_600_000;
@@ -75,16 +69,31 @@ export function partesEmSaoPaulo(ms: number) {
 }
 
 export const INICIO = emSaoPaulo(2026, 10, 26);
-/** O balão sobe do bueiro, estoura, a tela desmancha e o mural aparece. */
+/** A abertura de sempre, se ninguém começar antes: sexta, 16h. */
 export const ABERTURA = emSaoPaulo(2026, 10, 30, 16);
-/** Do barquinho aparecer até a mão sair do bueiro com ele (o barco boia 9 s e cai). */
-export const MAO_SAI_MS = 9_600;
-/** A contagem com a mão segurando o barco, até a abertura. */
-export const CONTAGEM_FINAL_MS = 2 * MINUTO;
-/** Quando o barquinho aparece, antes da abertura: o começo da fase `final`. */
-export const BARCO_ANTES_DA_ABERTURA_MS = CONTAGEM_FINAL_MS + MAO_SAI_MS;
-/** Até quando o mural fica para rever (o sábado inteiro). */
+/** Até quando o mural fica (o sábado inteiro). */
 export const FIM = emSaoPaulo(2026, 11, 1);
+
+/** A revelação inteira: do bueiro aparecer até a abertura. */
+export const JANELA_MS = 5 * MINUTO;
+/** O «Participar»: a mão segurando o barco, até a abertura. */
+export const CONTAGEM_FINAL_MS = 2 * MINUTO;
+/**
+ * A água, o barco e a mão, antes dos 2 minutos (`portal.css` anda nesta
+ * conta: 45 s): a água escorre 0–25 s, o barco boia 25–39 s, cai 39–43,6 s e
+ * a mão sai 43,6–45 s.
+ */
+export const AGUA_MS = 45_000;
+/** Quando a mão começa a sair, contado do começo da água. */
+export const MAO_SAI_MS = AGUA_MS - 1_400;
+/** Quando a água começa, antes da abertura: o começo da fase `final`. */
+export const BARCO_ANTES_DA_ABERTURA_MS = CONTAGEM_FINAL_MS + AGUA_MS;
+/**
+ * Quanto dura a revelação de quem participou (a abertura ~6 s, a Coisa
+ * nascendo e dançando ~16 s, babando e o close ~10 s, a puxada ~5 s): só
+ * depois disso o mural abre para quem não participou.
+ */
+export const REVELACAO_MS = 40_000;
 
 /** Meia-noite de cada dia da semana do evento: 1 = segunda 26, …, 5 = sexta 30. */
 export const DIAS: Readonly<Record<1 | 2 | 3 | 4 | 5, number>> = {
@@ -95,24 +104,20 @@ export const DIAS: Readonly<Record<1 | 2 | 3 | 4 | 5, number>> = {
   5: emSaoPaulo(2026, 10, 30),
 };
 
-export type Fase = 'fora' | 'espreitando' | 'final' | 'aberto';
+export type Fase = 'fora' | 'espreitando' | 'final' | 'revelando' | 'aberto';
 
 export interface EstadoDoPortal {
   fase: Fase;
-  /** O dia da semana do evento (1 = segunda … 5 = sexta); 0 fora da semana, 6 no sábado. */
+  /** O dia da semana do evento (1 = segunda … 5 = sexta); 0 antes, 6 no sábado. */
   dia: number;
-  /** O brilho dentro do bueiro: de quarta em diante, mais forte a cada dia, cheio às 16h de sexta. */
+  /** A brasa dentro do bueiro: acende ao longo da revelação, cheia no fim. */
   luz: number;
-  /** O bueiro treme de vez em quando (quinta e sexta). */
+  /** O bueiro treme (no final). */
   tremor: boolean;
-  /** De quanto em quanto tempo (da hora do portal) aparece um balão na tela; `null` fora da semana. */
+  /** De quanto em quanto tempo sobe um balão, em média; `null` sem o bueiro. */
   balaoACadaMs: number | null;
-  /** Na fase `final`: quanto já passou desde que o barquinho apareceu (ms); `null` fora dela. */
+  /** Na fase `final`: quanto já passou desde que a água começou (ms); `null` fora dela. */
   noFinalMs: number | null;
-  /** «Amanhã, às 16h.» (quinta). */
-  bilhete: boolean;
-  /** A contagem regressiva (sexta, até abrir). */
-  contagem: boolean;
   /** Quanto falta para abrir (ms; 0 depois). */
   faltaMs: number;
 }
@@ -122,45 +127,29 @@ function diaDoEvento(agora: number): number {
   return Math.min(6, 1 + Math.floor((agora - DIAS[1]) / (24 * HORA)));
 }
 
-/** `abertura`: a hora em que a tela desmancha — sexta 16h, ou a solta pelo botão. */
+/** `abertura`: a hora em que a tela desmancha — 5 minutos depois do botão, ou sexta 16h. */
 export function estadoDoPortal(agora: number, abertura: number = ABERTURA): EstadoDoPortal {
-  const dia = diaDoEvento(agora);
   const faltaMs = Math.max(0, abertura - agora);
   const fase: Fase =
-    agora < INICIO || agora >= FIM ? 'fora'
-      : agora >= abertura ? 'aberto'
-        : agora >= abertura - BARCO_ANTES_DA_ABERTURA_MS ? 'final'
-          : 'espreitando';
-  let luz = 0;
-  const espreitando = fase === 'espreitando' || fase === 'final';
-  if (espreitando) {
-    if (dia === 3) luz = 0.35;
-    else if (dia === 4) luz = 0.55;
-    else if (dia === 5) luz = 0.65 + 0.35 * Math.min(1, Math.max(0, (agora - DIAS[5]) / (abertura - DIAS[5])));
-  }
+    agora >= FIM ? 'fora'
+      : agora >= abertura + REVELACAO_MS ? 'aberto'
+        : agora >= abertura ? 'revelando'
+          : agora >= abertura - BARCO_ANTES_DA_ABERTURA_MS ? 'final'
+            : agora >= abertura - JANELA_MS ? 'espreitando'
+              : 'fora';
+  const comBueiro = fase === 'espreitando' || fase === 'final';
   return {
     fase,
-    dia,
-    luz,
-    tremor: espreitando && dia >= 4,
-    balaoACadaMs: espreitando ? intervaloDosBaloes(dia, faltaMs) : null,
+    dia: diaDoEvento(agora),
+    luz: comBueiro ? 0.35 + 0.65 * Math.min(1, Math.max(0, 1 - faltaMs / JANELA_MS)) : 0,
+    tremor: fase === 'final',
+    balaoACadaMs: fase === 'espreitando' ? 20_000 : fase === 'final' ? 12_000 : null,
     noFinalMs: fase === 'final' ? agora - (abertura - BARCO_ANTES_DA_ABERTURA_MS) : null,
-    bilhete: fase === 'espreitando' && dia === 4,
-    contagem: fase === 'espreitando' && dia === 5,
     faltaMs,
   };
 }
 
-/** Os balões: mais vezes a cada dia, e quase sem parar na última hora. */
-const BALOES: Readonly<Record<number, number>> = { 1: 40, 2: 25, 3: 15, 4: 10, 5: 6 };
-
-function intervaloDosBaloes(dia: number, faltaMs: number): number {
-  if (faltaMs <= BARCO_ANTES_DA_ABERTURA_MS) return 15_000;
-  if (faltaMs <= HORA) return 2 * MINUTO;
-  return (BALOES[dia] ?? 40) * MINUTO;
-}
-
-/** «03:12:45» (ou «12:45» na última hora). */
+/** «03:12:45» (ou «04:59» na última hora). */
 export function relogioDaContagem(ms: number): string {
   const total = Math.ceil(ms / 1000);
   const h = Math.floor(total / 3600), m = Math.floor((total % 3600) / 60), s = total % 60;
@@ -178,8 +167,9 @@ export function dataCurta(ms: number): string {
 }
 
 export const NOME_DA_FASE: Readonly<Record<Fase, string>> = {
-  fora: 'fora da semana',
-  espreitando: 'a Coisa espreita',
-  final: 'o barco e a contagem',
+  fora: 'sem o bueiro',
+  espreitando: 'o bueiro',
+  final: 'a água, o barco e o «Participar»',
+  revelando: 'a revelação',
   aberto: 'mural aberto',
 };

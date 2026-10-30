@@ -2,14 +2,18 @@
  * PortalDeOutubro.tsx — a peça que o `Layout` monta: decide, pela hora do
  * portal (`fases.ts`), o que aparece.
  *
- *   espreitando / final  o bueiro com os olhos e os balões (com o tema de
- *                        Halloween ligado: quem desligou os enfeites não vê)
- *                        e os avisos (para todos); no final, o barco, a mão
- *                        e a contagem com o «Participar»
- *   aberto               quem participou: a abertura, uma vez, só com a aba
+ *   espreitando / final  os 5 minutos: o bueiro com os olhos e os balões
+ *                        (com o tema de Halloween ligado: quem desligou os
+ *                        enfeites não vê) e o relógio pequeno (para todos);
+ *                        no final, a água, o barco, a mão e o convite com o
+ *                        «Participar» do lado do bueiro
+ *   revelando            quem participou: a abertura, uma vez, só com a aba
  *                        à vista (quem está em outra aba vê quando voltar);
- *                        quem não participou, ou já viu: o botão do mural na
- *                        barra de cima, só o visual (29/10/2026)
+ *                        os outros, nada ainda. O «participou» é só desta
+ *                        aba: quem recarrega no meio perde a abertura e fica
+ *                        como quem não participou (30/10/2026)
+ *   aberto               a revelação acabou: o botão do mural na barra de
+ *                        cima para quem não está nela, só o visual (29/10/2026)
  *
  * A abertura e o mural são outro pedaço (`Cerimonia.tsx`), que só baixa na
  * hora. Quem decide se isto monta é o `Layout`, pela liberação do super_admin
@@ -18,13 +22,14 @@
  * abertura e o mural aparecem.
  */
 import { lazy, Suspense, useEffect } from 'react';
-import { DIAS, estadoDoPortal } from './fases';
+import { ABERTURA, AGUA_MS, DIAS, JANELA_MS, NOME_DA_FASE, estadoDoPortal, relogioDaContagem } from './fases';
+import { BaloesChegando } from './BaloesDaRevelacao';
+import { CHEGADA_S } from './revelacao';
 import { agoraDoPortal, useAgoraDoPortal } from './relogio';
-import { abrirAbertura, lerTela, useJaViu, useParticipa, useTela } from './estado';
-import { BALAO_NA_PREVIA_MS, BARCO_NA_PREVIA_MS, encerrarPrevia, usePrevia, usePreviaDoBueiro } from './liberacao';
+import { abrirAbertura, lerTela, pararEnsaio, pularEnsaioParaAgua, useJaViu, useParticipa, useTela } from './estado';
+import { BALAO_NA_PREVIA_MS, BARCO_NA_PREVIA_MS, encerrarPrevia, useEnsaio, usePrevia, usePreviaDoBueiro } from './liberacao';
 import { CamadaDoBueiro } from './Bueiro';
 import { Avisos, BotaoDoMural } from './Avisos';
-import { ControleDeSom } from './ControleDeSom';
 import { PainelDoRelogio } from './PainelDoRelogio';
 import { carregarFonte, carregarFontesPixel } from '@/components/Halloween/fonte';
 import { semPlacaDeVideo } from '@/components/Halloween/aguenta';
@@ -44,16 +49,28 @@ interface Props {
   abertura: number;
 }
 
-export function PortalDeOutubro({ temaLigado, leve = false, liberado, abertura }: Props) {
-  // Relê a hora de segundo em segundo só quando o segundo aparece (a contagem
-  // de sexta, o último minuto, a abertura chegando); no resto da semana, de
-  // 30 em 30 s — o bueiro anda devagar, e reler à toa é trabalho para nada.
-  const precisaDoSegundo = (() => {
+/**
+ * O ensaio finge ser sexta à tarde (a contagem de sexta, a luz cheia, sem o
+ * bilhete de quinta) em qualquer dia: a linha do tempo dele é posta aqui.
+ */
+const SEXTA_DO_ENSAIO = DIAS[5] + 15 * 3_600_000;
+
+export function PortalDeOutubro({ temaLigado, leve = false, liberado: liberadoDeVerdade, abertura: aberturaDeVerdade }: Props) {
+  // O ensaio do super_admin (só nesta aba): liberado, com a abertura dele.
+  const ensaio = useEnsaio();
+  const liberado = liberadoDeVerdade || !!ensaio;
+  const abertura = ensaio ? ensaio.abreEm : aberturaDeVerdade;
+  // Relê a hora de segundo em segundo só perto e durante a revelação; no
+  // resto do tempo, de 30 em 30 s — reler à toa é trabalho para nada.
+  const precisaDoSegundo = !!ensaio || (() => {
     const e = estadoDoPortal(agoraDoPortal(), abertura);
-    return e.contagem || e.fase === 'final' || e.dia === 5 || (e.faltaMs > 0 && e.faltaMs <= 3 * 60_000);
+    return e.fase === 'espreitando' || e.fase === 'final' || e.fase === 'revelando' || (e.faltaMs > 0 && e.faltaMs <= JANELA_MS + 60_000);
   })();
-  const agora = useAgoraDoPortal(precisaDoSegundo ? 1000 : 30_000);
-  const estado = estadoDoPortal(agora, abertura);
+  const agoraDeVerdade = useAgoraDoPortal(precisaDoSegundo ? 1000 : 30_000);
+  const agora = ensaio ? SEXTA_DO_ENSAIO + (agoraDeVerdade - ensaio.inicio) : agoraDeVerdade;
+  const estado = ensaio
+    ? estadoDoPortal(agora, SEXTA_DO_ENSAIO + (ensaio.abreEm - ensaio.inicio))
+    : estadoDoPortal(agora, abertura);
   const previa = usePrevia();
   // Máquina sem placa de vídeo: o portal fica parado, como o tema (`Halloween/aguenta.ts`).
   const parado = leve || semPlacaDeVideo();
@@ -70,38 +87,67 @@ export function PortalDeOutubro({ temaLigado, leve = false, liberado, abertura }
     if (previa && !lerTela()) encerrarPrevia();
   }, [previa, tela]);
 
-  // Na hora: a abertura passa, uma vez, para quem participou, quando a aba está à vista.
+  // Zerou: a abertura passa, uma vez, para quem participou, quando a aba está à vista.
+  const zerou = estado.fase === 'revelando' || estado.fase === 'aberto';
   useEffect(() => {
-    if (!liberado || estado.fase !== 'aberto' || viu || !participa) return;
+    if (!liberado || !zerou || viu || !participa) return;
     const tentar = () => {
       if (document.visibilityState === 'visible' && !lerTela()) abrirAbertura();
     };
     tentar();
     document.addEventListener('visibilitychange', tentar);
     return () => document.removeEventListener('visibilitychange', tentar);
-  }, [liberado, estado.fase, viu, participa]);
+  }, [liberado, zerou, viu, participa]);
+  // No segundo exato do zero (o relógio da tela só anda de segundo em
+  // segundo): os balões que chegaram na contagem estouram na hora certa.
+  const final = estado.fase === 'final';
+  useEffect(() => {
+    if (!liberado || !final || viu || !participa) return;
+    const t = window.setTimeout(() => {
+      if (document.visibilityState === 'visible' && !lerTela()) abrirAbertura();
+    }, Math.max(0, abertura - agoraDoPortal()));
+    return () => window.clearTimeout(t);
+  }, [liberado, final, viu, participa, abertura]);
 
   const espreitando = liberado && (estado.fase === 'espreitando' || estado.fase === 'final');
+  // Do «Participar» em diante, os balões ao acaso só para quem participou, e
+  // só até os da revelação começarem a chegar (29/10/2026).
+  const noConvite = final && (estado.noFinalMs ?? 0) >= AGUA_MS;
+  const chegando = noConvite && participa && estado.faltaMs <= CHEGADA_S * 1000;
+  const estadoDaCamada = noConvite && (!participa || chegando) ? { ...estado, balaoACadaMs: null } : estado;
 
   // A prévia do bueiro (só nesta aba): o dia de hoje se for semana do mural,
   // senão uma quinta; balões e barquinho bem mais vezes. Com ou sem o tema.
-  const previaDoBueiro = usePreviaDoBueiro();
+  const previaDoBueiro = usePreviaDoBueiro() && !ensaio;
   const estadoDaPrevia = previaDoBueiro
-    ? { ...(estado.fase === 'espreitando' ? estado : estadoDoPortal(DIAS[4] + 10 * 3_600_000)), balaoACadaMs: BALAO_NA_PREVIA_MS }
+    ? { ...(estado.fase === 'espreitando' ? estado : estadoDoPortal(ABERTURA - 4 * 60_000)), balaoACadaMs: BALAO_NA_PREVIA_MS }
     : null;
 
   return (
     <>
       {estadoDaPrevia && !tela && <CamadaDoBueiro estado={estadoDaPrevia} abertura={abertura} leve={parado} barcoNaPreviaMs={BARCO_NA_PREVIA_MS} />}
-      {!estadoDaPrevia && espreitando && temaLigado && !tela && <CamadaDoBueiro estado={estado} abertura={abertura} leve={parado} />}
-      {espreitando && !tela && <Avisos agora={agora} estado={estado} />}
-      {/* Participou: o volume já na contagem, para chegar na revelação no ponto. */}
-      {liberado && estado.fase === 'final' && participa && !tela && <ControleDeSom />}
+      {/* A chave do ensaio remonta o bueiro: ele chega de novo, com a névoa. */}
+      {!estadoDaPrevia && espreitando && (temaLigado || ensaio) && !tela && (
+        <CamadaDoBueiro key={ensaio?.inicio ?? 'semana'} estado={estadoDaCamada} abertura={abertura} leve={parado} />
+      )}
+      {espreitando && !tela && <Avisos estado={estado} />}
+      {/* Quem participou: os balões da revelação chegando, um a um, até o zero. */}
+      {liberado && chegando && !viu && !tela && <BaloesChegando faltaMs={estado.faltaMs} leve={parado} />}
       {liberado && estado.fase === 'aberto' && (viu || !participa) && !tela && <BotaoDoMural />}
       {tela && (
         <Suspense fallback={null}>
           <Cerimonia tela={tela} leve={parado} />
         </Suspense>
+      )}
+      {ensaio && (
+        <div className="portal-ensaio" data-portal-fora data-portal-anima>
+          <span>
+            Ensaio do mural · {NOME_DA_FASE[estado.fase]}
+            {estado.faltaMs > 0 && ` · abre em ${relogioDaContagem(estado.faltaMs)}`}
+          </span>
+          {estado.fase === 'espreitando' && <button type="button" onClick={pularEnsaioParaAgua}>Pular para a água</button>}
+          <button type="button" onClick={pararEnsaio}>Parar o ensaio</button>
+        </div>
       )}
       {import.meta.env.DEV && <PainelDoRelogio />}
     </>

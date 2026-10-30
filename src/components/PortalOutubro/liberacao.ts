@@ -5,11 +5,14 @@
  * Uma linha em `mural_outubro` (migration 20261029120000). O super_admin, em
  * Configurações > Geral (`admin/MuralOutubroConfig.tsx`):
  *
- *   «Liberar para o pessoal»  o bueiro e os avisos aparecem para todos, no
- *                             ponto da semana em que estamos (`fases.ts`)
- *   «Soltar a abertura»       daqui a 1 minuto (hora do banco), para todos:
- *                             a contagem grande, a tela desmancha, o mural
- *   nada solto                a abertura é a de sempre, sexta 30/10, 16h
+ *   «Liberar para o pessoal»  o mural liga para todos; sem a revelação
+ *                             começada, ainda não aparece nada (`fases.ts`)
+ *   «Começar a revelação»     a abertura fica daqui a 5 minutos (hora do
+ *                             banco, migration 20261029235000), para todos:
+ *                             o bueiro, a água, o barco, a mão, o
+ *                             «Participar» e a revelação (e libera junto)
+ *   nada começado             a revelação é a de sempre: o bueiro às 15h55
+ *                             de sexta 30/10, a abertura às 16h
  *
  * O banco avisa pelo sinal `permissoes` (o caminho do jumpscare) e cada tela
  * relê. Este arquivo é leve de propósito: o `Layout` o carrega sempre, e o
@@ -21,7 +24,7 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { supabase } from '@/lib/supabase';
 import { assinarSinal } from '@/lib/sinais';
-import { ABERTURA, FIM } from './fases';
+import { ABERTURA, BARCO_ANTES_DA_ABERTURA_MS, FIM, JANELA_MS } from './fases';
 import { acertarPeloBanco } from './relogio';
 
 export interface Liberacao {
@@ -107,9 +110,9 @@ export function useLiberacaoDoMural(empresaId: string | null | undefined): Liber
   return valor;
 }
 
-/** O mural monta nesta tela? (liberado, ou no dev, ou na prévia — e antes do fim de sábado). */
+/** O mural monta nesta tela? (liberado, ou no dev, ou na prévia ou no ensaio — e antes do fim de sábado). */
 export function muralNaTela(l: Liberacao, previa: boolean): boolean {
-  if (previa || previaDoBueiro) return true;
+  if (previa || previaDoBueiro || ensaio) return true;
   if (agoraDoServidor() >= FIM) return false;
   return l.liberado || import.meta.env.DEV;
 }
@@ -151,9 +154,55 @@ export function alternarPreviaDoBueiro(): void {
   for (const o of ouvintesDaPrevia) o();
 }
 
-/** Na prévia: um balão a cada ~8 s e o barquinho a cada 30 s. */
+/** Na prévia: um balão a cada ~8 s e a água com o barco a cada minuto (ela leva 45 s até a mão). */
 export const BALAO_NA_PREVIA_MS = 8_000;
-export const BARCO_NA_PREVIA_MS = 30_000;
+export const BARCO_NA_PREVIA_MS = 60_000;
+
+// ── O ensaio completo (29/10/2026) ──────────────────────────────────────────
+//
+// Pedido: «uma versão completa de teste, desde o início, o tempo de espera e
+// até a abertura, para o super_admin». Só nesta aba, nada gravado: a mesma
+// revelação do botão de verdade, os 5 minutos inteiros (`JANELA_MS`). O
+// bueiro aparece com a névoa, faltando 2 min 45 s a água escorre, o barco
+// cai, a mão sai, os 2 minutos com o «Participar» e, quando zera, a abertura
+// (ou, sem participar, o botão da barra quando a revelação acaba). Os «já
+// viu» e «participou» de verdade ficam guardados e voltam quando o ensaio
+// acaba (`estado.ts`). Recarregar a página também acaba.
+
+export interface Ensaio {
+  /** Quando o ensaio começou (hora do portal). */
+  inicio: number;
+  /** A abertura do ensaio (hora do portal). */
+  abreEm: number;
+}
+
+let ensaio: Ensaio | null = null;
+
+export function lerEnsaio(): Ensaio | null { return ensaio; }
+
+export function useEnsaio(): Ensaio | null {
+  return useSyncExternalStore(
+    o => { ouvintesDaPrevia.add(o); return () => { ouvintesDaPrevia.delete(o); }; },
+    () => ensaio,
+  );
+}
+
+/** Use `comecarEnsaio` (`estado.ts`), que também separa o «já viu» e o «participou». */
+export function definirEnsaio(novo: Ensaio | null): void {
+  ensaio = novo;
+  for (const o of ouvintesDaPrevia) o();
+}
+
+/** O ensaio começando agora: a abertura dele fica 5 minutos depois, como no botão de verdade. */
+export function ensaioDesdeAgora(agora: number): Ensaio {
+  return { inicio: agora, abreEm: agora + JANELA_MS };
+}
+
+/** O atalho do ensaio: o relógio dele anda até 3 s antes da água (se ainda não chegou lá). */
+export function ensaioNaAgua(e: Ensaio, agora: number): Ensaio {
+  const pulo = e.abreEm - agora - (BARCO_ANTES_DA_ABERTURA_MS + 3_000);
+  return pulo > 0 ? { inicio: e.inicio - pulo, abreEm: e.abreEm - pulo } : e;
+}
 
 // ── O cartão de Configurações (só o super_admin passa no banco) ──────────────
 

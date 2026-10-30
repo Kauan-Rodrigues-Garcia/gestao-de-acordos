@@ -352,7 +352,13 @@ export function ACoisaPuxando({ x, y, px, mural, v, leve, aoTerminar }: {
       id = requestAnimationFrame(passo);
     };
     id = requestAnimationFrame(passo);
-    return () => cancelAnimationFrame(id);
+    // O mural já está na tela quando ela começa a puxar.
+    const muralPuxado = mural.current;
+    return () => {
+      cancelAnimationFrame(id);
+      // Pulou no meio da puxada: o mural volta para o lugar dele.
+      if (muralPuxado) muralPuxado.style.transform = '';
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

@@ -23,17 +23,17 @@
  * risada quando ela sai puxando o mural (e, no mural, o tema em laço:
  * `Mural.tsx`).
  *
- * Esc ou o X fecham (voltam ao Gestão).
+ * Para pular: o X ao lado do volume (ou o Esc), com a confirmação, vai
+ * direto ao mural (`ControleDeSom.tsx`).
  */
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from 'react';
-import { X } from 'lucide-react';
 import { BASE_X, BASE_Y, CenaDaCoisa, DURA_DO_CLOSE, ESCALA, ROSTO, type FaseDaCena } from './cena';
 import { PALCO_A, PALCO_L } from './derry';
 import { ACoisaPuxando } from './Puxando';
 import { Busto } from './Busto';
 import { FogoDePixel, LuzesMortas } from './LuzesMortas';
 import { ALTURA_DA_CABECONA, meioDaBoca, type PoseDaCabecona } from './cabecona';
-import { fecharTela, useVelocidadeDoMural } from '../estado';
+import { useVelocidadeDoMural } from '../estado';
 import { sorteador } from '../acaso';
 import { calarSomDaCoisa, tocarSomDaCoisa, type SomDaCoisa } from './trilha';
 import './coisa.css';
@@ -259,12 +259,6 @@ export function ACoisa({ leve, pronto, mural, aoPuxar, aoTerminar }: {
     return () => window.clearTimeout(t);
   }, [fase]);
 
-  useEffect(() => {
-    const tecla = (e: KeyboardEvent) => { if (e.key === 'Escape') fecharTela(); };
-    window.addEventListener('keydown', tecla);
-    return () => window.removeEventListener('keydown', tecla);
-  }, []);
-
   // Um ponto do palco, na tela.
   const naTela = (px: number, py: number) =>
     [tela.w / 2 + (px - PALCO_L / 2) * tela.escala, tela.h / 2 + (py - PALCO_A / 2) * tela.escala] as const;
@@ -303,10 +297,6 @@ export function ACoisa({ leve, pronto, mural, aoPuxar, aoTerminar }: {
         )}
         {fase === 'perto' && <CloseNoRosto v={vRef} aoAbrir={() => tocar('luzes')} />}
         {(fase === 'perto' || fase === 'fim') && <div key={fase} className="coisa-corte" aria-hidden />}
-
-        <button type="button" className="coisa-fechar" onClick={fecharTela} aria-label="Fechar">
-          <X />
-        </button>
       </div>
 
       {puxando && (

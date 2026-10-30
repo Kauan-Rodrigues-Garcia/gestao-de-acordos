@@ -3,11 +3,13 @@
  * se o mural está aberto, a velocidade do mural e (só no teste) quem das
  * Lendas já clicou.
  *
- * Tudo no navegador. A abertura passa UMA vez por pessoa, para quem clicou
+ * O «já viu» fica no navegador; o «participou», só na memória da aba (o F5
+ * perde a abertura). A abertura passa UMA vez por pessoa, para quem clicou
  * em «Participar»; depois o mural fica num botão até o fim de sábado.
  */
 import { useSyncExternalStore } from 'react';
-import { lerPrevia } from './liberacao';
+import { definirEnsaio, ensaioDesdeAgora, ensaioNaAgua, lerEnsaio, lerPrevia } from './liberacao';
+import { agoraDoPortal } from './relogio';
 
 function criar<T>(inicial: T) {
   let valor = inicial;
@@ -34,8 +36,10 @@ const visto = criar(lerVisto());
 export const useJaViu = visto.useValor;
 
 export function marcarVisto(): void {
-  // A prévia do super_admin (Configurações) não gasta a abertura de verdade.
+  // A prévia do super_admin (Configurações) não gasta a abertura de verdade;
+  // o ensaio marca só na memória (o botão da barra aparece depois, como no dia).
   if (lerPrevia()) return;
+  if (lerEnsaio()) { visto.mudar(true); return; }
   try { localStorage.setItem(CHAVE_VISTO, '1'); } catch { /* sem armazenamento: só nesta aba */ }
   visto.mudar(true);
 }
@@ -50,29 +54,61 @@ export function esquecerVisto(): void {
 //
 // Pedido de 29/10/2026: na contagem dos 2 minutos, «a opção de participar:
 // para quem participar, ao terminar a contagem a animação de revelação
-// continua»; quem não participa ganha só o botão do mural, depois. Fica no
-// navegador, como o «já viu».
+// continua»; quem não participa ganha só o botão do mural, depois.
+//
+// Só na memória desta aba, de propósito (30/10/2026: «caso a pessoa
+// recarregue a página no meio, vai acontecer como se ela não tivesse
+// escolhido participar; para quem recarregar, perde a abertura»): o F5 zera,
+// e o botão do mural só aparece quando ele abre para todo mundo.
 
-const CHAVE_PARTICIPA = 'portal-outubro:participa';
-
-function lerParticipa(): boolean {
-  try { return localStorage.getItem(CHAVE_PARTICIPA) === '1'; } catch { return false; }
-}
-
-const participa = criar(lerParticipa());
+const participa = criar(false);
 
 export const useParticipa = participa.useValor;
 export const participando = participa.ler;
 
 export function participar(): void {
-  try { localStorage.setItem(CHAVE_PARTICIPA, '1'); } catch { /* sem armazenamento: só nesta aba */ }
   participa.mudar(true);
 }
 
 /** Do painel de teste: volta a não participar. */
 export function esquecerParticipacao(): void {
-  try { localStorage.removeItem(CHAVE_PARTICIPA); } catch { /* idem */ }
   participa.mudar(false);
+}
+
+// O X do convite (pedido de 29/10/2026: «um botão para fechar o campo que
+// aparece o botão de participar; fechando, fica só o bueiro»). Só nesta aba.
+const conviteFechado = criar(false);
+export const useConviteFechado = conviteFechado.useValor;
+export function fecharConvite(): void { conviteFechado.mudar(true); }
+
+// ── O ensaio completo do super_admin (`liberacao.ts`) ───────────────────────
+
+/** O «participou» de verdade, guardado enquanto o ensaio usa o dele. */
+let participavaAntesDoEnsaio = false;
+
+/** Começa o ensaio nesta aba: como quem nunca viu nem participou, sem gravar nada. */
+export function comecarEnsaio(): void {
+  if (!lerEnsaio()) participavaAntesDoEnsaio = participa.ler();
+  tela.mudar(null);
+  visto.mudar(false);
+  participa.mudar(false);
+  conviteFechado.mudar(false);
+  definirEnsaio(ensaioDesdeAgora(agoraDoPortal()));
+}
+
+/** O atalho do ensaio: pula a espera do bueiro, até 3 s antes da água. */
+export function pularEnsaioParaAgua(): void {
+  const e = lerEnsaio();
+  if (e) definirEnsaio(ensaioNaAgua(e, agoraDoPortal()));
+}
+
+/** Acaba o ensaio: fecha o que estiver aberto e volta o «já viu» e o «participou» de verdade. */
+export function pararEnsaio(): void {
+  definirEnsaio(null);
+  tela.mudar(null);
+  visto.mudar(lerVisto());
+  participa.mudar(participavaAntesDoEnsaio);
+  conviteFechado.mudar(false);
 }
 
 // ── O mural na tela ─────────────────────────────────────────────────────────
@@ -83,7 +119,12 @@ export function esquecerParticipacao(): void {
  * botão da barra, só o visual do mural (29/10: «sem os bichos aparecendo na
  * tela com interação de matar, somente os do mural fixos mesmo»).
  */
-export type Tela = null | { modo: 'abertura' } | { modo: 'coisa' } | { modo: 'mural'; puxado?: boolean };
+export type Tela = null | { modo: 'abertura' } | { modo: 'coisa' } | {
+  modo: 'mural';
+  puxado?: boolean;
+  /** Pulou a animação (30/10/2026): o mural inteiro, já pregado, sem a puxada. */
+  pulou?: boolean;
+};
 
 const tela = criar<Tela>(null);
 
@@ -98,6 +139,14 @@ export function abrirMural(): void { tela.mudar({ modo: 'mural' }); }
 export function puxarMural(): void { tela.mudar({ modo: 'mural', puxado: true }); }
 /** A Coisa no palco de Derry (depois da abertura, antes do mural). */
 export function abrirCoisa(): void { tela.mudar({ modo: 'coisa' }); }
+/**
+ * Pulou a animação (o X ao lado do volume, confirmado): conta como visto e vai
+ * direto ao mural inteiro — o mesmo de quem assistiu até o fim, com os bichos.
+ */
+export function pularAnimacao(): void {
+  marcarVisto();
+  tela.mudar({ modo: 'mural', pulou: true });
+}
 export function fecharTela(): void { tela.mudar(null); }
 
 // ── A velocidade do mural ───────────────────────────────────────────────────

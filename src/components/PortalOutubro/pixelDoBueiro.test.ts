@@ -54,10 +54,12 @@ describe('a mão com o barco', () => {
     for (const ch of letras(m)) expect(PALETA_DA_MAO[ch], ch).toBeTruthy();
   });
 
-  it('o braço desce do alto, a luva segura o barco à vista', () => {
-    expect(m[0]).toMatch(/[gGlK]/);
+  it('a luva embaixo segura o barco à vista em cima, e o punho fica no escuro atrás', () => {
     const papel = m.join('').split('').filter(ch => ch === 'p' || ch === 'P').length;
-    expect(papel).toBeGreaterThan(30);
-    expect(m.join('')).toMatch(/w/);
+    expect(papel).toBeGreaterThan(25);
+    // O barco em cima, a palma embaixo.
+    expect(m.slice(0, 5).join('')).toMatch(/p/);
+    expect(m.slice(-4).join('')).toMatch(/[wW]/);
+    expect(m.join('')).toMatch(/[CD]/);
   });
 });

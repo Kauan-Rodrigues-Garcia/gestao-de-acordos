@@ -181,9 +181,10 @@
   animation: mural-cacho 3s ease-in-out var(--atraso) infinite alternate;
 }
 .mural-cacho-balao svg { display: block; }
+/* Gira no nó (onde o fio prende), sem subir: o fio fica preso nele. */
 @keyframes mural-cacho {
-  from { transform: rotate(var(--giro)) translateY(0); }
-  to   { transform: rotate(calc(var(--giro) * -0.5)) translateY(-8px); }
+  from { transform: rotate(var(--giro)); }
+  to   { transform: rotate(calc(var(--giro) * -0.5)); }
 }
 
 /* ── As peças ────────────────────────────────────────────────────────────── */
