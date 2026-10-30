@@ -223,74 +223,119 @@ export function paletaDosOlhos(vermelho: boolean, aceso = false): Readonly<Recor
 
 // ── A mão com o barco ───────────────────────────────────────────────────────
 
-export const LARGURA_DA_MAO = 24;
-export const ALTURA_DA_MAO = 15;
+export const LARGURA_DA_MAO = 30;
+export const ALTURA_DA_MAO = 48;
+/** Quanto do alto do desenho começa dentro da boca, escondido (o braço vem lá de dentro). */
+export const MAO_DENTRO_DA_BOCA = 4;
 
-/** O barco de perto, na mão (o da água, `BARCO`, é pequeno demais para ler entre os dedos). */
+/** O barco de perto, pendurado (o da água, `BARCO`, é pequeno demais para ler na mão). */
 const BARCO_NA_MAO: readonly string[] = [
-  '......oo......',
-  '.....oPpo.....',
-  '....oPppPo....',
-  '...oPpppPpo...',
-  '..oPppppPppo..',
-  'oooooooooooooo',
-  '.oppppppppppo.',
-  '..oPppppppPo..',
-  '...oooooooo...',
+  '.........oo.........',
+  '........owPo........',
+  '.......owwkPo.......',
+  '......owwwkPPo......',
+  '.....owwwwkPPPo.....',
+  '....owwwwwkPPPPo....',
+  '...owwwwwwkPPPPPo...',
+  'oooooooooooooooooooo',
+  '.ohhhhhhhhhhhhhhhho.',
+  '..oHhhHhhhhhhHhhHo..',
+  '...oHhhhhhhhhhhHo...',
+  '....oooooooooooo....',
 ];
 
+/** De onde vem a luz na mão (de cima, um tico da esquerda). */
+const LUZ_DA_MAO = [-0.6, -0.8] as const;
+
 /**
- * A mão dela oferecendo o barco, na beira da boca (refeita em 29/10/2026 com
- * a cena do filme como referência: o palhaço fica no escuro, lá dentro, e
- * estende o barco ali mesmo, na guia — não pendura o braço para fora). De
- * frente: a luva branca de palma para cima apoiada na beira, o barco em pé em
- * cima dela, a ponta dos quatro dedos fechando na frente do casco, o polegar
- * no bico do lado, e o babado do punho e a manga sumindo no escuro atrás do
- * barco. A paleta é a da Coisa (`PALETA_DA_MAO`), com o papel em `p`/`P`.
+ * A mão dela com o barco, refeita do zero em 30/10/2026 («uma mão mais
+ * desenhada, o braço aparecendo, segurando o barquinho de um jeito que dê
+ * pra ver bem o detalhe»): o braço desce da boca do bueiro (a manga
+ * cinza-azulada bufando até o punho, com as pregas), o babado largo no punho,
+ * a luva virada para baixo — as costas para quem olha, com as três costuras,
+ * os outros dedos dobrados — e o polegar e o indicador pinçando a ponta da
+ * vela, com o barco pendurado embaixo, inteiro à vista. O alto do desenho
+ * (`MAO_DENTRO_DA_BOCA`) começa dentro da boca, no escuro.
  */
 export function montarMao(): string[] {
-  const g = grade(LARGURA_DA_MAO, ALTURA_DA_MAO);
-  const elipse = (cx: number, cy: number, rx: number, ry: number, cor: (ey: number, x: number) => string) => {
-    for (let y = 0; y < ALTURA_DA_MAO; y++) for (let x = 0; x < LARGURA_DA_MAO; x++) {
-      const ex = (x + 0.5 - cx) / rx, ey = (y + 0.5 - cy) / ry;
-      if (ex * ex + ey * ey <= 1) pintar(g, x, y, cor(ey, x));
+  const W = LARGURA_DA_MAO, H = ALTURA_DA_MAO;
+  const g = grade(W, H);
+  const em = (x: number, y: number) => g[y]?.[x] ?? '.';
+
+  /** Um traço grosso por uma linha de pontos; `cor(s, t)`: s é a luz (−1 a 1), t o quanto andou. Devolve o anel de contorno. */
+  const traco = (pts: readonly (readonly [number, number])[], raio: (t: number) => number, cor: (s: number, t: number) => string | null, contorno = false) => {
+    const anel: [number, number][] = [];
+    const total = pts.length - 1;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      let d = Infinity, s = 0, tt = 0;
+      for (let i = 0; i < total; i++) {
+        const [ax, ay] = pts[i], [bx, by] = pts[i + 1];
+        const vx = bx - ax, vy = by - ay, l2 = vx * vx + vy * vy || 1;
+        const k = Math.max(0, Math.min(1, ((x + 0.5 - ax) * vx + (y + 0.5 - ay) * vy) / l2));
+        const qx = ax + vx * k, qy = ay + vy * k;
+        const dd = Math.hypot(x + 0.5 - qx, y + 0.5 - qy);
+        if (dd < d) {
+          d = dd; tt = (i + k) / total;
+          s = dd > 0.01 ? ((x + 0.5 - qx) * LUZ_DA_MAO[0] + (y + 0.5 - qy) * LUZ_DA_MAO[1]) / dd : 0;
+        }
+      }
+      const r = raio(tt);
+      if (d <= r) { const ch = cor(s * Math.min(1, d / r), tt); if (ch) pintar(g, x, y, ch); }
+      else if (contorno && d <= r + 1) anel.push([x, y]);
     }
+    return anel;
   };
-  // Atrás do barco, no escuro: a manga e o babado do punho, de onde a mão vem.
-  elipse(3, 6.5, 3.2, 3.5, ey => (ey < -0.2 ? 'K' : 'G'));
-  elipse(5.5, 9, 4.6, 2.4, (ey, x) => (ey > 0.4 ? (x % 2 ? 'D' : 'C') : x % 3 === 0 ? 'D' : 'C'));
-  // A palma, para cima, apoiada na beira; a sombra embaixo.
-  elipse(12.5, 10.5, 8.6, 2.9, ey => (ey > 0.35 ? 'W' : 'w'));
-  // O barco em pé em cima da palma.
-  BARCO_NA_MAO.forEach((linhaDoBarco, y) => [...linhaDoBarco].forEach((ch, x) => {
-    if (ch !== '.') pintar(g, 5 + x, y, ch);
-  }));
-  // A ponta dos dedos fechando na frente do casco, e o polegar no bico do lado
-  // (cada um com o próprio contorno por cima do barco).
-  const dedo = (x0: number, y0: number, l: number, a: number) => {
-    for (let y = y0 - 1; y <= y0 + a; y++) for (let x = x0 - 1; x <= x0 + l; x++) {
-      const fora = y < y0 || y >= y0 + a || x < x0 || x >= x0 + l;
-      const canto = (y === y0 - 1 || y >= y0 + a) && (x === x0 - 1 || x === x0 + l);
-      if (canto || y >= y0 + a) continue;
-      // Em cima, o contorno não come o casco: só onde não tem nada.
-      if (fora) { if (y < y0 ? g[y]?.[x] === '.' : !'wW'.includes(g[y]?.[x] ?? 'w')) pintar(g, x, y, 'o'); continue; }
-      pintar(g, x, y, x === x0 + l - 1 ? 'W' : 'w');
-    }
-  };
-  // Os dedos curtos, de ponta redonda, só na parte de baixo do casco (o casco aparece em cima).
-  for (const x of [6, 10, 14, 18]) {
-    dedo(x, 7, 3, 2);
-    pintar(g, x, 7, 'o');
-    pintar(g, x + 2, 7, 'o');
+
+  // O braço: a manga descendo da boca, bufando até o punho, com as pregas.
+  traco([[9.5, -3], [10.5, 8], [12.5, 18]], t => 3.2 + t * 1.4, (s, t) => {
+    const prega = (t * 5.5) % 1;
+    if (prega > 0.8 && prega < 0.93 && s > -0.6) return 'G';
+    return s > 0.5 ? 'l' : s > 0 ? 'g' : s > -0.5 ? 'G' : 'K';
+  });
+
+  // O babado do punho: largo, em pregas, a borda de baixo em ondas.
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const dx = x + 0.5 - 13, dy = y + 0.5 - 20;
+    const onda = dy > 0 ? 0.35 * Math.abs(Math.sin((x + 0.5) * 1.6)) : 0;
+    if ((dx / 7.2) ** 2 + (dy / (2.7 + onda)) ** 2 > 1) continue;
+    const prega = Math.floor(x / 2) % 2;
+    pintar(g, x, y, dy < -1.4 ? 'C' : dy > 1.2 ? (prega ? 'D' : 'C') : prega ? 'c' : 'C');
   }
-  dedo(3, 4, 2, 5);
+
+  // O barco pendurado, a ponta da vela entre os dedos.
+  BARCO_NA_MAO.forEach((linha, y) => [...linha].forEach((ch, x) => { if (ch !== '.') pintar(g, 8 + x, 34 + y, ch); }));
+
+  // A luva: as costas da mão, para baixo, com as três costuras.
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const ex = (x + 0.5 - 13.5) / 6.3, ey = (y + 0.5 - 26.2) / 4.6;
+    if (ex * ex + ey * ey > 1) continue;
+    pintar(g, x, y, ex > 0.55 || ey > 0.7 || ex < -0.6 ? 'W' : 'w');
+  }
+  for (const x of [11, 13, 15]) for (let y = 23; y <= 27; y++) pintar(g, x, y, 'V');
+
+  // Os três dedos dobrados por baixo (os nós), o indicador esticado para
+  // baixo e o polegar do outro lado; as pontas se encontram na vela.
+  const branco = (s: number) => (s > -0.3 ? 'w' : 'W');
+  const nos = ([[9.3, 30.1], [11.9, 30.9], [14.5, 30.6]] as const).map(([cx, cy]) => traco([[cx, cy - 0.6], [cx, cy + 0.2]], () => 1.55, branco, true));
+  const INDICADOR = [[15.8, 28.5], [17.1, 32.2], [17.6, 34.4]] as const;
+  const POLEGAR = [[19.2, 24.8], [20.1, 29.5], [18.9, 34.1]] as const;
+  const indicador = traco(INDICADOR, t => 1.45 - t * 0.2, s => (s > -0.2 ? 'w' : 'W'), true);
+  const polegar = traco(POLEGAR, t => 1.55 - t * 0.25, s => (s > -0.2 ? 'w' : 'W'), true);
+  // Os contornos dos dedos por cima do que estiver embaixo (menos a luva);
+  // do meio da mão para baixo eles cortam a luva também, e os dedos ficam
+  // separados uns dos outros.
+  for (const anel of [...nos, indicador, polegar]) for (const [x, y] of anel) if (!'wWV'.includes(em(x, y)) || y >= 29) pintar(g, x, y, 'o');
+  traco(INDICADOR, t => 1.45 - t * 0.2, s => (s > -0.2 ? 'w' : 'W'));
+  traco(POLEGAR, t => 1.55 - t * 0.25, s => (s > -0.2 ? 'w' : 'W'));
+  // A unha do polegar, a dobra dele e o vinco entre os nós.
+  pintar(g, 19, 32, 'W'); pintar(g, 20, 28, 'V');
+  pintar(g, 10, 31, 'V'); pintar(g, 13, 31, 'V');
+
   // O contorno de tudo.
   const marcar: [number, number][] = [];
-  for (let y = 0; y < ALTURA_DA_MAO; y++) {
-    for (let x = 0; x < LARGURA_DA_MAO; x++) {
-      if (g[y][x] !== '.') continue;
-      if ([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => { const c = g[y + dy]?.[x + dx]; return c != null && c !== '.' && c !== 'o'; })) marcar.push([x, y]);
-    }
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    if (g[y][x] !== '.') continue;
+    if ([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => { const c = em(x + dx, y + dy); return c !== '.' && c !== 'o'; })) marcar.push([x, y]);
   }
   for (const [x, y] of marcar) g[y][x] = 'o';
   return g.map(l => l.join(''));
@@ -298,8 +343,12 @@ export function montarMao(): string[] {
 
 export const PALETA_DA_MAO: Readonly<Record<string, string>> = {
   o: '#0b0a10',
-  G: '#4a5966', K: '#232b33',
-  C: '#8c826d', D: '#5c5444',
-  w: '#f2efe8', W: '#bdb7ad',
-  p: '#ebe3c1', P: '#b8ad86',
+  // A manga: a luz, o meio, a sombra e a dobra.
+  l: '#c9d6df', g: '#93a5b3', G: '#617482', K: '#3a4752',
+  // O babado do punho.
+  c: '#ece5d2', C: '#bfb398', D: '#7a6f58',
+  // A luva: o branco, a sombra e as costuras.
+  w: '#f6f3ec', W: '#c9c3b8', V: '#8f897e',
+  // O papel do barco: a vela na sombra, o vinco, o casco e as dobras.
+  P: '#d6cca6', k: '#a89d78', h: '#ece4c3', H: '#bdb28d',
 };

@@ -31,7 +31,7 @@ import { agoraDoPortal } from './relogio';
 import { BALAO, BARCO, PALETA_DO_BALAO, PALETA_DO_BARCO } from './coisa/arte';
 import { pintarGrade } from './coisa/derry';
 import {
-  ALTURA_DA_MAO, ALTURA_DO_BUEIRO, BOCA, LARGURA_DA_MAO, LARGURA_DO_BUEIRO, PALETA_DA_MAO, PALETA_DO_BUEIRO, PX,
+  ALTURA_DA_MAO, ALTURA_DO_BUEIRO, BOCA, LARGURA_DA_MAO, LARGURA_DO_BUEIRO, MAO_DENTRO_DA_BOCA, PALETA_DA_MAO, PALETA_DO_BUEIRO, PX,
   montarBueiro, montarMao, montarOlhos, paletaDosOlhos,
 } from './pixelDoBueiro';
 import { prepararSonsDaCoisa } from './coisa/trilha';
@@ -306,13 +306,18 @@ export function Bueiro({ luz = 0, seguir = true, acesos = false, tremendo = fals
           )}
         </div>
 
-        {/* A mão dela com o barco: sai pela boca, por cima da guia. */}
+        {/* A mão dela com o barco: o braço desce da boca, por cima da guia, e o
+            barco fica pendurado embaixo. A caixa corta o que está acima da
+            boca (o braço lá dentro) e o escuro cobre o braço até a beira. */}
         {mao && (
           <div
-            className={`portal-mao portal-mao-${mao}`}
-            style={{ left: (BOCA.x + 3) * PX, top: (BOCA.y - 1) * PX, width: LARGURA_DA_MAO * PX, height: ALTURA_DA_MAO * PX, ...(mao === 'sai' ? atraso(jaMs - MAO_SAI_MS) : {}) }}
+            className={`portal-mao-caixa portal-mao-${mao}`}
+            style={{ left: (BOCA.x - 4) * PX, top: BOCA.y * PX, width: LARGURA_DA_MAO * PX, height: (ALTURA_DA_MAO - MAO_DENTRO_DA_BOCA + 2) * PX }}
           >
-            <Grade linhas={MAO} paleta={PALETA_DA_MAO} className="portal-mao-arte" />
+            <div className="portal-mao" style={{ top: -MAO_DENTRO_DA_BOCA * PX, ...(mao === 'sai' ? atraso(jaMs - MAO_SAI_MS) : {}) }}>
+              <Grade linhas={MAO} paleta={PALETA_DA_MAO} className="portal-mao-arte" />
+            </div>
+            <span className="portal-mao-breu" style={{ left: 4 * PX, width: 13 * PX, height: BOCA.a * PX }} />
           </div>
         )}
       </div>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  ALTURA_DA_MAO, ALTURA_DO_BUEIRO, BOCA, LARGURA_DA_MAO, LARGURA_DO_BUEIRO, PALETA_DA_MAO, PALETA_DO_BUEIRO, PX,
+  ALTURA_DA_MAO, ALTURA_DO_BUEIRO, BOCA, LARGURA_DA_MAO, LARGURA_DO_BUEIRO, MAO_DENTRO_DA_BOCA, PALETA_DA_MAO, PALETA_DO_BUEIRO, PX,
   montarBueiro, montarMao, montarOlhos, paletaDosOlhos,
 } from './pixelDoBueiro';
 
@@ -54,12 +54,15 @@ describe('a mão com o barco', () => {
     for (const ch of letras(m)) expect(PALETA_DA_MAO[ch], ch).toBeTruthy();
   });
 
-  it('a luva embaixo segura o barco à vista em cima, e o punho fica no escuro atrás', () => {
-    const papel = m.join('').split('').filter(ch => ch === 'p' || ch === 'P').length;
-    expect(papel).toBeGreaterThan(25);
-    // O barco em cima, a palma embaixo.
-    expect(m.slice(0, 5).join('')).toMatch(/p/);
-    expect(m.slice(-4).join('')).toMatch(/[wW]/);
-    expect(m.join('')).toMatch(/[CD]/);
+  it('o braço desce do alto, o babado no punho, a luva no meio e o barco pendurado embaixo, inteiro', () => {
+    // A manga começa no alto (dentro da boca).
+    expect(m.slice(0, MAO_DENTRO_DA_BOCA).join('')).toMatch(/[lgGK]/);
+    // O babado e a luva com as costuras no meio.
+    expect(m.slice(17, 23).join('')).toMatch(/[cCD]/);
+    expect(m.slice(22, 29).join('')).toMatch(/V/);
+    // O barco embaixo: a vela e o casco, e nada de manga lá.
+    const baixo = m.slice(34).join('');
+    expect(baixo.split('').filter(ch => 'hHP'.includes(ch)).length).toBeGreaterThan(40);
+    expect(baixo).not.toMatch(/[lgGK]/);
   });
 });

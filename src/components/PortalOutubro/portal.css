@@ -66,26 +66,25 @@
 .portal-bueiro-vermelho .portal-bueiro-brasa { opacity: calc(var(--luz) * 0.25); animation: none; transition: opacity 0.7s; }
 
 /*
- * A mão dela (`montarMao`): vem lá do fundo da boca, saindo do escuro (cresce
- * um tico e acende em degraus), e fica na beira da guia oferecendo o barco,
- * subindo e descendo devagar. Como na cena do filme: ela não sai do bueiro.
+ * A mão dela (`montarMao`, refeita em 30/10/2026): o braço desce da boca
+ * (a caixa corta o que está acima dela, e o escuro cobre o braço até a beira)
+ * e o barco fica pendurado embaixo, entre o polegar e o indicador, subindo e
+ * descendo devagar. Na prévia, ela volta subindo.
  */
-.portal-mao { position: absolute; pointer-events: none; transform-origin: 50% 100%; }
-.portal-mao-sai { animation: portal-mao-sai 1.4s steps(7, end) both; }
-.portal-mao-volta { animation: portal-mao-volta 1.2s steps(6, end) both; }
-@keyframes portal-mao-sai {
-  from { transform: translateY(-9px) scale(0.75); opacity: 0; filter: brightness(0); }
-  40%  { opacity: 1; filter: brightness(0.25); }
-  to   { transform: none; opacity: 1; filter: none; }
-}
-@keyframes portal-mao-volta {
-  from { transform: none; opacity: 1; filter: none; }
-  to   { transform: translateY(-9px) scale(0.75); opacity: 0; filter: brightness(0); }
-}
+.portal-mao-caixa { position: absolute; overflow: hidden; pointer-events: none; }
+.portal-mao { position: absolute; left: 0; transform: translateY(-140px); }
+.portal-mao-sai .portal-mao { animation: portal-mao-sai 1.4s steps(12, end) both; }
+.portal-mao-volta .portal-mao { transform: none; animation: portal-mao-volta 1.2s steps(10, end) both; }
+@keyframes portal-mao-sai { from { transform: translateY(-140px); } to { transform: none; } }
+@keyframes portal-mao-volta { to { transform: translateY(-140px); } }
 .portal-mao-arte { animation: portal-mao-oferece 2.4s steps(2, end) 1.4s infinite alternate; }
 @keyframes portal-mao-oferece { to { transform: translateY(3px); } }
-.portal-bueiro-leve .portal-mao-sai { animation-name: portal-mao-sai-leve; }
-@keyframes portal-mao-sai-leve { from { transform: translateY(-9px) scale(0.75); opacity: 0; } }
+/* O escuro da boca por cima do braço, em degraus: ele vem lá de dentro. */
+.portal-mao-breu {
+  position: absolute;
+  top: 0;
+  background: linear-gradient(#000 0 9px, rgb(0 0 0 / 0.75) 9px 15px, rgb(0 0 0 / 0.45) 15px 21px, rgb(0 0 0 / 0.2) 21px 27px);
+}
 
 /* Quinta e sexta: treme de vez em quando (um pouco a cada 9 s). */
 .portal-bueiro-treme { animation: portal-bueiro-treme 9s steps(1, end) infinite; }
