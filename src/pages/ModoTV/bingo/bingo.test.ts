@@ -135,6 +135,28 @@ describe('o jogador', () => {
   });
 });
 
+describe('os temas', () => {
+  it('os oito estão prontos, carregam e cada arquivo é o tema do nome', async () => {
+    const { TEMAS_BINGO, carregarTema } = await import('./temas');
+    expect(TEMAS_BINGO.map(t => t.id).sort()).toEqual(['aquario', 'bichinho', 'bloco', 'chiclete', 'fliperama', 'gacha', 'galaxia', 'rpg']);
+    for (const t of TEMAS_BINGO) {
+      expect(t.pronto, t.id).toBe(true);
+      const tema = await carregarTema(t.id);
+      expect(tema.id).toBe(t.id);
+      expect(tema.nome).toBe(t.nome);
+      expect(typeof tema.Bola).toBe('function');
+      expect(typeof tema.Maquina).toBe('function');
+      expect(typeof tema.Festa).toBe('function');
+    }
+  });
+
+  it('os temas do banco são os mesmos do front', () => {
+    const sql = readFileSync(resolve(__dirname, '../../../../supabase/migrations/20261030200000_modo_tv_bingo.sql'), 'utf8');
+    const lista = sql.match(/CHECK \(tema IN \(([^)]+)\)\)/)?.[1] ?? '';
+    expect(lista.replace(/[' ]/g, '').split(',').sort()).toEqual(['aquario', 'bichinho', 'bloco', 'chiclete', 'fliperama', 'gacha', 'galaxia', 'rpg']);
+  });
+});
+
 describe('a migration casa com o front', () => {
   const sql = readFileSync(resolve(__dirname, '../../../../supabase/migrations/20261030200000_modo_tv_bingo.sql'), 'utf8');
   const servico = readFileSync(resolve(__dirname, 'servico.ts'), 'utf8');
