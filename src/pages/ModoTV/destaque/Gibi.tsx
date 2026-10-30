@@ -145,13 +145,13 @@ export function DestaqueGibi({ v, tela }: PropsEstilo) {
 
       {/* ── Quadro 2: o título ── */}
       <div style={quadro(1000, 52, 864, 318, 1.4, `${reticula('rgba(255,255,255,.16)', 20, 3)}, linear-gradient(135deg, ${COR.azul}, ${COR.azulEscuro})`, 120)}>
-        {d.quando && (
+        {d.quandoNaTela && (
           <div style={{
             position: 'absolute', left: -10, top: -10, padding: '10px 26px 12px',
             background: COR.amarelo, borderRight: `7px solid ${TINTA}`, borderBottom: `7px solid ${TINTA}`,
             fontFamily: TEXTO, fontWeight: 700, fontSize: 34, textTransform: 'uppercase', letterSpacing: 1,
           }}>
-            {d.quando}
+            {d.quandoNaTela}
           </div>
         )}
         <div style={{

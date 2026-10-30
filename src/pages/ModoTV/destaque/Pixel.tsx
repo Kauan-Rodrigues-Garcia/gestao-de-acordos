@@ -118,7 +118,7 @@ export function DestaquePixel({ v, tela }: PropsEstilo) {
         <div style={{ fontSize: caber(titulo, 860, 56, 1, 30), color: VERDE, textShadow: '6px 6px 0 #000', lineHeight: 1.3, ...entra(200) }}>
           {titulo}
         </div>
-        {d.quando && <div style={{ fontSize: 26, color: CIANO, marginTop: 26, lineHeight: 1.5, ...entra(300) }}>{semAcento(d.quando)}</div>}
+        {d.quandoNaTela && <div style={{ fontSize: 26, color: CIANO, marginTop: 26, lineHeight: 1.5, ...entra(300) }}>{semAcento(d.quandoNaTela)}</div>}
 
         <div style={{ marginTop: 56, padding: '40px 40px 44px', ...janela(), ...entra(400) }}>
           <div style={{ fontSize: 24, color: '#b9b0ff' }}>NOME</div>

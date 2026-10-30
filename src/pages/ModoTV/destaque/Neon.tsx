@@ -79,9 +79,9 @@ export function DestaqueNeon({ v, tela }: PropsEstilo) {
 
       {/* O letreiro. */}
       <div style={{ position: 'absolute', left: 960, right: 90, top: 120, display: 'flex', flexDirection: 'column' }}>
-        {d.quando && (
+        {d.quandoNaTela && (
           <div style={{ fontSize: 32, fontWeight: 600, letterSpacing: 6, textTransform: 'uppercase', ...brilho(CIANO, 0.6), ...acende(300) }}>
-            {d.quando}
+            {d.quandoNaTela}
           </div>
         )}
         <div style={{ fontFamily: LETREIRO, fontSize: caber(titulo, 860, 92, 0.78, 44), lineHeight: 1.15, marginTop: 30, ...brilho(ROSA), ...acende(500) }}>

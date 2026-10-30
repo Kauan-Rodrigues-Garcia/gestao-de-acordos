@@ -21,6 +21,14 @@ export interface DadosDestaque extends DestaqueNaTela {
   titulo: string;
   /** «quinta-feira, 29 de outubro» ou «outubro · até agora». */
   quando: string;
+  /**
+   * O `quando` com a unidade do valor no Cofen em H.O. («… · valor em H.O.»).
+   * Fica na linha da data, e não no valor: todo estilo encaixa o valor pelo
+   * comprimento do texto, e o sufixo o encolheria.
+   */
+  quandoNaTela: string;
+  /** «em H.O.» quando o valor mostrado é H.O.; senão vazio. */
+  unidade: string;
   /** Primeiro e último nome; «Quem será?» sem ninguém. */
   nome: string;
   /** `null` com «Mostrar o valor» desligado, ou sem ninguém. */
@@ -38,14 +46,20 @@ export function dadosDoDestaque(v: VisaoTv, tela: TelaDoPainel, tituloPadrao?: {
   const d = destaqueDaTela(v, tela);
   const p = d.pessoa;
   const automatico = tituloPadrao ?? { dia: 'Destaque do dia', mes: 'Destaque do mês' };
+  const valor = p && opcao<boolean>(tela, 'mostrar_valor') ? moedaTv(p.valor) : null;
+  const quando = d.doMes
+    ? `${MESES[Number(v.mesIso.slice(5, 7)) - 1] ?? ''} · até agora`
+    : d.dia ? dataPorExtenso(d.dia) : '';
+  // Só diz a unidade quando há valor na tela: sem ele, «em H.O.» não fala de nada.
+  const unidade = valor && v.unidade === 'ho' ? 'em H.O.' : '';
   return {
     ...d,
     titulo: opcao<string>(tela, 'titulo') || (d.doMes ? automatico.mes : automatico.dia),
-    quando: d.doMes
-      ? `${MESES[Number(v.mesIso.slice(5, 7)) - 1] ?? ''} · até agora`
-      : d.dia ? dataPorExtenso(d.dia) : '',
+    quando,
+    quandoNaTela: [quando, unidade && `valor ${unidade}`].filter(Boolean).join(' · '),
+    unidade,
     nome: p ? nomeCurto(p.nome) : 'Quem será?',
-    valor: p && opcao<boolean>(tela, 'mostrar_valor') ? moedaTv(p.valor) : null,
+    valor,
     pagamentos: p?.pagamentos ?? 0,
   };
 }

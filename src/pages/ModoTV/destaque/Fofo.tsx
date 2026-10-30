@@ -120,9 +120,9 @@ export function DestaqueFofo({ v, tela }: PropsEstilo) {
         boxShadow: '0 24px 0 rgba(143,107,216,.18), 0 30px 60px rgba(143,107,216,.25)', padding: '60px 64px',
         display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', ...pula(150),
       }}>
-        {d.quando && (
+        {d.quandoNaTela && (
           <div style={{ padding: '8px 28px', borderRadius: 999, background: '#efe6ff', color: LILAS, fontSize: 32, fontWeight: 600 }}>
-            {d.quando}
+            {d.quandoNaTela}
           </div>
         )}
         <div style={{ fontSize: caber(d.titulo, 680, 78, 0.55, 48), fontWeight: 700, color: LILAS, marginTop: 26 }}>

@@ -115,6 +115,12 @@ export interface NumerosTv {
   ranking_por_equipe?: { equipe_id: string; pessoas: PessoaRanking[] }[];
   /** A cena «Ranking de quitação» (20261030170000). */
   quitacao?: QuitacaoTv;
+  /**
+   * De onde veio o total do setor (20261030230000): a conciliação no setor
+   * Cofen, o Analítico no resto — e no Cofen com mais de um setor, quando a
+   * conciliação não diz de qual é cada pagamento. Falta no cache antigo.
+   */
+  fonte_setor?: 'conciliacao' | 'analitico';
   calculado_em: string;
   /** Hora do banco na resposta da prévia (20261027190000). */
   agora?: string;

@@ -312,6 +312,18 @@ export function Editor({ painel, alvo, conexoes, aoMudar, aoMudarConexoes }: {
         )}
       </div>
 
+      {/* O setor Cofen vem da conciliação; com mais de um setor Cofen ela não
+          diz de qual é cada pagamento, e o banco cai no Analítico (20261030230000). */}
+      {ehCofen && numeros?.alvo_tipo === 'setor' && numeros.fonte_setor === 'analitico' && (
+        <div className="flex items-start gap-2 rounded-xl border border-amber-500/50 bg-amber-500/10 p-3 text-sm">
+          <TriangleAlert className="h-4 w-4 mt-0.5 shrink-0 text-amber-600" />
+          <span>
+            O total do setor está vindo do Analítico, e não da conciliação: há mais de um setor Cofen,
+            e o relatório de conciliação não diz de qual setor é cada pagamento.
+          </span>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm text-muted-foreground mr-1">Tema</span>
         {TEMAS.map(t => (

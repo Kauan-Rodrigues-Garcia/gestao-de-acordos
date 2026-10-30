@@ -984,7 +984,8 @@ export function TelaTv({ tela, tema, visao, midiaUrl, posicao, atualizadoEm, mes
             ))}
           </div>
           <span>
-            {visao?.unidade === 'ho' ? 'Valores em H.O. · ' : ''}
+            {/* A quitação é Valor Acordo, que não tem H.O. */}
+            {visao?.unidade === 'ho' && tela.template !== 'quitacao' ? 'Valores em H.O. · ' : ''}
             {atualizadoEm ? `Atualizado às ${new Date(atualizadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : ''}
           </span>
         </div>

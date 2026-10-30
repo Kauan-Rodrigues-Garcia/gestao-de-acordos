@@ -12,6 +12,12 @@
  * percentual da empresa, igual a `metaNaUnidade` (`lib/unidadeValor.ts`). O
  * recebido em H.O. não é convertido — vem da coluna do relatório.
  *
+ * ## De onde vem o dinheiro no Cofen (Cleber, 30/10/2026)
+ *
+ * O painel de SETOR Cofen chega do banco pela conciliação (mês, hoje e curva,
+ * `fonte_setor`), como o card do Painel do Líder; equipe e pessoas, pelo 58
+ * (Analítico). Quem escolhe é `fn_tv_numeros_calcular` — aqui nada muda.
+ *
  * Puro: sem React e sem banco. Testado em `numeros.test.ts`.
  */
 import { hoPercentualDaConfig } from '@/lib/hoPercentual';

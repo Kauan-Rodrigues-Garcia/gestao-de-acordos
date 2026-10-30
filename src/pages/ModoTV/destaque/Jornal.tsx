@@ -33,7 +33,7 @@ export function DestaqueJornal({ v, tela }: PropsEstilo) {
   const manchete = p ? `${d.nome} é o ${d.titulo.toLowerCase()}` : 'Quem será o destaque?';
   const materia = p
     ? [
-        `${d.nome} liderou o recebimento ${doOnde(d.onde)} ${quando}${d.valor ? `, com ${d.valor} ${emPagamentos(d.pagamentos)}` : ''}.`,
+        `${d.nome} liderou o recebimento ${doOnde(d.onde)} ${quando}${d.valor ? `, com ${d.valor}${d.unidade ? ` ${d.unidade}` : ''} ${emPagamentos(d.pagamentos)}` : ''}.`,
         `O resultado coloca ${primeiro} no topo do placar e vira referência para quem quer subir no ranking.`,
         'Procurado pela reportagem, o time comemorou e já fala em repetir a dose.',
       ]

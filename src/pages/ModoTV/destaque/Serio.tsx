@@ -86,9 +86,9 @@ export function DestaqueSerio({ v, tela }: PropsEstilo) {
               </div>
             </div>
           )}
-          {d.quando && (
+          {d.quandoNaTela && (
             <div style={{ fontFamily: SERIFA, fontStyle: 'italic', fontSize: 44, color: TEXTO, opacity: 0.85, marginTop: 40, ...sobe(560) }}>
-              {d.quando.charAt(0).toUpperCase() + d.quando.slice(1)}
+              {d.quandoNaTela.charAt(0).toUpperCase() + d.quandoNaTela.slice(1)}
             </div>
           )}
         </div>
