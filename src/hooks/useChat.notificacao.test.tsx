@@ -81,7 +81,7 @@ describe('useChat e visibilidade real da conversa', () => {
 
     expect(estado.assinatura).toEqual({
       topico: 'chat:eu',
-      escutas: [{ sinal: 'mensagem' }, { sinal: 'participante' }],
+      escutas: [{ sinal: 'mensagem' }, { sinal: 'participante' }, { sinal: 'bingo' }],
     });
   });
 

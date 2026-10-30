@@ -10,7 +10,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { Monitor, Plus, Tv } from 'lucide-react';
+import { Gamepad2, Monitor, Plus, Tv } from 'lucide-react';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,6 +24,7 @@ import {
 import type { AlvoTv, ConexaoTv, Painel } from './tipos';
 import { criarPainel, listarAlvos, listarConexoes, listarPaineis, semMigration } from './servico';
 import { Editor } from './Editor';
+import { CentralDeJogos } from './bingo/Central';
 import { chaveAlvo, estadoDaTv, rotuloAlvo, tvLigada } from './apoio';
 
 export default function ModoTV() {
@@ -35,6 +36,7 @@ export default function ModoTV() {
   const [carregando, setCarregando] = useState(true);
   const [faltaMigration, setFaltaMigration] = useState(false);
   const [criando, setCriando] = useState(false);
+  const [aba, setAba] = useState<'paineis' | 'jogos'>('paineis');
 
   const recarregar = useCallback(async () => {
     if (!empresa?.id) return;
@@ -109,6 +111,19 @@ export default function ModoTV() {
           </div>
         </div>
 
+        {!faltaMigration && paineis.length > 0 && (
+          <div className="inline-flex rounded-lg border p-1 gap-1">
+            {([['paineis', 'Painéis'], ['jogos', 'Central de jogos']] as const).map(([id, nome]) => (
+              <button key={id} type="button" onClick={() => setAba(id)}
+                className={`h-9 rounded-md px-4 text-sm font-medium flex items-center gap-2 ${aba === id ? 'bg-primary text-primary-foreground' : 'hover:bg-accent'}`}>
+                {id === 'jogos' ? <Gamepad2 className="h-4 w-4" /> : <Tv className="h-4 w-4" />}{nome}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {aba === 'jogos' && !faltaMigration && paineis.length > 0 && <CentralDeJogos paineis={paineis} />}
+
         {faltaMigration && (
           <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-5 text-sm">
             <p className="font-semibold">O Modo TV ainda não está no banco.</p>
@@ -134,7 +149,7 @@ export default function ModoTV() {
           </div>
         )}
 
-        {paineis.length > 0 && (
+        {aba === 'paineis' && paineis.length > 0 && (
           <div className="grid gap-6 lg:grid-cols-[260px_1fr]">
             <nav className="space-y-5">
               {grupos.map(g => (

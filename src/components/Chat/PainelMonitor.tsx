@@ -48,6 +48,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Eye, Loader2, Search, Users, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { assinarTabela } from '@/lib/realtime';
+import { ESCUTAS_CANAL_PESSOAL, topicoPessoal } from '@/lib/canalPessoal';
 import {
   listarMonitoraveis, listarConversasDe, listarRecentes,
   type PessoaMonitoravel, type ConversaMonitorada, type ConversaRecente,
@@ -224,9 +225,11 @@ export function PainelMonitor({ expandido, onSair }: Props) {
     };
 
     return assinarTabela(
-      { topico: `chat:${alvo.perfil_id}`, escutas: [{ sinal: 'mensagem' }, { sinal: 'participante' }] },
+      { topico: topicoPessoal(alvo.perfil_id), escutas: ESCUTAS_CANAL_PESSOAL },
       {
         onSinal: (payload, sinal) => {
+          // O convite do Bingo usa o mesmo canal e não muda conversa nenhuma.
+          if (sinal === 'bingo') return;
           if (sinal === 'mensagem') {
             const id = typeof payload.id === 'string' ? payload.id : null;
             const conversaId = typeof payload.conversa_id === 'string' ? payload.conversa_id : null;

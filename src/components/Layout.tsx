@@ -79,6 +79,7 @@ import { useEasterEggCriadores, DURACAO_ESCURECIMENTO_MS } from '@/hooks/useEast
 import { ComemoracaoOverlay } from './comemoracao/ComemoracaoOverlay';
 import { JumpscareOverlay } from './Jumpscare/JumpscareOverlay';
 import { SireneOverlay } from './Sirene/SireneOverlay';
+import { BingoNoSistema } from '@/pages/ModoTV/bingo/jogador/BingoNoSistema';
 import { useModoLeveZeradoPeloAdmin } from '@/lib/modoLeveZerado';
 import { useTermoUso } from '@/hooks/useTermoUso';
 import { useMarcarAtrasados } from '@/hooks/useMarcarAtrasados';
@@ -1196,6 +1197,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <JumpscareOverlay />
       {/* A sirene (29/10/2026): luz e som nos horários do setor. Ver `Sirene/sirene.ts`. */}
       <SireneOverlay />
+
+      {/* O Bingo do Modo TV (30/10/2026): a cartela de quem está numa partida.
+          Durante «Entrar como» não aparece — o grito não age pela pessoa. */}
+      <BingoNoSistema perfilId={getImpersonacaoAtiva() ? null : perfil?.id} />
 
       {/* Troca de senha 1x */}
       {perfil?.id && (

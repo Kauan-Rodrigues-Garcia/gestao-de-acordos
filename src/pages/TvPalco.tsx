@@ -41,6 +41,11 @@ import { avisarSaida, pedirCodigo, versaoTv, verTv } from './ModoTV/servico';
 import { diferencaDoServidor } from './ModoTV/relogio';
 import { supabase } from '@/lib/supabase';
 import type { NumerosTv, Painel } from './ModoTV/tipos';
+import { BingoTv } from './ModoTV/bingo/BingoTv';
+import { useTemaBingo } from './ModoTV/bingo/temas';
+import { useBingoNaTv } from './ModoTV/bingo/useBingoNaTv';
+import { useBingoDemo } from './ModoTV/bingo/demo';
+import type { EstadoBingo, TemaBingoId } from './ModoTV/bingo/tipos';
 
 const CHAVE_TOKEN = 'tv2:token';
 /** «O painel mudou?» — rede de segurança do aviso do banco, que é o que chega na hora. */
@@ -66,6 +71,9 @@ type Estado =
 
 export default function TvPalco() {
   const [params] = useSearchParams();
+  if (params.get('demo') === '1' && params.get('bingo') === '1') {
+    return <BingoDemo tema={(params.get('tema') as TemaBingoId | null) ?? 'chiclete'} inicio={Number(params.get('pedras')) || 0} />;
+  }
   if (params.get('demo') === '1') {
     const tela = Number(params.get('tela'));
     return <TvDemo tema={params.get('tema')} vivo={params.get('vivo') === '1'} fixarEm={Number.isInteger(tela) && tela > 0 ? tela - 1 : null} />;
@@ -88,6 +96,27 @@ function TvDemo({ tema, fixarEm, vivo }: { tema: string | null; fixarEm: number 
   return (
     <div style={{ position: 'fixed', inset: 0, cursor: 'none' }}>
       <Rodizio key={tema ?? ''} painel={painel} numeros={numeros} fixarEm={fixarEm} style={{ position: 'absolute', inset: 0 }} />
+    </div>
+  );
+}
+
+/**
+ * O Bingo em cima do rodízio (20261030200000): partida aberta no painel passa
+ * por cima de tudo, até de tela fixa. Enquanto o tema baixa, o rodízio segue.
+ */
+function BingoNaParede({ estado, diferencaMs }: { estado: EstadoBingo; diferencaMs?: number }) {
+  const tema = useTemaBingo(estado.partida.tema);
+  if (!tema) return null;
+  return <BingoTv estado={estado} tema={tema} diferencaMs={diferencaMs} style={{ position: 'absolute', inset: 0 }} />;
+}
+
+/** `/#/tv?demo=1&bingo=1&tema=bloco&pedras=7`: o Bingo andando sozinho, sem banco. */
+function BingoDemo({ tema, inicio }: { tema: TemaBingoId; inicio: number }) {
+  useTelaSempreAcesa();
+  const estado = useBingoDemo(tema, inicio);
+  return (
+    <div style={{ position: 'fixed', inset: 0, cursor: 'none', background: CORES.noite.fundo }}>
+      <BingoNaParede estado={estado} />
     </div>
   );
 }
@@ -195,11 +224,16 @@ function TvPareada() {
    * canal cair, a pergunta curta de 3 s segura.
    */
   const painelId = estado.tipo === 'painel' ? estado.painel.id : null;
+  const { estado: bingo, aoAviso: avisoBingo } = useBingoNaTv(painelId ? lerToken() : null, painelId);
+  const avisoBingoRef = useRef(avisoBingo);
+  avisoBingoRef.current = avisoBingo;
   useEffect(() => {
     if (!painelId) return;
     const canal = supabase
       .channel(`tv-painel:${painelId}`)
       .on('broadcast', { event: 'mudou' }, () => acordar.current())
+      // O Bingo (20261030200000): a pedra vem dentro do aviso.
+      .on('broadcast', { event: 'bingo' }, (m: { payload?: Record<string, unknown> }) => avisoBingoRef.current(m.payload ?? {}))
       .subscribe();
     return () => { void supabase.removeChannel(canal); };
   }, [painelId]);
@@ -213,9 +247,11 @@ function TvPareada() {
 
   return (
     <div style={{ position: 'fixed', inset: 0, cursor: 'none', background: CORES.noite.fundo }}>
-      {estado.tipo === 'painel' && (
+      {/* Com bingo no ar o rodízio sai de cena: o PC da TV não desenha os dois. */}
+      {estado.tipo === 'painel' && !bingo && (
         <Rodizio painel={estado.painel} numeros={estado.numeros} diferencaMs={diferencaMs} style={{ position: 'absolute', inset: 0 }} />
       )}
+      {estado.tipo === 'painel' && bingo && <BingoNaParede estado={bingo} diferencaMs={diferencaMs} />}
       {estado.tipo === 'codigo' && <TelaCodigo codigo={estado.codigo} expiraEm={estado.expiraEm} />}
       {estado.tipo === 'iniciando' && (
         <PalcoTv tema="noite" style={{ position: 'absolute', inset: 0 }}>

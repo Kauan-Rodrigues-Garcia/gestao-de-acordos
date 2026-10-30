@@ -95,11 +95,12 @@ em `(SELECT ...)`.
 
 ### Aleatoriedade
 
-`gen_random_bytes` (pgcrypto, criptográfico) para cartelas e pedras — nunca
+O gerador forte do Postgres, via `gen_random_uuid()` (implementação, 30/10:
+sem depender do pgcrypto, que não aparece em migration nenhuma) — nunca
 `random()`. Cartela: B 1–15, I 16–30, N 31–45 (4 + estrela), G 46–60, O 61–75,
-cinco distintos por coluna. Cartela repetida na mesma partida é refeita. A
-pedra sai do conjunto das ainda não sorteadas. Confirmar no plano onde mora o
-pgcrypto (`extensions.gen_random_bytes`).
+cinco distintos por coluna (`fn_bingo_cartela_nova`). Cartela repetida na mesma
+partida é refeita. A pedra sai do conjunto das ainda não sorteadas
+(`fn_bingo_sorteio`).
 
 ### RPCs
 
@@ -131,19 +132,27 @@ leitura de qualquer ponta.
 
 ### Tempo real
 
-Gatilho em `bingo_pedras` (INSERT), `bingo_cartelas` (grito e inclusão),
-`bingo_vitorias` (INSERT) e `bingo_partidas` (abrir, automático, encerrar)
-manda `realtime.send`:
+Mudou na implementação (30/10), para ficar mais leve: em vez de mandar cada
+pedra para o canal pessoal de cada participante (N envios por pedra), as RPCs
+chamam `fn_bingo_avisar`, que manda UM aviso por evento em dois tópicos:
 
-- `tv-painel:<painel>` (público, existente) — evento `bingo`, payload mínimo:
-  `{tipo, ordem?, numero?}`. Nada pessoal no payload; a TV relê pelo token
-  quando o tipo pede (vitória, grito, abrir, encerrar).
-- `chat:<perfil>` (privado, existente, todos já assinam) — evento `bingo`, para
-  cada participante e para o criador. Pedra: `{tipo:'pedra', partida, ordem,
-  numero}`. Outros tipos: só o aviso; o cliente relê.
+- `bingo:<partida>` (privado) — participantes e controle. A policy
+  `bingo_sinal_receber` confere uma vez, na entrada do canal
+  (`fn_bingo_posso_ouvir`: tem cartela, ou controla o painel).
+- `tv-painel:<painel>` (público, existente) — a TV.
 
-Nenhum canal novo; quem não joga não recebe nada. Envio protegido por `BEGIN …
-EXCEPTION WHEN OTHERS THEN NULL` como em `fn_tv_avisar_tvs`.
+Payload mínimo: `{tipo, partida, ordem?, numero?}` (pedra), `{tipo:'grito',
+quem, grito}`, ou só o tipo (partida, vitória). Pedra entra direto; o resto o
+cliente relê.
+
+O convite (cartela nova) vai uma vez por pessoa pelo canal pessoal
+`chat:<perfil>`, evento `bingo` — as escutas desse tópico moram em
+`lib/canalPessoal.ts`, compartilhadas com o chat. Quem não joga não ganha
+assinatura. Envio protegido por `BEGIN … EXCEPTION WHEN OTHERS THEN NULL`.
+
+O automático: a central e a TV pedem a pedra na hora; o banco sorteia só se
+`proxima_pedra_em` já passou (`FOR UPDATE`), e toda resposta devolve a próxima
+hora, para quem pediu cedo recalibrar sem reler.
 
 ## 4. Telas
 
