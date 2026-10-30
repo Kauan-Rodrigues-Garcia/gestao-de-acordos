@@ -15,6 +15,7 @@
  * que aceita um número digitado — o recebido continua vindo do relatório.
  */
 import type { TelaDoPainel, TemaId, TemplateId } from './tipos';
+import { cenaDoModelo } from './livre/cena';
 
 export type CategoriaTemplate = 'meta' | 'ranking' | 'midia';
 
@@ -36,7 +37,9 @@ export type CampoOpcao = Condicao & (
   /** Uma equipe do setor do painel (o id); a lista vem do pacote de números. */
   | { chave: string; rotulo: string; tipo: 'equipe'; padrao: string }
   /** Um dia, «YYYY-MM-DD». */
-  | { chave: string; rotulo: string; tipo: 'data'; padrao: string });
+  | { chave: string; rotulo: string; tipo: 'data'; padrao: string }
+  /** A cena livre inteira (`livre/cena.ts`), montada no estúdio. */
+  | { chave: string; rotulo: string; tipo: 'cena'; padrao: null });
 
 export interface Template {
   id: TemplateId;
@@ -57,6 +60,21 @@ const TITULO = (padrao: string): CampoOpcao =>
  */
 const MOSTRAR_META: CampoOpcao =
   { chave: 'mostrar_meta', rotulo: 'Mostrar o valor da meta e do recebido', tipo: 'liga', padrao: true };
+
+/**
+ * De onde sai o ranking (30/10/2026): as pessoas do painel, as de uma equipe,
+ * ou as equipes do setor uma contra a outra. E o que se compara: o recebido
+ * ou a projeção de fechamento no ritmo atual. Ver `rankingDaTela`.
+ */
+const FONTE_RANKING: CampoOpcao[] = [
+  { chave: 'fonte', rotulo: 'Ranking de', tipo: 'escolha', padrao: 'painel',
+    escolhas: [
+      { valor: 'painel', rotulo: 'Pessoas' }, { valor: 'equipe', rotulo: 'Uma equipe' }, { valor: 'equipes', rotulo: 'Equipes' },
+    ] },
+  { chave: 'equipe_id', rotulo: 'Qual equipe', tipo: 'equipe', padrao: '', quando: { chave: 'fonte', valor: 'equipe' } },
+  { chave: 'valor', rotulo: 'Comparar', tipo: 'escolha', padrao: 'recebido',
+    escolhas: [{ valor: 'recebido', rotulo: 'Recebido no mês' }, { valor: 'projecao', rotulo: 'Projeção do mês' }] },
+];
 
 export const TEMPLATES: Template[] = [
   {
@@ -111,18 +129,20 @@ export const TEMPLATES: Template[] = [
   {
     id: 'podio', categoria: 'ranking',
     nome: 'Pódio',
-    descricao: 'Os três primeiros do mês, com foto, no formato de pódio.',
+    descricao: 'Os três primeiros do mês, com foto, no formato de pódio. Pessoas, uma equipe ou equipe contra equipe.',
     campos: [
       TITULO('Pódio do mês'),
+      ...FONTE_RANKING,
       { chave: 'mostrar_valor', rotulo: 'Mostrar o valor de cada um', tipo: 'liga', padrao: true },
     ],
   },
   {
     id: 'lista', categoria: 'ranking',
     nome: 'Ranking em lista',
-    descricao: 'Os primeiros colocados numerados, com foto e valor.',
+    descricao: 'Os primeiros colocados numerados, com foto e valor. Pessoas, uma equipe ou equipe contra equipe.',
     campos: [
       TITULO('Ranking do mês'),
+      ...FONTE_RANKING,
       { chave: 'quantidade', rotulo: 'Quantos aparecem', tipo: 'escolha', padrao: '5',
         escolhas: [{ valor: '5', rotulo: 'Top 5' }, { valor: '10', rotulo: 'Top 10' }] },
       { chave: 'mostrar_valor', rotulo: 'Mostrar o valor de cada um', tipo: 'liga', padrao: true },
@@ -152,6 +172,13 @@ export const TEMPLATES: Template[] = [
       { chave: 'data', rotulo: 'Qual dia', tipo: 'data', padrao: '', quando: { chave: 'dia', valor: 'data' } },
       { chave: 'mostrar_valor', rotulo: 'Mostrar o valor', tipo: 'liga', padrao: true },
     ],
+  },
+  {
+    // 30/10/2026: o mesmo ranking da aba do Analítico, com os prêmios.
+    id: 'quitacao', categoria: 'ranking',
+    nome: 'Ranking de quitação',
+    descricao: 'O top 10 de quitação do mês, com o prêmio até o 6º e quanto falta para passar do 7º ao 10º.',
+    campos: [TITULO('Ranking de quitação')],
   },
   {
     id: 'imagem', categoria: 'midia',
@@ -185,6 +212,13 @@ export const TEMPLATES: Template[] = [
       { chave: 'texto', rotulo: 'Recado', tipo: 'texto', padrao: 'Bora bater a meta!', max: 120 },
       { chave: 'assinatura', rotulo: 'Assinatura (opcional)', tipo: 'texto', padrao: '', max: 40 },
     ],
+  },
+  {
+    // 30/10/2026: a tela que o líder desenha do zero, no estúdio (`livre/`).
+    id: 'livre', categoria: 'midia',
+    nome: 'Cena livre',
+    descricao: 'Você desenha: textos, imagens, números ao vivo, relógio e formas, onde quiser, com o fundo que quiser.',
+    campos: [{ chave: 'cena', rotulo: 'Cena', tipo: 'cena', padrao: null }],
   },
 ];
 
@@ -221,6 +255,9 @@ export function opcao<T extends string | number | boolean | null>(
       return (typeof bruto === 'string' && /^[0-9a-f-]{36}$/i.test(bruto) ? bruto : campo.padrao) as T;
     case 'data':
       return (typeof bruto === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(bruto) ? bruto : campo.padrao) as T;
+    case 'cena':
+      // Quem lê é `cenaValida`, que saneia o objeto inteiro.
+      return (bruto ?? null) as T;
   }
 }
 
@@ -258,22 +295,36 @@ export function novaTela(template: TemplateId): TelaDoPainel {
   const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto
     ? crypto.randomUUID()
     : `t${Date.now()}${Math.random().toString(16).slice(2)}`;
-  // Vídeo nasce com «Duração do arquivo» (Cleber, 29/10).
-  return { id, template, opcoes: template === 'video' ? { tempo_do_arquivo: true } : {} };
+  // Vídeo nasce com «Duração do arquivo» (Cleber, 29/10); a cena livre, com o
+  // primeiro modelo, para o estúdio não abrir num palco vazio.
+  const opcoes: Record<string, unknown> = template === 'video' ? { tempo_do_arquivo: true }
+    : template === 'livre' ? { cena: cenaDoModelo('aviso') } : {};
+  return { id, template, opcoes };
 }
+
+/**
+ * Quantas telas cabem num painel. O banco limitava a 12 até 20261030170000;
+ * com as sob demanda (que não entram no rodízio) o teto subiu para 20.
+ */
+export const MAX_TELAS = 20;
+
+/** As telas que entram na conta do rodízio. */
+export const noRodizio = (t: Pick<TelaDoPainel, 'sob_demanda'>) => t.sob_demanda !== true;
 
 /** As telas que vieram do banco, sem o que não dá para desenhar. */
 export function telasValidas(bruto: unknown): TelaDoPainel[] {
   if (!Array.isArray(bruto)) return [];
   return bruto.flatMap((t): TelaDoPainel[] => {
     if (!t || typeof t !== 'object') return [];
-    const { id, template, opcoes, segundos } = t as Record<string, unknown>;
+    const { id, template, opcoes, segundos, sob_demanda } = t as Record<string, unknown>;
     if (typeof id !== 'string' || !templateDe(String(template))) return [];
     return [{
       id,
       template: template as TemplateId,
       opcoes: opcoes && typeof opcoes === 'object' && !Array.isArray(opcoes) ? opcoes as Record<string, unknown> : {},
       segundos: segundosValidos(segundos),
+      // Só o `true` grava a chave: painel antigo continua com o mesmo jsonb.
+      ...(sob_demanda === true ? { sob_demanda: true } : {}),
     }];
   });
 }

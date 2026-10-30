@@ -18,8 +18,13 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type { TelaDoPainel, TemaId } from './tipos';
 import { alvoDoDiaProprio, opcao } from './templates';
-import { iniciais, moedaTv, nomeCurto, percentualTv, tamanhoQueCabe, type VisaoTv } from './numeros';
+import {
+  iniciais, moedaTv, nomeCurto, nomeDoItem, percentualTv, quitacaoDaTela, rankingDaTela, tamanhoQueCabe,
+  type ItemDoRanking, type QuitacaoLinha, type RankingNaTela, type VisaoTv,
+} from './numeros';
 import { Destaque } from './destaque/Destaque';
+import { CenaLivre } from './livre/CenaLivre';
+import { cenaValida } from './livre/cena';
 
 // ── Temas ────────────────────────────────────────────────────────────────────
 
@@ -608,21 +613,44 @@ function Grafico({ v, tela, c }: { v: VisaoTv; tela: TelaDoPainel; c: Cores }) {
 
 const MEDALHA = ['#f5c542', '#a9b4c4', '#d6935a'];
 
-function Podio({ v, tela, c }: { v: VisaoTv; tela: TelaDoPainel; c: Cores }) {
-  const top = v.ranking.slice(0, 3);
-  if (!top.length) return <Aviso texto="Ainda não há recebimento neste mês." c={c} />;
-  const mostrar = opcao<boolean>(tela, 'mostrar_valor');
-  // 2º, 1º, 3º — o primeiro no meio e mais alto.
-  return <PodioVivo top={top} tela={tela} c={c} mostrar={mostrar} />;
+/**
+ * Debaixo do título, o que a tela compara quando não é o óbvio: projeção e
+ * equipe contra equipe (30/10/2026).
+ */
+function Subtitulo({ r, c, titulo }: { r: RankingNaTela; c: Cores; titulo: string }) {
+  // O que o título já diz não se repete embaixo.
+  const jaDiz = (s: string) => titulo.toLowerCase().includes(s.toLowerCase());
+  const partes = [
+    r.deEquipes && !jaDiz('equipe') ? 'Equipe contra equipe' : '',
+    r.projecao && !jaDiz('proje') ? 'Projeção de fechamento no ritmo atual' : '',
+  ].filter(Boolean);
+  if (!partes.length) return null;
+  return <div style={{ fontSize: 32, color: c.suave, marginTop: -12, marginBottom: 20, textAlign: 'center' }}>{partes.join(' · ')}</div>;
 }
 
-function PodioVivo({ top, tela, c, mostrar }: { top: VisaoTv['ranking']; tela: TelaDoPainel; c: Cores; mostrar: boolean }) {
+/** «87,4% da meta» de uma equipe; nada quando ela não tem meta. */
+function DaMeta({ item, c, tamanho }: { item: ItemDoRanking; c: Cores; tamanho: number }) {
+  if (!item.meta) return null;
+  const f = item.valor / item.meta;
+  return <span style={{ fontSize: tamanho, fontWeight: 700, color: f >= 1 ? c.ok : c.destaque }}>{percentualTv(f)} da meta</span>;
+}
+
+function Podio({ v, tela, c }: { v: VisaoTv; tela: TelaDoPainel; c: Cores }) {
+  const r = rankingDaTela(v, tela);
+  if (!r.itens.length) return <Aviso texto={r.motivo} c={c} />;
+  const mostrar = opcao<boolean>(tela, 'mostrar_valor');
+  // 2º, 1º, 3º — o primeiro no meio e mais alto.
+  return <PodioVivo top={r.itens.slice(0, 3)} r={r} tela={tela} c={c} mostrar={mostrar} />;
+}
+
+function PodioVivo({ top, r, tela, c, mostrar }: { top: ItemDoRanking[]; r: RankingNaTela; tela: TelaDoPainel; c: Cores; mostrar: boolean }) {
   const caixa = useDeslizar(top.map(p => p.id).join(','));
   const ordem = [1, 0, 2].filter(i => top[i]);
   const altura = [280, 200, 150];
   return (
     <div style={{ ...centro, justifyContent: 'flex-end', paddingBottom: 0 }}>
       <Titulo texto={opcao<string>(tela, 'titulo')} c={c} />
+      <Subtitulo r={r} c={c} titulo={opcao<string>(tela, 'titulo')} />
       <div ref={caixa} style={{ display: 'flex', alignItems: 'flex-end', gap: 56, marginTop: 'auto' }}>
         {ordem.map(i => {
           const p = top[i];
@@ -630,9 +658,10 @@ function PodioVivo({ top, tela, c, mostrar }: { top: VisaoTv['ranking']; tela: T
             <div key={p.id} data-flip={p.id} style={{ width: 460, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
               <Foto nome={p.nome} foto={p.foto} tamanho={i === 0 ? 190 : 150} c={c} borda={MEDALHA[i]} />
               <div style={{ fontSize: i === 0 ? 52 : 44, fontWeight: 700, marginTop: 24, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 460 }}>
-                {nomeCurto(p.nome)}
+                {nomeDoItem(p, r.deEquipes)}
               </div>
               {mostrar && <Moeda v={p.valor} caber={440} style={{ fontSize: 40, color: c.suave, marginTop: 6 }} />}
+              <DaMeta item={p} c={c} tamanho={32} />
               <div style={{
                 width: '100%', height: altura[i], marginTop: 28, borderRadius: '28px 28px 0 0',
                 transition: `height 1600ms ${CURVA}`,
@@ -652,12 +681,12 @@ function PodioVivo({ top, tela, c, mostrar }: { top: VisaoTv['ranking']; tela: T
 
 function Lista({ v, tela, c }: { v: VisaoTv; tela: TelaDoPainel; c: Cores }) {
   const qtd = Number(opcao<string>(tela, 'quantidade')) || 5;
-  const pessoas = v.ranking.slice(0, qtd);
-  if (!pessoas.length) return <Aviso texto="Ainda não há recebimento neste mês." c={c} />;
-  return <ListaViva pessoas={pessoas} tela={tela} c={c} />;
+  const r = rankingDaTela(v, tela);
+  if (!r.itens.length) return <Aviso texto={r.motivo} c={c} />;
+  return <ListaViva pessoas={r.itens.slice(0, qtd)} r={r} tela={tela} c={c} />;
 }
 
-function ListaViva({ pessoas, tela, c }: { pessoas: VisaoTv['ranking']; tela: TelaDoPainel; c: Cores }) {
+function ListaViva({ pessoas, r, tela, c }: { pessoas: ItemDoRanking[]; r: RankingNaTela; tela: TelaDoPainel; c: Cores }) {
   const caixa = useDeslizar(pessoas.map(p => p.id).join(','));
   const mostrar = opcao<boolean>(tela, 'mostrar_valor');
   const duasColunas = pessoas.length > 5;
@@ -665,6 +694,7 @@ function ListaViva({ pessoas, tela, c }: { pessoas: VisaoTv['ranking']; tela: Te
   return (
     <div style={{ ...centro, top: 140, justifyContent: 'flex-start' }}>
       <Titulo texto={opcao<string>(tela, 'titulo')} c={c} />
+      <Subtitulo r={r} c={c} titulo={opcao<string>(tela, 'titulo')} />
       <div ref={caixa} style={{
         display: 'grid', width: '100%', gap: '18px 56px',
         gridTemplateColumns: duasColunas ? 'minmax(0, 1fr) minmax(0, 1fr)' : 'minmax(0, 1fr)',
@@ -681,13 +711,106 @@ function ListaViva({ pessoas, tela, c }: { pessoas: VisaoTv['ranking']; tela: Te
           }}>
             <div style={{ width: duasColunas ? 60 : 72, fontSize: duasColunas ? 48 : 56, fontWeight: 800, color: i < 3 ? MEDALHA[i] : c.suave, textAlign: 'center' }}>{i + 1}</div>
             <Foto nome={p.nome} foto={p.foto} tamanho={duasColunas ? 72 : 92} c={c} />
-            <div style={{ flex: 1, minWidth: 0, fontSize: duasColunas ? 40 : 48, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {nomeCurto(p.nome)}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: duasColunas ? 40 : 48, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {nomeDoItem(p, r.deEquipes)}
+              </div>
+              {p.meta != null && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 6 }}>
+                  <div style={{ flex: 1 }}><Barra fracao={p.valor / p.meta} c={c} altura={12} cor={p.valor >= p.meta ? c.ok : undefined} /></div>
+                  <DaMeta item={p} c={c} tamanho={duasColunas ? 24 : 28} />
+                </div>
+              )}
             </div>
             {mostrar && <Moeda v={p.valor} style={{ fontSize: duasColunas ? 38 : 48, fontWeight: 700 }} />}
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// ── Ranking de quitação (30/10/2026) ─────────────────────────────────────────
+
+const quitacoesTexto = (n: number) => `${n} ${n === 1 ? 'quitação' : 'quitações'}`;
+
+/**
+ * A aba do Analítico na parede: pódio com a altura proporcional ao valor
+ * quitado (a distância de verdade entre as pessoas), do 4º ao 6º com o
+ * prêmio, do 7º ao 10º com quanto falta para passar quem está acima.
+ */
+function Quitacao({ v, tela, c }: { v: VisaoTv; tela: TelaDoPainel; c: Cores }) {
+  const q = quitacaoDaTela(v);
+  if (q.motivo) return <Aviso texto={q.motivo} c={c} />;
+  const maior = Math.max(1, ...q.podio.map(p => p.valor));
+  const ordem = [1, 0, 2].filter(i => q.podio[i]);
+  return (
+    <div style={{ ...centro, top: 140, justifyContent: 'flex-start' }}>
+      <Titulo texto={opcao<string>(tela, 'titulo')} c={c} />
+      <div style={{ display: 'flex', gap: 48, width: '100%', flex: 1, minHeight: 0 }}>
+        <div style={{ flex: '0 0 860px', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 24 }}>
+          {ordem.map(i => {
+            const p = q.podio[i];
+            return (
+              <div key={p.id} style={{ width: 280, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <Foto nome={p.nome} foto={p.foto} tamanho={i === 0 ? 150 : 124} c={c} borda={MEDALHA[i]} />
+                <div style={{ fontSize: i === 0 ? 42 : 36, fontWeight: 700, marginTop: 14, maxWidth: 280, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {nomeCurto(p.nome)}
+                </div>
+                <div style={{ fontSize: 32, fontWeight: 700, marginTop: 4 }}>{moedaTv(p.valor)}</div>
+                <div style={{ fontSize: 26, color: c.suave }}>{quitacoesTexto(p.quitacoes)}</div>
+                <div style={{
+                  width: '100%', marginTop: 14, borderRadius: '24px 24px 0 0',
+                  height: 120 + Math.round(200 * (p.valor / maior)),
+                  background: `linear-gradient(180deg, ${MEDALHA[i]}55, ${MEDALHA[i]}14)`,
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 14, gap: 8,
+                }}>
+                  <span style={{ fontSize: 76, fontWeight: 800, lineHeight: 1, color: MEDALHA[i] }}>{p.posicao}</span>
+                  {p.premio != null && <SeloPremio valor={p.premio} c={c} />}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', gap: 10 }}>
+          {[...q.premiados, ...q.perseguindo].map(p => (
+            <LinhaQuitacao key={p.id} p={p} c={c} falta={'falta' in p ? (p as { falta: number }).falta : null} />
+          ))}
+          {q.participantes > 10 && (
+            <div style={{ fontSize: 26, color: c.suave, textAlign: 'right' }}>{q.participantes} pessoas no ranking</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SeloPremio({ valor, c }: { valor: number; c: Cores }) {
+  return (
+    <span style={{ fontSize: 26, fontWeight: 800, padding: '6px 16px', borderRadius: 999, background: c.ok, color: '#0b1220', whiteSpace: 'nowrap' }}>
+      Prêmio {moedaTv(valor)}
+    </span>
+  );
+}
+
+function LinhaQuitacao({ p, c, falta }: { p: QuitacaoLinha; c: Cores; falta: number | null }) {
+  // Sete linhas têm de caber na altura da tela: tudo numa linha só, sem quebra.
+  const umaLinha: CSSProperties = { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' };
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 18, height: 88, padding: '0 22px', borderRadius: 24, background: c.linha, flexShrink: 0 }}>
+      <span style={{ width: 52, fontSize: 40, fontWeight: 800, color: c.suave, textAlign: 'center' }}>{p.posicao}</span>
+      <Foto nome={p.nome} foto={p.foto} tamanho={60} c={c} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 34, fontWeight: 700, ...umaLinha }}>{nomeCurto(p.nome)}</div>
+        <div style={{ fontSize: 24, color: c.suave, ...umaLinha }}>{moedaTv(p.valor)} · {quitacoesTexto(p.quitacoes)}</div>
+      </div>
+      {p.premio != null
+        ? <SeloPremio valor={p.premio} c={c} />
+        : falta != null && (
+          <span style={{ fontSize: 26, fontWeight: 700, color: c.alerta, textAlign: 'right', lineHeight: 1.15 }}>
+            falta {moedaTv(falta)}<br /><span style={{ fontWeight: 500, color: c.suave }}>para passar o {p.posicao - 1}º</span>
+          </span>
+        )}
     </div>
   );
 }
@@ -815,12 +938,14 @@ export interface PropsTelaTv {
 
 export function TelaTv({ tela, tema, visao, midiaUrl, posicao, atualizadoEm, mes, parada, semSom }: PropsTelaTv) {
   const c = CORES[tema];
-  // Tela cheia, sem o cabeçalho e o rodapé: a mídia e o destaque (cada estilo tem a página dele).
-  const ehMidia = tela.template === 'imagem' || tela.template === 'video' || tela.template === 'destaque';
+  // Tela cheia, sem o cabeçalho e o rodapé: a mídia, o destaque (cada estilo
+  // tem a página dele) e a cena livre (o líder desenha a página inteira).
+  const ehMidia = tela.template === 'imagem' || tela.template === 'video' || tela.template === 'destaque' || tela.template === 'livre';
   const nomeMes = mes ? MESES[Number(mes.slice(5, 7)) - 1] : undefined;
 
   let corpo: ReactNode;
-  if (tela.template === 'imagem') corpo = <Imagem tela={tela} c={c} url={midiaUrl} />;
+  if (tela.template === 'livre') corpo = <CenaLivre cena={cenaValida(tela.opcoes.cena)} visao={visao} />;
+  else if (tela.template === 'imagem') corpo = <Imagem tela={tela} c={c} url={midiaUrl} />;
   else if (tela.template === 'video') corpo = <Video tela={tela} c={c} url={midiaUrl} parada={parada} semSom={semSom} />;
   else if (tela.template === 'recado') corpo = <Recado tela={tela} c={c} />;
   else if (!visao) corpo = <Aviso texto="Carregando os números…" c={c} />;
@@ -830,6 +955,7 @@ export function TelaTv({ tela, tema, visao, midiaUrl, posicao, atualizadoEm, mes
       contagem: <Contagem {...P} />, barra: <MetaBarra {...P} />, anel: <Anel {...P} />,
       hoje: <Hoje {...P} />, ritmo: <Ritmo {...P} />, placar: <Placar {...P} />, grafico: <Grafico {...P} />,
       podio: <Podio {...P} />, lista: <Lista {...P} />, destaque: <Destaque v={visao} tela={tela} />,
+      quitacao: <Quitacao {...P} />,
     }[tela.template as 'contagem'] ?? <Aviso texto="Template desconhecido." c={c} />;
   }
 

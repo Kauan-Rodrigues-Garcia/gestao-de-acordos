@@ -43,6 +43,10 @@ export function semMigration(e: unknown): boolean {
 }
 
 function mensagemAmigavel(e: Erro): string {
+  // Antes de 20261030170000 o banco aceitava 12 telas e 16 KB por painel.
+  if (/tv_paineis_telas_check|telas_check/i.test(e.message ?? '')) {
+    return 'O painel passou do limite que o banco aceita hoje (12 telas). A atualização que libera 20 telas e a cena livre ainda não foi aplicada.';
+  }
   return e.message || 'Erro ao falar com o banco.';
 }
 

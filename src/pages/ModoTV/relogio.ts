@@ -13,30 +13,37 @@
  * Puro. Testado em `modoTv.test.ts`.
  */
 import type { TelaDoPainel } from './tipos';
-import { segundosDaTela } from './templates';
+import { noRodizio, segundosDaTela } from './templates';
 
 export interface Instante {
+  /** Posição da tela na lista COMPLETA do painel; -1 = nenhuma no rodízio. */
   indice: number;
   /** Quanto falta para a próxima troca, em ms. */
   restanteMs: number;
 }
 
+/**
+ * Tela sob demanda (30/10/2026) não entra na volta: o relógio conta só as do
+ * rodízio, e o índice devolvido continua sendo o da lista inteira — quem
+ * desenha não precisa saber que houve filtro.
+ */
 export function telaNoInstante(
-  telas: Pick<TelaDoPainel, 'segundos'>[],
+  telas: Pick<TelaDoPainel, 'segundos' | 'sob_demanda'>[],
   padraoDoPainel: number,
   inicioMs: number,
   agoraMs: number,
 ): Instante {
-  if (!telas.length) return { indice: 0, restanteMs: 60_000 };
-  const duracoes = telas.map(t => segundosDaTela(t, padraoDoPainel) * 1000);
+  const naVolta = telas.flatMap((t, i) => (noRodizio(t) ? [i] : []));
+  if (!naVolta.length) return { indice: -1, restanteMs: 60_000 };
+  const duracoes = naVolta.map(i => segundosDaTela(telas[i], padraoDoPainel) * 1000);
   const volta = duracoes.reduce((a, b) => a + b, 0);
   // Antes do início (relógio adiantado na outra ponta): a primeira tela.
   let pos = Math.max(0, agoraMs - inicioMs) % volta;
-  for (let i = 0; i < duracoes.length; i++) {
-    if (pos < duracoes[i]) return { indice: i, restanteMs: duracoes[i] - pos };
-    pos -= duracoes[i];
+  for (let k = 0; k < duracoes.length; k++) {
+    if (pos < duracoes[k]) return { indice: naVolta[k], restanteMs: duracoes[k] - pos };
+    pos -= duracoes[k];
   }
-  return { indice: 0, restanteMs: duracoes[0] };
+  return { indice: naVolta[0], restanteMs: duracoes[0] };
 }
 
 /** Quanto somar a `Date.now()` para chegar à hora do banco. */

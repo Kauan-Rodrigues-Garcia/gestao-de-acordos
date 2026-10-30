@@ -22,8 +22,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
-  ArrowDown, ArrowUp, CheckCircle2, CircleDashed, ImagePlus, Loader2, Pause, Pin, PinOff, Play, Plus,
-  Trash2, Tv, TriangleAlert, X,
+  ArrowDown, ArrowUp, CheckCircle2, CircleDashed, ImagePlus, Loader2, Palette, Pause, Pin, PinOff, Play, Plus,
+  Radio, Square, Trash2, Tv, TriangleAlert, X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -35,12 +35,14 @@ import {
 } from '@/components/ui/dialog';
 import type { AlvoTv, ConexaoTv, NumerosTv, Painel, TelaDoPainel, TemaId, Unidade } from './tipos';
 import {
-  CATEGORIAS, SEGUNDOS_MAX, SEGUNDOS_MIN, TEMAS, TEMPLATES, TEMPOS_PRONTOS,
-  campoVisivel, novaTela, opcao, rotuloTempo, segundosDaTela, segundosDoArquivo, templateDe, type CampoOpcao,
+  CATEGORIAS, MAX_TELAS, SEGUNDOS_MAX, SEGUNDOS_MIN, TEMAS, TEMPLATES, TEMPOS_PRONTOS,
+  campoVisivel, noRodizio, novaTela, opcao, rotuloTempo, segundosDaTela, segundosDoArquivo, templateDe, type CampoOpcao,
 } from './templates';
 import { CORES } from './TelaTv';
 import { Rodizio } from './Rodizio';
 import { numerosDemo } from './demo';
+import { montarVisao } from './numeros';
+import { Estudio } from './livre/Estudio';
 import {
   conectarTv, desconectarTv, enviarMidia, excluirPainel, fixarTela, previa, salvarPainel,
 } from './servico';
@@ -79,6 +81,7 @@ export function Editor({ painel, alvo, conexoes, aoMudar, aoMudarConexoes }: {
   const [conectando, setConectando] = useState(false);
   const [excluindo, setExcluindo] = useState(false);
   const [salvando, setSalvando] = useState(false);
+  const [estudio, setEstudio] = useState(false);
   const [, tique] = useState(0);
 
   const sujo = estavel(r) !== estavel(doPainel(painel));
@@ -155,9 +158,15 @@ export function Editor({ painel, alvo, conexoes, aoMudar, aoMudarConexoes }: {
     };
   });
 
+  /** Sobe ou desce dentro do mesmo grupo (rodízio ou sob demanda). */
+  const vizinho = (telas: TelaDoPainel[], i: number, d: -1 | 1) => {
+    const grupo = noRodizio(telas[i]);
+    for (let j = i + d; j >= 0 && j < telas.length; j += d) if (noRodizio(telas[j]) === grupo) return j;
+    return -1;
+  };
   const mover = (i: number, d: -1 | 1) => setR(atual => {
-    const j = i + d;
-    if (j < 0 || j >= atual.telas.length) return atual;
+    const j = vizinho(atual.telas, i, d);
+    if (j < 0) return atual;
     const telas = [...atual.telas];
     [telas[i], telas[j]] = [telas[j], telas[i]];
     setSel(j);
@@ -196,13 +205,88 @@ export function Editor({ painel, alvo, conexoes, aoMudar, aoMudarConexoes }: {
   const painelDaPrevia: Painel = vista === 'edicao' ? { ...painel, ...r, tela_fixa: null } : painel;
   const telaSel = r.telas[sel] ?? null;
   const tplSel = telaSel ? templateDe(telaSel.template) : null;
-  const volta = r.telas.reduce((s, t) => s + segundosDaTela(t, r.segundos_por_tela), 0);
+  const naVolta = r.telas.filter(noRodizio);
+  const volta = naVolta.reduce((s, t) => s + segundosDaTela(t, r.segundos_por_tela), 0);
+  const visao = useMemo(() => (numeros ? montarVisao(numeros, r.unidade) : null), [numeros, r.unidade]);
+
+  /** Uma linha da lista de telas. A sob demanda troca o tempo e o «Fixar» por «Pôr no ar». */
+  const linhaDaTela = (t: TelaDoPainel, i: number) => {
+    const fixada = painel.tela_fixa === t.id;
+    const publicada = publicadas.has(t.id);
+    const demanda = !noRodizio(t);
+    return (
+      <div key={t.id}
+        onClick={() => { setSel(i); setVista('edicao'); }}
+        className={`flex flex-wrap items-center gap-2 rounded-xl border p-2.5 cursor-pointer ${i === sel && vista === 'edicao' ? 'border-primary bg-primary/5' : 'hover:bg-accent'}`}>
+        <span className="w-6 text-center text-sm font-semibold text-muted-foreground">
+          {demanda ? <Radio className="h-4 w-4 mx-auto" /> : naVolta.indexOf(t) + 1}
+        </span>
+        <div className="flex-1 min-w-[140px]">
+          <div className="font-medium truncate flex items-center gap-2">
+            {templateDe(t.template)?.nome}
+            {fixada && <span className="rounded-full bg-sky-600 px-2 py-0.5 text-[10px] font-semibold text-white">{demanda ? 'NO AR' : 'FIXA NA TV'}</span>}
+            {!publicada && <span className="rounded-full bg-amber-600 px-2 py-0.5 text-[10px] font-semibold text-white">NOVA</span>}
+          </div>
+          <div className="text-xs text-muted-foreground truncate">
+            {opcao<string>(t, 'titulo') || opcao<string>(t, 'texto') || opcao<string>(t, 'legenda') || templateDe(t.template)?.descricao}
+          </div>
+        </div>
+        <div onClick={e => e.stopPropagation()} className="flex items-center gap-2">
+          <select
+            className="h-8 rounded-md border bg-background px-2 text-sm"
+            value={demanda ? 'demanda' : 'rodizio'}
+            title="No rodízio, a tela passa sozinha. Sob demanda, só entra quando você põe no ar — e fica até alguém tirar."
+            onChange={e => mudarTela(i, { sob_demanda: e.target.value === 'demanda' ? true : undefined })}
+          >
+            <option value="rodizio">No rodízio</option>
+            <option value="demanda">Sob demanda</option>
+          </select>
+          {!demanda && (t.template === 'video' ? (
+            <SeletorTempo
+              valor={t.segundos ?? null} padrao={r.segundos_por_tela}
+              arquivo={{
+                ligado: t.opcoes.tempo_do_arquivo === true,
+                segundos: segundosDoArquivo(t.opcoes.duracao_arquivo),
+                aoEscolher: () => { void escolherTempoDoArquivo(t.id); },
+              }}
+              aoMudar={v => mudarTelaPorId(t.id, x => ({ ...x, segundos: v, opcoes: { ...x.opcoes, tempo_do_arquivo: false } }))}
+            />
+          ) : (
+            <SeletorTempo valor={t.segundos ?? null} padrao={r.segundos_por_tela} aoMudar={v => mudarTela(i, { segundos: v })} />
+          ))}
+        </div>
+        {demanda ? (
+          <Button
+            variant={fixada ? 'secondary' : 'default'} size="sm"
+            disabled={!publicada}
+            title={!publicada ? 'Publique primeiro para poder pôr esta tela no ar' : undefined}
+            onClick={e => { e.stopPropagation(); void fixar(fixada ? null : t.id); }}
+          >
+            {fixada ? <><Square className="h-4 w-4 mr-1" />Tirar do ar</> : <><Play className="h-4 w-4 mr-1" />Pôr no ar</>}
+          </Button>
+        ) : (
+          <Button
+            variant={fixada ? 'secondary' : 'ghost'} size="sm"
+            disabled={!publicada}
+            title={publicada ? undefined : 'Publique primeiro para poder fixar esta tela na TV'}
+            onClick={e => { e.stopPropagation(); void fixar(fixada ? null : t.id); }}
+          >
+            {fixada ? <><PinOff className="h-4 w-4 mr-1" />Soltar</> : <><Pin className="h-4 w-4 mr-1" />Fixar</>}
+          </Button>
+        )}
+        <Button variant="ghost" size="icon" onClick={e => { e.stopPropagation(); mover(i, -1); }} disabled={vizinho(r.telas, i, -1) < 0} aria-label="Subir"><ArrowUp className="h-4 w-4" /></Button>
+        <Button variant="ghost" size="icon" onClick={e => { e.stopPropagation(); mover(i, 1); }} disabled={vizinho(r.telas, i, 1) < 0} aria-label="Descer"><ArrowDown className="h-4 w-4" /></Button>
+        <Button variant="ghost" size="icon" onClick={e => { e.stopPropagation(); remover(i); }} aria-label="Tirar"><X className="h-4 w-4" /></Button>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-5 min-w-0">
       <FaixaDeSituacao
         situacao={situacao}
         telaFixa={telaFixa ? templateDe(telaFixa.template)?.nome ?? 'uma tela' : null}
+        sobDemanda={telaFixa ? !noRodizio(telaFixa) : false}
         salvando={salvando}
         aoPublicar={publicar}
         aoDescartar={() => setR(doPainel(painel))}
@@ -277,7 +361,8 @@ export function Editor({ painel, alvo, conexoes, aoMudar, aoMudarConexoes }: {
         <div className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="font-semibold">Telas do rodízio</h2>
-            <Button size="sm" onClick={() => setGaleria(true)} disabled={r.telas.length >= 12}>
+            <Button size="sm" onClick={() => setGaleria(true)} disabled={r.telas.length >= MAX_TELAS}
+              title={r.telas.length >= MAX_TELAS ? `Até ${MAX_TELAS} telas por painel` : undefined}>
               <Plus className="h-4 w-4 mr-1.5" />Adicionar tela
             </Button>
           </div>
@@ -285,7 +370,7 @@ export function Editor({ painel, alvo, conexoes, aoMudar, aoMudarConexoes }: {
           <div className="flex flex-wrap items-center gap-2 rounded-xl bg-muted/50 px-3 py-2 text-sm">
             <span className="text-muted-foreground">Tempo padrão de cada tela</span>
             <SeletorTempo valor={r.segundos_por_tela} aoMudar={v => mudar({ segundos_por_tela: v ?? 20 })} />
-            {r.telas.length > 1 && (
+            {naVolta.length > 1 && (
               <span className="ml-auto text-xs text-muted-foreground">Uma volta completa: {rotuloTempo(volta)}</span>
             )}
           </div>
@@ -295,54 +380,24 @@ export function Editor({ painel, alvo, conexoes, aoMudar, aoMudarConexoes }: {
               Nenhuma tela ainda. Clique para escolher na vitrine.
             </button>
           )}
+          {!!r.telas.length && !naVolta.length && (
+            <p className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
+              Nenhuma tela no rodízio. Sem tela no ar, a TV mostra a tela de espera.
+            </p>
+          )}
 
-          {r.telas.map((t, i) => {
-            const fixada = painel.tela_fixa === t.id;
-            const publicada = publicadas.has(t.id);
-            return (
-              <div key={t.id}
-                onClick={() => { setSel(i); setVista('edicao'); }}
-                className={`flex flex-wrap items-center gap-2 rounded-xl border p-2.5 cursor-pointer ${i === sel && vista === 'edicao' ? 'border-primary bg-primary/5' : 'hover:bg-accent'}`}>
-                <span className="w-6 text-center text-sm font-semibold text-muted-foreground">{i + 1}</span>
-                <div className="flex-1 min-w-[140px]">
-                  <div className="font-medium truncate flex items-center gap-2">
-                    {templateDe(t.template)?.nome}
-                    {fixada && <span className="rounded-full bg-sky-600 px-2 py-0.5 text-[10px] font-semibold text-white">FIXA NA TV</span>}
-                    {!publicada && <span className="rounded-full bg-amber-600 px-2 py-0.5 text-[10px] font-semibold text-white">NOVA</span>}
-                  </div>
-                  <div className="text-xs text-muted-foreground truncate">
-                    {opcao<string>(t, 'titulo') || opcao<string>(t, 'texto') || opcao<string>(t, 'legenda') || templateDe(t.template)?.descricao}
-                  </div>
-                </div>
-                <div onClick={e => e.stopPropagation()}>
-                  {t.template === 'video' ? (
-                    <SeletorTempo
-                      valor={t.segundos ?? null} padrao={r.segundos_por_tela}
-                      arquivo={{
-                        ligado: t.opcoes.tempo_do_arquivo === true,
-                        segundos: segundosDoArquivo(t.opcoes.duracao_arquivo),
-                        aoEscolher: () => { void escolherTempoDoArquivo(t.id); },
-                      }}
-                      aoMudar={v => mudarTelaPorId(t.id, x => ({ ...x, segundos: v, opcoes: { ...x.opcoes, tempo_do_arquivo: false } }))}
-                    />
-                  ) : (
-                    <SeletorTempo valor={t.segundos ?? null} padrao={r.segundos_por_tela} aoMudar={v => mudarTela(i, { segundos: v })} />
-                  )}
-                </div>
-                <Button
-                  variant={fixada ? 'secondary' : 'ghost'} size="sm"
-                  disabled={!publicada}
-                  title={publicada ? undefined : 'Publique primeiro para poder fixar esta tela na TV'}
-                  onClick={e => { e.stopPropagation(); void fixar(fixada ? null : t.id); }}
-                >
-                  {fixada ? <><PinOff className="h-4 w-4 mr-1" />Soltar</> : <><Pin className="h-4 w-4 mr-1" />Fixar</>}
-                </Button>
-                <Button variant="ghost" size="icon" onClick={e => { e.stopPropagation(); mover(i, -1); }} disabled={i === 0} aria-label="Subir"><ArrowUp className="h-4 w-4" /></Button>
-                <Button variant="ghost" size="icon" onClick={e => { e.stopPropagation(); mover(i, 1); }} disabled={i === r.telas.length - 1} aria-label="Descer"><ArrowDown className="h-4 w-4" /></Button>
-                <Button variant="ghost" size="icon" onClick={e => { e.stopPropagation(); remover(i); }} aria-label="Tirar"><X className="h-4 w-4" /></Button>
-              </div>
-            );
-          })}
+          {r.telas.map((t, i) => (noRodizio(t) ? linhaDaTela(t, i) : null))}
+
+          {r.telas.some(t => !noRodizio(t)) && (
+            <div className="space-y-2 pt-3">
+              <h2 className="font-semibold flex items-center gap-2"><Radio className="h-4 w-4" />Sob demanda</h2>
+              <p className="text-xs text-muted-foreground">
+                Não entram no rodízio. Vão para a TV quando você clica em «Pôr no ar» e ficam até alguém tirar — bom para
+                sorteio, aviso da hora ou abertura de campanha.
+              </p>
+              {r.telas.map((t, i) => (noRodizio(t) ? null : linhaDaTela(t, i)))}
+            </div>
+          )}
         </div>
 
         {/* As opções da tela escolhida */}
@@ -354,10 +409,21 @@ export function Editor({ painel, alvo, conexoes, aoMudar, aoMudarConexoes }: {
                 <div className="text-xs text-muted-foreground">{tplSel.descricao}</div>
               </div>
               {tplSel.campos.filter(campo => campoVisivel(telaSel, campo)).map(campo => (
-                <CampoDaTela key={campo.chave} campo={campo} tela={telaSel} painelId={painel.id}
-                  aoMudar={v => mudarOpcao(sel, { [campo.chave]: v })}
-                  aoEnviarVideo={(url, duracao) => receberVideo(telaSel.id, url, duracao)}
-                  equipes={numeros?.equipes ?? []} />
+                campo.tipo === 'cena' ? (
+                  <div key={campo.chave} className="space-y-2">
+                    <Button className="w-full" onClick={() => setEstudio(true)}>
+                      <Palette className="h-4 w-4 mr-2" />Abrir o estúdio
+                    </Button>
+                    <p className="text-xs text-muted-foreground">
+                      Monte a tela do seu jeito. «Aplicar» traz para cá; a TV recebe quando você publicar.
+                    </p>
+                  </div>
+                ) : (
+                  <CampoDaTela key={campo.chave} campo={campo} tela={telaSel} painelId={painel.id}
+                    aoMudar={v => mudarOpcao(sel, { [campo.chave]: v })}
+                    aoEnviarVideo={(url, duracao) => receberVideo(telaSel.id, url, duracao)}
+                    equipes={numeros?.equipes ?? []} />
+                )
               ))}
               {!tplSel.campos.length && <p className="text-sm text-muted-foreground">Esta tela não tem opções.</p>}
             </>
@@ -424,6 +490,18 @@ export function Editor({ painel, alvo, conexoes, aoMudar, aoMudarConexoes }: {
         }}
       />
 
+      {telaSel?.template === 'livre' && (
+        <Estudio
+          aberto={estudio}
+          inicial={telaSel.opcoes.cena}
+          tema={r.tema}
+          visao={visao}
+          painelId={painel.id}
+          aoAplicar={cena => mudarTelaPorId(telaSel.id, t => ({ ...t, opcoes: { ...t.opcoes, cena } }))}
+          aoFechar={() => setEstudio(false)}
+        />
+      )}
+
       <DialogConectar aberto={conectando} painelId={painel.id} aoFechar={() => setConectando(false)}
         aoConectar={async () => { setConectando(false); await aoMudar(); }} />
 
@@ -448,8 +526,8 @@ export function Editor({ painel, alvo, conexoes, aoMudar, aoMudarConexoes }: {
 
 // ── A faixa do topo: em que pé está a TV ────────────────────────────────────
 
-function FaixaDeSituacao({ situacao, telaFixa, salvando, aoPublicar, aoDescartar, aoConectar, aoSoltar }: {
-  situacao: ReturnType<typeof situacaoDoPainel>; telaFixa: string | null; salvando: boolean;
+function FaixaDeSituacao({ situacao, telaFixa, sobDemanda, salvando, aoPublicar, aoDescartar, aoConectar, aoSoltar }: {
+  situacao: ReturnType<typeof situacaoDoPainel>; telaFixa: string | null; sobDemanda: boolean; salvando: boolean;
   aoPublicar: () => void; aoDescartar: () => void; aoConectar: () => void; aoSoltar: () => void;
 }) {
   let cor: string, icone: React.ReactNode, titulo: string, texto: string, acoes: React.ReactNode = null;
@@ -510,9 +588,15 @@ function FaixaDeSituacao({ situacao, telaFixa, salvando, aoPublicar, aoDescartar
       </div>
       {telaFixa && (
         <div className="flex flex-wrap items-center gap-3 rounded-lg bg-sky-600/10 px-3 py-2 text-sm">
-          <Pause className="h-4 w-4 text-sky-600" />
-          <span className="flex-1">A TV está <b>parada</b> em «{telaFixa}». O rodízio está pausado.</span>
-          <Button size="sm" variant="outline" onClick={aoSoltar}><Play className="h-4 w-4 mr-1.5" />Voltar ao rodízio</Button>
+          {sobDemanda ? <Radio className="h-4 w-4 text-sky-600" /> : <Pause className="h-4 w-4 text-sky-600" />}
+          <span className="flex-1">
+            {sobDemanda
+              ? <>No ar, sob demanda: <b>«{telaFixa}»</b>. Fica até alguém tirar.</>
+              : <>A TV está <b>parada</b> em «{telaFixa}». O rodízio está pausado.</>}
+          </span>
+          <Button size="sm" variant="outline" onClick={aoSoltar}>
+            {sobDemanda ? <><Square className="h-4 w-4 mr-1.5" />Tirar do ar</> : <><Play className="h-4 w-4 mr-1.5" />Voltar ao rodízio</>}
+          </Button>
         </div>
       )}
     </div>
@@ -534,8 +618,9 @@ function ControleDaTv({ painel, diferencaMs, aoEscolher }: {
   const calcular = () => telaNoInstante(painel.telas, painel.segundos_por_tela, inicio, Date.now() + diferencaMs);
   const [agora, setAgora] = useState(() => calcular());
 
+  const naVolta = painel.telas.filter(noRodizio);
   useEffect(() => {
-    if (fixa || painel.telas.length < 2) return;
+    if (fixa || naVolta.length < 2) return;
     let t: ReturnType<typeof setTimeout>;
     const passo = () => {
       const r = calcular();
@@ -548,14 +633,36 @@ function ControleDaTv({ painel, diferencaMs, aoEscolher }: {
   }, [fixa, inicio, diferencaMs, painel.telas, painel.segundos_por_tela]);
 
   if (!painel.telas.length) return null;
-  const noAr = fixa ? painel.telas.findIndex(t => t.id === fixa) : painel.telas.length < 2 ? 0 : agora.indice;
+  const noAr = fixa ? painel.telas.findIndex(t => t.id === fixa)
+    : naVolta.length < 2 ? painel.telas.findIndex(noRodizio) : agora.indice;
+  const sobDemanda = painel.telas.filter(t => !noRodizio(t));
+
+  const botao = (t: TelaDoPainel, rotulo: string) => {
+    const i = painel.telas.indexOf(t);
+    return (
+      <button
+        key={t.id}
+        onClick={() => aoEscolher(fixa === t.id && !noRodizio(t) ? null : t.id)}
+        className={`h-9 rounded-full border px-3 text-sm flex items-center gap-2 transition-colors ${
+          i === noAr ? (fixa ? 'bg-sky-600 text-white border-sky-600' : 'bg-emerald-600 text-white border-emerald-600') : 'hover:bg-accent'}`}
+      >
+        {i === noAr && <span className="h-2 w-2 rounded-full bg-white animate-pulse" />}
+        {rotulo}
+        {fixa === t.id && (noRodizio(t) ? <Pin className="h-3.5 w-3.5" /> : <Radio className="h-3.5 w-3.5" />)}
+      </button>
+    );
+  };
 
   return (
     <div className="rounded-xl border p-3 space-y-2">
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <span className="font-semibold">Na TV agora</span>
         <span className="text-muted-foreground">
-          {fixa ? '— parada nesta tela. Clique em outra para trocar.' : `— rodízio; próxima troca em ${Math.ceil(agora.restanteMs / 1000)} s. Clique numa tela para deixar só ela.`}
+          {fixa
+            ? '— parada nesta tela. Clique em outra para trocar.'
+            : naVolta.length > 1
+              ? `— rodízio; próxima troca em ${Math.ceil(agora.restanteMs / 1000)} s. Clique numa tela para deixar só ela.`
+              : '— rodízio.'}
         </span>
       </div>
       <div className="flex flex-wrap gap-2">
@@ -565,19 +672,14 @@ function ControleDaTv({ painel, diferencaMs, aoEscolher }: {
         >
           <Play className="h-3.5 w-3.5" />Rodízio
         </button>
-        {painel.telas.map((t, i) => (
-          <button
-            key={t.id}
-            onClick={() => aoEscolher(t.id)}
-            className={`h-9 rounded-full border px-3 text-sm flex items-center gap-2 transition-colors ${
-              i === noAr ? (fixa ? 'bg-sky-600 text-white border-sky-600' : 'bg-emerald-600 text-white border-emerald-600') : 'hover:bg-accent'}`}
-          >
-            {i === noAr && <span className="h-2 w-2 rounded-full bg-white animate-pulse" />}
-            {i + 1}. {templateDe(t.template)?.nome}
-            {fixa === t.id && <Pin className="h-3.5 w-3.5" />}
-          </button>
-        ))}
+        {naVolta.map((t, k) => botao(t, `${k + 1}. ${templateDe(t.template)?.nome ?? ''}`))}
       </div>
+      {!!sobDemanda.length && (
+        <div className="flex flex-wrap items-center gap-2 pt-1">
+          <span className="text-xs font-semibold text-muted-foreground flex items-center gap-1"><Radio className="h-3.5 w-3.5" />Sob demanda</span>
+          {sobDemanda.map(t => botao(t, templateDe(t.template)?.nome ?? ''))}
+        </div>
+      )}
     </div>
   );
 }
@@ -826,6 +928,9 @@ function CampoDaTela({ campo, tela, painelId, aoMudar, aoEnviarVideo, equipes = 
         </div>
       );
     }
+    case 'cena':
+      // O estúdio abre pelo botão do painel de opções (`Editor`).
+      return null;
   }
 }
 

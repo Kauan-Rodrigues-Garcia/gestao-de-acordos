@@ -12,8 +12,8 @@ export type Unidade = 'ho' | 'bruto';
 
 export type TemplateId =
   | 'contagem' | 'barra' | 'anel' | 'hoje' | 'ritmo' | 'placar' | 'grafico'
-  | 'podio' | 'lista' | 'destaque'
-  | 'imagem' | 'video' | 'recado';
+  | 'podio' | 'lista' | 'destaque' | 'quitacao'
+  | 'imagem' | 'video' | 'recado' | 'livre';
 
 /** Uma tela do rodízio. `opcoes` é o que o líder ajustou; o resto é padrão. */
 export interface TelaDoPainel {
@@ -22,6 +22,11 @@ export interface TelaDoPainel {
   opcoes: Record<string, unknown>;
   /** Tempo desta tela, em segundos. Nulo = o padrão do painel. */
   segundos?: number | null;
+  /**
+   * Fora do rodízio (30/10/2026): só vai para a TV quando o líder põe no ar
+   * (`tela_fixa`), e fica até alguém tirar. Ausente = no rodízio.
+   */
+  sob_demanda?: boolean;
 }
 
 export interface Painel {
@@ -61,6 +66,26 @@ export interface DestaqueTv {
   pagamentos: number;
 }
 
+/** Uma equipe do setor, com o total do mês (`fn_recebido_por_equipe`) e a meta dela. */
+export interface EquipeNoRanking {
+  id: string;
+  nome: string;
+  valor: number;
+  valor_ho: number;
+  meta: number;
+}
+
+/** O Ranking de quitação do setor no mês, a mesma conta de `fn_ranking_quitacao`. */
+export type QuitacaoTv =
+  | { habilitado: false }
+  | {
+      habilitado: true;
+      premios: number[];
+      participantes: number;
+      importado_em: string | null;
+      posicoes: { posicao: number; id: string; nome: string; foto: string | null; quitacoes: number; valor: number }[];
+    };
+
 /** O pacote de `fn_tv_numeros_calcular`. */
 export interface NumerosTv {
   alvo_nome: string;
@@ -85,6 +110,11 @@ export interface NumerosTv {
   equipes?: { id: string; nome: string }[];
   equipe_id?: string | null;
   setor_nome?: string;
+  /** As cenas de ranking por equipe (20261030170000). Faltam no cache antigo. */
+  equipes_ranking?: EquipeNoRanking[];
+  ranking_por_equipe?: { equipe_id: string; pessoas: PessoaRanking[] }[];
+  /** A cena «Ranking de quitação» (20261030170000). */
+  quitacao?: QuitacaoTv;
   calculado_em: string;
   /** Hora do banco na resposta da prévia (20261027190000). */
   agora?: string;
