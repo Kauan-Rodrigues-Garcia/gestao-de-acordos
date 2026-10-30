@@ -111,6 +111,34 @@ export function elegiveis(cartelas: CartelaNoControle[], pedras: number[], tipo:
   return cartelas.filter(c => padrao(c.numeros, sorteadas, tipo));
 }
 
+/** A máquina da TV gira este tempo antes de a pedra aparecer (`BingoTv`). */
+export const MAQUINA_GIRANDO_MS = 2200;
+
+/**
+ * O jogador só vê a pedra depois que a TV a mostrou (pedido do Cleber,
+ * 30/10/2026). O aviso chega aos dois ao mesmo tempo e a TV ainda gira a
+ * máquina; a folga cobre o aviso que chega à TV um pouco depois.
+ */
+export const REVELAR_AO_JOGADOR_MS = MAQUINA_GIRANDO_MS + 600;
+
+/**
+ * Do que o banco devolveu, o que já pode aparecer para o jogador e a pedra que
+ * ainda espera a TV: a última, se esta tela não a conhecia. As que já esperam
+ * (`pendentes`) continuam esperando.
+ */
+export function pedrasParaMostrar(
+  doBanco: readonly number[],
+  conhecidas: ReadonlySet<number>,
+  pendentes: ReadonlySet<number>,
+): { visiveis: number[]; aRevelar: number | null } {
+  const ultima = doBanco[doBanco.length - 1];
+  const aRevelar = ultima !== undefined && !conhecidas.has(ultima) ? ultima : null;
+  return {
+    visiveis: doBanco.filter(n => n !== aRevelar && !pendentes.has(n)),
+    aRevelar,
+  };
+}
+
 /**
  * A pedra que chegou encaixa na sequência? `ordem` é a posição dela. Se pulou
  * (chegou a 24 sem a 23), o cliente relê do banco em vez de remendar.

@@ -23,7 +23,10 @@ import { toast } from 'sonner';
 import { ChevronDown, Volume2, VolumeX, X } from 'lucide-react';
 import { assinarTabela } from '@/lib/realtime';
 import { Cartela } from '../Cartela';
-import { encaixa, lerAviso, melhorFeito, nomeDaVitoria, padrao, paraMarcarSozinho, podeGritar, TOTAL_PEDRAS } from '../regras';
+import {
+  encaixa, lerAviso, melhorFeito, nomeDaVitoria, padrao, paraMarcarSozinho, pedrasParaMostrar, podeGritar,
+  REVELAR_AO_JOGADOR_MS, TOTAL_PEDRAS,
+} from '../regras';
 import { gritar, minhaPartida } from '../servico';
 import { tocarFanfarra, tocarPlim } from '../som';
 import { useTemaBingo } from '../temas';
@@ -99,16 +102,41 @@ function CartelaDoJogador({ inicial, perfilId, somenteVer, indice, aoSumir }: {
     for (const n of estado.pedras) if (!vistaEm.current.has(n)) vistaEm.current.set(n, agora);
   }, [estado.pedras]);
 
+  const mudoRef = useRef(mudo);
+  mudoRef.current = mudo;
+
+  /*
+   * A pedra nova espera a TV (`REVELAR_AO_JOGADOR_MS`): o aviso chega aqui e
+   * na TV juntos, e a TV ainda gira a máquina antes de mostrar o número. Até
+   * lá ela fica em `pendentes` — conhecida, para o próximo aviso encaixar, mas
+   * fora da cartela, das últimas pedras e do som.
+   */
+  const pendentes = useRef(new Set<number>());
+  const timersRevelar = useRef(new Set<ReturnType<typeof setTimeout>>());
+  useEffect(() => () => { for (const t of timersRevelar.current) clearTimeout(t); }, []);
+  const revelarDepois = useCallback((numero: number) => {
+    if (pendentes.current.has(numero)) return;
+    pendentes.current.add(numero);
+    const t = setTimeout(() => {
+      timersRevelar.current.delete(t);
+      pendentes.current.delete(numero);
+      setEstado(e => (e.pedras.includes(numero) ? e : { ...e, pedras: [...e.pedras, numero] }));
+      setPedraNova({ numero, chave: Date.now() });
+      if (!mudoRef.current) tocarPlim();
+    }, REVELAR_AO_JOGADOR_MS);
+    timersRevelar.current.add(t);
+  }, []);
+
   const reler = useCallback(async () => {
     try {
       const e = await minhaPartida(id);
       if (!e || e.partida.estado !== 'aberta') { setEncerrada(true); return; }
-      setEstado(e);
+      const conhecidas = new Set([...estadoRef.current.pedras, ...pendentes.current]);
+      const { visiveis, aRevelar } = pedrasParaMostrar(e.pedras, conhecidas, pendentes.current);
+      setEstado({ ...e, pedras: visiveis });
+      if (aRevelar !== null) revelarDepois(aRevelar);
     } catch { /* segura o que tem */ }
-  }, [id]);
-
-  const mudoRef = useRef(mudo);
-  mudoRef.current = mudo;
+  }, [id, revelarDepois]);
 
   // O canal da partida: a pedra vem dentro do aviso.
   useEffect(() => assinarTabela(
@@ -118,19 +146,17 @@ function CartelaDoJogador({ inicial, perfilId, somenteVer, indice, aoSumir }: {
         const aviso = lerAviso(payload);
         if (!aviso || aviso.partida !== id) return;
         if (aviso.tipo === 'pedra') {
-          const como = encaixa(estadoRef.current.pedras, aviso);
+          const como = encaixa([...estadoRef.current.pedras, ...pendentes.current], aviso);
           if (como === 'repetida') return;
           if (como === 'buraco') { void reler(); return; }
-          setEstado(e => ({ ...e, pedras: [...e.pedras, aviso.numero] }));
-          setPedraNova({ numero: aviso.numero, chave: Date.now() });
-          if (!mudoRef.current) tocarPlim();
+          revelarDepois(aviso.numero);
           return;
         }
         void reler();
       },
       onReconectado: () => { void reler(); },
     },
-  ), [id, reler]);
+  ), [id, reler, revelarDepois]);
 
   // A pedra nova sai da tela sozinha.
   useEffect(() => {

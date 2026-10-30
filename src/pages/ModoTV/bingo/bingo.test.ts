@@ -3,7 +3,8 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   ESTRELA, LINHAS, elegiveis, encaixa, faltamParaCheia, gruposDoLider, lerAviso, letraDe, melhorFeito,
-  padrao, paraMarcarSozinho, pedrasDaSorteQuina, podeGritar,
+  MAQUINA_GIRANDO_MS, REVELAR_AO_JOGADOR_MS, padrao, paraMarcarSozinho, pedrasDaSorteQuina, pedrasParaMostrar,
+  podeGritar,
 } from './regras';
 import { CARTELA_DEMO, estadoDemo } from './demo';
 import type { CartelaNoControle } from './tipos';
@@ -218,5 +219,27 @@ describe('o movimento', () => {
     const css = readFileSync(resolve(__dirname, '../../../index.css'), 'utf8');
     expect(css).toContain('[data-bingo-anima], [data-bingo-anima] *');
     expect(readFileSync(resolve(__dirname, 'BingoTv.tsx'), 'utf8')).toContain('data-bingo-anima');
+  });
+});
+
+describe('pedra só aparece ao jogador depois da TV (30/10/2026)', () => {
+  it('o jogador espera o giro da máquina da TV, com folga', () => {
+    expect(REVELAR_AO_JOGADOR_MS).toBeGreaterThan(MAQUINA_GIRANDO_MS);
+  });
+
+  it('a última pedra desconhecida espera; as de antes aparecem', () => {
+    expect(pedrasParaMostrar([5, 12, 40], new Set([5]), new Set()))
+      .toEqual({ visiveis: [5, 12], aRevelar: 40 });
+  });
+
+  it('a que já espera continua esperando, sem ser agendada de novo', () => {
+    expect(pedrasParaMostrar([5, 12], new Set([5, 12]), new Set([12])))
+      .toEqual({ visiveis: [5], aRevelar: null });
+  });
+
+  it('nada novo: mostra o que o banco tem', () => {
+    expect(pedrasParaMostrar([5, 12], new Set([5, 12]), new Set()))
+      .toEqual({ visiveis: [5, 12], aRevelar: null });
+    expect(pedrasParaMostrar([], new Set(), new Set())).toEqual({ visiveis: [], aRevelar: null });
   });
 });

@@ -25,12 +25,13 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { PalcoTv } from '../TelaTv';
 import { Cartela } from './Cartela';
-import { LETRAS, TOTAL_PEDRAS, letraDe, nomeDaVitoria } from './regras';
+import { LETRAS, MAQUINA_GIRANDO_MS, TOTAL_PEDRAS, letraDe, nomeDaVitoria } from './regras';
 import { tocarFanfarra, tocarGlobo, tocarGrito, tocarSaiu } from './som';
 import type { TemaBingo } from './temas/contrato';
 import type { EstadoBingo, GritoBingo, VitoriaBingo } from './tipos';
 
-const GIRANDO_MS = 2200;
+// O jogador espera este giro para ver a pedra (`REVELAR_AO_JOGADOR_MS`).
+const GIRANDO_MS = MAQUINA_GIRANDO_MS;
 const SAINDO_MS = 2800;
 /** O fim do `SAINDO_MS`: o véu do sorteio se desfaz e a pedra pousa no quadro. */
 const DESFAZ_MS = 550;
