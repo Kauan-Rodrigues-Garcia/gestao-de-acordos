@@ -140,6 +140,7 @@ import { useEstadoLembrado } from '@/hooks/useEstadoLembrado';
 import { ValorAnimado } from '@/components/ValorAnimado';
 import { LinhaViva } from '@/components/LinhaViva';
 import { AnimatePresence } from 'framer-motion';
+import { buscarConfigDoMes } from '@/services/fechamento/configDoMes';
 
 /**
  * Dois mapas de dono de NR têm o mesmo conteúdo?
@@ -770,17 +771,45 @@ export function PixAutomatico() {
     setFiltroSetor('');
   }, [podeVerTodosSetores, filtroSetor, setores, setoresDoFiltro, setFiltroSetor]);
 
+  /*
+   * A config que entra na CONTA do mês (31/10/2026). Mês fechado: a que o
+   * retrato guardou (`composicao_mes_config.pix_config`) — mudar o percentual
+   * ou a meta da dobra em novembro não reescreve outubro. Mês aberto: a de hoje.
+   * O editor de config continua sobre `configs` (é o que se grava).
+   */
+  const [configsDoMes, setConfigsDoMes] = useState<Record<string, PixAutoConfig> | null>(null);
+  useEffect(() => {
+    let vivo = true;
+    setConfigsDoMes(null);
+    void buscarConfigDoMes(empresa?.id, mes).then(cfg => {
+      if (!vivo || !cfg) return;
+      const mapa: Record<string, PixAutoConfig> = {};
+      for (const c of cfg.pixConfig as unknown as PixAutoConfig[]) {
+        mapa[c.setor_id] = { ...c, permite_registro_operador: c.permite_registro_operador ?? true };
+      }
+      setConfigsDoMes(mapa);
+    });
+    return () => { vivo = false; };
+  }, [empresa?.id, mes]);
+  const configsDaConta = configsDoMes ?? configs;
+
   const pctPorSetor = useMemo(() => {
+    const m: Record<string, number> = {};
+    Object.values(configsDaConta).forEach(c => { m[c.setor_id] = Number(c.pct); });
+    return m;
+  }, [configsDaConta]);
+  /** O percentual de HOJE — o do editor e o do registro novo. */
+  const pctPorSetorHoje = useMemo(() => {
     const m: Record<string, number> = {};
     Object.values(configs).forEach(c => { m[c.setor_id] = Number(c.pct); });
     return m;
   }, [configs]);
 
   const pctDoMeuSetor = meuSetor != null
-    ? (pctPorSetor[meuSetor] ?? PIX_AUTO_PCT_PADRAO)
+    ? (pctPorSetorHoje[meuSetor] ?? PIX_AUTO_PCT_PADRAO)
     : PIX_AUTO_PCT_PADRAO;
   const pctSetorConfig = setorConfig != null
-    ? (pctPorSetor[setorConfig] ?? PIX_AUTO_PCT_PADRAO)
+    ? (pctPorSetorHoje[setorConfig] ?? PIX_AUTO_PCT_PADRAO)
     : PIX_AUTO_PCT_PADRAO;
   const registroLigadoSetorConfig = setorConfig != null
     ? (configs[setorConfig]?.permite_registro_operador ?? true)
@@ -1400,8 +1429,8 @@ export function PixAutomatico() {
   // A meta de acordos deixou de ser 18 fixo: cada setor tem a sua
   // (`pix_automatico_config.meta_acordos_dobra`, migration 20260810c).
   const metaPorSetor = useMemo(
-    () => metasDobraPorSetor(Object.values(configs)),
-    [configs],
+    () => metasDobraPorSetor(Object.values(configsDaConta)),
+    [configsDaConta],
   );
 
   const dobra = useMemo(

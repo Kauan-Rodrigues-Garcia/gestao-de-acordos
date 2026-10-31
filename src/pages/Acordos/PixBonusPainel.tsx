@@ -28,6 +28,7 @@ import {
   fetchBonusPix, salvarBonusPix, excluirBonusPix, bonusVigenteNoDia,
   PIX_AUTO_PCT_PADRAO, type PixAutoBonus,
 } from '@/services/pix_automatico.service';
+import { useFechamentoMes } from '@/hooks/useFechamentoMes';
 
 function fmtPctBonus(pct: number): string {
   return `${pct.toLocaleString('pt-BR', { maximumFractionDigits: 4 })}%`;
@@ -112,6 +113,10 @@ export function PixBonusPainel({
 
   const pctDoSetor = (id: string) => pctPorSetor[id] ?? PIX_AUTO_PCT_PADRAO;
 
+  // Bônus que começou em mês fechado é desse mês: só leitura (20261031210000).
+  // O banco recusa do mesmo jeito; aqui a pessoa recebe o motivo antes.
+  const fechamento = useFechamentoMes(null);
+
   async function salvar() {
     if (!rascunho) return;
     const pct = lerPct(rascunho.pct);
@@ -120,6 +125,9 @@ export function PixBonusPainel({
     if (rascunho.setorIds.length === 0) { toast.error('Escolha pelo menos um setor.'); return; }
     if (!rascunho.inicio) { toast.error('Informe a data de início.'); return; }
     if (rascunho.fim && rascunho.fim < rascunho.inicio) { toast.error('O fim é antes do início.'); return; }
+    if (fechamento.impedirData(rascunho.inicio, 'gravar um bônus que começa neste mês')) return;
+    const original = rascunho.id ? bonus.find(b => b.id === rascunho.id) : null;
+    if (original && fechamento.impedirData(original.inicio, 'alterar este bônus')) return;
 
     setSalvando(true);
     const r = await salvarBonusPix({
@@ -143,6 +151,7 @@ export function PixBonusPainel({
   }
 
   async function excluir(b: PixAutoBonus) {
+    if (fechamento.impedirData(b.inicio, 'excluir este bônus')) return;
     if (!window.confirm(`Excluir o bônus de +${fmtPctBonus(b.pct)} (${periodo(b)})? Os acordos ainda não pagos perdem o bônus.`)) return;
     const r = await excluirBonusPix(b.id);
     if (!r.ok) { toast.error('Erro ao excluir o bônus: ' + r.error); return; }
@@ -152,6 +161,7 @@ export function PixBonusPainel({
   }
 
   async function alternarAtivo(b: PixAutoBonus, ativo: boolean) {
+    if (fechamento.impedirData(b.inicio, 'ligar ou desligar este bônus')) return;
     const r = await salvarBonusPix({
       id: b.id, empresaId, pct: b.pct, setorIds: b.setor_ids, inicio: b.inicio, fim: b.fim,
       ativo, descricao: b.descricao, autorId, autorNome,

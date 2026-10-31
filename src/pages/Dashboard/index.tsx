@@ -6,7 +6,7 @@ import { Building2, MessageSquare, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useAuth } from '@/hooks/useAuth';
-import { useEquipesDoPerfil } from '@/hooks/useEquipesDoPerfil';
+import { useLugarNoMes } from '@/hooks/useLugarNoMes';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useAcordos } from '@/hooks/useAcordos';
 import { useValorComEspera } from '@/hooks/useValorComEspera';
@@ -50,7 +50,6 @@ import { PPModals } from './PPModals';
 
 export default function Dashboard() {
   const { perfil } = useAuth();
-  const { principal: equipePrincipal, todas: minhasEquipes } = useEquipesDoPerfil();
   const { empresa } = useEmpresa();
   const marca = useMarca();
   const { temPermissao } = useCargoPermissoes();
@@ -67,6 +66,11 @@ export default function Dashboard() {
    * 03/09/2026 o filtro oferece as equipes DAQUELE mês, e não as de hoje.
    */
   const { mes: mesFiltro, setMes: setMesFiltro } = useMesGlobal();
+
+  // Meu setor e minhas equipes NO MÊS olhado: no mês fechado, os do retrato —
+  // quem mudou de lugar vê o mês onde estava (decisão do Cleber, 31/10/2026).
+  const lugar = useLugarNoMes(mesFiltro);
+  const { principal: equipePrincipal, todas: minhasEquipes } = lugar;
 
   // Só as LISTAS de setor/equipe. Antes isto vinha de `useAnalytics()`, que
   // varre todos os acordos do mês — e o `AnalyticsPanel` logo abaixo monta o
@@ -94,7 +98,7 @@ export default function Dashboard() {
    * na lista de dependências, que é avaliada durante o render.
    */
   // Líder: a equipe que ele lidera (o cadastro dele é vazio). Quem lidera
-  // várias abre na primeira delas. Ver `useEquipesDoPerfil`.
+  // várias abre na primeira delas. Ver `useLugarNoMes`.
   const equipeDoPerfil = equipePrincipal ?? minhasEquipes[0] ?? null;
 
   /*
@@ -281,10 +285,11 @@ export default function Dashboard() {
   const [colFiltroEstado,    setColFiltroEstado]    = useState('');
   const [estadoDropdown,     setEstadoDropdown]     = useState(false);
 
-  const { isAtivoParaUsuario } = useDiretoExtraConfig();
+  // Mês fechado: o Direto/Extra que valia NAQUELE mês (retrato).
+  const { isAtivoParaUsuario } = useDiretoExtraConfig(mesFiltro);
   const usuarioTemLogicaDiretoExtra = isAtivoParaUsuario(
     perfil?.id ?? '',
-    perfil?.setor_id ?? null,
+    lugar.setorId,
     equipePrincipal,
   );
   const [filtroVinculo, setFiltroVinculo] = useState<'todos' | 'direto' | 'extra'>(
@@ -789,7 +794,7 @@ export default function Dashboard() {
           podeTodasEquipes={podeTodasEquipes}
           visao={visaoFiltro}
           onVisao={setVisaoFiltro}
-          setorDoPerfil={perfil?.setor_id ?? null}
+          setorDoPerfil={lugar.setorId}
           equipeDoPerfil={equipeDoPerfil}
         />
         <AnalyticsPanel

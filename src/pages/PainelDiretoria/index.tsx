@@ -20,7 +20,7 @@ import { useAnaliticoDashboard, agregarAnalitico } from '@/hooks/useAnaliticoDas
 import { useEscopoAnalitico } from '@/hooks/useEscopoAnalitico';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
-import { useHoPercentual, repassePercentuais } from '@/lib/hoPercentual';
+import { repassePercentuais } from '@/lib/hoPercentual';
 import { useTenant } from '@/lib/tenant-config';
 import { formatBRL } from '@/lib/money';
 import { pctLimitado } from '@/lib/projecaoMetas';
@@ -51,6 +51,7 @@ import { DiretoriaSetores } from './DiretoriaSetores';
 import { esquecerLeiturasDo59 } from '@/services/mestre/cache59';
 import { corDaForma, iconeDaForma, EVOL_AGENDADO, EVOL_RECEBIDO } from './types';
 import { corTexto } from '@/lib/temas';
+import { useHoPercentualDoMes } from '@/hooks/useHoPercentualDoMes';
 
 /*
  * Carregada só quando a aba é aberta. Ela traz o parser do 59 e a tabela de
@@ -98,7 +99,9 @@ type AbaDoPainel = 'visao' | 'setores' | 'operadores' | 'equipes' | 'divergencia
  */
 export default function PainelDiretoria() {
   // H.O. configurado (aba Metas): só onde não há relatório — tabulação e agendado.
-  const ho = useHoPercentual();
+  // No mês fechado, o que valia NAQUELE mês (retrato, 31/10/2026).
+  const { mes: mesDoHo } = useMesGlobal();
+  const ho = useHoPercentualDoMes(mesDoHo);
   const repasse = repassePercentuais(ho);
   const { tickColor, gridColor } = useAxisColors();
   const { perfil } = useAuth();

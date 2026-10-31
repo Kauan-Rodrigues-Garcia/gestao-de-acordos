@@ -14,6 +14,7 @@ import {
   resolverDiretoExtraAtivo,
   type DiretoExtraConfig,
 } from '@/services/direto_extra.service';
+import { buscarConfigDoMes } from '@/services/fechamento/configDoMes';
 
 export interface UseDiretoExtraConfigResult {
   configs: DiretoExtraConfig[];
@@ -27,7 +28,12 @@ export interface UseDiretoExtraConfigResult {
   refetch: () => Promise<void>;
 }
 
-export function useDiretoExtraConfig(): UseDiretoExtraConfigResult {
+/**
+ * `mes` (31/10/2026): num mês fechado, a configuração que valia NAQUELE mês
+ * (`composicao_mes_config.direto_extra`) — desligar a lógica de alguém em
+ * novembro não muda como outubro aparece. Sem `mes`, ou mês aberto, a de hoje.
+ */
+export function useDiretoExtraConfig(mes?: string | null): UseDiretoExtraConfigResult {
   const { empresa } = useEmpresa();
   const empresaId   = empresa?.id ?? '';
   const [configs, setConfigs] = useState<DiretoExtraConfig[]>([]);
@@ -48,13 +54,16 @@ export function useDiretoExtraConfig(): UseDiretoExtraConfigResult {
     if (!empresaId) { setConfigs([]); setLoading(false); return; }
     const comEsqueleto = primeiraCarga.current;
     if (comEsqueleto) setLoading(true);
-    const data = await fetchDiretoExtraConfigs(empresaId);
+    const doMes = await buscarConfigDoMes(empresaId, mes);
+    const data = doMes
+      ? (doMes.diretoExtra as unknown as DiretoExtraConfig[])
+      : await fetchDiretoExtraConfigs(empresaId);
     setConfigs(atual => reconciliarLista(atual, data, {
       chave: c => c.id, iguais: iguaisProfundo,
     }));
     if (comEsqueleto) setLoading(false);
     primeiraCarga.current = false;
-  }, [empresaId]);
+  }, [empresaId, mes]);
 
   // Empresa nova, cache antigo: volta a merecer espera.
   useEffect(() => { primeiraCarga.current = true; }, [empresaId]);

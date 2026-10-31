@@ -20,6 +20,7 @@
  */
 
 import { supabase } from '@/lib/supabase';
+import { buscarConfigDoMes } from '@/services/fechamento/configDoMes';
 
 /** Como o ranking ordena. */
 export type CriterioRanking =
@@ -87,11 +88,27 @@ export async function rankingConfigDisponivel(empresaId: string): Promise<boolea
  *
  * `null` = a tabela não existe neste banco ainda. Qualquer outro caso — sem
  * linha, linha incompleta — devolve config utilizável.
+ *
+ * Com `mes` fechado (31/10/2026): a config que o retrato guardou para o mês
+ * (`composicao_mes_config.ranking`) — mudar o critério em novembro não
+ * reordena o ranking de outubro. Mês aberto ou não guardado: a de hoje.
  */
 export async function buscarRankingConfig(
   empresaId: string,
   setorId: string,
+  mes?: string | null,
 ): Promise<RankingConfig | null> {
+  const doMes = await buscarConfigDoMes(empresaId, mes);
+  if (doMes) {
+    const linha = doMes.ranking.find(r => r.setor_id === setorId) as unknown as LinhaConfig | undefined;
+    if (!linha) return CONFIG_RANKING_PADRAO;
+    return {
+      criterio:        lerCriterio(linha.criterio),
+      gruposIncluidos: linha.grupos_incluidos ?? [],
+      perfisExcluidos: linha.perfis_excluidos ?? [],
+    };
+  }
+
   const { data, error } = await supabase
     .from('analitico_ranking_config')
     .select('criterio, grupos_incluidos, perfis_excluidos')

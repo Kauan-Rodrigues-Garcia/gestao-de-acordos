@@ -18,13 +18,13 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useEscopoAnalitico } from '@/hooks/useEscopoAnalitico';
+import { useLugarNoMes } from '@/hooks/useLugarNoMes';
 import { ESCOPO_EMPRESA } from '@/services/analitico/escopoAnalitico';
 import { niveisLiberados, veAlemDeSi } from '@/lib/permissoes-escopo';
 import {
   buscarContribuicoesReceptivo, receptivoDoEscopo, receptivoSomaPorCima,
 } from '@/services/analitico/contribuicaoReceptivo.service';
 import { formatCurrency } from '@/lib/index';
-import { useHoPercentual } from '@/lib/hoPercentual';
 import { formatarPctDaMeta, pctLimitado } from '@/lib/projecaoMetas';
 import { useTenant } from '@/lib/tenant-config';
 import { diasDecorridos, diasNoMes, ehMesAtual } from '@/lib/mesReferencia';
@@ -48,6 +48,7 @@ import { CHART_RECEBIDO } from './constants';
 import { ValorAnimado } from '@/components/ValorAnimado';
 
 import { corTexto } from '@/lib/temas';
+import { useHoPercentualDoMes } from '@/hooks/useHoPercentualDoMes';
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface AnalyticsPanelProps {
@@ -64,7 +65,9 @@ export function AnalyticsPanel({
   temLogicaDiretoExtra = false,
 }: AnalyticsPanelProps = {}) {
   // Direto/Extra pagos são ACORDOS: sem H.O. de relatório, converte.
-  const ho = useHoPercentual();
+  // O H.O. do mês olhado: no mês fechado, o do retrato (31/10/2026).
+  const { mes: mesDoHo } = useMesGlobal();
+  const ho = useHoPercentualDoMes(mesDoHo);
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
@@ -197,7 +200,10 @@ export function AnalyticsPanel({
   // alcance, entregaria só a equipe: o total na tela sairia menor que o
   // rótulo, exatamente a divergência que esta rodada veio consertar.
   const veSetor = niveisDashboard.includes('setor');
-  const setorTravado = !veTodosSetores && veSetor ? (perfil?.setor_id ?? null) : null;
+  // O setor do mês olhado: no mês fechado, o do retrato (decisão do Cleber,
+  // 31/10/2026 — quem mudou de setor vê o mês onde estava).
+  const lugar = useLugarNoMes(mesAnalise);
+  const setorTravado = !veTodosSetores && veSetor ? lugar.setorId : null;
   const setorEmFoco  = (setorExterno ?? null) || setorTravado;
 
   // Membros, clones que contam (`conta_recebimento`) e setores alternativos —

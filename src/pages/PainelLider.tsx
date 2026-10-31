@@ -62,6 +62,7 @@ import {
   rotuloDoMes, ultimoDiaDoMes, type MesRef,
 } from '@/lib/mesReferencia';
 import { useMesGlobal } from '@/providers/MesProvider';
+import { useLugarNoMes } from '@/hooks/useLugarNoMes';
 import { setoresDosFiltros } from '@/lib/setoresDosFiltros';
 import { assinarSinal } from '@/lib/sinais';
 
@@ -210,6 +211,9 @@ export default function PainelLider() {
   // inventada que sujaria a contagem.
   useSubAbaUso(abaVisivel);
   const mesStr = mesRef;
+  // O setor de quem olha NO MÊS: no mês fechado, o do retrato — quem mudou de
+  // setor vê o mês onde estava (decisão do Cleber, 31/10/2026).
+  const setorNoMes = useLugarNoMes(mesStr).setorId;
 
   // ── Recorte das abas analíticas: setor + equipe, um só para as três ────────
   //
@@ -249,11 +253,11 @@ export default function PainelLider() {
   const escopoAbas = useMemo(() => resolverEscopoPainel({
     cargo:           perfil?.perfil,
     temPermissao,
-    setorDoPerfil:   perfil?.setor_id ?? null,
+    setorDoPerfil:   setorNoMes,
     setoresEscolhidos: filtroSetores,
     equipesEscolhidas: filtroEquipes,
     equipes:           equipesInfo?.equipes ?? [],
-  }), [perfil?.perfil, perfil?.setor_id, temPermissao, filtroSetores, filtroEquipes, equipesInfo?.equipes]);
+  }), [perfil?.perfil, setorNoMes, temPermissao, filtroSetores, filtroEquipes, equipesInfo?.equipes]);
 
   /** Setores em foco. Lista vazia = todos. É este valor que as abas recebem. */
   const setoresAbas = escopoAbas.setorIds;
@@ -300,10 +304,10 @@ export default function PainelLider() {
   );
   const setoresParaAjuste = useMemo(
     () => setoresDoFiltro
-      .filter(s => (setoresAbas.length ? setoresAbas.includes(s.id) : (escopoAbas.podeFiltrarSetor || s.id === perfil?.setor_id)))
+      .filter(s => (setoresAbas.length ? setoresAbas.includes(s.id) : (escopoAbas.podeFiltrarSetor || s.id === setorNoMes)))
       .map(s => ({ id: s.id, nome: s.nome }))
       .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')),
-    [setoresDoFiltro, setoresAbas, escopoAbas.podeFiltrarSetor, perfil?.setor_id],
+    [setoresDoFiltro, setoresAbas, escopoAbas.podeFiltrarSetor, setorNoMes],
   );
   const nomeSetorTravado = useMemo(
     () => (escopoAbas.podeFiltrarSetor || !escopoAbas.setorUnico

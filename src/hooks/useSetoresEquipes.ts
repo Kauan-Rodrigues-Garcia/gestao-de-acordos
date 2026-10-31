@@ -21,7 +21,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from './useAuth';
-import { useEquipesDoPerfil } from './useEquipesDoPerfil';
+import { useLugarNoMes } from './useLugarNoMes';
 import { useEmpresa } from './useEmpresa';
 import { useCargoPermissoes } from './useCargoPermissoes';
 import { niveisLiberados, type NivelEscopo } from '@/lib/permissoes-escopo';
@@ -73,7 +73,10 @@ export interface SetoresEquipes {
 
 export function useSetoresEquipes(mes?: string | null): SetoresEquipes {
   const { perfil }  = useAuth();
-  const { todas: equipesDaPessoa } = useEquipesDoPerfil();
+  // O LUGAR no mês olhado: no mês fechado, o setor e as equipes do retrato —
+  // quem mudou de lugar vê o mês onde estava (decisão do Cleber, 31/10/2026).
+  const lugar = useLugarNoMes(mes);
+  const equipesDaPessoa = lugar.todas;
   const { empresa } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
   /*
@@ -127,7 +130,7 @@ export function useSetoresEquipes(mes?: string | null): SetoresEquipes {
   // laço infinito até estourar a memória. Foi exatamente o que aconteceu quando
   // este hook nasceu copiando as dependências de `useAnalytics`.
   const cargo    = perfil?.perfil ?? null;
-  const setorId  = perfil?.setor_id ?? null;
+  const setorId  = lugar.setorId;
   const empresaId = empresa?.id ?? null;
   // As equipes por onde respondo — para líder, as que lidera (o cadastro dele
   // é vazio). Ver `useEquipesDoPerfil`. Em texto, para a dependência ser

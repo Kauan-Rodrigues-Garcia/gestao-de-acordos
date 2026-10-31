@@ -38,6 +38,7 @@ import {
   montarEquipesDoSetor, serieDiariaDaEquipe,
   type EquipeDiretoria, type MetaDoMes,
 } from '@/services/mestre/equipesDiretoria';
+import { buscarTreinamentoDasEquipes } from '@/services/fechamento/configDoMes';
 
 interface Base {
   composicao: ComposicaoEquipes;
@@ -98,7 +99,8 @@ export function useEquipesDiretoria(
             .in('perfil', [...PERFIS_QUE_CONTAM_NO_RECEBIMENTO])
             .eq('ativo', true)
             .eq('situacao', 'ativo'),
-          supabase.from('equipes').select('id, treinamento, treinamento_inicio').eq('empresa_id', empresaId),
+          // Mês fechado: o treinamento DAQUELE mês (retrato).
+          buscarTreinamentoDasEquipes(empresaId, mes),
           supabase.from('perfis').select('id, nome, foto_url, equipe_id')
             .eq('empresa_id', empresaId).eq('perfil', 'lider'),
           supabase.from('equipe_lideres').select('equipe_id, lider_id').eq('empresa_id', empresaId),

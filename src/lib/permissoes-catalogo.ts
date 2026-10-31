@@ -2189,6 +2189,23 @@ export const PERMISSOES: PermissaoMeta[] = [
       motivo: 'Só se preenche o fechamento de quem aparece na aba, e é o alcance que mostra.',
     },
   },
+  {
+    /*
+     * O selo do mês (31/10/2026): os números oficiais de cada mês fechado,
+     * gravados na virada (`fechamento_mes`, 20261029201000) e imutáveis. Nasce
+     * com o valor de `ver_fechamento` de cada cargo (20261031230200). Selar de
+     * novo é só do super admin, no banco.
+     */
+    key: 'fechamento_sub_selo', label: 'Fechamento: aba Selo do mês',
+    descricao:
+      'Ver os números oficiais do mês fechado (recebido, H.O., meta) gravados na '
+      + 'virada, com as versões e o motivo de cada uma',
+    grupo: 'Fechamento', tenants: ['bookplay'], padrao: {},
+    depende: {
+      chaves: ['fechamento_escopo_setor', 'fechamento_escopo_todos_setores'],
+      motivo: 'O selo mostra o alcance da própria aba Fechamento.',
+    },
+  },
 
   // ── Vendas (Comercial) ───────────────────────────────────────────────────
   // Migration 20260915100000. Primeiro grupo do painel fora da cobrança:

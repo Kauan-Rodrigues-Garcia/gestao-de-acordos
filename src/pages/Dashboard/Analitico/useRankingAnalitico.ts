@@ -47,6 +47,7 @@ import {
   type LinhaRanking, type LinhaGrupoRanking,
 } from './rankingCriterio';
 import type { GrupoConfiguravel, PessoaConfiguravel } from './ConfigurarRankingDialog';
+import { buscarTreinamentoDasEquipes, buscarConfigDoMes, buscarSubgruposDasPessoasNoMes } from '@/services/fechamento/configDoMes';
 
 /** Uma pessoa do setor, com o que decide grupo e dias úteis. */
 interface PerfilRanking {
@@ -137,13 +138,16 @@ export function useRankingAnalitico({
             .map((p): PerfilRanking => ({ ...p, subgrupo_id: null }))
         : (comSubgrupo.data as PerfilRanking[] ?? []);
 
-      const [sgs, cfgMetas, equipesTreino, retrato] = await Promise.all([
+      const [sgs, cfgMetas, equipesTreino, retrato, subDoMes, cfgDoMes] = await Promise.all([
         listarSubgrupos(empresaId),
         getMetasConfig(empresaId, mesNum, anoNum),
-        supabase.from('equipes').select('id, treinamento, treinamento_inicio')
-          .eq('empresa_id', empresaId),
+        // Mês fechado: o treinamento DAQUELE mês (retrato).
+        buscarTreinamentoDasEquipes(empresaId, mes),
         // Mês fechado: a equipe de cada um é a DAQUELE mês (01/10/2026).
         buscarPessoasDoRetrato(empresaId, mes),
+        // …e o subgrupo e a lista de subgrupos também (31/10/2026).
+        buscarSubgruposDasPessoasNoMes(empresaId, mes),
+        buscarConfigDoMes(empresaId, mes),
       ]);
 
       // `select('*')` pelo mesmo motivo de QuartisOperadores: colunas da meta
@@ -154,9 +158,10 @@ export function useRankingAnalitico({
 
       if (cancelado) return;
 
-      // O subgrupo continua o de hoje (não é retratado), mas `grupoDe` só o usa
-      // quando ele é da mesma equipe — que agora é a do mês.
-      const subgrupoHoje = new Map(perfisLidos.map(p => [p.id, p.subgrupo_id]));
+      // O subgrupo do mês quando o retrato o guarda (outubro/2026 em diante);
+      // antes disso, o de hoje — `grupoDe` só o usa quando ele é da mesma
+      // equipe, que já é a do mês.
+      const subgrupoHoje = subDoMes ?? new Map(perfisLidos.map(p => [p.id, p.subgrupo_id]));
       setPerfis(retrato
         ? [...retrato.values()].map(r => ({
             id: r.id,
@@ -165,7 +170,7 @@ export function useRankingAnalitico({
             perfil: r.perfil,
           }))
         : perfisLidos);
-      setSubgrupos(sgs ?? []);
+      setSubgrupos(cfgDoMes ? cfgDoMes.subgrupos : (sgs ?? []));
 
       const mapaMetas: Record<string, number> = {};
       for (const m of (metasRows.data as { referencia_id: string; meta_valor: number }[]) ?? []) {
@@ -216,12 +221,13 @@ export function useRankingAnalitico({
       return;
     }
     let cancelado = false;
-    void buscarRankingConfig(empresaId, setorId).then(c => {
+    // Mês fechado: a config DAQUELE mês (retrato).
+    void buscarRankingConfig(empresaId, setorId, mes).then(c => {
       if (cancelado) return;
       setConfig(c ?? CONFIG_RANKING_PADRAO);
     });
     return () => { cancelado = true; };
-  }, [empresaId, setorId]);
+  }, [empresaId, setorId, mes]);
 
   const salvar = useCallback(async (nova: RankingConfig, autorId?: string | null) => {
     if (!empresaId || !setorId) return false;

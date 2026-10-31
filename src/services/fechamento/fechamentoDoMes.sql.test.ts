@@ -274,3 +274,89 @@ describe('travas que faltavam no mês fechado (20261031210000)', () => {
     expect(TRAVAS).toContain("fn_mes_fechado_barrar(to_char(NEW.inicio, 'YYYY-MM'), 'Bônus de Pix')");
   });
 });
+
+describe('mês fechado mostra o lugar de quem olha (20261031220000)', () => {
+  const LUGAR = semComentarios(migration('_mes_fechado_mostra_o_lugar_de_quem_olha.sql'));
+
+  it('as três RPCs do mês trocam o lugar de hoje pelo lugar do mês', () => {
+    for (const fn of ['fn_analitico_dashboard_mes_json', 'fn_analitico_resumo_por_operador', 'fn_analitico_recebido_fora_do_setor']) {
+      const corpo = LUGAR.slice(LUGAR.indexOf(`FUNCTION public.${fn}(`));
+      const fim = corpo.indexOf('$function$;');
+      const def = corpo.slice(0, fim);
+      expect(def, fn).toContain('_no_mes(v_eu, p_empresa_id, p_mes)');
+      expect(def, fn).not.toMatch(/fn_setores_do_operador\(v_eu\)|fn_equipes_de_alcance\(v_eu\)/);
+    }
+  });
+
+  it('no mês corrente o lugar novo É o de hoje — e a migration prova', () => {
+    expect(LUGAR).toMatch(/fn_analitico_setores_no_mes\(p_empresa_id, p_mes, ARRAY\[p_perfil\]\)/);
+    expect(LUGAR).toMatch(/SELECT e\.eq\s+FROM public\.fn_equipes_de_alcance\(p_perfil\)/);
+    expect(LUGAR).toMatch(/RAISE EXCEPTION 'PROVA: o lugar do mês corrente mudou/);
+  });
+
+  it('a tela pergunta o lugar à mesma regra (fn_meu_lugar_no_mes)', () => {
+    expect(LUGAR).toContain('CREATE OR REPLACE FUNCTION public.fn_meu_lugar_no_mes(p_empresa_id uuid, p_mes text)');
+    expect(LUGAR).toContain('GRANT EXECUTE ON FUNCTION public.fn_meu_lugar_no_mes(uuid, text) TO authenticated');
+  });
+});
+
+describe('a carteira do 59 inteira no retrato (20261031230000)', () => {
+  const CARTEIRA = semComentarios(migration('_retrato_guarda_a_carteira_inteira_do_59.sql'));
+
+  it('grava a linha inteira de mestre_grupos e mestre_equipes', () => {
+    expect(CARTEIRA).toContain('jsonb_agg(to_jsonb(g) ORDER BY g.cod_grupo_filtro)');
+    expect(CARTEIRA).toContain('jsonb_agg(to_jsonb(me) ORDER BY me.cod_grupo_filtro, me.nome_subgrupo)');
+  });
+
+  it('continua sem gravar config de mês fechado', () => {
+    expect(CARTEIRA).toMatch(/IF NOT v_fechado THEN\s*DELETE FROM public\.composicao_mes_config/);
+  });
+});
+
+describe('Painel Diretoria lê o mês fechado (20261031230100)', () => {
+  const DIRETORIA = semComentarios(migration('_diretoria_mes_fechado_le_o_retrato.sql'));
+
+  /** O corpo de uma função da migration, de `CREATE` até o `$function$;` final. */
+  function corpoDe(nome: string): string {
+    const ini = DIRETORIA.indexOf(`CREATE OR REPLACE FUNCTION public.${nome}(`);
+    expect(ini, nome).toBeGreaterThanOrEqual(0);
+    const abre = DIRETORIA.indexOf('$function$', ini);
+    const fecha = DIRETORIA.indexOf('$function$', abre + 1);
+    return DIRETORIA.slice(ini, fecha);
+  }
+
+  it('nenhuma das nove funções lê setores/carteiras de hoje direto', () => {
+    for (const fn of ['fn_diretoria_cofen', 'fn_mestre_diretoria_alternativos', 'fn_mestre_diretoria_cidades',
+      'fn_mestre_diretoria_dia', 'fn_mestre_diretoria_equipes_dos_setores', 'fn_mestre_diretoria_linhas',
+      'fn_mestre_diretoria_setor', 'fn_mestre_diretoria_setores', 'fn_mestre_diretoria_visao_geral']) {
+      const corpo = corpoDe(fn).replace(/public\.fn_(setores|mestre_grupos|mestre_equipes)_do_mes/g, '');
+      expect(corpo, fn).not.toMatch(/\b(from|join)\s+(public\.)?(setores|mestre_grupos|mestre_equipes)\b/i);
+    }
+  });
+
+  it('o Cofen continua lendo o setor da PaguePlay', () => {
+    expect(DIRETORIA).toContain('FROM public.fn_setores_do_mes(v_pp, p_mes) s');
+  });
+
+  it('as tabelas do mês podem ser expandidas pelo planejador (sem SECURITY DEFINER nem SET)', () => {
+    for (const t of ['fn_setores_do_mes', 'fn_mestre_grupos_do_mes', 'fn_mestre_equipes_do_mes']) {
+      const def = corpoDe(t);
+      const cabecalho = def.slice(0, def.indexOf('AS $function$'));
+      expect(cabecalho, t).not.toMatch(/SECURITY DEFINER|SET search_path/);
+    }
+  });
+
+  it('prova antes e depois, com sessão de super admin', () => {
+    expect(DIRETORIA).toContain('CREATE TEMP TABLE _prova_antes');
+    expect(DIRETORIA).toMatch(/RAISE EXCEPTION 'PROVA: a Diretoria mudou em/);
+  });
+});
+
+describe('excluir usuário conta saldo e premiação do Pix (20261031230300)', () => {
+  const EXCLUIR = semComentarios(migration('_excluir_usuario_conta_saldo_e_premiacao_do_pix.sql'));
+
+  it('as duas tabelas entram na pergunta', () => {
+    expect(EXCLUIR).toContain('FROM public.pix_automatico_saldos');
+    expect(EXCLUIR).toContain('FROM public.pix_automatico_premiacoes_pagamento');
+  });
+});

@@ -1773,9 +1773,39 @@ bônus de Pix (pelo mês do início).
 
 **Decisão do Cleber (31/10/2026):** quem abre um mês fechado vê o setor e a
 equipe onde estava NAQUELE mês, com os números de lá, mesmo que hoje esteja em
-outro lugar. As telas ainda usam o lugar de hoje (`perfil.setor_id`,
-`useEquipesDoPerfil`) — correção pendente, junto com as leituras de
-`composicao_mes_config` e do selo, que ainda não têm tela.
+outro lugar.
+
+#### Mês fechado lê o mês (31/10/2026)
+
+| O quê | Mês fechado lê | Onde |
+|---|---|---|
+| meu setor e minhas equipes (o LUGAR) | retrato | banco: `fn_setores_do_operador_no_mes`, `fn_equipes_de_alcance_no_mes` nas RPCs do mês (`20261031220000`); tela: `useLugarNoMes` (RPC `fn_meu_lugar_no_mes`) |
+| o NÍVEL (equipe / setor / empresa) | hoje | é permissão |
+| treinamento da equipe | retrato | `buscarTreinamentoDasEquipes` (Quartis, Desempenho, Ranking, Meta diária, RH, Fechamento, Diretoria, Painel de Metas) |
+| subgrupo da pessoa e lista de subgrupos | retrato | comissão (`comPessoasDosSubgrupos`) e ranking |
+| config do Pix (percentual, dobra) | retrato | conta do Pix e o relatório de fechamento; o editor continua sobre a de hoje |
+| critério do ranking | retrato | `buscarRankingConfig(…, mes)` |
+| premiação × comissão do RH | retrato | `vinculosDoMes` em Premiações e Comissões |
+| H.O. configurado | retrato | `useHoPercentualDoMes` (Diretoria, Dashboard, Painel de Metas) |
+| Direto/Extra | retrato | `useDiretoExtraConfig(mes)` no Dashboard |
+| regra Cofen do setor | retrato | `useRegraDoSetorNoMes` na comissão pessoal |
+| carteira do 59, setor, regra e cidade | retrato | Painel Diretoria: `fn_setores_do_mes`, `fn_mestre_grupos_do_mes`, `fn_mestre_equipes_do_mes` (`20261031230000`, `20261031230100`) |
+| nome do setor no relatório de fechamento | retrato | `fechamento.service` |
+
+Mês aberto, ou mês fechado antes de outubro/2026 (sem esses dados guardados):
+a tabela de hoje, como sempre.
+
+**Selo na tela:** Fechamento › **Selo do mês** (chave `fechamento_sub_selo`,
+nasce igual a `ver_fechamento` — `20261031230200`). Mostra versões, motivo e os
+números por setor, equipe e pessoa no alcance da aba; o super admin sela de
+novo com motivo.
+
+**Excluir usuário** passa a contar também saldo e pagamento de premiação do Pix
+de mês fechado (`20261031230300`).
+
+**Campanha Fácil na virada — pendente de decisão.** A proposta de 25/10
+(encerrar tudo do mês anterior à 00:00 do dia 1º) contradiz a regra de 20/10
+(«a completa só vai para o histórico quando o líder finaliza»).
 
 ---
 

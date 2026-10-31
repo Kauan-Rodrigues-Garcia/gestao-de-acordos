@@ -38,6 +38,7 @@ import type { MetasConfigMes, QuartilConfig } from '@/lib/supabase';
 import {
   buscarAnaliticoDashboardMes,
   buscarResumoOperadoresAnalitico,
+  buscarSetoresDoRetrato,
   buscarDestaquesDoMes,
   buscarFontesDeEscopo,
   operadoresDoSetor,
@@ -326,7 +327,7 @@ export async function montarFechamento(
   const avisos: string[] = [];
 
   // ── 1. As bases: linhas do mês, quem é quem, metas e config ────────────────
-  const [analitico, fontes, metas, cfg, perfisResp, setoresResp, exclusoesResp] = await Promise.all([
+  const [analitico, fontes, metas, cfg, perfisResp, setoresResp, exclusoesResp, nomesDoMes] = await Promise.all([
     buscarAnaliticoDashboardMes(params.empresaId, mes),
     buscarFontesDeEscopo(params.empresaId, mes),
     buscarMetasDoMes(params.empresaId, mes),
@@ -338,6 +339,8 @@ export async function montarFechamento(
     // As origens que cada setor tirou do acumulado. Tabela vazia = tudo conta,
     // que é o comportamento de sempre; migration ausente devolve vazio também.
     buscarExclusoesSetor(params.empresaId, mes),
+    // Mês fechado: o NOME do setor naquele mês (retrato), não o de hoje.
+    ehMesAtual(mes) ? Promise.resolve(null) : buscarSetoresDoRetrato(params.empresaId, mes),
   ]);
 
   const linhas = analitico.data;
@@ -358,7 +361,7 @@ export async function montarFechamento(
   const perfis = ((perfisResp.data as PerfilFechamento[] | null) ?? []);
   const perfilPorId = new Map(perfis.map(p => [p.id, p]));
   const setores = ((setoresResp.data as { id: string; nome: string }[] | null) ?? []);
-  const nomeSetor = new Map(setores.map(s => [s.id, s.nome]));
+  const nomeSetor = new Map(setores.map(s => [s.id, nomesDoMes?.[s.id] ?? s.nome]));
   const nomeEquipe = new Map<string, string>();
   for (const [, info] of Object.entries(fontes.operadorEquipeMap)) {
     if (info.equipe_id) nomeEquipe.set(info.equipe_id, info.equipe_nome);

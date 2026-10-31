@@ -137,6 +137,7 @@ import {
 } from '@/services/diario/diario.service';
 import type { LinhaRecebidaDia } from '@/services/analitico/analitico.service';
 import { celulasDoMapa } from './fonteDoMapa';
+import { useFechamentoMes } from '@/hooks/useFechamentoMes';
 
 /*
  * Sob demanda, como em `AnaliticoOperador` — e é o MESMO `import()`.
@@ -471,8 +472,11 @@ export function AnaliticoLider({
    * card, o Desempenho Equipes e o gráfico — reconstruir só um deles é como as
    * telas passam a discordar.
    */
+  // Mês fechado: as origens fora do acumulado são só leitura (20261031210000).
+  const fechamentoComposicao = useFechamentoMes(mes);
   const salvarComposicao = useCallback(async (excluidas: Set<OrigemKey>) => {
     if (!empresaId || !mes || !setorId) return;
+    if (fechamentoComposicao.impedir('mudar as origens do acumulado')) return;
     setSalvandoComposicao(true);
     const ok = await salvarExclusoesSetor({
       empresaId, setorId, mes, excluidas, usuarioId: perfilId ?? null,
@@ -480,7 +484,7 @@ export function AnaliticoLider({
     if (!ok) toast.error('Não foi possível salvar a composição do acumulado.');
     else await carregarResumos();
     setSalvandoComposicao(false);
-  }, [empresaId, mes, setorId, perfilId, carregarResumos]);
+  }, [empresaId, mes, setorId, perfilId, carregarResumos, fechamentoComposicao]);
 
   const carregarSnapshot = useCallback(async () => {
     if (!empresaId || !mes) return;
