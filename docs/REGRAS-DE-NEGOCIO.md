@@ -1754,6 +1754,29 @@ meio do mês conta o mês inteiro na equipe onde terminou (decisão do Cleber); 
 fantasma da transferência continua valendo. Mês corrente: igual ao de antes, com
 prova na própria migration.
 
+#### Fechamento de outubro (31/10/2026)
+
+**O retrato guarda também** (`20261031200000`) o subgrupo de cada pessoa
+(`composicao_mes.subgrupo_id`) e, em `composicao_mes_config`, os subgrupos da
+empresa, a remuneração do RH por setor (`rh_config_setores`), a lógica
+Direto/Extra (`direto_extra_config`) e o bônus de Pix cujo período toca o mês.
+Meses fechados antes disso: nulo / lista vazia («não guardado»).
+
+**O selo se refaz nos dias 1 a 5, às 00:02.** O do dia 1º é a prova da estrutura
+na virada; o relatório do último dia chega depois (em setembro, R$ 226 mil
+importados ao longo de 01/10). Dos dias 2 a 5 só nasce versão nova se algum
+número mudou, com o motivo «relatório importado depois da virada».
+
+**Travas de mês fechado que faltavam** (`20261031210000`): origens fora do
+acumulado (`analitico_exclusoes_setor`), meta de contribuição do Receptivo e
+bônus de Pix (pelo mês do início).
+
+**Decisão do Cleber (31/10/2026):** quem abre um mês fechado vê o setor e a
+equipe onde estava NAQUELE mês, com os números de lá, mesmo que hoje esteja em
+outro lugar. As telas ainda usam o lugar de hoje (`perfil.setor_id`,
+`useEquipesDoPerfil`) — correção pendente, junto com as leituras de
+`composicao_mes_config` e do selo, que ainda não têm tela.
+
 ---
 
 ## 13. Módulos auxiliares

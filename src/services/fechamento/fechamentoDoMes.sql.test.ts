@@ -228,3 +228,49 @@ describe('recebido do mês fechado lê o retrato (20261029222000)', () => {
     expect(RECEBIDO).toMatch(/IF v_dif > 0 THEN\s+RAISE EXCEPTION 'PROVA/);
   });
 });
+
+describe('fechamento de outubro (20261031200000)', () => {
+  const OUTUBRO = semComentarios(migration('_retrato_guarda_subgrupo_rh_direto_extra_e_selo_refeito.sql'));
+
+  it('o retrato guarda o subgrupo de cada pessoa', () => {
+    expect(OUTUBRO).toMatch(/conta_no_recebimento, robo, subgrupo_id\)/);
+    expect(OUTUBRO).toContain('COALESCE(p.robo, FALSE), p.subgrupo_id');
+  });
+
+  it('a config do mês guarda subgrupos, RH, Direto/Extra e bônus de Pix — e continua só no mês corrente', () => {
+    const bloco = OUTUBRO.match(/IF NOT v_fechado THEN\s*DELETE FROM public\.composicao_mes_config[\s\S]*?END IF;/);
+    expect(bloco).not.toBeNull();
+    expect(bloco![0]).toMatch(/subgrupos, rh_setores, direto_extra, pix_bonus\)/);
+    for (const t of ['equipe_subgrupos', 'rh_config_setores', 'direto_extra_config', 'pix_automatico_bonus']) {
+      expect(bloco![0], t).toContain(`FROM public.${t}`);
+    }
+    expect(OUTUBRO.match(/INSERT INTO public\.composicao_mes_config/g)).toHaveLength(1);
+  });
+
+  it('o selo da virada se refaz nos dias 2 a 5, com motivo', () => {
+    expect(OUTUBRO).toContain("schedule := '2 3 1-5 * *'");
+    expect(OUTUBRO).toMatch(/IF v_dia > 1 THEN\s+v_motivo := format\('Relatório importado depois da virada/);
+    expect(OUTUBRO).toContain('fn_fechamento_mes_selar(v_emp.id, v_mes, v_motivo)');
+  });
+
+  it('a migration regrava o mês corrente e aborta se o retrato não bater', () => {
+    expect(OUTUBRO).toMatch(/PERFORM public\.fn_composicao_mes_snapshot\(v_emp\.id, v_mes\)/);
+    expect(OUTUBRO.match(/RAISE EXCEPTION 'PROVA/g)?.length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe('travas que faltavam no mês fechado (20261031210000)', () => {
+  const TRAVAS = semComentarios(migration('_mes_fechado_trava_exclusoes_contribuicao_e_bonus_pix.sql'));
+
+  it('as três tabelas ganham a trava, com insert, update e delete', () => {
+    for (const t of ['analitico_exclusoes_setor', 'contribuicao_receptivo', 'pix_automatico_bonus']) {
+      expect(TRAVAS, t).toMatch(new RegExp(
+        `CREATE TRIGGER trg_trava_mes_fechado\\s+BEFORE INSERT OR UPDATE OR DELETE ON public\\.${t}\\s`));
+    }
+  });
+
+  it('a regra é a de sempre: fn_mes_fechado_barrar (só super admin passa)', () => {
+    expect(TRAVAS).toContain("fn_mes_fechado_barrar(to_jsonb(OLD)->>'mes', v_oque)");
+    expect(TRAVAS).toContain("fn_mes_fechado_barrar(to_char(NEW.inicio, 'YYYY-MM'), 'Bônus de Pix')");
+  });
+});
