@@ -5,7 +5,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, act, fireEvent, within } from '@testing-library/react';
-import { GENEROS, GENERO_DA_MUSICA, MUSICAS, PADRAO, TEMAS_DE_TERROR } from './preferencias';
+import { GENEROS, GENERO_DA_MUSICA, MUSICAS, PADRAO } from './preferencias';
 import { EMBUTIDAS } from './faixas';
 
 const motor = vi.hoisted(() => ({
@@ -59,19 +59,16 @@ beforeEach(() => {
 });
 
 describe('seletor de faixas', () => {
-  it('enxuto: abas Temas e Músicas, sem YouTube, abrindo na aba da faixa escolhida', () => {
+  it('enxuto: só a aba Músicas, sem YouTube (os Temas de terror saíram em 03/11/2026)', () => {
     render(<PainelSomAmbiente />);
     const abas = screen.getAllByRole('tab').map(t => t.textContent);
-    expect(abas).toEqual([`Temas${TEMAS_DE_TERROR.length}`, `Músicas${MUSICAS.length}`]);
-    expect(screen.getByRole('tab', { name: /Temas/ })).toHaveAttribute('aria-selected', 'true');
-    expect(within(screen.getByRole('tabpanel')).queryByText('Provavelmente')).toBeNull();
+    expect(abas).toEqual([`Músicas${MUSICAS.length}`]);
+    expect(screen.getByRole('tab', { name: /Músicas/ })).toHaveAttribute('aria-selected', 'true');
+    expect(within(screen.getByRole('tabpanel')).queryByText('Halloween')).toBeNull();
   });
 
-  it('os cinco temas cabem sem busca; as músicas, que passam disso, rolam e têm busca', () => {
+  it('as músicas, que passam do que cabe, rolam e têm busca', () => {
     render(<PainelSomAmbiente />);
-    expect(faixasNaTela()).toHaveLength(TEMAS_DE_TERROR.length);
-    expect(screen.queryByRole('textbox', { name: 'Buscar na lista' })).toBeNull();
-    fireEvent.click(screen.getByRole('tab', { name: /Músicas/ }));
     // Todas na mesma lista, que rola por dentro — sem páginas.
     expect(MUSICAS.length).toBeGreaterThan(LINHAS_VISIVEIS);
     expect(faixasNaTela()).toHaveLength(MUSICAS.length);
@@ -140,16 +137,16 @@ describe('tocando agora', () => {
 
   it('mostra a capa, o nome e o artista, nas cores da faixa', () => {
     render(<PainelSomAmbiente />);
-    expect(within(heroi()).getByText('Halloween')).toBeInTheDocument();
-    expect(within(heroi()).getByText('Tema de John Carpenter')).toBeInTheDocument();
+    expect(within(heroi()).getByText('300 no 7')).toBeInTheDocument();
+    expect(within(heroi()).getByText(EMBUTIDAS.trezentosno7.descricao)).toBeInTheDocument();
     const capas = [...heroi().querySelectorAll('img')].map(i => i.getAttribute('src'));
-    expect(capas).toContain('/sounds/capas/halloween.jpg');
-    expect(heroi().style.getPropertyValue('--som-fundo')).toBe(EMBUTIDAS.halloween.cor.fundo);
+    expect(capas).toContain('/sounds/capas/trezentosno7.jpg');
+    expect(heroi().style.getPropertyValue('--som-fundo')).toBe(EMBUTIDAS.trezentosno7.cor.fundo);
   });
 
   it('cada faixa da lista tem a sua capa', () => {
     render(<PainelSomAmbiente />);
-    for (const id of TEMAS_DE_TERROR) {
+    for (const id of MUSICAS) {
       expect(screen.getByRole('tabpanel').querySelector(`img[src="${EMBUTIDAS[id].capa}"]`)).not.toBeNull();
     }
   });

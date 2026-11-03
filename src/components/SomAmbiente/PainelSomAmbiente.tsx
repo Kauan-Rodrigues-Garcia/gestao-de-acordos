@@ -2,7 +2,7 @@
  * PainelSomAmbiente — o que abre ao clicar no fone do header.
  *
  * De cima para baixo: o que está tocando e os controles, o volume, o seletor
- * de faixas (`SeletorFaixas`: abas «Temas» e «Músicas», em páginas) e o
+ * de faixas (`SeletorFaixas`: aba «Músicas», em páginas) e o
  * «Tocar ao entrar».
  *
  * Duas versões, decididas pelo motor (`completo`):
@@ -11,8 +11,9 @@
  *   - os demais: enxuta — só as de fábrica, sem a aba «YouTube» (não dá para
  *     buscar nem adicionar música) e volume de 0 a 50.
  *
- * Mora com o tema de Halloween e só aparece quando o tema está liberado para
- * a pessoa (`useHalloween().disponivel`, no `Layout`). Tudo que muda aqui vai
+ * Nasceu com o tema de Halloween; desde 03/11/2026, quando o tema foi para
+ * `arquivo-morto/halloween/` (e com ele a aba «Temas», de terror), o player
+ * vive sozinho e o `Layout` decide quem o vê. Tudo que muda aqui vai
  * para o motor; o painel não guarda estado de som — fechar e abrir de novo
  * mostra o mesmo que está tocando.
  *
@@ -22,7 +23,7 @@ import { Fragment, useEffect, useRef, useState, type ComponentPropsWithoutRef, t
 import * as SliderPrimitive from '@radix-ui/react-slider';
 import {
   Play, Pause, SkipBack, SkipForward, Repeat, Repeat1, Volume, Volume1, Volume2, VolumeX, X, Loader2,
-  Ghost, ListEnd, ListPlus, Music, Pin, PinOff, Radio, Search, Youtube,
+  ListEnd, ListPlus, Music, Pin, PinOff, Radio, Search, Youtube,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -35,7 +36,7 @@ import {
   escolher, limparFila, progresso, pular, salvarPlaylists, useSomAmbiente,
 } from './motor';
 import {
-  GENEROS, GENERO_DA_MUSICA, LIMITE_PLAYLISTS, MUSICAS, RADIO, TEMAS_DE_TERROR, VOLUME_PADRAO, ehEmbutida,
+  GENEROS, GENERO_DA_MUSICA, LIMITE_PLAYLISTS, MUSICAS, RADIO, VOLUME_PADRAO, ehEmbutida,
   type Genero, type Musica, type PlaylistSalva,
 } from './preferencias';
 import { EMBUTIDAS, estiloDaFaixa, infoDaFaixa, infoDaPlaylist, type InfoFaixa } from './faixas';
@@ -57,7 +58,7 @@ export function PainelSomAmbiente() {
   const escolhida = prefs.faixa;
   const radio = useRadio();
   const naRadio = escolhida === RADIO;
-  const info = infoDaFaixa(escolhida, prefs.playlists, radio.estado?.atual) ?? EMBUTIDAS.halloween;
+  const info = infoDaFaixa(escolhida, prefs.playlists, radio.estado?.atual) ?? EMBUTIDAS[MUSICAS[0]];
   const tocando = estado === 'tocando' && !silenciado;
   const carregando = estado === 'carregando';
   const externa = !ehEmbutida(escolhida);
@@ -92,7 +93,7 @@ export function PainelSomAmbiente() {
 
   // Tocando, a linha de estado só confirma: o nome e o artista já estão acima.
   const legenda = silenciado
-    ? 'Pausado enquanto a mensagem de outubro toca'
+    ? 'Pausado enquanto outro som toca'
     : estado === 'erro' && erro ? erro
     : naRadio && radio.fase === 'desligada' ? 'Rádio desligada · começa sozinha quando ligarem'
     : carregando ? (naRadio ? 'Sintonizando a rádio…' : externa ? 'Abrindo o player…' : 'Carregando a música…')
@@ -103,7 +104,7 @@ export function PainelSomAmbiente() {
 
   const tipo = naRadio ? (radio.fase === 'desligada' ? 'Rádio · desligada' : 'Rádio ao vivo')
     : externa ? (spotify ? 'Playlist do Spotify' : 'Do YouTube')
-    : (TEMAS_DE_TERROR as readonly string[]).includes(escolhida) ? 'Tema de terror' : 'Música';
+    : 'Música';
 
   /*
    * A altura é a que o Popover diz que cabe (`--radix-popover-content-available-
@@ -360,7 +361,7 @@ function BarraSom({ rotulo, className, ...props }: ComponentPropsWithoutRef<type
   );
 }
 
-type Aba = 'temas' | 'musicas' | 'playlists' | 'radio';
+type Aba = 'musicas' | 'playlists' | 'radio';
 
 /**
  * Faixas que aparecem de uma vez; passando disso, a própria lista rola, com a
@@ -401,7 +402,6 @@ const semAcento = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLo
 
 function abaDaFaixa(id: string): Aba {
   if (id === RADIO) return 'radio';
-  if ((TEMAS_DE_TERROR as readonly string[]).includes(id)) return 'temas';
   if ((MUSICAS as readonly string[]).includes(id)) return 'musicas';
   return 'playlists';
 }
@@ -413,7 +413,8 @@ interface ItemDaLista {
 }
 
 /**
- * Temas de terror e músicas em abas separadas (e «Playlists», no completo).
+ * As músicas numa aba (e «YouTube» e «Rádio», no completo). Até 03/11/2026
+ * havia também a aba «Temas», de terror, que saiu com o tema de Halloween.
  * Na aba «Músicas», as faixas vêm agrupadas pelo gênero, com o título de cada
  * um, e uma fileira de gêneros filtra a lista (16/10/2026).
  * A lista mostra `LINHAS_VISIVEIS` e rola por dentro; passando disso aparece
@@ -433,7 +434,6 @@ function SeletorFaixas({ escolhida, noAr, playlists, fila, comRadio = false }: {
   comRadio?: boolean;
 }) {
   const listas: Record<Aba, ItemDaLista[]> = {
-    temas: TEMAS_DE_TERROR.map(id => ({ id, info: EMBUTIDAS[id] })),
     musicas: MUSICAS.map(id => ({ id, info: EMBUTIDAS[id] })),
     playlists: (playlists ?? []).map(p => ({
       id: p.id,
@@ -442,8 +442,7 @@ function SeletorFaixas({ escolhida, noAr, playlists, fila, comRadio = false }: {
     })),
     radio: [],
   };
-  const abas: { id: Aba; rotulo: string; Icone: typeof Ghost }[] = [
-    { id: 'temas', rotulo: 'Temas', Icone: Ghost },
+  const abas: { id: Aba; rotulo: string; Icone: typeof Music }[] = [
     { id: 'musicas', rotulo: 'Músicas', Icone: Music },
     ...(playlists ? [{ id: 'playlists' as const, rotulo: 'YouTube', Icone: Youtube }] : []),
     ...(comRadio ? [{ id: 'radio' as const, rotulo: 'Rádio', Icone: Radio }] : []),
@@ -451,7 +450,7 @@ function SeletorFaixas({ escolhida, noAr, playlists, fila, comRadio = false }: {
 
   const abaInicial = () => {
     const a = abaDaFaixa(escolhida);
-    return (a === 'playlists' && !playlists) || (a === 'radio' && !comRadio) ? 'temas' : a;
+    return (a === 'playlists' && !playlists) || (a === 'radio' && !comRadio) ? 'musicas' : a;
   };
   const [aba, setAba] = useState<Aba>(abaInicial);
   const [busca, setBusca] = useState('');
@@ -642,7 +641,7 @@ function SeletorFaixas({ escolhida, noAr, playlists, fila, comRadio = false }: {
           <Input
             value={busca}
             onChange={e => { setBusca(e.target.value); if (lista.current) lista.current.scrollTop = 0; }}
-            placeholder={aba === 'temas' ? 'Buscar tema' : aba === 'musicas' ? 'Buscar música, artista ou gênero' : 'Filtrar a sua lista'}
+            placeholder={aba === 'musicas' ? 'Buscar música, artista ou gênero' : 'Filtrar a sua lista'}
             aria-label="Buscar na lista"
             className="h-8 pl-8 pr-8 text-xs"
           />

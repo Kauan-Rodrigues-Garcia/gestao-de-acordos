@@ -1,8 +1,8 @@
 /**
  * BotaoSomAmbiente — o fone ao lado do sino, que vira o visor da música.
  *
- * Parte do tema de Halloween: o `Layout` só o monta quando o tema está
- * liberado para a pessoa (`useHalloween().disponivel`). Desmontado, o motor
+ * Nasceu com o tema de Halloween (que foi para `arquivo-morto/halloween/` em
+ * 03/11/2026); hoje o `Layout` decide quem o vê. Desmontado, o motor
  * para a música sozinho (`soltarSessao`). `completo` (super_admin) decide o
  * player inteiro ou a versão enxuta — ver `motor.ts`.
  *
@@ -65,7 +65,7 @@ export function BotaoSomAmbiente({ perfilId, completo = false }: {
   // Carregando conta como «no ar»: o visor abre junto do clique no play, e não
   // meio segundo depois, quando o som começa.
   const noArAgora = tocando || estado === 'carregando';
-  // Pausa de verdade, ou pausa da mensagem de outubro: o visor espera as duas.
+  // Pausa de verdade, ou silêncio pedido por outro som: o visor espera as duas.
   const pausado = estado === 'pausado' || (silenciado && estado === 'tocando');
 
   // ── Quando o visor está aberto ──

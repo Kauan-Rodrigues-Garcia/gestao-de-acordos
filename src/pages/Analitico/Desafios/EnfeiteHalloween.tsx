@@ -6,12 +6,30 @@
  * atrás do texto, não recebe clique e some para o leitor de tela. Com
  * «reduzir movimento» ligado os morcegos param no lugar.
  *
- * Desenho próprio, e não os do Halloween do site (`components/Halloween`):
- * aqueles dependem do contexto e do CSS do tema do site, que pode estar
- * desligado enquanto a campanha estiver no ar.
+ * Desenho próprio, e não os do tema de Halloween do site — que saiu para
+ * `arquivo-morto/halloween/` em 03/11/2026. O tema `halloween` do desafio
+ * continua como opção, independente dele.
  */
 import { useEffect } from 'react';
-import { carregarFonte } from '@/components/Halloween/fonte';
+
+/**
+ * A Creepster mora no próprio site (`public/fonts/creepster.woff2`, OFL). A
+ * declaração entra uma vez e fica: tirar faria a fonte piscar a cada troca.
+ */
+const ID_FONTE = 'desafio-fonte-creepster';
+function carregarFonte() {
+  if (typeof document === 'undefined' || document.getElementById(ID_FONTE)) return;
+  const estilo = document.createElement('style');
+  estilo.id = ID_FONTE;
+  estilo.textContent = `@font-face {
+  font-family: 'Creepster';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/creepster.woff2') format('woff2');
+}`;
+  document.head.appendChild(estilo);
+}
 
 /** A fonte do título no tema: a Creepster, que já mora em `public/fonts`. */
 export const FONTE_TITULO_HALLOWEEN = "'Creepster', ui-sans-serif, system-ui, sans-serif";

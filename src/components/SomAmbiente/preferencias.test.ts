@@ -9,8 +9,9 @@ const SPOTIFY = 'https://open.spotify.com/playlist/37i9dQZF1DX8Uebhn9wzrS';
 describe('preferências do Som ambiente', () => {
   beforeEach(() => localStorage.clear());
 
-  it('quem nunca abriu: tema do Halloween, volume baixo, não toca sozinho, em sequência', () => {
+  it('quem nunca abriu: «300 no 7», volume baixo, não toca sozinho, em sequência', () => {
     expect(lerPreferencias('p1')).toEqual(PADRAO);
+    expect(PADRAO.faixa).toBe('trezentosno7');
     expect(PADRAO.volume).toBe(VOLUME_PADRAO);
     expect(VOLUME_PADRAO).toBeLessThanOrEqual(25);
     expect(PADRAO.tocarAoEntrar).toBe(false);
@@ -18,17 +19,17 @@ describe('preferências do Som ambiente', () => {
   });
 
   it('grava e lê por pessoa', () => {
-    gravarPreferencias('p1', { faixa: 'saw', volume: 55, tocarAoEntrar: true, repetir: true, videoFixo: true, playlists: [] });
-    expect(lerPreferencias('p1')).toMatchObject({ faixa: 'saw', volume: 55, tocarAoEntrar: true, repetir: true, videoFixo: true });
+    gravarPreferencias('p1', { faixa: 'mdt', volume: 55, tocarAoEntrar: true, repetir: true, videoFixo: true, playlists: [] });
+    expect(lerPreferencias('p1')).toMatchObject({ faixa: 'mdt', volume: 55, tocarAoEntrar: true, repetir: true, videoFixo: true });
     expect(lerPreferencias('p2')).toEqual(PADRAO);
   });
 
   it('o padrão é 15%; quem ficou no padrão antigo (20, gravado antes da versão 2) desce junto', () => {
     expect(VOLUME_PADRAO).toBe(15);
-    localStorage.setItem('som-ambiente:p1', JSON.stringify({ faixa: 'halloween', volume: 20 }));
+    localStorage.setItem('som-ambiente:p1', JSON.stringify({ faixa: 'mdt', volume: 20 }));
     expect(lerPreferencias('p1').volume).toBe(15);
     // Escolheu outro volume: fica.
-    localStorage.setItem('som-ambiente:p2', JSON.stringify({ faixa: 'halloween', volume: 35 }));
+    localStorage.setItem('som-ambiente:p2', JSON.stringify({ faixa: 'mdt', volume: 35 }));
     expect(lerPreferencias('p2').volume).toBe(35);
     // Escolheu 20 já na versão nova: fica.
     gravarPreferencias('p3', { ...PADRAO, volume: 20 });
@@ -47,18 +48,18 @@ describe('preferências do Som ambiente', () => {
   });
 
   it('faixa que não existe mais (playlist removida ou som antigo) volta para o padrão', () => {
-    expect(normalizar({ faixa: 'spotify:playlist:sumiu' }).faixa).toBe('halloween');
-    expect(normalizar({ faixa: 'chuva' }).faixa).toBe('halloween');
-    expect(normalizar({ faixa: 'stranger' }).faixa).toBe('stranger');
+    expect(normalizar({ faixa: 'spotify:playlist:sumiu' }).faixa).toBe('trezentosno7');
+    expect(normalizar({ faixa: 'chuva' }).faixa).toBe('trezentosno7');
+    expect(normalizar({ faixa: 'pos' }).faixa).toBe('pos');
   });
 
   it('quem tinha a faixa do Batman, que saiu do projeto, volta ao padrão', () => {
-    expect(normalizar({ faixa: 'batman' }).faixa).toBe('halloween');
+    expect(normalizar({ faixa: 'batman' }).faixa).toBe('trezentosno7');
   });
 
   it('a posição da música volta no F5: por pessoa, e só de faixa que existe', () => {
-    gravarPosicao('p1', { faixa: 'saw', t: 83.27 });
-    expect(lerPosicao('p1')).toEqual({ faixa: 'saw', t: 83.3 });
+    gravarPosicao('p1', { faixa: 'mdt', t: 83.27 });
+    expect(lerPosicao('p1')).toEqual({ faixa: 'mdt', t: 83.3 });
     expect(lerPosicao('p2')).toBeNull();
     esquecerPosicao('p1');
     expect(lerPosicao('p1')).toBeNull();
@@ -66,8 +67,11 @@ describe('preferências do Som ambiente', () => {
     expect(lerPosicao('p1')).toBeNull();
     localStorage.setItem('som-ambiente-posicao:p1', '{quebrado');
     expect(lerPosicao('p1')).toBeNull();
-    localStorage.setItem('som-ambiente-posicao:p1', JSON.stringify({ faixa: 'stranger', t: -5 }));
-    expect(lerPosicao('p1')).toEqual({ faixa: 'stranger', t: 0 });
+    localStorage.setItem('som-ambiente-posicao:p1', JSON.stringify({ faixa: 'pos', t: -5 }));
+    expect(lerPosicao('p1')).toEqual({ faixa: 'pos', t: 0 });
+    // Os temas de terror saíram com o Halloween (03/11/2026): não voltam no F5.
+    localStorage.setItem('som-ambiente-posicao:p1', JSON.stringify({ faixa: 'saw', t: 10 }));
+    expect(lerPosicao('p1')).toBeNull();
     // Faixa que saiu em 13/10 também não volta no F5.
     localStorage.setItem('som-ambiente-posicao:p1', JSON.stringify({ faixa: 'candyman', t: 10 }));
     expect(lerPosicao('p1')).toBeNull();
@@ -76,8 +80,11 @@ describe('preferências do Som ambiente', () => {
     expect(lerPosicao('p1')).toBeNull();
   });
 
-  it('quem tinha um tema que saiu fica com «Halloween»; uma música, com «300 no 7»', () => {
-    for (const t of ['sexta13', 'candyman', 'pesadelo', 'pecadores']) expect(normalizar({ faixa: t }).faixa).toBe('halloween');
+  it('quem tinha um tema de terror ou uma música que saiu fica com «300 no 7»', () => {
+    // Os temas de 13/10/2026 e os que saíram com o Halloween, em 03/11/2026.
+    for (const t of ['sexta13', 'candyman', 'pesadelo', 'pecadores', 'saw', 'deadsilence', 'it', 'halloween', 'stranger']) {
+      expect(normalizar({ faixa: t }).faixa).toBe('trezentosno7');
+    }
     for (const m of ['rainha', 'boladao', 'numb', 'byob', 'bicho', 'gemebaixo', 'veigh', 'puxalanca', 'reliquia']) {
       expect(normalizar({ faixa: m }).faixa).toBe('trezentosno7');
     }

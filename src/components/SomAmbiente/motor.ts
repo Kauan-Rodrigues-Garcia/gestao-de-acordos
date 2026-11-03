@@ -7,8 +7,7 @@
  *
  * ## Duas fontes
  *
- *   - FÁBRICA: os seis temas de terror e as duas músicas (`preferencias.ts`),
- *     em `public/sounds/` junto da trilha da mensagem de outubro. Tocam
+ *   - FÁBRICA: as músicas de `preferencias.ts`, em `public/sounds/`. Tocam
  *     em sequência, como playlist (ou repetem uma, com «Repetir»), num
  *     `<audio>`. O volume é nosso, de 0 a 100.
  *   - PLAYLIST da pessoa (Spotify ou YouTube): o player oficial da plataforma,
@@ -33,9 +32,10 @@
  *
  * ## Quem mais fala
  *
- * A mensagem de outubro (Halloween) tem trilha própria: enquanto ela está
- * aberta, `silenciar('halloween')` pausa o som ambiente, e ele volta sozinho
- * quando ela fecha.
+ * Quem tem trilha própria pede silêncio: `silenciar(motivo)` pausa o som
+ * ambiente, e ele volta sozinho no `liberarSilencio(motivo)`. Era a mensagem
+ * de outubro e a cerimônia do Mural (Halloween, em `arquivo-morto/halloween/`
+ * desde 03/11/2026); hoje ninguém pede, mas a porta fica.
  *
  * ## A rádio (29/10/2026)
  *
@@ -46,7 +46,7 @@
 import { useSyncExternalStore } from 'react';
 import { enderecoYoutube, uriSpotify, type LinkExterno } from './links';
 import {
-  ARQUIVOS, FAIXAS_DA_SEQUENCIA, GANHO, MUSICAS, PADRAO, RADIO, TEMAS_DE_TERROR, ehEmbutida, esquecerPosicao, gravarPosicao, gravarPreferencias,
+  ARQUIVOS, FAIXAS_DA_SEQUENCIA, GANHO, MUSICAS, PADRAO, RADIO, ehEmbutida, esquecerPosicao, gravarPosicao, gravarPreferencias,
   lerPosicao, lerPreferencias, linkDaPlaylist,
   type FaixaEmbutida, type PreferenciasSom,
 } from './preferencias';
@@ -68,7 +68,7 @@ export type EstadoSom =
 export interface InstantaneoSom {
   estado: EstadoSom;
   prefs: PreferenciasSom;
-  /** Alguém (a mensagem de outubro) pediu silêncio. */
+  /** Alguém com trilha própria pediu silêncio (`silenciar`). */
   silenciado: boolean;
   /** A faixa que está de fato no ar — pode ser diferente de `prefs.faixa` por um instante. */
   noAr: string | null;
@@ -253,14 +253,12 @@ let ultimaGravacao = 0;
 
 /**
  * A faixa de fábrica seguinte — é por onde a sequência anda quando uma acaba.
- * Anda dentro do próprio grupo e dá a volta nele: a última música volta à
- * primeira música, não cai nos temas de terror (pedido de 14/10/2026); o
- * mesmo vale para os temas.
+ * A última música volta à primeira. (Até 03/11/2026 cada grupo dava a volta
+ * em si — músicas e temas de terror — a pedido de 14/10/2026.)
  */
 export function proximaEmbutida(faixa: FaixaEmbutida): FaixaEmbutida {
-  const grupo: readonly FaixaEmbutida[] = (MUSICAS as readonly string[]).includes(faixa) ? MUSICAS : TEMAS_DE_TERROR;
-  const i = grupo.indexOf(faixa);
-  return grupo[(i + 1) % grupo.length];
+  const i = MUSICAS.indexOf(faixa);
+  return MUSICAS[(i + 1) % MUSICAS.length];
 }
 
 /** O volume escolhido, já com o ganho da faixa que está carregada (`GANHO`). */

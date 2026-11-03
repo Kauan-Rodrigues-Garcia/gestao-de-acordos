@@ -25,14 +25,11 @@ import AdminTags from '@/components/admin/AdminTags';
 import AcessoMultiempresa from '@/components/admin/AcessoMultiempresa';
 import CorridaConfig from '@/components/admin/CorridaConfig';
 import LiberacaoChat from '@/components/admin/LiberacaoChat';
-import LiberacaoHalloween from '@/components/admin/LiberacaoHalloween';
 import CrachaPedidoConfig from '@/components/admin/CrachaPedidoConfig';
 import AdminDocumentacoes from '@/pages/AdminDocumentacoes';
 import AdminCargos from '@/components/admin/AdminCargos';
 import ImportarAcordosCard from '@/components/admin/ImportarAcordosCard';
 import RankingQuitacaoConfig from '@/components/admin/RankingQuitacaoConfig';
-import JumpscareConfig from '@/components/admin/JumpscareConfig';
-import MuralOutubroConfig from '@/components/admin/MuralOutubroConfig';
 import SireneConfig from '@/components/admin/SireneConfig';
 
 const MIGRATION_SQL = `ALTER TABLE public.acordos
@@ -301,22 +298,9 @@ export default function AdminConfiguracoes() {
               esta aba — `fn_cracha_pedido_painel` cobra `config_sub_geral`. */}
           <CrachaPedidoConfig />
 
-          {/* ── Halloween: o botão temporário que libera o tema para todos.
-              Some sozinho depois de liberado. Só super_admin — a função
-              `fn_halloween_liberar` confere de novo no banco. */}
-          {ehSuperAdmin && <LiberacaoHalloween />}
-
           {/* ── Corrida da Sorte: o sorteio em forma de corrida (20/10/2026). Só
               super_admin — as funções `fn_corrida_*` conferem de novo no banco. */}
           {ehSuperAdmin && <CorridaConfig />}
-
-          {/* ── Jumpscare: imagem em tela cheia para todos num horário (23/10/2026).
-              Só super_admin — as funções `fn_jumpscare_*` conferem de novo no banco. */}
-          {ehSuperAdmin && <JumpscareConfig />}
-
-          {/* ── Mural de Outubro: liberar para o pessoal e soltar a abertura (29/10/2026).
-              Só super_admin — as funções `fn_mural_outubro_*` conferem de novo no banco. */}
-          {ehSuperAdmin && <MuralOutubroConfig />}
 
           {/* ── Sirene: luz e som por horário, cor e setor (29/10/2026). Só
               super_admin — as funções `fn_sirene_*` conferem de novo no banco. */}

@@ -1,0 +1,2067 @@
+diff --git b/public/sounds/ce-ta-doido-dvd.mp3 a/public/sounds/halloween-ce-ta-doido-dvd.mp3
+similarity index 100%
+rename from public/sounds/ce-ta-doido-dvd.mp3
+rename to public/sounds/halloween-ce-ta-doido-dvd.mp3
+diff --git b/public/sounds/cesar-menotti-fabiano-temporal-de-amor.mp3 a/public/sounds/halloween-cesar-menotti-fabiano-temporal-de-amor.mp3
+similarity index 100%
+rename from public/sounds/cesar-menotti-fabiano-temporal-de-amor.mp3
+rename to public/sounds/halloween-cesar-menotti-fabiano-temporal-de-amor.mp3
+diff --git b/public/sounds/chico-rey-parana-um-degrau-na-escada.mp3 a/public/sounds/halloween-chico-rey-parana-um-degrau-na-escada.mp3
+similarity index 100%
+rename from public/sounds/chico-rey-parana-um-degrau-na-escada.mp3
+rename to public/sounds/halloween-chico-rey-parana-um-degrau-na-escada.mp3
+diff --git b/public/sounds/felipe-e-rodrigo-pos.mp3 a/public/sounds/halloween-felipe-e-rodrigo-pos.mp3
+similarity index 100%
+rename from public/sounds/felipe-e-rodrigo-pos.mp3
+rename to public/sounds/halloween-felipe-e-rodrigo-pos.mp3
+diff --git b/public/sounds/joao-carreiro-nunca-namore-um-cowboy.mp3 a/public/sounds/halloween-joao-carreiro-nunca-namore-um-cowboy.mp3
+similarity index 100%
+rename from public/sounds/joao-carreiro-nunca-namore-um-cowboy.mp3
+rename to public/sounds/halloween-joao-carreiro-nunca-namore-um-cowboy.mp3
+diff --git b/public/sounds/mc-gp-300-no-7.mp3 a/public/sounds/halloween-mc-gp-300-no-7.mp3
+similarity index 100%
+rename from public/sounds/mc-gp-300-no-7.mp3
+rename to public/sounds/halloween-mc-gp-300-no-7.mp3
+diff --git b/public/sounds/mc-kelvinho-mdt.mp3 a/public/sounds/halloween-mc-kelvinho-mdt.mp3
+similarity index 100%
+rename from public/sounds/mc-kelvinho-mdt.mp3
+rename to public/sounds/halloween-mc-kelvinho-mdt.mp3
+diff --git b/public/sounds/me-postou-no-daily.mp3 a/public/sounds/halloween-me-postou-no-daily.mp3
+similarity index 100%
+rename from public/sounds/me-postou-no-daily.mp3
+rename to public/sounds/halloween-me-postou-no-daily.mp3
+diff --git b/public/sounds/michael-jackson-chicago.mp3 a/public/sounds/halloween-michael-jackson-chicago.mp3
+similarity index 100%
+rename from public/sounds/michael-jackson-chicago.mp3
+rename to public/sounds/halloween-michael-jackson-chicago.mp3
+diff --git b/public/sounds/michael-jackson-they-dont-care-about-us.mp3 a/public/sounds/halloween-michael-jackson-they-dont-care-about-us.mp3
+similarity index 100%
+rename from public/sounds/michael-jackson-they-dont-care-about-us.mp3
+rename to public/sounds/halloween-michael-jackson-they-dont-care-about-us.mp3
+diff --git b/public/sounds/nle-choppa-walk-em-down.mp3 a/public/sounds/halloween-nle-choppa-walk-em-down.mp3
+similarity index 100%
+rename from public/sounds/nle-choppa-walk-em-down.mp3
+rename to public/sounds/halloween-nle-choppa-walk-em-down.mp3
+diff --git b/public/sounds/ryu-the-runner-mantem-o-pique.mp3 a/public/sounds/halloween-ryu-the-runner-mantem-o-pique.mp3
+similarity index 100%
+rename from public/sounds/ryu-the-runner-mantem-o-pique.mp3
+rename to public/sounds/halloween-ryu-the-runner-mantem-o-pique.mp3
+diff --git b/public/sounds/to-com-uma-novinha-midia.mp3 a/public/sounds/halloween-to-com-uma-novinha-midia.mp3
+similarity index 100%
+rename from public/sounds/to-com-uma-novinha-midia.mp3
+rename to public/sounds/halloween-to-com-uma-novinha-midia.mp3
+diff --git b/public/sounds/veigh-clickbait.mp3 a/public/sounds/halloween-veigh-clickbait.mp3
+similarity index 100%
+rename from public/sounds/veigh-clickbait.mp3
+rename to public/sounds/halloween-veigh-clickbait.mp3
+diff --git b/public/sounds/veigh-dono-da-verdade.mp3 a/public/sounds/halloween-veigh-dono-da-verdade.mp3
+similarity index 100%
+rename from public/sounds/veigh-dono-da-verdade.mp3
+rename to public/sounds/halloween-veigh-dono-da-verdade.mp3
+diff --git b/src/components/AcordoNovoInline/index.tsx a/src/components/AcordoNovoInline/index.tsx
+index a8418fc..b1a2b7e 100644
+--- b/src/components/AcordoNovoInline/index.tsx
++++ a/src/components/AcordoNovoInline/index.tsx
+@@ -50,6 +50,7 @@ import { TIPOS_PAGUEPLAY, TIPOS_BOOKPLAY } from './constants';
+ import { FormPP } from './FormPP';
+ import { FormBP } from './FormBP';
+ import type { ConflitNR, AcordoNovoInlineProps, SharedFormState } from './types';
++import { avisarAcordoSalvo } from '@/components/Halloween/tema';
+ 
+ // Re-export public API so callers using `@/components/AcordoNovoInline` keep working
+ export { ModalAutorizacaoNR } from './ModalAutorizacaoNR';
+@@ -703,6 +704,7 @@ export function AcordoNovoInline({
+ 
+       const inserido = await executarSalvar(payload);
+       if (inserido) {
++        avisarAcordoSalvo();
+         if (agendarProxima) await criarProximaParcela(inserido);
+         limparDraft();
+         await concluirSalvo(
+diff --git b/src/components/Chat/BolhaChat.celular.test.tsx a/src/components/Chat/BolhaChat.celular.test.tsx
+index dbc93c2..368dcd9 100644
+--- b/src/components/Chat/BolhaChat.celular.test.tsx
++++ a/src/components/Chat/BolhaChat.celular.test.tsx
+@@ -1,8 +1,8 @@
+ /**
+  * BolhaChat no modo `celular` — o chat dentro do app (05/10/2026).
+  *
+- * O que este arquivo trava: o botão é o ícone do chat; aberto, é a tela
+- * inteira sem o botão de aumentar; e o link do aviso
++ * O que este arquivo trava: a abóbora segue o tema de Halloween (e some com
++ * ele); aberto, é a tela inteira sem o botão de aumentar; e o link do aviso
+  * (`conversaInicial`) abre direto na conversa e avisa quem passou.
+  */
+ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+@@ -47,6 +47,7 @@ vi.mock('@/lib/notificacao-chat', () => ({
+ vi.mock('@/lib/som-chat', () => ({ prepararSomChat: () => {}, tocarSomChat: () => {} }));
+ vi.mock('@/components/ui/sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
+ vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
++vi.mock('@/components/Halloween/Desenhos', () => ({ AboboraChat: () => <span data-testid="abobora" /> }));
+ vi.mock('@/components/Chat/janela', () => {
+   const nada = () => null;
+   return {
+@@ -58,9 +59,14 @@ vi.mock('@/components/Chat/janela', () => {
+ });
+ 
+ import { BolhaChat } from './BolhaChat';
++import { TemaHalloweenContext } from '@/components/Halloween/tema';
+ 
+-function montar(props: Parameters<typeof BolhaChat>[0] = {}) {
+-  return render(<BolhaChat modo="celular" {...props} />);
++function montar(halloween: boolean, props: Parameters<typeof BolhaChat>[0] = {}) {
++  return render(
++    <TemaHalloweenContext.Provider value={halloween}>
++      <BolhaChat modo="celular" {...props} />
++    </TemaHalloweenContext.Provider>,
++  );
+ }
+ 
+ beforeEach(() => {
+@@ -70,14 +76,21 @@ beforeEach(() => {
+ });
+ 
+ describe('BolhaChat no celular', () => {
+-  it('o botão é o ícone normal do chat', async () => {
+-    montar();
++  it('tema de Halloween ligado: o botão é a abóbora', async () => {
++    montar(true);
++    await screen.findByRole('button', { name: 'Abrir o chat' });
++    expect(screen.getByTestId('abobora')).toBeInTheDocument();
++  });
++
++  it('tema desligado: volta o ícone normal do chat', async () => {
++    montar(false);
+     const botao = await screen.findByRole('button', { name: 'Abrir o chat' });
++    expect(screen.queryByTestId('abobora')).not.toBeInTheDocument();
+     expect(botao.className).toContain('bg-primary');
+   });
+ 
+   it('aberto é a tela inteira, sem o botão de aumentar a janela', async () => {
+-    montar();
++    montar(false);
+     fireEvent.click(await screen.findByRole('button', { name: 'Abrir o chat' }));
+     expect(screen.getByRole('button', { name: 'Fechar o chat' })).toBeInTheDocument();
+     expect(screen.queryByRole('button', { name: /Aumentar a janela|Diminuir a janela/ })).not.toBeInTheDocument();
+@@ -85,7 +98,7 @@ describe('BolhaChat no celular', () => {
+ 
+   it('vindo do aviso: abre direto na conversa e avisa que abriu', async () => {
+     const aberta = vi.fn();
+-    montar({ conversaInicial: 'c-42', onConversaInicialAberta: aberta });
++    montar(false, { conversaInicial: 'c-42', onConversaInicialAberta: aberta });
+     await waitFor(() => expect(abrir).toHaveBeenCalledWith('c-42'));
+     expect(aberta).toHaveBeenCalledTimes(1);
+     expect(screen.getByRole('button', { name: 'Fechar o chat' })).toBeInTheDocument();
+diff --git b/src/components/Chat/BolhaChat.tsx a/src/components/Chat/BolhaChat.tsx
+index bc3fb49..449e5d9 100644
+--- b/src/components/Chat/BolhaChat.tsx
++++ a/src/components/Chat/BolhaChat.tsx
+@@ -39,6 +39,8 @@ import {
+   type ConversaChat, type MensagemChat, type ContatoEscolhido,
+ } from '@/services/chat/chat.service';
+ import { IconeChat } from './comum';
++import { AboboraChat } from '@/components/Halloween/Desenhos';
++import { useTemaHalloween } from '@/components/Halloween/tema';
+ import { PainelSobDemanda } from '@/components/PainelSobDemanda';
+ import { comNovaTentativa } from '@/lib/sobDemanda';
+ import { usePrecarregarQuandoOcioso } from '@/hooks/useSobDemanda';
+@@ -142,6 +144,10 @@ export interface BolhaChatProps {
+ export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaInicialAberta, acimaDoRodape = 0 }: BolhaChatProps = {}) {
+   const celular = modo === 'celular';
+   const { perfil } = useAuth();
++  const halloween = useTemaHalloween();
++  // Só o mouse acende a abóbora. O foco não: ao fechar a janela o foco volta
++  // para a bolha e a abóbora ficava acesa até trocar de aba.
++  const [mouseNaBolha, setMouseNaBolha] = useState(false);
+   const { temPermissao, loading: permLoading } = useCargoPermissoes();
+ 
+   const [aberto, setAberto] = useState(false);
+@@ -520,6 +526,8 @@ export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaI
+   const abrirJanela = useCallback(() => {
+     abertoRef.current = true;
+     setAberto(true);
++    // A bolha some com o mouse em cima e o `mouseleave` nunca chega.
++    setMouseNaBolha(false);
+     // Minimizar conserva a conversa selecionada. Ao voltar ela se torna
+     // visível novamente, então relê e marca como lida o que chegou no intervalo.
+     if (chat.conversaAberta) chat.abrir(chat.conversaAberta);
+@@ -607,8 +615,8 @@ export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaI
+       `}</style>
+       <button
+         onClick={abrirJanela}
+-        onMouseEnter={() => { setSobre(true); precarregarJanela(); }}
+-        onMouseLeave={() => setSobre(false)}
++        onMouseEnter={() => { setSobre(true); setMouseNaBolha(true); precarregarJanela(); }}
++        onMouseLeave={() => { setSobre(false); setMouseNaBolha(false); }}
+         onFocus={() => { setSobre(true); precarregarJanela(); }}
+         onBlur={() => setSobre(false)}
+         style={celular ? { bottom: `calc(env(safe-area-inset-bottom) + ${16 + acimaDoRodape}px)` } : undefined}
+@@ -617,8 +625,9 @@ export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaI
+           celular ? 'right-4' : 'bottom-6 right-6',
+           // Quadrado de cantos arredondados. `rounded-2xl` e não `rounded-full`:
+           // pedido explícito, e combina com o resto do sistema, que é todo
+-          // feito de cartões de canto arredondado.
+-          'rounded-2xl bg-primary text-primary-foreground shadow-lg',
++          // feito de cartões de canto arredondado. No Halloween o quadrado
++          // some e a bolha é a própria abóbora.
++          halloween ? 'rounded-2xl' : 'rounded-2xl bg-primary text-primary-foreground shadow-lg',
+           'transition-all duration-300',
+           'hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 active:scale-95',
+           'flex items-center justify-center',
+@@ -631,21 +640,25 @@ export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaI
+             ].filter(Boolean).join(', ')}`
+           : 'Abrir o chat'}
+       >
+-        {avisosNaBolha > 0 && (
++        {avisosNaBolha > 0 && !halloween && (
+           <span
+             aria-hidden="true"
+             className="chat-alerta-pendente pointer-events-none absolute -inset-1 rounded-[18px] border-2 border-primary/70"
+           />
+         )}
+         {/* O brilho, atrás. Acende no hover e fica aceso com mensagem nova. */}
+-        <span
+-          aria-hidden="true"
+-          className={cn(
+-            'absolute inset-0 rounded-2xl blur-lg -z-10 bg-primary/40 transition-opacity duration-500',
+-            sobre || avisosNaBolha > 0 ? 'opacity-100' : 'opacity-0',
+-          )}
+-        />
+-        <IconeChat ativo={sobre || avisosNaBolha > 0} />
++        {!halloween && (
++          <span
++            aria-hidden="true"
++            className={cn(
++              'absolute inset-0 rounded-2xl blur-lg -z-10 bg-primary/40 transition-opacity duration-500',
++              sobre || avisosNaBolha > 0 ? 'opacity-100' : 'opacity-0',
++            )}
++          />
++        )}
++        {halloween
++          ? <AboboraChat acesa={mouseNaBolha || avisosNaBolha > 0} />
++          : <IconeChat ativo={sobre || avisosNaBolha > 0} />}
+ 
+         {avisosNaBolha > 0 && (
+           <span className={cn(
+diff --git b/src/components/Chat/comum.tsx a/src/components/Chat/comum.tsx
+index cd72de0..02e7720 100644
+--- b/src/components/Chat/comum.tsx
++++ a/src/components/Chat/comum.tsx
+@@ -5,6 +5,7 @@
+  * curta, o balão de anexo. Ficam juntos para a bolha e a versão expandida
+  * mostrarem exatamente a mesma coisa — duas cópias divergem no primeiro ajuste.
+  */
++import { ComChapeu } from '@/components/Halloween/Desenhos';
+ import { useEffect, useRef, useState } from 'react';
+ import { FileText, ImageIcon, Music, Video, Download, Play, Pause, Mic } from 'lucide-react';
+ import { urlDoAnexo, urlDoAnexoEmCache, type AnexoChat } from '@/services/chat/chat.service';
+@@ -25,6 +26,7 @@ export function AvatarChat({
+   const src = useFotoResolvida(foto);
+ 
+   return (
++    <ComChapeu chave={nome} tamanho={tamanho} escala={0.92}>
+     <div className="relative shrink-0" style={estilo}>
+       {/* `lazy`: a lista de disparo desenha a empresa inteira, e sem isto o
+           navegador baixava centenas de fotos antes de a janela responder. */}
+@@ -55,6 +57,7 @@ export function AvatarChat({
+         />
+       )}
+     </div>
++    </ComChapeu>
+   );
+ }
+ 
+diff --git b/src/components/Corrida/guerra/guerra.css a/src/components/Corrida/guerra/guerra.css
+index 9fb2815..9e9fa67 100644
+--- b/src/components/Corrida/guerra/guerra.css
++++ a/src/components/Corrida/guerra/guerra.css
+@@ -40,55 +40,3 @@ tr.gx-morte .st { filter: grayscale(1); opacity: .6; }
+ /* a página treme com a cabeçada (meio segundo; no modo leve, não) */
+ .gx-treme { animation: gx-treme-pag .5s; }
+ @keyframes gx-treme-pag { 15% { transform: translate(-10px, 5px); } 30% { transform: translate(9px, -6px); } 50% { transform: translate(-6px, 4px); } 70% { transform: translate(4px, -3px); } 85% { transform: translate(-2px, 1px); } }
+-
+-/*
+- * A medalha que sai do Cavalo da Guerra quando ele cai (`soltarMedalha`, em
+- * palcoGuerra.js). O desenho vinha do álbum de insígnias, que foi para
+- * `arquivo-morto/halloween/` em 03/11/2026: as regras que a medalha usa
+- * foram copiadas para cá, iguais.
+- */
+-.ins-medalha {
+-  --tam: 24px;
+-  --fita: #888;
+-  --ouro: #c9962c;
+-  --ouro-claro: #f0c75e;
+-  position: relative;
+-  width: var(--tam);
+-  height: calc(var(--tam) * 1.32);
+-  flex-shrink: 0;
+-}
+-
+-/* A fita: uma faixa com a ponta em V, atrás do disco. */
+-.ins-medalha .ins-fita {
+-  position: absolute;
+-  left: 50%;
+-  top: 0;
+-  width: calc(var(--tam) * 0.5);
+-  height: calc(var(--tam) * 0.62);
+-  transform: translateX(-50%);
+-  background: linear-gradient(90deg, var(--fita) 0 34%, rgb(255 255 255 / 0.32) 34% 66%, var(--fita) 66% 100%);
+-  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 78%, 0 100%);
+-}
+-
+-.ins-medalha .ins-disco {
+-  position: absolute;
+-  left: 0;
+-  bottom: 0;
+-  width: var(--tam);
+-  height: var(--tam);
+-  border-radius: 9999px;
+-  background: #f3ead3;
+-  border: calc(var(--tam) * 0.06 + 1px) solid var(--ouro);
+-  box-shadow: inset 0 0 0 calc(var(--tam) * 0.035 + 0.5px) var(--ouro-claro), 0 1px 2px rgb(0 0 0 / 0.25);
+-  display: flex;
+-  align-items: center;
+-  justify-content: center;
+-  overflow: hidden;
+-}
+-
+-.ins-medalha .ins-disco img {
+-  image-rendering: pixelated;
+-  display: block;
+-  pointer-events: none;
+-  user-select: none;
+-}
+diff --git b/src/components/Corrida/guerra/palcoGuerra.d.ts a/src/components/Corrida/guerra/palcoGuerra.d.ts
+index bf591fd..f2ba9f9 100644
+--- b/src/components/Corrida/guerra/palcoGuerra.d.ts
++++ a/src/components/Corrida/guerra/palcoGuerra.d.ts
+@@ -39,7 +39,6 @@ export interface OpcoesPalcoGuerra {
+   /**
+    * A medalha que sai dele quando cai e voa para o álbum do topo: 'real' (só se esta tela atirou; avisa o
+    * álbum com o evento `insignia-ganha`), 'teste' (só a animação) ou nada (quem assiste como organizador).
+-   * O álbum está em `arquivo-morto/halloween/` desde 03/11/2026: sem ele a medalha voa para o meio do topo.
+    */
+   medalha?: 'real' | 'teste';
+ }
+diff --git b/src/components/Corrida/guerra/palcoGuerra.js a/src/components/Corrida/guerra/palcoGuerra.js
+index e4cfa02..a1d8f14 100644
+--- b/src/components/Corrida/guerra/palcoGuerra.js
++++ a/src/components/Corrida/guerra/palcoGuerra.js
+@@ -35,11 +35,6 @@
+  * os raios dourados, e voa até a fileira de medalhas do topo do app (`medalha`:
+  * 'real' só para quem atirou; 'teste' no teste, que não mexe no álbum).
+  *
+- * O álbum foi para `arquivo-morto/halloween/` em 03/11/2026. A medalha continua
+- * igual (as regras `.ins-*` que ela usa foram copiadas para `guerra.css`); sem
+- * a fileira na tela ela voa para o meio do topo, e o `insignia-ganha` fica sem
+- * ninguém ouvindo. Se o álbum voltar, tudo volta a se encaixar sozinho.
+- *
+  * ## O anjo
+  *
+  * Quando o banco cura (o diretor de ritmo achou que a vida caiu rápido demais),
+@@ -50,6 +45,7 @@
+  * opções estão em `palcoGuerra.d.ts`.
+  */
+ import './guerra.css';
++import '../../Insignias/insignias.css';
+ import { retratoUrl } from './retrato.js';
+ import { assarFogo, sprites, chama as chamaF, luz as luzF, tremula as tremulaF, particula as particulaF, explosaoFogo, poda, ESCUDO } from './fogo.js';
+ import { CW, CH, CCHAO, CMEIO, CPIV, EXTENSAO, MARGEM_ALTO, MARGEM_TRAS, MAT, CAVALEIROS, criarDestino, construirCavalo, cabecaDo, pontaDaCabeca, noCavalo, naGrade, tipoDoAcerto } from './cavaloDaGuerra.js';
+diff --git b/src/components/CrachaPendente/index.tsx a/src/components/CrachaPendente/index.tsx
+index d20cdb8..6ca2012 100644
+--- b/src/components/CrachaPendente/index.tsx
++++ a/src/components/CrachaPendente/index.tsx
+@@ -4,9 +4,8 @@
+  *   - Para todo mundo que ainda não tem crachá cadastrado. «Tem» é a linha em
+  *     `rh_dados_operadores`: preencheu uma vez, não volta — nem recarregando,
+  *     nem em outro computador.
+- *   - Espera 1 min de uso e sai da frente do termo e do tutorial
+- *     (`liberado`, que o Layout calcula; até 03/11/2026, também da carta de
+- *     Halloween). Impersonação e super_admin
++ *   - Espera 1 min de uso e sai da frente do termo, do tutorial e da carta de
++ *     Halloween (`liberado`, que o Layout calcula). Impersonação e super_admin
+  *     não veem; `?previa-cracha` na URL abre a prévia, que não grava nada.
+  *   - Não tem «agora não»: uma vez na tela, fica até a pessoa preencher — ou
+  *     até o super_admin desligar o pedido em Configurações → Geral. Quem está
+diff --git b/src/components/SomAmbiente/BotaoSomAmbiente.test.tsx a/src/components/Halloween/SomAmbiente/BotaoSomAmbiente.test.tsx
+similarity index 89%
+rename from src/components/SomAmbiente/BotaoSomAmbiente.test.tsx
+rename to src/components/Halloween/SomAmbiente/BotaoSomAmbiente.test.tsx
+index 5a91ac7..8a4f731 100644
+--- b/src/components/SomAmbiente/BotaoSomAmbiente.test.tsx
++++ a/src/components/Halloween/SomAmbiente/BotaoSomAmbiente.test.tsx
+@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+ import { render, screen, act, fireEvent } from '@testing-library/react';
+ 
+ const motor = vi.hoisted(() => ({
+-  snap: { estado: 'parado', silenciado: false, noAr: null as string | null, prefs: { faixa: 'trezentosno7', playlists: [] } },
++  snap: { estado: 'parado', silenciado: false, noAr: null as string | null, prefs: { faixa: 'halloween', playlists: [] } },
+   ouvintes: new Set<() => void>(),
+   pular: vi.fn(),
+   alternar: vi.fn(),
+@@ -42,7 +42,7 @@ const fone = () => screen.getByRole('button', { name: /^Som ambiente(, tocando)?
+ 
+ beforeEach(() => {
+   vi.useFakeTimers();
+-  motor.snap = { estado: 'parado', silenciado: false, noAr: null, prefs: { faixa: 'trezentosno7', playlists: [] } };
++  motor.snap = { estado: 'parado', silenciado: false, noAr: null, prefs: { faixa: 'halloween', playlists: [] } };
+   motor.ouvintes.clear();
+   motor.pular.mockClear();
+   motor.alternar.mockClear();
+@@ -58,14 +58,14 @@ describe('o visor', () => {
+ 
+   it('tocando, vira o visor com o nome e a capa da música', () => {
+     const { container } = render(<BotaoSomAmbiente perfilId="p1" />);
+-    noAr('mdt');
+-    expect(visor()).toHaveAccessibleName(/MDT/);
+-    expect(container.querySelector('img[src="/sounds/capas/mdt.jpg"]')).not.toBeNull();
++    noAr('saw');
++    expect(visor()).toHaveAccessibleName(/Hello Zepp/);
++    expect(container.querySelector('img[src="/sounds/capas/saw.jpg"]')).not.toBeNull();
+   });
+ 
+   it('com o mouse em cima, tem anterior, pausar e próxima', () => {
+     render(<BotaoSomAmbiente perfilId="p1" />);
+-    noAr('mdt');
++    noAr('saw');
+     fireEvent.click(screen.getByRole('button', { name: 'Faixa anterior' }));
+     fireEvent.click(screen.getByRole('button', { name: 'Pausar' }));
+     fireEvent.click(screen.getByRole('button', { name: 'Próxima faixa' }));
+@@ -75,8 +75,8 @@ describe('o visor', () => {
+ 
+   it('pausou: o visor espera e só então volta a ser fone', () => {
+     render(<BotaoSomAmbiente perfilId="p1" />);
+-    noAr('mdt');
+-    noAr('mdt', 'pausado');
++    noAr('saw');
++    noAr('saw', 'pausado');
+     act(() => { vi.advanceTimersByTime(PAUSA_MS - 500); });
+     expect(visor()).toBeInTheDocument();
+     expect(screen.getByRole('button', { name: 'Tocar' })).toBeInTheDocument();
+@@ -86,18 +86,18 @@ describe('o visor', () => {
+ 
+   it('voltar a tocar dentro do prazo cancela a volta ao fone', () => {
+     render(<BotaoSomAmbiente perfilId="p1" />);
+-    noAr('mdt');
+-    noAr('mdt', 'pausado');
++    noAr('saw');
++    noAr('saw', 'pausado');
+     act(() => { vi.advanceTimersByTime(PAUSA_MS - 1000); });
+-    noAr('mdt', 'tocando');
++    noAr('saw', 'tocando');
+     act(() => { vi.advanceTimersByTime(PAUSA_MS * 2); });
+     expect(visor()).toBeInTheDocument();
+   });
+ 
+   it('mouse em cima segura o visor: o prazo não corre', () => {
+     const { container } = render(<BotaoSomAmbiente perfilId="p1" />);
+-    noAr('mdt');
+-    noAr('mdt', 'pausado');
++    noAr('saw');
++    noAr('saw', 'pausado');
+     const grupo = container.querySelector('[role="group"]')!;
+     fireEvent.mouseEnter(grupo);
+     act(() => { vi.advanceTimersByTime(PAUSA_MS * 3); });
+@@ -109,7 +109,7 @@ describe('o visor', () => {
+ 
+   it('parar (nada no ar) recolhe na hora', () => {
+     render(<BotaoSomAmbiente perfilId="p1" />);
+-    noAr('mdt');
++    noAr('saw');
+     noAr(null, 'parado');
+     expect(screen.queryByRole('button', { name: /Abrir o painel/ })).toBeNull();
+   });
+diff --git b/src/components/SomAmbiente/BotaoSomAmbiente.tsx a/src/components/Halloween/SomAmbiente/BotaoSomAmbiente.tsx
+similarity index 97%
+rename from src/components/SomAmbiente/BotaoSomAmbiente.tsx
+rename to src/components/Halloween/SomAmbiente/BotaoSomAmbiente.tsx
+index c519531..cfc770b 100644
+--- b/src/components/SomAmbiente/BotaoSomAmbiente.tsx
++++ a/src/components/Halloween/SomAmbiente/BotaoSomAmbiente.tsx
+@@ -1,8 +1,8 @@
+ /**
+  * BotaoSomAmbiente — o fone ao lado do sino, que vira o visor da música.
+  *
+- * Nasceu com o tema de Halloween (que foi para `arquivo-morto/halloween/` em
+- * 03/11/2026); hoje o `Layout` decide quem o vê. Desmontado, o motor
++ * Parte do tema de Halloween: o `Layout` só o monta quando o tema está
++ * liberado para a pessoa (`useHalloween().disponivel`). Desmontado, o motor
+  * para a música sozinho (`soltarSessao`). `completo` (super_admin) decide o
+  * player inteiro ou a versão enxuta — ver `motor.ts`.
+  *
+@@ -65,7 +65,7 @@ export function BotaoSomAmbiente({ perfilId, completo = false }: {
+   // Carregando conta como «no ar»: o visor abre junto do clique no play, e não
+   // meio segundo depois, quando o som começa.
+   const noArAgora = tocando || estado === 'carregando';
+-  // Pausa de verdade, ou silêncio pedido por outro som: o visor espera as duas.
++  // Pausa de verdade, ou pausa da mensagem de outubro: o visor espera as duas.
+   const pausado = estado === 'pausado' || (silenciado && estado === 'tocando');
+ 
+   // ── Quando o visor está aberto ──
+diff --git b/src/components/SomAmbiente/CapaFaixa.tsx a/src/components/Halloween/SomAmbiente/CapaFaixa.tsx
+similarity index 100%
+rename from src/components/SomAmbiente/CapaFaixa.tsx
+rename to src/components/Halloween/SomAmbiente/CapaFaixa.tsx
+diff --git b/src/components/SomAmbiente/Equalizador.tsx a/src/components/Halloween/SomAmbiente/Equalizador.tsx
+similarity index 100%
+rename from src/components/SomAmbiente/Equalizador.tsx
+rename to src/components/Halloween/SomAmbiente/Equalizador.tsx
+diff --git b/src/components/SomAmbiente/PainelSomAmbiente.test.tsx a/src/components/Halloween/SomAmbiente/PainelSomAmbiente.test.tsx
+similarity index 86%
+rename from src/components/SomAmbiente/PainelSomAmbiente.test.tsx
+rename to src/components/Halloween/SomAmbiente/PainelSomAmbiente.test.tsx
+index 3a1f5ff..68fc270 100644
+--- b/src/components/SomAmbiente/PainelSomAmbiente.test.tsx
++++ a/src/components/Halloween/SomAmbiente/PainelSomAmbiente.test.tsx
+@@ -5,7 +5,7 @@
+  */
+ import { describe, it, expect, vi, beforeEach } from 'vitest';
+ import { render, screen, act, fireEvent, within } from '@testing-library/react';
+-import { GENEROS, GENERO_DA_MUSICA, MUSICAS, PADRAO } from './preferencias';
++import { GENEROS, GENERO_DA_MUSICA, MUSICAS, PADRAO, TEMAS_DE_TERROR } from './preferencias';
+ import { EMBUTIDAS } from './faixas';
+ 
+ const motor = vi.hoisted(() => ({
+@@ -59,16 +59,19 @@ beforeEach(() => {
+ });
+ 
+ describe('seletor de faixas', () => {
+-  it('enxuto: só a aba Músicas, sem YouTube (os Temas de terror saíram em 03/11/2026)', () => {
++  it('enxuto: abas Temas e Músicas, sem YouTube, abrindo na aba da faixa escolhida', () => {
+     render(<PainelSomAmbiente />);
+     const abas = screen.getAllByRole('tab').map(t => t.textContent);
+-    expect(abas).toEqual([`Músicas${MUSICAS.length}`]);
+-    expect(screen.getByRole('tab', { name: /Músicas/ })).toHaveAttribute('aria-selected', 'true');
+-    expect(within(screen.getByRole('tabpanel')).queryByText('Halloween')).toBeNull();
++    expect(abas).toEqual([`Temas${TEMAS_DE_TERROR.length}`, `Músicas${MUSICAS.length}`]);
++    expect(screen.getByRole('tab', { name: /Temas/ })).toHaveAttribute('aria-selected', 'true');
++    expect(within(screen.getByRole('tabpanel')).queryByText('Provavelmente')).toBeNull();
+   });
+ 
+-  it('as músicas, que passam do que cabe, rolam e têm busca', () => {
++  it('os cinco temas cabem sem busca; as músicas, que passam disso, rolam e têm busca', () => {
+     render(<PainelSomAmbiente />);
++    expect(faixasNaTela()).toHaveLength(TEMAS_DE_TERROR.length);
++    expect(screen.queryByRole('textbox', { name: 'Buscar na lista' })).toBeNull();
++    fireEvent.click(screen.getByRole('tab', { name: /Músicas/ }));
+     // Todas na mesma lista, que rola por dentro — sem páginas.
+     expect(MUSICAS.length).toBeGreaterThan(LINHAS_VISIVEIS);
+     expect(faixasNaTela()).toHaveLength(MUSICAS.length);
+@@ -137,16 +140,16 @@ describe('tocando agora', () => {
+ 
+   it('mostra a capa, o nome e o artista, nas cores da faixa', () => {
+     render(<PainelSomAmbiente />);
+-    expect(within(heroi()).getByText('300 no 7')).toBeInTheDocument();
+-    expect(within(heroi()).getByText(EMBUTIDAS.trezentosno7.descricao)).toBeInTheDocument();
++    expect(within(heroi()).getByText('Halloween')).toBeInTheDocument();
++    expect(within(heroi()).getByText('Tema de John Carpenter')).toBeInTheDocument();
+     const capas = [...heroi().querySelectorAll('img')].map(i => i.getAttribute('src'));
+-    expect(capas).toContain('/sounds/capas/trezentosno7.jpg');
+-    expect(heroi().style.getPropertyValue('--som-fundo')).toBe(EMBUTIDAS.trezentosno7.cor.fundo);
++    expect(capas).toContain('/sounds/capas/halloween.jpg');
++    expect(heroi().style.getPropertyValue('--som-fundo')).toBe(EMBUTIDAS.halloween.cor.fundo);
+   });
+ 
+   it('cada faixa da lista tem a sua capa', () => {
+     render(<PainelSomAmbiente />);
+-    for (const id of MUSICAS) {
++    for (const id of TEMAS_DE_TERROR) {
+       expect(screen.getByRole('tabpanel').querySelector(`img[src="${EMBUTIDAS[id].capa}"]`)).not.toBeNull();
+     }
+   });
+diff --git b/src/components/SomAmbiente/PainelSomAmbiente.tsx a/src/components/Halloween/SomAmbiente/PainelSomAmbiente.tsx
+similarity index 97%
+rename from src/components/SomAmbiente/PainelSomAmbiente.tsx
+rename to src/components/Halloween/SomAmbiente/PainelSomAmbiente.tsx
+index dd47a1d..ececd55 100644
+--- b/src/components/SomAmbiente/PainelSomAmbiente.tsx
++++ a/src/components/Halloween/SomAmbiente/PainelSomAmbiente.tsx
+@@ -2,7 +2,7 @@
+  * PainelSomAmbiente — o que abre ao clicar no fone do header.
+  *
+  * De cima para baixo: o que está tocando e os controles, o volume, o seletor
+- * de faixas (`SeletorFaixas`: aba «Músicas», em páginas) e o
++ * de faixas (`SeletorFaixas`: abas «Temas» e «Músicas», em páginas) e o
+  * «Tocar ao entrar».
+  *
+  * Duas versões, decididas pelo motor (`completo`):
+@@ -11,9 +11,8 @@
+  *   - os demais: enxuta — só as de fábrica, sem a aba «YouTube» (não dá para
+  *     buscar nem adicionar música) e volume de 0 a 50.
+  *
+- * Nasceu com o tema de Halloween; desde 03/11/2026, quando o tema foi para
+- * `arquivo-morto/halloween/` (e com ele a aba «Temas», de terror), o player
+- * vive sozinho e o `Layout` decide quem o vê. Tudo que muda aqui vai
++ * Mora com o tema de Halloween e só aparece quando o tema está liberado para
++ * a pessoa (`useHalloween().disponivel`, no `Layout`). Tudo que muda aqui vai
+  * para o motor; o painel não guarda estado de som — fechar e abrir de novo
+  * mostra o mesmo que está tocando.
+  *
+@@ -23,7 +22,7 @@ import { Fragment, useEffect, useRef, useState, type ComponentPropsWithoutRef, t
+ import * as SliderPrimitive from '@radix-ui/react-slider';
+ import {
+   Play, Pause, SkipBack, SkipForward, Repeat, Repeat1, Volume, Volume1, Volume2, VolumeX, X, Loader2,
+-  ListEnd, ListPlus, Music, Pin, PinOff, Radio, Search, Youtube,
++  Ghost, ListEnd, ListPlus, Music, Pin, PinOff, Radio, Search, Youtube,
+ } from 'lucide-react';
+ import { Button } from '@/components/ui/button';
+ import { Input } from '@/components/ui/input';
+@@ -36,7 +35,7 @@ import {
+   escolher, limparFila, progresso, pular, salvarPlaylists, useSomAmbiente,
+ } from './motor';
+ import {
+-  GENEROS, GENERO_DA_MUSICA, LIMITE_PLAYLISTS, MUSICAS, RADIO, VOLUME_PADRAO, ehEmbutida,
++  GENEROS, GENERO_DA_MUSICA, LIMITE_PLAYLISTS, MUSICAS, RADIO, TEMAS_DE_TERROR, VOLUME_PADRAO, ehEmbutida,
+   type Genero, type Musica, type PlaylistSalva,
+ } from './preferencias';
+ import { EMBUTIDAS, estiloDaFaixa, infoDaFaixa, infoDaPlaylist, type InfoFaixa } from './faixas';
+@@ -58,7 +57,7 @@ export function PainelSomAmbiente() {
+   const escolhida = prefs.faixa;
+   const radio = useRadio();
+   const naRadio = escolhida === RADIO;
+-  const info = infoDaFaixa(escolhida, prefs.playlists, radio.estado?.atual) ?? EMBUTIDAS[MUSICAS[0]];
++  const info = infoDaFaixa(escolhida, prefs.playlists, radio.estado?.atual) ?? EMBUTIDAS.halloween;
+   const tocando = estado === 'tocando' && !silenciado;
+   const carregando = estado === 'carregando';
+   const externa = !ehEmbutida(escolhida);
+@@ -93,7 +92,7 @@ export function PainelSomAmbiente() {
+ 
+   // Tocando, a linha de estado só confirma: o nome e o artista já estão acima.
+   const legenda = silenciado
+-    ? 'Pausado enquanto outro som toca'
++    ? 'Pausado enquanto a mensagem de outubro toca'
+     : estado === 'erro' && erro ? erro
+     : naRadio && radio.fase === 'desligada' ? 'Rádio desligada · começa sozinha quando ligarem'
+     : carregando ? (naRadio ? 'Sintonizando a rádio…' : externa ? 'Abrindo o player…' : 'Carregando a música…')
+@@ -104,7 +103,7 @@ export function PainelSomAmbiente() {
+ 
+   const tipo = naRadio ? (radio.fase === 'desligada' ? 'Rádio · desligada' : 'Rádio ao vivo')
+     : externa ? (spotify ? 'Playlist do Spotify' : 'Do YouTube')
+-    : 'Música';
++    : (TEMAS_DE_TERROR as readonly string[]).includes(escolhida) ? 'Tema de terror' : 'Música';
+ 
+   /*
+    * A altura é a que o Popover diz que cabe (`--radix-popover-content-available-
+@@ -361,7 +360,7 @@ function BarraSom({ rotulo, className, ...props }: ComponentPropsWithoutRef<type
+   );
+ }
+ 
+-type Aba = 'musicas' | 'playlists' | 'radio';
++type Aba = 'temas' | 'musicas' | 'playlists' | 'radio';
+ 
+ /**
+  * Faixas que aparecem de uma vez; passando disso, a própria lista rola, com a
+@@ -402,6 +401,7 @@ const semAcento = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLo
+ 
+ function abaDaFaixa(id: string): Aba {
+   if (id === RADIO) return 'radio';
++  if ((TEMAS_DE_TERROR as readonly string[]).includes(id)) return 'temas';
+   if ((MUSICAS as readonly string[]).includes(id)) return 'musicas';
+   return 'playlists';
+ }
+@@ -413,8 +413,7 @@ interface ItemDaLista {
+ }
+ 
+ /**
+- * As músicas numa aba (e «YouTube» e «Rádio», no completo). Até 03/11/2026
+- * havia também a aba «Temas», de terror, que saiu com o tema de Halloween.
++ * Temas de terror e músicas em abas separadas (e «Playlists», no completo).
+  * Na aba «Músicas», as faixas vêm agrupadas pelo gênero, com o título de cada
+  * um, e uma fileira de gêneros filtra a lista (16/10/2026).
+  * A lista mostra `LINHAS_VISIVEIS` e rola por dentro; passando disso aparece
+@@ -434,6 +433,7 @@ function SeletorFaixas({ escolhida, noAr, playlists, fila, comRadio = false }: {
+   comRadio?: boolean;
+ }) {
+   const listas: Record<Aba, ItemDaLista[]> = {
++    temas: TEMAS_DE_TERROR.map(id => ({ id, info: EMBUTIDAS[id] })),
+     musicas: MUSICAS.map(id => ({ id, info: EMBUTIDAS[id] })),
+     playlists: (playlists ?? []).map(p => ({
+       id: p.id,
+@@ -442,7 +442,8 @@ function SeletorFaixas({ escolhida, noAr, playlists, fila, comRadio = false }: {
+     })),
+     radio: [],
+   };
+-  const abas: { id: Aba; rotulo: string; Icone: typeof Music }[] = [
++  const abas: { id: Aba; rotulo: string; Icone: typeof Ghost }[] = [
++    { id: 'temas', rotulo: 'Temas', Icone: Ghost },
+     { id: 'musicas', rotulo: 'Músicas', Icone: Music },
+     ...(playlists ? [{ id: 'playlists' as const, rotulo: 'YouTube', Icone: Youtube }] : []),
+     ...(comRadio ? [{ id: 'radio' as const, rotulo: 'Rádio', Icone: Radio }] : []),
+@@ -450,7 +451,7 @@ function SeletorFaixas({ escolhida, noAr, playlists, fila, comRadio = false }: {
+ 
+   const abaInicial = () => {
+     const a = abaDaFaixa(escolhida);
+-    return (a === 'playlists' && !playlists) || (a === 'radio' && !comRadio) ? 'musicas' : a;
++    return (a === 'playlists' && !playlists) || (a === 'radio' && !comRadio) ? 'temas' : a;
+   };
+   const [aba, setAba] = useState<Aba>(abaInicial);
+   const [busca, setBusca] = useState('');
+@@ -641,7 +642,7 @@ function SeletorFaixas({ escolhida, noAr, playlists, fila, comRadio = false }: {
+           <Input
+             value={busca}
+             onChange={e => { setBusca(e.target.value); if (lista.current) lista.current.scrollTop = 0; }}
+-            placeholder={aba === 'musicas' ? 'Buscar música, artista ou gênero' : 'Filtrar a sua lista'}
++            placeholder={aba === 'temas' ? 'Buscar tema' : aba === 'musicas' ? 'Buscar música, artista ou gênero' : 'Filtrar a sua lista'}
+             aria-label="Buscar na lista"
+             className="h-8 pl-8 pr-8 text-xs"
+           />
+diff --git b/src/components/SomAmbiente/faixas.ts a/src/components/Halloween/SomAmbiente/faixas.ts
+similarity index 84%
+rename from src/components/SomAmbiente/faixas.ts
+rename to src/components/Halloween/SomAmbiente/faixas.ts
+index 46030ab..0340497 100644
+--- b/src/components/SomAmbiente/faixas.ts
++++ a/src/components/Halloween/SomAmbiente/faixas.ts
+@@ -12,17 +12,17 @@
+  *
+  * As duas cores saíram da própria capa, medidas uma vez (matiz dominante entre
+  * os pixels saturados, no Chromium) e ajustadas à mão — e não na hora, na tela
+- * de cada um: várias capas são quase preto e branco (MDT, «Pós»), e a média
+- * daria um cinza que não diz nada.
++ * de cada um: metade das capas é quase preto e branco (Halloween, Saw,
++ * Provavelmente), e a média daria um cinza que não diz nada.
+  *
+  *   `fundo`    escuro, o chão do «Tocando agora» — texto claro por cima;
+- *   `destaque` o tom vivo da capa (o vermelho do «300 no 7»), no play e
+- *              no equalizador. Capa sem
++ *   `destaque` o tom vivo da capa (o laranja do título de Halloween, o
++ *              vermelho do balão de IT), no play e no equalizador. Capa sem
+  *              cor nenhuma ganha destaque neutro: inventar uma cor mentiria
+  *              sobre o disco.
+  */
+ import type { ComponentType } from 'react';
+-import { ListMusic, Music, Radio, Youtube } from 'lucide-react';
++import { Ghost, ListMusic, Music, Radio, Youtube } from 'lucide-react';
+ import { RADIO, ehEmbutida, type FaixaEmbutida, type PlaylistSalva } from './preferencias';
+ import type { MusicaRadio } from './radio/conta';
+ 
+@@ -45,6 +45,26 @@ export interface InfoFaixa {
+ const capa = (id: string) => `/sounds/capas/${id}.jpg`;
+ 
+ export const EMBUTIDAS: Record<FaixaEmbutida, InfoFaixa> = {
++  saw: {
++    nome: 'Hello Zepp', descricao: 'Jogos Mortais · Charlie Clouser', capa: capa('saw'), Icone: Ghost,
++    cor: { fundo: 'hsl(351 22% 12%)', destaque: 'hsl(354 78% 56%)' },
++  },
++  deadsilence: {
++    nome: 'Dead Silence', descricao: 'Gritos Mortais · Charlie Clouser', capa: capa('deadsilence'), Icone: Ghost,
++    cor: { fundo: 'hsl(10 30% 13%)', destaque: 'hsl(8 75% 60%)' },
++  },
++  it: {
++    nome: 'Every 27 Years', descricao: 'It: A Coisa · Benjamin Wallfisch', capa: capa('it27'), Icone: Ghost,
++    cor: { fundo: 'hsl(215 16% 13%)', destaque: 'hsl(355 80% 57%)' },
++  },
++  halloween: {
++    nome: 'Halloween', descricao: 'Tema de John Carpenter', capa: capa('halloween'), Icone: Ghost,
++    cor: { fundo: 'hsl(30 6% 11%)', destaque: 'hsl(28 92% 56%)' },
++  },
++  stranger: {
++    nome: 'Stranger Things', descricao: 'Tema de Kyle Dixon e Michael Stein', capa: capa('stranger'), Icone: Ghost,
++    cor: { fundo: 'hsl(0 45% 9%)', destaque: 'hsl(0 85% 57%)' },
++  },
+   // As de 21/10/2026 entraram no lugar de todas as músicas de antes. Capas do
+   // Spotify (oEmbed) e cores tiradas olhando a capa.
+   // Funk
+diff --git b/src/components/SomAmbiente/links.test.ts a/src/components/Halloween/SomAmbiente/links.test.ts
+similarity index 100%
+rename from src/components/SomAmbiente/links.test.ts
+rename to src/components/Halloween/SomAmbiente/links.test.ts
+diff --git b/src/components/SomAmbiente/links.ts a/src/components/Halloween/SomAmbiente/links.ts
+similarity index 100%
+rename from src/components/SomAmbiente/links.ts
+rename to src/components/Halloween/SomAmbiente/links.ts
+diff --git b/src/components/SomAmbiente/motor.test.ts a/src/components/Halloween/SomAmbiente/motor.test.ts
+similarity index 73%
+rename from src/components/SomAmbiente/motor.test.ts
+rename to src/components/Halloween/SomAmbiente/motor.test.ts
+index 2c3ee8a..a47982b 100644
+--- b/src/components/SomAmbiente/motor.test.ts
++++ a/src/components/Halloween/SomAmbiente/motor.test.ts
+@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
+ import {
+   VOLUME_MAX_ENXUTO, dentroDosLimites, ganhoDoVolume, ordemDasFaixas, proximaEmbutida, vizinha, volumeDaFaixa,
+ } from './motor';
+-import { FAIXAS_EMBUTIDAS, GANHO, MUSICAS, PADRAO } from './preferencias';
++import { FAIXAS_EMBUTIDAS, GANHO, MUSICAS, PADRAO, TEMAS_DE_TERROR } from './preferencias';
+ 
+ describe('motor do Som ambiente', () => {
+   it('volume: 0 cala, 100 é cheio, e o padrão fica baixo', () => {
+@@ -18,6 +18,7 @@ describe('motor do Som ambiente', () => {
+     const prefs = { ...PADRAO, playlists: [{ id: 'youtube:playlist:X', url: '', nome: 'X' }] };
+     // As músicas na ordem do painel, agrupadas pelo gênero (as de 21/10/2026).
+     expect(ordemDasFaixas(prefs)).toEqual([
++      'saw', 'deadsilence', 'it', 'halloween', 'stranger',
+       'trezentosno7', 'mdt', 'postounodaily', 'novinhamidia',
+       'donodaverdade', 'clickbait', 'walkemdown', 'mantemopique',
+       'pos', 'cowboy', 'temporaldeamor', 'umdegrau', 'cetadoido',
+@@ -25,35 +26,38 @@ describe('motor do Som ambiente', () => {
+       'youtube:playlist:X',
+     ]);
+     expect(vizinha(prefs, 'theydontcare', 1)).toBe('youtube:playlist:X');
+-    expect(vizinha(prefs, 'youtube:playlist:X', 1)).toBe('trezentosno7');
+-    expect(vizinha(prefs, 'trezentosno7', -1)).toBe('youtube:playlist:X');
+-    expect(vizinha(prefs, 'sumiu', 1)).toBe('trezentosno7');
++    expect(vizinha(prefs, 'youtube:playlist:X', 1)).toBe('saw');
++    expect(vizinha(prefs, 'saw', -1)).toBe('youtube:playlist:X');
++    expect(vizinha(prefs, 'sumiu', 1)).toBe('saw');
+   });
+ 
+   it('enxuto: sem playlists na lista e no anterior/próxima', () => {
+     const prefs = { ...PADRAO, playlists: [{ id: 'youtube:playlist:X', url: '', nome: 'X' }] };
+-    expect(ordemDasFaixas(prefs, false)).toEqual([...MUSICAS]);
+-    expect(vizinha(prefs, 'theydontcare', 1, false)).toBe('trezentosno7');
++    expect(ordemDasFaixas(prefs, false)).toEqual([...TEMAS_DE_TERROR, ...MUSICAS]);
++    expect(vizinha(prefs, 'theydontcare', 1, false)).toBe('saw');
+   });
+ 
+   it('enxuto: volume até 50 e faixa de fábrica; completo não muda nada', () => {
+     const salvas = { ...PADRAO, volume: 90, faixa: 'youtube:playlist:X', playlists: [{ id: 'youtube:playlist:X', url: '', nome: 'X' }] };
+     expect(VOLUME_MAX_ENXUTO).toBe(50);
+-    expect(dentroDosLimites(salvas, false)).toMatchObject({ volume: 50, faixa: 'trezentosno7' });
++    expect(dentroDosLimites(salvas, false)).toMatchObject({ volume: 50, faixa: 'halloween' });
+     // As playlists continuam guardadas — só não tocam.
+     expect(dentroDosLimites(salvas, false).playlists).toHaveLength(1);
+     expect(dentroDosLimites(salvas, true)).toBe(salvas);
+     expect(dentroDosLimites({ ...PADRAO, volume: 30 }, false).volume).toBe(30);
+   });
+ 
+-  it('no fim de uma faixa de fábrica, a sequência anda pela lista e dá a volta', () => {
++  it('no fim de uma faixa de fábrica, a sequência fica no grupo dela e dá a volta', () => {
++    expect(proximaEmbutida('halloween')).toBe('stranger');
+     // As músicas seguem a ordem do painel, agrupadas pelo gênero (16/10/2026):
+     // do último funk ao primeiro rap, do último rap ao primeiro sertanejo.
+     expect(proximaEmbutida('novinhamidia')).toBe('donodaverdade');
+     expect(proximaEmbutida('mantemopique')).toBe('pos');
+-    // A última música volta à primeira.
++    // A última música volta à primeira música, não cai nos temas (14/10/2026).
+     expect(proximaEmbutida('theydontcare')).toBe('trezentosno7');
+     expect(proximaEmbutida(MUSICAS[MUSICAS.length - 1])).toBe(MUSICAS[0]);
++    // E o último tema volta ao primeiro tema.
++    expect(proximaEmbutida(TEMAS_DE_TERROR[TEMAS_DE_TERROR.length - 1])).toBe(TEMAS_DE_TERROR[0]);
+   });
+ 
+   it('cada faixa tem o seu ganho, e o volume final nunca passa de 1', () => {
+@@ -64,9 +68,9 @@ describe('motor do Som ambiente', () => {
+       expect(GANHO[f]).toBeLessThan(3);
+     }
+     // A mais baixa sobe, a mais alta desce, no mesmo controle.
+-    expect(volumeDaFaixa(40, 'theydontcare')).toBeGreaterThan(volumeDaFaixa(40, 'cetadoido'));
+-    expect(volumeDaFaixa(100, 'theydontcare')).toBe(1);
+-    expect(volumeDaFaixa(0, 'theydontcare')).toBe(0);
++    expect(volumeDaFaixa(40, 'it')).toBeGreaterThan(volumeDaFaixa(40, 'cetadoido'));
++    expect(volumeDaFaixa(100, 'it')).toBe(1);
++    expect(volumeDaFaixa(0, 'it')).toBe(0);
+     expect(volumeDaFaixa(40, null)).toBe(ganhoDoVolume(40));
+   });
+ });
+diff --git b/src/components/SomAmbiente/motor.ts a/src/components/Halloween/SomAmbiente/motor.ts
+similarity index 97%
+rename from src/components/SomAmbiente/motor.ts
+rename to src/components/Halloween/SomAmbiente/motor.ts
+index 6544d92..9bb92d4 100644
+--- b/src/components/SomAmbiente/motor.ts
++++ a/src/components/Halloween/SomAmbiente/motor.ts
+@@ -7,7 +7,8 @@
+  *
+  * ## Duas fontes
+  *
+- *   - FÁBRICA: as músicas de `preferencias.ts`, em `public/sounds/`. Tocam
++ *   - FÁBRICA: os seis temas de terror e as duas músicas (`preferencias.ts`),
++ *     em `public/sounds/` junto da trilha da mensagem de outubro. Tocam
+  *     em sequência, como playlist (ou repetem uma, com «Repetir»), num
+  *     `<audio>`. O volume é nosso, de 0 a 100.
+  *   - PLAYLIST da pessoa (Spotify ou YouTube): o player oficial da plataforma,
+@@ -32,10 +33,9 @@
+  *
+  * ## Quem mais fala
+  *
+- * Quem tem trilha própria pede silêncio: `silenciar(motivo)` pausa o som
+- * ambiente, e ele volta sozinho no `liberarSilencio(motivo)`. Era a mensagem
+- * de outubro e a cerimônia do Mural (Halloween, em `arquivo-morto/halloween/`
+- * desde 03/11/2026); hoje ninguém pede, mas a porta fica.
++ * A mensagem de outubro (Halloween) tem trilha própria: enquanto ela está
++ * aberta, `silenciar('halloween')` pausa o som ambiente, e ele volta sozinho
++ * quando ela fecha.
+  *
+  * ## A rádio (29/10/2026)
+  *
+@@ -46,7 +46,7 @@
+ import { useSyncExternalStore } from 'react';
+ import { enderecoYoutube, uriSpotify, type LinkExterno } from './links';
+ import {
+-  ARQUIVOS, FAIXAS_DA_SEQUENCIA, GANHO, MUSICAS, PADRAO, RADIO, ehEmbutida, esquecerPosicao, gravarPosicao, gravarPreferencias,
++  ARQUIVOS, FAIXAS_DA_SEQUENCIA, GANHO, MUSICAS, PADRAO, RADIO, TEMAS_DE_TERROR, ehEmbutida, esquecerPosicao, gravarPosicao, gravarPreferencias,
+   lerPosicao, lerPreferencias, linkDaPlaylist,
+   type FaixaEmbutida, type PreferenciasSom,
+ } from './preferencias';
+@@ -68,7 +68,7 @@ export type EstadoSom =
+ export interface InstantaneoSom {
+   estado: EstadoSom;
+   prefs: PreferenciasSom;
+-  /** Alguém com trilha própria pediu silêncio (`silenciar`). */
++  /** Alguém (a mensagem de outubro) pediu silêncio. */
+   silenciado: boolean;
+   /** A faixa que está de fato no ar — pode ser diferente de `prefs.faixa` por um instante. */
+   noAr: string | null;
+@@ -253,12 +253,14 @@ let ultimaGravacao = 0;
+ 
+ /**
+  * A faixa de fábrica seguinte — é por onde a sequência anda quando uma acaba.
+- * A última música volta à primeira. (Até 03/11/2026 cada grupo dava a volta
+- * em si — músicas e temas de terror — a pedido de 14/10/2026.)
++ * Anda dentro do próprio grupo e dá a volta nele: a última música volta à
++ * primeira música, não cai nos temas de terror (pedido de 14/10/2026); o
++ * mesmo vale para os temas.
+  */
+ export function proximaEmbutida(faixa: FaixaEmbutida): FaixaEmbutida {
+-  const i = MUSICAS.indexOf(faixa);
+-  return MUSICAS[(i + 1) % MUSICAS.length];
++  const grupo: readonly FaixaEmbutida[] = (MUSICAS as readonly string[]).includes(faixa) ? MUSICAS : TEMAS_DE_TERROR;
++  const i = grupo.indexOf(faixa);
++  return grupo[(i + 1) % grupo.length];
+ }
+ 
+ /** O volume escolhido, já com o ganho da faixa que está carregada (`GANHO`). */
+diff --git b/src/components/SomAmbiente/preferencias.test.ts a/src/components/Halloween/SomAmbiente/preferencias.test.ts
+similarity index 80%
+rename from src/components/SomAmbiente/preferencias.test.ts
+rename to src/components/Halloween/SomAmbiente/preferencias.test.ts
+index e511b80..0c7e7dd 100644
+--- b/src/components/SomAmbiente/preferencias.test.ts
++++ a/src/components/Halloween/SomAmbiente/preferencias.test.ts
+@@ -9,9 +9,8 @@ const SPOTIFY = 'https://open.spotify.com/playlist/37i9dQZF1DX8Uebhn9wzrS';
+ describe('preferências do Som ambiente', () => {
+   beforeEach(() => localStorage.clear());
+ 
+-  it('quem nunca abriu: «300 no 7», volume baixo, não toca sozinho, em sequência', () => {
++  it('quem nunca abriu: tema do Halloween, volume baixo, não toca sozinho, em sequência', () => {
+     expect(lerPreferencias('p1')).toEqual(PADRAO);
+-    expect(PADRAO.faixa).toBe('trezentosno7');
+     expect(PADRAO.volume).toBe(VOLUME_PADRAO);
+     expect(VOLUME_PADRAO).toBeLessThanOrEqual(25);
+     expect(PADRAO.tocarAoEntrar).toBe(false);
+@@ -19,17 +18,17 @@ describe('preferências do Som ambiente', () => {
+   });
+ 
+   it('grava e lê por pessoa', () => {
+-    gravarPreferencias('p1', { faixa: 'mdt', volume: 55, tocarAoEntrar: true, repetir: true, videoFixo: true, playlists: [] });
+-    expect(lerPreferencias('p1')).toMatchObject({ faixa: 'mdt', volume: 55, tocarAoEntrar: true, repetir: true, videoFixo: true });
++    gravarPreferencias('p1', { faixa: 'saw', volume: 55, tocarAoEntrar: true, repetir: true, videoFixo: true, playlists: [] });
++    expect(lerPreferencias('p1')).toMatchObject({ faixa: 'saw', volume: 55, tocarAoEntrar: true, repetir: true, videoFixo: true });
+     expect(lerPreferencias('p2')).toEqual(PADRAO);
+   });
+ 
+   it('o padrão é 15%; quem ficou no padrão antigo (20, gravado antes da versão 2) desce junto', () => {
+     expect(VOLUME_PADRAO).toBe(15);
+-    localStorage.setItem('som-ambiente:p1', JSON.stringify({ faixa: 'mdt', volume: 20 }));
++    localStorage.setItem('som-ambiente:p1', JSON.stringify({ faixa: 'halloween', volume: 20 }));
+     expect(lerPreferencias('p1').volume).toBe(15);
+     // Escolheu outro volume: fica.
+-    localStorage.setItem('som-ambiente:p2', JSON.stringify({ faixa: 'mdt', volume: 35 }));
++    localStorage.setItem('som-ambiente:p2', JSON.stringify({ faixa: 'halloween', volume: 35 }));
+     expect(lerPreferencias('p2').volume).toBe(35);
+     // Escolheu 20 já na versão nova: fica.
+     gravarPreferencias('p3', { ...PADRAO, volume: 20 });
+@@ -48,18 +47,18 @@ describe('preferências do Som ambiente', () => {
+   });
+ 
+   it('faixa que não existe mais (playlist removida ou som antigo) volta para o padrão', () => {
+-    expect(normalizar({ faixa: 'spotify:playlist:sumiu' }).faixa).toBe('trezentosno7');
+-    expect(normalizar({ faixa: 'chuva' }).faixa).toBe('trezentosno7');
+-    expect(normalizar({ faixa: 'pos' }).faixa).toBe('pos');
++    expect(normalizar({ faixa: 'spotify:playlist:sumiu' }).faixa).toBe('halloween');
++    expect(normalizar({ faixa: 'chuva' }).faixa).toBe('halloween');
++    expect(normalizar({ faixa: 'stranger' }).faixa).toBe('stranger');
+   });
+ 
+   it('quem tinha a faixa do Batman, que saiu do projeto, volta ao padrão', () => {
+-    expect(normalizar({ faixa: 'batman' }).faixa).toBe('trezentosno7');
++    expect(normalizar({ faixa: 'batman' }).faixa).toBe('halloween');
+   });
+ 
+   it('a posição da música volta no F5: por pessoa, e só de faixa que existe', () => {
+-    gravarPosicao('p1', { faixa: 'mdt', t: 83.27 });
+-    expect(lerPosicao('p1')).toEqual({ faixa: 'mdt', t: 83.3 });
++    gravarPosicao('p1', { faixa: 'saw', t: 83.27 });
++    expect(lerPosicao('p1')).toEqual({ faixa: 'saw', t: 83.3 });
+     expect(lerPosicao('p2')).toBeNull();
+     esquecerPosicao('p1');
+     expect(lerPosicao('p1')).toBeNull();
+@@ -67,11 +66,8 @@ describe('preferências do Som ambiente', () => {
+     expect(lerPosicao('p1')).toBeNull();
+     localStorage.setItem('som-ambiente-posicao:p1', '{quebrado');
+     expect(lerPosicao('p1')).toBeNull();
+-    localStorage.setItem('som-ambiente-posicao:p1', JSON.stringify({ faixa: 'pos', t: -5 }));
+-    expect(lerPosicao('p1')).toEqual({ faixa: 'pos', t: 0 });
+-    // Os temas de terror saíram com o Halloween (03/11/2026): não voltam no F5.
+-    localStorage.setItem('som-ambiente-posicao:p1', JSON.stringify({ faixa: 'saw', t: 10 }));
+-    expect(lerPosicao('p1')).toBeNull();
++    localStorage.setItem('som-ambiente-posicao:p1', JSON.stringify({ faixa: 'stranger', t: -5 }));
++    expect(lerPosicao('p1')).toEqual({ faixa: 'stranger', t: 0 });
+     // Faixa que saiu em 13/10 também não volta no F5.
+     localStorage.setItem('som-ambiente-posicao:p1', JSON.stringify({ faixa: 'candyman', t: 10 }));
+     expect(lerPosicao('p1')).toBeNull();
+@@ -80,11 +76,8 @@ describe('preferências do Som ambiente', () => {
+     expect(lerPosicao('p1')).toBeNull();
+   });
+ 
+-  it('quem tinha um tema de terror ou uma música que saiu fica com «300 no 7»', () => {
+-    // Os temas de 13/10/2026 e os que saíram com o Halloween, em 03/11/2026.
+-    for (const t of ['sexta13', 'candyman', 'pesadelo', 'pecadores', 'saw', 'deadsilence', 'it', 'halloween', 'stranger']) {
+-      expect(normalizar({ faixa: t }).faixa).toBe('trezentosno7');
+-    }
++  it('quem tinha um tema que saiu fica com «Halloween»; uma música, com «300 no 7»', () => {
++    for (const t of ['sexta13', 'candyman', 'pesadelo', 'pecadores']) expect(normalizar({ faixa: t }).faixa).toBe('halloween');
+     for (const m of ['rainha', 'boladao', 'numb', 'byob', 'bicho', 'gemebaixo', 'veigh', 'puxalanca', 'reliquia']) {
+       expect(normalizar({ faixa: m }).faixa).toBe('trezentosno7');
+     }
+diff --git b/src/components/SomAmbiente/preferencias.ts a/src/components/Halloween/SomAmbiente/preferencias.ts
+similarity index 83%
+rename from src/components/SomAmbiente/preferencias.ts
+rename to src/components/Halloween/SomAmbiente/preferencias.ts
+index e654354..a3de5a6 100644
+--- b/src/components/SomAmbiente/preferencias.ts
++++ a/src/components/Halloween/SomAmbiente/preferencias.ts
+@@ -10,11 +10,8 @@
+  */
+ import { chaveDoLink, lerLink, type LinkExterno } from './links';
+ 
+-/*
+- * Os temas de terror (Saw, Dead Silence, IT, Halloween e Stranger Things) saíram
+- * com o tema de Halloween em 03/11/2026 — estão em `arquivo-morto/halloween/`.
+- * Quem estava com um deles fica com a primeira música (`SUBSTITUTAS`).
+- */
++/** Os temas de terror que vêm de fábrica, na ordem do painel. Trocados em 13/10/2026. */
++export const TEMAS_DE_TERROR = ['saw', 'deadsilence', 'it', 'halloween', 'stranger'] as const;
+ /**
+  * As músicas para escutar que vêm de fábrica. Trocadas em 13/10/2026 («Raindance» ficou; «Leão» entrou no fim no mesmo dia).
+  * Sete entraram em 14/10/2026, de «Poesia Acústica #6» a «Somebody That I Used To Know».
+@@ -24,7 +21,7 @@ import { chaveDoLink, lerLink, type LinkExterno } from './links';
+  * mesmo dia: cinco funks e «Flexiona / Poder da Gestão».
+  *
+  * Em 21/10/2026 todas as músicas foram trocadas pelas treze de agora (as que
+- * saíram vão para `SUBSTITUTAS`). Os temas de terror ficaram até 03/11/2026. No mesmo dia
++ * saíram vão para `SUBSTITUTAS`). Os temas de terror ficaram. No mesmo dia
+  * entraram mais duas, cada uma no fim do seu gênero: «Tô com uma Novinha
+  * Mídia» (funk) e «Mantém o Pique» (rap).
+  */
+@@ -64,28 +61,33 @@ export const GENERO_DA_MUSICA: Record<Musica, Genero> = {
+   chicago: 'pop', theydontcare: 'pop',
+ };
+ /** Todas as de fábrica, na ordem do painel. */
+-export const FAIXAS_EMBUTIDAS = [...MUSICAS] as const;
++export const FAIXAS_EMBUTIDAS = [...TEMAS_DE_TERROR, ...MUSICAS] as const;
+ export type FaixaEmbutida = (typeof FAIXAS_EMBUTIDAS)[number];
+ /** A ordem do anterior/próxima: todas as de fábrica, na ordem do painel. */
+ export const FAIXAS_DA_SEQUENCIA: readonly FaixaEmbutida[] = FAIXAS_EMBUTIDAS;
+ 
+-/** Onde cada uma mora — `public/sounds/`. */
++/** Onde cada uma mora — `public/sounds/`, junto da trilha da mensagem de outubro. */
+ export const ARQUIVOS: Record<FaixaEmbutida, string> = {
+-  trezentosno7: '/sounds/mc-gp-300-no-7.mp3',
+-  mdt: '/sounds/mc-kelvinho-mdt.mp3',
+-  postounodaily: '/sounds/me-postou-no-daily.mp3',
+-  novinhamidia: '/sounds/to-com-uma-novinha-midia.mp3',
+-  donodaverdade: '/sounds/veigh-dono-da-verdade.mp3',
+-  clickbait: '/sounds/veigh-clickbait.mp3',
+-  walkemdown: '/sounds/nle-choppa-walk-em-down.mp3',
+-  mantemopique: '/sounds/ryu-the-runner-mantem-o-pique.mp3',
+-  pos: '/sounds/felipe-e-rodrigo-pos.mp3',
+-  cowboy: '/sounds/joao-carreiro-nunca-namore-um-cowboy.mp3',
+-  temporaldeamor: '/sounds/cesar-menotti-fabiano-temporal-de-amor.mp3',
+-  umdegrau: '/sounds/chico-rey-parana-um-degrau-na-escada.mp3',
+-  cetadoido: '/sounds/ce-ta-doido-dvd.mp3',
+-  chicago: '/sounds/michael-jackson-chicago.mp3',
+-  theydontcare: '/sounds/michael-jackson-they-dont-care-about-us.mp3',
++  saw: '/sounds/halloween-saw-hello-zepp.mp3',
++  deadsilence: '/sounds/halloween-dead-silence.mp3',
++  it: '/sounds/halloween-it-every-27-years.mp3',
++  halloween: '/sounds/halloween-john-carpenter.mp3',
++  stranger: '/sounds/halloween-stranger-things.mp3',
++  trezentosno7: '/sounds/halloween-mc-gp-300-no-7.mp3',
++  mdt: '/sounds/halloween-mc-kelvinho-mdt.mp3',
++  postounodaily: '/sounds/halloween-me-postou-no-daily.mp3',
++  novinhamidia: '/sounds/halloween-to-com-uma-novinha-midia.mp3',
++  donodaverdade: '/sounds/halloween-veigh-dono-da-verdade.mp3',
++  clickbait: '/sounds/halloween-veigh-clickbait.mp3',
++  walkemdown: '/sounds/halloween-nle-choppa-walk-em-down.mp3',
++  mantemopique: '/sounds/halloween-ryu-the-runner-mantem-o-pique.mp3',
++  pos: '/sounds/halloween-felipe-e-rodrigo-pos.mp3',
++  cowboy: '/sounds/halloween-joao-carreiro-nunca-namore-um-cowboy.mp3',
++  temporaldeamor: '/sounds/halloween-cesar-menotti-fabiano-temporal-de-amor.mp3',
++  umdegrau: '/sounds/halloween-chico-rey-parana-um-degrau-na-escada.mp3',
++  cetadoido: '/sounds/halloween-ce-ta-doido-dvd.mp3',
++  chicago: '/sounds/halloween-michael-jackson-chicago.mp3',
++  theydontcare: '/sounds/halloween-michael-jackson-they-dont-care-about-us.mp3',
+ };
+ 
+ /**
+@@ -120,6 +122,11 @@ export const ARQUIVOS: Record<FaixaEmbutida, string> = {
+  * Faixa nova: medir e pôr aqui (o teste cobra que toda faixa tenha ganho).
+  */
+ export const GANHO: Record<FaixaEmbutida, number> = {
++  saw: 0.97,           // -12,7
++  deadsilence: 0.86,   // -11,7
++  it: 2.30,            // -20,3
++  halloween: 0.82,     // -11,3
++  stranger: 1.04,      // -13,3
+   trezentosno7: 0.61,  // -8,7 (21/10/2026)
+   mdt: 0.69,           // -9,7
+   postounodaily: 0.65, // -9,3
+@@ -142,17 +149,14 @@ export const GANHO: Record<FaixaEmbutida, number> = {
+  * escolhido. A posição salva para o F5 não é trocada: a de faixa que saiu só
+  * é descartada (`lerPosicao`).
+  *
+- * Tudo vai para a primeira das músicas — desde 21/10/2026, «300 no 7»: as
+- * músicas de 13/10 e as que já tinham saído antes (Veigh em 05/10, «Puxa o
+- * Lança» e «Na Relíquia do 2T» em 08/10), as dezoito de 21/10 e, desde
+- * 03/11/2026, todos os temas de terror (os de 13/10 iam para «Halloween», que
+- * era o padrão e saiu junto com o tema).
++ * Temas que saíram em 13/10/2026 vão para «Halloween», o padrão; músicas — as
++ * de 13/10 e as que já tinham saído antes (Veigh em 05/10, «Puxa o Lança» e
++ * «Na Relíquia do 2T» em 08/10) — para a primeira das músicas. Desde
++ * 21/10/2026 é «300 no 7», e vão para ela também as dezoito que saíram nesse dia.
+  */
+ const SUBSTITUTAS: Record<string, FaixaEmbutida> = {
++  sexta13: 'halloween', candyman: 'halloween', pesadelo: 'halloween', pecadores: 'halloween',
+   ...Object.fromEntries([
+-    // Os temas de terror: os que saíram em 13/10/2026 e os que saíram em 03/11/2026.
+-    'sexta13', 'candyman', 'pesadelo', 'pecadores',
+-    'saw', 'deadsilence', 'it', 'halloween', 'stranger',
+     'rainha', 'boladao', 'numb', 'byob', 'bicho', 'gemebaixo', 'veigh', 'puxalanca', 'reliquia',
+     // As de antes de 21/10/2026.
+     'malvadinho', 'famosoima', 'penaporta', 'termineicomaex', 'barulhodorock', 'longedemagnata',
+@@ -182,7 +186,7 @@ export interface PreferenciasSom {
+   tocarAoEntrar: boolean;
+   /**
+    * Repete a faixa de fábrica. Desligado, elas tocam em sequência, como uma
+-   * playlist, e voltam à primeira depois da última.
++   * playlist, e voltam à primeira do grupo (músicas ou temas) depois da última.
+    */
+   repetir: boolean;
+   /**
+@@ -206,8 +210,7 @@ const VERSAO = 2;
+ export const LIMITE_PLAYLISTS = 40;
+ 
+ export const PADRAO: PreferenciasSom = {
+-  // Até 03/11/2026 o padrão era o tema «Halloween».
+-  faixa: 'trezentosno7',
++  faixa: 'halloween',
+   volume: VOLUME_PADRAO,
+   tocarAoEntrar: false,
+   repetir: false,
+diff --git b/src/components/SomAmbiente/radio/PainelRadio.tsx a/src/components/Halloween/SomAmbiente/radio/PainelRadio.tsx
+similarity index 100%
+rename from src/components/SomAmbiente/radio/PainelRadio.tsx
+rename to src/components/Halloween/SomAmbiente/radio/PainelRadio.tsx
+diff --git b/src/components/SomAmbiente/radio/banco.sql.test.ts a/src/components/Halloween/SomAmbiente/radio/banco.sql.test.ts
+similarity index 99%
+rename from src/components/SomAmbiente/radio/banco.sql.test.ts
+rename to src/components/Halloween/SomAmbiente/radio/banco.sql.test.ts
+index fa51420..09b2a19 100644
+--- b/src/components/SomAmbiente/radio/banco.sql.test.ts
++++ a/src/components/Halloween/SomAmbiente/radio/banco.sql.test.ts
+@@ -17,7 +17,7 @@ const ADMIN = '00000000-0000-4000-8000-0000000000a1';
+ const ADMIN2 = '00000000-0000-4000-8000-0000000000a2';
+ const ANA   = '00000000-0000-4000-8000-0000000000c1';
+ 
+-const SQL = readFileSync(resolve(__dirname, '../../../../supabase/migrations/20261029210000_radio.sql'), 'utf8');
++const SQL = readFileSync(resolve(__dirname, '../../../../../supabase/migrations/20261029210000_radio.sql'), 'utf8');
+ 
+ let db: PGlite;
+ 
+diff --git b/src/components/SomAmbiente/radio/conta.test.ts a/src/components/Halloween/SomAmbiente/radio/conta.test.ts
+similarity index 100%
+rename from src/components/SomAmbiente/radio/conta.test.ts
+rename to src/components/Halloween/SomAmbiente/radio/conta.test.ts
+diff --git b/src/components/SomAmbiente/radio/conta.ts a/src/components/Halloween/SomAmbiente/radio/conta.ts
+similarity index 100%
+rename from src/components/SomAmbiente/radio/conta.ts
+rename to src/components/Halloween/SomAmbiente/radio/conta.ts
+diff --git b/src/components/SomAmbiente/radio/importar.ts a/src/components/Halloween/SomAmbiente/radio/importar.ts
+similarity index 100%
+rename from src/components/SomAmbiente/radio/importar.ts
+rename to src/components/Halloween/SomAmbiente/radio/importar.ts
+diff --git b/src/components/SomAmbiente/radio/radio.ts a/src/components/Halloween/SomAmbiente/radio/radio.ts
+similarity index 100%
+rename from src/components/SomAmbiente/radio/radio.ts
+rename to src/components/Halloween/SomAmbiente/radio/radio.ts
+diff --git b/src/components/SomAmbiente/somAmbiente.css a/src/components/Halloween/SomAmbiente/somAmbiente.css
+similarity index 97%
+rename from src/components/SomAmbiente/somAmbiente.css
+rename to src/components/Halloween/SomAmbiente/somAmbiente.css
+index 15a0612..2c8ac34 100644
+--- b/src/components/SomAmbiente/somAmbiente.css
++++ a/src/components/Halloween/SomAmbiente/somAmbiente.css
+@@ -14,7 +14,8 @@
+  * sumiria no fundo branco).
+  *
+  * O equalizador anima só `transform` (compositor, sem refazer layout). Não
+- * consulta `prefers-reduced-motion`, como fazia o tema de Halloween: nos computadores da operação ela vem ligada por política,
++ * consulta `prefers-reduced-motion`, como o resto do tema (ver
++ * `halloween.css`): nos computadores da operação ela vem ligada por política,
+  * e as barras paradas não diziam que o som estava tocando. A troca de capa,
+  * que é enfeite, respeita.
+  */
+@@ -61,7 +62,7 @@
+ }
+ /* E o véu na cor do fundo assenta o texto: leve no topo, cheio embaixo. Por
+    cima dele, um brilho na cor de destaque em volta da capa — a luz vem do
+-   disco. É o que dá cor às capas quase preto e branco (MDT, «Pós»), onde
++   disco. É o que dá cor às capas quase preto e branco (Halloween, Saw), onde
+    a capa desfocada sozinha só daria cinza. */
+ .som-heroi::after {
+   content: '';
+diff --git b/src/components/SomAmbiente/youtube.test.ts a/src/components/Halloween/SomAmbiente/youtube.test.ts
+similarity index 100%
+rename from src/components/SomAmbiente/youtube.test.ts
+rename to src/components/Halloween/SomAmbiente/youtube.test.ts
+diff --git b/src/components/SomAmbiente/youtube.ts a/src/components/Halloween/SomAmbiente/youtube.ts
+similarity index 100%
+rename from src/components/SomAmbiente/youtube.ts
+rename to src/components/Halloween/SomAmbiente/youtube.ts
+diff --git b/src/components/Layout.tsx a/src/components/Layout.tsx
+index ebbbe0c..65baee6 100644
+--- b/src/components/Layout.tsx
++++ a/src/components/Layout.tsx
+@@ -22,7 +22,7 @@
+  * ```
+  */
+ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+-import { lazy, useState, useRef, useEffect, useMemo, useCallback, useSyncExternalStore } from 'react';
++import { lazy, Suspense, useState, useRef, useEffect, useMemo, useCallback, useSyncExternalStore } from 'react';
+ import { motion, AnimatePresence } from 'framer-motion';
+ import {
+   LogOut, Menu, X, ChevronRight,
+@@ -60,17 +60,24 @@ import { ChefeDeTeste } from './Corrida/guerra/ChefeDeTeste';
+ import { PalcoDoOrganizador } from './Corrida/admin/PalcoDoOrganizador';
+ import { useDesafioEmCartaz } from '@/hooks/useDesafios';
+ import { AvisoNotificacaoHeader } from './AvisoNotificacaoHeader';
+-import { BotaoSomAmbiente } from './SomAmbiente/BotaoSomAmbiente';
++import { BotaoSomAmbiente } from './Halloween/SomAmbiente/BotaoSomAmbiente';
++import { PlayerSeFoi } from './Halloween/SomAmbiente/PlayerSeFoi';
+ import { BarraAtualizacao } from './BarraAtualizacao';
+ import { AutorizacaoDock } from './AutorizacaoDock';
+ import { BolhaChat } from '@/components/Chat/BolhaChat';
++import { TemaHalloweenContext, cenaDaRota, temFundo } from '@/components/Halloween/tema';
++import { useModoLeve } from '@/lib/modoLeve';
++import { useHalloweenParado, useVigiaDoHalloween } from '@/components/Halloween/aguenta';
++import { EVENTO_ABRIR_BOAS_VINDAS, pediuBoasVindasNaUrl, temaEsperaACarta, useHalloween } from '@/components/Halloween/preferencia';
+ import { getImpersonacaoAtiva, sairImpersonacao } from '@/services/impersonacao.service';
++import { MarcaHalloween } from '@/components/Halloween/MarcaHalloween';
+ import { CrachaPendente } from '@/components/CrachaPendente';
+ import { useNotificacoes } from '@/providers/NotificacoesProvider';
+ import { useEasterEggCriadores, DURACAO_ESCURECIMENTO_MS } from '@/hooks/useEasterEggCriadores';
+ // O overlay continua no Layout: a comemoração explode em QUALQUER página, não
+ // só onde ela é criada. Só a aba de criação mudou de lugar.
+ import { ComemoracaoOverlay } from './comemoracao/ComemoracaoOverlay';
++import { JumpscareOverlay } from './Jumpscare/JumpscareOverlay';
+ import { SireneOverlay } from './Sirene/SireneOverlay';
+ import { BingoNoSistema } from '@/pages/ModoTV/bingo/jogador/BingoNoSistema';
+ import { useModoLeveZeradoPeloAdmin } from '@/lib/modoLeveZerado';
+@@ -81,6 +88,8 @@ import { TrocarSenhaModal } from './TrocarSenhaModal';
+ import { SeletorEmpresa } from './SeletorEmpresa';
+ import { PainelSobDemanda } from './PainelSobDemanda';
+ import { BotaoCalendario } from './Calendario/BotaoCalendario';
++import { BotaoInsignias } from './Insignias/BotaoInsignias';
++import { aberturaDe, muralNaTela, useEnsaio as useEnsaioDoMural, useLiberacaoDoMural, usePrevia, usePreviaDoBueiro } from './PortalOutubro/liberacao';
+ import { BarraRolagemLateral } from './BarraRolagemLateral';
+ import { ligarRolagemLateral } from '@/lib/rolagemLateral';
+ import { comNovaTentativa } from '@/lib/sobDemanda';
+@@ -109,12 +118,22 @@ const carregarPainelDesafio  = comNovaTentativa(() => import('./DesafioMenu/Pain
+ const carregarRecorteFoto    = comNovaTentativa(() => import('./ModalRecortarFoto'));
+ const carregarEditorMenu     = comNovaTentativa(() => import('@/components/MenuLateralEditor'));
+ const carregarCalendario     = comNovaTentativa(() => import('./Calendario/PainelCalendario'));
++// Tema de Halloween: só quem está com ele ligado baixa as camadas.
++const carregarHalloween      = comNovaTentativa(() => import('@/components/Halloween/CenaHalloween'));
+ 
+ const DesempenhoDia     = lazy(() => carregarDesempenhoDia().then(m => ({ default: m.DesempenhoDia })));
+ const PainelDesafio     = lazy(() => carregarPainelDesafio().then(m => ({ default: m.PainelDesafio })));
+ const ModalRecortarFoto = lazy(() => carregarRecorteFoto().then(m => ({ default: m.ModalRecortarFoto })));
+ const MenuLateralEditor = lazy(() => carregarEditorMenu().then(m => ({ default: m.MenuLateralEditor })));
+ const PainelCalendario  = lazy(() => carregarCalendario().then(m => ({ default: m.PainelCalendario })));
++const FundoHalloween    = lazy(() => carregarHalloween().then(m => ({ default: m.FundoHalloween })));
++const CamadaHalloween   = lazy(() => carregarHalloween().then(m => ({ default: m.CamadaHalloween })));
++const RevoadaHalloween  = lazy(() => carregarHalloween().then(m => ({ default: m.RevoadaHalloween })));
++const SobreposicaoHalloween = lazy(() => carregarHalloween().then(m => ({ default: m.SobreposicaoHalloween })));
++const carregarBoasVindasHalloween = comNovaTentativa(() => import('@/components/Halloween/BoasVindasHalloween'));
++const BoasVindasHalloween = lazy(carregarBoasVindasHalloween);
++// O Mural de Outubro (26–31/10/2026): só baixa depois que o super_admin libera (`PortalOutubro/liberacao.ts`).
++const PortalDeOutubro = lazy(() => import('@/components/PortalOutubro/PortalDeOutubro').then(m => ({ default: m.PortalDeOutubro })));
+ 
+ /*
+  * A lista e o filtro mudaram de casa: `src/lib/menuLateral.ts`.
+@@ -127,8 +146,13 @@ const PainelCalendario  = lazy(() => carregarCalendario().then(m => ({ default:
+ export default function Layout({ children }: { children: React.ReactNode }) {
+   const { perfil, signOut } = useAuth();
+   const { empresa, branding } = useEmpresa();
++  const liberacaoDoMural = useLiberacaoDoMural(empresa?.id);
+   // O super admin pode desligar o modo leve de todos (29/10/2026). Ver `lib/modoLeveZerado.ts`.
+   useModoLeveZeradoPeloAdmin(empresa?.id);
++  const previaDoMural = usePrevia();
++  // Lidas aqui só para o Layout redesenhar quando a prévia do bueiro ou o ensaio ligam/desligam.
++  usePreviaDoBueiro();
++  useEnsaioDoMural();
+   const tenant = useTenant();
+   /* Nome e cor pela cidade do setor da pessoa (Birigui BookPlay, Marília PaguePlay). */
+   const marca = useMarca();
+@@ -276,10 +300,26 @@ export default function Layout({ children }: { children: React.ReactNode }) {
+   // Nome e logo: pela cidade do setor (`useMarca`); sem ela, como a regra.
+   const marcaPaguePlay = marca ? marca.nome === 'PaguePlay' : isPP;
+   const userRole = perfil?.perfil ?? 'operador';
+-  // O tema de Halloween (os enfeites, a mensagem de outubro, o Mural, o
+-  // jumpscare e o álbum de insígnias) foi para `arquivo-morto/halloween/` em
+-  // 03/11/2026 — o README de lá diz como devolver tudo como estava.
++  // Tema de Halloween — temporada, liberação e a escolha de cada pessoa em
++  // `Halloween/preferencia.ts`. Liberado para todos desde a primeira semana
++  // de outubro de 2026; cada um pode desligar os enfeites no botão de tema.
+   const { pathname } = useLocation();
++  const hw = useHalloween();
++  // Modo leve (`lib/modoLeve.ts`): do Halloween fica só o que é parado — as
++  // teias, os chapéus e a marca. Chuva, névoa, vultos, aranha, fantasmas,
++  // lanterna e morcegos não montam.
++  const leve = useModoLeve();
++  // O mesmo recolhimento, sozinho, em máquina sem placa de vídeo ou quando a
++  // tela sufoca com o tema (`Halloween/aguenta.ts`). Só o tema: o resto do
++  // sistema continua como a pessoa deixou.
++  const halloweenParado = useHalloweenParado(hw.ligado);
++  const halloweenSoParado = leve || halloweenParado;
++  const cenaHalloween = useMemo(() => {
++    const cena = cenaDaRota(pathname, marcaPaguePlay);
++    return halloweenSoParado
++      ? { teias: cena.teias, aranha: false, chuva: false, nuvens: false, nevoa: false, vulto: false, fantasmas: false, lanterna: null }
++      : cena;
++  }, [pathname, marcaPaguePlay, halloweenSoParado]);
+   // `valorDoCargo` é o que o editor de ordem usa para desenhar o menu de OUTRO
+   // cargo: ele responde «o que este cargo concede», sem aplicar exceção de
+   // pessoa nenhuma — que é exatamente a pergunta de uma prévia por cargo.
+@@ -294,15 +334,73 @@ export default function Layout({ children }: { children: React.ReactNode }) {
+   const { precisaAceitar, loading: termoLoading } = useTermoUso();
+   useMarcarAtrasados();
+ 
++  /*
++   * A mensagem de outubro: uma vez por pessoa, com o tema carregando por trás.
++   * Espera o termo de uso e o tutorial de quem nunca entrou — as duas coisas
++   * na tela ao mesmo tempo seria demais —, e não gasta a mensagem de quem está
++   * sendo visto por impersonação. `?hw-boas-vindas` reabre, para validar.
++   */
++  const [boasVindasAberta, setBoasVindasAberta] = useState(false);
++  // Chega SEMPRE como envelope fechado — pela automática, pelo
++  // `?hw-boas-vindas` e pelo «Ver a mensagem» de Configurações (que valida
++  // exatamente o que a equipe vai ver). Cada pedido de Configurações conta uma
++  // vez a mais: a `key` nova remonta e devolve o envelope mesmo com a carta
++  // já aberta.
++  const [boasVindasVez, setBoasVindasVez] = useState(0);
++  // A pessoa apertou «Ler agora» no envelope que está na tela.
++  const [cartaAberta, setCartaAberta] = useState(false);
+   /*
+    * O tutorial saiu do caminho? Vem do PRÓPRIO tutorial (`onFinished`), e não
+    * só de `perfil.tour_visto_em`: na conta nova o tutorial grava a data no
+-   * banco, mas o perfil em memória não muda — e quem espera por ele (o crachá
+-   * pendente) só seguia depois de recarregar a página (achado em 01/10/2026).
++   * banco, mas o perfil em memória não muda — e a mensagem só aparecia depois
++   * de recarregar a página (achado em 01/10/2026).
+    */
+   const [tourResolvido, setTourResolvido] = useState(false);
+   const aoResolverTour = useCallback(() => setTourResolvido(true), []);
+   const tourJaVisto = !!perfil?.tour_visto_em || tourResolvido;
++  useEffect(() => {
++    if (!hw.ligado || termoLoading || precisaAceitar) return;
++    if (pediuBoasVindasNaUrl()) { setBoasVindasAberta(true); return; }
++    if (hw.boasVindasPendentes && tourJaVisto && !getImpersonacaoAtiva()) setBoasVindasAberta(true);
++  }, [hw.ligado, hw.boasVindasPendentes, tourJaVisto, termoLoading, precisaAceitar]);
++  // «Ver a mensagem», em Configurações: reabre sem gravar nada de novo.
++  useEffect(() => {
++    if (!hw.ligado) return;
++    const abrir = () => { setBoasVindasVez(v => v + 1); setCartaAberta(false); setBoasVindasAberta(true); };
++    window.addEventListener(EVENTO_ABRIR_BOAS_VINDAS, abrir);
++    return () => window.removeEventListener(EVENTO_ABRIR_BOAS_VINDAS, abrir);
++  }, [hw.ligado]);
++  const fecharBoasVindas = () => {
++    setBoasVindasAberta(false);
++    if (pediuBoasVindasNaUrl()) {
++      const url = new URL(window.location.href);
++      url.searchParams.delete('hw-boas-vindas');
++      window.history.replaceState(window.history.state, '', url);
++    }
++    if (!getImpersonacaoAtiva()) hw.marcarBoasVindasVistas();
++  };
++
++  /*
++   * O tema chega COM a mensagem, não antes dela.
++   *
++   * Enquanto a mensagem está pendente (ou o envelope está na tela), o tema fica
++   * segurado: nada de teias, morcegos, fundo nem abóbora no chat, e as camadas
++   * nem são baixadas. No «Ler agora» ele solta — as camadas descem e se montam
++   * por trás da carta, que espera por elas (`preparar`) antes de liberar o
++   * «Entrar no Halloween». Quem fecha a carta encontra tudo no lugar.
++   *
++   * `cartaAberta` não volta a `false` ao fechar: entre fechar e a marca de
++   * «vista» chegar, o tema piscaria. Volta só quando um envelope novo abre.
++   * Impersonação não recebe a mensagem — então também não segura o tema.
++   */
++  const esperandoCarta = temaEsperaACarta({
++    cartaAberta,
++    envelopeNaTela: boasVindasAberta,
++    pendente: hw.boasVindasPendentes,
++    impersonando: !!getImpersonacaoAtiva(),
++  });
++  const halloween = hw.ligado && !esperandoCarta;
++  useVigiaDoHalloween(halloween && !halloweenSoParado);
+ 
+   /*
+    * A campanha que o menu anuncia.
+@@ -498,10 +596,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
+         <AnimatePresence>
+           {(sidebarOpen || mobileOpen) && (
+             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="overflow-hidden">
+-              <div>
+-                <p className="font-bold text-sm text-sidebar-foreground leading-none">{branding.appName}</p>
+-                {marca && <p className="text-[11px] text-sidebar-foreground/70 leading-none mt-1">{marca.nome}</p>}
+-              </div>
++              {halloween
++                ? <MarcaHalloween nome={branding.appName} />
++                : (
++                  <div>
++                    <p className="font-bold text-sm text-sidebar-foreground leading-none">{branding.appName}</p>
++                    {marca && <p className="text-[11px] text-sidebar-foreground/70 leading-none mt-1">{marca.nome}</p>}
++                  </div>
++                )}
+             </motion.div>
+           )}
+         </AnimatePresence>
+@@ -676,14 +778,17 @@ export default function Layout({ children }: { children: React.ReactNode }) {
+   );
+ 
+   const conteudo = (
+-    <main ref={areaConteudo} className="flex-1 overflow-y-auto bg-background">
++    <main ref={areaConteudo} className={cn('flex-1 overflow-y-auto', halloween && 'relative', halloween && temFundo(cenaHalloween) ? 'z-[1] bg-transparent' : 'bg-background')}>
++      {/* Teias, aranha, lanterna e fantasmas moram no alto do conteúdo e
++          rolam com a página — ficar parado lá em cima era o defeito. */}
++      {halloween && <Suspense fallback={null}><CamadaHalloween cena={cenaHalloween} /></Suspense>}
+       {children}
+       <BarraRolagemLateral raiz={areaConteudo} />
+     </main>
+   );
+ 
+   return (
+-    <>
++    <TemaHalloweenContext.Provider value={halloween}>
+     <DesfazTemaDaMarca />
+     <div className="flex h-screen bg-background overflow-hidden">
+       {/* O fio de 2 px que substituiu os esqueletos de releitura. Fica fora do
+@@ -743,6 +848,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
+             onAbrir={() => setCalendarioAberto(true)}
+           />
+ 
++          {/* As insígnias das gincanas (19/10/2026): uma medalha por gincana
++              completada, pendurada na borda de cima da barra; o mouse em cima
++              mostra a placa da gincana. O pessoal, só para o super_admin.
++              Voltaram em 20/10/2026 sem a Caça, que segue no arquivo morto.
++              Ver `Insignias/insignias.ts`. */}
++          <BotaoInsignias
++            perfilId={perfil?.id}
++            souSuperAdmin={userRole === 'super_admin'}
++          />
++
+           {/* O aviso de notificação nova mora AQUI, no vão que já era vazio
+               entre o menu e o bloco de ações — e é ele mesmo que faz o papel do
+               antigo `flex-1`. Assim o aviso não pode cobrir botão nenhum: ele é
+@@ -796,15 +911,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
+                 <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber-500" />
+               </Button>
+             )}
+-            {/* Som ambiente — as músicas de fábrica, o YouTube e a rádio. O
+-                motor vive fora do React — trocar de página não para a música.
+-                Ver `components/SomAmbiente/motor.ts`. Desde 23/10/2026 só o
+-                super_admin tem o player; até 03/11/2026 ele vinha com o tema
+-                de Halloween (só em outubro) e os demais viam a lápide
+-                `PlayerSeFoi`, que foi para o arquivo morto com o tema. Para
+-                devolver aos demais, monte `<BotaoSomAmbiente>` sem `completo`
+-                (a versão enxuta, sem YouTube e com volume até 50%). */}
+-            {userRole === 'super_admin' && <BotaoSomAmbiente perfilId={perfil?.id} completo />}
++            {/* Som ambiente — os temas de terror, as músicas de fábrica ou a
++                playlist da pessoa. Vem com o tema de Halloween: só aparece
++                quando ele está liberado (`hw.disponivel`). Player inteiro só
++                para o super_admin; os demais têm a versão enxuta, sem
++                playlists e com volume até 50%. O motor vive fora
++                do React — trocar de página não para a música. Ver
++                `components/Halloween/SomAmbiente/motor.ts`. */}
++            {/* 23/10/2026: player desligado para todos menos super_admin —
++                o botão fica e abre a lápide (`PlayerSeFoi`), sem motor. */}
++            {hw.disponivel && (userRole === 'super_admin'
++              ? <BotaoSomAmbiente perfilId={perfil?.id} completo />
++              : <PlayerSeFoi />)}
+             {/* Sino — indica novas sem abrir o painel.
+                 O sino BALANÇA e o número PULSA quando chega notificação: o
+                 badge sozinho, num canto de 16 px, passava despercebido em quem
+@@ -835,7 +953,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
+               )}
+             </Button>
+             <HelpDrawer />
+-            <ThemeToggle />
++            <ThemeToggle
++              halloween={hw.disponivel
++                ? { ligado: !hw.desligado, alternar: ligar => hw.definirDesligado(!ligar) }
++                : undefined}
++            />
+             {/* Perfil no header — clicável para upload de foto */}
+             <Popover open={perfilPopoverOpen} onOpenChange={setPerfilPopoverOpen}>
+               <PopoverTrigger asChild>
+@@ -961,6 +1083,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
+         <ChefeDeTeste />
+         {/* O «Assistir» e o «Testar só na minha tela» do card da Corrida: aqui, trocar de aba não fecha. */}
+         <PalcoDoOrganizador />
++        {/* O Mural de Outubro: o bueiro na semana e a abertura (sexta 16h, ou solta pelo botão em Configurações). Ver `PortalOutubro/fases.ts`. */}
++        {muralNaTela(liberacaoDoMural, previaDoMural) && (
++          <Suspense fallback={null}>
++            <PortalDeOutubro
++              temaLigado={halloween} leve={halloweenSoParado}
++              liberado={liberacaoDoMural.liberado || import.meta.env.DEV}
++              abertura={aberturaDe(liberacaoDoMural)}
++            />
++          </Suspense>
++        )}
+ 
+         {/* Expand toggle */}
+         <button
+@@ -971,9 +1103,22 @@ export default function Layout({ children }: { children: React.ReactNode }) {
+           <ChevronRight className={cn('w-3 h-3 transition-transform', sidebarOpen && 'rotate-180')} />
+         </button>
+ 
+-        {conteudo}
+-        {/* `onFinished`: o crachá pendente espera o tutorial sair do caminho,
+-            sem recarregar a página. */}
++        {halloween ? (
++          // Caixa própria para as camadas do tema: a coluna de fora não pode
++          // virar `relative`, senão o botão de recolher o menu muda de lugar.
++          <div className="relative flex-1 min-h-0 flex flex-col bg-background">
++            <Suspense fallback={null}>{temFundo(cenaHalloween) && <FundoHalloween cena={cenaHalloween} />}</Suspense>
++            {conteudo}
++            {!halloweenSoParado && (
++              <Suspense fallback={null}>
++                <SobreposicaoHalloween cena={cenaHalloween} />
++                <RevoadaHalloween />
++              </Suspense>
++            )}
++          </div>
++        ) : conteudo}
++        {/* `onFinished` voltou em 01/10/2026: libera a mensagem de Halloween
++            assim que o tutorial sai do caminho, sem recarregar a página. */}
+         <OnboardingTour
+           precisaAceitar={precisaAceitar}
+           termoLoading={termoLoading}
+@@ -982,9 +1127,20 @@ export default function Layout({ children }: { children: React.ReactNode }) {
+         {/* Crachá pendente (26/10/2026): canto de baixo à esquerda, depois do
+             menu, no lugar onde ficava a pesquisa de experiência. */}
+         <CrachaPendente
+-          liberado={!termoLoading && !precisaAceitar && tourJaVisto}
++          liberado={!termoLoading && !precisaAceitar && tourJaVisto && !boasVindasAberta}
+           esquerda={sidebarOpen ? 240 : 64}
+         />
++        {boasVindasAberta && (
++          <Suspense fallback={null}>
++            <BoasVindasHalloween
++              key={boasVindasVez}
++              nome={perfil?.nome}
++              preparar={carregarHalloween}
++              aoFechar={fecharBoasVindas}
++              aoAbrirCarta={() => setCartaAberta(true)}
++            />
++          </Suspense>
++        )}
+       </div>
+ 
+       <PainelSobDemanda aberto={painelDiaAberto} nome="Desempenho do dia">
+@@ -1036,6 +1192,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
+           for do setor dos homenageados. Não bloqueia cliques. */}
+       <ComemoracaoOverlay />
+ 
++      {/* Jumpscare — a imagem agendada em Configurações > Geral: tela cheia
++          para todos por ≈0,3 s. Não pega clique e some sozinha sempre. */}
++      <JumpscareOverlay />
+       {/* A sirene (29/10/2026): luz e som nos horários do setor. Ver `Sirene/sirene.ts`. */}
+       <SireneOverlay />
+ 
+@@ -1138,6 +1297,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
+         />
+       </PainelSobDemanda>
+     </div>
+-    </>
++    </TemaHalloweenContext.Provider>
+   );
+ }
+diff --git b/src/components/OnboardingTour.resolvido.test.tsx a/src/components/OnboardingTour.resolvido.test.tsx
+index bc2417d..1309ef3 100644
+--- b/src/components/OnboardingTour.resolvido.test.tsx
++++ a/src/components/OnboardingTour.resolvido.test.tsx
+@@ -1,10 +1,9 @@
+ /**
+  * O tutorial avisa quando sai do caminho (01/10/2026).
+  *
+- * Quem espera o tutorial (hoje, o crachá pendente; até 03/11/2026, também a
+- * mensagem de Halloween) olhava `perfil.tour_visto_em` — que o tutorial grava
+- * no banco, mas que o perfil em memória só enxerga depois de recarregar. Numa
+- * conta nova, a espera não acabava até o F5.
++ * A mensagem de Halloween espera o tutorial. Ela olhava `perfil.tour_visto_em`
++ * — que o tutorial grava no banco, mas que o perfil em memória só enxerga
++ * depois de recarregar. Numa conta nova, a mensagem não aparecia até o F5.
+  * Agora o tutorial chama `onFinished` em três situações, e estes testes as
+  * prendem: já visto (data no perfil), já visto nesta máquina, e concluído.
+  */
+diff --git b/src/components/OnboardingTour.tsx a/src/components/OnboardingTour.tsx
+index 187a191..2f76a79 100644
+--- b/src/components/OnboardingTour.tsx
++++ a/src/components/OnboardingTour.tsx
+@@ -238,8 +238,8 @@ interface OnboardingTourProps {
+   termoLoading: boolean;
+   /**
+    * Chamado quando o tutorial deixa de estar no caminho: concluído, pulado,
+-   * ou já visto antes (aí ele nem abre). Quem espera o tutorial — o crachá
+-   * pendente — escuta isto, e não `perfil.tour_visto_em`: a data é gravada
++   * ou já visto antes (aí ele nem abre). Quem espera o tutorial — a mensagem
++   * de Halloween — escuta isto, e não `perfil.tour_visto_em`: a data é gravada
+    * no banco, mas o perfil em memória só a vê depois de recarregar a página.
+    * Passe uma função estável (`useCallback`).
+    */
+@@ -286,7 +286,7 @@ export function OnboardingTour({ precisaAceitar, termoLoading, onFinished }: Onb
+     if (getImpersonacaoAtiva()) return;
+     const chave = chaveDoTour(user.id);
+     // Tutorial já visto: avisa que não vai abrir, para quem espera por ele
+-    // (o crachá pendente) seguir sem precisar recarregar a página.
++    // (a mensagem de Halloween) seguir sem precisar recarregar a página.
+     if (localStorage.getItem(chave)) { onFinished?.(); return; }
+     if (tourVistoEm) {
+       localStorage.setItem(chave, '1');
+diff --git b/src/components/Sirene/SireneOverlay.tsx a/src/components/Sirene/SireneOverlay.tsx
+index 72ca304..31abace 100644
+--- b/src/components/Sirene/SireneOverlay.tsx
++++ a/src/components/Sirene/SireneOverlay.tsx
+@@ -28,7 +28,7 @@ import { useEmpresa } from '@/hooks/useEmpresa';
+ import { DURACAO_MAX_S, TOLERANCIA_MS, corDaSirene, proximoToque, type CorDaSirene } from './horario';
+ import { agoraDoServidor, ouvirTeste, useMinhaSirene } from './sirene';
+ import { destravarNoPrimeiroGesto, prepararSom, tocarSom } from './som';
+-import { semPlacaDeVideo } from '@/lib/semPlacaDeVideo';
++import { semPlacaDeVideo } from '@/components/Halloween/aguenta';
+ import './sirene.css';
+ 
+ /** O maior atraso que o `setTimeout` aceita (~24,8 dias). */
+diff --git b/src/components/ThemeToggle.test.tsx a/src/components/ThemeToggle.test.tsx
+index 611f9d2..e6fee87 100644
+--- b/src/components/ThemeToggle.test.tsx
++++ a/src/components/ThemeToggle.test.tsx
+@@ -130,3 +130,32 @@ describe('ehTemaEscuro', () => {
+       .toEqual([false, false, false, false, false]);
+   });
+ });
++
++describe('ThemeToggle — interruptor de Halloween', () => {
++  async function abrir(halloween?: { ligado: boolean; alternar: (v: boolean) => void }) {
++    const { default: userEvent } = await import('@testing-library/user-event');
++    const user = userEvent.setup();
++    const r = render(
++      <ThemeProvider attribute="class" defaultTheme="light" themes={NOMES_TEMAS} enableColorScheme={false}>
++        <ThemeToggle halloween={halloween} />
++      </ThemeProvider>,
++    );
++    await user.click(r.getByRole('button'));
++    return { ...r, user };
++  }
++
++  it('fora da temporada (sem a propriedade) o menu não tem o interruptor', async () => {
++    const r = await abrir();
++    expect(r.queryByText('Detalhes de Halloween')).toBeNull();
++  });
++
++  it('desligar é um clique, sem aviso', async () => {
++    const alternar = vi.fn();
++    const r = await abrir({ ligado: true, alternar });
++    const item = await r.findByRole('menuitemcheckbox', { name: /Detalhes de Halloween/ });
++    expect(item.getAttribute('aria-checked')).toBe('true');
++    await r.user.click(item);
++    expect(alternar).toHaveBeenCalledWith(false);
++    expect(r.queryByRole('alertdialog')).toBeNull();
++  });
++});
+diff --git b/src/components/ThemeToggle.tsx a/src/components/ThemeToggle.tsx
+index c8222e0..0556775 100644
+--- b/src/components/ThemeToggle.tsx
++++ a/src/components/ThemeToggle.tsx
+@@ -86,11 +86,18 @@ function Amostra({ tema }: { tema: TemaInfo }) {
+   );
+ }
+ 
+-/*
+- * O interruptor «Detalhes de Halloween» (outubro) saiu com o tema, em
+- * 03/11/2026 — ver `arquivo-morto/halloween/`.
++/**
++ * O interruptor do Halloween, quando a temporada está aberta para a pessoa.
++ *
++ * Vem do `Layout` por propriedade, e não de `useHalloween()` aqui dentro: o
++ * botão de tema não depende do login, e assim continua não dependendo.
+  */
+-export function ThemeToggle() {
++export interface InterruptorHalloween {
++  ligado: boolean;
++  alternar: (ligar: boolean) => void;
++}
++
++export function ThemeToggle({ halloween }: { halloween?: InterruptorHalloween } = {}) {
+   const { theme, setTheme, resolvedTheme } = useTheme();
+   const atual = (theme ?? 'system') as EscolhaTema;
+   const escuroEmVigor = ehTemaEscuro(resolvedTheme);
+@@ -187,6 +194,25 @@ export function ThemeToggle() {
+           <Feather className="h-3.5 w-3.5" />
+           Modo leve
+         </DropdownMenuCheckboxItem>
++        {/*
++          Halloween (outubro): só os enfeites, sem trocar cor nenhuma. Sem
++          aviso, de propósito — quem não quer só desliga. O menu fica aberto,
++          como no menu lateral escuro, para a pessoa ver o efeito na hora.
++        */}
++        {halloween && (
++          <>
++            <DropdownMenuSeparator />
++            <DropdownMenuCheckboxItem
++              checked={halloween.ligado}
++              onCheckedChange={v => halloween.alternar(v === true)}
++              onSelect={e => e.preventDefault()}
++              className="gap-2"
++            >
++              <span aria-hidden className="text-[13px] leading-none">🎃</span>
++              Detalhes de Halloween
++            </DropdownMenuCheckboxItem>
++          </>
++        )}
+       </DropdownMenuContent>
+     </DropdownMenu>
+   );
+diff --git b/src/components/__tests__/pacoteDeEntrada.test.ts a/src/components/__tests__/pacoteDeEntrada.test.ts
+index 39a6eff..f02ce99 100644
+--- b/src/components/__tests__/pacoteDeEntrada.test.ts
++++ a/src/components/__tests__/pacoteDeEntrada.test.ts
+@@ -57,7 +57,7 @@ describe('pacote de entrada', () => {
+   });
+ 
+   it('o Som ambiente só baixa o painel quando alguém abre', () => {
+-    const daqui = arquivosDoApp(join(RAIZ, 'components', 'SomAmbiente'))
++    const daqui = arquivosDoApp(join(RAIZ, 'components', 'Halloween', 'SomAmbiente'))
+       .filter(f => !f.endsWith('PainelSomAmbiente.tsx'));
+     for (const f of daqui) {
+       expect(importsEstaticos(readFileSync(f, 'utf8')), relative(RAIZ, f)).not.toContain('./PainelSomAmbiente');
+diff --git b/src/components/admin/ListaPessoas.tsx a/src/components/admin/ListaPessoas.tsx
+index d82ed00..b026f24 100644
+--- b/src/components/admin/ListaPessoas.tsx
++++ a/src/components/admin/ListaPessoas.tsx
+@@ -30,6 +30,7 @@ import {
+   Users2, UserCircle2,
+ } from 'lucide-react';
+ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
++import { ComChapeu } from '@/components/Halloween/Desenhos';
+ import { Button } from '@/components/ui/button';
+ import {
+   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+@@ -351,12 +352,14 @@ function LinhaPessoa({
+             title={u.foto_url ? 'Ver foto em tamanho maior' : undefined}
+             className={cn('block rounded-full transition-transform', u.foto_url && 'hover:scale-105')}
+           >
+-            <Avatar className="w-9 h-9">
+-              {u.foto_url && <AvatarImage src={u.foto_url} alt={u.nome} />}
+-              <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
+-                {iniciais}
+-              </AvatarFallback>
+-            </Avatar>
++            <ComChapeu chave={u.nome} tamanho={36}>
++              <Avatar className="w-9 h-9">
++                {u.foto_url && <AvatarImage src={u.foto_url} alt={u.nome} />}
++                <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
++                  {iniciais}
++                </AvatarFallback>
++              </Avatar>
++            </ComChapeu>
+           </button>
+           <span
+             className={cn(
+diff --git b/src/components/comemoracao2/musicasDoPlayer.test.ts a/src/components/comemoracao2/musicasDoPlayer.test.ts
+index 8252ddf..69c71ca 100644
+--- b/src/components/comemoracao2/musicasDoPlayer.test.ts
++++ a/src/components/comemoracao2/musicasDoPlayer.test.ts
+@@ -7,12 +7,11 @@
+ import { describe, it, expect } from 'vitest';
+ import { MUSICAS_DO_PLAYER, musicaDoPlayer, volumeComGanho } from './musicasDoPlayer';
+ import { designDoJson, designPadrao, designParaJson } from './design';
+-import { MUSICAS } from '@/components/SomAmbiente/preferencias';
+ 
+ describe('MUSICAS_DO_PLAYER', () => {
+   it('traz todas as faixas do player numa lista só, sem repetir', () => {
+     const ids = MUSICAS_DO_PLAYER.map((m) => m.id);
+-    expect(ids).toEqual([...MUSICAS]);
++    expect(ids.length).toBeGreaterThanOrEqual(17);
+     expect(new Set(ids).size).toBe(ids.length);
+   });
+ 
+@@ -27,8 +26,6 @@ describe('MUSICAS_DO_PLAYER', () => {
+   it('faixa que saiu do app não é encontrada (a festa cai no som do catálogo)', () => {
+     expect(musicaDoPlayer('sumiu')).toBeNull();
+     expect(musicaDoPlayer(null)).toBeNull();
+-    // Os temas de terror saíram com o Halloween (03/11/2026).
+-    for (const t of ['saw', 'deadsilence', 'it', 'halloween', 'stranger']) expect(musicaDoPlayer(t)).toBeNull();
+     expect(musicaDoPlayer(MUSICAS_DO_PLAYER[0].id)?.id).toBe(MUSICAS_DO_PLAYER[0].id);
+   });
+ });
+diff --git b/src/components/comemoracao2/musicasDoPlayer.ts a/src/components/comemoracao2/musicasDoPlayer.ts
+index 3440707..ef8aae1 100644
+--- b/src/components/comemoracao2/musicasDoPlayer.ts
++++ a/src/components/comemoracao2/musicasDoPlayer.ts
+@@ -13,9 +13,9 @@
+  * `musicaDoPlayer` devolve null e a festa toca o som do catálogo no lugar.
+  */
+ import {
+-  ARQUIVOS, FAIXAS_EMBUTIDAS, GANHO, MUSICAS, type FaixaEmbutida,
+-} from '@/components/SomAmbiente/preferencias';
+-import { EMBUTIDAS } from '@/components/SomAmbiente/faixas';
++  ARQUIVOS, FAIXAS_EMBUTIDAS, GANHO, MUSICAS, TEMAS_DE_TERROR, type FaixaEmbutida,
++} from '@/components/Halloween/SomAmbiente/preferencias';
++import { EMBUTIDAS } from '@/components/Halloween/SomAmbiente/faixas';
+ 
+ export interface MusicaDoPlayer {
+   id:        FaixaEmbutida;
+@@ -27,12 +27,8 @@ export interface MusicaDoPlayer {
+   ganho:     number;
+ }
+ 
+-/**
+- * As músicas, na ordem do player. Os temas de terror vinham depois e saíram
+- * com o Halloween (03/11/2026): festa que estava com um deles toca o som do
+- * catálogo (`musicaDoPlayer` devolve null).
+- */
+-const ORDEM: readonly FaixaEmbutida[] = [...MUSICAS];
++/** As músicas primeiro, os temas depois — mas uma lista só. */
++const ORDEM: readonly FaixaEmbutida[] = [...MUSICAS, ...TEMAS_DE_TERROR];
+ 
+ export const MUSICAS_DO_PLAYER: readonly MusicaDoPlayer[] = ORDEM
+   .filter((id) => (FAIXAS_EMBUTIDAS as readonly string[]).includes(id))
+diff --git b/src/index.css a/src/index.css
+index b85aa29..9e27be2 100644
+--- b/src/index.css
++++ a/src/index.css
+@@ -1154,17 +1154,20 @@
+    O desfoque de fundo sai: o navegador reamostra tudo o que está atrás dele a
+    cada quadro, e é justamente o que máquina sem placa de vídeo não aguenta.
+ 
+-   O Bingo (`data-bingo-anima`) fica de fora (pedido de 30/10/2026, o mesmo
+-   que valia para o Mural de Outubro: «animações que funcionam até em PCs que
+-   têm redução de animações»): sem a máquina girando e a pedra surgindo não há
+-   sorteio. Ele anima só transform e opacidade (ver
+-   `pages/ModoTV/bingo/BingoTv.tsx`). O Mural (`data-portal-anima`) foi para
+-   `arquivo-morto/halloween/` em 03/11/2026.
++   O Mural de Outubro (`data-portal-anima`) fica de fora (pedido de
++   29/10/2026: «animações que funcionam até em PCs que têm redução de
++   animações»): parado, ele não conta nada. No modo leve ele mesmo tira o que
++   pesa (`.portal-leve`, e o `leve` dos componentes) e anima só transform e
++   opacidade.
++
++   O Bingo (`data-bingo-anima`) também, pelo mesmo pedido (30/10/2026): sem a
++   máquina girando e a pedra surgindo não há sorteio. Ele anima só transform e
++   opacidade (ver `pages/ModoTV/bingo/BingoTv.tsx`).
+ 
+    ─────────────────────────────────────────────────────────────────────────── */
+-html[data-leve] *:not([data-bingo-anima], [data-bingo-anima] *),
+-html[data-leve] *:not([data-bingo-anima], [data-bingo-anima] *)::before,
+-html[data-leve] *:not([data-bingo-anima], [data-bingo-anima] *)::after {
++html[data-leve] *:not([data-portal-anima], [data-portal-anima] *, [data-bingo-anima], [data-bingo-anima] *),
++html[data-leve] *:not([data-portal-anima], [data-portal-anima] *, [data-bingo-anima], [data-bingo-anima] *)::before,
++html[data-leve] *:not([data-portal-anima], [data-portal-anima] *, [data-bingo-anima], [data-bingo-anima] *)::after {
+   animation-duration: 1ms !important;
+   animation-delay: 0ms !important;
+   animation-iteration-count: 1 !important;
+diff --git b/src/lib/__tests__/painel-manda.test.ts a/src/lib/__tests__/painel-manda.test.ts
+index 40a843c..fd83bb8 100644
+--- b/src/lib/__tests__/painel-manda.test.ts
++++ a/src/lib/__tests__/painel-manda.test.ts
+@@ -137,6 +137,10 @@ const EXCECOES: Record<string, Excecao> = {
+       + 'ouve o chefe a 100% (operador a 12%) e fica sem escudo — o clique dele no Gestão continua sendo clique, só vira '
+       + 'tiro em cima de um alvo. Não libera tela nem dado: quem decide são as RPCs fn_corrida_guerra_*.',
+   },
++  'components/Halloween/preferencia.ts': {
++    linhas: 1, familia: 'chave-mestra',
++    motivo: 'pré-estreia do tema de Halloween: até `HALLOWEEN_LIBERADO` ser ligado, só o super_admin vê os enfeites e a mensagem de outubro. Não libera tela nem dado — é decoração, e o cargo deixa de decidir quando o tema for aberto a todos.',
++  },
+   'lib/mobile/preferencia.ts': {
+     linhas: 1, familia: 'chave-mestra',
+     motivo: 'super_admin abre a tela do celular só para TESTE e escolhe um operador antes (impersonação); não concede dado nenhum — a tela passa a ser a do operador escolhido.',
+diff --git b/src/lib/modoLeve.ts a/src/lib/modoLeve.ts
+index 319f2bf..d9872bb 100644
+--- b/src/lib/modoLeve.ts
++++ a/src/lib/modoLeve.ts
+@@ -4,6 +4,7 @@
+  * Operadores com máquina mais fraca reclamaram de a tela travar na planilha. O
+  * modo leve tira o que custa processador sem mudar número nenhum:
+  *
++ *   - as camadas animadas do Halloween (o que é parado fica);
+  *   - animações e transições do app (`html[data-leve]` em `index.css`, e o
+  *     framer-motion via `MotionConfig` em `App.tsx`);
+  *   - a contagem dos números (`useMovimentoPreferido`);
+diff --git b/src/lib/semPlacaDeVideo.ts a/src/lib/semPlacaDeVideo.ts
+deleted file mode 100644
+index c3cde9a..0000000
+--- b/src/lib/semPlacaDeVideo.ts
++++ /dev/null
+@@ -1,37 +0,0 @@
+-/**
+- * semPlacaDeVideo.ts — o navegador está desenhando sem placa de vídeo?
+- *
+- * Visto pelo nome do renderizador do WebGL (SwiftShader, «Microsoft Basic
+- * Render Driver», llvmpipe) ou pela falta de WebGL: o Chrome novo não cria
+- * mais o contexto quando não há placa. Sem placa, canvas e filtros são
+- * pintados pelo processador — quem anima por cima da tela se recolhe.
+- *
+- * Nasceu no tema de Halloween (`aguenta.ts`, 09/10/2026), que foi para
+- * `arquivo-morto/halloween/` em 03/11/2026; a Sirene continua usando.
+- */
+-
+-const RENDERIZADOR_DE_SOFTWARE = /swiftshader|basic render|llvmpipe|softpipe|software/i;
+-
+-let semPlaca: boolean | null = null;
+-
+-/** Pergunta uma vez por carga. */
+-export function semPlacaDeVideo(): boolean {
+-  if (semPlaca !== null) return semPlaca;
+-  semPlaca = false;
+-  try {
+-    const c = document.createElement('canvas');
+-    const gl = c.getContext('webgl') as WebGLRenderingContext | null;
+-    if (!gl) {
+-      semPlaca = true;
+-      return semPlaca;
+-    }
+-    const info = gl.getExtension('WEBGL_debug_renderer_info');
+-    const nome = String(gl.getParameter(info ? info.UNMASKED_RENDERER_WEBGL : gl.RENDERER) ?? '');
+-    semPlaca = RENDERIZADOR_DE_SOFTWARE.test(nome);
+-    // O contexto só existiu para a pergunta: devolve a memória da placa já.
+-    gl.getExtension('WEBGL_lose_context')?.loseContext();
+-  } catch {
+-    semPlaca = false;
+-  }
+-  return semPlaca;
+-}
+diff --git b/src/pages/AdminConfiguracoes.tsx a/src/pages/AdminConfiguracoes.tsx
+index 5763e30..8488d22 100644
+--- b/src/pages/AdminConfiguracoes.tsx
++++ a/src/pages/AdminConfiguracoes.tsx
+@@ -25,11 +25,14 @@ import AdminTags from '@/components/admin/AdminTags';
+ import AcessoMultiempresa from '@/components/admin/AcessoMultiempresa';
+ import CorridaConfig from '@/components/admin/CorridaConfig';
+ import LiberacaoChat from '@/components/admin/LiberacaoChat';
++import LiberacaoHalloween from '@/components/admin/LiberacaoHalloween';
+ import CrachaPedidoConfig from '@/components/admin/CrachaPedidoConfig';
+ import AdminDocumentacoes from '@/pages/AdminDocumentacoes';
+ import AdminCargos from '@/components/admin/AdminCargos';
+ import ImportarAcordosCard from '@/components/admin/ImportarAcordosCard';
+ import RankingQuitacaoConfig from '@/components/admin/RankingQuitacaoConfig';
++import JumpscareConfig from '@/components/admin/JumpscareConfig';
++import MuralOutubroConfig from '@/components/admin/MuralOutubroConfig';
+ import SireneConfig from '@/components/admin/SireneConfig';
+ 
+ const MIGRATION_SQL = `ALTER TABLE public.acordos
+@@ -298,10 +301,23 @@ export default function AdminConfiguracoes() {
+               esta aba — `fn_cracha_pedido_painel` cobra `config_sub_geral`. */}
+           <CrachaPedidoConfig />
+ 
++          {/* ── Halloween: o botão temporário que libera o tema para todos.
++              Some sozinho depois de liberado. Só super_admin — a função
++              `fn_halloween_liberar` confere de novo no banco. */}
++          {ehSuperAdmin && <LiberacaoHalloween />}
++
+           {/* ── Corrida da Sorte: o sorteio em forma de corrida (20/10/2026). Só
+               super_admin — as funções `fn_corrida_*` conferem de novo no banco. */}
+           {ehSuperAdmin && <CorridaConfig />}
+ 
++          {/* ── Jumpscare: imagem em tela cheia para todos num horário (23/10/2026).
++              Só super_admin — as funções `fn_jumpscare_*` conferem de novo no banco. */}
++          {ehSuperAdmin && <JumpscareConfig />}
++
++          {/* ── Mural de Outubro: liberar para o pessoal e soltar a abertura (29/10/2026).
++              Só super_admin — as funções `fn_mural_outubro_*` conferem de novo no banco. */}
++          {ehSuperAdmin && <MuralOutubroConfig />}
++
+           {/* ── Sirene: luz e som por horário, cor e setor (29/10/2026). Só
+               super_admin — as funções `fn_sirene_*` conferem de novo no banco. */}
+           {ehSuperAdmin && <SireneConfig />}
+diff --git b/src/pages/Analitico/Desafios/EnfeiteHalloween.tsx a/src/pages/Analitico/Desafios/EnfeiteHalloween.tsx
+index 83c0f10..64f8a6e 100644
+--- b/src/pages/Analitico/Desafios/EnfeiteHalloween.tsx
++++ a/src/pages/Analitico/Desafios/EnfeiteHalloween.tsx
+@@ -6,30 +6,12 @@
+  * atrás do texto, não recebe clique e some para o leitor de tela. Com
+  * «reduzir movimento» ligado os morcegos param no lugar.
+  *
+- * Desenho próprio, e não os do tema de Halloween do site — que saiu para
+- * `arquivo-morto/halloween/` em 03/11/2026. O tema `halloween` do desafio
+- * continua como opção, independente dele.
++ * Desenho próprio, e não os do Halloween do site (`components/Halloween`):
++ * aqueles dependem do contexto e do CSS do tema do site, que pode estar
++ * desligado enquanto a campanha estiver no ar.
+  */
+ import { useEffect } from 'react';
+-
+-/**
+- * A Creepster mora no próprio site (`public/fonts/creepster.woff2`, OFL). A
+- * declaração entra uma vez e fica: tirar faria a fonte piscar a cada troca.
+- */
+-const ID_FONTE = 'desafio-fonte-creepster';
+-function carregarFonte() {
+-  if (typeof document === 'undefined' || document.getElementById(ID_FONTE)) return;
+-  const estilo = document.createElement('style');
+-  estilo.id = ID_FONTE;
+-  estilo.textContent = `@font-face {
+-  font-family: 'Creepster';
+-  font-style: normal;
+-  font-weight: 400;
+-  font-display: swap;
+-  src: url('/fonts/creepster.woff2') format('woff2');
+-}`;
+-  document.head.appendChild(estilo);
+-}
++import { carregarFonte } from '@/components/Halloween/fonte';
+ 
+ /** A fonte do título no tema: a Creepster, que já mora em `public/fonts`. */
+ export const FONTE_TITULO_HALLOWEEN = "'Creepster', ui-sans-serif, system-ui, sans-serif";
+diff --git b/src/pages/Mobile/comum/ChatDoApp.tsx a/src/pages/Mobile/comum/ChatDoApp.tsx
+index 24dc563..2b992ee 100644
+--- b/src/pages/Mobile/comum/ChatDoApp.tsx
++++ a/src/pages/Mobile/comum/ChatDoApp.tsx
+@@ -4,15 +4,21 @@
+  * É a mesma `BolhaChat` do desktop, no modo `celular`: botão no canto e, aberto,
+  * tela cheia. Todas as funções e as mesmas regras de quem pode usar.
+  *
++ *   - Abóbora: o app monta fora do `Layout`, que é quem publica o tema de
++ *     Halloween. Aqui a preferência da pessoa (`useHalloween`) é publicada no
++ *     mesmo contexto — tema desligado, ícone normal do chat.
+  *   - `?chat=<conversa>`: o aviso de mensagem nova abre o app direto na
+  *     conversa. Depois de aberta, o parâmetro sai da URL (voltar não reabre).
+  */
+ import { useCallback } from 'react';
+ import { useSearchParams } from 'react-router-dom';
+ import { BolhaChat } from '@/components/Chat/BolhaChat';
++import { TemaHalloweenContext } from '@/components/Halloween/tema';
++import { useHalloween } from '@/components/Halloween/preferencia';
+ 
+ /** `acimaDoRodape`: a tela da equipe tem a barra de abas fixa embaixo. */
+ export function ChatDoApp({ acimaDoRodape = 0 }: { acimaDoRodape?: number }) {
++  const hw = useHalloween();
+   const [params, setParams] = useSearchParams();
+   const conversa = params.get('chat');
+ 
+@@ -25,7 +31,9 @@ export function ChatDoApp({ acimaDoRodape = 0 }: { acimaDoRodape?: number }) {
+   }, [setParams]);
+ 
+   return (
+-    <BolhaChat modo="celular" conversaInicial={conversa} onConversaInicialAberta={consumir}
+-      acimaDoRodape={acimaDoRodape} />
++    <TemaHalloweenContext.Provider value={hw.ligado}>
++      <BolhaChat modo="celular" conversaInicial={conversa} onConversaInicialAberta={consumir}
++        acimaDoRodape={acimaDoRodape} />
++    </TemaHalloweenContext.Provider>
+   );
+ }

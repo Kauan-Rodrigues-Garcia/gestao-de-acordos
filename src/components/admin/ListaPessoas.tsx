@@ -30,7 +30,6 @@ import {
   Users2, UserCircle2,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { ComChapeu } from '@/components/Halloween/Desenhos';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -352,14 +351,12 @@ function LinhaPessoa({
             title={u.foto_url ? 'Ver foto em tamanho maior' : undefined}
             className={cn('block rounded-full transition-transform', u.foto_url && 'hover:scale-105')}
           >
-            <ComChapeu chave={u.nome} tamanho={36}>
-              <Avatar className="w-9 h-9">
-                {u.foto_url && <AvatarImage src={u.foto_url} alt={u.nome} />}
-                <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
-                  {iniciais}
-                </AvatarFallback>
-              </Avatar>
-            </ComChapeu>
+            <Avatar className="w-9 h-9">
+              {u.foto_url && <AvatarImage src={u.foto_url} alt={u.nome} />}
+              <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
+                {iniciais}
+              </AvatarFallback>
+            </Avatar>
           </button>
           <span
             className={cn(

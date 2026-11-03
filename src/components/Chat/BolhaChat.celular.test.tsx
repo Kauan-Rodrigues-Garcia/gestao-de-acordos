@@ -1,8 +1,8 @@
 /**
  * BolhaChat no modo `celular` — o chat dentro do app (05/10/2026).
  *
- * O que este arquivo trava: a abóbora segue o tema de Halloween (e some com
- * ele); aberto, é a tela inteira sem o botão de aumentar; e o link do aviso
+ * O que este arquivo trava: o botão é o ícone do chat; aberto, é a tela
+ * inteira sem o botão de aumentar; e o link do aviso
  * (`conversaInicial`) abre direto na conversa e avisa quem passou.
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -47,7 +47,6 @@ vi.mock('@/lib/notificacao-chat', () => ({
 vi.mock('@/lib/som-chat', () => ({ prepararSomChat: () => {}, tocarSomChat: () => {} }));
 vi.mock('@/components/ui/sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
-vi.mock('@/components/Halloween/Desenhos', () => ({ AboboraChat: () => <span data-testid="abobora" /> }));
 vi.mock('@/components/Chat/janela', () => {
   const nada = () => null;
   return {
@@ -59,14 +58,9 @@ vi.mock('@/components/Chat/janela', () => {
 });
 
 import { BolhaChat } from './BolhaChat';
-import { TemaHalloweenContext } from '@/components/Halloween/tema';
 
-function montar(halloween: boolean, props: Parameters<typeof BolhaChat>[0] = {}) {
-  return render(
-    <TemaHalloweenContext.Provider value={halloween}>
-      <BolhaChat modo="celular" {...props} />
-    </TemaHalloweenContext.Provider>,
-  );
+function montar(props: Parameters<typeof BolhaChat>[0] = {}) {
+  return render(<BolhaChat modo="celular" {...props} />);
 }
 
 beforeEach(() => {
@@ -76,21 +70,14 @@ beforeEach(() => {
 });
 
 describe('BolhaChat no celular', () => {
-  it('tema de Halloween ligado: o botão é a abóbora', async () => {
-    montar(true);
-    await screen.findByRole('button', { name: 'Abrir o chat' });
-    expect(screen.getByTestId('abobora')).toBeInTheDocument();
-  });
-
-  it('tema desligado: volta o ícone normal do chat', async () => {
-    montar(false);
+  it('o botão é o ícone normal do chat', async () => {
+    montar();
     const botao = await screen.findByRole('button', { name: 'Abrir o chat' });
-    expect(screen.queryByTestId('abobora')).not.toBeInTheDocument();
     expect(botao.className).toContain('bg-primary');
   });
 
   it('aberto é a tela inteira, sem o botão de aumentar a janela', async () => {
-    montar(false);
+    montar();
     fireEvent.click(await screen.findByRole('button', { name: 'Abrir o chat' }));
     expect(screen.getByRole('button', { name: 'Fechar o chat' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Aumentar a janela|Diminuir a janela/ })).not.toBeInTheDocument();
@@ -98,7 +85,7 @@ describe('BolhaChat no celular', () => {
 
   it('vindo do aviso: abre direto na conversa e avisa que abriu', async () => {
     const aberta = vi.fn();
-    montar(false, { conversaInicial: 'c-42', onConversaInicialAberta: aberta });
+    montar({ conversaInicial: 'c-42', onConversaInicialAberta: aberta });
     await waitFor(() => expect(abrir).toHaveBeenCalledWith('c-42'));
     expect(aberta).toHaveBeenCalledTimes(1);
     expect(screen.getByRole('button', { name: 'Fechar o chat' })).toBeInTheDocument();

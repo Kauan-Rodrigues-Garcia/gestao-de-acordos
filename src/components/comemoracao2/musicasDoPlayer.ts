@@ -13,9 +13,9 @@
  * `musicaDoPlayer` devolve null e a festa toca o som do catálogo no lugar.
  */
 import {
-  ARQUIVOS, FAIXAS_EMBUTIDAS, GANHO, MUSICAS, TEMAS_DE_TERROR, type FaixaEmbutida,
-} from '@/components/Halloween/SomAmbiente/preferencias';
-import { EMBUTIDAS } from '@/components/Halloween/SomAmbiente/faixas';
+  ARQUIVOS, FAIXAS_EMBUTIDAS, GANHO, MUSICAS, type FaixaEmbutida,
+} from '@/components/SomAmbiente/preferencias';
+import { EMBUTIDAS } from '@/components/SomAmbiente/faixas';
 
 export interface MusicaDoPlayer {
   id:        FaixaEmbutida;
@@ -27,8 +27,12 @@ export interface MusicaDoPlayer {
   ganho:     number;
 }
 
-/** As músicas primeiro, os temas depois — mas uma lista só. */
-const ORDEM: readonly FaixaEmbutida[] = [...MUSICAS, ...TEMAS_DE_TERROR];
+/**
+ * As músicas, na ordem do player. Os temas de terror vinham depois e saíram
+ * com o Halloween (03/11/2026): festa que estava com um deles toca o som do
+ * catálogo (`musicaDoPlayer` devolve null).
+ */
+const ORDEM: readonly FaixaEmbutida[] = [...MUSICAS];
 
 export const MUSICAS_DO_PLAYER: readonly MusicaDoPlayer[] = ORDEM
   .filter((id) => (FAIXAS_EMBUTIDAS as readonly string[]).includes(id))

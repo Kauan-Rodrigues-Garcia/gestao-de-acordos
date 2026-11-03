@@ -28,7 +28,7 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { DURACAO_MAX_S, TOLERANCIA_MS, corDaSirene, proximoToque, type CorDaSirene } from './horario';
 import { agoraDoServidor, ouvirTeste, useMinhaSirene } from './sirene';
 import { destravarNoPrimeiroGesto, prepararSom, tocarSom } from './som';
-import { semPlacaDeVideo } from '@/components/Halloween/aguenta';
+import { semPlacaDeVideo } from '@/lib/semPlacaDeVideo';
 import './sirene.css';
 
 /** O maior atraso que o `setTimeout` aceita (~24,8 dias). */

@@ -12,17 +12,17 @@
  *
  * As duas cores saíram da própria capa, medidas uma vez (matiz dominante entre
  * os pixels saturados, no Chromium) e ajustadas à mão — e não na hora, na tela
- * de cada um: metade das capas é quase preto e branco (Halloween, Saw,
- * Provavelmente), e a média daria um cinza que não diz nada.
+ * de cada um: várias capas são quase preto e branco (MDT, «Pós»), e a média
+ * daria um cinza que não diz nada.
  *
  *   `fundo`    escuro, o chão do «Tocando agora» — texto claro por cima;
- *   `destaque` o tom vivo da capa (o laranja do título de Halloween, o
- *              vermelho do balão de IT), no play e no equalizador. Capa sem
+ *   `destaque` o tom vivo da capa (o vermelho do «300 no 7»), no play e
+ *              no equalizador. Capa sem
  *              cor nenhuma ganha destaque neutro: inventar uma cor mentiria
  *              sobre o disco.
  */
 import type { ComponentType } from 'react';
-import { Ghost, ListMusic, Music, Radio, Youtube } from 'lucide-react';
+import { ListMusic, Music, Radio, Youtube } from 'lucide-react';
 import { RADIO, ehEmbutida, type FaixaEmbutida, type PlaylistSalva } from './preferencias';
 import type { MusicaRadio } from './radio/conta';
 
@@ -45,26 +45,6 @@ export interface InfoFaixa {
 const capa = (id: string) => `/sounds/capas/${id}.jpg`;
 
 export const EMBUTIDAS: Record<FaixaEmbutida, InfoFaixa> = {
-  saw: {
-    nome: 'Hello Zepp', descricao: 'Jogos Mortais · Charlie Clouser', capa: capa('saw'), Icone: Ghost,
-    cor: { fundo: 'hsl(351 22% 12%)', destaque: 'hsl(354 78% 56%)' },
-  },
-  deadsilence: {
-    nome: 'Dead Silence', descricao: 'Gritos Mortais · Charlie Clouser', capa: capa('deadsilence'), Icone: Ghost,
-    cor: { fundo: 'hsl(10 30% 13%)', destaque: 'hsl(8 75% 60%)' },
-  },
-  it: {
-    nome: 'Every 27 Years', descricao: 'It: A Coisa · Benjamin Wallfisch', capa: capa('it27'), Icone: Ghost,
-    cor: { fundo: 'hsl(215 16% 13%)', destaque: 'hsl(355 80% 57%)' },
-  },
-  halloween: {
-    nome: 'Halloween', descricao: 'Tema de John Carpenter', capa: capa('halloween'), Icone: Ghost,
-    cor: { fundo: 'hsl(30 6% 11%)', destaque: 'hsl(28 92% 56%)' },
-  },
-  stranger: {
-    nome: 'Stranger Things', descricao: 'Tema de Kyle Dixon e Michael Stein', capa: capa('stranger'), Icone: Ghost,
-    cor: { fundo: 'hsl(0 45% 9%)', destaque: 'hsl(0 85% 57%)' },
-  },
   // As de 21/10/2026 entraram no lugar de todas as músicas de antes. Capas do
   // Spotify (oEmbed) e cores tiradas olhando a capa.
   // Funk

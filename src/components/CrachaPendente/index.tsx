@@ -4,8 +4,9 @@
  *   - Para todo mundo que ainda não tem crachá cadastrado. «Tem» é a linha em
  *     `rh_dados_operadores`: preencheu uma vez, não volta — nem recarregando,
  *     nem em outro computador.
- *   - Espera 1 min de uso e sai da frente do termo, do tutorial e da carta de
- *     Halloween (`liberado`, que o Layout calcula). Impersonação e super_admin
+ *   - Espera 1 min de uso e sai da frente do termo e do tutorial
+ *     (`liberado`, que o Layout calcula; até 03/11/2026, também da carta de
+ *     Halloween). Impersonação e super_admin
  *     não veem; `?previa-cracha` na URL abre a prévia, que não grava nada.
  *   - Não tem «agora não»: uma vez na tela, fica até a pessoa preencher — ou
  *     até o super_admin desligar o pedido em Configurações → Geral. Quem está

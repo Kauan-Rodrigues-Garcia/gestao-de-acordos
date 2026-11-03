@@ -137,10 +137,6 @@ const EXCECOES: Record<string, Excecao> = {
       + 'ouve o chefe a 100% (operador a 12%) e fica sem escudo — o clique dele no Gestão continua sendo clique, só vira '
       + 'tiro em cima de um alvo. Não libera tela nem dado: quem decide são as RPCs fn_corrida_guerra_*.',
   },
-  'components/Halloween/preferencia.ts': {
-    linhas: 1, familia: 'chave-mestra',
-    motivo: 'pré-estreia do tema de Halloween: até `HALLOWEEN_LIBERADO` ser ligado, só o super_admin vê os enfeites e a mensagem de outubro. Não libera tela nem dado — é decoração, e o cargo deixa de decidir quando o tema for aberto a todos.',
-  },
   'lib/mobile/preferencia.ts': {
     linhas: 1, familia: 'chave-mestra',
     motivo: 'super_admin abre a tela do celular só para TESTE e escolhe um operador antes (impersonação); não concede dado nenhum — a tela passa a ser a do operador escolhido.',

@@ -40,3 +40,55 @@ tr.gx-morte .st { filter: grayscale(1); opacity: .6; }
 /* a página treme com a cabeçada (meio segundo; no modo leve, não) */
 .gx-treme { animation: gx-treme-pag .5s; }
 @keyframes gx-treme-pag { 15% { transform: translate(-10px, 5px); } 30% { transform: translate(9px, -6px); } 50% { transform: translate(-6px, 4px); } 70% { transform: translate(4px, -3px); } 85% { transform: translate(-2px, 1px); } }
+
+/*
+ * A medalha que sai do Cavalo da Guerra quando ele cai (`soltarMedalha`, em
+ * palcoGuerra.js). O desenho vinha do álbum de insígnias, que foi para
+ * `arquivo-morto/halloween/` em 03/11/2026: as regras que a medalha usa
+ * foram copiadas para cá, iguais.
+ */
+.ins-medalha {
+  --tam: 24px;
+  --fita: #888;
+  --ouro: #c9962c;
+  --ouro-claro: #f0c75e;
+  position: relative;
+  width: var(--tam);
+  height: calc(var(--tam) * 1.32);
+  flex-shrink: 0;
+}
+
+/* A fita: uma faixa com a ponta em V, atrás do disco. */
+.ins-medalha .ins-fita {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: calc(var(--tam) * 0.5);
+  height: calc(var(--tam) * 0.62);
+  transform: translateX(-50%);
+  background: linear-gradient(90deg, var(--fita) 0 34%, rgb(255 255 255 / 0.32) 34% 66%, var(--fita) 66% 100%);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 78%, 0 100%);
+}
+
+.ins-medalha .ins-disco {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: var(--tam);
+  height: var(--tam);
+  border-radius: 9999px;
+  background: #f3ead3;
+  border: calc(var(--tam) * 0.06 + 1px) solid var(--ouro);
+  box-shadow: inset 0 0 0 calc(var(--tam) * 0.035 + 0.5px) var(--ouro-claro), 0 1px 2px rgb(0 0 0 / 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.ins-medalha .ins-disco img {
+  image-rendering: pixelated;
+  display: block;
+  pointer-events: none;
+  user-select: none;
+}

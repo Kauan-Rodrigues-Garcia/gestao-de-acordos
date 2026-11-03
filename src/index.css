@@ -1154,20 +1154,17 @@
    O desfoque de fundo sai: o navegador reamostra tudo o que está atrás dele a
    cada quadro, e é justamente o que máquina sem placa de vídeo não aguenta.
 
-   O Mural de Outubro (`data-portal-anima`) fica de fora (pedido de
-   29/10/2026: «animações que funcionam até em PCs que têm redução de
-   animações»): parado, ele não conta nada. No modo leve ele mesmo tira o que
-   pesa (`.portal-leve`, e o `leve` dos componentes) e anima só transform e
-   opacidade.
-
-   O Bingo (`data-bingo-anima`) também, pelo mesmo pedido (30/10/2026): sem a
-   máquina girando e a pedra surgindo não há sorteio. Ele anima só transform e
-   opacidade (ver `pages/ModoTV/bingo/BingoTv.tsx`).
+   O Bingo (`data-bingo-anima`) fica de fora (pedido de 30/10/2026, o mesmo
+   que valia para o Mural de Outubro: «animações que funcionam até em PCs que
+   têm redução de animações»): sem a máquina girando e a pedra surgindo não há
+   sorteio. Ele anima só transform e opacidade (ver
+   `pages/ModoTV/bingo/BingoTv.tsx`). O Mural (`data-portal-anima`) foi para
+   `arquivo-morto/halloween/` em 03/11/2026.
 
    ─────────────────────────────────────────────────────────────────────────── */
-html[data-leve] *:not([data-portal-anima], [data-portal-anima] *, [data-bingo-anima], [data-bingo-anima] *),
-html[data-leve] *:not([data-portal-anima], [data-portal-anima] *, [data-bingo-anima], [data-bingo-anima] *)::before,
-html[data-leve] *:not([data-portal-anima], [data-portal-anima] *, [data-bingo-anima], [data-bingo-anima] *)::after {
+html[data-leve] *:not([data-bingo-anima], [data-bingo-anima] *),
+html[data-leve] *:not([data-bingo-anima], [data-bingo-anima] *)::before,
+html[data-leve] *:not([data-bingo-anima], [data-bingo-anima] *)::after {
   animation-duration: 1ms !important;
   animation-delay: 0ms !important;
   animation-iteration-count: 1 !important;

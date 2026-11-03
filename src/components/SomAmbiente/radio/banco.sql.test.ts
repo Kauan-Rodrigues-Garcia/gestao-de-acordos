@@ -17,7 +17,7 @@ const ADMIN = '00000000-0000-4000-8000-0000000000a1';
 const ADMIN2 = '00000000-0000-4000-8000-0000000000a2';
 const ANA   = '00000000-0000-4000-8000-0000000000c1';
 
-const SQL = readFileSync(resolve(__dirname, '../../../../../supabase/migrations/20261029210000_radio.sql'), 'utf8');
+const SQL = readFileSync(resolve(__dirname, '../../../../supabase/migrations/20261029210000_radio.sql'), 'utf8');
 
 let db: PGlite;
 

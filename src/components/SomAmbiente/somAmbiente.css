@@ -14,8 +14,7 @@
  * sumiria no fundo branco).
  *
  * O equalizador anima só `transform` (compositor, sem refazer layout). Não
- * consulta `prefers-reduced-motion`, como o resto do tema (ver
- * `halloween.css`): nos computadores da operação ela vem ligada por política,
+ * consulta `prefers-reduced-motion`, como fazia o tema de Halloween: nos computadores da operação ela vem ligada por política,
  * e as barras paradas não diziam que o som estava tocando. A troca de capa,
  * que é enfeite, respeita.
  */
@@ -62,7 +61,7 @@
 }
 /* E o véu na cor do fundo assenta o texto: leve no topo, cheio embaixo. Por
    cima dele, um brilho na cor de destaque em volta da capa — a luz vem do
-   disco. É o que dá cor às capas quase preto e branco (Halloween, Saw), onde
+   disco. É o que dá cor às capas quase preto e branco (MDT, «Pós»), onde
    a capa desfocada sozinha só daria cinza. */
 .som-heroi::after {
   content: '';

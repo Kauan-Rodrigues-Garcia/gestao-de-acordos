@@ -57,7 +57,7 @@ describe('pacote de entrada', () => {
   });
 
   it('o Som ambiente só baixa o painel quando alguém abre', () => {
-    const daqui = arquivosDoApp(join(RAIZ, 'components', 'Halloween', 'SomAmbiente'))
+    const daqui = arquivosDoApp(join(RAIZ, 'components', 'SomAmbiente'))
       .filter(f => !f.endsWith('PainelSomAmbiente.tsx'));
     for (const f of daqui) {
       expect(importsEstaticos(readFileSync(f, 'utf8')), relative(RAIZ, f)).not.toContain('./PainelSomAmbiente');

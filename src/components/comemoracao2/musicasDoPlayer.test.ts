@@ -7,11 +7,12 @@
 import { describe, it, expect } from 'vitest';
 import { MUSICAS_DO_PLAYER, musicaDoPlayer, volumeComGanho } from './musicasDoPlayer';
 import { designDoJson, designPadrao, designParaJson } from './design';
+import { MUSICAS } from '@/components/SomAmbiente/preferencias';
 
 describe('MUSICAS_DO_PLAYER', () => {
   it('traz todas as faixas do player numa lista só, sem repetir', () => {
     const ids = MUSICAS_DO_PLAYER.map((m) => m.id);
-    expect(ids.length).toBeGreaterThanOrEqual(17);
+    expect(ids).toEqual([...MUSICAS]);
     expect(new Set(ids).size).toBe(ids.length);
   });
 
@@ -26,6 +27,8 @@ describe('MUSICAS_DO_PLAYER', () => {
   it('faixa que saiu do app não é encontrada (a festa cai no som do catálogo)', () => {
     expect(musicaDoPlayer('sumiu')).toBeNull();
     expect(musicaDoPlayer(null)).toBeNull();
+    // Os temas de terror saíram com o Halloween (03/11/2026).
+    for (const t of ['saw', 'deadsilence', 'it', 'halloween', 'stranger']) expect(musicaDoPlayer(t)).toBeNull();
     expect(musicaDoPlayer(MUSICAS_DO_PLAYER[0].id)?.id).toBe(MUSICAS_DO_PLAYER[0].id);
   });
 });

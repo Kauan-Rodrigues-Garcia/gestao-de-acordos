@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, act, fireEvent } from '@testing-library/react';
 
 const motor = vi.hoisted(() => ({
-  snap: { estado: 'parado', silenciado: false, noAr: null as string | null, prefs: { faixa: 'halloween', playlists: [] } },
+  snap: { estado: 'parado', silenciado: false, noAr: null as string | null, prefs: { faixa: 'trezentosno7', playlists: [] } },
   ouvintes: new Set<() => void>(),
   pular: vi.fn(),
   alternar: vi.fn(),
@@ -42,7 +42,7 @@ const fone = () => screen.getByRole('button', { name: /^Som ambiente(, tocando)?
 
 beforeEach(() => {
   vi.useFakeTimers();
-  motor.snap = { estado: 'parado', silenciado: false, noAr: null, prefs: { faixa: 'halloween', playlists: [] } };
+  motor.snap = { estado: 'parado', silenciado: false, noAr: null, prefs: { faixa: 'trezentosno7', playlists: [] } };
   motor.ouvintes.clear();
   motor.pular.mockClear();
   motor.alternar.mockClear();
@@ -58,14 +58,14 @@ describe('o visor', () => {
 
   it('tocando, vira o visor com o nome e a capa da música', () => {
     const { container } = render(<BotaoSomAmbiente perfilId="p1" />);
-    noAr('saw');
-    expect(visor()).toHaveAccessibleName(/Hello Zepp/);
-    expect(container.querySelector('img[src="/sounds/capas/saw.jpg"]')).not.toBeNull();
+    noAr('mdt');
+    expect(visor()).toHaveAccessibleName(/MDT/);
+    expect(container.querySelector('img[src="/sounds/capas/mdt.jpg"]')).not.toBeNull();
   });
 
   it('com o mouse em cima, tem anterior, pausar e próxima', () => {
     render(<BotaoSomAmbiente perfilId="p1" />);
-    noAr('saw');
+    noAr('mdt');
     fireEvent.click(screen.getByRole('button', { name: 'Faixa anterior' }));
     fireEvent.click(screen.getByRole('button', { name: 'Pausar' }));
     fireEvent.click(screen.getByRole('button', { name: 'Próxima faixa' }));
@@ -75,8 +75,8 @@ describe('o visor', () => {
 
   it('pausou: o visor espera e só então volta a ser fone', () => {
     render(<BotaoSomAmbiente perfilId="p1" />);
-    noAr('saw');
-    noAr('saw', 'pausado');
+    noAr('mdt');
+    noAr('mdt', 'pausado');
     act(() => { vi.advanceTimersByTime(PAUSA_MS - 500); });
     expect(visor()).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Tocar' })).toBeInTheDocument();
@@ -86,18 +86,18 @@ describe('o visor', () => {
 
   it('voltar a tocar dentro do prazo cancela a volta ao fone', () => {
     render(<BotaoSomAmbiente perfilId="p1" />);
-    noAr('saw');
-    noAr('saw', 'pausado');
+    noAr('mdt');
+    noAr('mdt', 'pausado');
     act(() => { vi.advanceTimersByTime(PAUSA_MS - 1000); });
-    noAr('saw', 'tocando');
+    noAr('mdt', 'tocando');
     act(() => { vi.advanceTimersByTime(PAUSA_MS * 2); });
     expect(visor()).toBeInTheDocument();
   });
 
   it('mouse em cima segura o visor: o prazo não corre', () => {
     const { container } = render(<BotaoSomAmbiente perfilId="p1" />);
-    noAr('saw');
-    noAr('saw', 'pausado');
+    noAr('mdt');
+    noAr('mdt', 'pausado');
     const grupo = container.querySelector('[role="group"]')!;
     fireEvent.mouseEnter(grupo);
     act(() => { vi.advanceTimersByTime(PAUSA_MS * 3); });
@@ -109,7 +109,7 @@ describe('o visor', () => {
 
   it('parar (nada no ar) recolhe na hora', () => {
     render(<BotaoSomAmbiente perfilId="p1" />);
-    noAr('saw');
+    noAr('mdt');
     noAr(null, 'parado');
     expect(screen.queryByRole('button', { name: /Abrir o painel/ })).toBeNull();
   });

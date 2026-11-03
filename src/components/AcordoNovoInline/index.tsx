@@ -50,7 +50,6 @@ import { TIPOS_PAGUEPLAY, TIPOS_BOOKPLAY } from './constants';
 import { FormPP } from './FormPP';
 import { FormBP } from './FormBP';
 import type { ConflitNR, AcordoNovoInlineProps, SharedFormState } from './types';
-import { avisarAcordoSalvo } from '@/components/Halloween/tema';
 
 // Re-export public API so callers using `@/components/AcordoNovoInline` keep working
 export { ModalAutorizacaoNR } from './ModalAutorizacaoNR';
@@ -704,7 +703,6 @@ export function AcordoNovoInline({
 
       const inserido = await executarSalvar(payload);
       if (inserido) {
-        avisarAcordoSalvo();
         if (agendarProxima) await criarProximaParcela(inserido);
         limparDraft();
         await concluirSalvo(

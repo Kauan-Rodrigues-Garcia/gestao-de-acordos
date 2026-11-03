@@ -39,8 +39,6 @@ import {
   type ConversaChat, type MensagemChat, type ContatoEscolhido,
 } from '@/services/chat/chat.service';
 import { IconeChat } from './comum';
-import { AboboraChat } from '@/components/Halloween/Desenhos';
-import { useTemaHalloween } from '@/components/Halloween/tema';
 import { PainelSobDemanda } from '@/components/PainelSobDemanda';
 import { comNovaTentativa } from '@/lib/sobDemanda';
 import { usePrecarregarQuandoOcioso } from '@/hooks/useSobDemanda';
@@ -144,10 +142,6 @@ export interface BolhaChatProps {
 export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaInicialAberta, acimaDoRodape = 0 }: BolhaChatProps = {}) {
   const celular = modo === 'celular';
   const { perfil } = useAuth();
-  const halloween = useTemaHalloween();
-  // Só o mouse acende a abóbora. O foco não: ao fechar a janela o foco volta
-  // para a bolha e a abóbora ficava acesa até trocar de aba.
-  const [mouseNaBolha, setMouseNaBolha] = useState(false);
   const { temPermissao, loading: permLoading } = useCargoPermissoes();
 
   const [aberto, setAberto] = useState(false);
@@ -526,8 +520,6 @@ export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaI
   const abrirJanela = useCallback(() => {
     abertoRef.current = true;
     setAberto(true);
-    // A bolha some com o mouse em cima e o `mouseleave` nunca chega.
-    setMouseNaBolha(false);
     // Minimizar conserva a conversa selecionada. Ao voltar ela se torna
     // visível novamente, então relê e marca como lida o que chegou no intervalo.
     if (chat.conversaAberta) chat.abrir(chat.conversaAberta);
@@ -615,8 +607,8 @@ export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaI
       `}</style>
       <button
         onClick={abrirJanela}
-        onMouseEnter={() => { setSobre(true); setMouseNaBolha(true); precarregarJanela(); }}
-        onMouseLeave={() => { setSobre(false); setMouseNaBolha(false); }}
+        onMouseEnter={() => { setSobre(true); precarregarJanela(); }}
+        onMouseLeave={() => setSobre(false)}
         onFocus={() => { setSobre(true); precarregarJanela(); }}
         onBlur={() => setSobre(false)}
         style={celular ? { bottom: `calc(env(safe-area-inset-bottom) + ${16 + acimaDoRodape}px)` } : undefined}
@@ -625,9 +617,8 @@ export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaI
           celular ? 'right-4' : 'bottom-6 right-6',
           // Quadrado de cantos arredondados. `rounded-2xl` e não `rounded-full`:
           // pedido explícito, e combina com o resto do sistema, que é todo
-          // feito de cartões de canto arredondado. No Halloween o quadrado
-          // some e a bolha é a própria abóbora.
-          halloween ? 'rounded-2xl' : 'rounded-2xl bg-primary text-primary-foreground shadow-lg',
+          // feito de cartões de canto arredondado.
+          'rounded-2xl bg-primary text-primary-foreground shadow-lg',
           'transition-all duration-300',
           'hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 active:scale-95',
           'flex items-center justify-center',
@@ -640,25 +631,21 @@ export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaI
             ].filter(Boolean).join(', ')}`
           : 'Abrir o chat'}
       >
-        {avisosNaBolha > 0 && !halloween && (
+        {avisosNaBolha > 0 && (
           <span
             aria-hidden="true"
             className="chat-alerta-pendente pointer-events-none absolute -inset-1 rounded-[18px] border-2 border-primary/70"
           />
         )}
         {/* O brilho, atrás. Acende no hover e fica aceso com mensagem nova. */}
-        {!halloween && (
-          <span
-            aria-hidden="true"
-            className={cn(
-              'absolute inset-0 rounded-2xl blur-lg -z-10 bg-primary/40 transition-opacity duration-500',
-              sobre || avisosNaBolha > 0 ? 'opacity-100' : 'opacity-0',
-            )}
-          />
-        )}
-        {halloween
-          ? <AboboraChat acesa={mouseNaBolha || avisosNaBolha > 0} />
-          : <IconeChat ativo={sobre || avisosNaBolha > 0} />}
+        <span
+          aria-hidden="true"
+          className={cn(
+            'absolute inset-0 rounded-2xl blur-lg -z-10 bg-primary/40 transition-opacity duration-500',
+            sobre || avisosNaBolha > 0 ? 'opacity-100' : 'opacity-0',
+          )}
+        />
+        <IconeChat ativo={sobre || avisosNaBolha > 0} />
 
         {avisosNaBolha > 0 && (
           <span className={cn(

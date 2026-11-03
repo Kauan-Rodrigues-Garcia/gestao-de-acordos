@@ -10,8 +10,11 @@
  */
 import { chaveDoLink, lerLink, type LinkExterno } from './links';
 
-/** Os temas de terror que vêm de fábrica, na ordem do painel. Trocados em 13/10/2026. */
-export const TEMAS_DE_TERROR = ['saw', 'deadsilence', 'it', 'halloween', 'stranger'] as const;
+/*
+ * Os temas de terror (Saw, Dead Silence, IT, Halloween e Stranger Things) saíram
+ * com o tema de Halloween em 03/11/2026 — estão em `arquivo-morto/halloween/`.
+ * Quem estava com um deles fica com a primeira música (`SUBSTITUTAS`).
+ */
 /**
  * As músicas para escutar que vêm de fábrica. Trocadas em 13/10/2026 («Raindance» ficou; «Leão» entrou no fim no mesmo dia).
  * Sete entraram em 14/10/2026, de «Poesia Acústica #6» a «Somebody That I Used To Know».
@@ -21,7 +24,7 @@ export const TEMAS_DE_TERROR = ['saw', 'deadsilence', 'it', 'halloween', 'strang
  * mesmo dia: cinco funks e «Flexiona / Poder da Gestão».
  *
  * Em 21/10/2026 todas as músicas foram trocadas pelas treze de agora (as que
- * saíram vão para `SUBSTITUTAS`). Os temas de terror ficaram. No mesmo dia
+ * saíram vão para `SUBSTITUTAS`). Os temas de terror ficaram até 03/11/2026. No mesmo dia
  * entraram mais duas, cada uma no fim do seu gênero: «Tô com uma Novinha
  * Mídia» (funk) e «Mantém o Pique» (rap).
  */
@@ -61,33 +64,28 @@ export const GENERO_DA_MUSICA: Record<Musica, Genero> = {
   chicago: 'pop', theydontcare: 'pop',
 };
 /** Todas as de fábrica, na ordem do painel. */
-export const FAIXAS_EMBUTIDAS = [...TEMAS_DE_TERROR, ...MUSICAS] as const;
+export const FAIXAS_EMBUTIDAS = [...MUSICAS] as const;
 export type FaixaEmbutida = (typeof FAIXAS_EMBUTIDAS)[number];
 /** A ordem do anterior/próxima: todas as de fábrica, na ordem do painel. */
 export const FAIXAS_DA_SEQUENCIA: readonly FaixaEmbutida[] = FAIXAS_EMBUTIDAS;
 
-/** Onde cada uma mora — `public/sounds/`, junto da trilha da mensagem de outubro. */
+/** Onde cada uma mora — `public/sounds/`. */
 export const ARQUIVOS: Record<FaixaEmbutida, string> = {
-  saw: '/sounds/halloween-saw-hello-zepp.mp3',
-  deadsilence: '/sounds/halloween-dead-silence.mp3',
-  it: '/sounds/halloween-it-every-27-years.mp3',
-  halloween: '/sounds/halloween-john-carpenter.mp3',
-  stranger: '/sounds/halloween-stranger-things.mp3',
-  trezentosno7: '/sounds/halloween-mc-gp-300-no-7.mp3',
-  mdt: '/sounds/halloween-mc-kelvinho-mdt.mp3',
-  postounodaily: '/sounds/halloween-me-postou-no-daily.mp3',
-  novinhamidia: '/sounds/halloween-to-com-uma-novinha-midia.mp3',
-  donodaverdade: '/sounds/halloween-veigh-dono-da-verdade.mp3',
-  clickbait: '/sounds/halloween-veigh-clickbait.mp3',
-  walkemdown: '/sounds/halloween-nle-choppa-walk-em-down.mp3',
-  mantemopique: '/sounds/halloween-ryu-the-runner-mantem-o-pique.mp3',
-  pos: '/sounds/halloween-felipe-e-rodrigo-pos.mp3',
-  cowboy: '/sounds/halloween-joao-carreiro-nunca-namore-um-cowboy.mp3',
-  temporaldeamor: '/sounds/halloween-cesar-menotti-fabiano-temporal-de-amor.mp3',
-  umdegrau: '/sounds/halloween-chico-rey-parana-um-degrau-na-escada.mp3',
-  cetadoido: '/sounds/halloween-ce-ta-doido-dvd.mp3',
-  chicago: '/sounds/halloween-michael-jackson-chicago.mp3',
-  theydontcare: '/sounds/halloween-michael-jackson-they-dont-care-about-us.mp3',
+  trezentosno7: '/sounds/mc-gp-300-no-7.mp3',
+  mdt: '/sounds/mc-kelvinho-mdt.mp3',
+  postounodaily: '/sounds/me-postou-no-daily.mp3',
+  novinhamidia: '/sounds/to-com-uma-novinha-midia.mp3',
+  donodaverdade: '/sounds/veigh-dono-da-verdade.mp3',
+  clickbait: '/sounds/veigh-clickbait.mp3',
+  walkemdown: '/sounds/nle-choppa-walk-em-down.mp3',
+  mantemopique: '/sounds/ryu-the-runner-mantem-o-pique.mp3',
+  pos: '/sounds/felipe-e-rodrigo-pos.mp3',
+  cowboy: '/sounds/joao-carreiro-nunca-namore-um-cowboy.mp3',
+  temporaldeamor: '/sounds/cesar-menotti-fabiano-temporal-de-amor.mp3',
+  umdegrau: '/sounds/chico-rey-parana-um-degrau-na-escada.mp3',
+  cetadoido: '/sounds/ce-ta-doido-dvd.mp3',
+  chicago: '/sounds/michael-jackson-chicago.mp3',
+  theydontcare: '/sounds/michael-jackson-they-dont-care-about-us.mp3',
 };
 
 /**
@@ -122,11 +120,6 @@ export const ARQUIVOS: Record<FaixaEmbutida, string> = {
  * Faixa nova: medir e pôr aqui (o teste cobra que toda faixa tenha ganho).
  */
 export const GANHO: Record<FaixaEmbutida, number> = {
-  saw: 0.97,           // -12,7
-  deadsilence: 0.86,   // -11,7
-  it: 2.30,            // -20,3
-  halloween: 0.82,     // -11,3
-  stranger: 1.04,      // -13,3
   trezentosno7: 0.61,  // -8,7 (21/10/2026)
   mdt: 0.69,           // -9,7
   postounodaily: 0.65, // -9,3
@@ -149,14 +142,17 @@ export const GANHO: Record<FaixaEmbutida, number> = {
  * escolhido. A posição salva para o F5 não é trocada: a de faixa que saiu só
  * é descartada (`lerPosicao`).
  *
- * Temas que saíram em 13/10/2026 vão para «Halloween», o padrão; músicas — as
- * de 13/10 e as que já tinham saído antes (Veigh em 05/10, «Puxa o Lança» e
- * «Na Relíquia do 2T» em 08/10) — para a primeira das músicas. Desde
- * 21/10/2026 é «300 no 7», e vão para ela também as dezoito que saíram nesse dia.
+ * Tudo vai para a primeira das músicas — desde 21/10/2026, «300 no 7»: as
+ * músicas de 13/10 e as que já tinham saído antes (Veigh em 05/10, «Puxa o
+ * Lança» e «Na Relíquia do 2T» em 08/10), as dezoito de 21/10 e, desde
+ * 03/11/2026, todos os temas de terror (os de 13/10 iam para «Halloween», que
+ * era o padrão e saiu junto com o tema).
  */
 const SUBSTITUTAS: Record<string, FaixaEmbutida> = {
-  sexta13: 'halloween', candyman: 'halloween', pesadelo: 'halloween', pecadores: 'halloween',
   ...Object.fromEntries([
+    // Os temas de terror: os que saíram em 13/10/2026 e os que saíram em 03/11/2026.
+    'sexta13', 'candyman', 'pesadelo', 'pecadores',
+    'saw', 'deadsilence', 'it', 'halloween', 'stranger',
     'rainha', 'boladao', 'numb', 'byob', 'bicho', 'gemebaixo', 'veigh', 'puxalanca', 'reliquia',
     // As de antes de 21/10/2026.
     'malvadinho', 'famosoima', 'penaporta', 'termineicomaex', 'barulhodorock', 'longedemagnata',
@@ -186,7 +182,7 @@ export interface PreferenciasSom {
   tocarAoEntrar: boolean;
   /**
    * Repete a faixa de fábrica. Desligado, elas tocam em sequência, como uma
-   * playlist, e voltam à primeira do grupo (músicas ou temas) depois da última.
+   * playlist, e voltam à primeira depois da última.
    */
   repetir: boolean;
   /**
@@ -210,7 +206,8 @@ const VERSAO = 2;
 export const LIMITE_PLAYLISTS = 40;
 
 export const PADRAO: PreferenciasSom = {
-  faixa: 'halloween',
+  // Até 03/11/2026 o padrão era o tema «Halloween».
+  faixa: 'trezentosno7',
   volume: VOLUME_PADRAO,
   tocarAoEntrar: false,
   repetir: false,
