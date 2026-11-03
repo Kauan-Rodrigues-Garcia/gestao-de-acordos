@@ -1,9 +1,14 @@
 /**
- * A capa do mês: o tema (a cor e o emoji da campanha), o título, a frase e o
+ * A capa do mês: o tema (a cor e o desenho da campanha), o título, a frase e o
  * expediente. Tudo opcional — em branco, vale o que o tema sugere.
+ *
+ * Os temas vêm em dois grupos: as campanhas do mês, que entram sozinhas no
+ * «Automático», e as datas comemorativas (Páscoa, Dia das Mães, Halloween…),
+ * que só valem escolhendo. A «Cor livre» guarda a cor no próprio id do tema
+ * (`cor_0d9488`), sem migration. Em cima, a capa em gibi mostra a escolha.
  */
-import { useEffect, useState, type CSSProperties } from 'react';
-import { Loader2, Wand2 } from 'lucide-react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { Loader2, Palette, Wand2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,8 +17,15 @@ import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
-import { TEMAS, TEMA_AUTOMATICO, temaEfetivo } from '@/lib/calendarioSetor';
+import {
+  TEMAS, TEMA_AUTOMATICO, corDoIdLivre, idDaCorLivre, rotuloDoMesLongo, temaEfetivo,
+  type TemaCalendario,
+} from '@/lib/calendarioSetor';
+import { paletaGibi, varsDaPaleta } from '@/lib/calendarioGibi';
 import { salvarCapa, type CapaDoMes } from '@/services/calendario/calendario.service';
+import { Motivo } from './gibi/desenhos';
+import { carregarFontesGibi } from './gibi/fontes';
+import './gibi/gibi.css';
 
 interface Props {
   aberto: boolean;
@@ -30,16 +42,29 @@ const VAZIA: CapaDoMes = {
   tema: TEMA_AUTOMATICO, titulo: null, frase: null, expediente_semana: null, expediente_sabado: null,
 };
 
+const CAMPANHAS = TEMAS.filter(t => t.id === 'padrao' || t.mes);
+const DATAS = TEMAS.filter(t => t.id !== 'padrao' && !t.mes);
+const COR_LIVRE_INICIAL = '#0D9488';
+
 export function DialogoCapa({ aberto, mes, capa, empresaId, setorId, tema, onMudou, onFechar }: Props) {
   const [valor, setValor] = useState<CapaDoMes>(VAZIA);
   const [salvando, setSalvando] = useState(false);
   const numeroDoMes = Number(mes.slice(5, 7));
+  const corLivre = corDoIdLivre(valor.tema);
+  const [ultimaCorLivre, setUltimaCorLivre] = useState(COR_LIVRE_INICIAL);
 
-  useEffect(() => { if (aberto) setValor(capa ?? VAZIA); }, [aberto, capa]);
+  useEffect(() => {
+    if (!aberto) return;
+    carregarFontesGibi();
+    setValor(capa ?? VAZIA);
+    const livre = corDoIdLivre(capa?.tema);
+    if (livre) setUltimaCorLivre(livre);
+  }, [aberto, capa]);
 
   const sugerido = temaEfetivo(valor.tema, numeroDoMes);
   const texto = (campo: keyof CapaDoMes) => (valor[campo] ?? '') as string;
   const muda = (campo: keyof CapaDoMes, v: string) => setValor(atual => ({ ...atual, [campo]: v }));
+  const escolher = (id: string) => setValor(atual => ({ ...atual, tema: id }));
 
   async function salvar() {
     setSalvando(true);
@@ -61,39 +86,65 @@ export function DialogoCapa({ aberto, mes, capa, empresaId, setorId, tema, onMud
     }
   }
 
-  const opcoes = [{ id: TEMA_AUTOMATICO, nome: 'Automático', acento: temaEfetivo(TEMA_AUTOMATICO, numeroDoMes).acento, emoji: '✨' }, ...TEMAS];
+  const automatico = temaEfetivo(TEMA_AUTOMATICO, numeroDoMes);
 
   return (
     <Dialog open={aberto} onOpenChange={a => { if (!a) onFechar(); }}>
-      <DialogContent className="cal-raiz max-h-[92vh] overflow-y-auto sm:max-w-2xl" style={tema}>
+      <DialogContent className="cal-raiz max-h-[92vh] overflow-y-auto sm:max-w-3xl" style={tema}>
         <DialogHeader>
           <DialogTitle>Personalizar o mês</DialogTitle>
           <DialogDescription>
-            O tema muda as cores do calendário. «Automático» usa a campanha do mês — Outubro Rosa em outubro, Novembro Azul em novembro.
+            O tema muda as cores e o desenho do calendário. «Automático» usa a campanha do mês — Outubro Rosa em outubro,
+            Novembro Azul em novembro. As datas comemorativas valem quando você escolhe.
           </DialogDescription>
         </DialogHeader>
 
+        <PreviaDaCapa
+          tema={sugerido}
+          mes={mes}
+          titulo={valor.titulo?.trim() || sugerido.titulo || 'Calendário do setor'}
+          frase={valor.frase?.trim() || sugerido.frase}
+        />
+
         <div className="space-y-2">
-          <Label>Tema</Label>
+          <Label>Campanhas do mês</Label>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {opcoes.map(t => (
-              <button
-                key={t.id}
-                type="button"
-                data-ligado={valor.tema === t.id}
-                onClick={() => setValor(atual => ({ ...atual, tema: t.id }))}
-                className="cal-opcao flex items-center gap-2 rounded-xl border border-border bg-card p-2 text-left text-xs font-medium text-foreground transition-colors hover:bg-muted"
-              >
-                <span
-                  className="cal-amostra grid h-8 w-8 shrink-0 place-items-center rounded-lg text-base"
-                  style={{ '--amostra': t.acento ?? 'var(--primary)' } as CSSProperties}
-                  aria-hidden
-                >
-                  {t.emoji}
-                </span>
-                <span className="min-w-0 truncate">{t.nome}</span>
-              </button>
+            <OpcaoTema
+              tema={{ ...automatico, nome: `Automático · ${automatico.nome}` }}
+              ligado={valor.tema === TEMA_AUTOMATICO}
+              onClick={() => escolher(TEMA_AUTOMATICO)}
+            />
+            {CAMPANHAS.map(t => (
+              <OpcaoTema key={t.id} tema={t} ligado={valor.tema === t.id} onClick={() => escolher(t.id)} />
             ))}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label>Datas comemorativas</Label>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {DATAS.map(t => (
+              <OpcaoTema key={t.id} tema={t} ligado={valor.tema === t.id} onClick={() => escolher(t.id)} />
+            ))}
+            <div
+              data-ligado={!!corLivre}
+              className="cal-opcao flex items-center gap-2 rounded-xl border border-border bg-card p-2 text-xs font-medium text-foreground"
+            >
+              <label className="relative grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-lg border border-border"
+                style={{ background: corLivre ?? ultimaCorLivre }} title="Escolher a cor">
+                <Palette className="h-4 w-4 text-white mix-blend-difference" aria-hidden />
+                <input
+                  type="color"
+                  className="absolute inset-0 cursor-pointer opacity-0"
+                  value={(corLivre ?? ultimaCorLivre).toLowerCase()}
+                  onChange={e => { setUltimaCorLivre(e.target.value); escolher(idDaCorLivre(e.target.value)); }}
+                  aria-label="Cor livre"
+                />
+              </label>
+              <button type="button" className="min-w-0 flex-1 truncate text-left" onClick={() => escolher(idDaCorLivre(ultimaCorLivre))}>
+                Cor livre
+              </button>
+            </div>
           </div>
         </div>
 
@@ -139,5 +190,42 @@ export function DialogoCapa({ aberto, mes, capa, empresaId, setorId, tema, onMud
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function OpcaoTema({ tema, ligado, onClick }: { tema: TemaCalendario; ligado: boolean; onClick: () => void }) {
+  const paleta = useMemo(() => paletaGibi(tema, false), [tema]);
+  return (
+    <button
+      type="button"
+      data-ligado={ligado}
+      onClick={onClick}
+      className="cal-opcao flex items-center gap-2 rounded-xl border border-border bg-card p-2 text-left text-xs font-medium text-foreground transition-colors hover:bg-muted"
+    >
+      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border-2 p-1"
+        style={{ background: paleta.soft, borderColor: paleta.ol }} aria-hidden>
+        <Motivo id={tema.motivo} cores={paleta} className="h-full w-full" />
+      </span>
+      <span className="min-w-0 truncate">{tema.nome}</span>
+    </button>
+  );
+}
+
+/** A capa do gibi com o tema escolhido, do jeito que vai aparecer no mês. */
+function PreviaDaCapa({ tema, mes, titulo, frase }: { tema: TemaCalendario; mes: string; titulo: string; frase: string }) {
+  const paleta = useMemo(() => paletaGibi(tema, false), [tema]);
+  return (
+    <div className="gb" style={varsDaPaleta(paleta) as CSSProperties} aria-label="Prévia da capa">
+      <div className="gb-in" style={{ padding: 14 }}>
+        <div className="gb-capa">
+          <div className="gb-motivo" aria-hidden><Motivo id={tema.motivo} cores={paleta} /></div>
+          <div className="gb-capa-txt">
+            <p className="gb-mes">{rotuloDoMesLongo(mes).replace(' de ', ' ')}</p>
+            <p className="gb-titulo" style={{ fontSize: 34 }}>{titulo}</p>
+            {frase && <p className="gb-frase">{frase}</p>}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

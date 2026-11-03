@@ -155,35 +155,118 @@ export function faltaNoHorarioBanco(h: HorarioBanco): string | null {
 
 // ── Os temas do mês ──────────────────────────────────────────────────────────
 
+/** O desenho do tema na capa do gibi (`gibi/desenhos.tsx`). */
+export type MotivoTema =
+  | 'calendario' | 'fala' | 'mascara' | 'tulipa' | 'quebra_cabeca' | 'semaforo' | 'fogueira'
+  | 'laco' | 'bigode' | 'arvore' | 'abobora' | 'estrela' | 'coracao' | 'taca' | 'ovo'
+  | 'floco' | 'gravata' | 'flor' | 'balao' | 'etiqueta' | 'bolo';
+
+/**
+ * As cores do gibi (`lib/calendarioGibi.ts`). `ac` é o acento, `ac2` a cor do
+ * «hoje» e das etiquetas, `ol` o contorno; o resto é papel, tinta e linha.
+ */
+export interface PaletaGibi {
+  ac: string; ac2: string; soft: string; paper: string; surf: string;
+  ink: string; muted: string; line: string; ol: string; onac: string; onac2: string;
+}
+
 export interface TemaCalendario {
   id: string;
   nome: string;
   /** Cor da campanha. `null` = o destaque do app (tema Padrão). */
   acento: string | null;
+  /** A segunda cor do gibi: o «hoje», as etiquetas dos quadros. */
+  acento2: string;
   emoji: string;
+  motivo: MotivoTema;
   /** Título e frase sugeridos quando a capa ainda está em branco. */
   titulo: string;
   frase: string;
-  /** O mês em que este tema entra sozinho no «Automático». */
+  /** O mês em que este tema entra sozinho no «Automático». Sem mês = data comemorativa, só escolhendo. */
   mes?: number;
+  /** Cores do gibi acertadas à mão, por cima das que saem do acento. */
+  paleta?: Partial<PaletaGibi>;
+  /** O escuro próprio do tema (o Halloween nasce escuro). */
+  paletaEscura?: Partial<PaletaGibi>;
 }
 
+/*
+ * As campanhas do mês (com `mes`) entram sozinhas no «Automático». As datas
+ * comemorativas (sem `mes`) só valem quando alguém escolhe — Páscoa, Dia das
+ * Mães, Halloween… —, para o mês continuar com a campanha dele por padrão.
+ *
+ * As paletas à mão são as do «Estúdio do Calendário» (o artefato de referência
+ * do gibi); os outros temas tiram as cores do acento.
+ */
 export const TEMAS: readonly TemaCalendario[] = [
-  { id: 'padrao',           nome: 'Padrão',           acento: null,      emoji: '📅', titulo: '',                 frase: '' },
-  { id: 'janeiro_branco',   nome: 'Janeiro Branco',   acento: '#64748B', emoji: '🤍', titulo: 'Janeiro Branco',   frase: 'Cuidar da mente também é cuidar da saúde.', mes: 1 },
-  { id: 'carnaval',         nome: 'Carnaval',         acento: '#A855F7', emoji: '🎉', titulo: 'Carnaval',         frase: 'Folia com responsabilidade!', mes: 2 },
-  { id: 'marco_mulheres',   nome: 'Mês das Mulheres', acento: '#C026D3', emoji: '🌷', titulo: 'Mês das Mulheres', frase: 'Respeito e igualdade todos os dias.', mes: 3 },
-  { id: 'abril_azul',       nome: 'Abril Azul',       acento: '#0EA5E9', emoji: '🧩', titulo: 'Abril Azul',       frase: 'Conscientização sobre o autismo.', mes: 4 },
-  { id: 'maio_amarelo',     nome: 'Maio Amarelo',     acento: '#CA8A04', emoji: '🚦', titulo: 'Maio Amarelo',     frase: 'No trânsito, escolha a vida.', mes: 5 },
-  { id: 'junino',           nome: 'Arraiá',           acento: '#EA580C', emoji: '🌽', titulo: 'Arraiá do setor',  frase: 'Olha a meta! É mentira… é verdade!', mes: 6 },
-  { id: 'agosto_lilas',     nome: 'Agosto Lilás',     acento: '#8B5CF6', emoji: '💜', titulo: 'Agosto Lilás',     frase: 'Pelo fim da violência contra a mulher.', mes: 8 },
-  { id: 'setembro_amarelo', nome: 'Setembro Amarelo', acento: '#F59E0B', emoji: '💛', titulo: 'Setembro Amarelo', frase: 'Falar é a melhor solução.', mes: 9 },
-  { id: 'outubro_rosa',     nome: 'Outubro Rosa',     acento: '#EC4899', emoji: '🎀', titulo: 'Outubro Rosa',     frase: 'Prevenção é o melhor caminho!', mes: 10 },
-  { id: 'novembro_azul',    nome: 'Novembro Azul',    acento: '#2563EB', emoji: '💙', titulo: 'Novembro Azul',    frase: 'Prevenção também é coisa de homem.', mes: 11 },
-  { id: 'natal',            nome: 'Natal',            acento: '#DC2626', emoji: '🎄', titulo: 'Boas festas',      frase: 'Que venha um ano novo de metas batidas!', mes: 12 },
-];
+  { id: 'padrao',           nome: 'Padrão',           acento: null,      acento2: '#FACC15', emoji: '📅', motivo: 'calendario',    titulo: '',                 frase: '' },
+  { id: 'janeiro_branco',   nome: 'Janeiro Branco',   acento: '#64748B', acento2: '#7DD3FC', emoji: '🤍', motivo: 'fala',          titulo: 'Janeiro Branco',   frase: 'Cuidar da mente também é cuidar da saúde.', mes: 1 },
+  { id: 'carnaval',         nome: 'Carnaval',         acento: '#A855F7', acento2: '#FACC15', emoji: '🎉', motivo: 'mascara',       titulo: 'Carnaval',         frase: 'Folia com responsabilidade!', mes: 2 },
+  { id: 'marco_mulheres',   nome: 'Mês das Mulheres', acento: '#C026D3', acento2: '#FDE047', emoji: '🌷', motivo: 'tulipa',        titulo: 'Mês das Mulheres', frase: 'Respeito e igualdade todos os dias.', mes: 3 },
+  { id: 'abril_azul',       nome: 'Abril Azul',       acento: '#0EA5E9', acento2: '#FACC15', emoji: '🧩', motivo: 'quebra_cabeca', titulo: 'Abril Azul',       frase: 'Conscientização sobre o autismo.', mes: 4 },
+  { id: 'maio_amarelo',     nome: 'Maio Amarelo',     acento: '#CA8A04', acento2: '#22C55E', emoji: '🚦', motivo: 'semaforo',      titulo: 'Maio Amarelo',     frase: 'No trânsito, escolha a vida.', mes: 5 },
+  { id: 'junino',           nome: 'Arraiá',           acento: '#EA580C', acento2: '#FACC15', emoji: '🌽', motivo: 'fogueira',      titulo: 'Arraiá do setor',  frase: 'Olha a meta! É mentira… é verdade!', mes: 6 },
+  { id: 'agosto_lilas',     nome: 'Agosto Lilás',     acento: '#8B5CF6', acento2: '#FACC15', emoji: '💜', motivo: 'laco',          titulo: 'Agosto Lilás',     frase: 'Pelo fim da violência contra a mulher.', mes: 8 },
+  {
+    id: 'setembro_amarelo', nome: 'Setembro Amarelo', acento: '#F59E0B', acento2: '#F97316', emoji: '💛', motivo: 'laco',
+    titulo: 'Setembro Amarelo', frase: 'Falar é a melhor solução.', mes: 9,
+    paleta: { ac: '#F5B70A', ac2: '#F97316', soft: '#FFF0BF', paper: '#FFFAE8', surf: '#FFFFFF', ink: '#2A1F00', muted: '#7A6A3D', line: '#ECE1BC', ol: '#2A1F00', onac: '#2A1F00', onac2: '#2A1F00' },
+  },
+  {
+    id: 'outubro_rosa', nome: 'Outubro Rosa', acento: '#EC4899', acento2: '#FACC15', emoji: '🎀', motivo: 'laco',
+    titulo: 'Outubro Rosa', frase: 'Prevenção é o melhor caminho!', mes: 10,
+    paleta: { ac: '#EC4899', ac2: '#FACC15', soft: '#FDE2EF', paper: '#FFF5FA', surf: '#FFFFFF', ink: '#3A0A22', muted: '#85566E', line: '#F1D5E3', ol: '#2B0718', onac: '#FFFFFF', onac2: '#2B0718' },
+  },
+  {
+    id: 'novembro_azul', nome: 'Novembro Azul', acento: '#2563EB', acento2: '#FACC15', emoji: '💙', motivo: 'bigode',
+    titulo: 'Novembro Azul', frase: 'Prevenção também é coisa de homem.', mes: 11,
+    paleta: { ac: '#2563EB', ac2: '#FACC15', soft: '#DCE7FF', paper: '#F2F6FF', surf: '#FFFFFF', ink: '#0B1A3A', muted: '#55678C', line: '#D5DEEF', ol: '#0B1A3A', onac: '#FFFFFF', onac2: '#0B1A3A' },
+  },
+  {
+    id: 'natal', nome: 'Natal', acento: '#DC2626', acento2: '#15803D', emoji: '🎄', motivo: 'arvore',
+    titulo: 'Boas festas', frase: 'Que venha um ano novo de metas batidas!', mes: 12,
+    paleta: { ac: '#D62828', ac2: '#15803D', soft: '#FCE3E3', paper: '#FFF8F1', surf: '#FFFFFF', ink: '#2B0D0D', muted: '#7D5B55', line: '#EED9D2', ol: '#2B0D0D', onac: '#FFFFFF', onac2: '#FFFFFF' },
+  },
+
+  // ── Datas comemorativas: só escolhendo ──
+  { id: 'ano_novo',         nome: 'Ano Novo',         acento: '#CA8A04', acento2: '#A855F7', emoji: '🥂', motivo: 'taca',          titulo: 'Feliz Ano Novo',       frase: 'Ano novo, metas novas. Bora começar com tudo!' },
+  { id: 'pascoa',           nome: 'Páscoa',           acento: '#8B4513', acento2: '#F9A8D4', emoji: '🐰', motivo: 'ovo',           titulo: 'Feliz Páscoa',         frase: 'Que a meta venha recheada de chocolate!' },
+  { id: 'dia_das_maes',     nome: 'Dia das Mães',     acento: '#E11D48', acento2: '#FDE68A', emoji: '💐', motivo: 'coracao',       titulo: 'Mês das Mães',         frase: 'Para quem ensinou a nunca desistir.' },
+  { id: 'inverno',          nome: 'Inverno',          acento: '#0891B2', acento2: '#FBBF24', emoji: '❄️', motivo: 'floco',         titulo: 'Inverno no setor',     frase: 'Lá fora faz frio, aqui a meta esquenta!' },
+  { id: 'dia_dos_pais',     nome: 'Dia dos Pais',     acento: '#334155', acento2: '#F59E0B', emoji: '👔', motivo: 'gravata',       titulo: 'Mês dos Pais',         frase: 'Exemplo de garra todo dia.' },
+  { id: 'primavera',        nome: 'Primavera',        acento: '#65A30D', acento2: '#F472B6', emoji: '🌸', motivo: 'flor',          titulo: 'Chegou a primavera',   frase: 'Tempo de florescer resultados.' },
+  { id: 'dia_das_criancas', nome: 'Dia das Crianças', acento: '#F43F5E', acento2: '#FACC15', emoji: '🎈', motivo: 'balao',         titulo: 'Dia das Crianças',     frase: 'Bater meta também é brincadeira de gente grande!' },
+  {
+    id: 'halloween', nome: 'Halloween', acento: '#F97316', acento2: '#65A30D', emoji: '🎃', motivo: 'abobora',
+    titulo: 'Mês do Terror', frase: 'Meta batida não assusta ninguém.',
+    paleta: { ac: '#F97316', ac2: '#65A30D', soft: '#FFE4CC', paper: '#FFF6EC', surf: '#FFFFFF', ink: '#2A1606', muted: '#8A6A55', line: '#F0DCC8', ol: '#2A1606', onac: '#1A0E00', onac2: '#FFFFFF' },
+    paletaEscura: { ac: '#F97316', ac2: '#A3E635', soft: '#33223F', paper: '#140F1C', surf: '#211830', ink: '#F6EBDD', muted: '#B3A3C4', line: '#3A2D4C', ol: '#05030A', onac: '#1A0E00', onac2: '#14210A' },
+  },
+  {
+    id: 'black_friday', nome: 'Black Friday', acento: '#27272A', acento2: '#FACC15', emoji: '🏷️', motivo: 'etiqueta',
+    titulo: 'Black Friday', frase: 'Oferta boa é a que vira acordo.',
+    // No escuro, o preto sumiria no fundo: o amarelo vira o acento.
+    paletaEscura: { ac: '#FACC15', ac2: '#F97316', soft: '#3A3410', onac: '#1A1A1A', onac2: '#1A1A1A' },
+  },
+  { id: 'aniversario',      nome: 'Aniversário da empresa', acento: '#7C3AED', acento2: '#FACC15', emoji: '🎂', motivo: 'bolo', titulo: 'É festa na firma!',    frase: 'Mais um ano de história, e a gente fazendo parte.' },];
 
 export const TEMA_AUTOMATICO = 'automatico';
+
+/**
+ * O tema de cor livre: a cor vai no próprio id (`cor_0d9488`), que cabe no
+ * CHECK da coluna (`^[a-z0-9_]{1,40}$`). Tema novo não pede migration.
+ */
+export const PREFIXO_COR_LIVRE = 'cor_';
+
+export function idDaCorLivre(hex: string): string {
+  return PREFIXO_COR_LIVRE + hex.replace('#', '').toLowerCase();
+}
+
+/** A cor de um id de cor livre, ou `null` se não for um. */
+export function corDoIdLivre(id: string | null | undefined): string | null {
+  const m = /^cor_([0-9a-f]{6})$/.exec(id ?? '');
+  return m ? `#${m[1].toUpperCase()}` : null;
+}
 
 /**
  * O texto que se lê em cima da cor cheia: branco no rosa e no azul, quase preto
@@ -221,6 +304,13 @@ export function corForte(hex: string): string {
 export function temaEfetivo(id: string | null | undefined, mes: number): TemaCalendario {
   const padrao = TEMAS[0];
   if (!id || id === TEMA_AUTOMATICO) return TEMAS.find(t => t.mes === mes) ?? padrao;
+  const livre = corDoIdLivre(id);
+  if (livre) {
+    return {
+      id, nome: 'Cor livre', acento: livre, acento2: '#FACC15', emoji: '⭐',
+      motivo: 'estrela', titulo: '', frase: '',
+    };
+  }
   return TEMAS.find(t => t.id === id) ?? padrao;
 }
 

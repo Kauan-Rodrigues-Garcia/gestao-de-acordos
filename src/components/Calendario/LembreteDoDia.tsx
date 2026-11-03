@@ -5,82 +5,72 @@
  *
  * Desce colado ao botão (que é de onde a informação vem), uma vez por dia:
  * «Ver calendário» abre o painel, «Ok, entendi» só fecha. As duas marcam o dia
- * como visto (`calendarioLembrete.ts`), e o botão para de piscar junto.
+ * como visto (`calendarioLembrete.ts`), e o botão para de chamar junto.
+ *
+ * Em gibi, como o botão (30/10/2026): um quadro com o desenho do tema e o
+ * «Hoje tem 2 coisas!» em letra de gibi. As cores chegam do botão (`.gb-sys`).
+ * Desce de leve, uma vez (`gb-desce`, em gibi.css), como o resto do calendário.
  */
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { CalendarDays, X } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { corTexto } from '@/lib/temas';
-import { INFO_TIPO, rotuloDoDia, type EventoCalendario } from '@/lib/calendarioSetor';
+import { X } from 'lucide-react';
+import type { CSSProperties } from 'react';
+import {
+  INFO_TIPO, rotuloDoDia, type EventoCalendario, type PaletaGibi, type TemaCalendario,
+} from '@/lib/calendarioSetor';
 import { ICONE_TIPO } from './estiloTipo';
+import { Motivo } from './gibi/desenhos';
 
 interface Props {
   aberto: boolean;
   hojeISO: string;
   eventos: EventoCalendario[];
+  tema: TemaCalendario;
+  paleta: PaletaGibi;
   onVer: () => void;
   onDispensar: () => void;
 }
 
-export function LembreteDoDia({ aberto, hojeISO, eventos, onVer, onDispensar }: Props) {
-  const reduzir = useReducedMotion();
+export function LembreteDoDia({ aberto, hojeISO, eventos, tema, paleta, onVer, onDispensar }: Props) {
+  const n = eventos.length;
+  if (!aberto || n === 0) return null;
   return (
-    <AnimatePresence>
-      {aberto && eventos.length > 0 && (
-        <motion.div
-          role="status"
-          aria-live="polite"
-          initial={reduzir ? { opacity: 0 } : { opacity: 0, y: -14, scale: 0.97 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={reduzir ? { opacity: 0 } : { opacity: 0, y: -8, scale: 0.98 }}
-          transition={{ duration: 0.35, delay: reduzir ? 0 : 0.6, ease: [0.22, 1, 0.36, 1] }}
-          className="absolute left-0 top-full z-40 mt-2.5 w-[min(21rem,calc(100vw-5rem))] origin-top-left overflow-hidden rounded-2xl border border-border bg-card text-left shadow-xl"
-        >
-          {/* A setinha apontando para o botão. */}
-          <span className="absolute -top-1.5 left-5 h-3 w-3 rotate-45 border-l border-t border-border bg-card" aria-hidden />
+    <div role="status" aria-live="polite" className="gb-lb">
+      {/* A setinha apontando para o botão. */}
+      <span className="gb-lb-seta" aria-hidden />
 
-          <div className="relative flex items-start gap-3 border-b border-border bg-primary/10 px-4 py-3">
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground">
-              <CalendarDays className="h-4 w-4" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-foreground">Hoje no seu setor</p>
-              <p className="text-xs text-muted-foreground">{rotuloDoDia(hojeISO)}</p>
-            </div>
-            <button type="button" onClick={onDispensar} aria-label="Fechar lembrete"
-              className="-mr-1 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
-              <X className="h-4 w-4" />
-            </button>
-          </div>
+      <div className="gb-lb-cab">
+        <span className="gb-lb-ic" aria-hidden><Motivo id={tema.motivo} cores={paleta} /></span>
+        <div className="gb-lb-tit">
+          <p className="t">{n === 1 ? 'Hoje tem 1 coisa!' : `Hoje tem ${n} coisas!`}</p>
+          <p className="s">{rotuloDoDia(hojeISO)}</p>
+        </div>
+        <button type="button" onClick={onDispensar} aria-label="Fechar lembrete" className="gb-lb-x">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
 
-          <ul className="space-y-2.5 px-4 py-3">
-            {eventos.slice(0, 4).map(e => {
-              const Icone = ICONE_TIPO[e.tipo];
-              const cor = INFO_TIPO[e.tipo].cor;
-              const aniversario = e.tipo === 'aniversario' && e.pessoa_nome;
-              return (
-                <li key={e.id} className="flex items-start gap-2.5">
-                  <Icone className="mt-0.5 h-4 w-4 shrink-0" style={{ color: cor ? corTexto(cor) : 'var(--primary)' }} aria-hidden />
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium leading-snug text-foreground">
-                      {aniversario ? `Aniversário de ${e.pessoa_nome} 🎉` : e.titulo}
-                    </p>
-                    {e.detalhe && <p className="text-xs text-muted-foreground">{e.detalhe}</p>}
-                  </div>
-                </li>
-              );
-            })}
-            {eventos.length > 4 && (
-              <li className="text-xs text-muted-foreground">e mais {eventos.length - 4} no calendário</li>
-            )}
-          </ul>
+      <ul className="gb-lb-lista">
+        {eventos.slice(0, 4).map(e => {
+          const Icone = ICONE_TIPO[e.tipo];
+          const aniversario = e.tipo === 'aniversario' && e.pessoa_nome;
+          return (
+            <li key={e.id} className="gb-item">
+              <span className="gb-ic" style={{ '--tipo': INFO_TIPO[e.tipo].cor ?? paleta.ac } as CSSProperties}>
+                <Icone aria-hidden />
+              </span>
+              <div>
+                <b>{aniversario ? `Aniversário de ${e.pessoa_nome} 🎉` : e.titulo}</b>
+                <span>{e.detalhe || INFO_TIPO[e.tipo].rotulo}</span>
+              </div>
+            </li>
+          );
+        })}
+        {n > 4 && <li className="gb-lb-mais">e mais {n - 4} no calendário</li>}
+      </ul>
 
-          <div className="flex gap-2 px-4 pb-4">
-            <Button size="sm" className="flex-1" onClick={onVer}>Ver calendário</Button>
-            <Button size="sm" variant="ghost" onClick={onDispensar}>Ok, entendi</Button>
-          </div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+      <div className="gb-lb-acoes">
+        <button type="button" className="gb-lb-ver" onClick={onVer}>Ver calendário</button>
+        <button type="button" className="gb-lb-ok" onClick={onDispensar}>Ok, entendi</button>
+      </div>
+    </div>
   );
 }

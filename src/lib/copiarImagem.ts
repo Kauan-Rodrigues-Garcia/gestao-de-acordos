@@ -113,10 +113,17 @@ function criarConversorRgb(): (cor: string) => string {
  * variantes do Inter (`font-feature-settings`) e os números tabulares; a cópia
  * posiciona cada pedaço de texto com essas larguras e o canvas o desenha com
  * as larguras normais — sobrava espaço («10 :00»). Na cópia, tudo normal.
+ *
+ * A cópia é um documento novo, e nele toda animação CSS recomeça do primeiro
+ * quadro: o que entra «de opacidade 0» sairia invisível na foto. Com duração
+ * zero, cada uma já nasce terminada, e a foto mostra a tela parada.
  */
 const CSS_DA_COPIA = `*, *::before, *::after {
   font-variant-numeric: normal !important;
   font-feature-settings: normal !important;
+  animation-duration: 0s !important;
+  animation-delay: 0s !important;
+  transition-duration: 0s !important;
 }`;
 
 /*
