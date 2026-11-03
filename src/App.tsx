@@ -83,6 +83,7 @@ const PaginaAnalitico   = lazy(() => import('@/pages/Analitico'));
 const CampanhaFacil     = lazy(() => import('@/pages/CampanhaFacil'));
 const CampanhasWhatsapp = lazy(() => import('@/pages/CampanhasWhatsapp'));
 const AbrirAutorizacoes = lazy(() => import('@/pages/AbrirAutorizacoes'));
+const AbrirTransferencias = lazy(() => import('@/pages/AbrirTransferencias'));
 const SolicitacoesWpp   = lazy(() => import('@/pages/SolicitacoesWhatsapp'));
 const Tickets           = lazy(() => import('@/pages/Tickets'));
 const Vendas            = lazy(() => import('@/pages/Vendas'));
@@ -616,6 +617,15 @@ export default function App() {
                 <LayoutWrapper>
                   <ProtectedRoute>
                     <AbrirAutorizacoes />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+
+              {/* Transferências — não é tela: abre o chat no canal dos pedidos e volta (03/11/2026). */}
+              <Route path={ROUTE_PATHS.TRANSFERENCIAS} element={
+                <LayoutWrapper>
+                  <ProtectedRoute>
+                    <AbrirTransferencias />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />

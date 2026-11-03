@@ -21,3 +21,4 @@ export { GruposTodosDialog } from './GruposTodosDialog';
 export { GaleriaDialog } from './GaleriaDialog';
 export { BoasVindasChat } from './BoasVindasChat';
 export { PainelAutorizacoes } from './AutorizacoesChat';
+export { PainelTransferencias } from './TransferenciasChat';

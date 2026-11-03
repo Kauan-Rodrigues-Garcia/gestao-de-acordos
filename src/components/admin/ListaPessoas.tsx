@@ -105,6 +105,8 @@ interface Props {
 
   onEditar: (u: Perfil) => void;
   onTransferir: (u: Perfil) => void;
+  /** «Solicitar transferência» para quem não é super admin (03/11/2026). */
+  rotuloTransferir?: string;
   onSituacao: (u: Perfil, s: SituacaoUsuario) => void;
   onEntrarComo: (u: Perfil) => void;
   onVerFoto: (f: { url: string; nome: string }) => void;
@@ -118,7 +120,7 @@ export function ListaPessoas({
   onlineIds, perfilAtualId, impersonando,
   podeTransferir, podeGerenciarSituacao, podeImpersonar, podeEditar,
   mostrarEmpresa, nomeEmpresa, nomeEquipe, marcaDe, onAbrir, abertaId,
-  onEditar, onTransferir, onSituacao, onEntrarComo, onVerFoto, rotuloAfastamento,
+  onEditar, onTransferir, rotuloTransferir, onSituacao, onEntrarComo, onVerFoto, rotuloAfastamento,
 }: Props) {
   return (
     <div className="space-y-3">
@@ -249,6 +251,7 @@ export function ListaPessoas({
                             onAlternarSelecao={onAlternarSelecao}
                             onEditar={onEditar}
                             onTransferir={onTransferir}
+                            rotuloTransferir={rotuloTransferir}
                             onSituacao={onSituacao}
                             onEntrarComo={onEntrarComo}
                             onVerFoto={onVerFoto}
@@ -290,6 +293,7 @@ interface LinhaProps {
   onAlternarSelecao: (id: string) => void;
   onEditar: (u: Perfil) => void;
   onTransferir: (u: Perfil) => void;
+  rotuloTransferir?: string;
   onSituacao: (u: Perfil, s: SituacaoUsuario) => void;
   onEntrarComo: (u: Perfil) => void;
   onVerFoto: (f: { url: string; nome: string }) => void;
@@ -307,7 +311,7 @@ function LinhaPessoa({
   u, online, souEu, selecionado, impersonando,
   podeTransferir, podeGerenciarSituacao, podeImpersonar, podeEditar,
   mostrarEmpresa, nomeEmpresa, nomeEquipe, marca, onAbrir, aberta,
-  onAlternarSelecao, onEditar, onTransferir, onSituacao, onEntrarComo, onVerFoto, afastamento,
+  onAlternarSelecao, onEditar, onTransferir, rotuloTransferir, onSituacao, onEntrarComo, onVerFoto, afastamento,
 }: LinhaProps) {
   const ehClone = !!u._cloneDe;
   const situacao = u.situacao ?? 'ativo';
@@ -527,7 +531,7 @@ function LinhaPessoa({
               <Button
                 variant="ghost" size="icon"
                 className="w-7 h-7 hover:text-primary hover:bg-primary/10"
-                title="Transferir de setor ou empresa"
+                title={rotuloTransferir ?? 'Transferir de setor ou empresa'}
                 onClick={() => onTransferir(u)}
               >
                 <ArrowRightLeft className="w-3.5 h-3.5" />

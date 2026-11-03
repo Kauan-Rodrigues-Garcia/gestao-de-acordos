@@ -17,6 +17,10 @@ import { AbasSegmentadas, type AbaSegmentada } from '@/components/AbasSegmentada
 // duplicava. Ver o cabeçalho de `AdminSetoresAba` e o de `DialogTransferencia`.
 import { ListaPessoas, ListaPessoasVazia, type GrupoDeSetor } from '@/components/admin/ListaPessoas';
 import { DialogTransferencia } from '@/components/admin/DialogTransferencia';
+import { DialogPedirTransferencia, type AberturaPedido } from '@/components/admin/transferencia/DialogPedirTransferencia';
+import { abrirTransferenciasNoChat } from '@/components/Chat/abrirTransferencias';
+import { useTransferenciaPedidos } from '@/hooks/useTransferenciaPedidos';
+import { pedidoAberto } from '@/lib/transferenciaPedidos';
 import { DialogUsuario, type UserForm, type PodeNoUsuario } from '@/components/admin/DialogUsuario';
 import { DialogNovoUsuario } from '@/components/admin/DialogNovoUsuario';
 import { useSetorNucleo } from '@/hooks/useSetorNucleo';
@@ -379,6 +383,20 @@ export default function AdminUsuarios() {
   const podeTransferir = temPermissao('usuarios_transferir');
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
   const [transferindo, setTransferindo] = useState<Perfil[] | null>(null);
+  /*
+   * Quem não é super admin PEDE (03/11/2026): o mesmo botão abre o pedido, e o
+   * super admin decide no chat, no canal «Transferências». Ver
+   * `DialogPedirTransferencia`.
+   */
+  const pedeTransferencia = podeTransferir && !isSuperAdmin;
+  const [pedindo, setPedindo] = useState<AberturaPedido | null>(null);
+  const transferirOuPedir = (pessoas: Perfil[]) => {
+    if (!pessoas.length) return;
+    if (pedeTransferencia) setPedindo({ direcao: 'tirar', pessoas });
+    else setTransferindo(pessoas);
+  };
+  const pedidosTransf = useTransferenciaPedidos(isSuperAdmin, true);
+  const pedidosAbertos = pedidosTransf.pedidos.filter(pedidoAberto).length;
   /** O setor que a transferência abre já escolhido — o Núcleo, vindo da janela de usuário. */
   const [destinoTransferencia, setDestinoTransferencia] = useState<string | null>(null);
 
@@ -1624,12 +1642,31 @@ export default function AdminUsuarios() {
             <Button variant="outline" size="icon" className="h-9 w-9" title="Recarregar" onClick={fetchDados}>
               <RefreshCw className={cn('w-4 h-4', loading && 'animate-spin')} />
             </Button>
+            {pedeTransferencia && (
+              <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => setPedindo({ direcao: 'trazer' })}
+                title="Pedir ao super admin para trazer pessoas de outro setor para o seu">
+                <ArrowRightLeft className="w-4 h-4" /> Trazer de outro setor
+              </Button>
+            )}
             {temPermissao('usuarios_administrar') && (
               <Button size="sm" className="h-9" onClick={abrirCriar}>
                 <Plus className="w-4 h-4 mr-2" /> Novo Usuário
               </Button>
             )}
           </div>
+
+          {/* Super admin: os pedidos de transferência esperando, que moram no chat. */}
+          {isSuperAdmin && pedidosAbertos > 0 && (
+            <button type="button" onClick={() => abrirTransferenciasNoChat()}
+              className="flex w-full items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-left text-sm hover:bg-amber-500/15">
+              <ArrowRightLeft className="h-4 w-4 shrink-0 text-amber-600" />
+              <span className="min-w-0 flex-1">
+                <strong>{pedidosAbertos === 1 ? '1 pedido de transferência esperando' : `${pedidosAbertos} pedidos de transferência esperando`}</strong>
+                <span className="text-muted-foreground"> · decida no chat, no canal «Transferências»</span>
+              </span>
+              <span className="shrink-0 text-xs font-medium text-amber-700 dark:text-amber-400">Abrir</span>
+            </button>
+          )}
 
           {/* ── O que está selecionado, e o que dá para fazer com isso ────
               Veio da aba Setores junto com a transferência. Lá os checkboxes
@@ -1638,8 +1675,8 @@ export default function AdminUsuarios() {
           {/* A barra de seleção: presa embaixo, sobe quando alguém é marcado. */}
           <div className={cn('us-lote', podeTransferir && selecionados.size > 0 && 'us-on')} role="region" aria-label="Seleção" aria-hidden={!(podeTransferir && selecionados.size > 0)}>
             <span><b>{selecionados.size}</b> {selecionados.size === 1 ? 'pessoa selecionada' : 'pessoas selecionadas'}</span>
-            <button type="button" className="us-forte" onClick={() => { if (perfisSelecionados.length) setTransferindo(perfisSelecionados); }}>
-              <ArrowRightLeft className="w-3.5 h-3.5" /> Transferir
+            <button type="button" className="us-forte" onClick={() => transferirOuPedir(perfisSelecionados)}>
+              <ArrowRightLeft className="w-3.5 h-3.5" /> {pedeTransferencia ? 'Solicitar transferência' : 'Transferir'}
             </button>
             <button type="button" onClick={() => exportar(perfisSelecionados)}><Download className="w-3.5 h-3.5" /> Exportar</button>
             <button type="button" aria-label="Limpar seleção" onClick={() => setSelecionados(new Set())}><X className="w-3.5 h-3.5" /></button>
@@ -1679,7 +1716,8 @@ export default function AdminUsuarios() {
               nomeEmpresa={nomeEmpresa}
               nomeEquipe={nomeEquipe}
               onEditar={abrirEditar}
-              onTransferir={u => setTransferindo([u])}
+              onTransferir={u => transferirOuPedir([u])}
+              rotuloTransferir={pedeTransferencia ? 'Solicitar transferência' : undefined}
               onSituacao={handleSituacao}
               rotuloAfastamento={u => {
                 const a = afastamentosDaTela.get(u.id);
@@ -1843,7 +1881,7 @@ export default function AdminUsuarios() {
         onTransferirAoNucleo={
           // Mesma empresa: a transferência parte da empresa atual, e o Núcleo
           // calculado é o da empresa da pessoa editada.
-          editando && podeTransferir && setorNucleoId && editando.empresa_id === empresaAtual?.id
+          editando && podeTransferir && !pedeTransferencia && setorNucleoId && editando.empresa_id === empresaAtual?.id
             ? () => {
                 setDialogOpen(false);
                 setDestinoTransferencia(setorNucleoId);
@@ -1880,7 +1918,8 @@ export default function AdminUsuarios() {
         podeImpersonar={isSuperAdmin}
         souEu={!!pessoaAberta && pessoaAberta.id === perfilAtual?.id}
         onEditar={u => { setAbertaId(null); abrirEditar(u); }}
-        onTransferir={u => { setAbertaId(null); setTransferindo([u]); }}
+        onTransferir={u => { setAbertaId(null); transferirOuPedir([u]); }}
+        rotuloTransferir={pedeTransferencia ? 'Solicitar transferência' : undefined}
         onEntrarComo={u => void entrarComo(u)}
         afastamentos={pessoaAberta && !(pessoaAberta as PerfilComClone)._cloneDe ? {
           podeAgir: podeGerenciarSituacao,
@@ -1960,6 +1999,12 @@ export default function AdminUsuarios() {
       {/* ── Transferir de setor ou empresa ───────────────────────────────────
           A porta única. Ver `DialogTransferencia` para o que a operação faz de
           verdade e por que ela deixou de morar na aba Setores. */}
+      <DialogPedirTransferencia
+        abertura={pedindo}
+        onFechar={() => setPedindo(null)}
+        onEnviado={() => { setPedindo(null); setSelecionados(new Set()); }}
+      />
+
       <DialogTransferencia
         alvos={transferindo}
         setores={setores}

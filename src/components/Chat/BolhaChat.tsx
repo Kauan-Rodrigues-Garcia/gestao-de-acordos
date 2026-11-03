@@ -51,6 +51,14 @@ import {
 } from '@/lib/notificacao-chat';
 import { prepararSomChat, tocarSomChat } from '@/lib/som-chat';
 import { useAutorizacaoPedidos } from '@/hooks/useAutorizacaoPedidos';
+import { useTransferenciaPedidos } from '@/hooks/useTransferenciaPedidos';
+import { IconeTransferencias } from './IconeTransferencias';
+import {
+  CONVERSA_TRANSFERENCIAS, EVENTO_ABRIR_TRANSFERENCIAS, consumirPedidoDeAbrirTransferencias,
+} from './abrirTransferencias';
+import {
+  decididosDesde, fraseDoPedido, pedidoAberto, pedidosNovos, resumoDasTransferencias,
+} from '@/lib/transferenciaPedidos';
 import { EscudoAutorizacoes } from '@/components/Autorizacoes/EscudoAutorizacoes';
 import { buscarNomeDoAlvo } from '@/services/comemoracoes.service';
 import type { PedidoAutorizacao } from '@/services/autorizacaoPedidos.service';
@@ -84,6 +92,7 @@ const GruposTodosDialog  = lazy(() => carregarJanela().then(m => ({ default: m.G
 const GaleriaDialog      = lazy(() => carregarJanela().then(m => ({ default: m.GaleriaDialog })));
 const BoasVindasChat     = lazy(() => carregarJanela().then(m => ({ default: m.BoasVindasChat })));
 const PainelAutorizacoes = lazy(() => carregarJanela().then(m => ({ default: m.PainelAutorizacoes })));
+const PainelTransferencias = lazy(() => carregarJanela().then(m => ({ default: m.PainelTransferencias })));
 
 function precarregarJanela() {
   void carregarJanela().catch(() => {});
@@ -390,6 +399,7 @@ export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaI
 
   const abrirAutorizacoes = useCallback(() => {
     chatRef.current?.abrir(null);
+    setVendoTransferencias(false);
     setVendoAutorizacoes(true);
     abertoRef.current = true;
     setAberto(true);
@@ -448,8 +458,89 @@ export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaI
     tocarSomChat();
   }, [podeAutorizar, autorizacoes.carregando, autorizacoes.pedidos, perfil?.id, abrirAutorizacoes, autorizacoesDiscretas]);
 
-  /** Mensagem não lida + autorização esperando: o que a bolha conta. */
-  const avisosNaBolha = chat.naoLidasTotal + (autorizacoesDiscretas ? 0 : resumoAutorizacoes.pendentes);
+  /*
+   * ── Transferências: o canal dos pedidos (03/11/2026) ──────────────────────
+   *
+   * Super admin: todos os pedidos, no topo e aceso enquanto houver aberto.
+   * Quem pede (`usuarios_transferir`): só os seus; o canal aparece depois do
+   * primeiro pedido, não sobe para o topo e acende quando um é decidido.
+   */
+  const podeTransferencias = podeVer && !!perfil?.id && (souSuperAdmin || temPermissao('usuarios_transferir'));
+  const transferencias = useTransferenciaPedidos(podeTransferencias, souSuperAdmin);
+  const [vendoTransferencias, setVendoTransferencias] = useState(false);
+  const chaveVistoTransf = perfil?.id ? `chat:transferencias-visto:${perfil.id}` : null;
+  const [vistoTransfEm, setVistoTransfEm] = useState<string | null>(null);
+  useEffect(() => {
+    if (!chaveVistoTransf) return;
+    try { setVistoTransfEm(localStorage.getItem(chaveVistoTransf)); } catch { setVistoTransfEm(null); }
+  }, [chaveVistoTransf]);
+  const resumoTransferencias = resumoDasTransferencias(transferencias.pedidos, souSuperAdmin);
+  const transfAbertas = transferencias.pedidos.filter(pedidoAberto).length;
+  const transfDecididasNovas = souSuperAdmin ? 0 : decididosDesde(transferencias.pedidos, vistoTransfEm);
+  const mostraLinhaTransf = podeTransferencias && (souSuperAdmin || transferencias.pedidos.length > 0);
+  const avisosTransf = souSuperAdmin ? transfAbertas : transfDecididasNovas;
+
+  const abrirTransferencias = useCallback(() => {
+    chatRef.current?.abrir(null);
+    setVendoAutorizacoes(false);
+    setVendoTransferencias(true);
+    abertoRef.current = true;
+    setAberto(true);
+  }, []);
+
+  // Ver o canal apaga o «decidido» de quem pediu.
+  useEffect(() => {
+    if (!vendoTransferencias || !chaveVistoTransf) return;
+    const agora = new Date().toISOString();
+    setVistoTransfEm(agora);
+    try { localStorage.setItem(chaveVistoTransf, agora); } catch { /* sem storage */ }
+  }, [vendoTransferencias, chaveVistoTransf, transferencias.pedidos]);
+
+  useEffect(() => {
+    if (chat.conversaAberta) setVendoTransferencias(false);
+  }, [chat.conversaAberta]);
+  useEffect(() => {
+    if (vendoAutorizacoes) setVendoTransferencias(false);
+  }, [vendoAutorizacoes]);
+
+  useEffect(() => {
+    if (!podeTransferencias) return;
+    if (consumirPedidoDeAbrirTransferencias()) abrirTransferencias();
+    const aoPedir = () => { if (consumirPedidoDeAbrirTransferencias()) abrirTransferencias(); };
+    window.addEventListener(EVENTO_ABRIR_TRANSFERENCIAS, aoPedir);
+    return () => window.removeEventListener(EVENTO_ABRIR_TRANSFERENCIAS, aoPedir);
+  }, [podeTransferencias, abrirTransferencias]);
+
+  // Pedido novo (super admin): aviso no formato de mensagem, com o som do chat.
+  const vistosTransfRef = useRef<Set<string> | null>(null);
+  const vendoTransfRef = useRef(vendoTransferencias);
+  vendoTransfRef.current = vendoTransferencias;
+  useEffect(() => {
+    if (!souSuperAdmin || !podeTransferencias || transferencias.carregando) return;
+    if (vistosTransfRef.current === null) {
+      vistosTransfRef.current = new Set(transferencias.pedidos.map(p => p.id));
+      return;
+    }
+    const novos = pedidosNovos(vistosTransfRef.current, transferencias.pedidos, perfil?.id ?? null);
+    for (const p of transferencias.pedidos) vistosTransfRef.current.add(p.id);
+    if (novos.length === 0 || (abertoRef.current && vendoTransfRef.current)) return;
+    const p = novos[0];
+    const mais = novos.length > 1 ? ` (e mais ${novos.length - 1})` : '';
+    toastFlutuante.custom(id => (
+      <NotificacaoMensagem
+        nome="Transferências"
+        foto={p.solicitante_foto}
+        avatar={p.solicitante_foto ? undefined : <IconeTransferencias tamanho={42} alerta />}
+        mensagem={`${p.solicitante_nome} pede transferir ${fraseDoPedido(p)}${mais}`}
+        onFechar={() => toastFlutuante.dismiss(id)}
+        onAbrir={() => { toastFlutuante.dismiss(id); abrirTransferencias(); }}
+      />
+    ), { duration: 12_000 });
+    tocarSomChat();
+  }, [souSuperAdmin, podeTransferencias, transferencias.carregando, transferencias.pedidos, perfil?.id, abrirTransferencias]);
+
+  /** Mensagem não lida + autorização esperando + transferência: o que a bolha conta. */
+  const avisosNaBolha = chat.naoLidasTotal + (autorizacoesDiscretas ? 0 : resumoAutorizacoes.pendentes) + avisosTransf;
 
   // Contagem da própria aba do navegador. Mensagens lidas limpam o prefixo.
   useEffect(() => {
@@ -493,11 +584,16 @@ export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaI
       avisarAberta.current?.();
       return;
     }
+    if (conversaInicial === CONVERSA_TRANSFERENCIAS) {
+      if (podeTransferencias) abrirTransferencias();
+      avisarAberta.current?.();
+      return;
+    }
     chatRef.current?.abrir(conversaInicial);
     abertoRef.current = true;
     setAberto(true);
     avisarAberta.current?.();
-  }, [podeVer, conversaInicial, podeAutorizar, abrirAutorizacoes]);
+  }, [podeVer, conversaInicial, podeAutorizar, abrirAutorizacoes, podeTransferencias, abrirTransferencias]);
 
   // Celular, aberto: a tela de trás não rola por baixo do chat.
   useEffect(() => {
@@ -668,9 +764,10 @@ export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaI
    * resolvesse (conversa nova, ainda fora da lista), a janela ficava vazia:
    * lista escondida, conversa nula, nada desenhado.
    */
-  const mostraLista = largo || (!conversaAtual && !vendoAutorizacoes);
-  const mostraConversa = !!conversaAtual && !vendoAutorizacoes;
+  const mostraLista = largo || (!conversaAtual && !vendoAutorizacoes && !vendoTransferencias);
+  const mostraConversa = !!conversaAtual && !vendoAutorizacoes && !vendoTransferencias;
   const mostraAutorizacoes = vendoAutorizacoes && podeAutorizar;
+  const mostraTransferencias = vendoTransferencias && podeTransferencias && !mostraAutorizacoes;
 
   /*
    * A janela inteira mora dentro da casca sob demanda: se o pedaço não descer,
@@ -803,6 +900,13 @@ export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaI
                   onAbrir: abrirAutorizacoes,
                   discreto: autorizacoesDiscretas,
                 } : undefined}
+                transferencias={mostraLinhaTransf ? {
+                  resumo: resumoTransferencias,
+                  avisos: avisosTransf,
+                  emDestaque: souSuperAdmin && transfAbertas > 0,
+                  selecionada: vendoTransferencias,
+                  onAbrir: abrirTransferencias,
+                } : undefined}
               />
             </div>
           )}
@@ -855,7 +959,20 @@ export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaI
             </div>
           )}
 
-          {largo && !conversaAtual && !mostraAutorizacoes && (
+          {mostraTransferencias && (
+            <div className="flex-1 min-w-0 min-h-0">
+              <PainelTransferencias
+                pedidos={transferencias.pedidos}
+                souSuperAdmin={souSuperAdmin}
+                meuId={perfil?.id ?? null}
+                onMudou={transferencias.recarregar}
+                expandido={largo}
+                onVoltar={() => setVendoTransferencias(false)}
+              />
+            </div>
+          )}
+
+          {largo && !conversaAtual && !mostraAutorizacoes && !mostraTransferencias && (
             <div className="flex-1 flex items-center justify-center">
               <p className="text-xs text-muted-foreground">Escolha uma conversa</p>
             </div>
