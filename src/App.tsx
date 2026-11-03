@@ -52,6 +52,11 @@ const SO_COMERCIAL: readonly Produto[] = ['comercial'];
  * declaram o mesmo produto.
  */
 const COBRANCA_E_COMERCIAL: readonly Produto[] = ['cobranca', 'comercial'];
+/**
+ * A primeira tela do produto RH, o Quadro de Pessoal (20/10/2026): também na
+ * cobrança, onde o RH de cada operação a abre.
+ */
+const COBRANCA_E_RH: readonly Produto[] = ['cobranca', 'rh'];
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -126,6 +131,7 @@ const VendasLixeira      = lazy(() => import('@/pages/Vendas/LixeiraVendas'));
 // também deixaram de ser página própria — ver os redirecionamentos abaixo.
 const VendasIndicacoes  = lazy(() => import('@/pages/Vendas/Indicacoes'));
 const RhGestao          = lazy(() => import('@/pages/RhGestao'));
+const RhQuadro          = lazy(() => import('@/pages/RhQuadro'));
 const Fechamento        = lazy(() => import('@/pages/Fechamento'));
 const ControleNumeros   = lazy(() => import('@/pages/ControleNumeros'));
 const MeusChips         = lazy(() => import('@/pages/MeusChips'));
@@ -785,6 +791,17 @@ export default function App() {
                 <LayoutWrapper>
                   <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_rh_gestao">
                     <RhGestao />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+
+              {/* Quadro de Pessoal — setores e equipes vistos pelo RH, só
+                  leitura. Mesma chave do RH Gestão; dentro, a tela exige o
+                  alcance «todos os setores», que é o do RH. */}
+              <Route path={ROUTE_PATHS.RH_QUADRO} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={COBRANCA_E_RH} requiredPermissao="ver_rh_gestao">
+                    <RhQuadro />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />

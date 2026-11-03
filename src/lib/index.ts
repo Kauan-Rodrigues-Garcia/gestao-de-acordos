@@ -62,6 +62,8 @@ export const ROUTE_PATHS = {
   JORNADA_RETENCAO: '/retencao',
   /** Ouvidoria da regra Cofen (06/11/2026): reclamações do 0800 e o acompanhamento delas. */
   OUVIDORIA: '/ouvidoria',
+  /** Quadro de Pessoal — a visão do RH sobre setores e equipes, só leitura (20/10/2026). */
+  RH_QUADRO: '/quadro-pessoal',
   /**
    * O fechamento mensal por operador — a planilha de fechamento da gerência.
    * Não confundir com o relatório de fechamento (`BotaoFechamento`), que é um

@@ -71,6 +71,7 @@ export const TELA_LABEL: Record<string, string> = {
   'admin/configuracoes:uso':   'Configurações · Monitoramento de uso',
   'admin/configuracoes:permissoes': 'Configurações · Permissões',
   'rh-gestao':                 'RH Gestão',
+  'quadro-pessoal':            'Quadro de Pessoal',
   'fechamento':                'Fechamento',
   // A Ouvidoria da regra Cofen (06/11/2026) usa a mesma rota da aba arquivada
   // em 05/09/2026 (`arquivo-morto/ouvidoria/`): o histórico de `uso_telas` das
@@ -171,6 +172,7 @@ export const ROTULO_SEGMENTO: Record<string, Record<string, string>> = {
     celulares: 'Celulares', numeros: 'Números', lixeira: 'Lixeira', configuracao: 'Configuração',
   },
   'meus-chips': { numeros: 'Números de WhatsApp', fisicos: 'Chips Físicos' },
+  'quadro-pessoal': { setores: 'Setores', equipes: 'Equipes', conferencia: 'Conferir planilha' },
   'rh-gestao': {
     consolidado: 'Visão consolidada', setor: 'Setor aberto',
     historico: 'Histórico', configuracao: 'Configuração',

@@ -33,9 +33,10 @@ import {
   LayoutDashboard, FileText, Plus, Users, Settings, Trash2, TrendingUp,
   BarChart3, Upload, BarChart2, Megaphone, MessageSquarePlus,
   Ticket, ClipboardList, ClipboardCheck, Smartphone, MessageCircle, Gauge,
-  ShoppingBag, Handshake, Send, Zap, Tv, KeyRound, ShieldCheck, Headset,
+  ShoppingBag, Handshake, Send, Zap, Network, Tv, KeyRound, ShieldCheck, Headset,
 } from 'lucide-react';
 import { CARGOS_MODO_TV, ROUTE_PATHS } from '@/lib/index';
+import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { produtoPermite, type Produto } from '@/lib/produto';
 
 export interface NavItem {
@@ -115,6 +116,13 @@ const SO_COMERCIAL: readonly Produto[] = ['comercial'];
  */
 const COBRANCA_E_COMERCIAL: readonly Produto[] = ['cobranca', 'comercial'];
 
+/**
+ * A primeira aba do produto RH: o Quadro de Pessoal (20/10/2026). Ela mora nos
+ * dois porque o RH entra por qualquer um — pela empresa Recursos Humanos, de
+ * onde vê todas as operações, ou pela cobrança, de onde vê a sua.
+ */
+const COBRANCA_E_RH: readonly Produto[] = ['cobranca', 'rh'];
+
 export const NAV_ITEMS: NavItem[] = [
   // A única aba que existe em todo produto por necessidade: é a rota `/`, a
   // porta de entrada. O que ela DESENHA muda por produto — ver `Dashboard`.
@@ -143,6 +151,11 @@ export const NAV_ITEMS: NavItem[] = [
   // e equipes dela. O produto `rh`, quando tiver tela, terá a sua — com a
   // visão das quatro empresas, que esta não tem.
   { label: 'RH Gestão',        icon: ClipboardList,   to: ROUTE_PATHS.RH_GESTAO,           produtos: SO_COBRANCA, permissaoKey: 'ver_rh_gestao' },
+  // Quadro de Pessoal (20/10/2026) — setores e equipes vistos pelo RH, só
+  // leitura. A chave é a do RH Gestão, e o filtro abaixo pede também o alcance
+  // «todos os setores» daquela aba: é ele que faz do cargo «o RH», e não o
+  // líder que preenche a premiação da própria equipe.
+  { label: 'Quadro de Pessoal', icon: Network,        to: ROUTE_PATHS.RH_QUADRO,           produtos: COBRANCA_E_RH, permissaoKey: 'ver_rh_gestao', depoisDe: ROUTE_PATHS.RH_GESTAO },
   // Fechamento — a planilha de fechamento da gerência. Só BookPlay. A chave
   // nasce desligada para todo cargo configurável: hoje o item aparece só para
   // quem tem acesso total, e a gerência entra quando alguém ligar no painel.
@@ -367,6 +380,12 @@ export function abasDoMenu(ctx: ContextoMenu): NavItem[] {
     // ligada num setor Nosso produto não abre nada).
     if (item.to === ROUTE_PATHS.OUVIDORIA) {
       return ctx.ouvidoria ?? true;
+    }
+
+    // Quadro de Pessoal: a visão do RH, que é o alcance «todos os setores» do
+    // RH Gestão. A tela confere o mesmo por dentro.
+    if (item.to === ROUTE_PATHS.RH_QUADRO) {
+      return niveisLiberados('rh', ctx.temPermissao).includes('todos_setores');
     }
 
     if (item.permissaoKey) return true;

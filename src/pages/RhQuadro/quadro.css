@@ -1,0 +1,78 @@
+/*
+ * O organograma do Quadro de Pessoal: o setor no topo e as equipes penduradas
+ * numa linha só. As linhas são bordas dos próprios itens (a técnica clássica de
+ * árvore em CSS), então acompanham qualquer número de equipes sem conta nenhuma.
+ * A fileira não quebra: quando não cabe, o organograma rola de lado.
+ */
+.qp-org {
+  --qp-linha: color-mix(in oklch, var(--muted-foreground) 40%, transparent);
+}
+
+.qp-org-raiz {
+  position: relative;
+  padding-bottom: 1.5rem;
+}
+.qp-org-raiz::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  height: 1.5rem;
+  border-left: 2px solid var(--qp-linha);
+}
+
+.qp-org-filhos {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+.qp-org-filhos > li {
+  position: relative;
+  padding: 1.5rem 0.5rem 0;
+}
+.qp-org-filhos > li::before,
+.qp-org-filhos > li::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 50%;
+  width: 50%;
+  height: 1.5rem;
+  border-top: 2px solid var(--qp-linha);
+}
+.qp-org-filhos > li::after {
+  right: auto;
+  left: 50%;
+  border-left: 2px solid var(--qp-linha);
+}
+.qp-org-filhos > li:first-child::before,
+.qp-org-filhos > li:last-child::after {
+  border: 0 none;
+}
+.qp-org-filhos > li:last-child::before {
+  border-right: 2px solid var(--qp-linha);
+  border-radius: 0 0.6rem 0 0;
+}
+.qp-org-filhos > li:first-child::after {
+  border-radius: 0.6rem 0 0 0;
+}
+.qp-org-filhos > li:only-child::before {
+  display: none;
+}
+.qp-org-filhos > li:only-child::after {
+  border-top: 0 none;
+  border-radius: 0;
+}
+
+/* A pessoa procurada pisca duas vezes e fica marcada. */
+@keyframes qp-achado {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--primary) 0%, transparent); }
+  50% { box-shadow: 0 0 0 6px color-mix(in oklch, var(--primary) 30%, transparent); }
+}
+.qp-achado {
+  animation: qp-achado 0.9s ease-in-out 2;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qp-achado { animation: none; }
+}
