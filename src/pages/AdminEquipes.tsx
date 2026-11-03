@@ -200,11 +200,15 @@ export default function AdminEquipes() {
         .order('nome');
       if (!isAdmin && perfil?.setor_id) equipesQuery = equipesQuery.eq('setor_id', perfil.setor_id) as typeof equipesQuery;
 
+      // Desligado de mês anterior (arquivado) não existe mais para a equipe:
+      // vive só no retrato do mês em que saiu e na aba Desligados. O desligado
+      // DESTE mês continua aqui, com a etiqueta, até a virada.
       let operadoresQuery = supabase
         .from('perfis')
         .select('id, nome, email, perfil, setor_id, equipe_id, empresa_id, situacao, ferias_ate, foto_url')
         .eq('empresa_id', empresaId)
         .in('perfil', ['operador', 'lider', 'elite'])
+        .not('arquivado', 'is', true)
         .order('nome');
       if (!isAdmin && perfil?.setor_id) operadoresQuery = operadoresQuery.eq('setor_id', perfil.setor_id) as typeof operadoresQuery;
 

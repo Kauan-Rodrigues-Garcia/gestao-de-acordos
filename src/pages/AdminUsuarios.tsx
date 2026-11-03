@@ -526,9 +526,8 @@ export default function AdminUsuarios() {
     const pendentes = idsDaLista.filter(id => !manutencaoFeita.has(`${id}:${hojeManutencao}`));
     await Promise.all(pendentes.map(async empAlvo => {
       manutencaoFeita.add(`${empAlvo}:${hojeManutencao}`);
-      const pp = cobrancaDaLista.find(e => e.id === empAlvo)?.slug === 'pagueplay' || (!cobrancaDaLista.length && tenant.isPaguePlay);
       const [, voltaram] = await Promise.all([
-        arquivarDesligadosAnteriores(empAlvo, { isPaguePlay: pp }).catch(() => 0),
+        arquivarDesligadosAnteriores(empAlvo).catch(() => 0),
         encerrarFeriasVencidas(empAlvo).catch(() => 0),
       ]);
       if (voltaram > 0) {

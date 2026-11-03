@@ -105,51 +105,28 @@ export async function definirSituacao(
 }
 
 /**
- * Arquiva os desligados de meses anteriores: eles somem das listas e passam a
- * existir só na aba Desligados.
+ * Arquiva os desligados de meses anteriores: eles saem de tudo e passam a
+ * existir só no retrato do mês em que saíram e na aba Desligados.
  *
- * É AQUI que os vínculos de acordo são soltos, e não mais no ato do
- * desligamento. Enquanto o mês corre, a pessoa desligada continua inteira —
- * na equipe, no analítico, nos cards — com uma etiqueta "Desligado". A conta do
- * mês em que ela trabalhou não pode encolher no meio do caminho.
+ * Quem tira a pessoa de tudo é o banco, no mesmo passo do arquivamento
+ * (`fn_desligado_sai_de_tudo`, migration 20261103120000): equipe, liderança,
+ * clone, subgrupo e os pares Direto/Extra do mês corrente. Até 03/11/2026 os
+ * pares eram soltos aqui, no navegador — e só para quem esta chamada
+ * arquivasse. Como o `pg_cron` arquiva antes de qualquer um abrir a tela, a
+ * lista chegava vazia e ninguém tinha os pares soltos.
  *
- * Best-effort dos dois lados: o arquivamento vale mesmo que a liberação falhe,
- * e a próxima passagem por aqui não tenta de novo (a pessoa já está arquivada).
- * O `pg_cron` da migration cuida do arquivamento sozinho todo dia às 00:10 de
- * São Paulo; esta função existe para o caso de alguém abrir a tela antes disso.
+ * O `pg_cron` faz tudo isso sozinho todo dia às 00:10 de São Paulo; esta
+ * chamada existe para o caso de alguém abrir a tela antes disso.
  */
-export async function arquivarDesligadosAnteriores(
-  empresaId: string,
-  contexto?: { isPaguePlay?: boolean },
-): Promise<number> {
+export async function arquivarDesligadosAnteriores(empresaId: string): Promise<number> {
   const { data, error } = await rpcSemTipo<{ fn_arquivar_desligados_ids: string }[] | string[]>(
     'fn_arquivar_desligados_ids', { p_empresa_id: empresaId },
   );
   if (error) return 0;
   invalidarComposicaoEquipes();
-
   // A RPC devolve SETOF uuid; o PostgREST entrega ora uma lista de strings, ora
   // uma lista de objetos de uma chave, conforme a versão.
-  const ids = (data ?? []).map(linha =>
-    typeof linha === 'string' ? linha : linha.fn_arquivar_desligados_ids,
-  ).filter(Boolean);
-
-  if (ids.length > 0) {
-    try {
-      const { liberarVinculosDeDesligado } = await import('@/services/desligamento.service');
-      for (const perfilId of ids) {
-        await liberarVinculosDeDesligado({
-          perfilId,
-          empresaId,
-          isPaguePlay: contexto?.isPaguePlay ?? false,
-        });
-      }
-    } catch (e) {
-      console.warn('[situacaoUsuario] falha ao liberar vínculos de arquivado', e);
-    }
-  }
-
-  return ids.length;
+  return (data ?? []).filter(Boolean).length;
 }
 
 /**
