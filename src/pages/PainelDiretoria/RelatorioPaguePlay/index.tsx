@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { carregarResumo, excluirRelatorio, importarRelatorio } from '@/services/relatorioPaguePlay/service';
 import { diaAnterior, formatarCentavos, inicioSugerido, validarPeriodo, type Modalidade, type RelatorioLido, type ResumoSalvo } from '@/services/relatorioPaguePlay/modelo';
 import { documentoRelatorio } from './documento';
+import { FaixaConciliacao } from './FaixaConciliacao';
 import { useImportacao945 } from '@/hooks/useImportacao945';
 import { ImportarRelatorio945Modal } from '@/components/relatorio945/ImportarRelatorio945Modal';
 import { FaixaCobertura945 } from '@/components/relatorio945/FaixaCobertura945';
@@ -176,7 +177,8 @@ export default function RelatorioPaguePlay({ empresaId, versao }: { empresaId: s
       </div>
       <p className="text-sm text-muted-foreground">Históricos independentes. Os valores de Pague Play, Coren e Cofen vêm das colunas do relatório; os percentuais exibem a participação desses valores no total.</p>
       {modo === 'pagamento' && <FaixaCobertura945 cobertura={imp945.cobertura} erro={imp945.erroCobertura} />}
-      {modo === 'conciliacao' && <p className="text-sm">{resumo?.primeiraImportacaoPendente ? `Primeira atualização de hoje: o período tem de começar até ${dataBR(diaAnterior(hoje))} e ir até ${dataBR(hoje)}. A conciliação só anda em dia útil — depois de fim de semana ou feriado, exporte desde o dia seguinte ao último importado. Cargas históricas até ontem também são permitidas e não liberam essa atualização.` : resumo ? 'Ontem já foi atualizado hoje. As próximas importações podem conter somente hoje.' : 'Carregue um arquivo para conferir a prévia.'}</p>}
+      {modo === 'conciliacao' && !erro && <FaixaConciliacao resumo={resumo} />}
+      {modo === 'conciliacao' && resumo?.primeiraImportacaoPendente && <p className="text-xs text-muted-foreground">Primeira atualização de hoje: o período tem de começar até {dataBR(diaAnterior(hoje))} e ir até {dataBR(hoje)}. Cargas históricas até ontem também são permitidas e não liberam essa atualização.</p>}
       {carregando && <p role="status">Carregando histórico…</p>}
       {erro && <div role="alert" className="rounded-lg border border-destructive/30 p-3 text-sm"><strong>Histórico indisponível.</strong> {erro.includes('fn_pp_relatorio') ? 'A integração do banco ainda não está disponível. É possível conferir uma prévia local; salvar exige aplicar a migração após aprovação.' : erro}<Button className="ml-2" variant="outline" size="sm" disabled={ocupado} onClick={() => void atualizar()}>Tentar novamente</Button></div>}
       {aviso && <p role="status" className="rounded-lg bg-muted p-3 text-sm">{aviso}</p>}

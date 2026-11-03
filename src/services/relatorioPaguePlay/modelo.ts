@@ -121,6 +121,45 @@ export function inicioSugerido(
   return inicioDoArquivo < limite ? inicioDoArquivo : limite;
 }
 
+export type EstadoDiaConciliacao = 'completo' | 'sem_movimento' | 'andamento' | 'sem_importacao';
+
+export interface DiaConciliacao { data: string; estado: EstadoDiaConciliacao; quantidade: number }
+
+/**
+ * Os últimos `quantos` dias até hoje, como a faixa da conciliação mostra.
+ * Dia coberto por um arquivo que foi além dele = completo; coberto só no
+ * próprio dia = em andamento. Completo sem linha nenhuma = sem movimento (fim
+ * de semana, feriado): a conciliação só anda em dia útil.
+ */
+export function faixaConciliacao(
+  hoje: string, dias: ResumoSalvo['dias'], quantos = 14,
+): DiaConciliacao[] {
+  const salvos = new Map(dias.map(d => [d.data, d]));
+  const datas: string[] = [];
+  for (let d = hoje; datas.length < quantos; d = diaAnterior(d)) datas.unshift(d);
+  return datas.map(data => {
+    const salvo = salvos.get(data);
+    const estado: EstadoDiaConciliacao = !salvo ? 'sem_importacao'
+      : !salvo.completo ? 'andamento'
+      : salvo.quantidade ? 'completo' : 'sem_movimento';
+    return { data, estado, quantidade: salvo?.quantidade ?? 0 };
+  });
+}
+
+/**
+ * Por onde a próxima exportação deve começar: o dia seguinte ao último dia
+ * completo (assim um dia em andamento é refeito), nunca depois de ontem.
+ * `null` = hoje já foi atualizado e qualquer período serve.
+ */
+export function inicioRecomendado(hoje: string, primeira: boolean, dias: ResumoSalvo['dias']): string | null {
+  if (!primeira) return null;
+  const ontem = diaAnterior(hoje);
+  const completos = dias.filter(d => d.completo && d.data < hoje).map(d => d.data).sort();
+  const ultimo = completos[completos.length - 1];
+  const desde = ultimo ? diaSeguinte(ultimo) : ontem;
+  return desde < ontem ? desde : ontem;
+}
+
 export function validarPeriodo(inicio: string, fim: string, hoje: string, primeira: boolean) {
   if (!inicio || !fim || inicio > fim || fim > hoje) throw new Error('Confira o período: início até fim, sem datas futuras.');
   // Carga histórica não libera a atualização diária. Uma importação que inclua
