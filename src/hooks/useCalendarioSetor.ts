@@ -64,6 +64,8 @@ const CACHE = {
   /** A config do mês inteira: o feriado que vale depende do setor aberto. */
   metas: new Map<string, FonteDiasUteis>(),
   vendas: new Map<string, CalendarioDoMes>(),
+  /** O setor que a pessoa escolheu no seletor: reabrir o painel volta nele. */
+  escolhidos: new Map<string, string>(),
 };
 
 export interface CalendarioSetor {
@@ -109,7 +111,7 @@ export function useCalendarioSetor(
   const [setores, setSetores] = useState<SetorDoCalendario[]>(() => (base && CACHE.setores.get(base)) || []);
   /** A lista que está na tela já veio do banco nesta abertura (e não só da memória). */
   const [setoresConfirmados, setSetoresConfirmados] = useState<string | null>(null);
-  const [escolhido, setEscolhido] = useState<string | null>(null);
+  const [escolhido, setEscolhido] = useState<string | null>(() => (base && CACHE.escolhidos.get(base)) || null);
   const [carregandoSetores, setCarregandoSetores] = useState(() => !(base && CACHE.setores.has(base)));
   const [lido, setLido] = useState<{ chave: string; dados: MesDoCalendario } | null>(null);
   const [carregandoMes, setCarregandoMes] = useState(false);
@@ -211,6 +213,11 @@ export function useCalendarioSetor(
     return ehSegundaASexta(iso) && !(feriadosMetas ?? SEM_FERIADOS).includes(iso);
   }, [produto, calVendas, feriadosMetas]);
 
+  const escolher = useCallback((id: string) => {
+    if (base) CACHE.escolhidos.set(base, id);
+    setEscolhido(id);
+  }, [base]);
+
   const recarregar = useCallback(() => {
     setVersao(v => v + 1);
     window.dispatchEvent(new Event(EVENTO_CALENDARIO_SETOR));
@@ -219,7 +226,7 @@ export function useCalendarioSetor(
   return {
     setores,
     setorId,
-    setSetorId: setEscolhido,
+    setSetorId: escolher,
     setor: setores.find(s => s.id === setorId) ?? null,
     dados,
     mesPronto,

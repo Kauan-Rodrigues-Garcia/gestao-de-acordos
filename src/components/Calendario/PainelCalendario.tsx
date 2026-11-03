@@ -44,7 +44,7 @@ import { useCallback, useMemo, useRef, useState, type CSSProperties } from 'reac
 import { useTheme } from 'next-themes';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import {
-  CalendarDays, ChevronLeft, ChevronRight, EyeOff, ImageDown, Loader2, Palette, Send, Wand2, X,
+  Building2, CalendarDays, ChevronLeft, ChevronRight, EyeOff, ImageDown, Loader2, Palette, Send, Wand2, X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -260,14 +260,22 @@ function ConteudoCalendario() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {cal.setores.length > 1 && (
-            <Select value={setorId} onValueChange={cal.setSetorId}>
-              <SelectTrigger className="h-9 w-[190px]" aria-label="Setor"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {cal.setores.map(s => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          )}
+          {/* Qual setor está aberto, sempre à vista; quem enxerga mais de um troca aqui. */}
+          <div className="flex items-center gap-1.5">
+            <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+              <Building2 className="h-3.5 w-3.5" /> Setor
+            </span>
+            {cal.setores.length > 1 ? (
+              <Select value={setorId} onValueChange={cal.setSetorId}>
+                <SelectTrigger className="h-9 w-[200px] font-semibold" aria-label="Setor do calendário"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {cal.setores.map(s => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            ) : (
+              <span className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm font-semibold text-foreground">{setor?.nome}</span>
+            )}
+          </div>
           {!aguardandoLideranca && (
             <Button variant="outline" size="sm" className="gap-2" onClick={() => void copiarImagem()} disabled={copiando}
               title="Copiar o calendário como imagem, para colar no grupo">

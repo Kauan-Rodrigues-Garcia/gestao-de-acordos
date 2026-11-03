@@ -11,7 +11,7 @@
  *   4. Sem transferência, a lista confirmada não avisa o botão à toa.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 
 const { mockListarSetores, mockBuscarMes } = vi.hoisted(() => ({
   mockListarSetores: vi.fn(),
@@ -115,5 +115,34 @@ describe('useCalendarioSetor — transferência de setor', () => {
     await waitFor(() => expect(segunda.result.current.carregandoMes).toBe(false));
     expect(aviso).not.toHaveBeenCalled();
     window.removeEventListener('calendario-setor-mudou', aviso);
+  });
+});
+
+describe('useCalendarioSetor — seletor de setor', () => {
+  it('quem enxerga vários setores troca pelo seletor, e reabrir volta no escolhido', async () => {
+    mockListarSetores.mockResolvedValue([PLAY2, PLAY3]);
+    const primeira = renderHook(() => useCalendarioSetor('pessoa-6', 'empresa-4', 'cobranca', PLAY2.id, MES));
+    await waitFor(() => expect(primeira.result.current.dados.capa?.titulo).toBe('Mês do Play 2'));
+    expect(primeira.result.current.setores).toHaveLength(2);
+
+    act(() => primeira.result.current.setSetorId(PLAY3.id));
+    await waitFor(() => expect(primeira.result.current.dados.capa?.titulo).toBe('Mês do Play 3'));
+    primeira.unmount();
+
+    const segunda = renderHook(() => useCalendarioSetor('pessoa-6', 'empresa-4', 'cobranca', PLAY2.id, MES));
+    expect(segunda.result.current.setorId).toBe(PLAY3.id);
+  });
+
+  it('setor escolhido que saiu da lista: volta para o próprio', async () => {
+    mockListarSetores.mockResolvedValueOnce([PLAY2, PLAY3]);
+    const primeira = renderHook(() => useCalendarioSetor('pessoa-7', 'empresa-5', 'cobranca', PLAY2.id, MES));
+    await waitFor(() => expect(primeira.result.current.setores).toHaveLength(2));
+    act(() => primeira.result.current.setSetorId(PLAY3.id));
+    primeira.unmount();
+
+    mockListarSetores.mockResolvedValueOnce([PLAY2]);
+    const segunda = renderHook(() => useCalendarioSetor('pessoa-7', 'empresa-5', 'cobranca', PLAY2.id, MES));
+    await waitFor(() => expect(segunda.result.current.setores).toEqual([PLAY2]));
+    expect(segunda.result.current.setorId).toBe(PLAY2.id);
   });
 });
