@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FileSpreadsheet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { carregarResumo, excluirRelatorio, importarRelatorio } from '@/services/relatorioPaguePlay/service';
-import { diaAnterior, formatarCentavos, validarPeriodo, type Modalidade, type RelatorioLido, type ResumoSalvo } from '@/services/relatorioPaguePlay/modelo';
+import { diaAnterior, formatarCentavos, inicioSugerido, validarPeriodo, type Modalidade, type RelatorioLido, type ResumoSalvo } from '@/services/relatorioPaguePlay/modelo';
 import { documentoRelatorio } from './documento';
 import { useImportacao945 } from '@/hooks/useImportacao945';
 import { ImportarRelatorio945Modal } from '@/components/relatorio945/ImportarRelatorio945Modal';
@@ -105,7 +105,11 @@ export default function RelatorioPaguePlay({ empresaId, versao }: { empresaId: s
     try {
       const { lerEmWorker } = await import('@/services/relatorioPaguePlay/lerEmWorker');
       const dados = await lerEmWorker(file);
-      setArquivo({ nome: file.name, dados }); setInicio(dados.inicio); setFim(dados.fim);
+      // A conciliação só anda em dia útil: o arquivo exportado desde o último
+      // dia importado pode ter linhas só de hoje. Ver `inicioSugerido`.
+      setArquivo({ nome: file.name, dados });
+      setInicio(resumo ? inicioSugerido(dados.inicio, dados.fim, resumo.hoje, resumo.primeiraImportacaoPendente, resumo.dias) : dados.inicio);
+      setFim(dados.fim);
     } catch (e) { setAviso(mensagemErro(e)); }
     finally { setOcupado(false); if (input.current) input.current.value = ''; }
   }
@@ -172,13 +176,14 @@ export default function RelatorioPaguePlay({ empresaId, versao }: { empresaId: s
       </div>
       <p className="text-sm text-muted-foreground">Históricos independentes. Os valores de Pague Play, Coren e Cofen vêm das colunas do relatório; os percentuais exibem a participação desses valores no total.</p>
       {modo === 'pagamento' && <FaixaCobertura945 cobertura={imp945.cobertura} erro={imp945.erroCobertura} />}
-      {modo === 'conciliacao' && <p className="text-sm">{resumo?.primeiraImportacaoPendente ? `Primeira atualização de hoje: importe ${dataBR(diaAnterior(hoje))} e ${dataBR(hoje)} juntos. Cargas históricas até ontem também são permitidas e não liberam essa atualização.` : resumo ? 'Ontem já foi atualizado hoje. As próximas importações podem conter somente hoje.' : 'Carregue um arquivo para conferir a prévia.'}</p>}
+      {modo === 'conciliacao' && <p className="text-sm">{resumo?.primeiraImportacaoPendente ? `Primeira atualização de hoje: o período tem de começar até ${dataBR(diaAnterior(hoje))} e ir até ${dataBR(hoje)}. A conciliação só anda em dia útil — depois de fim de semana ou feriado, exporte desde o dia seguinte ao último importado. Cargas históricas até ontem também são permitidas e não liberam essa atualização.` : resumo ? 'Ontem já foi atualizado hoje. As próximas importações podem conter somente hoje.' : 'Carregue um arquivo para conferir a prévia.'}</p>}
       {carregando && <p role="status">Carregando histórico…</p>}
       {erro && <div role="alert" className="rounded-lg border border-destructive/30 p-3 text-sm"><strong>Histórico indisponível.</strong> {erro.includes('fn_pp_relatorio') ? 'A integração do banco ainda não está disponível. É possível conferir uma prévia local; salvar exige aplicar a migração após aprovação.' : erro}<Button className="ml-2" variant="outline" size="sm" disabled={ocupado} onClick={() => void atualizar()}>Tentar novamente</Button></div>}
       {aviso && <p role="status" className="rounded-lg bg-muted p-3 text-sm">{aviso}</p>}
       {arquivo && modo === 'conciliacao' && <div className="space-y-3 rounded-lg border border-border p-4">
         <p className="font-medium">{arquivo.nome} · {arquivo.dados.linhas.length} pagamentos únicos · {formatarCentavos(arquivo.dados.totais.total)}</p>
         <p className="text-sm">Pague Play: {formatarCentavos(arquivo.dados.totais.pp)} · Coren: {formatarCentavos(arquivo.dados.totais.coren)} · Cofen: {formatarCentavos(arquivo.dados.totais.cofen)}</p>
+        {inicio < arquivo.dados.inicio && <p className="text-sm">As linhas vão de {dataBR(arquivo.dados.inicio)} a {dataBR(arquivo.dados.fim)}: a conciliação só anda em dia útil. O período sugerido começa em {dataBR(inicio)}, o dia seguinte ao último dia já importado — confira se foi isso que você exportou.</p>}
         <p className="text-sm text-muted-foreground">{arquivo.dados.rodapeConferido ? 'Os quatro totais conferem com o rodapé do arquivo.' : arquivo.dados.camposConferidos.length ? `${arquivo.dados.camposConferidos.length} totais conferidos no rodapé; os demais não constam nele e foram somados pelas linhas.` : 'Arquivo sem rodapé: totais calculados a partir das linhas, sem conferência externa.'} {arquivo.dados.duplicadas > 0 && `${arquivo.dados.duplicadas} linhas idênticas repetidas serão ignoradas.`} {arquivo.dados.estornos > 0 && `${arquivo.dados.estornos} ${arquivo.dados.estornos === 1 ? 'cartão estornado entra' : 'cartões estornados entram'} com o valor líquido (pagamento menos estorno).`}</p>
         <div className="flex flex-wrap gap-4">
           <label className="text-sm">Início do período exportado<input aria-label="Início do período exportado" type="date" value={inicio} max={hoje} disabled={ocupado} onChange={e => { setInicio(e.target.value); setConfirmado(false); }} className="block rounded border border-border bg-background p-2" /></label>

@@ -88,6 +88,39 @@ export function diaAnterior(iso: string) {
   return d.toISOString().slice(0, 10);
 }
 
+export function diaSeguinte(iso: string) {
+  const d = new Date(`${iso}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * O início do período que a tela sugere para o arquivo.
+ *
+ * As datas das linhas não dizem o período exportado: a conciliação só anda em
+ * dia útil. Exportado de 31/10 a 03/11/2026 (sábado, domingo e o feriado de
+ * Finados no meio), o arquivo trouxe 2.206 linhas, todas com Data 03/11 — e a
+ * tela sugeria 03/11 a 03/11, que a trava «a primeira importação do dia deve
+ * incluir ontem e hoje» recusava.
+ *
+ * Na primeira importação do dia que chega até hoje, a sugestão é o dia seguinte
+ * ao último dia já importado (o período que faltava), nunca depois de ontem.
+ * Fora disso, vale a primeira linha do arquivo. É sugestão: a pessoa confirma
+ * que exportou esse período.
+ */
+export function inicioSugerido(
+  inicioDoArquivo: string, fimDoArquivo: string, hoje: string, primeira: boolean,
+  diasImportados: readonly { data: string }[],
+): string {
+  if (!primeira || fimDoArquivo !== hoje) return inicioDoArquivo;
+  const ontem = diaAnterior(hoje);
+  const anteriores = diasImportados.map(d => d.data).filter(d => d < hoje).sort();
+  const ultimo = anteriores[anteriores.length - 1];
+  const desde = ultimo ? diaSeguinte(ultimo) : ontem;
+  const limite = desde < ontem ? desde : ontem;
+  return inicioDoArquivo < limite ? inicioDoArquivo : limite;
+}
+
 export function validarPeriodo(inicio: string, fim: string, hoje: string, primeira: boolean) {
   if (!inicio || !fim || inicio > fim || fim > hoje) throw new Error('Confira o período: início até fim, sem datas futuras.');
   // Carga histórica não libera a atualização diária. Uma importação que inclua
