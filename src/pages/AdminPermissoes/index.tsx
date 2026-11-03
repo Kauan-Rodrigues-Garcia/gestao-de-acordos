@@ -14,15 +14,18 @@
  */
 import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { useState } from 'react';
-import { ShieldCheck, Users, Info } from 'lucide-react';
+import { ShieldCheck, Users, Info, Building2 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { PorCargo } from './PorCargo';
 import { PorPessoa } from './PorPessoa';
+import { PorSetor } from './PorSetor';
 
 export default function AdminPermissoes() {
   const { temPermissao, loading } = useCargoPermissoes();
   const [aba, setAba] = useState('cargo');
+  // O aviso do Por cargo («estes setores têm mapa próprio») abre o setor aqui.
+  const [setorInicial, setSetorInicial] = useState<{ setorId: string; cargo: string } | null>(null);
   // Monitoramento de uso: nível 2, dentro da aba «Permissões» de Configurações.
   useSubAbaUso(aba, 2);
 
@@ -43,7 +46,7 @@ export default function AdminPermissoes() {
       <div>
         <h2 className="text-lg font-semibold text-foreground">Permissões</h2>
         <p className="text-sm text-muted-foreground mt-0.5">
-          O que cada cargo pode fazer, e as exceções de pessoas específicas.
+          O que cada cargo pode fazer, o que muda em cada setor e as exceções de pessoas específicas.
         </p>
       </div>
 
@@ -66,13 +69,19 @@ export default function AdminPermissoes() {
           <TabsTrigger value="cargo" className="gap-1.5">
             <ShieldCheck className="w-3.5 h-3.5" /> Por cargo
           </TabsTrigger>
+          <TabsTrigger value="setor" className="gap-1.5">
+            <Building2 className="w-3.5 h-3.5" /> Por setor
+          </TabsTrigger>
           <TabsTrigger value="pessoa" className="gap-1.5">
             <Users className="w-3.5 h-3.5" /> Por pessoa
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="cargo" className="mt-4">
-          <PorCargo />
+          <PorCargo onVerNoSetor={(setorId, cargo) => { setSetorInicial({ setorId, cargo }); setAba('setor'); }} />
+        </TabsContent>
+        <TabsContent value="setor" className="mt-4">
+          <PorSetor key={setorInicial ? `${setorInicial.setorId}:${setorInicial.cargo}` : 'setor'} inicial={setorInicial} />
         </TabsContent>
         <TabsContent value="pessoa" className="mt-4">
           <PorPessoa />

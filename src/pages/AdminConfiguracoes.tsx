@@ -3,7 +3,7 @@ import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { copiarTexto } from '@/lib/clipboard';
 import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Settings, MessageSquare, Plus, Save, Trash2, Edit, Check, Database, CheckCircle2, AlertTriangle, Copy, Building2, ShieldCheck, ClipboardList, ArrowLeftRight, Tag, FileText, Briefcase } from 'lucide-react';
+import { Settings, MessageSquare, Plus, Save, Trash2, Edit, Check, Database, CheckCircle2, AlertTriangle, Copy, Building2, ShieldCheck, ClipboardList, ArrowLeftRight, Tag, FileText, Briefcase, PartyPopper, type LucideIcon } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,14 +23,12 @@ import AdminLogs from '@/pages/AdminLogs';
 import AdminDiretoExtra from '@/pages/AdminDiretoExtra';
 import AdminTags from '@/components/admin/AdminTags';
 import AcessoMultiempresa from '@/components/admin/AcessoMultiempresa';
-import CorridaConfig from '@/components/admin/CorridaConfig';
 import LiberacaoChat from '@/components/admin/LiberacaoChat';
 import CrachaPedidoConfig from '@/components/admin/CrachaPedidoConfig';
 import AdminDocumentacoes from '@/pages/AdminDocumentacoes';
 import AdminCargos from '@/components/admin/AdminCargos';
 import ImportarAcordosCard from '@/components/admin/ImportarAcordosCard';
-import RankingQuitacaoConfig from '@/components/admin/RankingQuitacaoConfig';
-import SireneConfig from '@/components/admin/SireneConfig';
+import AbaEventos from '@/components/admin/AbaEventos';
 
 const MIGRATION_SQL = `ALTER TABLE public.acordos
   ADD COLUMN IF NOT EXISTS instituicao TEXT;
@@ -82,16 +80,43 @@ export default function AdminConfiguracoes() {
   const podeVerMultiempresa = temPermissao('config_sub_multiempresa');
   // Setores com o Ranking de quitação, e os prêmios. A função do banco confere a chave de novo.
   const podeConfigurarRankingQuitacao = ehCobranca && temPermissao('ranking_quitacao_configurar');
-  const abasVisiveis = [
-    podeVerGeral && 'geral',
-    podeVerPermissoes && 'permissoes',
-    podeVerPermissoes && 'cargos',
-    podeVerDiretoExtra && 'direto_extra',
-    podeVerTags && 'tags',
-    podeVerLogs && 'logs',
-    podeVerDocumentacoes && 'documentacoes',
-    podeVerMultiempresa && 'multiempresa',
-  ].filter((aba): aba is string => Boolean(aba));
+  /*
+   * O menu da tela, por assunto (03/11/2026). Eram oito abas numa fileira, e a
+   * Geral juntava de tudo: crachá, corrida, sirene, chat, ranking, banco de
+   * dados, importação e modelos de mensagem, um embaixo do outro.
+   *
+   * Agora cada coisa mora no seu grupo, e todo evento ou gincana tem a aba
+   * Eventos e gincanas. As chaves não mudaram: Eventos e Banco de dados eram
+   * cards da Geral, e continuam pedindo `config_sub_geral` além da sua própria.
+   */
+  const podeVerEventos = podeVerGeral && (ehSuperAdmin || podeConfigurarRankingQuitacao);
+  const podeVerDados = podeVerGeral && podeVerBancoDados;
+  const secoes: { titulo: string; abas: { id: string; rotulo: string; icone: LucideIcon; visivel: boolean }[] }[] = [
+    { titulo: 'Operação', abas: [
+      { id: 'geral', rotulo: 'Geral', icone: Settings, visivel: podeVerGeral },
+      { id: 'eventos', rotulo: 'Eventos e gincanas', icone: PartyPopper, visivel: podeVerEventos },
+    ] },
+    { titulo: 'Acesso', abas: [
+      { id: 'permissoes', rotulo: 'Permissões', icone: ShieldCheck, visivel: podeVerPermissoes },
+      // Cargos: quem vê as permissões vê o cadastro; editar é do Super Admin,
+      // como no banco (policies de `cargos`).
+      { id: 'cargos', rotulo: 'Cargos', icone: Briefcase, visivel: podeVerPermissoes },
+      { id: 'multiempresa', rotulo: 'Multiempresa', icone: Building2, visivel: podeVerMultiempresa },
+    ] },
+    { titulo: 'Cobrança', abas: [
+      { id: 'direto_extra', rotulo: 'Direto e Extra', icone: ArrowLeftRight, visivel: podeVerDiretoExtra },
+      { id: 'tags', rotulo: 'Tags', icone: Tag, visivel: podeVerTags },
+    ] },
+    { titulo: 'Sistema', abas: [
+      { id: 'dados', rotulo: 'Banco de dados', icone: Database, visivel: podeVerDados },
+      { id: 'logs', rotulo: 'Logs', icone: ClipboardList, visivel: podeVerLogs },
+      { id: 'documentacoes', rotulo: 'Documentações', icone: FileText, visivel: podeVerDocumentacoes },
+    ] },
+  ];
+  const secoesVisiveis = secoes
+    .map(secao => ({ ...secao, abas: secao.abas.filter(aba => aba.visivel) }))
+    .filter(secao => secao.abas.length > 0);
+  const abasVisiveis = secoesVisiveis.flatMap(secao => secao.abas.map(aba => aba.id));
   const tabAtiva = abasVisiveis.includes(tabFromUrl) ? tabFromUrl : abasVisiveis[0];
   // Monitoramento de uso: a aba aberta. As de dentro (Logs, Permissões…) vêm no nível 2.
   useSubAbaUso(tabAtiva);
@@ -208,7 +233,7 @@ export default function AdminConfiguracoes() {
             <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
               <Settings className="w-5 h-5 text-primary" /> Configurações
             </h1>
-            <p className="text-sm text-muted-foreground mt-0.5">Configurações do sistema, permissões e logs</p>
+            <p className="text-sm text-muted-foreground mt-0.5">Operação, eventos, acesso e sistema da empresa</p>
             {empresa && (
               <p className="text-xs text-muted-foreground/70 mt-1 flex items-center gap-1">
                 <Building2 className="w-3 h-3" />
@@ -219,96 +244,115 @@ export default function AdminConfiguracoes() {
         </div>
       </div>
 
-      {/* Abas internas */}
-      {tabAtiva ? <Tabs value={tabAtiva} onValueChange={selecionarAba} className="flex-1 flex flex-col">
+      {/* Abas internas, em grupos na mesma fileira (o app já tem o menu lateral) */}
+      {tabAtiva ? <Tabs value={tabAtiva} onValueChange={selecionarAba} className="flex min-h-0 flex-1 flex-col">
         <div className="px-6 border-b border-border">
           <TabsList className="h-10 bg-transparent p-0 gap-0">
-            {podeVerGeral && <TabsTrigger
-              value="geral"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
-            >
-              <Settings className="w-4 h-4" /> Geral
-            </TabsTrigger>}
-            {podeVerPermissoes && <TabsTrigger
-              value="permissoes"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
-            >
-              <ShieldCheck className="w-4 h-4" /> Permissões
-            </TabsTrigger>}
-            {/* Cargos: quem vê as permissões vê o cadastro; editar é do Super
-                Admin, como no banco (policies de `cargos`). */}
-            {podeVerPermissoes && <TabsTrigger
-              value="cargos"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
-            >
-              <Briefcase className="w-4 h-4" /> Cargos
-            </TabsTrigger>}
-            {podeVerDiretoExtra && (
-            <TabsTrigger
-              value="direto_extra"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
-            >
-              <ArrowLeftRight className="w-4 h-4" /> Direto e Extra
-            </TabsTrigger>
-            )}
-            {podeVerTags && (
-            <TabsTrigger
-              value="tags"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
-            >
-              <Tag className="w-4 h-4" /> Tags
-            </TabsTrigger>
-            )}
-            {podeVerLogs && (
-            <TabsTrigger
-              value="logs"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
-            >
-              <ClipboardList className="w-4 h-4" /> Logs
-            </TabsTrigger>
-            )}
-            {podeVerDocumentacoes && <TabsTrigger
-              value="documentacoes"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
-            >
-              <FileText className="w-4 h-4" /> Documentações
-            </TabsTrigger>}
-            {podeVerMultiempresa && (
-            <TabsTrigger
-              value="multiempresa"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
-            >
-              <Building2 className="w-4 h-4" /> Multiempresa
-            </TabsTrigger>
-            )}
+            {secoesVisiveis.map((secao, i) => (
+              <div key={secao.titulo} role="group" aria-label={secao.titulo} title={secao.titulo}
+                className="flex h-full shrink-0 items-center">
+                {/* O divisor entre os grupos: Operação | Acesso | Cobrança | Sistema */}
+                {i > 0 && <span aria-hidden className="mx-1.5 h-5 w-px bg-border" />}
+                {secao.abas.map(({ id, rotulo, icone: Icone }) => (
+                  <TabsTrigger
+                    key={id}
+                    value={id}
+                    className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 h-10 text-sm gap-2"
+                  >
+                    <Icone className="w-4 h-4" /> {rotulo}
+                  </TabsTrigger>
+                ))}
+              </div>
+            ))}
           </TabsList>
         </div>
 
         {/* ─── Aba: Geral ──────────────────────────────────────────────── */}
-        {podeVerGeral && <TabsContent value="geral" className="flex-1 overflow-y-auto p-6 mt-0">
+        {podeVerGeral && <TabsContent value="geral" className="mt-0 min-w-0 flex-1 overflow-y-auto p-6">
           <div className="max-w-4xl mx-auto space-y-6">
+
+          {/* ── Pedido do crachá (26/10/2026): liga/desliga o cartão e mostra quem
+              respondeu, por setor. Ligar é do super_admin; ler é de quem abre
+              esta aba — `fn_cracha_pedido_painel` cobra `config_sub_geral`. */}
+          <CrachaPedidoConfig />
 
           {/* ── Chat interno ─────────────────────────────────────────────
               A trava de LANÇAMENTO, que é outra coisa das permissões: ela
               segura até o administrador, e o painel de Cargos só passa a
               mandar depois que ela abre. Só super_admin vira — a policy
               `chat_config_update` confere de novo no banco. */}
-          {/* ── Pedido do crachá (26/10/2026): liga/desliga o cartão e mostra quem
-              respondeu, por setor. Ligar é do super_admin; ler é de quem abre
-              esta aba — `fn_cracha_pedido_painel` cobra `config_sub_geral`. */}
-          <CrachaPedidoConfig />
-
-          {/* ── Corrida da Sorte: o sorteio em forma de corrida (20/10/2026). Só
-              super_admin — as funções `fn_corrida_*` conferem de novo no banco. */}
-          {ehSuperAdmin && <CorridaConfig />}
-
-          {/* ── Sirene: luz e som por horário, cor e setor (29/10/2026). Só
-              super_admin — as funções `fn_sirene_*` conferem de novo no banco. */}
-          {ehSuperAdmin && <SireneConfig />}
-
           {ehSuperAdmin && <LiberacaoChat />}
 
-          {podeConfigurarRankingQuitacao && <RankingQuitacaoConfig />}
+          {/* Modelos de mensagem */}
+          <Card className="border-border">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4 text-primary" /> Modelos de Mensagem WhatsApp
+                </CardTitle>
+                <Button size="sm" onClick={abrirCriar}>
+                  <Plus className="w-4 h-4 mr-2" /> Novo Modelo
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {/* Variáveis disponíveis */}
+              <div className="mb-4 p-3 bg-muted/30 rounded-lg">
+                <p className="text-xs font-medium text-muted-foreground mb-2">Variáveis disponíveis para personalização:</p>
+                <div className="flex flex-wrap gap-2">
+                  {variaveis.map(v => (
+                    <code key={v} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded font-mono">{v}</code>
+                  ))}
+                </div>
+              </div>
+
+              {loading ? (
+                <p className="text-sm text-muted-foreground text-center py-4">Carregando...</p>
+              ) : (
+                <div className="space-y-3">
+                  {modelos.map(m => (
+                    <motion.div
+                      key={m.id}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="border border-border rounded-lg p-4"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <p className="text-sm font-semibold text-foreground">{m.nome}</p>
+                            {m.ativo && <span className="text-xs bg-success/10 text-success px-1.5 py-0.5 rounded-full">Ativo</span>}
+                          </div>
+                          <p className="text-xs text-muted-foreground leading-relaxed">{m.conteudo}</p>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <Switch checked={m.ativo} onCheckedChange={() => toggleAtivo(m)} />
+                          <Button variant="ghost" size="icon" className="w-7 h-7" onClick={() => abrirEditar(m)}>
+                            <Edit className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="w-7 h-7 text-destructive hover:bg-destructive/10" onClick={() => excluir(m.id)}>
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          </div>
+        </TabsContent>}
+
+        {/* ─── Aba: Eventos e gincanas ────────────────────────────────── */}
+        {podeVerEventos && <TabsContent value="eventos" className="mt-0 min-w-0 flex-1 overflow-y-auto p-6">
+          <AbaEventos ehSuperAdmin={ehSuperAdmin} podeConfigurarRankingQuitacao={podeConfigurarRankingQuitacao} />
+        </TabsContent>}
+
+        {/* ─── Aba: Banco de dados ─────────────────────────────────────── */}
+        {podeVerDados && <TabsContent value="dados" className="mt-0 min-w-0 flex-1 overflow-y-auto p-6">
+          <div className="max-w-4xl mx-auto space-y-6">
 
           {/* ── Status do Banco de Dados ─────────────────────────────── */}
           {/* Gate: visível apenas para Admin e Super Admin (item #8) */}
@@ -377,107 +421,48 @@ export default function AdminConfiguracoes() {
               só Admin/Super Admin, porque grava tabulação no nome de terceiros. */}
           {podeVerBancoDados && <ImportarAcordosCard />}
 
-          {/* Modelos de mensagem */}
-          <Card className="border-border">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                  <MessageSquare className="w-4 h-4 text-primary" /> Modelos de Mensagem WhatsApp
-                </CardTitle>
-                <Button size="sm" onClick={abrirCriar}>
-                  <Plus className="w-4 h-4 mr-2" /> Novo Modelo
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {/* Variáveis disponíveis */}
-              <div className="mb-4 p-3 bg-muted/30 rounded-lg">
-                <p className="text-xs font-medium text-muted-foreground mb-2">Variáveis disponíveis para personalização:</p>
-                <div className="flex flex-wrap gap-2">
-                  {variaveis.map(v => (
-                    <code key={v} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded font-mono">{v}</code>
-                  ))}
-                </div>
-              </div>
-
-              {loading ? (
-                <p className="text-sm text-muted-foreground text-center py-4">Carregando...</p>
-              ) : (
-                <div className="space-y-3">
-                  {modelos.map(m => (
-                    <motion.div
-                      key={m.id}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="border border-border rounded-lg p-4"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <p className="text-sm font-semibold text-foreground">{m.nome}</p>
-                            {m.ativo && <span className="text-xs bg-success/10 text-success px-1.5 py-0.5 rounded-full">Ativo</span>}
-                          </div>
-                          <p className="text-xs text-muted-foreground leading-relaxed">{m.conteudo}</p>
-                        </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          <Switch checked={m.ativo} onCheckedChange={() => toggleAtivo(m)} />
-                          <Button variant="ghost" size="icon" className="w-7 h-7" onClick={() => abrirEditar(m)}>
-                            <Edit className="w-3.5 h-3.5" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="w-7 h-7 text-destructive hover:bg-destructive/10" onClick={() => excluir(m.id)}>
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
-                        </div>
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
           </div>
         </TabsContent>}
 
         {/* ─── Aba: Permissões ─────────────────────────────────────────── */}
-        {podeVerPermissoes && <TabsContent value="permissoes" className="flex-1 overflow-y-auto mt-0">
+        {podeVerPermissoes && <TabsContent value="permissoes" className="mt-0 min-w-0 flex-1 overflow-y-auto">
           <AdminPermissoes />
         </TabsContent>}
 
         {/* ─── Aba: Cargos ─────────────────────────────────────────────── */}
-        {podeVerPermissoes && <TabsContent value="cargos" className="flex-1 overflow-y-auto p-6 mt-0">
+        {podeVerPermissoes && <TabsContent value="cargos" className="mt-0 min-w-0 flex-1 overflow-y-auto p-6">
           <AdminCargos podeEditar={ehSuperAdmin} />
         </TabsContent>}
 
         {/* ─── Aba: Direto e Extra ─────────────────────────────────────── */}
         {podeVerDiretoExtra && (
-        <TabsContent value="direto_extra" className="flex-1 overflow-y-auto mt-0">
+        <TabsContent value="direto_extra" className="mt-0 min-w-0 flex-1 overflow-y-auto">
           <AdminDiretoExtra />
         </TabsContent>
         )}
 
         {/* ─── Aba: Tags ───────────────────────────────────────────────── */}
         {podeVerTags && (
-        <TabsContent value="tags" className="flex-1 overflow-y-auto p-6 mt-0">
+        <TabsContent value="tags" className="mt-0 min-w-0 flex-1 overflow-y-auto p-6">
           <AdminTags />
         </TabsContent>
         )}
 
         {/* ─── Aba: Logs ───────────────────────────────────────────────── */}
         {podeVerLogs && (
-        <TabsContent value="logs" className="flex-1 overflow-y-auto mt-0">
+        <TabsContent value="logs" className="mt-0 min-w-0 flex-1 overflow-y-auto">
           <AdminLogs />
         </TabsContent>
         )}
 
         {/* ─── Aba: Documentações LGPD ─────────────────────────────────── */}
-        {podeVerDocumentacoes && <TabsContent value="documentacoes" className="flex-1 overflow-y-auto mt-0">
+        {podeVerDocumentacoes && <TabsContent value="documentacoes" className="mt-0 min-w-0 flex-1 overflow-y-auto">
           <AdminDocumentacoes />
         </TabsContent>}
 
         {/* ─── Aba: Multiempresa (só super_admin) ──────────────────────── */}
         {podeVerMultiempresa && (
-        <TabsContent value="multiempresa" className="flex-1 overflow-y-auto p-6 mt-0">
+        <TabsContent value="multiempresa" className="mt-0 min-w-0 flex-1 overflow-y-auto p-6">
           <AcessoMultiempresa />
         </TabsContent>
         )}
