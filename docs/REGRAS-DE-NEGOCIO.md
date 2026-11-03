@@ -1689,7 +1689,8 @@ gravado todo dia às 23:50 pelo cron `composicao-mes-congelar`):
 | foto | a de hoje, se a pessoa existe — é a mesma pessoa |
 | alcance de quem olha (que equipes/setores enxerga) | hoje — é permissão |
 
-**O que é só leitura no mês fechado** — acordos (cadeado de sempre), metas,
+**O que é só leitura no mês fechado** — ~~acordos (cadeado de sempre)~~ (ver
+abaixo, 03/11/2026), metas,
 dias úteis/quartis, comissão (config, faixas, exceções, bônus), Pix (registrar,
 importar, mudar valor/NR/dono, excluir não desaprovado) e ajuste manual. Trava na
 tela (`useFechamentoMes`) **e** no banco (gatilhos `trg_trava_mes_fechado`,
@@ -1745,6 +1746,16 @@ Comissão, meta de Pix, ajuste, vendas, indicações, transferências e comemora
 guardam o `equipe_id` sem FK, como `metas.referencia_id`; o nome do mês vem de
 `composicao_mes_equipe`. Só o mês em aberto perde a comissão e a meta de Pix da
 equipe (ou do subgrupo) excluída.
+
+#### Acordos saem do cadeado (03/11/2026)
+
+**Acordo é editável em qualquer mês**, fechado ou não: criar com vencimento em
+mês passado, editar, mudar status, reagendar, excluir, restaurar da lixeira e
+WhatsApp. Acordo é dado manual — não há relatório do outro lado para divergir —,
+e o dinheiro do fechamento vem do Analítico e do 59, que seguem travados.
+Metas, dias úteis, comissão, Pix e ajuste manual continuam só leitura. A chave é
+`ACORDOS_FECHAM_COM_O_MES` em `lib/fechamentoMes.ts`; a tabela `acordos` nunca
+teve gatilho de mês fechado no banco, então não há migration.
 
 **Recebido por equipe/setor de mês fechado lê o retrato** (`20261029222000`).
 `fn_recebido_por_equipe` e `fn_recebido_por_setor` (desafios, app, avisos, TV,

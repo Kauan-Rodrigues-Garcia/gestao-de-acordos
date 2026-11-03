@@ -50,7 +50,7 @@ import { abrirChatplay } from '@/lib/chatplay';
 import { camposComCpf, ERRO_CPF_NO_CODIGO } from '@/lib/cpf';
 import { ehSoNumeros, propsSoNumeros } from '@/lib/soNumeros';
 import {
-  estadoFechamentoDaData, mensagemFechamento, mesDaData,
+  estadoFechamentoDoAcordo, mensagemFechamento, mesDaData,
 } from '@/lib/fechamentoMes';
 import {
   formatBRL, temEntrada, valorDemaisParcelas, totalComEntrada,
@@ -230,8 +230,10 @@ export function AcordoEditInline({
     // Os DOIS meses precisam estar abertos: o de origem (o mês que perderia o
     // valor) e o de destino (o que ganharia). Checar só um deles deixaria mover
     // dinheiro para dentro ou para fora de um fechamento já apresentado.
+    // Desligado desde 03/11/2026: acordo não fecha com o mês
+    // (`ACORDOS_FECHAM_COM_O_MES`).
     for (const data of [acordo.vencimento, vencimento]) {
-      if (estadoFechamentoDaData({ data, cargo: perfil?.perfil }).bloqueado) {
+      if (estadoFechamentoDoAcordo({ data, cargo: perfil?.perfil }).bloqueado) {
         toast.error(mensagemFechamento(mesDaData(data)));
         return;
       }

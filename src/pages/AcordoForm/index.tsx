@@ -82,7 +82,7 @@ export default function AcordoForm() {
 
   // Cadeado da EDIÇÃO. Na criação não há mês ainda — o vencimento é escolhido
   // dentro do formulário, e a barreira fica no salvar (`AcordoNovoInline`).
-  const fechamento = useFechamentoMes(mesDaData(acordo?.vencimento));
+  const fechamento = useFechamentoMes(mesDaData(acordo?.vencimento), { acordos: true });
 
   if (loadingData) return <div className="p-6 text-center text-muted-foreground">Carregando...</div>;
   if (!perfilLocal && perfilLoading) return <div className="p-6 text-center text-muted-foreground">Carregando perfil...</div>;

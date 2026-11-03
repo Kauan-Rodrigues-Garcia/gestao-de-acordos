@@ -3,9 +3,11 @@
  *
  * ## A regra
  *
- * Virou o mês, o anterior FECHA: não se cria acordo com vencimento nele, não se
- * edita, não se exclui, não se dispara WhatsApp, não se reagenda. A tela passa a
- * mostrar cadeado, e quem tenta agir recebe o motivo em vez de um erro genérico.
+ * Virou o mês, o anterior FECHA. A tela passa a mostrar cadeado, e quem tenta
+ * agir recebe o motivo em vez de um erro genérico.
+ *
+ * Até 03/11/2026 o cadeado começava pelos acordos (criar, editar, excluir,
+ * WhatsApp, reagendar). Acordo saiu dele — ver `ACORDOS_FECHAM_COM_O_MES`.
  *
  * Desde 01/10/2026 o mesmo cadeado vale para metas, dias úteis, comissão, Pix e
  * ajuste manual, com trava também no banco (`20261001130000`). O quadro inteiro
@@ -134,6 +136,30 @@ export function estadoFechamentoDaData(params: {
   const mes = mesDaData(params.data);
   if (!mes) return ABERTO;
   return estadoFechamento({ mes, cargo: params.cargo, hoje: params.hoje });
+}
+
+/**
+ * Acordo fecha com o mês? Desde 03/11/2026, não.
+ *
+ * Acordo é dado digitado à mão, não número de relatório: não tem ERP do outro
+ * lado para divergir dele, e o operador precisa corrigir status, vencimento e
+ * parcela de mês passado sem pedir ao super admin. O dinheiro do fechamento vem
+ * do Analítico e do 59, que continuam no cadeado — como metas, dias úteis,
+ * comissão, Pix e ajuste manual.
+ *
+ * Uma constante, e não as checagens apagadas tela por tela, para que voltar
+ * atrás seja trocar `false` por `true` aqui.
+ */
+export const ACORDOS_FECHAM_COM_O_MES = false;
+
+/** Estado do cadeado para um ACORDO, pela data dele (vencimento ou parcela). */
+export function estadoFechamentoDoAcordo(params: {
+  data: string | null | undefined;
+  cargo: string | null | undefined;
+  hoje?: string;
+}): EstadoFechamento {
+  if (!ACORDOS_FECHAM_COM_O_MES) return ABERTO;
+  return estadoFechamentoDaData(params);
 }
 
 /** Rótulo curto do cadeado, para chip e tooltip. */

@@ -40,7 +40,7 @@ import { parseCurrencyInput, STATUS_LABELS_PAGUEPLAY, STATUS_COLORS } from '@/li
 import {
   dataDaParcela, mudancasDaParcela, paraLinha, type LinhaParcelaPP,
 } from '@/services/parcelasPP';
-import { estadoFechamentoDaData, mensagemFechamento, mesDaData } from '@/lib/fechamentoMes';
+import { estadoFechamentoDoAcordo, mensagemFechamento, mesDaData } from '@/lib/fechamentoMes';
 
 interface Props {
   acordo: Acordo;
@@ -108,7 +108,7 @@ export function ModalEditarParcelasPP({ acordo, open, onClose, onSaved }: Props)
       // Mesma trava da edição: o mês que perde e o que ganha precisam estar
       // abertos.
       for (const data of [dataDaParcela(l.original), l.data]) {
-        if (estadoFechamentoDaData({ data, cargo: perfil?.perfil }).bloqueado) {
+        if (estadoFechamentoDoAcordo({ data, cargo: perfil?.perfil }).bloqueado) {
           toast.error(mensagemFechamento(mesDaData(data)));
           return;
         }

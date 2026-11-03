@@ -215,7 +215,7 @@ export default function Lixeira() {
     podeRestaurarItemLixeira(item, { meuId: perfil?.id, temChave: podeRestaurar, soOsProprios });
 
   // O mesmo cadeado de mês fechado da exclusão: devolver um acordo mexe no mês dele.
-  const fechamento = useFechamentoMes(null);
+  const fechamento = useFechamentoMes(null, { acordos: true });
 
   const carregar = useCallback(async () => {
     if (!empresa?.id) return;

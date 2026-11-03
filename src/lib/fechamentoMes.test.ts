@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   mesFechado, mesDaData, podeIgnorarFechamento,
-  estadoFechamento, estadoFechamentoDaData,
+  estadoFechamento, estadoFechamentoDaData, estadoFechamentoDoAcordo,
   mensagemFechamento, mensagemFechamentoLiberado,
 } from './fechamentoMes';
 
@@ -138,5 +138,20 @@ describe('mensagens', () => {
     const msg = mensagemFechamentoLiberado('2026-07');
     expect(msg).toContain('Julho 2026');
     expect(msg).toContain('já foi apresentado');
+  });
+});
+
+describe('estadoFechamentoDoAcordo', () => {
+  it('acordo de mês fechado continua editável para qualquer cargo (03/11/2026)', () => {
+    for (const cargo of ['operador', 'lider', 'gerencia', null]) {
+      const e = estadoFechamentoDoAcordo({ data: '2026-07-15', cargo, hoje: HOJE });
+      expect(e.bloqueado).toBe(false);
+      expect(e.fechado).toBe(false);
+    }
+  });
+
+  it('o resto segue no cadeado: a mesma data fora de acordo bloqueia', () => {
+    expect(estadoFechamentoDaData({ data: '2026-07-15', cargo: 'operador', hoje: HOJE }).bloqueado)
+      .toBe(true);
   });
 });

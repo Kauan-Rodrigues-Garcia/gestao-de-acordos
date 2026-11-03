@@ -23,7 +23,7 @@ import { calcularParcelas, totalComEntrada, formatBRL } from '@/lib/money';
 import { camposComCpf, ERRO_CPF_NO_CODIGO } from '@/lib/cpf';
 import { ehSoNumeros } from '@/lib/soNumeros';
 import {
-  estadoFechamentoDaData, mensagemFechamento, mesDaData,
+  estadoFechamentoDoAcordo, mensagemFechamento, mesDaData,
 } from '@/lib/fechamentoMes';
 import { ultimoDiaProxMes } from '@/lib/vencimentos';
 import { criarNotificacao }    from '@/services/notificacoes.service';
@@ -282,7 +282,8 @@ export function AcordoNovoInline({
     }
     // O mês do acordo é o do VENCIMENTO. Cadastrar hoje com vencimento em mês
     // fechado reescreveria um fechamento já apresentado — ver `lib/fechamentoMes`.
-    if (estadoFechamentoDaData({ data: vencimento, cargo: perfil?.perfil }).bloqueado) {
+    // Desligado desde 03/11/2026 (`ACORDOS_FECHAM_COM_O_MES`).
+    if (estadoFechamentoDoAcordo({ data: vencimento, cargo: perfil?.perfil }).bloqueado) {
       return mensagemFechamento(mesDaData(vencimento));
     }
     const v = parseCurrencyInput(valorStr);

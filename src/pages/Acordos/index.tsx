@@ -252,7 +252,7 @@ export default function Acordos() {
    * por link direto, por realtime ou de um formulário que já estava aberto
    * quando o mês virou.
    */
-  const fechamento = useFechamentoMes(mesFiltro);
+  const fechamento = useFechamentoMes(mesFiltro, { acordos: true });
 
   // Formulário aberto + usuário volta um mês = formulário que grava num mês
   // fechado. Fechar o inline é mais honesto que deixá-lo aberto e recusar no
