@@ -87,6 +87,32 @@ export function iniciais(nome: string): string {
   return (primeira + ultima).toUpperCase();
 }
 
+/** Ligações que não contam como nome: «Maria de Fátima» leva o «de» junto. */
+const LIGACOES = new Set(['de', 'da', 'do', 'das', 'dos', 'e', 'del', 'di']);
+
+/**
+ * O nome que o quadro mostra: os dois primeiros nomes, inteiros (Cleber,
+ * 03/11/2026: sem foto, nome cortado em «Gabri…» não diz quem é). A ligação
+ * entre eles vai junto. O nome completo fica no `title`.
+ */
+export function nomeCurto(nome: string): string {
+  const partes = nome.trim().split(/\s+/).filter(Boolean);
+  const fica: string[] = [];
+  let nomes = 0;
+  for (const p of partes) {
+    if (nomes === 2) break;
+    if (LIGACOES.has(p.toLowerCase())) {
+      if (nomes === 1) fica.push(p);
+      continue;
+    }
+    fica.push(p);
+    nomes++;
+  }
+  // Ligação no fim («Maria de») não fica sozinha.
+  while (fica.length > 1 && LIGACOES.has(fica[fica.length - 1].toLowerCase())) fica.pop();
+  return fica.join(' ') || nome.trim();
+}
+
 export function plural(n: number, um: string, varios: string): string {
   return `${n} ${n === 1 ? um : varios}`;
 }
