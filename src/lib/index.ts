@@ -52,6 +52,8 @@ export const ROUTE_PATHS = {
   SOLICITACOES_WHATSAPP: '/solicitacoes-whatsapp',
   TICKETS: '/tickets',
   RH_GESTAO: '/rh-gestao',
+  /** Quadro de Pessoal — a visão do RH sobre setores e equipes, só leitura (20/10/2026). */
+  RH_QUADRO: '/quadro-pessoal',
   /**
    * O fechamento mensal por operador — a planilha de fechamento da gerência.
    * Não confundir com o relatório de fechamento (`BotaoFechamento`), que é um

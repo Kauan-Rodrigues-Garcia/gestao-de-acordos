@@ -69,6 +69,7 @@ export const TELA_LABEL: Record<string, string> = {
   'admin/configuracoes:uso':   'Configurações · Monitoramento de uso',
   'admin/configuracoes:permissoes': 'Configurações · Permissões',
   'rh-gestao':                 'RH Gestão',
+  'quadro-pessoal':            'Quadro de Pessoal',
   'fechamento':                'Fechamento',
   // Aba arquivada em 05/09/2026 (`arquivo-morto/ouvidoria/`). O rótulo fica:
   // `uso_telas` guarda o que foi aberto enquanto ela existia, e sem ele o
@@ -166,6 +167,7 @@ export const ROTULO_SEGMENTO: Record<string, Record<string, string>> = {
     celulares: 'Celulares', numeros: 'Números', lixeira: 'Lixeira', configuracao: 'Configuração',
   },
   'meus-chips': { numeros: 'Números de WhatsApp', fisicos: 'Chips Físicos' },
+  'quadro-pessoal': { setores: 'Setores', equipes: 'Equipes', conferencia: 'Conferir planilha' },
   'rh-gestao': {
     consolidado: 'Visão consolidada', setor: 'Setor aberto',
     historico: 'Histórico', configuracao: 'Configuração',

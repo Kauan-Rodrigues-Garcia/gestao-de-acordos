@@ -268,6 +268,29 @@ describe('abasDoMenu — por produto', () => {
     expect(abas).toContain('Usuários');
   });
 
+  /*
+   * O Quadro de Pessoal (20/10/2026) é a primeira tela do produto RH. Em
+   * 20/10 ele nasceu só na cobrança, e quem entrava pela empresa Recursos
+   * Humanos não o achava nem pelo link: a rota devolvia ao Dashboard.
+   */
+  it('o Quadro de Pessoal existe no RH e na cobrança, e não no Comercial', () => {
+    const noRh = rotas(abasDoMenu(ctx({ produto: 'rh', isBookplay: false })));
+    const naCobranca = rotas(abasDoMenu(ctx({ produto: 'cobranca' })));
+    const noComercial = rotas(abasDoMenu(ctx({ produto: 'comercial', isBookplay: false })));
+    expect(noRh).toContain(ROUTE_PATHS.RH_QUADRO);
+    expect(naCobranca).toContain(ROUTE_PATHS.RH_QUADRO);
+    expect(noComercial).not.toContain(ROUTE_PATHS.RH_QUADRO);
+  });
+
+  it('o Quadro de Pessoal pede o alcance «todos os setores» do RH Gestão', () => {
+    const so = (chaves: string[]) => (k: string) => chaves.includes(k);
+    const lider = rotas(abasDoMenu(ctx({ cargo: 'lider', temPermissao: so(['ver_rh_gestao', 'rh_escopo_equipe']) })));
+    const rh = rotas(abasDoMenu(ctx({ cargo: 'rh', temPermissao: so(['ver_rh_gestao', 'rh_escopo_todos_setores']) })));
+    expect(lider).toContain(ROUTE_PATHS.RH_GESTAO);
+    expect(lider).not.toContain(ROUTE_PATHS.RH_QUADRO);
+    expect(rh).toContain(ROUTE_PATHS.RH_QUADRO);
+  });
+
   it('produto desconhecido não mostra NADA', () => {
     // Empresa nova sem produto declarado. Vazio é o comportamento certo: o erro
     // fica visível, em vez de vazar a cobrança para uma operação qualquer.
