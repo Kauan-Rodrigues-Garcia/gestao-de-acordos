@@ -24,7 +24,7 @@
  * mesma do card de Comissão ao lado. Lista maior que isso rola por dentro.
  */
 
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Target, ArrowUpRight, ChevronRight } from 'lucide-react';
 import {
@@ -41,6 +41,12 @@ import { corDaMeta, fatiasDeForma, type FatiaForma } from './metaDonut';
 import { ALTURA_CARD_PROGRESSO } from './tamanhoCards';
 import { PontoDaLegenda } from './PontoDaLegenda';
 import { corTexto } from '@/lib/temas';
+import { comNovaTentativa } from '@/lib/sobDemanda';
+import { useTemaNatal } from '@/components/Natal/tema';
+
+// Tema de Natal: a árvore entra no lugar do anel, e só desce com ele ligado.
+const ArvoreDaMeta = lazy(() => comNovaTentativa(() => import('@/components/Natal/ArvoreDaMeta'))()
+  .then(m => ({ default: m.ArvoreDaMeta })));
 
 function formatarPct(v: number): string {
   return v.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
@@ -58,6 +64,7 @@ export function CardMetaDonut({
   recebido, meta, escopoRotulo, porForma,
 }: CardMetaDonutProps) {
   const [breakdownAberto, setBreakdownAberto] = useState(false);
+  const natal = useTemaNatal();
   const pct = pctLimitado(recebido, meta);
   const cor = corDaMeta(pct);
   const fatias = fatiasDeForma(porForma);
@@ -108,15 +115,27 @@ export function CardMetaDonut({
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.97 }}
               transition={{ duration: 0.22 }}
-              className="flex h-full flex-col items-center justify-center gap-4"
+              className={cn('flex h-full flex-col items-center justify-center', natal ? 'gap-2' : 'gap-4')}
             >
-              <DonutChart
-                percent={pct}
-                label={formatarPctDaMeta(pct)}
-                sublabel="da meta"
-                color={cor}
-                size={180}
-              />
+              {natal ? (
+                <>
+                  <Suspense fallback={<div className="h-[200px] w-[160px]" />}>
+                    <ArvoreDaMeta pct={pct} rotulo={formatarPctDaMeta(pct)} />
+                  </Suspense>
+                  <p className="flex items-baseline gap-1.5">
+                    <span className="text-2xl font-bold tabular-nums" style={{ color: corTexto(cor) }}>{formatarPctDaMeta(pct)}</span>
+                    <span className="text-xs text-muted-foreground">da meta</span>
+                  </p>
+                </>
+              ) : (
+                <DonutChart
+                  percent={pct}
+                  label={formatarPctDaMeta(pct)}
+                  sublabel="da meta"
+                  color={cor}
+                  size={180}
+                />
+              )}
               <div className="text-center space-y-1">
                 <p className="text-xs text-muted-foreground">
                   <span className="font-mono tabular-nums font-semibold text-foreground">

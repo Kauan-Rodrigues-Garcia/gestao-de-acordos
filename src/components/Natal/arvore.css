@@ -1,0 +1,53 @@
+/*
+ * Natal — a árvore do «Progresso da meta» (`ArvoreDaMeta.tsx`). Cor de objeto
+ * (folha, tronco, enfeite); só o chão de neve ganha contorno no tema claro.
+ * `--a` é o atraso de entrada de cada peça, para acenderem em sequência.
+ */
+.nt-arvore { display: block; overflow: visible; filter: drop-shadow(0 4px 6px oklch(0.25 0.05 160 / .18)); }
+.nt-arvore.nt-claro .av-chao { stroke: oklch(0.82 0.035 240); stroke-width: .8; }
+.nt-arvore .av-fio { stroke: #22392B; stroke-width: .8; opacity: .85; }
+
+/* ── Luzinhas ────────────────────────────────────────────────────────────── */
+.av-lampada.acesa, .av-halo { animation: av-acende .5s ease-out var(--a) both, av-pisca var(--t) ease-in-out calc(var(--a) + .5s) infinite; }
+.av-halo { transform-box: fill-box; transform-origin: center; }
+@keyframes av-acende { from { opacity: 0; } 40% { opacity: 1; filter: brightness(1.6); } to { opacity: 1; } }
+@keyframes av-pisca { 0%, 100% { opacity: 1; } 45% { opacity: .55; } 60% { opacity: .95; } }
+
+/* ── Enfeites ────────────────────────────────────────────────────────────── */
+.av-surge { transform-box: fill-box; transform-origin: 50% 0; animation: av-surge .6s cubic-bezier(.3, 1.6, .5, 1) var(--a) both; }
+@keyframes av-surge { from { opacity: 0; transform: scale(0); } to { opacity: 1; transform: scale(1); } }
+/* Balançam de leve, cada uma no seu tempo — começa depois de surgir. */
+.av-balanca { animation: av-surge .6s cubic-bezier(.3, 1.6, .5, 1) var(--a) both, av-balanca 3.2s ease-in-out calc(var(--a) + .6s) infinite alternate; }
+@keyframes av-balanca { from { transform: rotate(-5deg); } to { transform: rotate(5deg); } }
+
+.av-presente { transform-box: fill-box; transform-origin: 50% 100%; animation: av-presente .7s cubic-bezier(.3, 1.5, .5, 1) var(--a) both; }
+@keyframes av-presente { from { opacity: 0; transform: translateY(-10px) scale(.6); } to { opacity: 1; transform: none; } }
+
+/* ── Estrela ─────────────────────────────────────────────────────────────── */
+.av-estrela { stroke: #A8996A; stroke-width: 1.6; stroke-linejoin: round; opacity: .55; }
+.av-estrela.acesa { stroke: #E7A800; opacity: 1; transform-box: fill-box; transform-origin: center;
+  animation: av-estrela 1.1s cubic-bezier(.3, 1.7, .5, 1) var(--a) both, av-pulsa 2.4s ease-in-out calc(var(--a) + 1.1s) infinite alternate;
+  filter: drop-shadow(0 0 4px #FFD54F); }
+@keyframes av-estrela { 0% { transform: scale(.6); filter: brightness(1) drop-shadow(0 0 0 #FFD54F); } 40% { transform: scale(1.35); filter: brightness(1.8) drop-shadow(0 0 10px #FFE58A); } 100% { transform: scale(1); } }
+@keyframes av-pulsa { from { transform: scale(1); } to { transform: scale(1.08); } }
+.av-estrela-brilho { animation: av-pisca 1.8s ease-in-out infinite; }
+
+.av-raios { transform-box: view-box; transform-origin: 80px 19px; animation: av-raios-entra 1s ease-out var(--a) both, av-gira 22s linear calc(var(--a) + 1s) infinite; }
+@keyframes av-raios-entra { from { opacity: 0; transform: scale(.3); } to { opacity: 1; transform: scale(1); } }
+@keyframes av-gira { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+
+/* ── Meta batida: aura e faíscas douradas subindo ────────────────────────── */
+.av-aura { animation: av-aura 3s ease-in-out infinite alternate; }
+@keyframes av-aura { from { opacity: .55; } to { opacity: 1; } }
+.av-faisca { fill: #FFD54F; opacity: 0; transform-box: fill-box; transform-origin: center;
+  animation: av-sobe 3s ease-out var(--d) infinite; filter: drop-shadow(0 0 2px #FFE58A); }
+@keyframes av-sobe {
+  0% { opacity: 0; transform: translateY(0) scale(.4) rotate(0); }
+  20% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-26px) scale(1.1) rotate(90deg); }
+}
+
+/* Modo leve: tudo aceso e parado. */
+.nt-arvore.quieto { filter: none; }
+.nt-arvore.quieto * { animation: none !important; }
+.nt-arvore.quieto .av-faisca { display: none; }

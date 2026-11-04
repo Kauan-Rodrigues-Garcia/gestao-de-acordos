@@ -73,7 +73,7 @@ import { getImpersonacaoAtiva } from '@/services/impersonacao.service';
 import { MarcaHalloween } from '@/components/Halloween/MarcaHalloween';
 import { CrachaPendente } from '@/components/CrachaPendente';
 import { TemaNatalContext, cenaDaRota as cenaNatalDaRota, soParado as natalSoParado, temFundo as temFundoNatal } from '@/components/Natal/tema';
-import { useNatal } from '@/components/Natal/previa';
+import { abrirNatal, useNatal } from '@/components/Natal/previa';
 import { MarcaNatal } from '@/components/Natal/MarcaNatal';
 import { PreviaNatal } from '@/components/Natal/PreviaNatal';
 import { useNotificacoes } from '@/providers/NotificacoesProvider';
@@ -136,6 +136,11 @@ const FundoNatal        = lazy(() => carregarNatal().then(m => ({ default: m.Fun
 const CamadaNatal       = lazy(() => carregarNatal().then(m => ({ default: m.CamadaNatal })));
 const SobreposicaoNatal = lazy(() => carregarNatal().then(m => ({ default: m.SobreposicaoNatal })));
 const RevoadaNatal      = lazy(() => carregarNatal().then(m => ({ default: m.RevoadaNatal })));
+// A abertura do Natal (o presente, o vídeo e a mensagem): só desce para quem ainda não abriu.
+const AberturaNatal     = lazy(() => comNovaTentativa(() => import('@/components/Natal/presente/AberturaNatal'))()
+  .then(m => ({ default: m.AberturaNatal })));
+const BotaoMusicaNatal  = lazy(() => comNovaTentativa(() => import('@/components/Natal/BotaoMusicaNatal'))()
+  .then(m => ({ default: m.BotaoMusicaNatal })));
 const carregarBoasVindasHalloween = comNovaTentativa(() => import('@/components/Halloween/BoasVindasHalloween'));
 const BoasVindasHalloween = lazy(carregarBoasVindasHalloween);
 
@@ -319,7 +324,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   }, [pathname, marcaPaguePlay, halloweenSoParado]);
   // Tema de Natal (novembro) — em prévia, só no navegador de quem pede
   // (`Natal/previa.ts`). Ligado, ele tira o Halloween da frente.
-  const { podeVer: podeVerNatal, estilo: natal } = useNatal();
+  const { podeVer: podeVerNatal, estilo: natal, pessoa: pessoaNatal, aberto: natalAberto } = useNatal();
+  // O tema entra no meio da abertura (na nevasca), com o cartão ainda na tela:
+  // a abertura fica montada até avisar que terminou.
+  const [aberturaNatalViva, setAberturaNatalViva] = useState(false);
   const cenaNatal = useMemo(() => {
     if (!natal) return null;
     const cena = cenaNatalDaRota(pathname, natal);
@@ -926,7 +934,15 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 o botão fica e abre a lápide (`PlayerSeFoi`), sem motor. */}
             {hw.disponivel && (userRole === 'super_admin'
               ? <BotaoSomAmbiente perfilId={perfil?.id} completo />
-              : <PlayerSeFoi />)}
+              : !natal && <PlayerSeFoi />)}
+            {/* Música de Natal — a mesma para todos, ao mesmo tempo
+                (`Natal/musica.ts`). Com o tema ligado, entra no lugar da
+                lápide; para o super_admin, fica ao lado do player. */}
+            {natal && (
+              <Suspense fallback={<span className="h-8 w-8 shrink-0" />}>
+                <BotaoMusicaNatal />
+              </Suspense>
+            )}
             {/* Sino — indica novas sem abrir o painel.
                 O sino BALANÇA e o número PULSA quando chega notificação: o
                 badge sozinho, num canto de 16 px, passava despercebido em quem
@@ -1122,6 +1138,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </div>
         ) : conteudo}
         {podeVerNatal && (import.meta.env.DEV || natal) && <PreviaNatal estilo={natal} />}
+        {/* O presente do Natal: uma vez por pessoa, depois do termo, do tutorial e da mensagem
+            de outubro (nunca as duas na tela), e nunca na impersonação. `?natal=presente` devolve. */}
+        {(aberturaNatalViva || (podeVerNatal && !natalAberto && !termoLoading && !precisaAceitar && tourJaVisto && !boasVindasAberta && !getImpersonacaoAtiva())) && (
+          <Suspense fallback={null}>
+            <AberturaNatal
+              aoTemaEntrar={() => { setAberturaNatalViva(true); abrirNatal(pessoaNatal); }}
+              aoTerminar={() => setAberturaNatalViva(false)}
+            />
+          </Suspense>
+        )}
         {/* `onFinished` voltou em 01/10/2026: libera a mensagem de Halloween
             assim que o tutorial sai do caminho, sem recarregar a página. */}
         <OnboardingTour

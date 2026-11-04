@@ -42,7 +42,10 @@ import {
 const CLASSE_MENU_ESCURO = 'menu-lateral-escuro';
 const CHAVE_MENU_ESCURO = 'menuLateralEscuro';
 
-function aplicarMenuEscuro(ligado: boolean) {
+/** O menu lateral está escuro agora? (A abertura do Natal confere: o vídeo é o sistema com o menu claro.) */
+export const menuEscuroLigado = () => document.documentElement.classList.contains(CLASSE_MENU_ESCURO);
+
+export function aplicarMenuEscuro(ligado: boolean) {
   document.documentElement.classList.toggle(CLASSE_MENU_ESCURO, ligado);
   try { localStorage.setItem(CHAVE_MENU_ESCURO, ligado ? 'true' : 'false'); }
   catch { /* modo privado */ }
@@ -131,7 +134,7 @@ export function ThemeToggle({ halloween }: { halloween?: InterruptorHalloween } 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="w-8 h-8" title={`Tema: ${rotuloAtual ?? 'Sistema'}`}>
+        <Button variant="ghost" size="icon" className="w-8 h-8" title={`Tema: ${rotuloAtual ?? 'Sistema'}`} data-tema-botao>
           {atual === 'system' ? (
             <Monitor className="h-4 w-4" />
           ) : escuroEmVigor ? (

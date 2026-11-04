@@ -1,0 +1,25 @@
+/*
+ * A bola da saudação (`BolaDaSaudacao.tsx`). O ponto de giro das duas camadas
+ * é o laço no fio do varal: `--fio` acima do alto da caixa, mais a argola.
+ */
+.nt-saud-bola { position: relative; display: inline-block; flex: none; vertical-align: middle; margin-left: 2px; /* as de cima e de baixo saem do componente */ }
+.nt-saud-balanco,
+.nt-saud-empurrao { position: absolute; inset: 0; transform-origin: 50% calc(var(--argola) - var(--fio)); }
+.nt-saud-balanco { animation: nt-saud-balanca 3.6s ease-in-out infinite alternate; }
+.nt-saud-bola.parada .nt-saud-balanco { animation: none; }
+@keyframes nt-saud-balanca { from { rotate: -2.5deg; } to { rotate: 2.5deg; } }
+
+.nt-saud-fio {
+  position: absolute;
+  left: 50%;
+  top: calc(var(--argola) - var(--fio));
+  width: 1px;
+  height: calc(var(--fio) - 2px);
+  margin-left: -.5px;
+  background: linear-gradient(oklch(0.45 0.03 80 / .75), oklch(0.78 0.1 85 / .95));
+}
+.nt-saud-laco { position: absolute; left: 50%; top: calc(var(--argola) - var(--fio) - 5px); margin-left: -8px; overflow: visible; filter: drop-shadow(0 1px 1px oklch(0.2 0.03 30 / .35)); }
+.nt-saud-laco path { fill: #D32F2F; stroke: #9A1B1B; stroke-width: .6; }
+.nt-saud-laco .no { fill: #B71C1C; }
+
+.nt-saud-bola canvas { position: absolute; left: 0; top: 0; cursor: pointer; filter: drop-shadow(0 4px 5px oklch(0.2 0.04 25 / .35)); }

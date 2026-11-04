@@ -6,7 +6,7 @@
 
 import {
   BarChart2, Bell, Camera, ChevronRight, FileText, HelpCircle, LayoutDashboard, LogOut,
-  Menu, MessageCircle, Plus, Send, Smartphone, Sun, Trash2, CalendarDays,
+  Menu, MessageCircle, Plus, Send, Smartphone, Sun, Trash2, CalendarDays, User,
 } from 'lucide-react';
 import { Img, staticFile, useCurrentFrame } from 'remotion';
 import { cn } from '@/lib/utils';
@@ -34,6 +34,8 @@ type Props = {
   children: React.ReactNode;
   /** Gavetas, chat, avisos: por cima de tudo, como os `fixed` do app. */
   sobre?: React.ReactNode;
+  /** Altura do app. O vídeo de Natal usa 900 (16:9 exato, ocupa a tela sem cortar). */
+  altura?: number;
 };
 
 const apertoDe = (f: number, cliques: { id: string; f: number }[], id: string) => {
@@ -43,11 +45,12 @@ const apertoDe = (f: number, cliques: { id: string; f: number }[], id: string) =
 
 export const AvatarIniciais: React.FC<{ iniciais: string; className?: string; style?: React.CSSProperties }> = ({ iniciais, className, style }) => (
   <span className={cn('relative flex h-10 w-10 shrink-0 overflow-hidden rounded-full', className)} style={style}>
-    <span className="flex h-full w-full items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">{iniciais}</span>
+    {/* Sem iniciais (o vídeo de Natal não tem nome): o ícone de pessoa. */}
+    <span className="flex h-full w-full items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">{iniciais || <User className="h-4 w-4" />}</span>
   </span>
 );
 
-export const Casca: React.FC<Props> = ({ aparece, ativo, anterior, trocaEm, cliques, desempenhoAberto, children, sobre }) => {
+export const Casca: React.FC<Props> = ({ aparece, ativo, anterior, trocaEm, cliques, desempenhoAberto, children, sobre, altura = APP_A }) => {
   const f = useCurrentFrame();
   const OPERADORA = usePessoa();
   const cargoClasse = OPERADORA.papel === 'lider'
@@ -62,7 +65,7 @@ export const Casca: React.FC<Props> = ({ aparece, ativo, anterior, trocaEm, cliq
   const chegou = desliza > 0.55;
 
   return (
-    <div className="absolute left-0 top-0 flex bg-background overflow-hidden font-sans text-foreground" style={{ width: APP_L, height: APP_A }}>
+    <div className="absolute left-0 top-0 flex bg-background overflow-hidden font-sans text-foreground" style={{ width: APP_L, height: altura }}>
       {/* ── menu lateral ── */}
       <aside className="relative flex flex-col bg-sidebar border-r border-sidebar-border overflow-hidden flex-shrink-0" style={{ width: SIDEBAR }}>
         <div className="flex items-center gap-3 px-4 py-5 border-b border-sidebar-border" style={{ height: LOGO_ALTURA, ...entrada(f, aparece, 0) }}>
@@ -95,7 +98,7 @@ export const Casca: React.FC<Props> = ({ aparece, ativo, anterior, trocaEm, cliq
                 style={{ ...entrada(f, aparece, 1 + i), scale: String(apertoDe(f, cliques, `menu-${m.id}`)) }}
               >
                 <m.Icone className="w-4 h-4 flex-shrink-0" />
-                <span className="flex-1 truncate">{m.rotulo}</span>
+                <span className="flex-1 truncate" data-alvo-feitico="aba">{m.rotulo}</span>
               </div>
             );
           })}
@@ -126,7 +129,7 @@ export const Casca: React.FC<Props> = ({ aparece, ativo, anterior, trocaEm, cliq
           <div className="flex items-center gap-3 p-2 rounded-lg bg-sidebar-accent">
             <AvatarIniciais iniciais={OPERADORA.iniciais} className="w-8 h-8" />
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-sidebar-foreground truncate">{OPERADORA.nome}</p>
+              {OPERADORA.nome && <p className="text-xs font-semibold text-sidebar-foreground truncate">{OPERADORA.nome}</p>}
               <p className="text-xs text-sidebar-foreground/60 flex items-center gap-1">
                 <span className={cn('inline-block px-1.5 py-0 rounded text-[10px] font-medium', cargoClasse)}>
                   {OPERADORA.cargo}
@@ -177,7 +180,7 @@ export const Casca: React.FC<Props> = ({ aparece, ativo, anterior, trocaEm, cliq
                 </span>
               </span>
               <span className="flex min-w-0 flex-col gap-0.5">
-                <span className="max-w-[220px] truncate text-xs font-semibold leading-4 text-foreground">{OPERADORA.nome}</span>
+                {OPERADORA.nome && <span className="max-w-[220px] truncate text-xs font-semibold leading-4 text-foreground">{OPERADORA.nome}</span>}
                 <span className="flex h-4 min-w-0 items-center gap-1 text-[11px] leading-4 text-muted-foreground">
                   <span className={cn('inline-flex h-4 shrink-0 items-center whitespace-nowrap rounded border px-1.5 text-[10px] font-medium leading-none', cargoClasse)}>
                     {OPERADORA.cargo}

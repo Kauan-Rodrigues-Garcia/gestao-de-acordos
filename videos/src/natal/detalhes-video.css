@@ -1,0 +1,9 @@
+/*
+ * Os detalhes do Halloween no vídeo: o CSS é o do app (`halloween.css`, que
+ * vem com os desenhos, e `cartaz.css`). Toda animação dele fica parada aqui —
+ * quem anima é o quadro (Remotion grava quadro a quadro; animação CSS sairia
+ * tremida).
+ */
+.nt-hw, .nt-hw *, #nt-abobora-chat, #nt-abobora-chat * { animation: none !important; transition: none !important; }
+/* A camada do app tem altura zero e corta na horizontal; no vídeo quem posiciona é o quadro. */
+.nt-hw .hw-aranha { position: absolute; }

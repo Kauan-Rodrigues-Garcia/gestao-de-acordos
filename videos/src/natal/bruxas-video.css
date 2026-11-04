@@ -1,0 +1,8 @@
+/*
+ * A Caça às Bruxas no vídeo de Natal: o CSS original dos palcos (`bruxas.css`,
+ * `chefona.css`) como está. Só a fonte de fliperama muda de nome: o
+ * @remotion/google-fonts registra a Press Start 2P como «Press Start TwoP».
+ * As animações do CSS deles seguem o relógio virtual (`RelogioVirtual.tsx`).
+ */
+.bx-palco { --bx-arcade: 'Press Start TwoP', 'Press Start 2P', monospace; --zb-arcade: 'Press Start TwoP', 'Press Start 2P', monospace; }
+.bxc-palco { --bxc-arcade: 'Press Start TwoP', 'Press Start 2P', monospace; --zb-arcade: 'Press Start TwoP', 'Press Start 2P', monospace; }

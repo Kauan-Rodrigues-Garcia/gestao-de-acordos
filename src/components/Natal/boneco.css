@@ -1,0 +1,147 @@
+/*
+ * Natal — a neve no alto do card do recorte e o boneco de neve (`BonecoDeNeve.tsx`).
+ * Neve e boneco ganham um contorno azulado no tema claro: branco em fundo
+ * branco some. O resto é cor de objeto (gorro, cachecol, cenoura).
+ */
+
+/* ── A camada de neve ────────────────────────────────────────────────────── */
+.nt-nevado { position: absolute; left: -1px; right: -1px; top: -23px; height: 46px; z-index: 3; pointer-events: none;
+  animation: nt-nevado-chega .9s ease-out both; }
+@keyframes nt-nevado-chega { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+.nt-neve-topo { position: absolute; inset: 0; overflow: visible; filter: drop-shadow(0 1.2px 1.2px oklch(0.35 0.05 240 / .22)); }
+.nt-claro .nt-neve-topo { filter: drop-shadow(0 1.5px 2px oklch(0.45 0.07 240 / .28)); }
+.nt-claro .nt-neve-topo .massa { stroke: oklch(0.8 0.04 240); stroke-width: .9; }
+
+.nt-neve-topo .faisca { fill: #FFFFFF; opacity: 0; transform-box: fill-box; transform-origin: center;
+  animation: nt-faisca 4.2s ease-in-out var(--d) infinite; }
+.nt-claro .nt-neve-topo .faisca { fill: oklch(0.78 0.09 230); }
+@keyframes nt-faisca {
+  0%, 72%, 100% { opacity: 0; transform: scale(.3) rotate(0deg); }
+  84% { opacity: 1; transform: scale(1) rotate(45deg); }
+}
+
+/* O sulco do deslize na neve. */
+.nt-neve-topo .sulco { fill: oklch(0.62 0.05 240 / .2); animation: nt-sulco 4.5s ease-in forwards; }
+@keyframes nt-sulco { 0% { opacity: 0; } 10% { opacity: 1; } 55% { opacity: .8; } 100% { opacity: 0; } }
+
+/* ── O boneco ────────────────────────────────────────────────────────────── */
+.nt-bn { position: absolute; left: 0; top: 0; width: 54px; height: 57px; pointer-events: auto; cursor: pointer; will-change: transform; }
+.nt-bn svg { display: block; overflow: visible; filter: drop-shadow(0 1.5px 1.5px oklch(0.3 0.04 240 / .2));
+  animation: nt-bn-chega .9s cubic-bezier(.3, 1.45, .5, 1) .35s both; }
+@keyframes nt-bn-chega { from { opacity: 0; transform: translateY(-18px) scale(.8); } to { opacity: 1; transform: none; } }
+.nt-bn .sombra { fill: oklch(0.4 0.05 240 / .2); }
+.nt-claro .nt-bn .bola { stroke: oklch(0.84 0.03 240); stroke-width: .7; }
+
+/* ── A névoa ─────────────────────────────────────────────────────────────────
+   `--vel` (0 a 1) vem do laço do boneco, já suavizado: a névoa acompanha a
+   velocidade de verdade em vez de trocar de estado num estalo. No tema claro
+   ela ganha um azul de sombra — névoa branca em fundo branco não existe. */
+.nt-claro .nt-bn .nv-tinta { stop-color: oklch(0.86 0.045 240); }
+.nv-vira { transform-box: view-box; transform-origin: 36px 72px; }
+.esq .nv-vira { transform: scaleX(-1); }
+
+/* A almofada: estica para trás e achata conforme a velocidade. */
+.nv-nuvem { transform-box: view-box; transform-origin: 40px 72px;
+  transform: translateX(calc(var(--vel, 0) * -3.4px)) scale(calc(1 + var(--vel, 0) * .22), calc(1 - var(--vel, 0) * .1)); }
+.nv-tufo { transform-box: fill-box; transform-origin: 50% 80%; animation: nv-respira 3.6s ease-in-out var(--d) infinite alternate; }
+@keyframes nv-respira { from { transform: scale(.9); opacity: .85; } to { transform: translateY(-.5px) scale(1.06); opacity: 1; } }
+.deslizando .nv-tufo { animation: nv-revolve 1s ease-in-out var(--d) infinite alternate; }
+@keyframes nv-revolve { from { transform: translateX(.6px) scale(.94); } to { transform: translate(-1.6px, -.9px) scale(1.14); } }
+
+/* O rastro: só existe em movimento, e cada fiapo se desfaz para trás. */
+.nv-rastro { opacity: var(--vel, 0); }
+.nv-fio { transform-box: fill-box; transform-origin: center; opacity: 0;
+  animation: nv-desfaz 1.35s cubic-bezier(.25, .6, .4, 1) var(--d) infinite paused; }
+.deslizando .nv-fio { animation-play-state: running; }
+@keyframes nv-desfaz {
+  0% { opacity: 0; transform: translate(4px, 0) scale(.6); }
+  20% { opacity: .9; }
+  100% { opacity: 0; transform: translate(-12px, -2.5px) scale(1.6); }
+}
+
+/* Parado, dois brilhinhos piscam na névoa assentada; somem quando ele sai. */
+.nv-brilho { opacity: calc(1 - var(--vel, 0) * 2); }
+.nv-brilho path { fill: #FFFFFF; transform-box: fill-box; transform-origin: center; animation: nt-faisca 3.4s ease-in-out infinite; }
+.nv-brilho g + g path { animation-delay: -1.7s; }
+.nt-claro .nv-brilho path { fill: oklch(0.78 0.09 230); }
+
+/* Os grupos que se mexem giram em volta da base do montinho. */
+.bn-salto, .bn-inclina, .bn-corpo { transform-box: view-box; transform-origin: 36px 72px; }
+
+/* Virar: o rosto e os botões puxam para o lado, a cenoura troca de lado e a
+   ponta do cachecol passa para trás — tudo por transição, sem girar o boneco. */
+.bn-rosto, .bn-frente { transition: transform .65s cubic-bezier(.4, 0, .2, 1); }
+.dir .bn-rosto { transform: translateX(2.3px); }
+.esq .bn-rosto { transform: translateX(-2.3px); }
+.dir .bn-frente { transform: translateX(1.4px); }
+.esq .bn-frente { transform: translateX(-1.4px); }
+.bn-nariz { transform-box: view-box; transform-origin: 36px 31px; transition: transform .65s cubic-bezier(.4, 0, .2, 1); }
+.esq .bn-nariz { transform: scaleX(-1); }
+.bn-ponta { transition: opacity .55s ease; }
+.dir .bn-ponta-d, .esq .bn-ponta-e { opacity: 0; }
+
+/* Inclina para a frente quando desliza, e volta quando para. */
+.bn-inclina { transition: transform .8s cubic-bezier(.4, 0, .2, 1); }
+.deslizando.dir .bn-inclina { transform: rotate(4deg); }
+.deslizando.esq .bn-inclina { transform: rotate(-4deg); }
+
+/* Parado: respira, pisca, inclina a cabeça, mexe os braços e o cachecol. */
+.bn-corpo { animation: bn-respira 3.2s ease-in-out infinite alternate; }
+@keyframes bn-respira { from { transform: scale(1, 1); } to { transform: scale(1.016, .984); } }
+
+.bn-cabeca { transform-box: view-box; transform-origin: 36px 40px; animation: bn-cabeca 4.6s ease-in-out infinite alternate; }
+@keyframes bn-cabeca { from { transform: rotate(-3deg); } to { transform: rotate(3.5deg); } }
+
+.bn-olhos { transform-box: fill-box; transform-origin: center; animation: bn-pisca 5.2s infinite; }
+@keyframes bn-pisca { 0%, 91%, 97%, 100% { transform: scaleY(1); } 94% { transform: scaleY(.1); } }
+
+.bn-braco { transform-box: view-box; animation: bn-braco-calmo 3.4s ease-in-out infinite alternate; }
+.bn-braco-e { transform-origin: 21px 50px; }
+.bn-braco-d { transform-origin: 51px 50px; animation-delay: -1.7s; }
+@keyframes bn-braco-calmo { from { transform: rotate(-4deg); } to { transform: rotate(4deg); } }
+
+.bn-ponta { transform-box: view-box; animation: bn-ponta-e 3s ease-in-out infinite alternate; }
+.bn-ponta-e { transform-origin: 28.8px 42.8px; }
+.bn-ponta-d { transform-origin: 43.2px 42.8px; animation-name: bn-ponta-d; }
+@keyframes bn-ponta-e { from { transform: rotate(2deg); } to { transform: rotate(7deg); } }
+@keyframes bn-ponta-d { from { transform: rotate(-2deg); } to { transform: rotate(-7deg); } }
+
+.bn-pompom { transform-box: fill-box; transform-origin: 50% 100%; animation: bn-pompom 2.6s ease-in-out infinite alternate; }
+@keyframes bn-pompom { from { transform: rotate(-6deg); } to { transform: rotate(6deg); } }
+
+/* Deslizando: um balanço macio, braços abertos se equilibrando, o cachecol
+   esvoaçando para trás e o pompom chacoalhando de leve. */
+.deslizando .bn-corpo { animation: bn-desliza 1.9s ease-in-out infinite; }
+@keyframes bn-desliza {
+  0%, 100% { transform: translateY(0) scale(1, 1); }
+  50% { transform: translateY(-1.3px) scale(.99, 1.012); }
+}
+.deslizando .bn-braco-e { animation: bn-equilibra-e 1.9s ease-in-out infinite; }
+.deslizando .bn-braco-d { animation: bn-equilibra-d 1.9s ease-in-out infinite; }
+@keyframes bn-equilibra-e { 0%, 100% { transform: rotate(4deg); } 50% { transform: rotate(-7deg); } }
+@keyframes bn-equilibra-d { 0%, 100% { transform: rotate(7deg); } 50% { transform: rotate(-4deg); } }
+.deslizando .bn-ponta-e { animation: bn-esvoaca-e .7s ease-in-out infinite alternate; }
+.deslizando .bn-ponta-d { animation: bn-esvoaca-d .7s ease-in-out infinite alternate; }
+@keyframes bn-esvoaca-e { from { transform: rotate(12deg); } to { transform: rotate(22deg); } }
+@keyframes bn-esvoaca-d { from { transform: rotate(-12deg); } to { transform: rotate(-22deg); } }
+.deslizando .bn-pompom { animation-duration: .95s; }
+
+/* Acenando: o braço do lado para onde ele olha sobe e balança. */
+.nt-bn.acenando.dir .bn-braco-d { animation: bn-aceno-d .36s ease-in-out infinite alternate; }
+.nt-bn.acenando.esq .bn-braco-e { animation: bn-aceno-e .36s ease-in-out infinite alternate; }
+@keyframes bn-aceno-d { from { transform: rotate(-26deg); } to { transform: rotate(-54deg); } }
+@keyframes bn-aceno-e { from { transform: rotate(26deg); } to { transform: rotate(54deg); } }
+
+/* O pulinho do clique: agacha, sobe esticado, cai amassando. */
+.nt-bn.pulando .bn-salto { animation: bn-pulo .7s cubic-bezier(.3, .7, .4, 1); }
+@keyframes bn-pulo {
+  0% { transform: none; }
+  15% { transform: scale(1.08, .9); }
+  45% { transform: translateY(-11px) scale(.95, 1.06); }
+  76% { transform: translateY(0) scale(1.08, .91); }
+  100% { transform: none; }
+}
+
+/* Modo leve: tudo parado. */
+.nt-nevado.quieto, .nt-nevado.quieto * { animation: none !important; transition: none !important; }
+.nt-nevado.quieto .nt-neve-topo, .nt-nevado.quieto .nt-bn svg { filter: none; }

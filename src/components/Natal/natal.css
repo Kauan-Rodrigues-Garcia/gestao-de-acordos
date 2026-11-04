@@ -62,20 +62,59 @@
 .nt-festa { position: absolute; inset: 0; width: 100%; height: 100%; }
 
 /* ── Trenó ───────────────────────────────────────────────────────────────── */
-.nt-treno { position: absolute; left: 100%; width: 230px; animation: nt-voa 16s linear 1 forwards; will-change: transform; }
-.nt-treno-svg { position: relative; width: 230px; height: auto; overflow: visible; animation: nt-sobe-desce 2.2s ease-in-out infinite alternate;
+.nt-treno { position: absolute; left: 100%; width: 280px; animation: nt-voa 16s linear 1 forwards; will-change: transform; }
+.nt-treno-svg { position: relative; width: 280px; height: auto; overflow: visible; animation: nt-sobe-desce 2.2s ease-in-out infinite alternate;
   filter: drop-shadow(0 4px 6px oklch(0.15 0.03 250 / .35)); }
-.nt-treno .rastro { position: absolute; left: 190px; top: 30px; width: 260px; height: 14px; border-radius: 999px;
+.nt-treno .rastro { position: absolute; left: 232px; top: 36px; width: 260px; height: 14px; border-radius: 999px;
   background: radial-gradient(circle, #FFE9A6 0 1.2px, transparent 1.6px) 0 0 / 14px 7px, linear-gradient(90deg, oklch(0.9 0.12 90 / .45), transparent);
   -webkit-mask-image: linear-gradient(90deg, #000, transparent); mask-image: linear-gradient(90deg, #000, transparent); animation: nt-cintila .5s steps(2) infinite; }
 @keyframes nt-voa { from { transform: translateX(0); } to { transform: translateX(calc(-100vw - 560px)); } }
 @keyframes nt-sobe-desce { from { transform: translateY(-6px) rotate(-2deg); } to { transform: translateY(6px) rotate(1.5deg); } }
 @keyframes nt-cintila { from { opacity: .9; } to { opacity: .55; } }
-.nt-treno-svg .arreio { fill: none; stroke: #D9B24A; stroke-width: 1.2; }
-.nt-treno-svg .galho { fill: none; stroke: #6B4426; stroke-width: 1.4; stroke-linecap: round; }
-.nt-treno-svg .patas-tras path, .nt-treno-svg .patas-frente path { fill: none; stroke: #6B4426; stroke-width: 2.2; stroke-linecap: round; }
-.nt-treno-svg .patas-tras, .nt-treno-svg .patas-frente { transform-box: fill-box; transform-origin: 50% 0; animation: nt-galope .45s ease-in-out infinite alternate; }
-.nt-treno-svg .patas-frente { animation-direction: alternate-reverse; }
-.nt-treno-svg .rena:nth-of-type(2n) .patas-tras, .nt-treno-svg .rena:nth-of-type(2n) .patas-frente { animation-delay: -.2s; }
-@keyframes nt-galope { from { transform: rotate(-14deg); } to { transform: rotate(14deg); } }
+.nt-treno-svg .arreio { fill: none; stroke: #D9B24A; stroke-width: 1.2; stroke-linecap: round; }
+
+/*
+ * As renas (`Rena` em `CenaNatal.tsx`). Cada parte que mexe gira em volta do
+ * seu encaixe (quadril, pescoço, raiz da orelha…), que é o 0,0 do grupo dela.
+ * Tudo no mesmo compasso (`--passo`); `--d` atrasa cada rena, em onda.
+ */
+.nt-treno-svg .rena { --passo: .62s; transform-box: fill-box; transform-origin: 55% 70%; animation: nt-rena-passada var(--passo) ease-in-out var(--d) infinite; }
+.nt-treno-svg .pata, .nt-treno-svg .cabeca, .nt-treno-svg .orelha, .nt-treno-svg .rabo, .nt-treno-svg .sino { transform-box: view-box; transform-origin: 0 0; }
+.nt-treno-svg .pata.frente { animation: nt-pata-frente var(--passo) ease-in-out var(--d) infinite; }
+.nt-treno-svg .pata.tras { animation: nt-pata-tras var(--passo) ease-in-out var(--d) infinite; }
+/* As de lá vêm um tiquinho depois das de cá: a passada não é um bloco só. */
+.nt-treno-svg .pata.longe { animation-delay: calc(var(--d) - .07s); }
+.nt-treno-svg .cabeca { animation: nt-rena-cabeca var(--passo) ease-in-out var(--d) infinite; }
+.nt-treno-svg .orelha { animation: nt-rena-orelha calc(var(--passo) / 2) ease-in-out var(--d) infinite alternate; }
+.nt-treno-svg .orelha.longe { animation-delay: calc(var(--d) - .1s); }
+.nt-treno-svg .rabo { animation: nt-rena-rabo calc(var(--passo) / 2) ease-in-out var(--d) infinite alternate; }
+.nt-treno-svg .sino { animation: nt-rena-sino calc(var(--passo) / 2) ease-in-out var(--d) infinite alternate; }
+.nt-treno-svg .olho { transform-box: fill-box; transform-origin: 50% 50%; animation: nt-rena-pisca 4.2s ease-in-out calc(var(--d) * 5) infinite; }
+/* O corpo: sobe com a frente na impulsão e desce com a frente na chegada. */
+@keyframes nt-rena-passada {
+  0%, 100% { transform: translateY(1.2px) rotate(-3deg); }
+  35% { transform: translateY(-2.8px) rotate(4deg); }
+  65% { transform: translateY(-1.6px) rotate(0); }
+}
+/* Patas: girar positivo leva o casco para a frente (a esquerda). */
+@keyframes nt-pata-frente {
+  0%, 100% { transform: rotate(-30deg); }
+  40% { transform: rotate(42deg); }
+  70% { transform: rotate(10deg) scaleY(.85); }
+}
+@keyframes nt-pata-tras {
+  0%, 100% { transform: rotate(38deg) scaleY(.85); }
+  45% { transform: rotate(-12deg); }
+  70% { transform: rotate(-40deg); }
+}
+@keyframes nt-rena-cabeca {
+  0%, 100% { transform: rotate(5deg); }
+  35% { transform: rotate(-6deg); }
+  65% { transform: rotate(1deg); }
+}
+@keyframes nt-rena-orelha { from { transform: rotate(-14deg); } to { transform: rotate(16deg); } }
+@keyframes nt-rena-rabo { from { transform: rotate(-22deg); } to { transform: rotate(18deg); } }
+@keyframes nt-rena-sino { from { transform: rotate(-24deg); } to { transform: rotate(24deg); } }
+@keyframes nt-rena-pisca { 0%, 93%, 100% { transform: scaleY(1); } 96% { transform: scaleY(.1); } }
 .nt-treno-svg .nariz { filter: drop-shadow(0 0 3px #FF4040); animation: nt-pisca 1.2s ease-in-out infinite; }
+.nt-treno-svg .nariz-halo { animation: nt-pisca 1.2s ease-in-out infinite; }

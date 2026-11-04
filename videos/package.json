@@ -10,7 +10,8 @@
     "render": "remotion render src/index.ts Operador prontos/apresentacao-operador.mp4",
     "render:autorizacoes": "remotion render src/index.ts Autorizacoes prontos/autorizacoes-no-chat.mp4",
     "transcrever": "node scripts/transcrever.mjs",
-    "medir": "node scripts/css-do-app.mjs && node scripts/medir.mjs"
+    "medir": "node scripts/css-do-app.mjs && node scripts/medir.mjs",
+    "render:natal": "remotion render src/index.ts AberturaNatal prontos/abertura-natal.mp4"
   },
   "dependencies": {
     "@fontsource/bricolage-grotesque": "5.2.8",

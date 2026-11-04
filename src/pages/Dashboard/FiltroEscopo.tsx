@@ -65,8 +65,11 @@
  * `useAcordos`, o `AnalyticsPanel` — precisou saber que esta régua existe.
  */
 
+import { lazy, Suspense } from 'react';
 import { Building2, Layers, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { comNovaTentativa } from '@/lib/sobDemanda';
+import { useTemaNatal } from '@/components/Natal/tema';
 import type { NivelEscopo } from '@/lib/permissoes-escopo';
 import type { SetorResumo, EquipeResumo } from '@/hooks/useSetoresEquipes';
 
@@ -103,10 +106,15 @@ interface Props {
   equipeDoPerfil: string | null;
 }
 
+// Tema de Natal: a neve e o boneco no alto do card só descem com ele ligado.
+const TopoNevado = lazy(() => comNovaTentativa(() => import('@/components/Natal/BonecoDeNeve'))()
+  .then(m => ({ default: m.TopoNevado })));
+
 export function FiltroEscopo({
   niveis, setores, setorFiltro, onSetor, equipes, podeTodasEquipes,
   visao, onVisao, setorDoPerfil, equipeDoPerfil,
 }: Props) {
+  const natal = useTemaNatal();
   const podeEscolherSetor = niveis.includes('todos_setores');
   const podeEquipe = niveis.includes('equipe');
   /*
@@ -210,9 +218,10 @@ export function FiltroEscopo({
 
   return (
     <div
-      className="flex flex-col gap-2 px-4 py-3 rounded-xl border border-border bg-card"
+      className="relative flex flex-col gap-2 px-4 py-3 rounded-xl border border-border bg-card"
       data-tour="filtro-escopo"
     >
+      {natal && <Suspense fallback={null}><TopoNevado /></Suspense>}
       {/*
         A régua vem primeiro e sozinha: é ela que decide se as outras duas
         linhas existem, e um controle que governa os de baixo lendo-se depois

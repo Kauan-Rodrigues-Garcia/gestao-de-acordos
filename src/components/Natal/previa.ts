@@ -41,21 +41,51 @@ function assinar(aviso: () => void) {
   };
 }
 
+/*
+ * O presente da abertura (`presente/AberturaNatal.tsx`): o Natal só entra
+ * depois que a pessoa abre o presente, vê o vídeo e clica em «Entrar no
+ * Natal». Fica gravado neste navegador, por pessoa (ainda não no banco).
+ * `?natal=presente` no endereço devolve o presente, para testar de novo.
+ */
+const chaveAberto = (pessoa: string) => `natal:presente-aberto:${pessoa}`;
+
+function lerAberto(pessoa: string): boolean {
+  try { return localStorage.getItem(chaveAberto(pessoa)) === '1'; } catch { return false; }
+}
+
+/** A pessoa abriu o presente: o Natal entra (no estilo da prévia, ou o detalhado). */
+export function abrirNatal(pessoa: string) {
+  try { localStorage.setItem(chaveAberto(pessoa), '1'); } catch { /* modo privado: vale até recarregar */ }
+  if (!ler()) escolherPreviaNatal('detalhado');
+  window.dispatchEvent(new Event(EVENTO));
+}
+
+function devolverPresente() {
+  try {
+    for (const k of Object.keys(localStorage)) if (k.startsWith('natal:presente-aberto:')) localStorage.removeItem(k);
+  } catch { /* modo privado */ }
+  window.dispatchEvent(new Event(EVENTO));
+}
+
 /** `?natal=...` no endereço: grava e tira do endereço. */
 function lerDoEndereco() {
   const busca = new URLSearchParams(window.location.search);
   if (!busca.has('natal')) return;
   const v = busca.get('natal');
-  escolherPreviaNatal(v === 'simples' || v === 'detalhado' ? v : null);
+  if (v === 'presente') devolverPresente();
+  else escolherPreviaNatal(v === 'simples' || v === 'detalhado' ? v : null);
   const url = new URL(window.location.href);
   url.searchParams.delete('natal');
   window.history.replaceState(window.history.state, '', url);
 }
 
-export function useNatal(): { podeVer: boolean; estilo: EstiloNatal | null } {
+export function useNatal(): { podeVer: boolean; estilo: EstiloNatal | null; pessoa: string; aberto: boolean } {
   const { perfil } = useAuth();
   const podeVer = import.meta.env.DEV || perfil?.perfil === 'super_admin';
+  const pessoa = perfil?.id ?? 'anonimo';
   const estilo = useSyncExternalStore(assinar, ler);
+  const aberto = useSyncExternalStore(assinar, () => lerAberto(pessoa));
   useEffect(() => { if (podeVer) lerDoEndereco(); }, [podeVer]);
-  return { podeVer, estilo: podeVer ? estilo : null };
+  // Sem o presente aberto, nada do Natal aparece (é ele que traz o tema).
+  return { podeVer, estilo: podeVer && aberto ? estilo : null, pessoa, aberto };
 }

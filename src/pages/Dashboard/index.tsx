@@ -2,6 +2,8 @@ import { useMarca } from '@/hooks/useMarca';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { FormaSaudacao } from '@/components/FormaSaudacao';
+import { BolaDaSaudacao } from '@/components/Natal/BolaDaSaudacao';
+import { useTemaNatal } from '@/components/Natal/tema';
 import { Building2, MessageSquare, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -51,6 +53,7 @@ import { PPModals } from './PPModals';
 
 export default function Dashboard() {
   const { perfil } = useAuth();
+  const natal = useTemaNatal();
   const { principal: equipePrincipal, todas: minhasEquipes } = useEquipesDoPerfil();
   const { empresa } = useEmpresa();
   const marca = useMarca();
@@ -757,7 +760,8 @@ export default function Dashboard() {
               `--primary` em vez de constante. */}
           <h1 className="flex items-center gap-1.5 text-2xl font-bold text-foreground">
             <span>{saudacao()}, {nome}!</span>
-            <FormaSaudacao />
+            {/* No Natal, o sólido vira uma bola de árvore pendurada no varal de luzes. */}
+            {natal ? <BolaDaSaudacao /> : <FormaSaudacao />}
           </h1>
           <p className="text-sm text-muted-foreground capitalize mt-0.5">{diaSemana}, {dataFormatada}</p>
           {empresa && (

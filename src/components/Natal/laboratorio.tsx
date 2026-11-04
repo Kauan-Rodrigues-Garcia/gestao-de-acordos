@@ -14,10 +14,16 @@ import { cenaDaRota, EVENTO_FESTA, EVENTO_TRENO, TemaNatalContext, type EstiloNa
 import { CamadaNatal, FundoNatal, RevoadaNatal, SobreposicaoNatal } from './CenaNatal';
 import { ComGorro, GloboDeNeve } from './Desenhos';
 import { MarcaNatal } from './MarcaNatal';
+import { TopoNevado } from './BonecoDeNeve';
+import { BotaoMusicaNatal } from './BotaoMusicaNatal';
+import { BolaDaSaudacao } from './BolaDaSaudacao';
+import { CardMetaDonut } from '@/components/PainelMetas/CardMetaDonut';
 
 const busca = new URLSearchParams(location.search);
 const temaInicial = busca.get('tema') === 'dark' ? 'dark' : 'light';
 const estiloInicial: EstiloNatal = busca.get('estilo') === 'simples' ? 'simples' : 'detalhado';
+const metaInicial = Number(busca.get('meta') ?? 64);
+const FORMAS = { pix: { valor: 41000, qtd: 160 }, boleto: { valor: 18000, qtd: 52 } };
 
 const CARTOES = [
   ['Recebido no mês', 'R$ 412.380,55'], ['Meta do mês', '78%'], ['Acordos hoje', '146'], ['Ticket médio', 'R$ 286,10'],
@@ -27,6 +33,7 @@ const PESSOAS = ['Ana Paula', 'Bruno Lima', 'Carla Souza', 'Diego Alves'];
 function Lab() {
   const [estilo, setEstilo] = useState<EstiloNatal>(estiloInicial);
   const [mensagem, setMensagem] = useState(false);
+  const [pctMeta, setPctMeta] = useState(metaInicial);
   const cena = cenaDaRota('/', estilo);
   return (
     <TemaNatalContext.Provider value={estilo}>
@@ -44,7 +51,7 @@ function Lab() {
             <div className="p-6 max-w-[1400px] mx-auto">
               <div className="mb-6 flex items-start justify-between">
                 <div>
-                  <h1 className="text-2xl font-bold">Dashboard</h1>
+                  <h1 className="flex items-center gap-1.5 text-2xl font-bold"><span>Bom dia, Cleber!</span><BolaDaSaudacao /></h1>
                   <p className="text-sm text-muted-foreground">segunda-feira, 3 de novembro</p>
                 </div>
                 <div className="flex gap-2 text-xs">
@@ -54,6 +61,16 @@ function Lab() {
                   <button onClick={() => setMensagem(m => !m)} className="rounded-md border border-border bg-card px-3 py-1.5">mensagem</button>
                   <button onClick={() => window.dispatchEvent(new Event(EVENTO_FESTA))} className="rounded-md border border-border bg-card px-3 py-1.5">festa</button>
                   <button onClick={() => window.dispatchEvent(new Event(EVENTO_TRENO))} className="rounded-md border border-border bg-card px-3 py-1.5">trenó</button>
+                  <BotaoMusicaNatal />
+                </div>
+              </div>
+              {/* O card do recorte (`FiltroEscopo`), com a neve e o boneco. */}
+              <div className="relative mb-4 flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-3">
+                <TopoNevado />
+                <div className="flex items-center gap-1 rounded-lg border border-border bg-muted/30 p-0.5 text-xs">
+                  {['Minha visão', 'Minha equipe', 'Meu setor'].map((r, i) => (
+                    <span key={r} className={`rounded-md px-3 py-1.5 font-medium ${i === 0 ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}>{r}</span>
+                  ))}
                 </div>
               </div>
               <div className="grid grid-cols-4 gap-4">
@@ -65,7 +82,16 @@ function Lab() {
                 ))}
               </div>
               <div className="mt-6 grid grid-cols-3 gap-4">
-                <div className="col-span-2 h-72 rounded-xl border border-border bg-card p-5 shadow-sm">
+                {/* O card de verdade, com a árvore; a régua muda o quanto da meta foi batido. */}
+                <div className="space-y-2">
+                  <CardMetaDonut recebido={pctMeta * 1000} meta={100000} escopoRotulo="individual" porForma={FORMAS} />
+                  <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                    meta
+                    <input type="range" min={0} max={110} value={pctMeta} onChange={e => setPctMeta(Number(e.target.value))} className="flex-1" />
+                    <span className="w-9 tabular-nums">{pctMeta}%</span>
+                  </label>
+                </div>
+                <div className="h-72 rounded-xl border border-border bg-card p-5 shadow-sm">
                   <p className="text-sm font-semibold">Recebimento por dia</p>
                 </div>
                 <div className="rounded-xl border border-border bg-card p-5 shadow-sm">

@@ -80,7 +80,8 @@ export const Dashboard: React.FC<Props> = ({ t, entra, visita }) => {
         <div className="flex items-start justify-between mb-6" style={E(0)}>
           <div>
             <h1 className="flex items-center gap-1.5 text-2xl font-bold text-foreground">
-              <span>Boa tarde, {pessoa.primeiroNome}!</span>
+              {/* Sem nome (o vídeo de Natal, que cada pessoa assiste no próprio sistema): só «Boa tarde!». */}
+              <span>{pessoa.primeiroNome ? `Boa tarde, ${pessoa.primeiroNome}!` : 'Boa tarde!'}</span>
               <FormaSaudacao />
             </h1>
             <p className="text-sm text-muted-foreground capitalize mt-0.5">{HOJE.semana}, {HOJE.extenso}</p>
@@ -157,7 +158,7 @@ export const Dashboard: React.FC<Props> = ({ t, entra, visita }) => {
                       gradientFrom={COR_QUARTIL[1]}
                       trend="up"
                       className="h-full"
-                      value={<span className="text-emerald-600" style={ts}>{formatBRL(mistura('recebido'))}</span>}
+                      value={<span className="text-emerald-600" style={ts} data-alvo-feitico="valor">{formatBRL(mistura('recebido'))}</span>}
                       sub={`Meta ${n.rotulo}: ${formatBRL(n.meta)}`}
                     />
                     <Destaque forca={destaques[0]} />
@@ -185,7 +186,7 @@ export const Dashboard: React.FC<Props> = ({ t, entra, visita }) => {
                       icon={<CalendarCheck className="w-4 h-4" />}
                       accentColor="#6366f1"
                       gradientFrom="#6366f1"
-                      value={<span style={ts}>{formatBRL(mistura('esperado'))}</span>}
+                      value={<span style={ts} data-alvo-feitico="valor">{formatBRL(mistura('esperado'))}</span>}
                       sub={`Com base em ${DIAS_UTEIS.passados} de ${DIAS_UTEIS.total} dias úteis`}
                     />
                   </div>
@@ -196,7 +197,7 @@ export const Dashboard: React.FC<Props> = ({ t, entra, visita }) => {
                       accentColor={COR_QUARTIL[1]}
                       gradientFrom={COR_QUARTIL[1]}
                       trend="up"
-                      value={<span style={{ color: corTexto(COR_QUARTIL[1]), ...ts }}>+ {formatBRL(Math.abs(mistura('diferenca')))}</span>}
+                      value={<span style={{ color: corTexto(COR_QUARTIL[1]), ...ts }} data-alvo-feitico="valor">+ {formatBRL(Math.abs(mistura('diferenca')))}</span>}
                       sub="Acima da meta projetada"
                     />
                   </div>
@@ -235,7 +236,7 @@ export const Dashboard: React.FC<Props> = ({ t, entra, visita }) => {
                         <DonutChart percent={pctMeta} sublabel="da meta" color={corDaMeta(n.pctMeta)} size={180} />
                         <div className="text-center space-y-1">
                           <p className="text-xs text-muted-foreground">
-                            <span className="font-mono tabular-nums font-semibold text-foreground" style={ts}>{formatBRL(mistura('recebido'))}</span>
+                            <span className="font-mono tabular-nums font-semibold text-foreground" style={ts} data-alvo-feitico="valor">{formatBRL(mistura('recebido'))}</span>
                             {' '}de{' '}
                             <span className="font-mono tabular-nums">{formatBRL(n.meta)}</span>
                           </p>

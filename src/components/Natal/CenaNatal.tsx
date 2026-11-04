@@ -4,6 +4,7 @@ import { ehTemaEscuro } from '@/lib/temas';
 import { cn } from '@/lib/utils';
 import { EVENTO_ACORDO_SALVO } from '@/components/Halloween/tema';
 import { EVENTO_FESTA, EVENTO_TRENO, type CenaNatal } from './tema';
+import { VAO, naCurva } from './varal';
 import './natal.css';
 
 /*
@@ -138,13 +139,9 @@ export function CamadaNatal({ cena }: { cena: CenaNatal }) {
   );
 }
 
-/** Largura de um vão do varal, de um prego ao outro. */
-const VAO = 150;
 const CORES_LUZ = ['#FF3B3B', '#FFC531', '#2FD16B', '#3AA0FF', '#FF5FC0'];
 /** Posição ao longo do vão (0 a 1) de cada lâmpada. */
 const LAMPADAS = [0.17, 0.39, 0.61, 0.83];
-/** Ponto da curva do fio: começa e termina em y = 4, desce 10 px no meio. */
-const naCurva = (t: number) => ({ x: VAO * t, y: 4 + 40 * t * (1 - t) });
 const inclinacao = (t: number) => Math.atan((40 * (1 - 2 * t)) / VAO) * 180 / Math.PI;
 
 /**
@@ -376,21 +373,91 @@ export function RevoadaNatal({ cena }: { cena: CenaNatal }) {
   );
 }
 
-function Rena({ x, rudolph }: { x: number; rudolph?: boolean }) {
+/** Uma pata: sai do quadril (0, 0) para baixo, gordinha, com o casco escuro. */
+function Pata({ x, y, lado, longe }: { x: number; y: number; lado: 'frente' | 'tras'; longe?: boolean }) {
   return (
-    <g transform={`translate(${x} 0)`} className="rena">
-      <g className="patas-tras"><path d="M30 34 L36 45 M33 34 L40 43" /></g>
-      <g className="patas-frente"><path d="M14 34 L6 42 M17 34 L11 45" /></g>
-      <ellipse cx="23" cy="30" rx="13" ry="6.2" fill="#8B5A3C" />
-      <ellipse cx="23" cy="32.5" rx="9" ry="3" fill="#B98560" />
-      <path d="M33 27 C37 25 39 27 37 29" fill="#F2E6D8" />
-      <path d="M13 28 C10 22 8 18 6 15 L10 13 C12 17 15 22 18 26 Z" fill="#7C4F33" />
-      <ellipse cx="5.5" cy="14" rx="5.2" ry="3.6" fill="#8B5A3C" />
-      <path d="M8 11 L10 4 M9.2 7 L13 5 M7 11 L5 4 M6 7 L2.6 5" className="galho" />
-      <circle cx="4.4" cy="12.8" r=".9" fill="#1D120B" />
-      <circle cx="0.6" cy="15" r={rudolph ? 2.3 : 1.5} fill={rudolph ? '#FF2B2B' : '#3B2316'} className={rudolph ? 'nariz' : undefined} />
-      <path d="M14 26 Q20 24 26 26" fill="none" stroke="#C9302C" strokeWidth="2.2" />
-      <circle cx="20" cy="25.4" r="1.2" fill="#FFD23F" />
+    <g transform={`translate(${x} ${y})`}>
+      <g className={cn('pata', lado, longe && 'longe')}>
+        <path d="M-2.4 -1 C-2.6 4 -2.4 7 -2.2 9.5 L2.2 9.5 C2.4 7 2.6 4 2.4 -1 Z" fill={longe ? '#6E4129' : '#8B5A3C'} />
+        <rect x="-2.6" y="8.6" width="5.2" height="3.2" rx="1.4" fill="#3B2316" />
+      </g>
+    </g>
+  );
+}
+
+/**
+ * Rena fofinha, olhando para a esquerda (o trenó voa para lá): cabeça grande
+ * e redonda, olhos brilhando, bochecha rosada, chifre macio e corpo gordinho.
+ * Galopa no ar: o corpo sobe e inclina a cada passada, as patas da frente e de
+ * trás vão em fases opostas, a cabeça acompanha e as orelhas, o rabo e o
+ * sininho balançam. `ordem` atrasa a passada de cada uma, em onda.
+ */
+function Rena({ x, ordem, rudolph }: { x: number; ordem: number; rudolph?: boolean }) {
+  return (
+    <g transform={`translate(${x} 0)`}>
+      <g className="rena" style={{ ['--d' as string]: `${-ordem * 0.16}s` }}>
+        {/* Patas de lá, atrás do corpo */}
+        <Pata x={18.5} y={33} lado="frente" longe />
+        <Pata x={33} y={33} lado="tras" longe />
+        {/* O rabinho */}
+        <g transform="translate(37.5 27)">
+          <g className="rabo">
+            <ellipse cx="2.6" cy="-1" rx="3.4" ry="2.6" fill="#8B5A3C" />
+            <ellipse cx="3.4" cy="0" rx="2.4" ry="1.8" fill="#FBEBD6" />
+          </g>
+        </g>
+        {/* Patas de cá */}
+        <Pata x={16} y={34} lado="frente" />
+        <Pata x={31} y={34} lado="tras" />
+        {/* O corpo gordinho, a barriga e a coleira com o sininho */}
+        <ellipse cx="25" cy="30" rx="13.5" ry="8.6" fill="url(#nt-rena-pelo)" />
+        <ellipse cx="23" cy="34" rx="9" ry="4.4" fill="#F3DCC2" />
+        <path d="M26 22.5 C29 21.8 33 22.6 35.5 25" fill="none" stroke="#FFFFFF" strokeOpacity=".25" strokeWidth="1.6" strokeLinecap="round" />
+        {/* A cabeça, presa no pescoço: acompanha a passada */}
+        <g transform="translate(15 25)">
+          <g className="cabeca">
+            <path d="M1 1.5 C0 -2.5 -2 -6 -4.5 -9" fill="none" stroke="#8E5C3B" strokeWidth="9.5" strokeLinecap="round" />
+            <path d="M-4.5 1.5 C-6.5 -2 -7.5 -5 -7.5 -8" fill="none" stroke="#F3DCC2" strokeOpacity=".55" strokeWidth="2.2" strokeLinecap="round" />
+            {/* A coleira, na base do pescoço */}
+            <path d="M-4.6 -1.2 C-2.4 1.6 2.2 2.6 5.8 0.6" fill="none" stroke="#D62828" strokeWidth="2.6" strokeLinecap="round" />
+            <path d="M-4 -1.6 C-2 0.6 2 1.6 5.2 0" fill="none" stroke="#FF6B6B" strokeOpacity=".6" strokeWidth=".7" strokeLinecap="round" />
+            {/* O sininho, pendurado na coleira */}
+            <g transform="translate(0.4 2.4)">
+              <g className="sino">
+                <path d="M-2.4 2.8 C-2.4 0 -1.4 -0.6 0 -0.6 C1.4 -0.6 2.4 0 2.4 2.8 Z" fill="#F4C542" stroke="#B8860B" strokeWidth=".5" />
+                <circle cx="0" cy="3" r=".8" fill="#8A5A00" />
+              </g>
+            </g>
+            {/* Chifres macios (o de lá mais escuro) */}
+            <path d="M-2 -18.5 C-1 -22 0 -24 2.5 -25.5 M0 -22.3 C2 -22.4 3.4 -21.6 4.4 -20.4" fill="none" stroke="#A8784A" strokeWidth="1.9" strokeLinecap="round" />
+            <path d="M-6.5 -19.5 C-7.5 -23 -7.2 -25.5 -5.5 -27.5 M-7.1 -23.4 C-9.2 -24.2 -10.4 -25.6 -10.8 -27.2" fill="none" stroke="#C9935F" strokeWidth="2.1" strokeLinecap="round" />
+            {/* Orelha de lá */}
+            <g transform="translate(-1 -18)"><g className="orelha longe">
+              <ellipse cx="3.6" cy="-0.8" rx="3.8" ry="1.9" transform="rotate(-25 3.6 -0.8)" fill="#6E4129" />
+            </g></g>
+            <circle cx="-6" cy="-13" r="8" fill="url(#nt-rena-pelo)" />
+            {/* Topete */}
+            <path d="M-8.5 -20.5 C-7 -22.5 -5 -22.6 -4 -20.6 C-3.4 -22 -1.6 -22 -1 -20.2" fill="#7E4A2C" />
+            {/* Orelha de cá */}
+            <g transform="translate(-2 -16.5)"><g className="orelha">
+              <ellipse cx="4.2" cy="-0.6" rx="4.4" ry="2.2" transform="rotate(-18 4.2 -0.6)" fill="#8B5A3C" />
+              <ellipse cx="4.4" cy="-0.6" rx="2.6" ry="1.1" transform="rotate(-18 4.4 -0.6)" fill="#F2A8B4" />
+            </g></g>
+            {/* Focinho, bochecha, olho e sorriso */}
+            <ellipse cx="-12.2" cy="-10.6" rx="5" ry="3.9" fill="#F3DCC2" />
+            <ellipse cx="-5.2" cy="-9.6" rx="2.1" ry="1.3" fill="#FF8FA3" opacity=".75" />
+            <g className="olho">
+              <ellipse cx="-8.4" cy="-14.6" rx="2" ry="2.5" fill="#1D120B" />
+              <circle cx="-9" cy="-15.6" r=".85" fill="#FFFFFF" />
+              <circle cx="-7.8" cy="-13.6" r=".4" fill="#FFFFFF" />
+            </g>
+            <path d="M-13.6 -8.2 C-12.6 -7.1 -11 -7.1 -10.2 -8.1" fill="none" stroke="#5A3420" strokeWidth=".8" strokeLinecap="round" />
+            {rudolph && <circle cx="-16.4" cy="-11.6" r="5" fill="#FF3B3B" opacity=".22" className="nariz-halo" />}
+            <circle cx="-16.4" cy="-11.6" r={rudolph ? 2.9 : 2.2} fill={rudolph ? '#FF2B2B' : '#3B2316'} className={rudolph ? 'nariz' : undefined} />
+            <circle cx="-17.1" cy="-12.4" r=".8" fill="#FFFFFF" opacity=".7" />
+          </g>
+        </g>
+      </g>
     </g>
   );
 }
@@ -398,10 +465,18 @@ function Rena({ x, rudolph }: { x: number; rudolph?: boolean }) {
 function Treno() {
   return (
     <svg viewBox="0 0 270 64" className="nt-treno-svg">
-      <path d="M38 27 L70 27 M86 27 L118 27 M134 27 L178 34" className="arreio" />
-      <Rena x={0} rudolph />
-      <Rena x={48} />
-      <Rena x={96} />
+      <defs>
+        <radialGradient id="nt-rena-pelo" cx=".38" cy=".32" r=".75">
+          <stop offset="0" stopColor="#C38653" />
+          <stop offset=".55" stopColor="#94603D" />
+          <stop offset="1" stopColor="#6E4129" />
+        </radialGradient>
+      </defs>
+      {/* As rédeas, com folga, de uma coleira à outra e da última ao trenó */}
+      <path d="M33 26 Q47 33 61 26 M81 26 Q95 33 109 26 M129 26 Q156 36 182 30" className="arreio" />
+      <Rena x={0} ordem={0} rudolph />
+      <Rena x={48} ordem={1} />
+      <Rena x={96} ordem={2} />
       <g transform="translate(166 0)">
         <path d="M30 12 C26 8 34 4 40 7 C46 3 54 6 52 12 C58 14 56 24 50 24 L28 24 C22 22 24 14 30 12 Z" fill="#8C6239" />
         <rect x="30" y="7" width="7" height="7" rx="1" fill="#2E7FD6" /><path d="M33.5 7 V14" stroke="#FFD23F" strokeWidth="1.2" />

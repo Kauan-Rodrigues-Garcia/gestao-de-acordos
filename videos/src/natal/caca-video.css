@@ -1,0 +1,16 @@
+/*
+ * A Caça aos Zumbis no vídeo de Natal: o CSS original (`caca.css`, do arquivo
+ * morto) dá cor, fonte, borda em degrau, faixa e etiquetas. O que ele anima
+ * sozinho fica parado aqui — no vídeo quem anima é o quadro (Remotion grava
+ * quadro a quadro; animação CSS sairia tremida).
+ */
+/* O @remotion/google-fonts registra a Press Start 2P como «Press Start TwoP». */
+.nt-caca { --zb-arcade: 'Press Start TwoP', 'Press Start 2P', monospace; }
+
+.nt-caca .zb-tag-hs,
+.nt-caca .zb-faixa-trilho,
+.nt-caca .zb-letreiro,
+.nt-caca .zb-furo,
+.nt-caca .zb-recado,
+.nt-caca .zb-zumbi-sprite { animation: none !important; }
+.nt-caca .zb-faixa-trilho { position: absolute; inset: 0 auto 0 0; display: flex; width: max-content; }

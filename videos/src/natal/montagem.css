@@ -1,0 +1,45 @@
+/*
+ * A montagem do fim de outubro (`Montagem.tsx`): um cenário só do vídeo, fora
+ * do sistema. As peças que vêm do sistema trazem o visual delas:
+ *
+ *   - o cartão «Cafezinho» da pesquisa: as regras de `cafezinho.css` (arquivo
+ *     morto, pesquisa-experiencia) copiadas aqui, sem o `position: fixed` do
+ *     canto da tela e sem o @import das fontes (o vídeo carrega a Nunito e a
+ *     Caveat pelo @remotion/google-fonts);
+ *   - o «Tocando agora» do player: `somAmbiente.css` do app, importado.
+ *
+ * Nenhuma animação de CSS: no vídeo quem anima é o quadro.
+ */
+.nt-montagem .pq-caf {
+  position: relative;
+  width: 300px;
+  border-radius: 22px; padding: 15px 15px 13px;
+  color: #4a2e22; font-family: 'Nunito', 'Inter', system-ui, sans-serif;
+  background: radial-gradient(120% 90% at 100% 0%, #ffe3c2 0%, #fff4e6 46%, #fffaf3 100%);
+  box-shadow: 0 24px 50px -12px rgb(110 60 20 / 0.38), 0 0 0 1px rgb(200 140 90 / 0.22);
+  display: grid; gap: 9px; overflow: hidden;
+  color-scheme: light;
+}
+.nt-montagem .pq-caf .pq-cab { display: flex; gap: 10px; align-items: center; }
+.nt-montagem .pq-caf .pq-caneca { width: 44px; height: 44px; flex: none; }
+.nt-montagem .pq-caf .pq-oi { font-weight: 900; font-size: 17px; line-height: 1.15; letter-spacing: -0.01em; }
+.nt-montagem .pq-caf .pq-sub { font-size: 12.5px; color: #8a5f48; font-weight: 600; margin-top: 1px; line-height: 1.35; }
+.nt-montagem .pq-caf .pq-perg { font-size: 14px; font-weight: 800; margin: 0; }
+.nt-montagem .pq-caf .pq-ops { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+.nt-montagem .pq-caf .pq-op {
+  border: 0; border-radius: 15px; padding: 8px 4px 7px; display: grid; justify-items: center; gap: 4px;
+  font: inherit; font-weight: 800; font-size: 12px; color: #4a2e22;
+  box-shadow: 0 2px 0 rgb(120 70 30 / 0.12);
+}
+.nt-montagem .pq-caf .pq-op svg { width: 32px; height: 32px; }
+.nt-montagem .pq-caf .pq-op.ruim { background: #ffd9cf; }
+.nt-montagem .pq-caf .pq-op.media { background: #ffeab8; }
+.nt-montagem .pq-caf .pq-op.boa { background: #d5f0d9; }
+.nt-montagem .pq-caf .pq-op[aria-pressed='true'] { outline: 3px solid #4a2e22; outline-offset: 1px; }
+.nt-montagem .pq-caf .pq-ops:has([aria-pressed='true']) .pq-op:not([aria-pressed='true']) { opacity: 0.62; }
+.nt-montagem .pq-caf.pq-fim { justify-items: center; text-align: center; }
+.nt-montagem .pq-caf .pq-assin { font-family: 'Caveat', cursive; font-size: 19px; color: #b5643a; line-height: 1; }
+
+/* O equalizador e a aura do «Tocando agora»: parados no CSS, mexidos pelo quadro. */
+.nt-montagem .som-eq > span { animation: none; }
+.nt-montagem .som-heroi-aura { animation: none; }
