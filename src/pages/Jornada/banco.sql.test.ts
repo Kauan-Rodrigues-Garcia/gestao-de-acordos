@@ -115,6 +115,33 @@ describe('migrations do Jornada (180000 → 200000 → 210000)', () => {
     expect(await como<boolean>(BIA, 'select public.fn_jornada_membro($1) v', [EQ_RET])).toBe(false);
   });
 
+  it('Suporte vê só Acesso, Retenção vê só Retenção (as duas equipes no Jornada)', async () => {
+    const EQ_RET_JOR = '00000000-0000-4000-8000-0000000000b3';
+    const CAIO = '00000000-0000-4000-8000-0000000000c3';
+    await db.exec(`
+      insert into public.equipes values ('${EQ_RET_JOR}', 'Retenção 2', '${JOR}', '${EMP}') on conflict do nothing;
+      insert into public.perfis (id, nome, perfil, empresa_id, setor_id, equipe_id)
+        values ('${CAIO}', 'Caio', 'operador', '${EMP}', '${JOR}', '${EQ_RET_JOR}') on conflict do nothing;`);
+    const abas = (uid: string) => como<string[]>(uid,
+      'select coalesce(array_agg(tipo order by tipo), array[]::text[]) v from public.fn_jornada_minhas_abas($1)', [EMP]);
+    expect(await abas(ANA)).toEqual(['acesso']);    // equipe Suporte
+    expect(await abas(CAIO)).toEqual(['retencao']); // equipe Retenção 2
+    expect(await abas(BIA)).toEqual([]);            // Retenção do Receptivo: nada
+    expect(await como<boolean>(ANA, 'select public.fn_jornada_membro($1) v', [EQ_RET_JOR])).toBe(false);
+    expect(await como<boolean>(CAIO, 'select public.fn_jornada_membro($1) v', [EQ_SUP])).toBe(false);
+  });
+
+  it('o nome decide a aba: palavra Suporte = Acesso, Retenç… = Retenção', async () => {
+    const tipo = (n: string) => db.query<{ t: string | null }>('select public.fn_jornada_tipo_subgrupo($1) t', [n]).then(r => r.rows[0].t);
+    expect(await tipo('Suporte')).toBe('acesso');
+    expect(await tipo('Equipe Suporte 2')).toBe('acesso');
+    expect(await tipo('RETENÇÃO')).toBe('retencao');
+    expect(await tipo('retencao manha')).toBe('retencao');
+    expect(await tipo('Suportes')).toBe('acesso');
+    expect(await tipo('Cobrança')).toBeNull();
+    expect(await tipo('Antisuporte')).toBeNull(); // precisa ser o começo de uma palavra
+  });
+
   it('desligar a chave no painel tira a aba', async () => {
     await db.exec(`update public.cargos_permissoes set permissoes = permissoes || '{"ver_jornada_acesso": false}' where cargo = 'operador'`);
     expect(await como<boolean>(ANA, 'select public.fn_jornada_membro($1) v', [EQ_SUP])).toBe(false);
