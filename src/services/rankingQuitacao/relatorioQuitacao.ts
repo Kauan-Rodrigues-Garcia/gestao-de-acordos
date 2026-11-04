@@ -33,9 +33,10 @@
  *     contrato, naquela data, é o que os outros acordos pagaram (até R$ 1,00
  *     de diferença, o arredondamento do ERP). O valor é o pago de cada um:
  *     Valor Acordo − Valor Restante do que estava aberto, mais o resto;
- *   - acordo já pago por inteiro, sem saldo em aberto no contrato (ex.:
- *     Quitação + um Parcelamento antigo terminado), continua NÃO somando —
- *     é a pergunta que ficou em aberto em 13/10.
+ *   - acordo já pago por inteiro (saldo 0), do mesmo contrato, operador e
+ *     data, SOMA o que recebeu no mês — mesmo sem saldo em aberto no contrato
+ *     (decisão de 04/11/2026, NR 13022960: Parcelamento das parcelas 1–4 +
+ *     Junção das 5–8 no mesmo dia é uma quitação de R$ 1.936,80).
  *
  * Saldo zerado quita (pedido de 28/10/2026, NR 12552080):
  *
@@ -256,13 +257,18 @@ export function extrairQuitacoes(rows: unknown[][]): RelatorioQuitacao {
   for (const q of porContrato.values()) {
     const outras = pecas.get(`${q.contrato}|${q.operador_usuario}|${q.data_quitacao}`);
     if (!outras) continue;
-    const abertas = [...outras.values()].filter(p => p.restante > 0);
+    const pecasDe = (aberta: boolean) => [...outras.entries()].filter(([, p]) => (p.restante > 0) === aberta);
+    const fechadas = pecasDe(false);
+    // Peça já paga por inteiro (saldo 0) no mesmo contrato, operador e data é parte da
+    // quitação e soma o que recebeu no mês (pedido de 04/11/2026, NR 13022960: Parcelamento
+    // das parcelas 1–4 + Junção das 5–8, pagos no mesmo dia — R$ 1.000 + R$ 936,80).
+    for (const [cod] of fechadas) q.centavosRecebidos += recebido(cod);
+    const abertas = pecasDe(true);
     if (!abertas.length) continue;
-    const fechadas = [...outras.values()].filter(p => p.restante <= 0);
-    const faltava = abertas.reduce((s, p) => s + centavos(p.restante), 0);
-    const quitouCom = centavos(q.valor_acordo) + fechadas.reduce((s, p) => s + centavos(p.valor), 0);
+    const faltava = abertas.reduce((s, [, p]) => s + centavos(p.restante), 0);
+    const quitouCom = centavos(q.valor_acordo) + fechadas.reduce((s, [, p]) => s + centavos(p.valor), 0);
     if (Math.abs(faltava - quitouCom) > 100) continue;
-    for (const cod of outras.keys()) q.centavosRecebidos += recebido(cod);
+    for (const [cod] of abertas) q.centavosRecebidos += recebido(cod);
     completandoParcelamento += 1;
   }
 

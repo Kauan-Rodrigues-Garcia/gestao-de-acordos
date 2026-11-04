@@ -126,13 +126,33 @@ describe('relatório mensal de parcelas pagas → acordos quitados no mês', () 
       expect(r.quitadosCompletandoParcelamento).toBe(0);
     });
 
-    it('Parcelamento antigo já pago por inteiro, sem saldo no contrato, continua não somando', () => {
+    it('Parcelamento já pago por inteiro no mesmo contrato e data soma o recebido (decisão de 04/11)', () => {
       const r = extrairQuitacoes([
         CAB_NR,
         p('1', '702', 1817, 0, 'Quitação'),
         p('2', '702', 500, 0, 'Parcelamento'),
       ]);
-      expect(r.acordos[0].valor_acordo).toBe(1817);
+      expect(r.acordos).toHaveLength(1);
+      expect(r.acordos[0].valor_acordo).toBe(2317);
+      expect(r.quitadosCompletandoParcelamento).toBe(0);
+    });
+
+    it('NR 13022960: Junção (parcelas 5–8) + Parcelamento (1–4), saldo 0, mesmo dia — R$ 1.936,80', () => {
+      const r = extrairQuitacoes([
+        CAB_NR,
+        p('5881970', '13022960', 936.8, 0, 'Junção', '2026-10-20'),
+        p('5881442', '13022960', 1000, 0, 'Parcelamento', '2026-10-20'),
+      ]);
+      expect(r.acordos).toEqual([{ cod_acordo: '5881970', operador_usuario: 'LUIZ', valor_acordo: 1936.8, data_quitacao: '2026-10-20' }]);
+    });
+
+    it('peça paga só em parte no mês soma só o que recebeu no mês', () => {
+      const r = extrairQuitacoes([
+        CAB_NR,
+        p('1', '704', 800, 0, 'Quitação'),
+        p('2', '704', 3000, 0, 'Parcelamento', '2026-10-20', 250),
+      ]);
+      expect(r.acordos[0].valor_acordo).toBe(1050);
     });
 
     it('outro contrato ou outra data não entram na conta', () => {
