@@ -41,6 +41,8 @@ interface ExcecoesPorUsuarioProps {
   /** As pessoas do setor em tela. */
   pessoas: PessoaSelecionavel[];
   bloqueado: boolean;
+  /** Configuração → meta comum de cada faixa (ver `premio.ts`). */
+  metasReferencia?: ReadonlyMap<string, (number | null)[]>;
   onMudou: () => void;
   /** Pede a confirmação de «voltar ao padrão» — o diálogo mora na aba. */
   onRemover: (grupo: ConfigComissao) => void;
@@ -108,7 +110,7 @@ function PessoasDoGrupo({ grupo, pessoas, ocupadas, alvo, bloqueado, onMudou }: 
 }
 
 export function ExcecoesPorUsuario({
-  empresaId, setorId, ano, mes, isPaguePlay, padrao, grupos, pessoas, bloqueado, onMudou, onRemover,
+  empresaId, setorId, ano, mes, isPaguePlay, padrao, grupos, pessoas, bloqueado, metasReferencia, onMudou, onRemover,
 }: ExcecoesPorUsuarioProps) {
   const [escolhidas, setEscolhidas] = useState<string[]>([]);
   const [criando, setCriando] = useState(false);
@@ -200,6 +202,7 @@ export function ExcecoesPorUsuario({
                 isPaguePlay={isPaguePlay}
                 regraDoSetor={regraDoSetor}
                 desabilitado={bloqueado}
+                metasReferencia={metasReferencia?.get(g.id)}
                 onSalvo={onMudou}
               />
             </div>

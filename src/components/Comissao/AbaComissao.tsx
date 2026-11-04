@@ -58,6 +58,7 @@ import { ExcecoesPorUsuario } from './ExcecoesPorUsuario';
 import { FormConfigComissao } from './FormConfigComissao';
 import { ListaComissaoOperadores, type OperadorComissao } from './ListaComissaoOperadores';
 import { MetaDoSetorComissao } from './MetaDoSetorComissao';
+import { metasDeReferenciaPorConfig } from './premio';
 import { payloadDe, rascunhoParaExcecao } from './rascunhoConfig';
 import type { PessoaSelecionavel } from './SeletorPessoas';
 import { listarSubgrupos, type SubgrupoEquipe } from '@/services/equipes/equipesSubgrupos.service';
@@ -226,6 +227,14 @@ export function AbaComissao({
     }).length;
   }, [metas, operadores, setorId, atual.configs]);
 
+  // ── Prêmio em reais: a meta comum de cada faixa, por configuração ─────────
+  // Só em bruto. Em H.O. a meta de cada pessoa passa pelo fator do próprio
+  // recebido, e não há uma meta comum para converter o prêmio.
+  const metasReferencia = useMemo(() => (isPaguePlay
+    ? new Map<string, (number | null)[]>()
+    : metasDeReferenciaPorConfig({ configs: atual.configs, operadores, metas, setorId })),
+  [isPaguePlay, atual.configs, operadores, metas, setorId]);
+
   async function importar(substituir: boolean) {
     setImportando(true);
     const r = await importarMesAnterior({ empresaId, setorId, ano, mes, substituir });
@@ -339,6 +348,7 @@ export function AbaComissao({
           isPaguePlay={isPaguePlay}
           regraDoSetor={padrao?.regraSetor ?? 'nenhuma'}
           desabilitado={bloqueado}
+          metasReferencia={padrao ? metasReferencia.get(padrao.id) : undefined}
           onSalvo={atual.recarregar}
         />
         {alemDasFaixas > 0 && (
@@ -390,6 +400,7 @@ export function AbaComissao({
                     isPaguePlay={isPaguePlay}
                     regraDoSetor={padrao.regraSetor}
                     desabilitado={bloqueado}
+                    metasReferencia={metasReferencia.get(ex.id)}
                     onSalvo={atual.recarregar}
                   />
                 </div>
@@ -429,6 +440,7 @@ export function AbaComissao({
             grupos={grupos}
             pessoas={pessoas}
             bloqueado={bloqueado}
+            metasReferencia={metasReferencia}
             onMudou={atual.recarregar}
             onRemover={setRemovendo}
           />
