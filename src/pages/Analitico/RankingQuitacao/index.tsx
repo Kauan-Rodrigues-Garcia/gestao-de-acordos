@@ -6,7 +6,8 @@
  * no rodapé. Do 1º ao 6º não há «falta»: já estão na premiação.
  *
  * Ao lado do Colchão, só nos setores habilitados em Configurações → Geral.
- * Ordem por VALOR quitado (soma do Valor Acordo dos acordos quitados no mês),
+ * Ordem por VALOR quitado (soma do Recebido no mês dos acordos quitados — não
+ * o Valor Acordo inteiro, pedido de 04/11/2026),
  * desempate pela quantidade. A conta é do banco (`fn_ranking_quitacao`); o
  * número vem do relatório mensal de parcelas pagas, importado aqui mesmo.
  *

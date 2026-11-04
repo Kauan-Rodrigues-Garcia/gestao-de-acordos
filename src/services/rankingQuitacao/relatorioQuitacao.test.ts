@@ -3,17 +3,18 @@ import { extrairQuitacoes, resumoPorOperador } from './relatorioQuitacao';
 
 const CAB = ['Cód. Acordo', 'Num. Parc. Acordo', 'Operador', 'Dt. Pgto', 'Recebido', 'Situação', 'Valor Acordo', 'Situação Atual', 'Data da quitação'];
 const d = (s: string) => new Date(`${s}T00:00:00`);
-const linha = (cod: string, op: string, pgto: string, valor: number, atual: string, quitou: string | null, parc = 1) =>
-  [cod, parc, op, d(pgto), 100, 'Quitação', valor, atual, quitou ? d(quitou) : null];
+/** `recebido`: o que a linha (a parcela) pagou no mês; por padrão, o acordo inteiro. */
+const linha = (cod: string, op: string, pgto: string, valor: number, atual: string, quitou: string | null, parc = 1, recebido = valor) =>
+  [cod, parc, op, d(pgto), recebido, 'Quitação', valor, atual, quitou ? d(quitou) : null];
 
 describe('relatório mensal de parcelas pagas → acordos quitados no mês', () => {
   it('conta só «Situação Atual» = Quitação, com a quitação dentro do mês do arquivo', () => {
     const r = extrairQuitacoes([
       CAB,
       linha('1', 'ANA', '2026-09-02', 500, 'Quitação', '2026-09-02'),
-      // Duas parcelas do mesmo acordo: conta uma vez, com o Valor Acordo.
-      linha('2', 'ANA', '2026-09-05', 900, 'Quitação', '2026-09-20', 1),
-      linha('2', 'ANA', '2026-09-20', 900, 'Quitação', '2026-09-20', 2),
+      // Duas parcelas do mesmo acordo: conta uma vez, com a soma do recebido.
+      linha('2', 'ANA', '2026-09-05', 900, 'Quitação', '2026-09-20', 1, 450),
+      linha('2', 'ANA', '2026-09-20', 900, 'Quitação', '2026-09-20', 2, 450),
       // «Situação» diz Quitação, mas o acordo ainda está parcelando.
       linha('3', 'BIA', '2026-09-03', 2000, 'Parcelamento', null),
       // Quitou em outubro: fica para o relatório de outubro.
@@ -49,9 +50,9 @@ describe('relatório mensal de parcelas pagas → acordos quitados no mês', () 
   });
 
   describe('Junção', () => {
-    const CAB_JUNCAO = ['Cód. Acordo', 'Nr. Documento', 'Operador', 'Dt. Pgto', 'Valor Acordo', 'Valor Restante', 'Situação Atual', 'Data da quitação'];
-    const j = (cod: string, nr: string, op: string, valor: number, restante: number, atual: string, quitou: string | null) =>
-      [cod, nr, op, d('2026-10-07'), valor, restante, atual, quitou ? d(quitou) : null];
+    const CAB_JUNCAO = ['Cód. Acordo', 'Nr. Documento', 'Operador', 'Dt. Pgto', 'Recebido', 'Valor Acordo', 'Valor Restante', 'Situação Atual', 'Data da quitação'];
+    const j = (cod: string, nr: string, op: string, valor: number, restante: number, atual: string, quitou: string | null, recebido = valor) =>
+      [cod, nr, op, d('2026-10-07'), recebido, valor, restante, atual, quitou ? d(quitou) : null];
 
     it('conta a Junção que quitou o contrato (saldo zerado e data da quitação)', () => {
       const r = extrairQuitacoes([
@@ -70,8 +71,8 @@ describe('relatório mensal de parcelas pagas → acordos quitados no mês', () 
     it('pagamento desmembrado (Pix Quitação + cartão Junção) é uma quitação, com a soma', () => {
       const r = extrairQuitacoes([
         CAB_JUNCAO,
-        j('5846977', '13008491', 'TAIS', 2800, 0, 'Junção', '2026-10-07'),
-        j('5846977', '13008491', 'TAIS', 2800, 0, 'Junção', '2026-10-07'),
+        j('5846977', '13008491', 'TAIS', 2800, 0, 'Junção', '2026-10-07', 1400),
+        j('5846977', '13008491', 'TAIS', 2800, 0, 'Junção', '2026-10-07', 1400),
         j('5847011', '13008491', 'TAIS', 700, 0, 'Quitação', '2026-10-07'),
       ]);
       expect(r.acordos).toEqual([{ cod_acordo: '5847011', operador_usuario: 'TAIS', valor_acordo: 3500, data_quitacao: '2026-10-07' }]);
@@ -90,9 +91,10 @@ describe('relatório mensal de parcelas pagas → acordos quitados no mês', () 
   });
 
   describe('quitação que completa um Parcelamento', () => {
-    const CAB_NR = ['Cód. Acordo', 'Nr. Documento', 'Operador', 'Dt. Pgto', 'Valor Acordo', 'Valor Restante', 'Situação Atual', 'Data da quitação'];
-    const p = (cod: string, nr: string, valor: number, restante: number, atual: string, quitou = '2026-10-20') =>
-      [cod, nr, 'LUIZ', d('2026-10-20'), valor, restante, atual, d(quitou)];
+    const CAB_NR = ['Cód. Acordo', 'Nr. Documento', 'Operador', 'Dt. Pgto', 'Recebido', 'Valor Acordo', 'Valor Restante', 'Situação Atual', 'Data da quitação'];
+    /** Por padrão o recebido no mês é o que o acordo já pagou (Valor Acordo − Valor Restante). */
+    const p = (cod: string, nr: string, valor: number, restante: number, atual: string, quitou = '2026-10-20', recebido = valor - restante) =>
+      [cod, nr, 'LUIZ', d('2026-10-20'), recebido, valor, restante, atual, d(quitou)];
 
     it('NR 12800154: pagou R$ 1.095 do Parcelamento e o saldo com R$ 648 + R$ 50 — quitação de R$ 1.793', () => {
       const r = extrairQuitacoes([
@@ -145,9 +147,9 @@ describe('relatório mensal de parcelas pagas → acordos quitados no mês', () 
   });
 
   describe('saldo zerado quita, qualquer que seja o rótulo', () => {
-    const CAB_NR = ['Cód. Acordo', 'Nr. Documento', 'Operador', 'Dt. Pgto', 'Valor Acordo', 'Valor Restante', 'Situação Atual', 'Data da quitação'];
+    const CAB_NR = ['Cód. Acordo', 'Nr. Documento', 'Operador', 'Dt. Pgto', 'Recebido', 'Valor Acordo', 'Valor Restante', 'Situação Atual', 'Data da quitação'];
     const s = (cod: string, nr: string, valor: number, restante: number, atual: string, quitou: string | null = '2026-10-27') =>
-      [cod, nr, 'TAIS', d('2026-10-27'), valor, restante, atual, quitou ? d(quitou) : null];
+      [cod, nr, 'TAIS', d('2026-10-27'), valor, valor, restante, atual, quitou ? d(quitou) : null];
 
     it('NR 12552080: Parcelamento 1/1, saldo 0 e data da quitação — conta', () => {
       const r = extrairQuitacoes([CAB_NR, s('5871579', '12552080', 955.8, 0, 'Parcelamento')]);
@@ -164,9 +166,45 @@ describe('relatório mensal de parcelas pagas → acordos quitados no mês', () 
     });
   });
 
+  describe('o valor é o RECEBIDO no mês, não o Valor Acordo (pedido de 04/11/2026)', () => {
+    const CAB_REC = ['Cód. Acordo', 'Nr. Documento', 'Operador', 'Dt. Pgto', 'Recebido', 'Valor Acordo', 'Valor Restante', 'Situação Atual', 'Data da quitação'];
+    const r_ = (cod: string, nr: string, op: string, pgto: string, recebido: number, valor: number, restante: number, atual: string, quitou: string | null) =>
+      [cod, nr, op, d(pgto), recebido, valor, restante, atual, quitou ? d(quitou) : null];
+
+    it('NR 12604078 (eduardo_naia): boleto de 16 parcelas, quitou a última — conta R$ 420,30, não R$ 6.723,00', () => {
+      const r = extrairQuitacoes([
+        CAB_REC,
+        r_('5207121', '12604078', 'eduardo_naia', '2026-11-03', 420.3, 6723, 0, 'Quitação', '2026-11-03'),
+        r_('5848653', '12915693', 'eduardo_naia', '2026-11-03', 1000, 1300, 0, 'Quitação', '2026-11-03'),
+        // Parcela única sem data da quitação: recebeu, mas não quitou contrato — fora do ranking.
+        r_('5882125', '12547048', 'eduardo_naia', '2026-11-03', 350, 350, 0, 'Parcela única', null),
+      ]);
+      expect(resumoPorOperador(r.acordos)).toEqual([{ operador: 'eduardo_naia', quitacoes: 2, valor: 1420.3 }]);
+    });
+
+    it('pagamento de outro mês na mesma planilha não entra no valor', () => {
+      const r = extrairQuitacoes([
+        CAB_REC,
+        r_('1', '900', 'ANA', '2026-11-03', 300, 600, 0, 'Quitação', '2026-11-03'),
+        r_('1', '900', 'ANA', '2026-11-04', 200, 600, 0, 'Quitação', '2026-11-03'),
+        r_('1', '900', 'ANA', '2026-10-30', 100, 600, 0, 'Quitação', '2026-11-03'),
+      ]);
+      expect(r.acordos[0].valor_acordo).toBe(500);
+    });
+
+    it('sem a coluna «Recebido» o arquivo é recusado, em vez de contar errado', () => {
+      const r = extrairQuitacoes([
+        ['Cód. Acordo', 'Operador', 'Dt. Pgto', 'Valor Acordo', 'Situação Atual', 'Data da quitação'],
+        ['1', 'ANA', d('2026-11-03'), 600, 'Quitação', d('2026-11-03')],
+      ]);
+      expect(r.acordos).toEqual([]);
+      expect(r.erros[0]).toContain('Recebido');
+    });
+  });
+
   it('aceita datas como número serial do Excel e valor em texto pt-BR', () => {
     // 46267 = 2026-09-02.
-    const r = extrairQuitacoes([CAB, ['9', 1, 'ANA', 46267, 100, 'Quitação', '1.234,50', 'Quitação', 46267]]);
+    const r = extrairQuitacoes([CAB, ['9', 1, 'ANA', 46267, '1.234,50', 'Quitação', '1.234,50', 'Quitação', 46267]]);
     expect(r.acordos).toEqual([{ cod_acordo: '9', operador_usuario: 'ANA', valor_acordo: 1234.5, data_quitacao: '2026-09-02' }]);
   });
 });

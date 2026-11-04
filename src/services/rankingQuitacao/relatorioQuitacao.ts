@@ -10,8 +10,8 @@
  *   - «Data da quitação» dentro do mês do arquivo. «Situação Atual» é a foto do
  *     dia da extração, então o relatório de setembro traz acordos que quitaram
  *     em outubro — esses entram pelo relatório de outubro;
- *   - um acordo conta UMA vez (Cód. Acordo), com o «Valor Acordo» — o arquivo
- *     tem uma linha por parcela paga.
+ *   - um acordo conta UMA vez (Cód. Acordo) — o arquivo tem uma linha por
+ *     parcela paga; o valor é o recebido no mês (ver abaixo).
  *
  * Junção que quita (análise de 13/10/2026, relatórios de setembro e outubro):
  *
@@ -45,6 +45,14 @@
  *   - só quando o contrato NÃO tem acordo Quitação: tendo, as outras peças
  *     seguem as regras acima.
  *
+ * O VALOR é o RECEBIDO NO MÊS (pedido de 04/11/2026, NR 12604078 do
+ * eduardo_naia): a soma da coluna «Recebido» das parcelas que os acordos da
+ * quitação pagaram no mês do arquivo — não o «Valor Acordo» inteiro. Quitar a
+ * última parcela de um boleto de 16 conta o que entrou agora (R$ 420,30), não
+ * os R$ 6.723,00 do acordo. O «Valor Acordo» e o «Valor Restante» seguem
+ * decidindo SE quita e se a quitação completa um Parcelamento; o valor que
+ * entra é o recebido de todos os acordos somados nela.
+ *
  * «Nr. Documento» e «Valor Restante» são opcionais: sem eles, cada acordo
  * conta sozinho e a Junção vale só com a data.
  *
@@ -59,6 +67,10 @@ import { norm, toDate } from '@/services/analitico/analiticoComum';
 export interface AcordoQuitado {
   cod_acordo: string;
   operador_usuario: string;
+  /**
+   * O RECEBIDO no mês pelos acordos da quitação (soma da coluna «Recebido»).
+   * O nome ficou o da coluna do banco (`ranking_quitacao_acordos.valor_acordo`).
+   */
   valor_acordo: number;
   /** `AAAA-MM-DD`. */
   data_quitacao: string;
@@ -83,6 +95,7 @@ const COLUNAS = {
   codAcordo: 'cod.acordo',
   operador: 'operador',
   dtPgto: 'dt.pgto',
+  recebido: 'recebido',
   situacaoAtual: 'situacaoatual',
   valorAcordo: 'valoracordo',
   dataQuitacao: 'datadaquitacao',
@@ -95,7 +108,7 @@ const OPCIONAIS = {
 } as const;
 
 const ROTULOS: Record<keyof typeof COLUNAS, string> = {
-  codAcordo: 'Cód. Acordo', operador: 'Operador', dtPgto: 'Dt. Pgto',
+  codAcordo: 'Cód. Acordo', operador: 'Operador', dtPgto: 'Dt. Pgto', recebido: 'Recebido',
   situacaoAtual: 'Situação Atual', valorAcordo: 'Valor Acordo', dataQuitacao: 'Data da quitação',
 };
 
@@ -145,6 +158,19 @@ export function extrairQuitacoes(rows: unknown[][]): RelatorioQuitacao {
 
   const iNr = cab.indexOf(OPCIONAIS.nrDocumento);
   const iRestante = cab.indexOf(OPCIONAIS.valorRestante);
+  const centavos = (v: number) => Math.round(v * 100);
+
+  /** O recebido no mês por Cód. Acordo, em centavos: uma linha por parcela paga. */
+  const recebidoDoAcordo = new Map<string, number>();
+  for (const r of linhas) {
+    const pago = toDate(r[idx.dtPgto]);
+    if (!pago || iso(pago).slice(0, 7) !== mes.slice(0, 7)) continue;
+    const cod = String(r[idx.codAcordo] ?? '').trim();
+    const v = numero(r[idx.recebido]);
+    if (!cod || v == null) continue;
+    recebidoDoAcordo.set(cod, (recebidoDoAcordo.get(cod) ?? 0) + centavos(v));
+  }
+  const recebido = (cod: string) => recebidoDoAcordo.get(cod) ?? 0;
 
   const contratoDa = (r: unknown[]) =>
     (iNr >= 0 ? String(r[iNr] ?? '').trim() : '') || `acordo:${String(r[idx.codAcordo] ?? '').trim()}`;
@@ -160,7 +186,8 @@ export function extrairQuitacoes(rows: unknown[][]): RelatorioQuitacao {
   const comQuitacao = new Set(linhas.filter(quitaPeloRotulo).map(contratoDa));
 
   // 1º os acordos que quitam (um por Cód. Acordo); 2º os do mesmo contrato viram uma quitação.
-  type Quitou = AcordoQuitado & { contrato: string; juncao: boolean };
+  // `valor_acordo` aqui é o Valor Acordo (confere as regras); `centavosRecebidos`, o que entra.
+  type Quitou = AcordoQuitado & { contrato: string; juncao: boolean; centavosRecebidos: number };
   const porAcordo = new Map<string, Quitou>();
   const foraDoMes = new Set<string>();
   /** Os OUTROS acordos do contrato com data de quitação no mês: `contrato|operador|dia` → por Cód. Acordo. */
@@ -195,7 +222,10 @@ export function extrairQuitacoes(rows: unknown[][]): RelatorioQuitacao {
     }
     if (dia.slice(0, 7) !== mes.slice(0, 7)) { foraDoMes.add(contrato); continue; }
     if (!porAcordo.has(cod)) {
-      porAcordo.set(cod, { cod_acordo: cod, operador_usuario: operador, valor_acordo: valor, data_quitacao: dia, contrato, juncao });
+      porAcordo.set(cod, {
+        cod_acordo: cod, operador_usuario: operador, valor_acordo: valor, data_quitacao: dia, contrato, juncao,
+        centavosRecebidos: recebido(cod),
+      });
     }
   }
 
@@ -205,6 +235,7 @@ export function extrairQuitacoes(rows: unknown[][]): RelatorioQuitacao {
     const atual = porContrato.get(chave);
     if (!atual) { porContrato.set(chave, { ...a, codDeJuncao: a.juncao }); continue; }
     atual.valor_acordo = Math.round((atual.valor_acordo + a.valor_acordo) * 100) / 100;
+    atual.centavosRecebidos += a.centavosRecebidos;
     atual.juncao ||= a.juncao;
     // O código que fica é o do acordo Quitação (a Junção só soma).
     if (atual.codDeJuncao && !a.juncao) {
@@ -217,9 +248,10 @@ export function extrairQuitacoes(rows: unknown[][]): RelatorioQuitacao {
   /*
    * A quitação que pagou o saldo de um Parcelamento do mesmo contrato, na mesma
    * data. Soma só quando os números fecham: o saldo em aberto é o que os outros
-   * acordos pagaram. Sem acordo em aberto, nada muda (ver o cabeçalho).
+   * acordos pagaram. Sem acordo em aberto, nada muda (ver o cabeçalho). A
+   * conferência é pelo Valor Acordo e Valor Restante; o que entra é o recebido
+   * no mês por todos esses acordos.
    */
-  const centavos = (v: number) => Math.round(v * 100);
   let completandoParcelamento = 0;
   for (const q of porContrato.values()) {
     const outras = pecas.get(`${q.contrato}|${q.operador_usuario}|${q.data_quitacao}`);
@@ -230,16 +262,15 @@ export function extrairQuitacoes(rows: unknown[][]): RelatorioQuitacao {
     const faltava = abertas.reduce((s, p) => s + centavos(p.restante), 0);
     const quitouCom = centavos(q.valor_acordo) + fechadas.reduce((s, p) => s + centavos(p.valor), 0);
     if (Math.abs(faltava - quitouCom) > 100) continue;
-    const pagoNasAbertas = abertas.reduce((s, p) => s + centavos(p.valor) - centavos(p.restante), 0);
-    q.valor_acordo = (quitouCom + pagoNasAbertas) / 100;
+    for (const cod of outras.keys()) q.centavosRecebidos += recebido(cod);
     completandoParcelamento += 1;
   }
 
   const quitacoes = [...porContrato.values()];
   return {
     mes,
-    acordos: quitacoes.map(({ cod_acordo, operador_usuario, valor_acordo, data_quitacao }) =>
-      ({ cod_acordo, operador_usuario, valor_acordo, data_quitacao })),
+    acordos: quitacoes.map(({ cod_acordo, operador_usuario, centavosRecebidos, data_quitacao }) =>
+      ({ cod_acordo, operador_usuario, valor_acordo: centavosRecebidos / 100, data_quitacao })),
     linhasLidas: linhas.length,
     quitadosForaDoMes: foraDoMes.size,
     quitadosPorJuncao: quitacoes.filter(q => q.juncao).length,
