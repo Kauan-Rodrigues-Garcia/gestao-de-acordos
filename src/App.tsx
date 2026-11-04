@@ -492,18 +492,18 @@ export default function App() {
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
-              {/* Jornada (04/11/2026): Acesso (subgrupo Suporte) e Retenção.
-                  Sem chave: quem abre é o subgrupo, e a tela pergunta ao banco. */}
+              {/* Jornada (04/11/2026): Acesso (grupo Suporte) e Retenção. A
+                  chave liga por cargo; o grupo, a tela pergunta ao banco. */}
               <Route path={ROUTE_PATHS.JORNADA_ACESSO} element={
                 <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COBRANCA}>
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_jornada_acesso">
                     <PaginaJornada tipo="acesso" />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
               <Route path={ROUTE_PATHS.JORNADA_RETENCAO} element={
                 <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COBRANCA}>
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_jornada_retencao">
                     <PaginaJornada tipo="retencao" />
                   </ProtectedRoute>
                 </LayoutWrapper>

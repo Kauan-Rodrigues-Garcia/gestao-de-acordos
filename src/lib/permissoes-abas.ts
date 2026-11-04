@@ -25,6 +25,8 @@ export type ModuloPermissaoId =
   | 'rh'
   | 'acordos'
   | 'pix'
+  | 'jornada_acesso'
+  | 'jornada_retencao'
   | 'painel_lider'
   | 'painel_diretoria'
   | 'usuarios'
@@ -155,6 +157,18 @@ export const MODULOS_PERMISSAO: readonly DefinicaoModulo[] = [
     id: 'pix', rotulo: 'Pix Automático', interruptor: 'ver_pix_automatico', escopo: 'pix',
     descricao: 'Registros, comissão, aprovação e configuração do Pix.',
     grupos: ['Pix Automático'], chaves: ['aprovar_pix_automatico'], tenants: ['bookplay'],
+  },
+  {
+    /*
+     * Jornada (04/11/2026). Sem alcance: quem vê é a equipe/subgrupo Suporte do
+     * setor Jornada e a liderança dele; o interruptor liga ou desliga por cargo.
+     */
+    id: 'jornada_acesso', rotulo: 'Acesso (Jornada)', interruptor: 'ver_jornada_acesso',
+    descricao: 'NR + data de acesso da equipe Suporte do Jornada, com meta do mês.',
+  },
+  {
+    id: 'jornada_retencao', rotulo: 'Retenção (Jornada)', interruptor: 'ver_jornada_retencao',
+    descricao: 'NR + data de retenção da equipe Retenção do Jornada, com meta do mês.',
   },
   {
     id: 'painel_lider', rotulo: 'Painel Líder', interruptor: 'ver_painel_lider',

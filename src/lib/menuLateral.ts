@@ -226,10 +226,11 @@ export const NAV_ITEMS: NavItem[] = [
   // também para quem já tinha arrumado o menu antes dela existir.
   { label: 'Pix Automático',   icon: Zap,             to: ROUTE_PATHS.PIX_AUTOMATICO,      produtos: SO_COBRANCA, hiddenForPaguePay: true, permissaoKey: 'ver_pix_automatico', depoisDe: ROUTE_PATHS.ACORDO_NOVO },
   // Jornada (04/11/2026): Acesso para quem está no grupo Suporte, Retenção para o
-  // grupo Retenção (equipe ou subgrupo). Sem chave nem cargo: quem decide é o
-  // GRUPO da pessoa (ou a liderança do setor dele) — ver `abasJornada` abaixo.
-  { label: 'Acesso',           icon: KeyRound,        to: ROUTE_PATHS.JORNADA_ACESSO,      produtos: SO_COBRANCA, depoisDe: ROUTE_PATHS.PIX_AUTOMATICO },
-  { label: 'Retenção',         icon: ShieldCheck,     to: ROUTE_PATHS.JORNADA_RETENCAO,    produtos: SO_COBRANCA, depoisDe: ROUTE_PATHS.JORNADA_ACESSO },
+  // grupo Retenção (equipe ou subgrupo), só do setor Jornada. A chave liga ou
+  // desliga por cargo; por baixo, quem decide é o GRUPO da pessoa (ou a
+  // liderança do setor dele) — ver `abasJornada` abaixo.
+  { label: 'Acesso',           icon: KeyRound,        to: ROUTE_PATHS.JORNADA_ACESSO,      produtos: SO_COBRANCA, permissaoKey: 'ver_jornada_acesso', depoisDe: ROUTE_PATHS.PIX_AUTOMATICO },
+  { label: 'Retenção',         icon: ShieldCheck,     to: ROUTE_PATHS.JORNADA_RETENCAO,    produtos: SO_COBRANCA, permissaoKey: 'ver_jornada_retencao', depoisDe: ROUTE_PATHS.JORNADA_ACESSO },
   { label: 'Painel Líder',     icon: BarChart3,       to: ROUTE_PATHS.PAINEL_LIDER,        produtos: SO_COBRANCA, roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_painel_lider' },
   // Modo TV 2 (27/10/2026). Por CARGO, sem chave: só líder, elite e acima
   // (Cleber, 27/10). É a régua de `fn_tv_alvo_no_meu_alcance` no banco — uma

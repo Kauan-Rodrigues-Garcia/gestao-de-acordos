@@ -19,7 +19,9 @@
 --   - em lote: `fn_jornada_lancar_lote` (importar), `fn_jornada_excluir_lote`
 --     (apagar vários) e `fn_jornada_exportar` (baixar NR + data, sem nome);
 --   - lixeira: apagar vira `apagado_em` (não some), `fn_jornada_lixeira` lista
---     os últimos 30 dias e `fn_jornada_restaurar` devolve.
+--     os últimos 30 dias e `fn_jornada_restaurar` devolve;
+--   - permissões: chaves `ver_jornada_acesso` e `ver_jornada_retencao` no
+--     painel (nascem ligadas para a operação) e só grupos do setor JORNADA.
 --
 -- Nenhum dado de outra tabela é alterado. Reaplicável.
 -- ============================================================================
@@ -599,6 +601,212 @@ COMMENT ON FUNCTION public.fn_jornada_restaurar(UUID[]) IS
   'Tira lancamentos do Jornada da lixeira (os proprios, ou qualquer um para a '
   'lideranca); o NR ja lancado de novo no mes fica na lixeira. 20261104210000.';
 
+-- ============================================================================
+-- 7. Permissões e setor: a aba é do JORNADA e liga/desliga no painel
+-- ============================================================================
+--
+-- Pedido de 04/11/2026: as abas entram em Configurações › Permissões, para
+-- habilitar ou não por cargo, e valem só para o setor Jornada.
+--
+--   ver_jornada_acesso    a aba Acesso (equipe/subgrupo Suporte).
+--   ver_jornada_retencao  a aba Retenção (equipe/subgrupo Retenção).
+--
+-- Nascem LIGADAS para todos os cargos da operação: quem vê continua sendo
+-- decidido pelo grupo (e pela liderança do setor); a chave é o interruptor por
+-- cima. Desligar no painel tira a aba e as funções passam a recusar.
+--
+-- O setor: só grupo de setor com «Jornada» no nome conta. Equipe «Retenção»
+-- de outro setor (Receptivo, por exemplo) não ganha a aba.
+
+DO $$
+BEGIN
+  IF to_regprocedure('public.fn_permissoes_catalogo_antes_jornada_20261104()') IS NULL THEN
+    ALTER FUNCTION public.fn_permissoes_catalogo() RENAME TO fn_permissoes_catalogo_antes_jornada_20261104;
+  END IF;
+END $$;
+
+COMMENT ON FUNCTION public.fn_permissoes_catalogo_antes_jornada_20261104() IS
+  'Retrato do catalogo antes das abas Acesso/Retencao do Jornada (04/11/2026). '
+  'NAO e objeto morto: fn_permissoes_catalogo depende dela.';
+
+CREATE OR REPLACE FUNCTION public.fn_permissoes_catalogo()
+RETURNS TABLE(chave TEXT, tenants TEXT[], padrao TEXT[], explicita BOOLEAN)
+LANGUAGE sql
+IMMUTABLE
+SET search_path TO ''
+AS $function$
+  SELECT * FROM public.fn_permissoes_catalogo_antes_jornada_20261104()
+  UNION ALL
+  SELECT * FROM (VALUES
+    -- As duas abas: todos os cargos da operação; o grupo decide quem vê.
+    ('ver_jornada_acesso',   NULL::TEXT[], ARRAY['operador','ouvidoria','lider','elite','gerencia','diretoria']::TEXT[], false),
+    ('ver_jornada_retencao', NULL::TEXT[], ARRAY['operador','ouvidoria','lider','elite','gerencia','diretoria']::TEXT[], false)
+  ) AS novas(chave, tenants, padrao, explicita);
+$function$;
+
+COMMENT ON FUNCTION public.fn_permissoes_catalogo() IS
+  'Catalogo completo. 20261104210000 soma ver_jornada_acesso e ver_jornada_retencao.';
+
+-- Semeia só as chaves ausentes (o que já está configurado não muda).
+DO $$
+DECLARE e RECORD;
+BEGIN
+  FOR e IN SELECT id FROM public.empresas LOOP
+    PERFORM public.fn_permissoes_semear_empresa(e.id);
+  END LOOP;
+END $$;
+
+-- O setor é o Jornada? (pelo nome, sem acento nem caixa)
+CREATE OR REPLACE FUNCTION public.fn_jornada_setor_ok(p_setor_id UUID)
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path TO ''
+AS $function$
+  SELECT EXISTS (
+    SELECT 1 FROM public.setores s
+     WHERE s.id = p_setor_id
+       AND lower(translate(s.nome, 'ÁáÀàÂâÃãÉéÊêÍíÓóÔôÕõÚúÇç', 'AaAaAaAaEeEeIiOoOoOoUuCc')) LIKE '%jornada%'
+  );
+$function$;
+
+COMMENT ON FUNCTION public.fn_jornada_setor_ok(UUID) IS
+  'O setor tem «Jornada» no nome? So grupos dele valem para as abas Acesso/Retencao. 20261104210000.';
+
+-- A chave da aba (o super_admin passa sempre).
+CREATE OR REPLACE FUNCTION public.fn_jornada_chave_ok(p_tipo TEXT)
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path TO ''
+AS $function$
+  SELECT public.fn_user_is_super_admin()
+      OR (p_tipo = 'acesso'   AND public.fn_user_tem('ver_jornada_acesso'))
+      OR (p_tipo = 'retencao' AND public.fn_user_tem('ver_jornada_retencao'));
+$function$;
+
+COMMENT ON FUNCTION public.fn_jornada_chave_ok(TEXT) IS
+  'A pessoa logada tem a chave da aba (ver_jornada_acesso / ver_jornada_retencao)? 20261104210000.';
+
+-- O grupo: fora do setor Jornada, ele não é aba nenhuma (tipo NULL).
+CREATE OR REPLACE FUNCTION public.fn_jornada_grupo(p_grupo_id UUID)
+RETURNS TABLE(grupo TEXT, empresa_id UUID, equipe_id UUID, setor_id UUID, tipo TEXT, nome TEXT)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path TO ''
+AS $function$
+  SELECT 'subgrupo', sg.empresa_id, sg.equipe_id, e.setor_id,
+         CASE WHEN public.fn_jornada_setor_ok(e.setor_id) THEN public.fn_jornada_tipo_subgrupo(sg.nome) END,
+         sg.nome
+    FROM public.equipe_subgrupos sg
+    JOIN public.equipes e ON e.id = sg.equipe_id
+   WHERE sg.id = p_grupo_id
+  UNION ALL
+  SELECT 'equipe', e.empresa_id, e.id, e.setor_id,
+         CASE WHEN public.fn_jornada_setor_ok(e.setor_id) THEN public.fn_jornada_tipo_subgrupo(e.nome) END,
+         e.nome
+    FROM public.equipes e
+   WHERE e.id = p_grupo_id;
+$function$;
+
+-- Membro: está no grupo, o grupo é do Jornada e a chave da aba está ligada.
+CREATE OR REPLACE FUNCTION public.fn_jornada_membro(p_grupo_id UUID)
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path TO ''
+AS $function$
+  SELECT EXISTS (
+    SELECT 1
+      FROM public.perfis p
+      JOIN public.fn_jornada_grupo(p_grupo_id) g ON TRUE
+     WHERE p.id = (SELECT auth.uid())
+       AND g.tipo IS NOT NULL
+       AND public.fn_jornada_chave_ok(g.tipo)
+       AND NOT COALESCE(p.arquivado, FALSE)
+       AND p.equipe_id = g.equipe_id
+       AND (g.grupo = 'equipe' OR p.subgrupo_id = p_grupo_id)
+  );
+$function$;
+
+-- Liderança: idem, com a chave da aba ligada.
+CREATE OR REPLACE FUNCTION public.fn_jornada_gere(p_grupo_id UUID)
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path TO ''
+AS $function$
+  SELECT EXISTS (
+    SELECT 1
+      FROM public.fn_jornada_grupo(p_grupo_id) g
+     WHERE g.tipo IS NOT NULL
+       AND public.fn_jornada_chave_ok(g.tipo)
+       AND public.fn_can_access_empresa(g.empresa_id)
+       AND (
+         public.fn_user_is_super_admin()
+         OR public.fn_user_has_any_role(ARRAY['administrador', 'gerencia', 'diretoria'])
+         OR (
+           public.fn_user_has_any_role(ARRAY['lider'])
+           AND g.setor_id IN (SELECT s FROM public.fn_setores_do_operador((SELECT auth.uid())) AS s)
+         )
+       )
+  );
+$function$;
+
+-- As abas da pessoa: só grupos do setor Jornada (membro/gere já pedem a chave).
+CREATE OR REPLACE FUNCTION public.fn_jornada_minhas_abas(p_empresa_id UUID)
+RETURNS TABLE(
+  grupo_id    UUID,
+  grupo       TEXT,
+  tipo        TEXT,
+  grupo_nome  TEXT,
+  equipe_nome TEXT,
+  setor_nome  TEXT,
+  sou_membro  BOOLEAN,
+  pode_gerir  BOOLEAN
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path TO ''
+AS $function$
+  SELECT x.id, x.grupo, x.tipo, x.nome, x.equipe_nome, x.setor_nome, x.membro, x.gere
+    FROM (
+      SELECT sg.id, 'subgrupo'::TEXT AS grupo, public.fn_jornada_tipo_subgrupo(sg.nome) AS tipo,
+             sg.nome, e.nome AS equipe_nome, s.nome AS setor_nome,
+             public.fn_jornada_membro(sg.id) AS membro,
+             public.fn_jornada_gere(sg.id)   AS gere
+        FROM public.equipe_subgrupos sg
+        JOIN public.equipes e ON e.id = sg.equipe_id
+        LEFT JOIN public.setores s ON s.id = e.setor_id
+       WHERE sg.empresa_id = p_empresa_id
+         AND public.fn_jornada_setor_ok(e.setor_id)
+         AND public.fn_jornada_tipo_subgrupo(sg.nome) IS NOT NULL
+      UNION ALL
+      SELECT e.id, 'equipe'::TEXT, public.fn_jornada_tipo_subgrupo(e.nome),
+             e.nome, e.nome, s.nome,
+             public.fn_jornada_membro(e.id),
+             public.fn_jornada_gere(e.id)
+        FROM public.equipes e
+        LEFT JOIN public.setores s ON s.id = e.setor_id
+       WHERE e.empresa_id = p_empresa_id
+         AND public.fn_jornada_setor_ok(e.setor_id)
+         AND public.fn_jornada_tipo_subgrupo(e.nome) IS NOT NULL
+    ) x
+   WHERE public.fn_can_access_empresa(p_empresa_id)
+     AND (x.membro OR x.gere)
+   ORDER BY x.tipo, x.membro DESC, x.setor_nome, x.equipe_nome, x.nome;
+$function$;
+
+COMMENT ON FUNCTION public.fn_jornada_minhas_abas(UUID) IS
+  'Grupos Suporte/Retencao do setor Jornada que a pessoa logada alcanca (membro '
+  'ou lideranca, com a chave da aba ligada). 20261104210000.';
+
 -- ── Grants ──────────────────────────────────────────────────────────────────
 
 REVOKE ALL ON FUNCTION public.fn_jornada_meta_pessoas_salvar(UUID, JSONB) FROM PUBLIC, anon;
@@ -610,6 +818,18 @@ REVOKE ALL ON FUNCTION public.fn_jornada_lancar(UUID, TEXT, DATE) FROM PUBLIC, a
 REVOKE ALL ON FUNCTION public.fn_jornada_lancar_lote(UUID, JSONB) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.fn_jornada_excluir(UUID) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.fn_jornada_lixeira(UUID) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.fn_jornada_setor_ok(UUID) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.fn_jornada_chave_ok(TEXT) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.fn_jornada_grupo(UUID) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.fn_jornada_membro(UUID) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.fn_jornada_gere(UUID) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.fn_jornada_minhas_abas(UUID) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.fn_jornada_setor_ok(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.fn_jornada_chave_ok(TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.fn_jornada_grupo(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.fn_jornada_membro(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.fn_jornada_gere(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.fn_jornada_minhas_abas(UUID) TO authenticated;
 REVOKE ALL ON FUNCTION public.fn_jornada_restaurar(UUID[]) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.fn_jornada_excluir(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.fn_jornada_lixeira(UUID) TO authenticated;
@@ -625,6 +845,13 @@ GRANT EXECUTE ON FUNCTION public.fn_jornada_exportar(UUID, DATE, DATE) TO authen
 
 DO $prova$
 BEGIN
+  IF (SELECT count(*) FROM public.fn_permissoes_catalogo() c
+       WHERE c.chave IN ('ver_jornada_acesso', 'ver_jornada_retencao')) <> 2 THEN
+    RAISE EXCEPTION 'As chaves das abas do Jornada nao entraram no catalogo.';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.fn_permissoes_catalogo() c WHERE c.chave = 'ver_acordos') THEN
+    RAISE EXCEPTION 'A cadeia do catalogo se partiu: chaves antigas sumiram.';
+  END IF;
   IF NOT (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.jornada_metas_pessoa'::regclass) THEN
     RAISE EXCEPTION 'jornada_metas_pessoa ficou sem RLS.';
   END IF;

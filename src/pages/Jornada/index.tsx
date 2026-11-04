@@ -118,9 +118,9 @@ export default function PaginaJornada({ tipo }: { tipo: TipoJornada }) {
           <PainelPrevia tipo={tipo} />
         ) : !grupo ? (
           <div className="rounded-xl border bg-card p-8 text-center space-y-2">
-            <p className="font-medium">Esta aba é da equipe ou do subgrupo {textos.grupo}.</p>
+            <p className="font-medium">Esta aba é da equipe ou do subgrupo {textos.grupo} do Jornada.</p>
             <p className="text-sm text-muted-foreground">
-              Ela aparece para quem está numa equipe ou num subgrupo com «{textos.grupo}» no nome (em Usuários › Equipes) e para a liderança do setor. Nesta empresa ainda não há nenhum.
+              Ela aparece para quem está, no setor Jornada, numa equipe ou num subgrupo com «{textos.grupo}» no nome (em Usuários › Equipes) e para a liderança do setor — com a aba ligada em Configurações › Permissões. Nesta empresa ainda não há nenhum.
             </p>
           </div>
         ) : (
@@ -302,7 +302,7 @@ function PainelPrevia({ tipo }: { tipo: TipoJornada }) {
     <div className="space-y-4">
       <div
         className="rounded-lg border border-warning/50 bg-warning/10 px-3 py-1.5 text-xs flex items-center gap-2"
-        title={`Ainda não há equipe nem subgrupo com «${TEXTOS[tipo].grupo}» no nome.`}
+        title={`Ainda não há, no setor Jornada, equipe nem subgrupo com «${TEXTOS[tipo].grupo}» no nome.`}
       >
         <Eye className="h-3.5 w-3.5 shrink-0 text-warning" />
         <span className="truncate">
