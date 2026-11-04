@@ -60,6 +60,7 @@
  * tela nunca a reimplementa.
  */
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   Plus, RefreshCw, TriangleAlert, ChevronLeft, ChevronRight, Search, X,
@@ -217,8 +218,13 @@ export default function Vendas() {
    * `/vendas?aba=fora_relatorio` abre direto na lista das arquivadas — é para
    * onde a notificação de «saiu da lista» aponta. Uma vez só: depois disso a
    * pessoa navega pelas abas, e reaplicar o parâmetro a prenderia lá.
+   *
+   * Lido do router, e não de `window.location.search`: no HashRouter a busca
+   * mora depois do `#`, e `location.search` vinha sempre vazio (até 30/10/2026
+   * a notificação nunca abria a aba).
    */
-  const [abaDaUrl] = useState(() => new URLSearchParams(window.location.search).get('aba'));
+  const [searchParams] = useSearchParams();
+  const [abaDaUrl] = useState(() => searchParams.get('aba'));
   useEffect(() => {
     if (abaDaUrl === 'fora_relatorio' && foraDoRelatorio.length > 0) setAba('fora_relatorio');
   }, [abaDaUrl, foraDoRelatorio.length]);

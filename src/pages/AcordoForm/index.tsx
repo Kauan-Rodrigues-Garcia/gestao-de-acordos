@@ -33,6 +33,7 @@ import { AcordoNovoInline } from '@/components/AcordoNovoInline';
 import { AcordoEditInline } from '@/components/AcordoEditInline';
 import { CadeadoMes } from '@/components/CadeadoMes';
 import { useFechamentoMes } from '@/hooks/useFechamentoMes';
+import { useVoltar } from '@/hooks/useVoltar';
 import { mesDaData } from '@/lib/fechamentoMes';
 
 export default function AcordoForm() {
@@ -42,6 +43,9 @@ export default function AcordoForm() {
   const navigate = useNavigate();
   const tenant   = useTenant();
   const isPP     = tenant.isPaguePlay;
+  // Na PaguePlay a lista de acordos é o próprio Dashboard.
+  const listaDeAcordos = isPP ? ROUTE_PATHS.DASHBOARD : ROUTE_PATHS.ACORDOS;
+  const voltar   = useVoltar(listaDeAcordos);
 
   const [perfilLocal, setPerfilLocal] = useState<Perfil | null>(null);
   const [acordo, setAcordo]           = useState<Acordo | null>(null);
@@ -89,8 +93,7 @@ export default function AcordoForm() {
 
   const p         = perfilLocal ?? perfil;
   const nomeSetor = (p?.setores as { nome?: string } | undefined)?.nome;
-  const voltar    = () => navigate(-1);
-  const aposSalvar = () => navigate(isPP ? ROUTE_PATHS.DASHBOARD : ROUTE_PATHS.ACORDOS);
+  const aposSalvar = () => navigate(listaDeAcordos);
 
   return (
     <div className="p-6 max-w-4xl mx-auto">

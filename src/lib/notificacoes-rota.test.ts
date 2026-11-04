@@ -7,7 +7,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-  rotaDaNotificacao, caminhoInternoSeguro,
+  rotaDaNotificacao, caminhoInternoSeguro, rotaAtualDoPix,
   ROTA_ANALITICO, ROTA_DIARIO, ROTA_SOLICITACOES,
 } from './notificacoes-rota';
 
@@ -113,5 +113,24 @@ describe('caminhoInternoSeguro — a notificação não tira o operador do siste
     expect(rotaDaNotificacao(
       { ...base, titulo: 'Bem-vindo', rota: '//site-falso.com' }, true,
     )).toBeNull();
+  });
+});
+
+describe('rotaDaNotificacao — link antigo do Pix', () => {
+  // As funções do banco ainda gravam `/acordos?tab=pix`, e a rota de Acordos
+  // exige `ver_acordos`: sem esta troca, quem só tem o Pix caía no Dashboard.
+  it('vai direto para a tela do Pix', () => {
+    expect(rotaDaNotificacao({ ...base, titulo: 'Pix automático — registro excluído', rota: '/acordos?tab=pix' }, false))
+      .toBe('/pix-automatico');
+  });
+  it('leva o resto da busca junto', () => {
+    expect(rotaAtualDoPix('/acordos?tab=pix&novo_nr=123&page=2')).toBe('/pix-automatico?novo_nr=123');
+  });
+  it('não mexe em outras abas de Acordos', () => {
+    expect(rotaAtualDoPix('/acordos?tab=pagos')).toBe('/acordos?tab=pagos');
+    expect(rotaAtualDoPix('/acordos')).toBe('/acordos');
+  });
+  it('não mexe em outras rotas com tab=pix', () => {
+    expect(rotaAtualDoPix('/analitico?tab=pix')).toBe('/analitico?tab=pix');
   });
 });

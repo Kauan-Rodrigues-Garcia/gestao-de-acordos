@@ -82,7 +82,7 @@ export function ProtectedRoute({
   children, roles, allowedProfiles, requiredPermissao, produtos, mostrarSemAcesso = false,
   alternativa,
 }: ProtectedRouteProps): React.ReactElement | null {
-  const { user, perfil, loading } = useAuth();
+  const { user, perfil, loading, perfilLoading } = useAuth();
   const { temPermissao, loading: permLoading } = useCargoPermissoes();
   const { empresa, tenantSlug, loading: empresaLoading } = useEmpresa();
 
@@ -103,7 +103,9 @@ export function ProtectedRoute({
    * carregamento diferentes desembocando neste único `if`.
    */
   const jaMostrou = useRef(false);
-  const carregando = loading || (requiredPermissao && permLoading) || (produtos && empresaLoading);
+  const perfilRequerido = roles ?? allowedProfiles;
+  const carregando = loading || (requiredPermissao && permLoading) || (produtos && empresaLoading)
+    || (!requiredPermissao && perfilRequerido && !perfil && perfilLoading);
 
   if (carregando && !jaMostrou.current) {
     return (
@@ -180,9 +182,14 @@ export function ProtectedRoute({
   }
 
   // Sem requiredPermissao: verificação por perfil (comportamento original)
-  const perfilRequerido = roles ?? allowedProfiles;
-  if (perfilRequerido && perfil && perfil.perfil !== 'super_admin' && !perfilRequerido.includes(perfil.perfil)) {
-    return <Navigate to={ROUTE_PATHS.DASHBOARD} replace />;
+  // Sem perfil não há cargo para conferir — e a rota NÃO libera. Até 30/10/2026
+  // o `perfil &&` deixava passar: com o perfil carregando ou que não veio
+  // (internet ruim), Modo TV e Creators Lab abriam para qualquer pessoa logada.
+  if (perfilRequerido) {
+    if (!perfil) return <Navigate to={ROUTE_PATHS.DASHBOARD} replace />;
+    if (perfil.perfil !== 'super_admin' && !perfilRequerido.includes(perfil.perfil)) {
+      return <Navigate to={ROUTE_PATHS.DASHBOARD} replace />;
+    }
   }
 
   return liberar();

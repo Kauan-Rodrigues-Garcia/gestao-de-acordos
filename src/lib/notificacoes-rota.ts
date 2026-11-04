@@ -111,6 +111,29 @@ function rotaLegadaDaCampanha(rota: string): string {
   return UUID.test(id) ? rotaDaCampanhaWhatsapp(id) : ROUTE_PATHS.CAMPANHAS_WHATSAPP;
 }
 
+// ── Pix automático ───────────────────────────────────────────────────────────
+
+/**
+ * O link do Pix de antes de 16/10/2026 (`/acordos?tab=pix&…`) vira a tela
+ * própria, com o resto da busca (o `novo_nr`, por exemplo).
+ *
+ * Fica aqui, e não só no redirecionamento da página Acordos, porque aquela
+ * rota exige `ver_acordos`: quem tem o Pix e não tem Acordos era mandado para
+ * o Dashboard antes de chegar ao redirecionamento. E as funções do banco
+ * (`fn_pix_notifica_desaprovacao`, `fn_pix_registrar_exclusao`, a do pedido de
+ * NR) continuam gravando o link antigo.
+ */
+export function rotaAtualDoPix(rota: string): string {
+  const [caminho, busca = ''] = rota.split('?', 2);
+  if (caminho !== ROUTE_PATHS.ACORDOS) return rota;
+  const params = new URLSearchParams(busca);
+  if (params.get('tab') !== 'pix') return rota;
+  params.delete('tab');
+  params.delete('page');
+  const resto = params.toString();
+  return `${ROUTE_PATHS.PIX_AUTOMATICO}${resto ? `?${resto}` : ''}`;
+}
+
 /**
  * A lista de acordos filtrada num acordo só (`?acordo=`).
  *
@@ -139,6 +162,6 @@ export function rotaDaNotificacao(n: Alvo, isPaguePlay: boolean): string | null 
   // A rota do banco só vale se for interna; sendo externa, ainda resta o
   // palpite pelo título, que sai de constantes do próprio código.
   const interna = caminhoInternoSeguro(n.rota);
-  if (interna) return interna;
+  if (interna) return rotaAtualDoPix(interna);
   return palpitePeloTitulo(n.titulo ?? '');
 }

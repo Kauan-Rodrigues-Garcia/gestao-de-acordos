@@ -47,7 +47,6 @@
 
 import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { useNavigate } from "react-router-dom";
 import {
   Target, Check, ChevronLeft, ChevronRight, Building2, Users, User, ArrowLeft,
   TriangleAlert, Trash2,
@@ -59,11 +58,12 @@ import { useAuth } from "@/hooks/useAuth";
 import { useEmpresa } from "@/hooks/useEmpresa";
 import { useCargoPermissoes } from "@/hooks/useCargoPermissoes";
 import { useFechamentoMes } from "@/hooks/useFechamentoMes";
+import { useVoltar } from "@/hooks/useVoltar";
 import { CadeadoMes } from "@/components/CadeadoMes";
 import { supabase } from "@/lib/supabase";
 import type { QuartilConfig } from "@/lib/supabase";
 import { useTenant } from "@/lib/tenant-config";
-import { getTodayISO } from "@/lib/index";
+import { getTodayISO, ROUTE_PATHS } from "@/lib/index";
 import { getHoPercentual, useHoPercentual, rotuloHoPercentual } from "@/lib/hoPercentual";
 import { CardPercentualHO } from "@/components/PainelMetas/CardPercentualHO";
 import { diasUteisDoMes, diasUteisDecorridos, ordenarQuartis, QUARTIS_PADRAO } from "@/lib/diasUteis";
@@ -579,7 +579,7 @@ function MetaRow({
 
 // ── Componente principal ──────────────────────────────────────────────────────
 export default function MetasConfig() {
-  const navigate = useNavigate();
+  const voltar = useVoltar(ROUTE_PATHS.DASHBOARD);
   const { perfil } = useAuth();
   const liderSetorId = perfil?.setor_id ?? null;
   const { empresa } = useEmpresa();
@@ -1537,7 +1537,7 @@ export default function MetasConfig() {
         <div>
           <Button variant="ghost" size="sm"
             className="mb-2 h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground -ml-1"
-            onClick={() => navigate(-1)}>
+            onClick={voltar}>
             <ArrowLeft className="h-3.5 w-3.5" /> Voltar
           </Button>
           <h1 className="text-xl font-bold flex items-center gap-2">

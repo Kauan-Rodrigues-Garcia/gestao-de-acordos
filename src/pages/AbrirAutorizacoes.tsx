@@ -10,13 +10,13 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { abrirAutorizacoesNoChat } from '@/components/Autorizacoes/abrirNoChat';
+import { temTelaAnterior } from '@/hooks/useVoltar';
 
 export default function AbrirAutorizacoes(): null {
   const navigate = useNavigate();
   useEffect(() => {
     abrirAutorizacoesNoChat();
-    const temAnterior = ((window.history.state as { idx?: number } | null)?.idx ?? 0) > 0;
-    if (temAnterior) navigate(-1);
+    if (temTelaAnterior()) navigate(-1);
     else navigate('/', { replace: true });
   }, [navigate]);
   return null;

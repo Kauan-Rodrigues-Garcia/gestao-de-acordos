@@ -59,6 +59,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { ROUTE_PATHS } from '@/lib/index';
 import { useAuth } from '@/hooks/useAuth';
 import { tetoDeUpload } from '@/lib/tetoDeUpload';
 import { useRelogioLento } from '@/hooks/useRelogioLento';
@@ -334,7 +335,9 @@ export default function DetalheTicket({
   }
 
   async function copiarLink() {
-    const url = `${window.location.origin}${window.location.pathname}?ticket=${ticket.id}`;
+    // O app usa HashRouter: a rota e a busca moram depois do `#`. Sem ele
+    // (como era até 30/10/2026) o link abria a tela inicial, e não o ticket.
+    const url = `${window.location.origin}${window.location.pathname}#${ROUTE_PATHS.TICKETS}?ticket=${ticket.id}`;
     try {
       await navigator.clipboard.writeText(url);
       toast.success(`Link do ticket #${ticket.numero} copiado.`);

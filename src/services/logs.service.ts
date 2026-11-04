@@ -106,10 +106,16 @@ export async function registrarLog(params: RegistrarLogParams): Promise<string |
   }
 }
 
-/** Rota atual, sem query string (que pode carregar dado de cliente). */
-function rotaAtual(): string | null {
+/**
+ * Rota atual, sem query string (que pode carregar dado de cliente).
+ *
+ * O app usa HashRouter: a rota mora depois do `#`. `location.pathname` é sempre
+ * `/`, e até 30/10/2026 toda linha da trilha saía com essa rota.
+ */
+export function rotaAtual(): string | null {
   if (typeof window === 'undefined') return null;
-  return window.location.pathname || null;
+  const doHash = window.location.hash.replace(/^#/, '').split('?')[0];
+  return (doHash.startsWith('/') ? doHash : null) || window.location.pathname || null;
 }
 
 /**
