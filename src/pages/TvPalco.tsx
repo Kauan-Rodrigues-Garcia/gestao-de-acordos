@@ -35,7 +35,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Rodizio } from './ModoTV/Rodizio';
-import { PalcoTv, CORES } from './ModoTV/TelaTv';
+import { PalcoTv } from './ModoTV/TelaTv';
+import { CORES } from './ModoTV/cores';
 import { numerosDemo, painelDemo, simularRelatorio } from './ModoTV/demo';
 import { avisarSaida, pedirCodigo, versaoTv, verTv } from './ModoTV/servico';
 import { diferencaDoServidor } from './ModoTV/relogio';

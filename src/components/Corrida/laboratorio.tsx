@@ -4,7 +4,6 @@
  * janelinha da corrida como ela aparece para o pessoal; no canto, o cenário do
  * lobby, a visão (quem corre ou quem só assiste) e o palpite de mentira.
  */
-/* eslint-disable react-refresh/only-export-components -- entrada de página avulsa (como o index.html), não um módulo de componentes. */
 import { StrictMode, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import '@/index.css';

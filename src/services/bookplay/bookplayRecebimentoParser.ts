@@ -50,6 +50,7 @@ import {
   type LinhaRelatorio,
 } from '@/services/analitico/analiticoComum';
 import { dayKeyDiario, type LinhaDiario } from '@/services/diario/diarioComum';
+import { identificarRelatorio, MSG_994_NO_LUGAR_DO_58 } from '@/services/relatorio945/identificar';
 import type { FormaPagementoAnalitico } from '@/lib/supabase';
 
 export interface ResultadoParseBookplay {
@@ -171,6 +172,11 @@ export function parseRelatorioBookplayRows(rows: unknown[][]): ResultadoParseBoo
   if (rows.length < 2) return resultadoVazio(['Planilha sem dados.']);
 
   const cabecalho = (rows[0] as unknown[]).map(h => String(h ?? '').trim());
+  // O 994 (Retenção do Jornada) tem botão próprio. Sem esta pergunta ele cairia
+  // em «colunas não encontradas» — não diz a quem errou de botão qual é o certo.
+  if (identificarRelatorio(rows[0] as unknown[]) === '994') {
+    return resultadoVazio([MSG_994_NO_LUGAR_DO_58], cabecalho);
+  }
   const cols = resolveCols(rows[0] as unknown[]);
   if (!cols) {
     const encontrados = (rows[0] as unknown[]).map(h => `"${h}"`).join(', ');
