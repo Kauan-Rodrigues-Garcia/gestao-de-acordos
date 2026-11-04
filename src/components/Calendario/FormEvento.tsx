@@ -47,7 +47,12 @@ export function FormEvento({ valor, onChange, pessoas, notaFeriado }: Props) {
     <div className="space-y-5">
       <section className="space-y-2">
         <Rotulo>O que lançar</Rotulo>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {/* As colunas seguem a largura do DIÁLOGO, não a da tela (04/11/2026):
+            com `sm:grid-cols-4`, a tela larga punha quatro botões num diálogo
+            estreito e «Treinamento» saía da borda. Cada botão tem pelo menos
+            8,5rem — o rótulo mais comprido cabe numa linha, os de três palavras
+            quebram em duas. */}
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-2">
           {MODELOS.map(m => {
             const ligado = valor.modeloId === m.id;
             return (
@@ -64,7 +69,7 @@ export function FormEvento({ valor, onChange, pessoas, notaFeriado }: Props) {
                 )}
               >
                 <IconeTipo tipo={m.tipo} className="h-7 w-7 rounded-lg" tamanho="h-3.5 w-3.5" />
-                <span className="min-w-0 leading-tight">{m.rotulo}</span>
+                <span className="min-w-0 leading-tight [overflow-wrap:anywhere]">{m.rotulo}</span>
               </button>
             );
           })}
@@ -122,7 +127,10 @@ export function FormEvento({ valor, onChange, pessoas, notaFeriado }: Props) {
               {(pessoas ?? []).map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
             </SelectContent>
           </Select>
-          <p className="text-[11px] text-muted-foreground">Com a pessoa marcada, a foto dela aparece em «Aniversariantes do mês».</p>
+          <p className="text-[11px] text-muted-foreground">
+            Com a pessoa marcada, a foto dela aparece em «Aniversariantes do mês». O aniversário de
+            alguém da diretoria aparece em destaque no calendário de todos os setores.
+          </p>
         </div>
       )}
 

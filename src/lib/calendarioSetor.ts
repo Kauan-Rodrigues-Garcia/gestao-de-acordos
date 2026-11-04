@@ -376,6 +376,15 @@ export interface EventoCalendario {
   pessoa_id: string | null;
   pessoa_nome: string | null;
   pessoa_foto: string | null;
+  /**
+   * O aniversariante é da diretoria (20261104160000): ganha destaque grande e
+   * aparece no calendário de todo setor. Ausente em banco antigo = não.
+   */
+  pessoa_diretoria?: boolean;
+  /** Veio do calendário de outro setor (o aniversário da diretoria). Não se edita daqui. */
+  de_outro_setor?: boolean;
+  /** O setor que lançou, quando `de_outro_setor`. */
+  setor_origem?: string | null;
 }
 
 /** Os eventos agrupados por dia, na ordem em que chegaram. */
@@ -462,6 +471,53 @@ export function proximosEventos(
 ): EventoCalendario[] {
   const desde = hojeISO.slice(0, 7) === mes ? hojeISO : `${mes}-01`;
   return eventos.filter(e => e.dia >= desde);
+}
+
+/** Um dia da agenda «Próximos dias»: tudo o que há nele, junto. */
+export interface DiaDaAgenda {
+  dia: string;
+  feriado: FeriadoDoDia | null;
+  eventos: EventoCalendario[];
+}
+
+export interface AgendaDosDias {
+  dias: DiaDaAgenda[];
+  /** Dias com coisa marcada que ficaram de fora da lista. */
+  ocultos: number;
+  /** O primeiro deles — o rodapé leva até ele. */
+  proximoOculto: string | null;
+}
+
+/**
+ * A agenda do lado, agrupada por DIA (04/11/2026).
+ *
+ * Até então era um evento por linha, seis no máximo: o dia com reunião,
+ * treinamento e aniversário gastava três linhas repetindo a data, e o banco de
+ * horas nem entrava — quem olhava via uma coisa por dia quando havia várias.
+ *
+ * Agora são os `quantosDias` próximos dias com algo marcado (três, a pedido),
+ * cada um com TUDO o que tem: feriado, banco de horas, aniversário, evento,
+ * aviso. Os outros dias ficam para a grade, e o rodapé leva ao próximo deles.
+ */
+export function agendaPorDia(
+  eventos: readonly EventoCalendario[],
+  feriados: ReadonlyMap<string, FeriadoDoDia>,
+  desde: string,
+  { quantosDias = 3 }: { quantosDias?: number } = {},
+): AgendaDosDias {
+  const porDia = new Map<string, DiaDaAgenda>();
+  const doDia = (dia: string) => {
+    let d = porDia.get(dia);
+    if (!d) { d = { dia, feriado: null, eventos: [] }; porDia.set(dia, d); }
+    return d;
+  };
+  for (const [dia, f] of feriados) if (dia >= desde) doDia(dia).feriado = f;
+  for (const e of eventos) if (e.dia >= desde) doDia(e.dia).eventos.push(e);
+
+  const todos = [...porDia.values()].sort((a, b) => a.dia.localeCompare(b.dia));
+  const dias = todos.slice(0, quantosDias);
+  const ocultos = todos.length - dias.length;
+  return { dias, ocultos, proximoOculto: ocultos > 0 ? todos[dias.length].dia : null };
 }
 
 // ── Textos ───────────────────────────────────────────────────────────────────

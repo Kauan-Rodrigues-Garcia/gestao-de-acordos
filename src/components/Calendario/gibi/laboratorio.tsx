@@ -7,7 +7,6 @@
  * `?tema=halloween&escuro=1&hoje=2026-10-29&largura=390` abre já escolhido
  * (é por aqui que dá para tirar print de cada tema).
  */
-/* eslint-disable react-refresh/only-export-components -- entrada de página avulsa (como o index.html), não um módulo de componentes. */
 import { StrictMode, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { createRoot } from 'react-dom/client';
 import '@/index.css';
@@ -41,6 +40,10 @@ function eventosDoMes(mes: string): EventoCalendario[] {
     ev(d(8), 'evento', 'Treinamento do novo roteiro', { detalhe: '14:00' }),
     ev(d(10), 'banco_horas', 'Banco de horas', { detalhe: '08:30 às 12:00' }),
     ev(d(13), 'banco_horas', 'Banco de horas', { detalhe: 'até às 19:00' }),
+    // Aniversário da diretoria, lançado em outro setor (20261104160000): cartão grande.
+    ev(d(13), 'aniversario', 'Aniversário', {
+      pessoa_nome: 'Rita Moraes', pessoa_id: 'p3', pessoa_diretoria: true, de_outro_setor: true, setor_origem: 'Play 1',
+    }),
     ev(d(16), 'aviso', 'Prazo da escala', { detalhe: 'até 18:00' }),
     ev(d(19), 'evento', 'Dia D do tema', { detalhe: 'Todo mundo no clima', destaque: true }),
     ev(d(21), 'aviso', 'Entrada Play 1'),
