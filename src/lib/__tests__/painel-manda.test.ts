@@ -218,6 +218,12 @@ const EXCECOES: Record<string, Excecao> = {
     linhas: 2, familia: 'definicao-ou-dado',
     motivo: 'seleciona QUEM pode ser líder de uma equipe. Filtro de cadastro: não decide o que quem olha enxerga.',
   },
+  'components/admin/equipes/partes.tsx': {
+    linhas: 1, familia: 'definicao-ou-dado',
+    motivo: 'esconde a etiqueta «Operador» no quadro de equipes (03/11/2026): só o cargo que foge do comum '
+      + '(elite, líder…) ganha etiqueta, e o nome fica com o espaço. É rótulo da pessoa LISTADA, não decide '
+      + 'o que quem olha vê nem pode — mover segue em `podeMover`, que vem do painel.',
+  },
   'pages/Tickets/PainelAtendentes.tsx': {
     linhas: 1, familia: 'definicao-ou-dado',
     motivo: 'exclui admin da LISTA de quem pode ser cadastrado como atendente. Filtro de cadastro, não de acesso.',
