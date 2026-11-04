@@ -86,6 +86,7 @@ export function PerfilContatoPainel({
 
   const lotacao = [perfil?.setor_nome, perfil?.equipe_nome].filter(Boolean).join(' · ');
   const emFerias = perfil?.situacao === 'ferias';
+  const afastado = perfil?.situacao === 'afastado';
 
   return (
     <div
@@ -213,6 +214,9 @@ export function PerfilContatoPainel({
                         : 'De férias'}
                       destaque
                     />
+                  )}
+                  {afastado && (
+                    <LinhaSobre Icone={Palmtree} rotulo="Situação" valor="Afastado" destaque />
                   )}
                 </div>
               )}

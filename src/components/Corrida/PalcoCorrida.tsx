@@ -19,6 +19,7 @@ import { criarMotor, type Gravacao, type Motor, type Painel, type VideosDaFesta 
 import { bichinhoDe } from './motor/bichinhos';
 import { segundos, type CorridaJson, type PessoaJson } from './banco';
 import { NOME_CORRIDA, SONS, audioDestravado } from './nome';
+import { ehMapaEspecial } from './especial';
 import LobbyNovo from './lobbies/LobbyNovo';
 import type { Cena, Palpite, TemaLobby } from './lobbies/cena';
 import './corrida.css';
@@ -53,7 +54,7 @@ const REACOES: ReadonlyArray<readonly [Reacao, string, string, string]> = [
   ['ola', 'Festa', '🎉', 'linear-gradient(145deg,#a98bff,#6a3df0)'],
 ];
 const ESPERA_REACAO = 1500;
-const VOL_TETO = 0.2; // o teto do volume no motor (20% do som cheio)
+const VOL_TETO = 1, VOL_PADRAO = 0.3; // o volume no motor é a fração do som cheio; o padrão é 30% (27/10/2026)
 const SEM_PALPITE: Palpite = { ativo: false, meu: null, votos: {}, quem: {} };
 const fmtMs = (s: number) => `${Math.floor(Math.max(0, s) / 60)}:${String(Math.floor(Math.max(0, s) % 60)).padStart(2, '0')}`;
 
@@ -130,6 +131,7 @@ export function PalcoCorrida({ corrida, pessoas, eu, agora, gravacao, videos, on
     return () => window.removeEventListener('keydown', k);
   }, [onFechar]);
   useEffect(() => { motorRef.current?.seguir(seguindo ? eu : null); }, [seguindo, eu, gravacao]);
+  useEffect(() => { motorRef.current?.setPalpite(palpite.meu); }, [palpite.meu]);
 
   const tela = painel?.tela ?? 'lobby';
   const novo = tema !== 'atual' && tela === 'lobby';
@@ -152,6 +154,8 @@ export function PalcoCorrida({ corrida, pessoas, eu, agora, gravacao, videos, on
     ? apostas.find(a => a.alvo.usuario === painel.vencedor?.id) ?? null : null;
   useEffect(() => { if (tela !== 'lobby') setVerApostas(false); }, [tela]);
 
+  // A corrida especial: o mapa grande vem na gravação; quem assiste fica sabendo assim que ela chega.
+  const especial = ehMapaEspecial(gravacao?.rec.mapa);
   const status = (() => {
     if (corrida.estado === 'cancelada') return 'A corrida foi cancelada';
     if (tela === 'lobby') return corrida.inicia_em ? 'Largada!' : `Lobby · ${noLobby} aguardando`;
@@ -166,7 +170,7 @@ export function PalcoCorrida({ corrida, pessoas, eu, agora, gravacao, videos, on
     return '';
   })();
 
-  const vol = painel?.volume ?? { max: VOL_TETO, mudo: false };
+  const vol = painel?.volume ?? { max: VOL_PADRAO, mudo: false };
   const volPct = vol.mudo ? 0 : Math.round((vol.max / VOL_TETO) * 100);
   const ajusta = (max: number, mudo: boolean) => motorRef.current?.volume(Math.round(max * 1000) / 1000, mudo);
   // As reações: uma a cada 1,5 s por pessoa (clicar sem parar enchia a tela de emoji e derrubava o FPS).
@@ -207,8 +211,9 @@ export function PalcoCorrida({ corrida, pessoas, eu, agora, gravacao, videos, on
         <div className="flex h-10 shrink-0 items-center gap-2 bg-black/70 pl-3 pr-1.5 text-[13px] font-semibold tracking-wide">
           <i className="cds-ao-vivo inline-block h-2 w-2 shrink-0 rounded-full bg-[#ff4d5e]" aria-hidden="true" />
           <span className="min-w-0 truncate uppercase">{status}</span>
+          {especial && <span className="shrink-0 rounded-full bg-[#5ff0f0]/15 px-2 py-0.5 text-[11px] uppercase text-[#5ff0f0]" title="O mapa grande, com canhões, luvas de boxe, pinball e teletransporte">⚡ Especial</span>}
           <span className="ml-auto flex items-center gap-0.5">
-            {/* o volume: arrastar a barra (0% é sem som); 100% aqui é o teto do motor (VOL_TETO, 20% do som cheio) */}
+            {/* o volume: arrastar a barra (0% é sem som, 100% é o som cheio); começa em 30% (VOL_PADRAO) */}
             <span className="mx-1 flex items-center gap-2 rounded-full bg-white/10 py-1 pl-2.5 pr-3 text-[12px]">
               <span ref={eqRef} className="cds-eq max-sm:hidden" aria-hidden="true">
                 {Array.from({ length: BARRAS_EQ }, (_, i) => <i key={i} />)}

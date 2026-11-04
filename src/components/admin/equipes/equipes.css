@@ -86,10 +86,11 @@
   letter-spacing: .06em; text-transform: uppercase; color: var(--warning); }
 .eq-lideres-rot svg { width: 13px; height: 13px; }
 .eq-lideres-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
-.eq-lider { display: flex; align-items: center; gap: 6px; min-width: 0; height: 30px; padding: 0 4px 0 10px; border-radius: 8px;
+.eq-lider { display: flex; align-items: center; flex-wrap: wrap; gap: 0 6px; min-width: 0; min-height: 30px; padding: 3px 4px 3px 10px; border-radius: 8px;
   font-size: 13px; font-weight: 600; color: var(--foreground); background: var(--card);
   border: 1px solid color-mix(in srgb, var(--warning) 35%, var(--border)); }
-.eq-lider > span { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* O nome do líder não é cortado (03/11/2026): quebra linha se precisar. */
+.eq-lider > span { flex: 0 1 auto; min-width: 0; overflow-wrap: anywhere; }
 .eq-lider.eq-sem-nome > span { color: var(--muted-foreground); font-style: italic; font-weight: 400; }
 .eq-lider em { flex: none; font-style: normal; font-weight: 400; font-size: 11px; color: var(--muted-foreground); white-space: nowrap; }
 .eq-lider button { margin-left: auto; flex: none; border: 0; background: none; width: 22px; height: 22px; color: var(--muted-foreground); cursor: pointer;
@@ -122,7 +123,7 @@
 .eq-solto-rot { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted-foreground); padding: 4px 6px 0; }
 
 /* ── A pessoa ────────────────────────────────────────────────────────────── */
-.eq-pessoa { display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 3px 4px 3px 3px; border-radius: 8px; min-width: 0;
+.eq-pessoa { position: relative; display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 3px 4px 3px 3px; border-radius: 8px; min-width: 0;
   cursor: grab; user-select: none; transition: background .12s, opacity .2s; }
 .eq-pessoa:hover { background: color-mix(in srgb, var(--muted) 60%, transparent); }
 .eq-pessoa:active { cursor: grabbing; }
@@ -142,25 +143,39 @@
 .eq-av:disabled { cursor: default; }
 .eq-pessoa:hover .eq-av:disabled > i { opacity: 0; }
 
-/* Nome e etiquetas numa linha só, centralizados: o nome encolhe (com «…»),
-   o cargo nunca desce para baixo dele. */
-.eq-pessoa-nome { flex: 1; min-width: 0; display: flex; align-items: center; gap: 5px; flex-wrap: nowrap; overflow: hidden; }
-.eq-pessoa-nome > * { flex: none; }
-.eq-pessoa-nome > span:first-child { flex: 0 1 auto; min-width: 0; font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* O nome em cima e as etiquetas embaixo (03/11/2026). Antes, nome e etiquetas
+   dividiam uma linha e quem encolhia era o nome — sem foto, «Gabri…» não diz
+   quem é. Agora o nome (os dois primeiros, `nomeCurto`) nunca leva «…»: se
+   não couber, quebra linha. As etiquetas quebram entre si. */
+.eq-pessoa-nome { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 2px; }
+.eq-nome { font-size: 13px; font-weight: 500; line-height: 1.25; overflow-wrap: anywhere; }
+.eq-etiquetas { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 4px; min-width: 0; }
+.eq-etiquetas > * { flex: none; max-width: 100%; }
+.eq-etiquetas .eq-selo.clone { overflow: hidden; text-overflow: ellipsis; }
 .eq-cargo { font-size: 10px; font-weight: 500; border-radius: 999px; padding: 0 6px; line-height: 16px; border: 1px solid; white-space: nowrap; }
-.eq-acoes { display: flex; align-items: center; gap: 1px; flex: none; opacity: 0; transition: opacity .12s; }
-.eq-pessoa:hover .eq-acoes, .eq-pessoa:focus-within .eq-acoes, .eq-pessoa[data-transf="true"] .eq-acoes { opacity: 1; }
+/* As ações não guardam lugar ao lado do nome: aparecem POR CIMA da ponta
+   direita, no mouse. Antes os três ícones invisíveis já comiam 70 px da linha. */
+.eq-acoes { display: flex; align-items: center; gap: 1px; flex: none; opacity: 0; transition: opacity .12s;
+  position: absolute; right: 4px; top: 50%; transform: translateY(-50%); padding: 1px; border-radius: 8px;
+  background: var(--card); box-shadow: 0 1px 3px rgb(0 0 0 / .12); pointer-events: none; }
+.eq-pessoa:hover .eq-acoes, .eq-pessoa:focus-within .eq-acoes { opacity: 1; pointer-events: auto; }
+/* Transferida: o X fica sempre à mão, no lugar dele. */
+.eq-pessoa[data-transf="true"] .eq-acoes { position: static; transform: none; opacity: 1; pointer-events: auto; box-shadow: none; background: none; }
 .eq-acoes .eq-icone { width: 24px; height: 24px; }
 .eq-acoes .eq-icone svg { width: 13px; height: 13px; }
 .eq-acoes .eq-icone.perigo:hover { color: var(--destructive); background: color-mix(in srgb, var(--destructive) 10%, transparent); }
-@media (hover: none) { .eq-acoes, .eq-sub-cab .eq-icone, .eq-lider button { opacity: 1; } }
+/* Toque: sem mouse para revelar, as ações voltam para o lugar delas. */
+@media (hover: none) {
+  .eq-acoes, .eq-sub-cab .eq-icone, .eq-lider button { opacity: 1; }
+  .eq-acoes { position: static; transform: none; pointer-events: auto; box-shadow: none; background: none; }
+}
 
 /* Clone: nome em cima, de onde vem embaixo; o interruptor e o X à direita,
    fora do texto — antes o selo comprido passava por cima deles. */
 .eq-clone { cursor: default; border: 1px dashed color-mix(in srgb, var(--primary) 35%, transparent); }
 .eq-clone .eq-av { background: color-mix(in srgb, var(--primary) 10%, transparent); color: var(--primary); cursor: default; }
 .eq-clone-txt { flex: 1; min-width: 0; display: grid; line-height: 1.25; }
-.eq-clone-txt b { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eq-clone-txt b { font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }
 .eq-clone-txt small { font-size: 11px; color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .eq-receb { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; color: var(--muted-foreground); cursor: pointer; white-space: nowrap; flex: none; }
 

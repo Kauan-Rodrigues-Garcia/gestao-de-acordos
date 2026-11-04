@@ -33,6 +33,7 @@ import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { cargosChatLiberados } from '@/lib/permissoes-chat';
 import { StatusMensagem } from './StatusMensagem';
 import { LinhaAutorizacoes, type AutorizacoesNoChat } from './AutorizacoesChat';
+import { LinhaTransferencias, TITULO_TRANSFERENCIAS, type TransferenciasNoChat } from './TransferenciasChat';
 import { posicaoDasAutorizacoes } from '@/components/Autorizacoes/resumoChat';
 import { estadoMensagem } from './estadoMensagem';
 
@@ -61,6 +62,11 @@ interface Props {
    * não decide autorização, e a linha não existe.
    */
   autorizacoes?:  AutorizacoesNoChat;
+  /**
+   * O canal «Transferências» (03/11/2026). Ausente = quem olha não pede nem
+   * decide transferência, e a linha não existe.
+   */
+  transferencias?: TransferenciasNoChat;
 }
 
 interface CardDisparoProps {
@@ -223,7 +229,7 @@ function CardDisparo({ disparo, online, onAbrir }: CardDisparoProps) {
 export function ListaConversas({
   conversas, disparos, online, digitando, selecionada, carregando, meuId,
   onAbrir, onApagar, onFixar, onVerMidias,
-  onNovaConversa, onNovoDisparo, onNovoGrupo, autorizacoes,
+  onNovaConversa, onNovoDisparo, onNovoGrupo, autorizacoes, transferencias,
 }: Props) {
   const [aba, setAba] = useState<Aba>('conversas');
   const [busca, setBusca] = useState('');
@@ -284,6 +290,25 @@ export function ListaConversas({
   const linhaAutorizacoes = comAutorizacoes && autorizacoes
     ? <LinhaAutorizacoes key="autorizacoes" {...autorizacoes} />
     : null;
+
+  // O canal «Transferências»: a mesma regra, com o topo só para o super admin
+  // com pedido aberto (`emDestaque`).
+  const comTransferencias = !!transferencias && aba === 'conversas'
+    && (!palavras.length || casaBusca(chaveDeBusca(TITULO_TRANSFERENCIAS, 'transferencias'), palavras));
+  const posTransferencias = comTransferencias && transferencias
+    ? posicaoDasAutorizacoes(filtradas, { pendentes: transferencias.emDestaque ? 1 : 0, ultimaEm: transferencias.resumo.ultimaEm })
+    : -1;
+  const linhaTransferencias = comTransferencias && transferencias
+    ? <LinhaTransferencias key="transferencias" {...transferencias} />
+    : null;
+
+  /** As linhas fixas, cada uma na sua posição. Empate no topo: Transferências primeiro. */
+  const fixas = [
+    ...(linhaTransferencias ? [{ pos: posTransferencias, linha: linhaTransferencias }] : []),
+    ...(linhaAutorizacoes ? [{ pos: posAutorizacoes, linha: linhaAutorizacoes }] : []),
+  ];
+  const fixasEm = (i: number) => fixas.filter(f => f.pos === i).map(f => f.linha);
+  const fixasNoFim = fixas.filter(f => f.pos > 0 && f.pos >= filtradas.length).map(f => f.linha);
 
   return (
     /*
@@ -400,8 +425,8 @@ export function ListaConversas({
             {carregando && (
               <p className="text-center text-xs text-muted-foreground py-8">Carregando…</p>
             )}
-            {posAutorizacoes === 0 && linhaAutorizacoes}
-            {!carregando && filtradas.length === 0 && !linhaAutorizacoes && (
+            {fixasEm(0)}
+            {!carregando && filtradas.length === 0 && fixas.length === 0 && (
               <div className="text-center py-10 px-4">
                 <p className="text-xs text-muted-foreground">
                   {busca.trim()
@@ -420,7 +445,7 @@ export function ListaConversas({
 
             {filtradas.map((c, i) => (
               <Fragment key={c.id}>
-              {i > 0 && i === posAutorizacoes && linhaAutorizacoes}
+              {i > 0 && fixasEm(i)}
               <div className="group relative">
                 <button
                   onClick={() => onAbrir(c.id)}
@@ -551,7 +576,7 @@ export function ListaConversas({
               </div>
               </Fragment>
             ))}
-            {posAutorizacoes > 0 && posAutorizacoes >= filtradas.length && linhaAutorizacoes}
+            {fixasNoFim}
           </>
         ) : (
           <>

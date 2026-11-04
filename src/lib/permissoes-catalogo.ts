@@ -100,25 +100,27 @@ export const CARGOS_ACESSO_TOTAL: readonly PerfilUsuario[] = CARGOS_DERIVADOS.ac
  * Chaves que o acesso total NÃO concede sozinho.
  *
  * "Administrador pode tudo" é verdade sobre o produto do dia a dia, e deixa de
- * ser verdade quando a permissão desfaz um fato já publicado. Reabrir mês
- * fechado é assim: o relatório de agosto já circulou por WhatsApp, e reescrevê-lo
- * em setembro muda um número que a diretoria leu — em silêncio, porque quem
- * recebeu o arquivo não é avisado.
+ * ser verdade quando a permissão desfaz um fato já publicado: o relatório já
+ * circulou, e reescrevê-lo muda um número que alguém leu — em silêncio, porque
+ * quem recebeu o arquivo não é avisado.
  *
- * Sem esta lista, ligar `ignorar_fechamento_mes` no catálogo teria liberado o
- * cadeado para TODO administrador no mesmo deploy, sem ninguém decidir isso: o
- * `temPermissao` responde `true` para acesso total antes de consultar tabela
- * nenhuma. A lista existe para que ampliar a exceção continue sendo uma escolha
- * registrada, e não efeito colateral de uma chave nova.
+ * Sem esta lista, uma chave assim no catálogo valeria para TODO administrador no
+ * mesmo deploy, sem ninguém decidir isso: o `temPermissao` responde `true` para
+ * acesso total antes de consultar tabela nenhuma. A lista existe para que
+ * ampliar a exceção continue sendo uma escolha registrada, e não efeito
+ * colateral de uma chave nova.
+ *
+ * `ignorar_fechamento_mes` (escrever em mês fechado) foi a primeira desta lista
+ * e saiu do produto em 29/10/2026: mês fechado é só do super admin
+ * (`20261029220000`).
  *
  * Quem lê estas chaves é `temPermissaoExplicita`, nunca `temPermissao`.
  */
 export const PERMISSOES_EXPLICITAS = [
-  'ignorar_fechamento_mes',
   /*
    * Reabrir competência finalizada do RH.
    *
-   * Mesma família do cadeado do mês, e pelo mesmo motivo: a competência
+   * Mesma família do antigo cadeado do mês, e pelo mesmo motivo: a competência
    * finalizada é a folha que já foi paga. Reabri-la reescreve um número que
    * pessoas receberam — e quem recebeu não é avisado.
    *
@@ -785,6 +787,21 @@ export const PERMISSOES: PermissaoMeta[] = [
     key: 'importar_analitico', label: 'Importar relatório Analítico',
     descricao: 'Subir o relatório de recebimentos do ERP',
     grupo: 'Importações', padrao: LIDERANCA,
+  },
+  {
+    /*
+     * O botão do 994 (a Retenção do Jornada, 27/10/2026). Chave própria porque
+     * o relatório é de um setor só: com `importar_analitico` ele aparecia para
+     * a liderança de todos. Nasce desligado — liga-se para quem importa a
+     * Retenção, por cargo ou por pessoa.
+     */
+    key: 'importar_analitico_retencao', label: 'Importar 994 · Retenção',
+    descricao: 'Ver o botão e subir o relatório 994 da Retenção do Jornada no Analítico',
+    grupo: 'Importações', tenants: ['bookplay'], padrao: {},
+    depende: {
+      chaves: ['importar_analitico'],
+      motivo: 'O 994 grava no Analítico: sem «Importar relatório Analítico» o botão aparece e a gravação é recusada.',
+    },
   },
   {
     key: 'importar_diario', label: 'Importar Recebimento diário',
@@ -1934,14 +1951,9 @@ export const PERMISSOES: PermissaoMeta[] = [
     grupo: 'RH Gestão', padrao: { rh: true },
   },
 
-  {
-    key: 'ignorar_fechamento_mes', label: 'Escrever em mês fechado',
-    descricao:
-      'Criar, editar e excluir em mês já encerrado. O super admin sempre pode; '
-      + 'ligue aqui para abrir a exceção a outro cargo — a alteração muda um mês '
-      + 'cujo relatório já circulou',
-    grupo: 'Ações específicas', padrao: {},
-  },
+  // `ignorar_fechamento_mes` saiu em 29/10/2026: mês fechado é só do super
+  // admin (20261029220000). O teste "as chaves aposentadas não voltaram" a
+  // trava fora daqui.
 
   // ── Controle de Números ──────────────────────────────────────────────────
   //
@@ -2175,6 +2187,23 @@ export const PERMISSOES: PermissaoMeta[] = [
     depende: {
       chaves: ['fechamento_escopo_setor', 'fechamento_escopo_todos_setores'],
       motivo: 'Só se preenche o fechamento de quem aparece na aba, e é o alcance que mostra.',
+    },
+  },
+  {
+    /*
+     * O selo do mês (31/10/2026): os números oficiais de cada mês fechado,
+     * gravados na virada (`fechamento_mes`, 20261029201000) e imutáveis. Nasce
+     * com o valor de `ver_fechamento` de cada cargo (20261031230200). Selar de
+     * novo é só do super admin, no banco.
+     */
+    key: 'fechamento_sub_selo', label: 'Fechamento: aba Selo do mês',
+    descricao:
+      'Ver os números oficiais do mês fechado (recebido, H.O., meta) gravados na '
+      + 'virada, com as versões e o motivo de cada uma',
+    grupo: 'Fechamento', tenants: ['bookplay'], padrao: {},
+    depende: {
+      chaves: ['fechamento_escopo_setor', 'fechamento_escopo_todos_setores'],
+      motivo: 'O selo mostra o alcance da própria aba Fechamento.',
     },
   },
 

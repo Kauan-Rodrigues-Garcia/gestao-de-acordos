@@ -24,10 +24,15 @@ interface Props {
   filtro: string;
   /** Por pessoa usa o seletor herda/sim/não; por cargo cai no Switch padrão. */
   renderControle?: (permissao: PermissaoMeta, contexto: ControleContexto) => ReactNode;
+  /** No painel de módulos o card é o único aberto: não recolhe. */
+  sempreAberto?: boolean;
+  /** «Exibir aba» já está na lista de módulos ao lado; aqui não se repete. */
+  semInterruptor?: boolean;
 }
 
 export function BlocoAba({
   bloco, valorDe, alternar, alterada, somenteLeitura, filtro, renderControle,
+  sempreAberto = false, semInterruptor = false,
 }: Props) {
   // Pedido explícito: todos os cards nascem minimizados.
   const [aberto, setAberto] = useState(false);
@@ -100,7 +105,7 @@ export function BlocoAba({
     );
   };
 
-  const mostrarConteudo = abaLigada && (aberto || buscando);
+  const mostrarConteudo = abaLigada && (sempreAberto || aberto || buscando);
 
   return (
     <section className={cn(
@@ -114,21 +119,21 @@ export function BlocoAba({
       )}>
         <button
           type="button"
-          disabled={!abaLigada}
+          disabled={!abaLigada || sempreAberto}
           onClick={() => setAberto(v => !v)}
-          className="flex min-w-0 items-center gap-2 text-left disabled:cursor-not-allowed"
+          className={cn('flex min-w-0 items-center gap-2 text-left', !sempreAberto && 'disabled:cursor-not-allowed')}
           aria-expanded={mostrarConteudo}
           title={!abaLigada ? 'Ligue a aba para abrir as configurações internas' : undefined}
         >
-          <ChevronDown className={cn(
+          {!sempreAberto && <ChevronDown className={cn(
             'h-4 w-4 shrink-0 text-muted-foreground transition-transform',
             !mostrarConteudo && '-rotate-90', !abaLigada && 'opacity-35',
-          )} />
+          )} />}
           <span className="min-w-0">
             <span className={cn('block text-sm font-semibold', !abaLigada && 'text-muted-foreground')}>
               {bloco.rotulo}
             </span>
-            <span className="block truncate text-[11px] font-normal text-muted-foreground">
+            <span className={cn('block text-[11px] font-normal text-muted-foreground', !sempreAberto && 'truncate')}>
               {bloco.descricao}
             </span>
           </span>
@@ -155,11 +160,21 @@ export function BlocoAba({
           </span>
         )}
 
-        <div className="ml-auto flex items-center gap-2">
-          <span className="text-[11px] text-muted-foreground">Exibir aba</span>
-          {controleDe(bloco.interruptor, { disabled: false, cabecalho: true })}
-        </div>
+        {!semInterruptor && (
+          <div className="ml-auto flex items-center gap-2">
+            <span className="text-[11px] text-muted-foreground">Exibir aba</span>
+            {controleDe(bloco.interruptor, { disabled: false, cabecalho: true })}
+          </div>
+        )}
       </header>
+
+      {!abaLigada && sempreAberto && (
+        <p className="px-4 py-6 text-center text-xs text-muted-foreground">
+          {semInterruptor
+            ? 'A aba está desligada. Ligue «Exibir aba» na lista ao lado para configurar o que tem dentro.'
+            : 'A aba está desligada. Ligue «Exibir aba» acima para configurar o que tem dentro.'}
+        </p>
+      )}
 
       {mostrarConteudo && (
         <div>

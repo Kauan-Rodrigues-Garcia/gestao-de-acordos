@@ -4,13 +4,13 @@
  * Regra (2026-07-28): quem é marcado como `desligado` deixa de "segurar" os
  * próprios acordos. Duas frentes:
  *
- *   1. NO MOMENTO DO DESLIGAMENTO (`liberarVinculosDeDesligado`)
- *      Desfaz o pareamento Direto/Extra. Ninguém ativo pode ficar pareado a
- *      um operador que saiu da empresa:
- *        • acordos DELE perdem `vinculo_operador_*`;
- *        • acordos de OUTROS que apontavam pra ele perdem a referência e, se
- *          eram EXTRA, são promovidos a DIRETO (mesma regra de
- *          `tratarExclusaoVinculo`) — inclusive assumindo o NR.
+ *   1. NA VIRADA DO MÊS — no banco, não aqui
+ *      Desfaz o pareamento Direto/Extra quando o desligado é arquivado
+ *      (`fn_desligado_sai_de_tudo`, migration 20261103120000): o EXTRA do
+ *      colega vira DIRETO e assume o NR; os demais perdem o vínculo. Até
+ *      03/11/2026 isto era `liberarVinculosDeDesligado`, no navegador, e não
+ *      rodava: o cron arquivava antes e a promoção esbarrava no NR do
+ *      desligado (`fn_nr_exigir_livre`).
  *
  *   2. NA HORA DE TABULAR (`transferirAcordoDeDesligado`)
  *      Se o NR/Código está preso a um desligado, a tabulação do novo operador
@@ -22,11 +22,10 @@
  * desligado antes desta funcionalidade existir, sem precisar de backfill, e
  * não há flag que possa ficar desatualizada.
  *
- * Ver 20260723c_status_usuario.sql e [[tratarExclusaoVinculo]].
+ * Ver 20260723c_status_usuario.sql e 20261030235500_vinculo_par_sincronizado.sql.
  */
-import { supabase, type Acordo, type SituacaoUsuario } from '@/lib/supabase';
+import { supabase, type SituacaoUsuario } from '@/lib/supabase';
 import { criarNotificacao } from '@/services/notificacoes.service';
-import { transferirNr, type NrCampo } from '@/services/nr_registros.service';
 
 /**
  * Nome gravado no lugar do líder autorizador quando a transferência sai pela
@@ -59,107 +58,6 @@ export async function situacaoDoOperador(operadorId: string): Promise<SituacaoUs
 /** Atalho de leitura no ponto de decisão. */
 export async function operadorEstaDesligado(operadorId: string): Promise<boolean> {
   return (await situacaoDoOperador(operadorId)) === 'desligado';
-}
-
-// ─────────────────────────────────────────────────────────────────────────
-// 1. Desfazer pareamento Direto/Extra no desligamento
-// ─────────────────────────────────────────────────────────────────────────
-
-export interface ResultadoLiberacao {
-  /** Acordos do desligado que perderam `vinculo_operador_*`. */
-  vinculosLimpos: number;
-  /** Acordos de outros operadores promovidos de EXTRA para DIRETO. */
-  extrasPromovidos: number;
-}
-
-/**
- * Desfaz os vínculos Direto/Extra de um operador desligado.
- *
- * Não mexe em `operador_id` nem apaga acordo nenhum: o recebimento do mês do
- * desligado continua contando nos totais de setor e equipe (é o que a
- * migration 20260723c define). O que sai é só o pareamento.
- */
-export async function liberarVinculosDeDesligado(params: {
-  perfilId:  string;
-  empresaId: string;
-  /** PaguePlay casa por `instituicao`; BookPlay por `nr_cliente`. */
-  isPaguePlay: boolean;
-}): Promise<ResultadoLiberacao> {
-  const { perfilId, empresaId, isPaguePlay } = params;
-  const saida: ResultadoLiberacao = { vinculosLimpos: 0, extrasPromovidos: 0 };
-  if (!perfilId || !empresaId) return saida;
-
-  const campo: NrCampo = isPaguePlay ? 'instituicao' : 'nr_cliente';
-
-  // ── a. Acordos de OUTROS que apontam para o desligado ──────────────────
-  // Precisam ser tratados antes de limpar os dele, senão perdemos a chave
-  // (instituicao/nr_cliente) que liga os dois lados.
-  const { data: apontamParaEle } = await supabase
-    .from('acordos')
-    .select('id, operador_id, tipo_vinculo, nr_cliente, instituicao')
-    .eq('empresa_id', empresaId)
-    .eq('vinculo_operador_id', perfilId);
-
-  for (const a of (apontamParaEle ?? []) as Array<Partial<Acordo> & { id: string }>) {
-    const ehExtra = (a.tipo_vinculo ?? 'direto') === 'extra';
-    const patch: Record<string, unknown> = {
-      vinculo_operador_id:   null,
-      vinculo_operador_nome: null,
-    };
-    // EXTRA pareado a um desligado vira DIRETO: passa a ser o titular do NR.
-    if (ehExtra) patch.tipo_vinculo = 'direto';
-
-    const { error } = await supabase.from('acordos').update(patch).eq('id', a.id);
-    if (error) {
-      console.warn('[desligamento] falha ao limpar vínculo de terceiro:', error.message);
-      continue;
-    }
-
-    if (!ehExtra || !a.operador_id) continue;
-    saida.extrasPromovidos++;
-
-    // Titularidade do NR acompanha a promoção.
-    const chave = ((isPaguePlay ? a.instituicao : a.nr_cliente) ?? '').trim();
-    if (chave) {
-      const { data: perf } = await supabase
-        .from('perfis').select('nome').eq('id', a.operador_id).maybeSingle();
-      await transferirNr({
-        empresaId,
-        nrValue:          chave,
-        campo,
-        novoOperadorId:   a.operador_id,
-        novoOperadorNome: (perf as { nome?: string } | null)?.nome ?? '',
-        novoAcordoId:     a.id,
-      });
-    }
-
-    try {
-      await criarNotificacao({
-        usuario_id: a.operador_id,
-        empresa_id: empresaId,
-        titulo:     'Seu acordo EXTRA virou DIRETO',
-        mensagem:
-          `O operador com quem você tinha vínculo foi desligado. ` +
-          `Seu acordo ${chave ? `(${isPaguePlay ? 'Código' : 'NR'} ${chave}) ` : ''}` +
-          `passou a ser DIRETO e você assumiu a titularidade.`,
-      });
-    } catch (e) {
-      console.warn('[desligamento] falha ao notificar promoção de extra', e);
-    }
-  }
-
-  // ── b. Acordos DELE que apontavam para outros ──────────────────────────
-  const { error: errDele, count } = await supabase
-    .from('acordos')
-    .update({ vinculo_operador_id: null, vinculo_operador_nome: null }, { count: 'exact' })
-    .eq('empresa_id', empresaId)
-    .eq('operador_id', perfilId)
-    .not('vinculo_operador_id', 'is', null);
-
-  if (errDele) console.warn('[desligamento] falha ao limpar vínculos do desligado:', errDele.message);
-  else saida.vinculosLimpos = count ?? 0;
-
-  return saida;
 }
 
 // ─────────────────────────────────────────────────────────────────────────

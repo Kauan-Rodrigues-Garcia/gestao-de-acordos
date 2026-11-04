@@ -10,7 +10,8 @@
  */
 
 import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
-import { lazy, Suspense, useState, useEffect, useCallback, useMemo } from 'react';
+import { lazy, Suspense, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { assinarSinal } from '@/lib/sinais';
 import {
   Upload, Users, Trophy, AlertCircle,
   Trash2, Loader2, Star, CalendarDays, X, Filter, Copy,
@@ -136,6 +137,7 @@ import {
 } from '@/services/diario/diario.service';
 import type { LinhaRecebidaDia } from '@/services/analitico/analitico.service';
 import { celulasDoMapa } from './fonteDoMapa';
+import { useFechamentoMes } from '@/hooks/useFechamentoMes';
 
 /*
  * Sob demanda, como em `AnaliticoOperador` — e é o MESMO `import()`.
@@ -422,12 +424,18 @@ export function AnaliticoLider({
   const [nomeDoSetor, setNomeDoSetor] = useState<Map<string, string>>(new Map());
 
   // ── Cargas ────────────────────────────────────────────────────────────────
-  const carregarResumos = useCallback(async () => {
+  /**
+   * `silencioso`: a recarga que o aviso do banco dispara (ver abaixo). Não
+   * mostra carregando nem fecha os cards abertos — a tela só troca os números.
+   */
+  const carregarResumos = useCallback(async (silencioso = false) => {
     if (!empresaId || !mes) return;
-    setLoadingResumos(true);
-    setExpandidos(new Set());
-    setLinhasMap(new Map());
-    setFiltrosDatas(new Map());
+    if (!silencioso) {
+      setLoadingResumos(true);
+      setExpandidos(new Set());
+      setLinhasMap(new Map());
+      setFiltrosDatas(new Map());
+    }
     // As exclusões vêm ANTES: `buscarTotalPorSetor` já devolve o total líquido
     // delas, para que nenhuma tela precise lembrar de aplicá-las depois.
     const { porSetor: exclusoesDoMes, dbAtiva } = await buscarExclusoesSetor(empresaId, mes);
@@ -441,7 +449,11 @@ export function AnaliticoLider({
       buscarTotalOrfaosPorSetor(empresaId, mes),
       buscarTotalPorSetor(empresaId, mes, exclusoesDoMes),
     ]);
-    if (error) toast.error(`Erro ao carregar resumo: ${error}`);
+    if (error) {
+      // Na recarga silenciosa, a lista que está na tela vale mais que uma vazia.
+      if (silencioso) return;
+      toast.error(`Erro ao carregar resumo: ${error}`);
+    }
     setResumos(data);
     setOrfaosPorSetor(orfaosSetor);
     setTotalPorSetor(totSetor);
@@ -460,8 +472,11 @@ export function AnaliticoLider({
    * card, o Desempenho Equipes e o gráfico — reconstruir só um deles é como as
    * telas passam a discordar.
    */
+  // Mês fechado: as origens fora do acumulado são só leitura (20261031210000).
+  const fechamentoComposicao = useFechamentoMes(mes);
   const salvarComposicao = useCallback(async (excluidas: Set<OrigemKey>) => {
     if (!empresaId || !mes || !setorId) return;
+    if (fechamentoComposicao.impedir('mudar as origens do acumulado')) return;
     setSalvandoComposicao(true);
     const ok = await salvarExclusoesSetor({
       empresaId, setorId, mes, excluidas, usuarioId: perfilId ?? null,
@@ -469,7 +484,7 @@ export function AnaliticoLider({
     if (!ok) toast.error('Não foi possível salvar a composição do acumulado.');
     else await carregarResumos();
     setSalvandoComposicao(false);
-  }, [empresaId, mes, setorId, perfilId, carregarResumos]);
+  }, [empresaId, mes, setorId, perfilId, carregarResumos, fechamentoComposicao]);
 
   const carregarSnapshot = useCallback(async () => {
     if (!empresaId || !mes) return;
@@ -524,6 +539,46 @@ export function AnaliticoLider({
     void carregarResumos();
     void carregarSnapshot();
   }, [carregarResumos, carregarSnapshot]);
+
+  /*
+   * O banco avisou que o analítico mudou (59, 994, importação de outra pessoa).
+   *
+   * As células do Mapa do mês já se atualizavam sozinhas (`useAnaliticoDashboard`
+   * ouve o mesmo aviso), mas a lista, os totais por setor e os órfãos só
+   * recarregavam ao abrir a tela ou depois de uma importação feita AQUI. O mapa
+   * desenha só quem está na lista: quem recebeu o primeiro pagamento do mês
+   * pelo 59 ficava fora dele até alguém recarregar a página (28/10/2026).
+   *
+   * Recarga silenciosa: os cards abertos continuam abertos e relêem as linhas.
+   * Aviso só de tabulação (UPDATE) espera 5 min, como no dashboard — tabular
+   * não muda valor.
+   */
+  const recarregarAoVivo = useRef<() => void>(() => {});
+  recarregarAoVivo.current = () => {
+    void carregarResumos(true);
+    void carregarSnapshot();
+    if (recorte.modo === 'dia') return;
+    for (const opId of expandidos) {
+      void buscarAnalitico({ empresaId, mes, operadorId: opId }).then(({ data }) => {
+        setLinhasMap(prev => (prev.has(opId) ? new Map(prev).set(opId, data) : prev));
+      });
+    }
+  };
+  useEffect(() => {
+    if (!empresaId) return;
+    let debounce: ReturnType<typeof setTimeout> | null = null;
+    const cancelar = assinarSinal('analitico', empresaId, {
+      onMudou: () => {
+        if (debounce) clearTimeout(debounce);
+        debounce = setTimeout(() => { debounce = null; recarregarAoVivo.current(); }, 1_500);
+      },
+      onReconectado: () => recarregarAoVivo.current(),
+    }, { minimoSoUpdateMs: 5 * 60_000 });
+    return () => {
+      if (debounce) clearTimeout(debounce);
+      cancelar();
+    };
+  }, [empresaId]);
 
   /*
    * Fotos dos operadores visíveis. A RPC do resumo não devolve `foto_url` e a
@@ -1850,7 +1905,19 @@ export function AnaliticoLider({
             >
               <Trash2 className="w-4 h-4" /> Limpar mês
             </Button>
-            <Button size="sm" className="gap-1.5 rounded-lg" onClick={() => setModalImportar(true)}
+            {/* O 994 é a Retenção do Jornada: o 58 a descarta, e ela entra pelo
+                relatório próprio — prévia do 59, como o 58. Mesmo modal, outro
+                parser — cada botão recusa o arquivo do outro. Chave própria:
+                o relatório é de um setor só. */}
+            {temPermissao('importar_analitico_retencao') && (
+              <Button size="sm" variant="outline" className="gap-1.5 rounded-lg"
+                onClick={() => { importHook.setRelatorio('994'); setModalImportar(true); }}
+                title="Relatório 994 — recebimento da Retenção do Jornada (Nr. Doc., Valor Pagto, Sub Grupo)">
+                <Upload className="w-4 h-4" /> Importar 994 · Retenção
+              </Button>
+            )}
+            <Button size="sm" className="gap-1.5 rounded-lg"
+              onClick={() => { importHook.setRelatorio('58'); setModalImportar(true); }}
               title="Relatório 58 — pagamento mensal (Cobradora, TpDoc, DtPgto, Recebido)">
               <Upload className="w-4 h-4" /> Importar 58 · pagamento mensal
             </Button>

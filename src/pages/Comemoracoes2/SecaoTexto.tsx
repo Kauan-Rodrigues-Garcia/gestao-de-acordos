@@ -11,7 +11,7 @@ import { MAX_SELO } from '@/components/comemoracao2/design';
 import { MAX_MENSAGEM, MAX_TITULO, type Rascunho } from './rascunho';
 import type { MudarRascunho } from './tipos';
 
-const TITULOS = ['META BATIDA!', 'RECORDE!', 'É CAMPEÃO!', 'MANDOU BEM!', 'SUPEROU A META!'];
+const TITULOS = ['META BATIDA!', 'RECORDE!', 'É CAMPEÃO!', 'MANDOU BEM!', 'SUPEROU A META!', 'DESTAQUE DO DIA!'];
 
 function Chips({ itens, onEscolher }: { itens: string[]; onEscolher: (t: string) => void }) {
   return (
@@ -27,7 +27,7 @@ function Chips({ itens, onEscolher }: { itens: string[]; onEscolher: (t: string)
 }
 
 export function SecaoTexto({ r, mudar, nomeDoMes }: { r: Rascunho; mudar: MudarRascunho; nomeDoMes: string }) {
-  const selos = [`Meta de ${nomeDoMes}`, 'Recorde do mês', 'Destaque da semana', 'Primeira meta'].map((s) => s.toUpperCase());
+  const selos = [`Meta de ${nomeDoMes}`, 'Recorde do mês', 'Destaque do dia', 'Destaque da semana', 'Primeira meta'].map((s) => s.toUpperCase());
 
   return (
     <>

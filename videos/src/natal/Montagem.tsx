@@ -29,8 +29,8 @@ import { loadFont as fontePirata } from '@remotion/google-fonts/PirataOne';
 import { loadFont as fonteOrbitron } from '@remotion/google-fonts/Orbitron';
 import { loadFont as fonteCinzel } from '@remotion/google-fonts/CinzelDecorative';
 import { loadFont as fonteMetal } from '@remotion/google-fonts/MetalMania';
-import { EMBUTIDAS, estiloDaFaixa } from '@/components/Halloween/SomAmbiente/faixas';
-import '@/components/Halloween/SomAmbiente/somAmbiente.css';
+import { EMBUTIDAS, estiloDaFaixa, type InfoFaixa } from '@/components/SomAmbiente/faixas';
+import '@/components/SomAmbiente/somAmbiente.css';
 import { criarMotor, type Gravacao, type Motor } from '@/components/Corrida/motor/motor';
 import { desempacotarGravacao } from '@/components/Corrida/gravacao';
 import infoCorrida from '../../public/natal/corrida/gravacao.json';
@@ -279,8 +279,19 @@ const CenaPesquisa: React.FC<{ p: RoteiroMontagem['pesquisa'] }> = ({ p }) => {
 // até aqui), a lista rola até «Mantém o Pique», o clique toca — e uns
 // segundos depois a janela encolhe e vira a lápide do `PlayerSeFoi`.
 
-type IdFaixa = keyof typeof EMBUTIDAS;
-const capaDe = (id: IdFaixa) => staticFile(`natal/player/capas/${(EMBUTIDAS[id].capa ?? '').split('/').pop()}`);
+// O vídeo mostra o player de outubro: a faixa do Halloween saiu do player com o
+// tema (03/11/2026) e volta só aqui.
+const FAIXAS = {
+  ...EMBUTIDAS,
+  halloween: {
+    nome: 'Halloween', descricao: 'Tema de John Carpenter', capa: '/sounds/capas/halloween.jpg',
+    // O lucide do vídeo traz a própria cópia dos tipos do React.
+    Icone: Ghost as unknown as InfoFaixa['Icone'],
+    cor: { fundo: 'hsl(30 6% 11%)', destaque: 'hsl(28 92% 56%)' },
+  },
+} satisfies Record<string, InfoFaixa>;
+type IdFaixa = keyof typeof FAIXAS;
+const capaDe = (id: IdFaixa) => staticFile(`natal/player/capas/${(FAIXAS[id].capa ?? '').split('/').pop()}`);
 
 const LISTA_MUSICAS: { genero: string; ids: IdFaixa[] }[] = [
   { genero: 'Funk', ids: ['trezentosno7', 'mdt', 'postounodaily', 'novinhamidia'] },
@@ -317,7 +328,7 @@ const Eq: React.FC<{ t: number; className?: string }> = ({ t, className = 'shrin
 );
 
 const Heroi: React.FC<{ id: IdFaixa; tocando: boolean; tocou: number; t: number; apertado: boolean }> = ({ id, tocando, tocou, t, apertado }) => {
-  const info = EMBUTIDAS[id];
+  const info = FAIXAS[id];
   const terror = id === ANTES;
   return (
     <section aria-label="Tocando agora" className="som-cores som-heroi relative shrink-0 px-4 pb-4 pt-3.5" style={estiloDaFaixa(info) as React.CSSProperties}>
@@ -388,7 +399,7 @@ const Seletor: React.FC<{ rolagem: number; escolhida: IdFaixa; tocando: boolean;
           <div key={g.genero} className="space-y-0.5">
             <p className={`px-1.5 pb-0.5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground ${gi === 0 ? 'pt-0.5' : 'pt-2.5'}`}>{g.genero}</p>
             {g.ids.map(id => {
-              const info = EMBUTIDAS[id];
+              const info = FAIXAS[id];
               const escolhidaAqui = id === escolhida;
               return (
                 <div key={id} className={`som-cores flex items-center gap-1 rounded-lg pr-1 ${escolhidaAqui ? 'som-linha-escolhida' : sobre === id ? 'bg-muted/70' : ''}`} style={estiloDaFaixa(info) as React.CSSProperties}>

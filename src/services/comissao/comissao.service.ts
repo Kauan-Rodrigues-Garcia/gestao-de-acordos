@@ -23,6 +23,8 @@ import type { BonusComissao, TipoBonus } from './bonus';
 import type {
   ConfigComissao, FaixaConfig, ModoIndireta, RegraSetor,
 } from './comissao';
+import { buscarSubgruposDasPessoasNoMes } from '@/services/fechamento/configDoMes';
+import { buscarPessoasDoRetrato } from '@/services/analitico/pessoasDoMes';
 
 const db = supabase as unknown as SupabaseClient;
 
@@ -219,7 +221,10 @@ export async function buscarConfigsDoMes(
     }
 
     return {
-      configs: await comPessoasDosSubgrupos(((data ?? []) as unknown as LinhaConfig[]).map(configDaLinha)),
+      configs: await comPessoasDosSubgrupos(
+        ((data ?? []) as unknown as LinhaConfig[]).map(configDaLinha),
+        empresaId, `${ano}-${String(mes).padStart(2, '0')}`,
+      ),
       bonus: bonusRes.error ? [] : ((bonusRes.data ?? []) as LinhaBonus[]).map(bonusDaLinha),
       dbAtiva: true,
     };
@@ -237,10 +242,31 @@ export async function buscarConfigsDoMes(
  *
  * Sem resposta, a exceção de subgrupo fica sem ninguém e as pessoas caem na
  * da equipe: errar para o lado do que valia antes do subgrupo.
+ *
+ * Mês fechado (31/10/2026): o subgrupo e a equipe de cada pessoa são os DAQUELE
+ * mês (retrato, 20261031200000). Trocar alguém de subgrupo em novembro não muda
+ * a comissão de outubro.
  */
-async function comPessoasDosSubgrupos(configs: ConfigComissao[]): Promise<ConfigComissao[]> {
+async function comPessoasDosSubgrupos(
+  configs: ConfigComissao[], empresaId: string, mesTexto: string,
+): Promise<ConfigComissao[]> {
   const subgrupos = [...new Set(configs.map(c => c.subgrupoId).filter((id): id is string => !!id))];
   if (subgrupos.length === 0) return configs;
+
+  const [subDoMes, pessoasDoMes] = await Promise.all([
+    buscarSubgruposDasPessoasNoMes(empresaId, mesTexto),
+    buscarPessoasDoRetrato(empresaId, mesTexto),
+  ]);
+  if (subDoMes && pessoasDoMes) {
+    const porSubgrupoDoMes = new Map<string, string[]>();
+    for (const [pessoa, sg] of subDoMes) {
+      if (!sg) continue;
+      const doSubgrupo = configs.find(c => c.subgrupoId === sg);
+      if (!doSubgrupo || doSubgrupo.equipeId !== (pessoasDoMes.get(pessoa)?.equipe_id ?? null)) continue;
+      porSubgrupoDoMes.set(sg, [...(porSubgrupoDoMes.get(sg) ?? []), pessoa]);
+    }
+    return configs.map(c => (c.subgrupoId ? { ...c, pessoasDoSubgrupo: porSubgrupoDoMes.get(c.subgrupoId) ?? [] } : c));
+  }
 
   const { data, error } = await db
     .from('perfis')

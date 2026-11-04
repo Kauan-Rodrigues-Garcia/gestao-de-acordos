@@ -7,7 +7,7 @@
  * ~400 pedidos em fila indiana.
  *
  * Paralelizar tudo não serve: o Direto e o Extra do mesmo NR mexem um no
- * outro (`tratarExclusaoVinculo` promove o Extra quando o Direto sai), e os
+ * outro (o banco promove o Extra quando o Direto sai, `trg_vinculo_par_del`), e os
  * dois ao mesmo tempo correriam um sobre o outro. Por isso o GRUPO — o mesmo
  * NR — anda em fila, e grupos diferentes andam juntos, até `limite` por vez.
  *

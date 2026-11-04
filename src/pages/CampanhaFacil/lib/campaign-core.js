@@ -14,9 +14,12 @@
     // Pix Automático em 21x (09/10/2026): desconto sobre o Valor Aberto
     // (21/10/2026; antes, sobre o valor com juros).
     pix_automatico: 5,
+    // Cartão Recorrente (27/10/2026): a mesma conta do Pix Automático, com o
+    // próprio desconto.
+    cartao_recorrente: 5,
   });
 
-  /** Pix Automático: o padrão é 21 parcelas. */
+  /** Pix Automático e Cartão Recorrente: o padrão é 21 parcelas. */
   const PIX_AUTO_PARCELAS = 21;
 
   /**
@@ -47,19 +50,19 @@
       key: "endereco", header: "Endereço",
       names: ["Endereço", "Endereco", "Endereço Residencial", "Endereço Completo", "Logradouro"],
       partials: ["ENDERECO", "LOGRADOURO"],
-      excludes: ["EMAIL", "ELETRONICO", "TRABALHO", "COMERCIAL", "EMPRESA"],
+      excludes: ["EMAIL", "ELETRONICO", "TRABALHO", "COMERCIAL", "EMPRESA", "AVALISTA"],
     },
     {
       key: "cidade", header: "Cidade",
       names: ["Cidade", "Município", "Municipio", "Cidade Residencial"],
       partials: ["CIDADE", "MUNICIPIO"],
-      excludes: ["TRABALHO", "COMERCIAL", "EMPRESA", "NASC"],
+      excludes: ["TRABALHO", "COMERCIAL", "EMPRESA", "NASC", "AVALISTA"],
     },
     {
       key: "local_trabalho", header: "Local de trabalho",
       names: ["Local de Trabalho", "Local Trabalho", "Empresa onde trabalha", "Empresa Trabalho", "Empregador"],
       partials: ["LOCALDETRABALHO", "LOCALTRABALHO", "EMPREGADOR", "EMPRESATRABALHO", "TRABALHO"],
-      excludes: ["ENDERECO", "CIDADE", "FONE", "TELEFONE", "RAMAL"],
+      excludes: ["ENDERECO", "CIDADE", "FONE", "TELEFONE", "RAMAL", "AVALISTA"],
     },
     {
       key: "ocupacao", header: "Ocupação",
@@ -73,6 +76,20 @@
       names: ["Tempo de atraso", "Dias de atraso", "Dias em atraso", "Dias Atraso", "Atraso"],
       partials: ["DIASDEATRASO", "DIASEMATRASO", "DIASATRASO", "TEMPODEATRASO", "TEMPOATRASO", "ATRASODIAS"],
       excludes: ["PARCELA"],
+    },
+    // O avalista do contrato (28/10/2026): «Nome Avalista» e «CPF Avalista»,
+    // as colunas AI e AJ do relatório. O CPF sai mascarado como o {{cpf}}.
+    {
+      key: "nome_avalista", header: "Nome do avalista",
+      names: ["Nome Avalista", "Nome do Avalista", "Avalista"],
+      partials: ["NOMEAVALISTA", "NOMEDOAVALISTA"],
+      excludes: [],
+    },
+    {
+      key: "cpf_avalista", header: "CPF do avalista",
+      names: ["CPF Avalista", "CPF do Avalista", "CPF/CNPJ Avalista"],
+      partials: ["CPFAVALISTA", "CPFDOAVALISTA", "CPFCNPJAVALISTA"],
+      excludes: [],
     },
   ]);
 
@@ -93,9 +110,9 @@ A *{{empresa}}* liberou DESCONTOS especiais nas suas parcelas.
 1️⃣ *Pagamento do valor em atraso: {{parcela_desconto}}*
 2️⃣ *Pagamento da junção (em atraso + próxima): {{juncao}}*
 3️⃣ *Quitação via Pix: {{quitacao}}*
-4️⃣ *Quitação em 12x no cartão: {{cartao_quitacao}} (sem juros, podendo ser de terceiros)*
-5️⃣ *Plano anual em 12x no cartão: {{cartao_anual}}*
-6️⃣ *PIX AUTOMÁTICO em 21x de {{pix_automatico_desconto_21x}}*
+4️⃣ *Quitação no cartão: {{cartao_quitacao}} (sem juros, podendo ser de terceiros)*
+5️⃣ *Plano anual no cartão: {{cartao_anual}}*
+6️⃣ *PIX AUTOMÁTICO em {{pix_automatico_desconto_21x}}*
 
 💬 *Estamos à disposição! Qual opção de pagamento você escolhe?*
 📞 Atendimento: {{atendimento}}`,
@@ -213,7 +230,7 @@ O seu contrato (*{{contrato}}*) foi selecionado para pagamento com um *DESCONTO 
 ⏳ Durante *UMA HORA* você vai ter *_ISENÇÃO TOTAL_* dos juros de sua parcela em atraso. Por favor me informe uma das opções abaixo:
 
 1️⃣ Quitação total de ~{{valor_com_juros}}~ no PIX por *{{quitacao}}*
-2️⃣ Quitação pelo cartão de crédito em 12x de *{{cartao_quitacao}}* (podendo ser de terceiros)
+2️⃣ Quitação pelo cartão de crédito em *{{cartao_quitacao}}* (podendo ser de terceiros)
 3️⃣ Junção com *{{pct_juncao}} OFF* por *{{juncao}}*
 4️⃣ Valor em atraso com *JUROS OFF* no PIX por *{{parcela_desconto}}*
 
@@ -235,7 +252,7 @@ O seu contrato (*{{contrato}}*) foi selecionado para pagamento com um *DESCONTO 
 1️⃣ *Valor em atraso SEM JUROS via PIX – {{parcela_desconto}}*
 2️⃣ *Junção (em atraso + próxima a vencer) com {{pct_juncao}} OFF – {{juncao}}*
 3️⃣ *Quitação total com {{pct_quitacao}} OFF via PIX – {{quitacao}}*
-4️⃣ *Quitação total no cartão de crédito em 12x de {{cartao_quitacao}} (inclusive de terceiros)*
+4️⃣ *Quitação total no cartão de crédito em {{cartao_quitacao}} (inclusive de terceiros)*
 
 💬 *Estamos aqui para te ajudar!*
 ⚡ *Qual opção funciona melhor pra você hoje?*
@@ -253,8 +270,8 @@ Olá *{{primeiro_nome}}*, tudo bem?
 
 Aproveite o desconto via PIX Automático HOJE:
 
-1️⃣ *PIX Automático em 21x de {{pix_automatico_desconto_21x}} ({{pct_pix_automatico}} OFF)*
-2️⃣ *Quitação à vista: {{quitacao}} ou 12x de {{cartao_quitacao}} ({{pct_quitacao}} OFF)*
+1️⃣ *PIX Automático em {{pix_automatico_desconto_21x}} ({{pct_pix_automatico}} OFF)*
+2️⃣ *Quitação à vista: {{quitacao}} ou {{cartao_quitacao}} ({{pct_quitacao}} OFF)*
 3️⃣ *Junção (em atraso + a vencer): {{juncao}} ({{pct_juncao}} OFF)*
 4️⃣ *Valor em atraso: {{parcela_desconto}}*
 
@@ -310,9 +327,9 @@ Com o PIX automático da *{{empresa}}*, você não precisa mais se preocupar com
 
 1️⃣ Quitar tudo com {{pct_quitacao}} OFF: *{{quitacao}}*
 2️⃣ Pagar o valor em atraso (sem juros): *{{parcela_desconto}}*
-3️⃣ Quitar no cartão: *12x de {{cartao_quitacao}}* (podendo ser de terceiros)
+3️⃣ Quitar no cartão: *{{cartao_quitacao}}* (podendo ser de terceiros)
 4️⃣ Regularizar a junção: *{{juncao}}*
-5️⃣ *Migrar pro PIX automático com {{pct_pix_automatico}} OFF: 21x de {{pix_automatico_desconto_21x}}*
+5️⃣ *Migrar pro PIX automático com {{pct_pix_automatico}} OFF: {{pix_automatico_desconto_21x}}*
 
 *Escolha a opção que faz mais sentido pra você e me chama aqui! Vamos ativar sua condição especial ainda hoje!*
 💬*Estamos aqui para lhe ajudar,*
@@ -333,7 +350,7 @@ Com o PIX automático da *{{empresa}}*, você não precisa mais se preocupar com
 1️⃣ *Valor em atraso SEM JUROS via PIX – {{parcela_desconto}}*
 2️⃣ *Junção (em atraso + próxima a vencer) com {{pct_juncao}} OFF – {{juncao}}*
 3️⃣ *Quitação total com {{pct_quitacao}} OFF via PIX – {{quitacao}}*
-4️⃣ *Quitação total no cartão de crédito em 12x de {{cartao_quitacao}} (inclusive de terceiros)*
+4️⃣ *Quitação total no cartão de crédito em {{cartao_quitacao}} (inclusive de terceiros)*
 
 💬 *Estamos aqui para te ajudar!*
 ⚡ *Qual opção funciona melhor pra você hoje?*
@@ -352,7 +369,7 @@ Olá *{{primeiro_nome}}*, tudo bem?
 Aproveite o desconto e evite maiores transtornos em seu CPF:
 
 1️⃣ Valor em atraso: *{{parcela_desconto}}*
-2️⃣ Quitação à vista: *{{quitacao}} ou 12x de {{cartao_quitacao}} ({{pct_quitacao}} OFF)*
+2️⃣ Quitação à vista: *{{quitacao}} ou {{cartao_quitacao}} ({{pct_quitacao}} OFF)*
 3️⃣ Junção (em atraso + a vencer): *{{juncao}} ({{pct_juncao}} OFF)*
 
 ⚠️ *Confirma hoje? Após isso, perde o desconto e o processo de negativação segue automaticamente.*
@@ -374,7 +391,7 @@ Sabemos que imprevistos acontecem. Queremos te ajudar a resolver o quanto antes:
 1️⃣ Valor vencido via PIX: *{{parcela_desconto}}*
 2️⃣ Junção das parcelas vencidas + à vencer com *{{pct_juncao}} OFF*: *{{juncao}}*
 3️⃣ Quitação total com *{{pct_quitacao}} OFF*: *{{quitacao}}*
-4️⃣ Parcelamento no cartão: *12x de {{cartao_quitacao}}* (podendo ser de terceiros)
+4️⃣ Parcelamento no cartão: *{{cartao_quitacao}}* (podendo ser de terceiros)
 
 _Assim que o pagamento for confirmado, damos início à baixa da restrição junto aos órgãos de proteção ao crédito._
 
@@ -397,7 +414,7 @@ Como última oportunidade de negociação, conforme a Lei 13.140/15, temos as se
 1️⃣ PIX do valor vencido com ISENÇÃO DE JUROS: {{parcela_desconto}}
 2️⃣ PIX da junção (valor vencido + próxima parcela) com {{pct_juncao}} DE DESCONTO: {{juncao}}
 3️⃣ Quitação à vista via PIX com {{pct_quitacao}} DE DESCONTO: {{quitacao}}
-4️⃣ Parcelamento total no cartão: 12x de {{cartao_quitacao}} sem juros (pode ser em cartão de terceiros)
+4️⃣ Parcelamento total no cartão: {{cartao_quitacao}} sem juros (pode ser em cartão de terceiros)
 
 💬 Estamos aqui para ajudar.
 ⚡ Qual dessas opções é mais viável para você hoje?
@@ -420,7 +437,7 @@ Como última oportunidade de negociação, conforme a Lei 13.140/15, temos as se
 
 3️⃣ *Quitação total via PIX com {{pct_quitacao}} de desconto 💰 Valor: de {{valor_com_juros}} por {{quitacao}}*
 
-4️⃣ *Parcelamento total em até 12x no cartão (inclusive de terceiros) 💳 12x de {{cartao_quitacao}}*
+4️⃣ *Parcelamento total no cartão (inclusive de terceiros) 💳 em até {{cartao_quitacao}}*
 
 *Qualquer dúvida ou para aproveitar, estou à disposição por aqui!* 😊
 📞 Atendimento: {{atendimento}}`,
@@ -439,8 +456,8 @@ Identificamos uma pendência no contrato Nº *{{contrato}}*. Para evitar que iss
 1️⃣ Valor em atraso com *ISENÇÃO DE JUROS* – *{{parcela_desconto}}*
 2️⃣ Junção das parcelas em atraso + à vencer com *{{pct_juncao}} OFF* – *{{juncao}}*
 3️⃣ Quitação total com *{{pct_quitacao}} OFF* no PIX – *{{quitacao}}*
-4️⃣ Parcelamento total da quitação em *12x de {{cartao_quitacao}}* no cartão (podendo ser de terceiros)
-5️⃣ Parcelamento plano anual em *12x de {{cartao_anual}}* no cartão.
+4️⃣ Parcelamento total da quitação em *{{cartao_quitacao}}* no cartão (podendo ser de terceiros)
+5️⃣ Parcelamento plano anual em *{{cartao_anual}}* no cartão.
 
 *Temos condições facilitadas. Como prefere seguir com o acerto?*
 💬*Estamos aqui para lhe ajudar,*
@@ -460,7 +477,7 @@ Sabemos que este é um mês especial para você, e por isso preparamos condiçõ
 🎁 *Veja seus PRESENTES deste mês:*
 
 🔹 *DIGITE 1 – Quitação total com desconto via PIX: {{quitacao}}*
-🔹 *DIGITE 2 – Parcelamento no Cartão de Crédito em até 12x de {{cartao_quitacao}} (inclusive de terceiros)*
+🔹 *DIGITE 2 – Parcelamento no Cartão de Crédito em até {{cartao_quitacao}} (inclusive de terceiros)*
 🔹 *DIGITE 3 – Parcelas vencidas + a vencer: {{juncao}} (PIX ou cartão)*
 🔹 *DIGITE 4 – Somente parcelas vencidas: {{parcela_desconto}} (PIX)*
 
@@ -480,7 +497,7 @@ Quitando você ganha em *cashback 30% OFF* + até 3 meses grátis de acesso à p
 
 Não fique de fora dessa, tempo limitado!
 
-1️⃣ - Quero parcelar em 12x no cartão de Crédito valor de {{cartao_quitacao}} (podendo ser de terceiros)
+1️⃣ - Quero parcelar no cartão de Crédito em {{cartao_quitacao}} (podendo ser de terceiros)
 2️⃣ - Irei regularizar a Junção (em atraso + a que vai vencer) por {{juncao}}
 3️⃣ - Quero pagar somente o valor em atraso por {{parcela_desconto}}
 
@@ -502,8 +519,8 @@ A *{{empresa}}* liberou DESCONTOS EXCLUSIVOS nas suas parcelas para você aprove
 1️⃣ *Pagamento do valor em atraso: {{parcela_desconto}}*
 2️⃣ *Pagamento da junção (em atraso + próxima): {{juncao}}*
 3️⃣ *Quitação via Pix com {{pct_quitacao}} OFF: {{quitacao}}*
-4️⃣ *Quitação em 12x no cartão: {{cartao_quitacao}} (sem juros, podendo ser de terceiros)*
-5️⃣ *Plano anual em 12x no cartão: {{cartao_anual}}*
+4️⃣ *Quitação no cartão: {{cartao_quitacao}} (sem juros, podendo ser de terceiros)*
+5️⃣ *Plano anual no cartão: {{cartao_anual}}*
 6️⃣ *Já efetuei o pagamento, vou enviar o comprovante*
 
 💬 Aproveite enquanto a condição está ativa! Qual opção você prefere?
@@ -522,7 +539,7 @@ Contrato: *{{contrato}}*
 ✅ *Juros zerados*
 ✅ *Descontos exclusivos*
 
-1️⃣ *Parcelar em 12x no cartão: {{cartao_quitacao}} (pode ser de terceiros)*
+1️⃣ *Parcelar no cartão: {{cartao_quitacao}} (pode ser de terceiros)*
 2️⃣ *Regularizar parcelas (em atraso + a vencer) com {{pct_juncao}} OFF: {{juncao}}*
 3️⃣ *Pagar somente as parcelas em atraso com {{pct_atraso}} OFF: {{parcela_desconto}}*
 
@@ -998,6 +1015,9 @@ Contrato: *{{contrato}}*
         value = key ? cleanValue(record.normalized[key]) : "";
       }
       if (field.key === "tempo_atraso") value = formatOverdueTime(value);
+      if (field.key === "nome_avalista") value = titleCase(value);
+      // Como o {{cpf}}: o CPF inteiro do avalista não sai do navegador.
+      if (field.key === "cpf_avalista") value = maskCpf(value);
       return [field.key, value];
     }));
   }
@@ -1270,6 +1290,10 @@ Contrato: *{{contrato}}*
         label: "Desconto do Pix Automático",
         value: discounts.pix_automatico ?? DEFAULT_DISCOUNTS.pix_automatico,
       },
+      cartao_recorrente: {
+        label: "Desconto do Cartão Recorrente",
+        value: discounts.cartao_recorrente ?? DEFAULT_DISCOUNTS.cartao_recorrente,
+      },
     };
     const parsedDiscounts = Object.fromEntries(
       Object.entries(discountFields).map(([key, field]) => [
@@ -1318,6 +1342,15 @@ Contrato: *{{contrato}}*
     const pixAutoParcela = financialDataAvailable
       ? (overdueCount > 0 ? roundUp(installmentValue * (1 - rates.pix_automatico)) : 0)
       : null;
+    // Cartão Recorrente (27/10/2026): o Pix Automático clonado — a mesma base
+    // (Valor Aberto), as mesmas parcelas, com o % do Cartão Recorrente.
+    const cardRecurring = financialDataAvailable ? roundUp(pixAutoBase / PIX_AUTO_PARCELAS) : null;
+    const cardRecurringDiscount = financialDataAvailable
+      ? roundUp((pixAutoBase * (1 - rates.cartao_recorrente)) / PIX_AUTO_PARCELAS)
+      : null;
+    const cardRecurringParcela = financialDataAvailable
+      ? (overdueCount > 0 ? roundUp(installmentValue * (1 - rates.cartao_recorrente)) : 0)
+      : null;
     // As outras quantidades de parcelas (16/10/2026), na mesma conta: o total
     // da modalidade ÷ n, arredondado para cima. Chave = n de parcelas.
     const emParcelas = (total, parcelamentos = PARCELAMENTOS) => Object.fromEntries(parcelamentos.map((n) => [
@@ -1330,6 +1363,8 @@ Contrato: *{{contrato}}*
       cardAnnual: emParcelas(annual),
       pixAuto: emParcelas(pixAutoBase),
       pixAutoDiscount: emParcelas(pixAutoBase * (1 - rates.pix_automatico)),
+      cardRecurring: emParcelas(pixAutoBase),
+      cardRecurringDiscount: emParcelas(pixAutoBase * (1 - rates.cartao_recorrente)),
     };
 
     const issues = [];
@@ -1391,6 +1426,9 @@ Contrato: *{{contrato}}*
       pixAuto,
       pixAutoDiscount,
       pixAutoParcela,
+      cardRecurring,
+      cardRecurringDiscount,
+      cardRecurringParcela,
       installments,
       mailing: mailingFieldsFor(record),
       saleType,
@@ -1426,25 +1464,32 @@ Contrato: *{{contrato}}*
       quitacao: formatCurrency(item.settlement),
       valor_com_juros: formatCurrency(item.valueWithInterest),
       juncao: formatCurrency(item.bundle),
-      juncao_6x: formatCurrency(item.installments?.bundle[6]),
-      juncao_12x: formatCurrency(item.installments?.bundle[12]),
       anual: formatCurrency(item.annual),
-      cartao_quitacao: formatCurrency(item.cardSettlement),
-      cartao_anual: formatCurrency(item.cardAnnual),
-      pix_automatico_21x: formatCurrency(item.pixAuto),
-      pix_automatico_desconto_21x: formatCurrency(item.pixAutoDiscount),
+      // As parceladas saem com as vezes, «12x de R$ 59,00» (27/10/2026). O
+      // 12x do cartão segue em {{cartao_quitacao}} / {{cartao_anual}}.
+      juncao_6x: emVezes(6, item.installments?.bundle[6]),
+      juncao_12x: emVezes(12, item.installments?.bundle[12]),
+      cartao_quitacao: emVezes(12, item.cardSettlement),
+      cartao_quitacao_20x: emVezes(20, item.installments?.cardSettlement[20]),
+      cartao_quitacao_21x: emVezes(21, item.installments?.cardSettlement[21]),
+      cartao_anual: emVezes(12, item.cardAnnual),
+      cartao_anual_20x: emVezes(20, item.installments?.cardAnnual[20]),
+      cartao_anual_21x: emVezes(21, item.installments?.cardAnnual[21]),
+      pix_automatico_12x: emVezes(12, item.installments?.pixAuto[12]),
+      pix_automatico_20x: emVezes(20, item.installments?.pixAuto[20]),
+      pix_automatico_21x: emVezes(21, item.pixAuto),
+      pix_automatico_desconto_12x: emVezes(12, item.installments?.pixAutoDiscount[12]),
+      pix_automatico_desconto_20x: emVezes(20, item.installments?.pixAutoDiscount[20]),
+      pix_automatico_desconto_21x: emVezes(21, item.pixAutoDiscount),
+      // A parcela do próprio contrato não é parcelamento: só o valor.
       pix_automatico_parcela: formatCurrency(item.pixAutoParcela),
-      // 20x e 21x em todas as modalidades (16/10/2026). O 12x do cartão segue
-      // em {{cartao_quitacao}} / {{cartao_anual}}, e o 21x do Pix Automático
-      // nas variáveis acima.
-      cartao_quitacao_20x: formatCurrency(item.installments?.cardSettlement[20]),
-      cartao_quitacao_21x: formatCurrency(item.installments?.cardSettlement[21]),
-      cartao_anual_20x: formatCurrency(item.installments?.cardAnnual[20]),
-      cartao_anual_21x: formatCurrency(item.installments?.cardAnnual[21]),
-      pix_automatico_12x: formatCurrency(item.installments?.pixAuto[12]),
-      pix_automatico_20x: formatCurrency(item.installments?.pixAuto[20]),
-      pix_automatico_desconto_12x: formatCurrency(item.installments?.pixAutoDiscount[12]),
-      pix_automatico_desconto_20x: formatCurrency(item.installments?.pixAutoDiscount[20]),
+      cartao_recorrente_12x: emVezes(12, item.installments?.cardRecurring?.[12]),
+      cartao_recorrente_20x: emVezes(20, item.installments?.cardRecurring?.[20]),
+      cartao_recorrente_21x: emVezes(21, item.cardRecurring),
+      cartao_recorrente_desconto_12x: emVezes(12, item.installments?.cardRecurringDiscount?.[12]),
+      cartao_recorrente_desconto_20x: emVezes(20, item.installments?.cardRecurringDiscount?.[20]),
+      cartao_recorrente_desconto_21x: emVezes(21, item.cardRecurringDiscount),
+      cartao_recorrente_parcela: formatCurrency(item.cardRecurringParcela),
       ...(item.mailing || {}),
       pct_atraso: formatPercent(discounts.overdue),
       pct_quitacao: formatPercent(discounts.settlement),
@@ -1452,8 +1497,22 @@ Contrato: *{{contrato}}*
       pct_juncao: formatPercent(discounts.bundle),
       pct_anual: formatPercent(discounts.annual),
       pct_pix_automatico: formatPercent(discounts.pix_automatico ?? DEFAULT_DISCOUNTS.pix_automatico),
+      pct_cartao_recorrente: formatPercent(discounts.cartao_recorrente ?? DEFAULT_DISCOUNTS.cartao_recorrente),
       link: item.shortLink,
+      // O parcelamento refeito para não ficar abaixo do mínimo (27/10/2026,
+      // `parcela-minima.ts`): «21x de R$ 15,00» vira «10x de R$ 32,00».
+      ...(item.variableOverrides || {}),
     };
+  }
+
+  /**
+   * A variável de parcelamento já com as vezes: «12x de R$ 59,00» (27/10/2026).
+   * As vezes saíram do texto da mensagem e moram aqui, e é isso que deixa a
+   * campanha refazer o parcelamento quando a parcela fica abaixo do mínimo.
+   */
+  function emVezes(vezes, valor) {
+    const reais = formatCurrency(valor);
+    return reais ? `${vezes}x de ${reais}` : "";
   }
 
   function renderTemplate(template, variables) {
@@ -1461,7 +1520,7 @@ Contrato: *{{contrato}}*
   }
 
   function templateRequiresFinancialData(template) {
-    return /{{\s*(?:parcela_desconto|uma_parcela_desconto|quitacao|valor_com_juros|juncao(?:_(?:6|12)x)?|anual|cartao_quitacao(?:_2[01]x)?|cartao_anual(?:_2[01]x)?|pix_automatico(?:_desconto)?_(?:12|20|21)x|pix_automatico_parcela)\s*}}/i
+    return /{{\s*(?:parcela_desconto|uma_parcela_desconto|quitacao|valor_com_juros|juncao(?:_(?:6|12)x)?|anual|cartao_quitacao(?:_2[01]x)?|cartao_anual(?:_2[01]x)?|(?:pix_automatico|cartao_recorrente)(?:_desconto)?_(?:12|20|21)x|(?:pix_automatico|cartao_recorrente)_parcela)\s*}}/i
       .test(String(template ?? ""));
   }
 

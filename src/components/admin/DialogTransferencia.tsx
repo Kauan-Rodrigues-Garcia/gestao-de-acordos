@@ -62,6 +62,7 @@ import {
 } from '@/lib/empresasDaTransferencia';
 import { ROTULO_REGRA, ehRegraDoSetor } from '@/lib/regraDoSetor';
 import { cn } from '@/lib/utils';
+import { EtiquetasSetor } from './transferencia/EtiquetasSetor';
 
 interface Props {
   /** Quem vai ser transferido. `null` mantém o diálogo fechado. */
@@ -161,6 +162,20 @@ export function DialogTransferencia({
     ? 'Este setor é de outra empresa, e mudar alguém de empresa é só com o super admin.'
     : null;
 
+  /*
+   * Regra diferente é carteira diferente (03/11/2026): tabulação de Nosso
+   * produto não vira tabulação Cofen. Levar as tabulações só na mesma regra.
+   */
+  const podeLevar = !mudaDeRegra;
+
+  /** Desligado sai de tudo na virada; transferir não é o caminho para ele. */
+  const desligados = (alvos ?? []).filter(p => p.situacao === 'desligado' || p.arquivado);
+  const bloqueioDeDesligado = desligados.length
+    ? `${desligados.map(p => p.nome).join(', ')} ${desligados.length === 1 ? 'está desligado' : 'estão desligados'}. Reative antes de transferir.`
+    : null;
+
+  const nomeDaCidade = (id: string | null | undefined) => (id ? cidades.find(c => c.id === id)?.nome ?? null : null);
+
   const mostrarEmpresaNoSetor = setoresDeVariasEmpresas(setoresDestino);
   const nomeDaEmpresa = (id: string | undefined) =>
     (id && (empresasDosSetores.find(e => e.id === id) ?? empresas.find(e => e.id === id))?.nome) || '';
@@ -256,7 +271,7 @@ export function DialogTransferencia({
    */
   const transferir = useCallback(async () => {
     if (!alvos?.length || !destinoSetor || !empresaId) return;
-    if (bloqueioDeEmpresa || bloqueioDeCargo || faltaNovoCargo) return;
+    if (bloqueioDeEmpresa || bloqueioDeCargo || bloqueioDeDesligado || faltaNovoCargo) return;
     setSalvando(true);
 
     const empresaDestino = empresaDestinoEfetiva || empresaId;
@@ -283,7 +298,7 @@ export function DialogTransferencia({
         },
         // A tela esconde a escolha quando alguém troca de empresa; num lote
         // misto, o aviso «sempre limpa» vale para todos.
-        levarAcordos: levarAcordos && !trocaDeEmpresa,
+        levarAcordos: levarAcordos && podeLevar && !trocaDeEmpresa,
         executadoPorId: perfilAtual?.id ?? null,
         novoCargo: cargoNovo,
       });
@@ -293,6 +308,9 @@ export function DialogTransferencia({
       apagados += r.acordosApagados;
       movidos  += r.acordosMovidos;
       if (r.avisoRegistro) toast.warning(`${p.nome} — ${r.avisoRegistro}`, { duration: 12000 });
+      if (r.liderancasRemovidas.length) {
+        toast.info(`${p.nome} deixou de liderar ${r.liderancasRemovidas.join(', ')}, do setor antigo.`, { duration: 9000 });
+      }
     }
 
     if (ok > 0) {
@@ -314,7 +332,7 @@ export function DialogTransferencia({
     if (ok > 0) onConcluida();
   }, [
     alvos, destinoSetor, empresaDestinoEfetiva, empresaId, levarAcordos, perfilAtual?.id, onConcluida,
-    nucleoDestino, novoCargo, bloqueioDeEmpresa, bloqueioDeCargo, faltaNovoCargo, trocaDeEmpresa,
+    nucleoDestino, novoCargo, bloqueioDeEmpresa, bloqueioDeCargo, bloqueioDeDesligado, faltaNovoCargo, trocaDeEmpresa, podeLevar,
   ]);
 
   return (
@@ -387,11 +405,8 @@ export function DialogTransferencia({
                     .map(s => (
                       <SelectItem key={s.id} value={s.id}>
                         {s.nome}{!s.ativo && ' (inativo)'}
-                        {s.regra === 'cofen' && (
-                          <span className="ml-1.5 rounded bg-amber-500/15 px-1 text-[10px] font-semibold text-amber-700 dark:text-amber-400">
-                            Regra Cofen
-                          </span>
-                        )}
+                        <EtiquetasSetor className="ml-1.5" setor={{ cidade: nomeDaCidade(s.cidade_id), regra: s.regra ?? null }} />
+
                         {grupos.length === 0 && mostrarEmpresaNoSetor && nomeDaEmpresa(s.empresa_id) && (
                           <span className="text-muted-foreground"> · {nomeDaEmpresa(s.empresa_id)}</span>
                         )}
@@ -400,6 +415,9 @@ export function DialogTransferencia({
                 )}
               </SelectContent>
             </Select>
+            {bloqueioDeDesligado && (
+              <p className="text-[11px] text-destructive leading-snug">{bloqueioDeDesligado}</p>
+            )}
             {bloqueioDeEmpresa && (
               <p className="text-[11px] text-destructive leading-snug">{bloqueioDeEmpresa}</p>
             )}
@@ -476,19 +494,22 @@ export function DialogTransferencia({
                 </span>
               </button>
               <button
-                type="button" role="radio" aria-checked={levarAcordos}
+                type="button" role="radio" aria-checked={levarAcordos && podeLevar}
+                disabled={!podeLevar}
                 onClick={() => setLevarAcordos(true)}
                 className={cn(
                   'w-full text-left rounded-md border p-2.5 transition-colors',
-                  levarAcordos ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/40',
+                  levarAcordos && podeLevar ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/40',
+                  !podeLevar && 'cursor-not-allowed opacity-50 hover:bg-transparent',
                 )}
               >
                 <span className={cn('block text-sm font-medium', levarAcordos && 'text-primary')}>
                   Levar as tabulações junto
                 </span>
                 <span className="block text-[11px] text-muted-foreground leading-snug">
-                  As tabulações mudam de setor com eles e os vínculos continuam de pé.
-                  Nada é apagado. Use só quando o setor mudou de nome na prática.
+                  {podeLevar
+                    ? 'As tabulações mudam de setor com eles e os vínculos continuam de pé. Nada é apagado. Use só quando o setor mudou de nome na prática.'
+                    : 'Não dá: o destino segue outra regra de negócio, e tabulação de uma regra não vale na outra.'}
                 </span>
               </button>
             </div>
@@ -514,7 +535,7 @@ export function DialogTransferencia({
           <Button
             size="sm"
             onClick={() => void transferir()}
-            disabled={salvando || !destinoSetor || !!bloqueioDeEmpresa || !!bloqueioDeCargo || faltaNovoCargo}
+            disabled={salvando || !destinoSetor || !!bloqueioDeEmpresa || !!bloqueioDeCargo || !!bloqueioDeDesligado || faltaNovoCargo}
             className="gap-2"
           >
             {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRightLeft className="w-4 h-4" />}

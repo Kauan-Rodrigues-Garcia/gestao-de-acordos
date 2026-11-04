@@ -126,6 +126,7 @@ import { corTexto } from '@/lib/temas';
 import {
   montarLinhasQuartil, distribuicaoQuartis, type LinhaQuartil, type PerfilOp,
 } from './linhasQuartil';
+import { buscarTreinamentoDasEquipes } from '@/services/fechamento/configDoMes';
 
 interface QuartisOperadoresProps {
   empresaId: string;
@@ -682,8 +683,8 @@ export function QuartisOperadores({
           // Equipes de treinamento: dias úteis reduzidos para quem está nelas.
           // Busca tolerante — coluna ausente devolve erro e o mapa fica vazio, o
           // que só faz a tabela voltar ao comportamento de mês cheio.
-          supabase.from('equipes').select('id, treinamento, treinamento_inicio')
-            .eq('empresa_id', empresaId),
+          // Mês fechado: o treinamento DAQUELE mês (retrato).
+          buscarTreinamentoDasEquipes(empresaId, mes),
           // Mês fechado: a lista é a DAQUELE mês — nome, situação e equipe
           // congelados no retrato. Ver `pessoasDoMes.ts`.
           buscarPessoasDoRetrato(empresaId, mes),

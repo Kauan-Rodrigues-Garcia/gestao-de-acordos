@@ -5,7 +5,6 @@
  * curta, o balão de anexo. Ficam juntos para a bolha e a versão expandida
  * mostrarem exatamente a mesma coisa — duas cópias divergem no primeiro ajuste.
  */
-import { ComChapeu } from '@/components/Halloween/Desenhos';
 import { ComGorro } from '@/components/Natal/Desenhos';
 import { useEffect, useRef, useState } from 'react';
 import { FileText, ImageIcon, Music, Video, Download, Play, Pause, Mic } from 'lucide-react';
@@ -28,7 +27,6 @@ export function AvatarChat({
 
   return (
     <ComGorro chave={nome} tamanho={tamanho} escala={0.9}>
-    <ComChapeu chave={nome} tamanho={tamanho} escala={0.92}>
     <div className="relative shrink-0" style={estilo}>
       {/* `lazy`: a lista de disparo desenha a empresa inteira, e sem isto o
           navegador baixava centenas de fotos antes de a janela responder. */}
@@ -59,7 +57,6 @@ export function AvatarChat({
         />
       )}
     </div>
-    </ComChapeu>
     </ComGorro>
   );
 }

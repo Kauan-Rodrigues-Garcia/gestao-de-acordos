@@ -15,6 +15,7 @@
  *  • Porta B — botão "Adicionar parcela" no detalhe (AcordoDetalheInline).
  */
 import { supabase, type Acordo } from '@/lib/supabase';
+import { rpcSemTipo } from '@/lib/supabaseSemTipo';
 import { getTodayISO } from '@/lib/index';
 
 export interface NovaParcelaInput {
@@ -126,7 +127,9 @@ async function garantirGrupo(base: Acordo): Promise<{ grupoId: string } | { erro
 export async function adicionarParcelaAoGrupo(
   acordoBase: Acordo,
   input: NovaParcelaInput,
-  opts: { isPaguePlay: boolean },
+  // A chave do par (NR ou Código) agora é decidida no servidor; o argumento
+  // fica pela assinatura que as telas já usam.
+  _opts: { isPaguePlay: boolean },
 ): Promise<AdicionarParcelaResultado> {
   if (!acordoBase?.id)        return { ok: false, erro: 'Acordo base não informado' };
   if (!acordoBase.empresa_id) return { ok: false, erro: 'Acordo sem empresa vinculada' };
@@ -169,14 +172,9 @@ export async function adicionarParcelaAoGrupo(
   }
 
   // Espelha no acordo do operador vinculado (par Direto↔Extra), como o
-  // reagendamento de parcelas já faz. Falha aqui não desfaz a parcela —
-  // para operador comum o RLS pode recusar o insert no acordo do par.
+  // reagendamento de parcelas já faz. Falha aqui não desfaz a parcela.
   if (acordoBase.vinculo_operador_id) {
-    try {
-      await espelharParcelaNoVinculo(acordoBase, input, opts.isPaguePlay);
-    } catch (e) {
-      console.warn('[parcelas.service] falha ao espelhar parcela no vínculo:', e);
-    }
+    await espelharParcelaNoVinculo((inserida as Acordo).id);
   }
 
   return { ok: true, novaParcela: inserida as Acordo, novoTotal };
@@ -203,7 +201,7 @@ export async function adicionarParcelaAoGrupo(
 export async function adicionarParcelasAoGrupo(
   acordoBase: Acordo,
   inputs: readonly NovaParcelaInput[],
-  opts: { isPaguePlay: boolean },
+  _opts: { isPaguePlay: boolean },
 ): Promise<AdicionarLoteResultado> {
   if (!acordoBase?.id)        return { ok: false, erro: 'Acordo base não informado' };
   if (!acordoBase.empresa_id) return { ok: false, erro: 'Acordo sem empresa vinculada' };
@@ -287,16 +285,9 @@ export async function adicionarParcelasAoGrupo(
   }
 
   // Espelha no par Direto↔Extra somente a parcela que de fato entrou. A falha
-  // de um espelho não desfaz a inclusão (para operador comum o RLS pode
-  // recusar).
+  // de um espelho não desfaz a inclusão.
   if (acordoBase.vinculo_operador_id) {
-    for (const input of aInserir) {
-      try {
-        await espelharParcelaNoVinculo(acordoBase, input, opts.isPaguePlay);
-      } catch (e) {
-        console.warn('[parcelas.service] falha ao espelhar parcela no vínculo:', e);
-      }
-    }
+    for (const nova of novas) await espelharParcelaNoVinculo(nova.id);
   }
 
   return { ok: true, novasParcelas: novas, novoTotal };
@@ -305,57 +296,13 @@ export async function adicionarParcelasAoGrupo(
 /**
  * Replica a parcela no grupo do operador vinculado (o outro lado do par
  * Direto↔Extra do mesmo NR), mantendo os dois painéis consistentes.
+ *
+ * Pelo servidor (`fn_acordo_par_espelhar_parcela`, migration 20261030235500).
+ * Era um INSERT no acordo do colega feito daqui, que a RLS recusa para
+ * operador comum — e a recusa era engolida, então o par ficava sem a parcela
+ * sem ninguém saber.
  */
-async function espelharParcelaNoVinculo(
-  base: Acordo,
-  input: NovaParcelaInput,
-  isPaguePlay: boolean,
-): Promise<void> {
-  const campoChave: 'instituicao' | 'nr_cliente' = isPaguePlay ? 'instituicao' : 'nr_cliente';
-  const valorChave = (isPaguePlay ? base.instituicao : base.nr_cliente)?.trim();
-  if (!valorChave || !base.empresa_id || !base.vinculo_operador_id) return;
-
-  const { data: parRows } = await supabase
-    .from('acordos')
-    .select('*')
-    .eq('empresa_id', base.empresa_id)
-    .eq('operador_id', base.vinculo_operador_id)
-    .eq(campoChave, valorChave)
-    .order('numero_parcela', { ascending: false })
-    .limit(1);
-
-  const parBase = (parRows?.[0] ?? null) as Acordo | null;
-  if (!parBase) return;
-
-  const grupoPar = await garantirGrupo(parBase);
-  if ('erro' in grupoPar) return;
-
-  const { data: linhasPar } = await supabase
-    .from('acordos')
-    .select('id, numero_parcela, parcelas')
-    .eq('empresa_id', base.empresa_id)
-    .eq('acordo_grupo_id', grupoPar.grupoId);
-
-  const { novoNumero, totalAtual } = medirGrupo(
-    (linhasPar ?? []) as Pick<Acordo, 'numero_parcela' | 'parcelas'>[],
-    parBase,
-  );
-  const novoTotal = Math.max(novoNumero, totalAtual);
-
-  const { error: errIns } = await supabase
-    .from('acordos')
-    .insert(payloadNovaParcela(parBase, input, grupoPar.grupoId, novoNumero, novoTotal) as never);
-  if (errIns) {
-    console.warn('[parcelas.service] espelho do vínculo não inserido:', errIns.message);
-    return;
-  }
-
-  if (novoTotal !== totalAtual) {
-    await supabase
-      .from('acordos')
-      .update({ parcelas: novoTotal })
-      .eq('empresa_id', base.empresa_id)
-      .eq('acordo_grupo_id', grupoPar.grupoId)
-      .neq('numero_parcela', novoNumero);
-  }
+async function espelharParcelaNoVinculo(novaId: string): Promise<void> {
+  const { error } = await rpcSemTipo('fn_acordo_par_espelhar_parcela', { p_nova_id: novaId });
+  if (error) console.warn('[parcelas.service] espelho do vínculo não gravado:', error.message);
 }

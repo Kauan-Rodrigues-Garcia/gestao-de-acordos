@@ -1,0 +1,395 @@
+/**
+ * templates.ts — a vitrine do Modo TV 2.
+ *
+ * Cada template é UMA tela cheia, pronta. O líder não posiciona nada: escolhe
+ * o template, ajusta duas ou três opções e põe no rodízio. Foi essa a troca
+ * pedida em 27/10/2026 — a mesa antiga (fontes arrastáveis, camadas, corte)
+ * fazia tudo e ninguém usou.
+ *
+ * Um template novo é uma entrada aqui e um desenho em `TelaTv.tsx`. O banco
+ * não muda: `tv_paineis.telas` é jsonb.
+ *
+ * ## Os números são sempre do relatório
+ *
+ * Nenhum template guarda valor. A única exceção é o alvo de «Meta de hoje»,
+ * que aceita um número digitado — o recebido continua vindo do relatório.
+ */
+import type { TelaDoPainel, TemaId, TemplateId } from './tipos';
+import { cenaDoModelo } from './livre/cena';
+
+export type CategoriaTemplate = 'meta' | 'ranking' | 'midia';
+
+export const CATEGORIAS: { id: CategoriaTemplate; nome: string }[] = [
+  { id: 'meta',    nome: 'Metas' },
+  { id: 'ranking', nome: 'Ranking' },
+  { id: 'midia',   nome: 'Imagem, vídeo e recado' },
+];
+
+/** Campo que só aparece quando outro tem um certo valor (ex.: o valor da meta própria). */
+interface Condicao { quando?: { chave: string; valor: string } }
+
+export type CampoOpcao = Condicao & (
+  | { chave: string; rotulo: string; tipo: 'texto'; padrao: string; max: number; dica?: string }
+  | { chave: string; rotulo: string; tipo: 'numero'; padrao: number | null; dica?: string }
+  | { chave: string; rotulo: string; tipo: 'escolha'; padrao: string; escolhas: { valor: string; rotulo: string }[] }
+  | { chave: string; rotulo: string; tipo: 'liga'; padrao: boolean }
+  | { chave: string; rotulo: string; tipo: 'midia'; padrao: string; aceita: 'imagem' | 'video' }
+  /** Uma equipe do setor do painel (o id); a lista vem do pacote de números. */
+  | { chave: string; rotulo: string; tipo: 'equipe'; padrao: string }
+  /** Um dia, «YYYY-MM-DD». */
+  | { chave: string; rotulo: string; tipo: 'data'; padrao: string }
+  /** A cena livre inteira (`livre/cena.ts`), montada no estúdio. */
+  | { chave: string; rotulo: string; tipo: 'cena'; padrao: null });
+
+export interface Template {
+  id: TemplateId;
+  nome: string;
+  /** Uma frase: o que aparece na parede. */
+  descricao: string;
+  categoria: CategoriaTemplate;
+  campos: CampoOpcao[];
+}
+
+const TITULO = (padrao: string): CampoOpcao =>
+  ({ chave: 'titulo', rotulo: 'Título', tipo: 'texto', padrao, max: 40 });
+
+/**
+ * Há líder que não mostra a meta para o time, só o quanto falta (Cleber,
+ * 27/10). Desligado, some a meta E o recebido — com os dois e o «falta» na
+ * tela, a meta sai numa conta de somar.
+ */
+const MOSTRAR_META: CampoOpcao =
+  { chave: 'mostrar_meta', rotulo: 'Mostrar o valor da meta e do recebido', tipo: 'liga', padrao: true };
+
+/**
+ * De onde sai o ranking (30/10/2026): as pessoas do painel, as de uma equipe,
+ * ou as equipes do setor uma contra a outra. E o que se compara: o recebido
+ * ou a projeção de fechamento no ritmo atual. Ver `rankingDaTela`.
+ */
+const FONTE_RANKING: CampoOpcao[] = [
+  { chave: 'fonte', rotulo: 'Ranking de', tipo: 'escolha', padrao: 'painel',
+    escolhas: [
+      { valor: 'painel', rotulo: 'Pessoas' }, { valor: 'equipe', rotulo: 'Uma equipe' }, { valor: 'equipes', rotulo: 'Equipes' },
+    ] },
+  { chave: 'equipe_id', rotulo: 'Qual equipe', tipo: 'equipe', padrao: '', quando: { chave: 'fonte', valor: 'equipe' } },
+  { chave: 'valor', rotulo: 'Comparar', tipo: 'escolha', padrao: 'recebido',
+    escolhas: [{ valor: 'recebido', rotulo: 'Recebido no mês' }, { valor: 'projecao', rotulo: 'Projeção do mês' }] },
+];
+
+export const TEMPLATES: Template[] = [
+  {
+    id: 'contagem', categoria: 'meta',
+    nome: 'Contagem regressiva',
+    descricao: 'Quanto falta para a meta, em número gigante. Diminui a cada relatório que entra.',
+    campos: [TITULO('Faltam para a meta'), MOSTRAR_META],
+  },
+  {
+    id: 'barra', categoria: 'meta',
+    nome: 'Meta em barra',
+    descricao: 'O percentual em destaque e a barra enchendo conforme o recebido.',
+    campos: [TITULO('Meta do mês'), MOSTRAR_META],
+  },
+  {
+    id: 'anel', categoria: 'meta',
+    nome: 'Anel da meta',
+    descricao: 'Um anel que fecha ao bater a meta. Lê bem do fundo da sala.',
+    campos: [TITULO('Meta do mês'), MOSTRAR_META],
+  },
+  {
+    id: 'hoje', categoria: 'meta',
+    nome: 'Meta de hoje',
+    descricao: 'O alvo do dia, quanto já entrou hoje e o percentual. A meta pode ser a do sistema ou uma própria.',
+    campos: [
+      TITULO('Meta de hoje'),
+      { chave: 'origem_alvo', rotulo: 'Meta do dia', tipo: 'escolha', padrao: 'sistema',
+        escolhas: [{ valor: 'sistema', rotulo: 'Meta do sistema' }, { valor: 'propria', rotulo: 'Outra meta' }] },
+      { chave: 'alvo_manual', rotulo: 'Valor da meta de hoje (R$)', tipo: 'numero', padrao: null,
+        quando: { chave: 'origem_alvo', valor: 'propria' },
+        dica: 'O percentual e o «falta» passam a contar sobre este valor. O recebido continua vindo do relatório.' },
+    ],
+  },
+  {
+    id: 'grafico', categoria: 'meta',
+    nome: 'Evolução do mês',
+    descricao: 'Gráfico do recebido dia a dia rumo à meta, com o ritmo ideal. Cresce a cada relatório.',
+    campos: [TITULO('Evolução do mês'), MOSTRAR_META],
+  },
+  {
+    id: 'ritmo', categoria: 'meta',
+    nome: 'Ritmo e projeção',
+    descricao: 'Quanto precisa entrar por dia útil e onde o mês fecha no ritmo atual.',
+    campos: [TITULO('Nosso ritmo')],
+  },
+  {
+    id: 'placar', categoria: 'meta',
+    nome: 'Placar do mês',
+    descricao: 'Recebido, meta e quanto falta, lado a lado. Só os números.',
+    campos: [TITULO('Como estamos')],
+  },
+  {
+    id: 'podio', categoria: 'ranking',
+    nome: 'Pódio',
+    descricao: 'Os três primeiros do mês, com foto, no formato de pódio. Pessoas, uma equipe ou equipe contra equipe.',
+    campos: [
+      TITULO('Pódio do mês'),
+      ...FONTE_RANKING,
+      { chave: 'mostrar_valor', rotulo: 'Mostrar o valor de cada um', tipo: 'liga', padrao: true },
+    ],
+  },
+  {
+    id: 'lista', categoria: 'ranking',
+    nome: 'Ranking em lista',
+    descricao: 'Os primeiros colocados numerados, com foto e valor. Pessoas, uma equipe ou equipe contra equipe.',
+    campos: [
+      TITULO('Ranking do mês'),
+      ...FONTE_RANKING,
+      { chave: 'quantidade', rotulo: 'Quantos aparecem', tipo: 'escolha', padrao: '5',
+        escolhas: [{ valor: '5', rotulo: 'Top 5' }, { valor: '10', rotulo: 'Top 10' }] },
+      { chave: 'mostrar_valor', rotulo: 'Mostrar o valor de cada um', tipo: 'liga', padrao: true },
+    ],
+  },
+  {
+    // 29/10/2026: o destaque com a foto grande, em vários estilos (`destaque/`).
+    id: 'destaque', categoria: 'ranking',
+    nome: 'Destaque do dia',
+    descricao: 'Quem mais recebeu no dia ou no mês, com a foto bem grande. Estilos: gibi, sério, fofo, pixel art, neon e jornal.',
+    campos: [
+      { chave: 'estilo', rotulo: 'Estilo', tipo: 'escolha', padrao: 'gibi',
+        escolhas: [
+          { valor: 'gibi', rotulo: 'Gibi' }, { valor: 'serio', rotulo: 'Sério' }, { valor: 'fofo', rotulo: 'Fofo' },
+          { valor: 'pixel', rotulo: 'Pixel art' }, { valor: 'neon', rotulo: 'Neon' }, { valor: 'jornal', rotulo: 'Jornal' },
+          { valor: 'surpresa', rotulo: 'Surpresa (sorteia a cada vez)' },
+        ] },
+      { chave: 'titulo', rotulo: 'Título (vazio = automático)', tipo: 'texto', padrao: '', max: 28 },
+      { chave: 'escopo', rotulo: 'Destaque de', tipo: 'escolha', padrao: 'setor',
+        escolhas: [{ valor: 'setor', rotulo: 'Setor' }, { valor: 'equipe', rotulo: 'Equipe' }] },
+      { chave: 'equipe_id', rotulo: 'Qual equipe', tipo: 'equipe', padrao: '', quando: { chave: 'escopo', valor: 'equipe' } },
+      { chave: 'dia', rotulo: 'Dia', tipo: 'escolha', padrao: 'anterior',
+        escolhas: [
+          { valor: 'hoje', rotulo: 'Hoje' }, { valor: 'anterior', rotulo: 'Dia anterior' },
+          { valor: 'data', rotulo: 'Outro dia' }, { valor: 'mes', rotulo: 'Mês' },
+        ] },
+      { chave: 'data', rotulo: 'Qual dia', tipo: 'data', padrao: '', quando: { chave: 'dia', valor: 'data' } },
+      { chave: 'mostrar_valor', rotulo: 'Mostrar o valor', tipo: 'liga', padrao: true },
+    ],
+  },
+  {
+    // 30/10/2026: o mesmo ranking da aba do Analítico, com os prêmios.
+    id: 'quitacao', categoria: 'ranking',
+    nome: 'Ranking de quitação',
+    descricao: 'O top 10 de quitação do mês, com o prêmio até o 6º e quanto falta para passar do 7º ao 10º.',
+    campos: [TITULO('Ranking de quitação')],
+  },
+  {
+    id: 'imagem', categoria: 'midia',
+    nome: 'Imagem',
+    descricao: 'Uma arte, foto ou campanha em tela cheia.',
+    campos: [
+      { chave: 'url', rotulo: 'Imagem', tipo: 'midia', padrao: '', aceita: 'imagem' },
+      { chave: 'ajuste', rotulo: 'Encaixe', tipo: 'escolha', padrao: 'contain',
+        escolhas: [{ valor: 'contain', rotulo: 'Inteira' }, { valor: 'cover', rotulo: 'Preencher a tela' }] },
+      { chave: 'legenda', rotulo: 'Legenda (opcional)', tipo: 'texto', padrao: '', max: 80 },
+    ],
+  },
+  {
+    id: 'video', categoria: 'midia',
+    nome: 'Vídeo',
+    descricao: 'Um vídeo em tela cheia, com ou sem som.',
+    // Fora dos campos, gravados pelo editor: `duracao_arquivo` (segundos do
+    // vídeo, medidos no envio) e `tempo_do_arquivo` (a tela dura o vídeo).
+    campos: [
+      { chave: 'url', rotulo: 'Vídeo', tipo: 'midia', padrao: '', aceita: 'video' },
+      { chave: 'ajuste', rotulo: 'Encaixe', tipo: 'escolha', padrao: 'contain',
+        escolhas: [{ valor: 'contain', rotulo: 'Inteiro' }, { valor: 'cover', rotulo: 'Preencher a tela' }] },
+      { chave: 'com_som', rotulo: 'Tocar o som do vídeo', tipo: 'liga', padrao: false },
+    ],
+  },
+  {
+    id: 'recado', categoria: 'midia',
+    nome: 'Recado',
+    descricao: 'Uma frase grande do líder para o time, com a hora ao lado.',
+    campos: [
+      { chave: 'texto', rotulo: 'Recado', tipo: 'texto', padrao: 'Bora bater a meta!', max: 120 },
+      { chave: 'assinatura', rotulo: 'Assinatura (opcional)', tipo: 'texto', padrao: '', max: 40 },
+    ],
+  },
+  {
+    // 30/10/2026: a tela que o líder desenha do zero, no estúdio (`livre/`).
+    id: 'livre', categoria: 'midia',
+    nome: 'Cena livre',
+    descricao: 'Você desenha: textos, imagens, números ao vivo, relógio e formas, onde quiser, com o fundo que quiser.',
+    campos: [{ chave: 'cena', rotulo: 'Cena', tipo: 'cena', padrao: null }],
+  },
+];
+
+const POR_ID = new Map(TEMPLATES.map(t => [t.id, t]));
+
+export function templateDe(id: string): Template | null {
+  return POR_ID.get(id as TemplateId) ?? null;
+}
+
+/**
+ * O valor de uma opção, já no tipo do campo. O que veio do banco e não
+ * confere com o campo (texto onde é número, chave que sumiu) cai no padrão.
+ */
+export function opcao<T extends string | number | boolean | null>(
+  tela: Pick<TelaDoPainel, 'template' | 'opcoes'>,
+  chave: string,
+): T {
+  const campo = templateDe(tela.template)?.campos.find(c => c.chave === chave);
+  const bruto = tela.opcoes?.[chave];
+  if (!campo) return (bruto ?? null) as T;
+  switch (campo.tipo) {
+    case 'texto':
+    case 'midia':
+      return (typeof bruto === 'string' ? bruto.slice(0, campo.tipo === 'texto' ? campo.max : 2048) : campo.padrao) as T;
+    case 'numero': {
+      const n = typeof bruto === 'number' ? bruto : typeof bruto === 'string' && bruto.trim() ? Number(bruto) : NaN;
+      return (Number.isFinite(n) && n > 0 ? n : campo.padrao) as T;
+    }
+    case 'liga':
+      return (typeof bruto === 'boolean' ? bruto : campo.padrao) as T;
+    case 'escolha':
+      return (campo.escolhas.some(e => e.valor === bruto) ? bruto : campo.padrao) as T;
+    case 'equipe':
+      return (typeof bruto === 'string' && /^[0-9a-f-]{36}$/i.test(bruto) ? bruto : campo.padrao) as T;
+    case 'data':
+      return (typeof bruto === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(bruto) ? bruto : campo.padrao) as T;
+    case 'cena':
+      // Quem lê é `cenaValida`, que saneia o objeto inteiro.
+      return (bruto ?? null) as T;
+  }
+}
+
+/**
+ * A meta de hoje escolhida na tela «Meta de hoje»: o valor digitado quando a
+ * origem é «Outra meta», ou `null` para a do sistema (meta do mês ÷ dias úteis).
+ *
+ * Tela gravada antes da escolha existir (só com `alvo_manual`) conta como
+ * «Outra meta» — era o que ela já fazia.
+ */
+export function alvoDoDiaProprio(tela: Pick<TelaDoPainel, 'template' | 'opcoes'>): number | null {
+  if (tela.template !== 'hoje') return null;
+  const valor = opcao<number | null>(tela, 'alvo_manual');
+  const origem = tela.opcoes?.origem_alvo;
+  const propria = origem === 'propria' || (origem === undefined && valor != null);
+  return propria && valor != null && valor > 0 ? valor : null;
+}
+
+/**
+ * Campo condicional escondido: o `quando` aponta outro campo, e ele não tem o
+ * valor pedido. Lê pelo `opcao`, então a regra de compatibilidade acima vale.
+ */
+export function campoVisivel(tela: Pick<TelaDoPainel, 'template' | 'opcoes'>, campo: CampoOpcao): boolean {
+  if (!campo.quando) return true;
+  if (tela.template === 'hoje' && campo.quando.chave === 'origem_alvo') {
+    const origem = tela.opcoes?.origem_alvo;
+    const propria = origem === 'propria' || (origem === undefined && tela.opcoes?.alvo_manual != null && tela.opcoes?.alvo_manual !== '');
+    return (propria ? 'propria' : 'sistema') === campo.quando.valor;
+  }
+  return opcao<string>(tela, campo.quando.chave) === campo.quando.valor;
+}
+
+/** Uma tela nova, com o id que a lista do editor usa como chave. */
+export function novaTela(template: TemplateId): TelaDoPainel {
+  const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `t${Date.now()}${Math.random().toString(16).slice(2)}`;
+  // Vídeo nasce com «Duração do arquivo» (Cleber, 29/10); a cena livre, com o
+  // primeiro modelo, para o estúdio não abrir num palco vazio.
+  const opcoes: Record<string, unknown> = template === 'video' ? { tempo_do_arquivo: true }
+    : template === 'livre' ? { cena: cenaDoModelo('aviso') } : {};
+  return { id, template, opcoes };
+}
+
+/**
+ * Quantas telas cabem num painel. O banco limitava a 12 até 20261030170000;
+ * com as sob demanda (que não entram no rodízio) o teto subiu para 20.
+ */
+export const MAX_TELAS = 20;
+
+/** As telas que entram na conta do rodízio. */
+export const noRodizio = (t: Pick<TelaDoPainel, 'sob_demanda'>) => t.sob_demanda !== true;
+
+/** As telas que vieram do banco, sem o que não dá para desenhar. */
+export function telasValidas(bruto: unknown): TelaDoPainel[] {
+  if (!Array.isArray(bruto)) return [];
+  return bruto.flatMap((t): TelaDoPainel[] => {
+    if (!t || typeof t !== 'object') return [];
+    const { id, template, opcoes, segundos, sob_demanda } = t as Record<string, unknown>;
+    if (typeof id !== 'string' || !templateDe(String(template))) return [];
+    return [{
+      id,
+      template: template as TemplateId,
+      opcoes: opcoes && typeof opcoes === 'object' && !Array.isArray(opcoes) ? opcoes as Record<string, unknown> : {},
+      segundos: segundosValidos(segundos),
+      // Só o `true` grava a chave: painel antigo continua com o mesmo jsonb.
+      ...(sob_demanda === true ? { sob_demanda: true } : {}),
+    }];
+  });
+}
+
+// ── Tempo de cada tela ───────────────────────────────────────────────────────
+
+export const SEGUNDOS_MIN = 5;
+export const SEGUNDOS_MAX = 3600;
+
+/** Segundos de uma tela vindos do jsonb: inteiro entre 5 s e 1 h, ou nulo (padrão). */
+export function segundosValidos(v: unknown): number | null {
+  const n = typeof v === 'number' ? v : NaN;
+  return Number.isInteger(n) && n >= SEGUNDOS_MIN && n <= SEGUNDOS_MAX ? n : null;
+}
+
+/** Quanto tempo esta tela fica na TV. */
+export function segundosDaTela(tela: Pick<TelaDoPainel, 'segundos'>, padraoDoPainel: number): number {
+  return segundosValidos(tela.segundos) ?? Math.min(SEGUNDOS_MAX, Math.max(SEGUNDOS_MIN, padraoDoPainel || 20));
+}
+
+/**
+ * «Duração do arquivo»: o vídeo inteiro, mais 1 s de folga para ele carregar
+ * na TV, entre 5 s e 1 h. Vai para `segundos` — o relógio do rodízio continua
+ * o mesmo na TV e na prévia. `null` sem duração medida.
+ */
+export function segundosDoArquivo(duracao: unknown): number | null {
+  const n = typeof duracao === 'number' ? duracao : NaN;
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.min(SEGUNDOS_MAX, Math.max(SEGUNDOS_MIN, Math.ceil(n) + 1));
+}
+
+/** As escolhas prontas de tempo. O campo «outro» aceita qualquer valor entre 5 s e 1 h. */
+export const TEMPOS_PRONTOS = [10, 15, 20, 30, 45, 60, 120, 300, 600];
+
+/** «20 s», «1 min», «1 min 30 s», «1 h». */
+export function rotuloTempo(s: number): string {
+  if (s >= 3600) return '1 h';
+  if (s < 60) return `${s} s`;
+  const m = Math.floor(s / 60), r = s % 60;
+  return r ? `${m} min ${r} s` : `${m} min`;
+}
+
+/**
+ * Só mídia do nosso balde vai para a parede.
+ *
+ * O jsonb das telas é escrito pelo cliente. Sem esta trava, quem alcança um
+ * painel poria qualquer endereço da internet na TV da sala.
+ */
+export function midiaSegura(url: unknown, baseSupabase: string): string | null {
+  if (typeof url !== 'string' || !url) return null;
+  const prefixo = `${baseSupabase.replace(/\/+$/, '')}/storage/v1/object/public/tv/paineis/`;
+  if (!url.startsWith(prefixo)) return null;
+  if (/[\s"'<>\\]|\.\./.test(url.slice(prefixo.length))) return null;
+  return url;
+}
+
+export const TEMAS: { id: TemaId; nome: string }[] = [
+  { id: 'noite',    nome: 'Noite' },
+  { id: 'grafite',  nome: 'Grafite' },
+  { id: 'oceano',   nome: 'Oceano' },
+  { id: 'floresta', nome: 'Floresta' },
+  { id: 'vinho',    nome: 'Vinho' },
+  { id: 'claro',    nome: 'Claro' },
+];
+
+export function temaValido(t: unknown): TemaId {
+  return TEMAS.some(x => x.id === t) ? t as TemaId : 'noite';
+}

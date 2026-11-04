@@ -37,6 +37,14 @@
  *     Quitação + um Parcelamento antigo terminado), continua NÃO somando —
  *     é a pergunta que ficou em aberto em 13/10.
  *
+ * Saldo zerado quita (pedido de 28/10/2026, NR 12552080):
+ *
+ *   - acordo com «Valor Restante» 0 e a «Data da quitação» quita, qualquer que
+ *     seja o rótulo (Parcelamento, Parcela única, Semestral...) — ex.: um
+ *     Parcelamento de 1 parcela que pagou as atrasadas e quitou o contrato;
+ *   - só quando o contrato NÃO tem acordo Quitação: tendo, as outras peças
+ *     seguem as regras acima.
+ *
  * «Nr. Documento» e «Valor Restante» são opcionais: sem eles, cada acordo
  * conta sozinho e a Junção vale só com a data.
  *
@@ -138,6 +146,19 @@ export function extrairQuitacoes(rows: unknown[][]): RelatorioQuitacao {
   const iNr = cab.indexOf(OPCIONAIS.nrDocumento);
   const iRestante = cab.indexOf(OPCIONAIS.valorRestante);
 
+  const contratoDa = (r: unknown[]) =>
+    (iNr >= 0 ? String(r[iNr] ?? '').trim() : '') || `acordo:${String(r[idx.codAcordo] ?? '').trim()}`;
+  // Quitação ou Junção que quita (saldo zerado e a data real — a zerada do ERP é 1899).
+  const quitaPeloRotulo = (r: unknown[]) => {
+    const situacao = norm(r[idx.situacaoAtual]);
+    if (situacao === 'quitacao') return true;
+    const quitou = toDate(r[idx.dataQuitacao]);
+    return situacao === 'juncao' && !!quitou && quitou.getFullYear() >= 2000
+      && (iRestante < 0 || numero(r[iRestante]) === 0);
+  };
+  /** Contratos que têm um acordo Quitação (ou Junção que quita): os outros acordos deles só somam pelas regras abaixo. */
+  const comQuitacao = new Set(linhas.filter(quitaPeloRotulo).map(contratoDa));
+
   // 1º os acordos que quitam (um por Cód. Acordo); 2º os do mesmo contrato viram uma quitação.
   type Quitou = AcordoQuitado & { contrato: string; juncao: boolean };
   const porAcordo = new Map<string, Quitou>();
@@ -155,11 +176,13 @@ export function extrairQuitacoes(rows: unknown[][]): RelatorioQuitacao {
     if (!cod || !operador || valor == null || !quitou) continue;
     const restante = iRestante >= 0 ? numero(r[iRestante]) : null;
     const nr = iNr >= 0 ? String(r[iNr] ?? '').trim() : '';
-    const contrato = nr || `acordo:${cod}`;
+    const contrato = contratoDa(r);
     const dia = iso(quitou);
-    // Quitação ou Junção que quita (saldo zerado e a data real — a zerada do ERP é 1899).
-    const quita = situacao === 'quitacao'
-      || (juncao && quitou.getFullYear() >= 2000 && (iRestante < 0 || restante === 0));
+    // Saldo zerado com a data da quitação quita, qualquer que seja o rótulo (NR 12552080:
+    // Parcelamento 1/1 que pagou as parcelas atrasadas e quitou o contrato) — se o contrato
+    // não tiver um acordo Quitação, que continua sendo o dono da quitação.
+    const quitaPeloSaldo = restante === 0 && quitou.getFullYear() >= 2000 && !comQuitacao.has(contrato);
+    const quita = quitaPeloRotulo(r) || quitaPeloSaldo;
     if (!quita) {
       // Guardado só com contrato e saldo conhecidos: sem eles não há o que conferir.
       if (nr && restante != null && dia.slice(0, 7) === mes.slice(0, 7)) {

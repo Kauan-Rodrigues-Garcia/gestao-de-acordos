@@ -17,6 +17,8 @@ export { DisparoDialog } from './DisparoDialog';
 export { NovaConversaDialog } from './NovaConversaDialog';
 export { NovoGrupoDialog } from './NovoGrupoDialog';
 export { ConfigGrupoDialog } from './ConfigGrupoDialog';
+export { GruposTodosDialog } from './GruposTodosDialog';
 export { GaleriaDialog } from './GaleriaDialog';
 export { BoasVindasChat } from './BoasVindasChat';
 export { PainelAutorizacoes } from './AutorizacoesChat';
+export { PainelTransferencias } from './TransferenciasChat';

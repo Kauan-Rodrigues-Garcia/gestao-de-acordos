@@ -29,6 +29,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
 import { diasUteisDoSetor, type DiasUteisPorSetor } from '@/lib/diasUteisDoSetor';
+import { buscarTreinamentoDasEquipes } from '@/services/fechamento/configDoMes';
 
 export interface MetasDiariasDoMes {
   /** operador_id → meta direta bruta do mês. Só metas positivas. */
@@ -83,8 +84,8 @@ export function useMetaDiariaOperadores(params: {
           getMetasConfig(empresaId, mesNum, ano),
           // Coluna de treinamento ausente devolve erro e o mapa fica vazio — o
           // que só faz a régua voltar ao mês cheio, como nos Quartis.
-          supabase.from('equipes').select('id, treinamento, treinamento_inicio')
-            .eq('empresa_id', empresaId),
+          // Mês fechado: o treinamento DAQUELE mês (retrato).
+          buscarTreinamentoDasEquipes(empresaId, mes),
         ]);
 
         const metaPorOperador: Record<string, number> = {};

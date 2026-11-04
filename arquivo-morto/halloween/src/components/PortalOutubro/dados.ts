@@ -1,0 +1,322 @@
+/**
+ * dados.ts — o retrato de outubro que o mural mostra. CONGELADO de propósito:
+ * às 16h de sexta ninguém lê o banco (ver `fases.ts`).
+ *
+ * De onde veio cada coisa:
+ *
+ *   - o ranking: a pontuação das medalhas (`Insignias/pontuacao.ts`), lida do
+ *     banco em 26/10/2026 com a autorização do Kauan. 174 pessoas têm pelo
+ *     menos uma insígnia; o Joao Miguel (10º, 460) saiu em 30/10 porque não
+ *     é mais da empresa, e quem vinha atrás subiu uma posição. No empate de pontos, a ordem é a do nome (o app
+ *     desempata por quem completou antes: pode trocar a ordem DENTRO de um
+ *     empate). Antes de sexta, ler de novo e trocar esta lista;
+ *   - as gincanas: o que está escrito no próprio código e nas artes já feitas
+ *     (a Bruxa do Pântano: `cartas/podio.ts`, 74 pessoas, golpe final do
+ *     Eduardo Naia). Número que não se sabe fica `null` e não aparece —
+ *     nada aqui é inventado.
+ *
+ */
+import type { IdInsignia } from '@/components/Insignias/insignias';
+
+export interface Pessoa {
+  posicao: number;
+  nome: string;
+  setor: string | null;
+  insignias: number;
+  pontos: number;
+  /** A foto do perfil (só do top 10; sem ela, as iniciais). */
+  foto: string | null;
+}
+
+/**
+ * Todo mundo com pelo menos uma insígnia, na ordem da pontuação de 26/10.
+ * Cada linha: posição | nome | setor (vazio = sem setor) | insígnias | pontos.
+ */
+const LISTA = `
+1|Erika Eduarda|Receptivo|5|630
+2|Ayslan Silva|Play 2|5|595
+3|Nicole Pacheco|Receptivo|5|575
+4|Lucas Nascimento|Receptivo|4|475
+5|Marianne Freitas|Receptivo|4|475
+6|Vitoria Grosso|Playmix|4|475
+7|Debora Portela da Silva|Receptivo|4|465
+8|Isabella Rocha|Play 2|4|465
+9|Pedro Pugina Verdinasse|Receptivo|4|465
+10|Thamires Souza|Play 2|4|450
+11|Igor Rocha|Play 2|3|405
+12|Amanda Paulo|Receptivo|3|360
+13|Fernanda Mata|Play 2|3|360
+14|Heloisa Lima|Receptivo|3|360
+15|Jose Victor Tavares|Receptivo|3|360
+16|Otavio Cestini|Play 2|3|360
+17|Eduardo Melo|Receptivo|3|355
+18|Nanci Moreira|Receptivo|3|355
+19|Poliana Shueter|Play 2|3|355
+20|Wilson Junior|Playmix|3|350
+21|Helton Paulino Roldon|Playmix|3|345
+22|Maria C Silva|Play 2|3|345
+23|Eduardo Naia|Play 3|2|290
+24|Agatha Rocha|Receptivo|2|260
+25|Matheus Costa|Receptivo|2|255
+26|Ana Clara Da Silva Sena|Receptivo|2|240
+27|Analimasilva|Play Mix Marília|2|240
+28|Andressa Aires|Play 3|2|240
+29|Breno Henrique Pereira Macarini|Play 3|2|240
+30|Carolina Murai|Play 1|2|240
+31|Daniela Reis|Play 2|2|240
+32|Debora Renata Souza|Play 1|2|240
+33|Emilly Oliveira|Play 2|2|240
+34|Erica Carvalho|Play 1|2|240
+35|Eriele Monteiro|Receptivo|2|240
+36|Gabriela Farias|Play 1|2|240
+37|Gustavo Nunes|Playmix|2|240
+38|Isabeli Ferreira|Play 3|2|240
+39|Joao Garcia|Playmix|2|240
+40|Joao V Santos|Conecta Play|2|240
+41|Juliana dos Santos Mello|Playmix|2|240
+42|Juliana Spereira|Play 1|2|240
+43|Laura|Playmix|2|240
+44|Luana Marchi Polo|Play 1|2|240
+45|Maria E Pereira|Playmix|2|240
+46|Mario Mantovani|Playmix|2|240
+47|Pedro Alves|Playmix|2|240
+48|Poliana Varjao|Play Mix Marília|2|240
+49|Quezia Vitoreli|Playmix|2|240
+50|Rayane Estevan|Play 2|2|240
+51|Thayna Izidro|Play 3|2|240
+52|Thayra Ferreira Silva|Play 2|2|240
+53|Elisandra Raquel|Play Mix Marília|2|235
+54|Layra Carini|Receptivo|2|235
+55|Leticia Andrade|Receptivo|2|235
+56|Sophia Costa|Conecta Play|2|235
+57|Alexia Silva|Play 2|2|230
+58|Diemily Da Silva|Play 3|2|230
+59|Isabele Barros|Play 2|2|230
+60|Kauane Azevedo|Conecta Play|2|230
+61|Brenda Ferreira|Play 5|2|225
+62|Bruna Xavier|Play Mix Marília|2|225
+63|Caio Shimite|Conecta Play|2|225
+64|Cleber Junior||2|225
+65|Gabriely Alves|Receptivo|2|225
+66|Julia Caetano|Play 1|2|225
+67|Leonardo Nunes Keppler|Play 2|2|225
+68|Maria V Souza|Play 5|2|225
+69|Sthefanny Moraes|Play 3|2|225
+70|Aline Rodrigues|Play 2|1|120
+71|Alisson Santana|Playmix|1|120
+72|Amabelly Santos|Conecta Play|1|120
+73|Amanda Alcasa|Play 5|1|120
+74|Amanda D Silva|Play 2|1|120
+75|Amanda Laisa|Play 3|1|120
+76|Ana Dias|Play 1|1|120
+77|Ana Gaiarin|Playmix|1|120
+78|Ana Paula Rodrigues|Play 3|1|120
+79|André Brandao|Play 3|1|120
+80|André Honorato||1|120
+81|Andreina Fratucci|Play 1|1|120
+82|Andressa Santos|Play 3|1|120
+83|Beatriz Reis|Play 3|1|120
+84|Beatriz Rodrigues|Receptivo|1|120
+85|Benjamin Ayala|Play 3|1|120
+86|Bianca Oliveira|Play 5|1|120
+87|Bianca Santelli Santos|Play 3|1|120
+88|Bianca Santera|Play 3|1|120
+89|Bruna Justimiano Ribeiro|Conecta Play|1|120
+90|Camila Ribeiro|Play 1|1|120
+91|Camilly Carvalho|Play 2|1|120
+92|Camilly Pereira|Play 1|1|120
+93|Caroline Valverde|Conecta Play|1|120
+94|Daniele Andrade|Playmix|1|120
+95|Debora Sobrinho|Conecta Play|1|120
+96|Douglas Faria|Playmix|1|120
+97|Elen Peralta Dos Santos|Play 3|1|120
+98|Emily Jardim|Play 1|1|120
+99|Fatima Tinareli|Playmix|1|120
+100|Francieli Silva|Playmix|1|120
+101|Gabriel Martin|Manutenção|1|120
+102|Gabriela Gonçalves|Play 3|1|120
+103|Gabrieli Oliveira|Play 3|1|120
+104|Giovana Souza|Conecta Play|1|120
+105|Giovanni Fagundes|Play 1|1|120
+106|Hayla Teixeira|Receptivo|1|120
+107|Heloisa Camilo|Receptivo|1|120
+108|Igor Eduardo Da Cruz Theodoro|Play 3|1|120
+109|Ingrid Nascimento|Play 2|1|120
+110|Isabela Sobrinho|Play Mix Marília|1|120
+111|Jacqueline Nascimento|Play 5|1|120
+112|Jaqueline Barbosa|Play 1|1|120
+113|Jaqueline Silva|Play Mix Marília|1|120
+114|Jessica Lucena|Play 3|1|120
+115|João Santos|Play Mix Marília|1|120
+116|Joyce Rosseto|Play Mix Marília|1|120
+117|Julia Barboza|Play 1|1|120
+118|Juliana Bellinati|Playmix|1|120
+119|Juliana Vitoria|Play 3|1|120
+120|Karina Silva|Play 1|1|120
+121|Karina Teixeira|Play Mix Marília|1|120
+122|Kauan Rodrigues||1|120
+123|Kaue Nadai|Conecta Play|1|120
+124|Laiza Daniele|Play 1|1|120
+125|Larissa Vieira|Play 2|1|120
+126|Leticia Kerlia|Play 3|1|120
+127|Leticia Peres|Play 2|1|120
+128|Luana Barrios|Play 3|1|120
+129|Lucila Silva|Playmix|1|120
+130|Luiz Silva|Play 3|1|120
+131|Marco Santos|Play 1|1|120
+132|Maria Eduarda Da Silva Pereira|Play 3|1|120
+133|Maria Segura|Play 2|1|120
+134|Mariha Rodrigues|Play 2|1|120
+135|Maryellen Araujo|Play Mix Marília|1|120
+136|Matheus Gonçalves de Souza|Receptivo|1|120
+137|Micaela Souza|Play 1|1|120
+138|Mirella Arias|Conecta Play|1|120
+139|Mirelly Marinho|Play Mix Marília|1|120
+140|Noemi Santos|Play 3|1|120
+141|Pamella Medeiros|Playmix|1|120
+142|Paola Souza|Play 1|1|120
+143|Pedro Souza|Play Mix Marília|1|120
+144|Rafaela Lisboa|Play Mix Marília|1|120
+145|Raiana Reis|Play 1|1|120
+146|Raquel Priscila|Play 1|1|120
+147|Rayssa Oliveira|Conecta Play|1|120
+148|Renata Cardoso Silva|Play 3|1|120
+149|Rodrigo Defalqui|Play 3|1|120
+150|Rosane Piona|Play 2|1|120
+151|Rosineide Mendes|Play 1|1|120
+152|Samara Chamarelli|Treinamento|1|120
+153|Sarah Inocencio|Playmix|1|120
+154|Shakira Santos|Play 1|1|120
+155|Silva Beatriz|Conecta Play|1|120
+156|Silvia Alves|Play Mix Marília|1|120
+157|Stefany Souza|Playmix|1|120
+158|Stella Nascimento|Play 2|1|120
+159|Stephanie Fagundes|Conecta Play|1|120
+160|Tassiane Viana|Conecta Play|1|120
+161|Thaina Couto|Play 2|1|120
+162|Thais Mayara|Conecta Play|1|120
+163|Thaís Rodrigues|Play Mix Marília|1|120
+164|Thais Venturin|Play 1|1|120
+165|Thalia Souza|Play 1|1|120
+166|Thalita Angelo|Play 1|1|120
+167|Thauany Moura|Conecta Play|1|120
+168|Tiago Henrique|Playmix|1|120
+169|Vinicius Manculi|Play 5|1|120
+170|Daniel Fagundes|Play Mix Marília|1|115
+171|Gabriela Santana|Play Mix Marília|1|115
+172|Maria Oliveira|Play Mix Marília|1|115
+173|Mirian Barbosa|Play 2|1|115
+`;
+
+/**
+ * A foto e QUAIS insígnias tem cada um do top 10 — o ranking de 26/10 guardou
+ * só quantas. Lido do banco em 27/10/2026 com a autorização do Kauan (perfis
+ * e as tabelas das gincanas, a mesma regra do álbum); bate com a contagem de
+ * cada um. Sem foto no perfil: as iniciais.
+ */
+const AVATAR = 'https://vfrvvoetidtsqbbhdkmj.supabase.co/storage/v1/object/public/perfis/avatars/';
+const DO_TOP: Readonly<Record<string, { foto: string | null; tem: readonly IdInsignia[] }>> = {
+  'Erika Eduarda': { foto: `${AVATAR}4f2ca1aa-8da8-450e-9b09-a5734072c030.jpg?t=1791914461571`, tem: ['zumbi', 'reiDoPop', 'bruxas', 'pantano', 'guerra'] },
+  'Ayslan Silva': { foto: `${AVATAR}0744c00a-cd73-4189-bc49-c1d4332eed43.jpg?t=1792430440625`, tem: ['zumbi', 'reiDoPop', 'bruxas', 'pantano', 'guerra'] },
+  'Nicole Pacheco': { foto: `${AVATAR}2d917b2f-233f-4b18-9165-049863927958.jpg?t=1788872811949`, tem: ['zumbi', 'reiDoPop', 'bruxas', 'pantano', 'guerra'] },
+  'Lucas Nascimento': { foto: `${AVATAR}4aa15ec5-b249-4da4-94c4-18ea897af36f.jpg?t=1791906604109`, tem: ['zumbi', 'reiDoPop', 'pantano', 'guerra'] },
+  'Marianne Freitas': { foto: `${AVATAR}c799c054-59f3-45ee-be51-26464dfa9fb7.jpg?t=1791906604892`, tem: ['zumbi', 'reiDoPop', 'pantano', 'guerra'] },
+  'Vitoria Grosso': { foto: `${AVATAR}52a0aae5-e96d-4453-9599-ffe12d0d0527.jpg?t=1791485902926`, tem: ['reiDoPop', 'bruxas', 'pantano', 'guerra'] },
+  'Debora Portela da Silva': { foto: `${AVATAR}827b8e43-675a-46ee-b9d5-bdfe28d8d038.jpg?t=1784056577162`, tem: ['zumbi', 'reiDoPop', 'pantano', 'guerra'] },
+  'Isabella Rocha': { foto: `${AVATAR}8b58aa13-ce96-4f22-8d97-a88faa2f1cdf.jpg?t=1790624396709`, tem: ['reiDoPop', 'bruxas', 'pantano', 'guerra'] },
+  'Pedro Pugina Verdinasse': { foto: null, tem: ['zumbi', 'reiDoPop', 'pantano', 'guerra'] },
+};
+
+export const PESSOAL: readonly Pessoa[] = LISTA.trim().split('\n').map(linha => {
+  const [posicao, nome, setor, insignias, pontos] = linha.split('|');
+  return {
+    posicao: Number(posicao), nome, setor: setor || null, insignias: Number(insignias), pontos: Number(pontos),
+    foto: DO_TOP[nome]?.foto ?? null,
+  };
+});
+
+const TODAS: readonly IdInsignia[] = ['zumbi', 'reiDoPop', 'bruxas', 'pantano', 'guerra'];
+
+/** Quais insígnias a pessoa tem (as cinco, nas Lendas); `null` = só se sabe quantas. */
+export function insigniasDe(p: Pick<Pessoa, 'nome' | 'insignias'>): readonly IdInsignia[] | null {
+  if (p.insignias === TODAS.length) return TODAS;
+  return DO_TOP[p.nome]?.tem ?? null;
+}
+
+/** O ranking do mural: só o top 10 (pedido de 26/10). */
+export const TOP10 = PESSOAL.slice(0, 10);
+
+/** As Lendas: as três com as cinco insígnias. */
+export const LENDAS = PESSOAL.filter(p => p.insignias === 5);
+
+/** Quem deu golpe final num chefe (o que o banco disse em 26/10). */
+export const GOLPE_FINAL = new Set(['Erika Eduarda', 'Igor Rocha', 'Eduardo Naia']);
+
+export const DATA_DO_RETRATO = '26/10/2026';
+
+// ── As gincanas ─────────────────────────────────────────────────────────────
+
+export interface Gincana {
+  id: IdInsignia;
+  titulo: string;
+  /** Uma frase sobre ela. */
+  frase: string;
+  /** Fatos certos; o que não se sabe fica de fora. */
+  fatos: string[];
+}
+
+export const GINCANAS: readonly Gincana[] = [
+  {
+    id: 'zumbi',
+    titulo: 'Caça aos Zumbis',
+    frase: 'Os zumbis invadiram o Gestão, e cada um que caía virava insígnia.',
+    fatos: ['Desde 07/10'],
+  },
+  {
+    id: 'reiDoPop',
+    titulo: 'O Rei do Pop',
+    frase: 'Dançou, deu moonwalk, comeu gente — e caiu com todo mundo atirando junto.',
+    fatos: ['O primeiro chefe do mês'],
+  },
+  {
+    id: 'bruxas',
+    titulo: 'Caça às Bruxas',
+    frase: 'As vassouras cruzaram a tela, e a caça mudou de alvo.',
+    fatos: [],
+  },
+  {
+    id: 'pantano',
+    titulo: 'A Bruxa do Pântano',
+    frase: 'Jogou poção, embaralhou a tela e se escondeu atrás do totem. Não adiantou.',
+    fatos: ['Caiu em 16/10', '74 caçadores', 'Golpe final: Eduardo Naia'],
+  },
+  {
+    id: 'guerra',
+    titulo: 'O Cavalo da Guerra',
+    frase: 'A corrida virou guerra, a janela estourou e ele brigou na página do Gestão.',
+    fatos: ['Desde 23/10'],
+  },
+];
+
+// ── O prêmio ────────────────────────────────────────────────────────────────
+
+/**
+ * O prêmio das Lendas é a garrafa (pedido de 28/10: «o prêmio das lendas é a
+ * garrafa, então o sorteio tem que ser esse»). Não há mais sorteio geral: as
+ * três clicam, a garrafa aparece e a roleta sorteia ENTRE as três.
+ */
+export const PREMIO_DAS_LENDAS = { titulo: 'A Garrafa', descricao: 'O prêmio das Lendas, sorteado entre as três.' };
+
+// ── O que também teve (o chat do mural) ─────────────────────────────────────
+
+/**
+ * O que teve em outubro além das cinco gincanas, para o chat do mural
+ * (pedido de 28/10). Tirado do que foi feito no Gestão no mês — CONFERIR
+ * com o Kauan antes de sexta.
+ */
+export const TAMBEM_TEVE: readonly { quando: string; texto: string }[] = [
+  { quando: '22/10', texto: 'Os cavalos entraram na Corrida. Antes da largada, a sala votava: bichinhos ou cavalos?' },
+  { quando: '27/10', texto: 'Corrida especial Fliperama Turbo: canhão, luva, pinball e teletransporte na pista.' },
+  { quando: '27/10', texto: 'Sorteio da pizza: quem levou foi a Rayane Estevan, do Play 2.' },
+  { quando: '26 a 30/10', texto: 'O Gestão foi rachando a semana toda: o bueiro, os olhos, os balões… até hoje, 16h.' },
+];

@@ -59,6 +59,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { registrarUso, registrarSessao } from '@/services/uso.service';
 import { telaDaRota, telaComAbas } from '@/lib/telas-catalogo';
 import { AcumuladorUso, type EnvioUso } from '@/lib/acumulador-uso';
+import { getImpersonacaoAtiva } from '@/services/impersonacao.service';
 
 /** De quanto em quanto tempo o acumulado sobe, para quem fica parado na tela. */
 const INTERVALO_ENVIO_MS = 180_000;
@@ -104,8 +105,11 @@ export function RastreioUsoProvider({ children }: { children: ReactNode }) {
   const abas = Object.keys(niveis).map(Number).sort((a, b) => a - b).map(n => niveis[n]);
   const camada = camadas.length ? camadas[camadas.length - 1].tela : null;
   // Sem sessão não há a quem atribuir, e `fn_uso_registrar` devolveria em
-  // silêncio de qualquer forma — não vale gastar a requisição.
-  const telaAtual = !perfil ? null
+  // silêncio de qualquer forma — não vale gastar a requisição. No «Entrar
+  // como» também não conta (28/10/2026): o tempo é do super admin, e somado na
+  // pessoa mexia no Monitoramento de uso e nos pontos de atenção dela.
+  const rastreia = !!perfil && !getImpersonacaoAtiva();
+  const telaAtual = !rastreia ? null
     : camada ?? (telaBase ? telaComAbas(telaBase, abas) : null);
 
   // ── Acumulador ────────────────────────────────────────────────────────────
@@ -163,7 +167,7 @@ export function RastreioUsoProvider({ children }: { children: ReactNode }) {
   // requisição.
   const sessaoRegistrada = useRef<string | null>(null);
   useEffect(() => {
-    if (!perfil?.id || sessaoRegistrada.current === perfil.id) return;
+    if (!perfil?.id || sessaoRegistrada.current === perfil.id || getImpersonacaoAtiva()) return;
     sessaoRegistrada.current = perfil.id;
     void registrarSessao();
   }, [perfil?.id]);

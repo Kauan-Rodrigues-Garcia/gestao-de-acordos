@@ -415,7 +415,7 @@ describe('executarTransferencia — levar as tabulações (setor)', () => {
     await executarTransferencia({
       alvo: ALVO_SETOR, levarAcordos: true, executadoPorId: 'admin-1',
     });
-    expect(rpcCalls).toHaveLength(0);
+    expect(rpcCalls.filter(c => c.nome === 'fn_admin_apagar_acordos_do_usuario')).toHaveLength(0);
   });
 });
 
@@ -550,5 +550,49 @@ describe('traduzirTransferencia', () => {
   it('função ausente aponta a migration', () => {
     expect(traduzirTransferencia('could not find the function'))
       .toContain('20260813');
+  });
+});
+
+// ── Conferência de 03/11/2026 ────────────────────────────────────────────────
+
+describe('executarTransferencia — liderança no setor antigo (03/11/2026)', () => {
+  it('tira a liderança das equipes do setor de ORIGEM e devolve os nomes', async () => {
+    perfilAtualizavel();
+    comAcordos(0);
+    respostaRpc = { data: [{ id: 'eq-1', nome: 'Equipe Manhã' }], error: null };
+
+    const r = await executarTransferencia({ alvo: ALVO_SETOR, levarAcordos: false, executadoPorId: 'admin-1' });
+
+    const chamada = rpcCalls.find(c => c.nome === 'fn_transferencia_sai_da_lideranca');
+    expect(chamada?.args).toEqual({ p_perfil: 'p-bruno', p_setor_origem: PLAY_4 });
+    expect(r.status).toBe('ok');
+    if (r.status === 'ok') expect(r.liderancasRemovidas).toEqual(['Equipe Manhã']);
+  });
+
+  it('migration pendente: segue como antes, sem aviso', async () => {
+    perfilAtualizavel();
+    comAcordos(0);
+    respostaRpc = { data: null, error: { message: 'Could not find the function public.fn_transferencia_sai_da_lideranca' } };
+
+    const r = await executarTransferencia({ alvo: ALVO_SETOR, levarAcordos: true, executadoPorId: 'admin-1' });
+
+    expect(r.status).toBe('ok');
+    if (r.status === 'ok') {
+      expect(r.liderancasRemovidas).toEqual([]);
+      expect(r.avisoRegistro).toBeNull();
+    }
+  });
+});
+
+describe('executarTransferencia — levar as tabulações que falham (03/11/2026)', () => {
+  it('não diz sucesso com 0 quando o UPDATE dos acordos falha', async () => {
+    perfilAtualizavel();
+    comAcordos(3);
+    respostas.set('acordos::update', { data: null, error: { message: 'permission denied for table acordos' } });
+
+    const r = await executarTransferencia({ alvo: ALVO_SETOR, levarAcordos: true, executadoPorId: 'admin-1' });
+
+    expect(r.status).toBe('falha');
+    if (r.status === 'falha') expect(r.mensagem).toMatch(/NÃO foram para o setor novo/);
   });
 });

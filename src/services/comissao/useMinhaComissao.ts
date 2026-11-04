@@ -14,7 +14,10 @@
  *   • configuração, confirmação do setor e bônus: `useConfigsComissao`, com
  *     tempo real — a confirmação do líder e o bônus novo chegam sem recarregar;
  *   • realizado por dia (meta especial do bônus): as mesmas linhas do agregado;
- *   • setor e equipe de origem: o perfil.
+ *   • setor e equipe de origem: o LUGAR no mês (`useLugarNoMes`) — no mês
+ *     fechado, onde a pessoa estava, não onde está (31/10/2026);
+ *   • regra Cofen ou Nosso produto: a do setor NO MÊS (`useRegraDoSetorNoMes`),
+ *     com a de hoje como reserva.
  *
  * ## Por que não o resumo por operador
  *
@@ -29,7 +32,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
-import { useEquipesDoPerfil } from '@/hooks/useEquipesDoPerfil';
+import { useLugarNoMes, useRegraDoSetorNoMes } from '@/hooks/useLugarNoMes';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useAnaliticoDashboard, agregarAnalitico } from '@/hooks/useAnaliticoDashboard';
@@ -66,18 +69,21 @@ export function useMinhaComissao(params: { aberto: boolean; mes: string }): Minh
   const { ano, mes: mesNum } = partesDoMes(mes);
 
   const { perfil } = useAuth();
-  const { principal: equipePrincipal } = useEquipesDoPerfil();
   const { empresa } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
-  const isPaguePlay = useTenant().isPaguePlay;
+  const lugar = useLugarNoMes(mes);
+  const regraNoMes = useRegraDoSetorNoMes(mes, lugar.setorId);
+  const regraDeHoje = useTenant().isPaguePlay;
+  // Cofen pela regra do setor do mês; sem ela guardada, a de hoje.
+  const isPaguePlay = regraNoMes ? regraNoMes === 'cofen' : regraDeHoje;
 
   const podeVer = temPermissao('dashboard_comissao');
   const ativo = params.aberto && podeVer;
   const empresaId = empresa?.id ?? null;
   const operadorId = perfil?.id ?? null;
-  const setorId = perfil?.setor_id ?? null;
-  // Para líder, a equipe que ele lidera — ver `useEquipesDoPerfil`.
-  const equipeId = equipePrincipal;
+  const setorId = lugar.setorId;
+  // Para líder, a equipe que ele lidera — ver `useLugarNoMes`.
+  const equipeId = lugar.principal;
   const chave = `${empresaId ?? ''}|${operadorId ?? ''}|${mes}`;
 
   const configs = useConfigsComissao({ empresaId, ano, mes: mesNum, ativo });

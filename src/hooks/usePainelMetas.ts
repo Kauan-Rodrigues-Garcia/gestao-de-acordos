@@ -54,7 +54,6 @@ import {
 import {
   getTodayISO,
 } from '@/lib/index';
-import { useHoPercentual } from '@/lib/hoPercentual';
 import {
   combinarMetaDupla, lerMetaIndiretaDaLinha, type MetaDupla,
 } from '@/services/metas/metaIndireta';
@@ -73,6 +72,8 @@ import {
   metaNaUnidade, UNIDADE_PADRAO, type UnidadeValor,
 } from '@/lib/unidadeValor';
 import { lerMetasExtras } from '@/services/comissao/entradaDoOperador';
+import { buscarTreinamentoDoRetrato } from '@/services/fechamento/configDoMes';
+import { useHoPercentualDoMes } from '@/hooks/useHoPercentualDoMes';
 
 export interface ParametrosPainelMetas {
   /** Mês em análise ('yyyy-MM'). */
@@ -215,6 +216,7 @@ function useEquipesDisponiveis(
   empresaId: string | null | undefined,
   setorId: string | null | undefined,
   podeVerOutros: boolean,
+  mes: string,
 ): { equipes: EquipeInfo[]; carregado: boolean } {
   const [equipes, setEquipes] = useState<EquipeInfo[]>([]);
   const [carregado, setCarregado] = useState(false);
@@ -234,14 +236,21 @@ function useEquipesDisponiveis(
           .order('nome');
         if (setorId) q = q.eq('setor_id', setorId);
 
-        const { data, error } = await q;
+        const [{ data, error }, doMes] = await Promise.all([
+          q,
+          // Mês fechado: o treinamento DAQUELE mês (retrato); aberto, nada a ler.
+          buscarTreinamentoDoRetrato(empresaId, mes),
+        ]);
         if (cancelado) return;
         if (error) { setEquipes([]); return; }
-        setEquipes(((data as LinhaEquipe[]) ?? []).map(e => ({
-          id: e.id,
-          nome: e.nome,
-          treinamentoInicio: e.treinamento ? (e.treinamento_inicio ?? null) : null,
-        })));
+        setEquipes(((data as LinhaEquipe[]) ?? []).map(e => {
+          const t = doMes?.get(e.id) ?? e;
+          return {
+            id: e.id,
+            nome: e.nome,
+            treinamentoInicio: t.treinamento ? (t.treinamento_inicio ?? null) : null,
+          };
+        }));
       } catch {
         if (!cancelado) setEquipes([]);
       } finally {
@@ -251,7 +260,7 @@ function useEquipesDisponiveis(
     setCarregado(false);
     void carregar();
     return () => { cancelado = true; };
-  }, [empresaId, setorId, podeVerOutros]);
+  }, [empresaId, setorId, podeVerOutros, mes]);
 
   return { equipes, carregado };
 }
@@ -260,7 +269,8 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
   const { setorId, equipeId, operadorId, temLogicaDiretoExtra } = params;
   // A meta em H.O. usa o percentual da aba Metas; o hook re-renderiza quando
   // ele muda (e entra nas dependências do `useMemo` abaixo).
-  const hoPct = useHoPercentual();
+  // O H.O. do mês olhado: no mês fechado, o do retrato (31/10/2026).
+  const hoPct = useHoPercentualDoMes(params.mes);
   const mes = normalizarMes(params.mes);
   const { ano, mes: mesNum } = partesDoMes(mes);
 
@@ -297,7 +307,7 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
   const podeVerOutros = veAlemDeSi('dashboard', temPermissao);
 
   const { equipes: equipesConhecidas, carregado: equipesCarregadas } =
-    useEquipesDisponiveis(empresa?.id, setorId, podeVerOutros);
+    useEquipesDisponiveis(empresa?.id, setorId, podeVerOutros, mes);
 
   /**
    * O escopo sai dos filtros do DASHBOARD, na mesma ordem que

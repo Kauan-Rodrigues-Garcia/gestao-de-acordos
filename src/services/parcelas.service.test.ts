@@ -54,7 +54,15 @@ vi.mock('@/lib/supabase', () => {
     };
     return builder;
   };
-  return { supabase: { from: vi.fn((t: string) => makeBuilder(t)) } };
+  return {
+    supabase: {
+      from: vi.fn((t: string) => makeBuilder(t)),
+      rpc:  vi.fn(async (nome: string, args: unknown) => {
+        supabaseCalls.push({ table: `rpc:${nome}`, op: 'rpc', payload: args, filters: [] });
+        return { data: { ok: true }, error: null };
+      }),
+    },
+  };
 });
 
 import {
@@ -198,39 +206,24 @@ describe('adicionarParcelaAoGrupo — plano maior em andamento', () => {
 });
 
 describe('adicionarParcelaAoGrupo — espelho no vínculo Direto↔Extra', () => {
-  it('base com vinculo_operador_id: insere parcela também no grupo do par', async () => {
-    routes.selectVinculo = {
-      data: [{
-        ...makeAcordo({
-          id: 'a-par', operador_id: 'op-2', acordo_grupo_id: 'grp-2',
-          tipo_vinculo: 'extra', vinculo_operador_id: 'op-1', vinculo_operador_nome: 'Op Um',
-        }),
-      }],
-      error: null,
-    };
+  // O espelho é do servidor (`fn_acordo_par_espelhar_parcela`): o navegador
+  // não escreve no acordo do colega, que a RLS recusa para operador comum.
+  it('base com vinculo_operador_id: pede ao servidor o espelho da parcela nova', async () => {
+    routes.insertAcordo = { data: makeAcordo({ id: 'a-nova', numero_parcela: 2 }), error: null };
 
     const base = makeAcordo({ vinculo_operador_id: 'op-2', vinculo_operador_nome: 'Op Dois' });
     const r = await adicionarParcelaAoGrupo(base, inputBoleto, { isPaguePlay: false });
     expect(r.ok).toBe(true);
 
-    const inserts = supabaseCalls.filter(c => c.op === 'insert');
-    expect(inserts.length).toBe(2);
-
-    // Espelho pertence ao grupo e ao operador do par.
-    const espelho = inserts.find(c =>
-      (c.payload as Record<string, unknown>).operador_id === 'op-2');
-    expect(espelho?.payload).toMatchObject({
-      acordo_grupo_id: 'grp-2',
-      vencimento:      '2026-07-20',
-      valor:           600,
-      tipo:            'boleto',
-    });
+    // Uma linha só pelo navegador: a do próprio operador.
+    expect(supabaseCalls.filter(c => c.op === 'insert').length).toBe(1);
+    const espelho = supabaseCalls.find(c => c.table === 'rpc:fn_acordo_par_espelhar_parcela');
+    expect(espelho?.payload).toEqual({ p_nova_id: 'a-nova' });
   });
 
-  it('sem vinculo_operador_id: não consulta o par', async () => {
+  it('sem vinculo_operador_id: não pede espelho', async () => {
     await adicionarParcelaAoGrupo(makeAcordo(), inputBoleto, { isPaguePlay: false });
-    const selectPar = supabaseCalls.find(c => c.filters.some(([col]) => col === 'operador_id'));
-    expect(selectPar).toBeUndefined();
+    expect(supabaseCalls.find(c => c.op === 'rpc')).toBeUndefined();
   });
 });
 

@@ -31,7 +31,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   ClipboardCheck, Building2, RefreshCw, Wallet, CalendarDays, Users, TriangleAlert, Info,
-  FileSpreadsheet, FileCode2, Loader2, Award,
+  FileSpreadsheet, FileCode2, Loader2, Award, Stamp,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -62,16 +62,21 @@ import {
 import { TabelaFechamento } from './TabelaFechamento';
 import { GraficosFechamento } from './GraficosFechamento';
 import { PremiacoesComissoes } from './PremiacoesComissoes';
+import { SeloDoMes } from './SeloDoMes';
+import { useLugarNoMes } from '@/hooks/useLugarNoMes';
+import { podeIgnorarFechamento } from '@/lib/fechamentoMes';
 import { COLUNAS_SETOR_DO_FILTRO, setoresDosFiltros } from '@/lib/setoresDosFiltros';
 
 /** O `Select` do shadcn recusa `value=""`; o "todos" precisa de um valor. */
 const TODOS_SETORES = '__todos__';
 
-type AbaFechamento = 'fechamento' | 'premiacoes';
+type AbaFechamento = 'fechamento' | 'premiacoes' | 'selo';
 
 const ABAS: readonly AbaSegmentada<AbaFechamento>[] = [
   { key: 'fechamento', label: 'Fechamento', Icon: ClipboardCheck },
   { key: 'premiacoes', label: 'Premiações e Comissões', Icon: Award },
+  // Os números oficiais do mês fechado (31/10/2026) — chave `fechamento_sub_selo`.
+  { key: 'selo', label: 'Selo do mês', Icon: Stamp },
 ];
 
 function Aviso({ tom, children }: { tom: 'alerta' | 'info'; children: React.ReactNode }) {
@@ -102,14 +107,22 @@ export default function PaginaFechamento() {
   const veTodosSetores = niveis.includes('todos_setores');
   const veSetor        = niveis.includes('setor');
   const podeEditar     = temPermissao('fechamento_editar');
-  const setorProprio   = perfil?.setor_id ?? null;
+  const podeVerSelo    = temPermissao('fechamento_sub_selo');
+  // O setor de quem olha NO MÊS: no mês fechado, o do retrato — quem mudou de
+  // setor vê o mês onde estava (decisão do Cleber, 31/10/2026).
+  const setorProprio   = useLugarNoMes(mes).setorId;
+  const abasVisiveis   = useMemo(
+    () => ABAS.filter(a => a.key !== 'selo' || podeVerSelo), [podeVerSelo]);
 
   const [setores, setSetores] = useState<{ id: string; nome: string; ativo?: boolean | null; tipo?: string | null }[]>([]);
   const [filtroSetorId, setFiltroSetorId] = useState<string | null>(null);
 
   // A aba fica na URL: recarregar a página ou mandar o link abre na mesma.
   const [params, setParams] = useSearchParams();
-  const aba: AbaFechamento = params.get('aba') === 'premiacoes' ? 'premiacoes' : 'fechamento';
+  // Aba interna escondida nunca é a de entrada: sem a chave, «selo» cai no Fechamento.
+  const abaDaUrl = params.get('aba');
+  const aba: AbaFechamento = abaDaUrl === 'premiacoes' ? 'premiacoes'
+    : abaDaUrl === 'selo' && podeVerSelo ? 'selo' : 'fechamento';
   useSubAbaUso(aba);
   const trocarAba = useCallback((k: AbaFechamento) => {
     setParams(p => {
@@ -208,7 +221,9 @@ export default function PaginaFechamento() {
           <div>
             <h1 className="text-2xl font-bold text-foreground">Fechamento</h1>
             <p className="text-sm text-muted-foreground mt-0.5">
-              {aba === 'fechamento' ? 'Fechamento mensal por operador' : 'Premiações e comissões por pessoa'} · {rotuloDoMes(mes)}
+              {aba === 'fechamento' ? 'Fechamento mensal por operador'
+                : aba === 'selo' ? 'Números oficiais do mês fechado'
+                : 'Premiações e comissões por pessoa'} · {rotuloDoMes(mes)}
             </p>
           </div>
         </div>
@@ -244,7 +259,7 @@ export default function PaginaFechamento() {
         )}
       </div>
 
-      <AbasSegmentadas abas={ABAS} ativa={aba} onTrocar={trocarAba} rotulo="Seção do Fechamento" />
+      <AbasSegmentadas abas={abasVisiveis} ativa={aba} onTrocar={trocarAba} rotulo="Seção do Fechamento" />
 
       {/* Mês + setor */}
       <div className="flex flex-wrap items-center gap-4">
@@ -288,6 +303,15 @@ export default function PaginaFechamento() {
             ? 'Seu usuário não está em nenhum setor, e o alcance do Fechamento liberado para o seu cargo é o do próprio setor.'
             : 'Nenhum alcance de dados está liberado para o seu cargo no Fechamento.'}
         </div>
+      )}
+
+      {temAlcance && aba === 'selo' && (
+        <SeloDoMes
+          empresaId={empresa.id}
+          mes={mes}
+          setorId={setorEmFoco}
+          podeSelar={podeIgnorarFechamento(perfil?.perfil)}
+        />
       )}
 
       {temAlcance && aba === 'premiacoes' && (

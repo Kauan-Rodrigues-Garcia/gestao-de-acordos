@@ -60,17 +60,11 @@ import { ChefeDeTeste } from './Corrida/guerra/ChefeDeTeste';
 import { PalcoDoOrganizador } from './Corrida/admin/PalcoDoOrganizador';
 import { useDesafioEmCartaz } from '@/hooks/useDesafios';
 import { AvisoNotificacaoHeader } from './AvisoNotificacaoHeader';
-import { BotaoSomAmbiente } from './Halloween/SomAmbiente/BotaoSomAmbiente';
-import { PlayerSeFoi } from './Halloween/SomAmbiente/PlayerSeFoi';
+import { BotaoSomAmbiente } from './SomAmbiente/BotaoSomAmbiente';
 import { BarraAtualizacao } from './BarraAtualizacao';
 import { AutorizacaoDock } from './AutorizacaoDock';
 import { BolhaChat } from '@/components/Chat/BolhaChat';
-import { TemaHalloweenContext, cenaDaRota, temFundo } from '@/components/Halloween/tema';
-import { useModoLeve } from '@/lib/modoLeve';
-import { useHalloweenParado, useVigiaDoHalloween } from '@/components/Halloween/aguenta';
-import { EVENTO_ABRIR_BOAS_VINDAS, pediuBoasVindasNaUrl, temaEsperaACarta, useHalloween } from '@/components/Halloween/preferencia';
-import { getImpersonacaoAtiva } from '@/services/impersonacao.service';
-import { MarcaHalloween } from '@/components/Halloween/MarcaHalloween';
+import { getImpersonacaoAtiva, sairImpersonacao } from '@/services/impersonacao.service';
 import { CrachaPendente } from '@/components/CrachaPendente';
 import { TemaNatalContext, cenaDaRota as cenaNatalDaRota, soParado as natalSoParado, temFundo as temFundoNatal } from '@/components/Natal/tema';
 import { abrirNatal, useNatal } from '@/components/Natal/previa';
@@ -81,7 +75,10 @@ import { useEasterEggCriadores, DURACAO_ESCURECIMENTO_MS } from '@/hooks/useEast
 // O overlay continua no Layout: a comemoração explode em QUALQUER página, não
 // só onde ela é criada. Só a aba de criação mudou de lugar.
 import { ComemoracaoOverlay } from './comemoracao/ComemoracaoOverlay';
-import { JumpscareOverlay } from './Jumpscare/JumpscareOverlay';
+import { SireneOverlay } from './Sirene/SireneOverlay';
+import { BingoNoSistema } from '@/pages/ModoTV/bingo/jogador/BingoNoSistema';
+import { useModoLeve } from '@/lib/modoLeve';
+import { useModoLeveZeradoPeloAdmin } from '@/lib/modoLeveZerado';
 import { useTermoUso } from '@/hooks/useTermoUso';
 import { useMarcarAtrasados } from '@/hooks/useMarcarAtrasados';
 import { ChatplayOnboardingModal } from './ChatplayOnboardingModal';
@@ -89,7 +86,6 @@ import { TrocarSenhaModal } from './TrocarSenhaModal';
 import { SeletorEmpresa } from './SeletorEmpresa';
 import { PainelSobDemanda } from './PainelSobDemanda';
 import { BotaoCalendario } from './Calendario/BotaoCalendario';
-import { BotaoInsignias } from './Insignias/BotaoInsignias';
 import { BarraRolagemLateral } from './BarraRolagemLateral';
 import { ligarRolagemLateral } from '@/lib/rolagemLateral';
 import { comNovaTentativa } from '@/lib/sobDemanda';
@@ -118,19 +114,13 @@ const carregarPainelDesafio  = comNovaTentativa(() => import('./DesafioMenu/Pain
 const carregarRecorteFoto    = comNovaTentativa(() => import('./ModalRecortarFoto'));
 const carregarEditorMenu     = comNovaTentativa(() => import('@/components/MenuLateralEditor'));
 const carregarCalendario     = comNovaTentativa(() => import('./Calendario/PainelCalendario'));
-// Tema de Halloween: só quem está com ele ligado baixa as camadas.
-const carregarHalloween      = comNovaTentativa(() => import('@/components/Halloween/CenaHalloween'));
 
 const DesempenhoDia     = lazy(() => carregarDesempenhoDia().then(m => ({ default: m.DesempenhoDia })));
 const PainelDesafio     = lazy(() => carregarPainelDesafio().then(m => ({ default: m.PainelDesafio })));
 const ModalRecortarFoto = lazy(() => carregarRecorteFoto().then(m => ({ default: m.ModalRecortarFoto })));
 const MenuLateralEditor = lazy(() => carregarEditorMenu().then(m => ({ default: m.MenuLateralEditor })));
 const PainelCalendario  = lazy(() => carregarCalendario().then(m => ({ default: m.PainelCalendario })));
-const FundoHalloween    = lazy(() => carregarHalloween().then(m => ({ default: m.FundoHalloween })));
-const CamadaHalloween   = lazy(() => carregarHalloween().then(m => ({ default: m.CamadaHalloween })));
-const RevoadaHalloween  = lazy(() => carregarHalloween().then(m => ({ default: m.RevoadaHalloween })));
-const SobreposicaoHalloween = lazy(() => carregarHalloween().then(m => ({ default: m.SobreposicaoHalloween })));
-// Tema de Natal: mesmo esquema — as camadas só descem com ele ligado.
+// Tema de Natal: as camadas só descem com ele ligado.
 const carregarNatal         = comNovaTentativa(() => import('@/components/Natal/CenaNatal'));
 const FundoNatal        = lazy(() => carregarNatal().then(m => ({ default: m.FundoNatal })));
 const CamadaNatal       = lazy(() => carregarNatal().then(m => ({ default: m.CamadaNatal })));
@@ -141,8 +131,6 @@ const AberturaNatal     = lazy(() => comNovaTentativa(() => import('@/components
   .then(m => ({ default: m.AberturaNatal })));
 const BotaoMusicaNatal  = lazy(() => comNovaTentativa(() => import('@/components/Natal/BotaoMusicaNatal'))()
   .then(m => ({ default: m.BotaoMusicaNatal })));
-const carregarBoasVindasHalloween = comNovaTentativa(() => import('@/components/Halloween/BoasVindasHalloween'));
-const BoasVindasHalloween = lazy(carregarBoasVindasHalloween);
 
 /*
  * A lista e o filtro mudaram de casa: `src/lib/menuLateral.ts`.
@@ -155,6 +143,8 @@ const BoasVindasHalloween = lazy(carregarBoasVindasHalloween);
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { perfil, signOut } = useAuth();
   const { empresa, branding } = useEmpresa();
+  // O super admin pode desligar o modo leve de todos (29/10/2026). Ver `lib/modoLeveZerado.ts`.
+  useModoLeveZeradoPeloAdmin(empresa?.id);
   const tenant = useTenant();
   /* Nome e cor pela cidade do setor da pessoa (Birigui BookPlay, Marília PaguePlay). */
   const marca = useMarca();
@@ -302,28 +292,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   // Nome e logo: pela cidade do setor (`useMarca`); sem ela, como a regra.
   const marcaPaguePlay = marca ? marca.nome === 'PaguePlay' : isPP;
   const userRole = perfil?.perfil ?? 'operador';
-  // Tema de Halloween — temporada, liberação e a escolha de cada pessoa em
-  // `Halloween/preferencia.ts`. Liberado para todos desde a primeira semana
-  // de outubro de 2026; cada um pode desligar os enfeites no botão de tema.
+  // O tema de Halloween (os enfeites, a mensagem de outubro, o Mural, o
+  // jumpscare e o álbum de insígnias) foi para `arquivo-morto/halloween/` em
+  // 03/11/2026 — o README de lá diz como devolver tudo como estava.
   const { pathname } = useLocation();
-  const hw = useHalloween();
-  // Modo leve (`lib/modoLeve.ts`): do Halloween fica só o que é parado — as
-  // teias, os chapéus e a marca. Chuva, névoa, vultos, aranha, fantasmas,
-  // lanterna e morcegos não montam.
+  // Modo leve (`lib/modoLeve.ts`): do Natal fica só o que é parado.
   const leve = useModoLeve();
-  // O mesmo recolhimento, sozinho, em máquina sem placa de vídeo ou quando a
-  // tela sufoca com o tema (`Halloween/aguenta.ts`). Só o tema: o resto do
-  // sistema continua como a pessoa deixou.
-  const halloweenParado = useHalloweenParado(hw.ligado);
-  const halloweenSoParado = leve || halloweenParado;
-  const cenaHalloween = useMemo(() => {
-    const cena = cenaDaRota(pathname, marcaPaguePlay);
-    return halloweenSoParado
-      ? { teias: cena.teias, aranha: false, chuva: false, nuvens: false, nevoa: false, vulto: false, fantasmas: false, lanterna: null }
-      : cena;
-  }, [pathname, marcaPaguePlay, halloweenSoParado]);
   // Tema de Natal (novembro) — em prévia, só no navegador de quem pede
-  // (`Natal/previa.ts`). Ligado, ele tira o Halloween da frente.
+  // (`Natal/previa.ts`).
   const { podeVer: podeVerNatal, estilo: natal, pessoa: pessoaNatal, aberto: natalAberto } = useNatal();
   // O tema entra no meio da abertura (na nevasca), com o cartão ainda na tela:
   // a abertura fica montada até avisar que terminou.
@@ -348,72 +324,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   useMarcarAtrasados();
 
   /*
-   * A mensagem de outubro: uma vez por pessoa, com o tema carregando por trás.
-   * Espera o termo de uso e o tutorial de quem nunca entrou — as duas coisas
-   * na tela ao mesmo tempo seria demais —, e não gasta a mensagem de quem está
-   * sendo visto por impersonação. `?hw-boas-vindas` reabre, para validar.
-   */
-  const [boasVindasAberta, setBoasVindasAberta] = useState(false);
-  // Chega SEMPRE como envelope fechado — pela automática, pelo
-  // `?hw-boas-vindas` e pelo «Ver a mensagem» de Configurações (que valida
-  // exatamente o que a equipe vai ver). Cada pedido de Configurações conta uma
-  // vez a mais: a `key` nova remonta e devolve o envelope mesmo com a carta
-  // já aberta.
-  const [boasVindasVez, setBoasVindasVez] = useState(0);
-  // A pessoa apertou «Ler agora» no envelope que está na tela.
-  const [cartaAberta, setCartaAberta] = useState(false);
-  /*
    * O tutorial saiu do caminho? Vem do PRÓPRIO tutorial (`onFinished`), e não
    * só de `perfil.tour_visto_em`: na conta nova o tutorial grava a data no
-   * banco, mas o perfil em memória não muda — e a mensagem só aparecia depois
-   * de recarregar a página (achado em 01/10/2026).
+   * banco, mas o perfil em memória não muda — e quem espera por ele (o crachá
+   * pendente) só seguia depois de recarregar a página (achado em 01/10/2026).
    */
   const [tourResolvido, setTourResolvido] = useState(false);
   const aoResolverTour = useCallback(() => setTourResolvido(true), []);
   const tourJaVisto = !!perfil?.tour_visto_em || tourResolvido;
-  useEffect(() => {
-    if (!hw.ligado || termoLoading || precisaAceitar) return;
-    if (pediuBoasVindasNaUrl()) { setBoasVindasAberta(true); return; }
-    if (hw.boasVindasPendentes && tourJaVisto && !getImpersonacaoAtiva()) setBoasVindasAberta(true);
-  }, [hw.ligado, hw.boasVindasPendentes, tourJaVisto, termoLoading, precisaAceitar]);
-  // «Ver a mensagem», em Configurações: reabre sem gravar nada de novo.
-  useEffect(() => {
-    if (!hw.ligado) return;
-    const abrir = () => { setBoasVindasVez(v => v + 1); setCartaAberta(false); setBoasVindasAberta(true); };
-    window.addEventListener(EVENTO_ABRIR_BOAS_VINDAS, abrir);
-    return () => window.removeEventListener(EVENTO_ABRIR_BOAS_VINDAS, abrir);
-  }, [hw.ligado]);
-  const fecharBoasVindas = () => {
-    setBoasVindasAberta(false);
-    if (pediuBoasVindasNaUrl()) {
-      const url = new URL(window.location.href);
-      url.searchParams.delete('hw-boas-vindas');
-      window.history.replaceState(window.history.state, '', url);
-    }
-    if (!getImpersonacaoAtiva()) hw.marcarBoasVindasVistas();
-  };
-
-  /*
-   * O tema chega COM a mensagem, não antes dela.
-   *
-   * Enquanto a mensagem está pendente (ou o envelope está na tela), o tema fica
-   * segurado: nada de teias, morcegos, fundo nem abóbora no chat, e as camadas
-   * nem são baixadas. No «Ler agora» ele solta — as camadas descem e se montam
-   * por trás da carta, que espera por elas (`preparar`) antes de liberar o
-   * «Entrar no Halloween». Quem fecha a carta encontra tudo no lugar.
-   *
-   * `cartaAberta` não volta a `false` ao fechar: entre fechar e a marca de
-   * «vista» chegar, o tema piscaria. Volta só quando um envelope novo abre.
-   * Impersonação não recebe a mensagem — então também não segura o tema.
-   */
-  const esperandoCarta = temaEsperaACarta({
-    cartaAberta,
-    envelopeNaTela: boasVindasAberta,
-    pendente: hw.boasVindasPendentes,
-    impersonando: !!getImpersonacaoAtiva(),
-  });
-  const halloween = hw.ligado && !esperandoCarta && !natal;
-  useVigiaDoHalloween(halloween && !halloweenSoParado);
 
   /*
    * A campanha que o menu anuncia.
@@ -521,6 +439,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const nomeSetor = (perfil?.setores as { nome?: string } | undefined)?.nome || null;
 
   async function handleSignOut() {
+    // No «Entrar como», sair é voltar à conta do super admin (ver `signOut`).
+    if (getImpersonacaoAtiva()) { await sairImpersonacao(); return; }
     await signOut();
     navigate(ROUTE_PATHS.LOGIN);
   }
@@ -543,6 +463,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
    */
   const [abrindoLab, setAbrindoLab] = useState(false);
   const easterEgg = useEasterEggCriadores(() => setAbrindoLab(true));
+  // Fora do ar para todos desde 28/10/2026 (Cleber): só o super admin abre o
+  // Lab. Para os outros o logo volta a ser só o logo.
+  const labLiberado = perfil?.perfil === 'super_admin';
 
   useEffect(() => {
     if (!abrindoLab) return;
@@ -584,16 +507,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             percebe diferença nenhuma (ver `useEasterEggCriadores`). */}
         <button
           type="button"
-          onClick={easterEgg.aoClicar}
+          onClick={labLiberado ? easterEgg.aoClicar : undefined}
           title={branding.appName}
           aria-label={branding.appName}
           className={cn(
             'w-8 h-8 flex-shrink-0 flex items-center justify-center rounded transition-transform',
-            easterEgg.descoberto && 'creators-logo-marca',
+            labLiberado && easterEgg.descoberto && 'creators-logo-marca',
             // Reação progressiva: nada, nada, leve, falha curta, interferência.
-            easterEgg.estagio === 2 && 'scale-105',
-            easterEgg.estagio === 3 && 'creators-logo-eco',
-            easterEgg.estagio === 4 && 'creators-logo-forte',
+            labLiberado && easterEgg.estagio === 2 && 'scale-105',
+            labLiberado && easterEgg.estagio === 3 && 'creators-logo-eco',
+            labLiberado && easterEgg.estagio === 4 && 'creators-logo-forte',
           )}
         >
           {marcaPaguePlay
@@ -606,8 +529,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="overflow-hidden">
               {natal
                 ? <MarcaNatal nome={branding.appName} />
-                : halloween
-                ? <MarcaHalloween nome={branding.appName} />
                 : (
                   <div>
                     <p className="font-bold text-sm text-sidebar-foreground leading-none">{branding.appName}</p>
@@ -788,10 +709,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   );
 
   const conteudo = (
-    <main ref={areaConteudo} className={cn('flex-1 overflow-y-auto', (halloween || natal) && 'relative', (halloween && temFundo(cenaHalloween)) || (cenaNatal && temFundoNatal(cenaNatal)) ? 'z-[1] bg-transparent' : 'bg-background')}>
-      {/* Teias, aranha, lanterna e fantasmas moram no alto do conteúdo e
-          rolam com a página — ficar parado lá em cima era o defeito. */}
-      {halloween && <Suspense fallback={null}><CamadaHalloween cena={cenaHalloween} /></Suspense>}
+    <main ref={areaConteudo} className={cn('flex-1 overflow-y-auto', natal && 'relative', cenaNatal && temFundoNatal(cenaNatal) ? 'z-[1] bg-transparent' : 'bg-background')}>
+      {/* As camadas do Natal moram no alto do conteúdo e rolam com a página. */}
       {cenaNatal && <Suspense fallback={null}><CamadaNatal cena={cenaNatal} /></Suspense>}
       {children}
       <BarraRolagemLateral raiz={areaConteudo} />
@@ -799,7 +718,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <TemaHalloweenContext.Provider value={halloween}>
     <TemaNatalContext.Provider value={natal}>
     <DesfazTemaDaMarca />
     <div className="flex h-screen bg-background overflow-hidden">
@@ -860,16 +778,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             onAbrir={() => setCalendarioAberto(true)}
           />
 
-          {/* As insígnias das gincanas (19/10/2026): uma medalha por gincana
-              completada, pendurada na borda de cima da barra; o mouse em cima
-              mostra a placa da gincana. O pessoal, só para o super_admin.
-              Voltaram em 20/10/2026 sem a Caça, que segue no arquivo morto.
-              Ver `Insignias/insignias.ts`. */}
-          <BotaoInsignias
-            perfilId={perfil?.id}
-            souSuperAdmin={userRole === 'super_admin'}
-          />
-
           {/* O aviso de notificação nova mora AQUI, no vão que já era vazio
               entre o menu e o bloco de ações — e é ele mesmo que faz o papel do
               antigo `flex-1`. Assim o aviso não pode cobrir botão nenhum: ele é
@@ -923,21 +831,17 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber-500" />
               </Button>
             )}
-            {/* Som ambiente — os temas de terror, as músicas de fábrica ou a
-                playlist da pessoa. Vem com o tema de Halloween: só aparece
-                quando ele está liberado (`hw.disponivel`). Player inteiro só
-                para o super_admin; os demais têm a versão enxuta, sem
-                playlists e com volume até 50%. O motor vive fora
-                do React — trocar de página não para a música. Ver
-                `components/Halloween/SomAmbiente/motor.ts`. */}
-            {/* 23/10/2026: player desligado para todos menos super_admin —
-                o botão fica e abre a lápide (`PlayerSeFoi`), sem motor. */}
-            {hw.disponivel && (userRole === 'super_admin'
-              ? <BotaoSomAmbiente perfilId={perfil?.id} completo />
-              : !natal && <PlayerSeFoi />)}
+            {/* Som ambiente — as músicas de fábrica, o YouTube e a rádio. O
+                motor vive fora do React — trocar de página não para a música.
+                Ver `components/SomAmbiente/motor.ts`. Desde 23/10/2026 só o
+                super_admin tem o player; até 03/11/2026 ele vinha com o tema
+                de Halloween (só em outubro) e os demais viam a lápide
+                `PlayerSeFoi`, que foi para o arquivo morto com o tema. Para
+                devolver aos demais, monte `<BotaoSomAmbiente>` sem `completo`
+                (a versão enxuta, sem YouTube e com volume até 50%). */}
+            {userRole === 'super_admin' && <BotaoSomAmbiente perfilId={perfil?.id} completo />}
             {/* Música de Natal — a mesma para todos, ao mesmo tempo
-                (`Natal/musica.ts`). Com o tema ligado, entra no lugar da
-                lápide; para o super_admin, fica ao lado do player. */}
+                (`Natal/musica.ts`). Para o super_admin, fica ao lado do player. */}
             {natal && (
               <Suspense fallback={<span className="h-8 w-8 shrink-0" />}>
                 <BotaoMusicaNatal />
@@ -973,11 +877,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               )}
             </Button>
             <HelpDrawer />
-            <ThemeToggle
-              halloween={hw.disponivel
-                ? { ligado: !hw.desligado, alternar: ligar => hw.definirDesligado(!ligar) }
-                : undefined}
-            />
+            <ThemeToggle />
             {/* Perfil no header — clicável para upload de foto */}
             <Popover open={perfilPopoverOpen} onOpenChange={setPerfilPopoverOpen}>
               <PopoverTrigger asChild>
@@ -1113,21 +1013,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <ChevronRight className={cn('w-3 h-3 transition-transform', sidebarOpen && 'rotate-180')} />
         </button>
 
-        {halloween ? (
+        {cenaNatal ? (
           // Caixa própria para as camadas do tema: a coluna de fora não pode
           // virar `relative`, senão o botão de recolher o menu muda de lugar.
-          <div className="relative flex-1 min-h-0 flex flex-col bg-background">
-            <Suspense fallback={null}>{temFundo(cenaHalloween) && <FundoHalloween cena={cenaHalloween} />}</Suspense>
-            {conteudo}
-            {!halloweenSoParado && (
-              <Suspense fallback={null}>
-                <SobreposicaoHalloween cena={cenaHalloween} />
-                <RevoadaHalloween />
-              </Suspense>
-            )}
-          </div>
-        ) : cenaNatal ? (
-          // A mesma caixa própria do Halloween, para as camadas do Natal.
           <div className="relative flex-1 min-h-0 flex flex-col bg-background">
             <Suspense fallback={null}>{temFundoNatal(cenaNatal) && <FundoNatal cena={cenaNatal} />}</Suspense>
             {conteudo}
@@ -1138,9 +1026,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </div>
         ) : conteudo}
         {podeVerNatal && (import.meta.env.DEV || natal) && <PreviaNatal estilo={natal} />}
-        {/* O presente do Natal: uma vez por pessoa, depois do termo, do tutorial e da mensagem
-            de outubro (nunca as duas na tela), e nunca na impersonação. `?natal=presente` devolve. */}
-        {(aberturaNatalViva || (podeVerNatal && !natalAberto && !termoLoading && !precisaAceitar && tourJaVisto && !boasVindasAberta && !getImpersonacaoAtiva())) && (
+        {/* O presente do Natal: uma vez por pessoa, depois do termo e do tutorial,
+            e nunca na impersonação. `?natal=presente` devolve. */}
+        {(aberturaNatalViva || (podeVerNatal && !natalAberto && !termoLoading && !precisaAceitar && tourJaVisto && !getImpersonacaoAtiva())) && (
           <Suspense fallback={null}>
             <AberturaNatal
               aoTemaEntrar={() => { setAberturaNatalViva(true); abrirNatal(pessoaNatal); }}
@@ -1148,8 +1036,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             />
           </Suspense>
         )}
-        {/* `onFinished` voltou em 01/10/2026: libera a mensagem de Halloween
-            assim que o tutorial sai do caminho, sem recarregar a página. */}
+        {/* `onFinished`: o crachá pendente espera o tutorial sair do caminho,
+            sem recarregar a página. */}
         <OnboardingTour
           precisaAceitar={precisaAceitar}
           termoLoading={termoLoading}
@@ -1158,20 +1046,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         {/* Crachá pendente (26/10/2026): canto de baixo à esquerda, depois do
             menu, no lugar onde ficava a pesquisa de experiência. */}
         <CrachaPendente
-          liberado={!termoLoading && !precisaAceitar && tourJaVisto && !boasVindasAberta}
+          liberado={!termoLoading && !precisaAceitar && tourJaVisto}
           esquerda={sidebarOpen ? 240 : 64}
         />
-        {boasVindasAberta && (
-          <Suspense fallback={null}>
-            <BoasVindasHalloween
-              key={boasVindasVez}
-              nome={perfil?.nome}
-              preparar={carregarHalloween}
-              aoFechar={fecharBoasVindas}
-              aoAbrirCarta={() => setCartaAberta(true)}
-            />
-          </Suspense>
-        )}
       </div>
 
       <PainelSobDemanda aberto={painelDiaAberto} nome="Desempenho do dia">
@@ -1223,9 +1100,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           for do setor dos homenageados. Não bloqueia cliques. */}
       <ComemoracaoOverlay />
 
-      {/* Jumpscare — a imagem agendada em Configurações > Geral: tela cheia
-          para todos por ≈0,3 s. Não pega clique e some sozinha sempre. */}
-      <JumpscareOverlay />
+      {/* A sirene (29/10/2026): luz e som nos horários do setor. Ver `Sirene/sirene.ts`. */}
+      <SireneOverlay />
+
+      {/* O Bingo do Modo TV (30/10/2026): a cartela de quem está numa partida.
+          Durante «Entrar como» aparece só para ver — o grito não age pela pessoa. */}
+      <BingoNoSistema perfilId={perfil?.id} somenteVer={!!getImpersonacaoAtiva()} />
 
       {/* Troca de senha 1x */}
       {perfil?.id && (
@@ -1323,6 +1203,5 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       </PainelSobDemanda>
     </div>
     </TemaNatalContext.Provider>
-    </TemaHalloweenContext.Provider>
   );
 }

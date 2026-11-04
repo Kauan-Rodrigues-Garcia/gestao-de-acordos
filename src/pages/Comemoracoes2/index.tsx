@@ -124,6 +124,14 @@ export default function Comemoracoes2() {
     [comemoracoes, alcance, usuarioId],
   );
 
+  // Agendada → no ar → finalizada muda com o relógio, não com os dados: sem
+  // este tique a aba aberta seguia dizendo «agendada» depois da hora.
+  const [, setRelogio] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setRelogio((r) => r + 1), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
   const agora = agoraCorrigido();
   const ativas = useMemo(
     () => comemoracoesVisiveis.filter((c) => estadoDe(c, agora) !== 'finalizada').length,

@@ -46,8 +46,9 @@ describe('Pix Automático 21x', () => {
     expect(item.pixAuto).toBe(48);            // 47,62 → 48
     expect(item.pixAutoDiscount).toBe(43);    // 900 / 21 = 42,86 → 43
     const v = CampaignCore.variablesFor(item, descontos);
-    expect(v.pix_automatico_21x).toBe(CampaignCore.formatCurrency(48));
-    expect(v.pix_automatico_desconto_21x).toBe(CampaignCore.formatCurrency(43));
+    // As vezes vêm na variável (27/10/2026).
+    expect(v.pix_automatico_21x).toBe(`21x de ${CampaignCore.formatCurrency(48)}`);
+    expect(v.pix_automatico_desconto_21x).toBe(`21x de ${CampaignCore.formatCurrency(43)}`);
     expect(v.pct_pix_automatico).toBe(CampaignCore.formatPercent(10));
   });
 

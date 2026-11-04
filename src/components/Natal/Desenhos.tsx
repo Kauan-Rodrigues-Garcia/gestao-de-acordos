@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
-import { indiceDaPessoa } from '@/components/Halloween/tema';
-import { EVENTO_GLOBO, useTemaNatal } from './tema';
+import { EVENTO_GLOBO, indiceDaPessoa, useTemaNatal } from './tema';
 import './desenhos.css';
 
 // ── Globo de neve do chat ─────────────────────────────────────────────────────

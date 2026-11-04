@@ -73,10 +73,28 @@ export default async function handler(req: ReqLike, res: ResLike): Promise<void>
   };
 
   try {
-    // 1) Identidade de quem chamou
-    const userResp = await fetch(`${url}/auth/v1/user`, {
-      headers: { apikey: serviceKey, Authorization: `Bearer ${callerJwt}` },
-    });
+    // O alvo é conferido antes de qualquer ida à rede.
+    const body = (typeof req.body === 'string' ? JSON.parse(req.body) : req.body) as { alvoUserId?: string };
+    const alvoId = body?.alvoUserId;
+    if (!alvoId) {
+      res.status(400).json({ error: 'alvoUserId é obrigatório.' });
+      return;
+    }
+    // Vai direto na URL do PostgREST: só UUID passa.
+    if (typeof alvoId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(alvoId)) {
+      res.status(400).json({ error: 'alvoUserId inválido.' });
+      return;
+    }
+
+    // 1) Identidade de quem chamou, junto com o cadastro do alvo: um não
+    // depende do outro, e esperar em fila era uma ida a mais (28/10/2026). O
+    // alvo só é USADO depois de confirmado o super_admin.
+    const [userResp, alvoResp] = await Promise.all([
+      fetch(`${url}/auth/v1/user`, {
+        headers: { apikey: serviceKey, Authorization: `Bearer ${callerJwt}` },
+      }),
+      fetch(`${url}/rest/v1/perfis?id=eq.${alvoId}&select=id,nome,email,perfil`, { headers: admin }),
+    ]);
     if (!userResp.ok) {
       res.status(401).json({ error: 'Sessão inválida.' });
       return;
@@ -100,26 +118,11 @@ export default async function handler(req: ReqLike, res: ResLike): Promise<void>
     }
 
     // 3) Alvo
-    const body = (typeof req.body === 'string' ? JSON.parse(req.body) : req.body) as { alvoUserId?: string };
-    const alvoId = body?.alvoUserId;
-    if (!alvoId) {
-      res.status(400).json({ error: 'alvoUserId é obrigatório.' });
-      return;
-    }
-    // Vai direto na URL do PostgREST: só UUID passa.
-    if (typeof alvoId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(alvoId)) {
-      res.status(400).json({ error: 'alvoUserId inválido.' });
-      return;
-    }
     if (alvoId === caller.id) {
       res.status(400).json({ error: 'Você já está logado como você mesmo.' });
       return;
     }
 
-    const alvoResp = await fetch(
-      `${url}/rest/v1/perfis?id=eq.${alvoId}&select=id,nome,email,perfil`,
-      { headers: admin },
-    );
     const alvoArr = (await alvoResp.json()) as Array<{ id: string; nome?: string; email?: string; perfil?: string }>;
     const alvo = Array.isArray(alvoArr) ? alvoArr[0] : null;
     if (!alvo?.email) {

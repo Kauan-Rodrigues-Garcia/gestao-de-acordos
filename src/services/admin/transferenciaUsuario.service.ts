@@ -44,6 +44,7 @@
 import { supabase } from '@/lib/supabase';
 import { invalidarComposicaoEquipes } from '@/services/analitico/composicaoCache';
 import type { Json } from '@/lib/database.types';
+import { rpcSemTipo } from '@/lib/supabaseSemTipo';
 import {
   buscarAcordosDoUsuario, baixarRelatorioAcordos, traduzirErro,
 } from './exclusaoUsuario.service';
@@ -87,6 +88,11 @@ export type ResultadoTransferencia =
       relatorio: string | null;
       /** Registro falhou mas a transferência aconteceu — não há desfazer. */
       avisoRegistro: string | null;
+      /**
+       * Equipes do setor de origem que a pessoa deixou de liderar. Ver
+       * `sairDaLiderancaDoSetorAntigo`. O desfazer não as devolve.
+       */
+      liderancasRemovidas: string[];
     }
   | { status: 'falha'; mensagem: string };
 
@@ -255,6 +261,9 @@ async function executarTransferenciaSemInvalidar(params: {
   const moveu = await moverPerfil(alvo, tipo, novoCargo);
   if (moveu.erro) return { status: 'falha', mensagem: moveu.erro };
 
+  // ── 2b. Liderança no setor antigo ─────────────────────────────────────────
+  const liderancas = await sairDaLiderancaDoSetorAntigo(alvo);
+
   // ── 3. Clones ─────────────────────────────────────────────────────────────
   // Troca de SETOR não mexe em clone — 19/08/2026. Ver `limparClones`.
   const clonesRemovidos = tipo === 'empresa'
@@ -265,7 +274,15 @@ async function executarTransferenciaSemInvalidar(params: {
   let acordosApagados = moveu.acordosApagados;
   let acordosMovidos  = 0;
   if (levarAcordos) {
-    acordosMovidos = await recarimbarSetorDosAcordos(alvo);
+    const movidos = await recarimbarSetorDosAcordos(alvo);
+    if (movidos.erro) {
+      // Mesmo caso do apagar: o perfil JÁ mudou, as tabulações não foram junto.
+      return {
+        status: 'falha',
+        mensagem: `Usuário transferido, mas as tabulações NÃO foram para o setor novo. ${movidos.erro}`,
+      };
+    }
+    acordosMovidos = movidos.total;
   } else if (tipo === 'setor') {
     // Mesmo com zero acordos próprios a RPC precisa rodar: o perfil pode ser o
     // DIRETO/EXTRA referenciado por um acordo de outra pessoa. A migration
@@ -296,8 +313,39 @@ async function executarTransferenciaSemInvalidar(params: {
     acordosMovidos,
     clonesRemovidos: clonesRemovidos.length,
     relatorio,
-    avisoRegistro: registro.erro,
+    avisoRegistro: [registro.erro, liderancas.erro].filter(Boolean).join(' ') || null,
+    liderancasRemovidas: liderancas.equipes,
   };
+}
+
+/**
+ * Tira a pessoa da liderança das equipes do setor de ORIGEM.
+ *
+ * Achado de 03/11/2026: a transferência trocava o setor e zerava `equipe_id`,
+ * mas `equipe_lideres` ficava intacto — o líder do Play 2 transferido para o
+ * Play 3 continuava liderando a equipe do Play 2, e cargo `lider` credita na
+ * equipe que LIDERA. A liderança em equipe de setor alternativo fica, pelo
+ * mesmo motivo que o clone fica (`limparClones`).
+ *
+ * Falhar aqui não desfaz a transferência: vira aviso, para alguém tirar a
+ * liderança à mão na tela de Equipes.
+ */
+async function sairDaLiderancaDoSetorAntigo(
+  alvo: AlvoTransferencia,
+): Promise<{ equipes: string[]; erro: string | null }> {
+  if (!alvo.origemSetorId || alvo.origemSetorId === alvo.destinoSetorId) return { equipes: [], erro: null };
+  const { data, error } = await rpcSemTipo<{ id: string; nome: string }[]>('fn_transferencia_sai_da_lideranca', {
+    p_perfil: alvo.perfilId, p_setor_origem: alvo.origemSetorId,
+  });
+  if (error) {
+    // Migration 20261103150000 pendente: o comportamento antigo, sem quebrar.
+    if (/could not find the function|does not exist|schema cache/i.test(error.message)) return { equipes: [], erro: null };
+    return {
+      equipes: [],
+      erro: `Se ${alvo.nome} liderava equipe no setor antigo, a liderança NÃO foi tirada (${error.message}). Confira em Equipes.`,
+    };
+  }
+  return { equipes: Array.isArray(data) ? data.map(e => e.nome) : [], erro: null };
 }
 
 /**
@@ -423,7 +471,9 @@ async function limparClones(perfilId: string): Promise<CloneSalvo[]> {
  * vínculo EXTRA aponta para um operador que não foi transferido, e desfazê-lo
  * quebraria o acordo dele.
  */
-async function recarimbarSetorDosAcordos(alvo: AlvoTransferencia): Promise<number> {
+async function recarimbarSetorDosAcordos(
+  alvo: AlvoTransferencia,
+): Promise<{ total: number; erro: string | null }> {
   const { data, error } = await supabase
     .from('acordos')
     .update({ setor_id: alvo.destinoSetorId })
@@ -431,11 +481,9 @@ async function recarimbarSetorDosAcordos(alvo: AlvoTransferencia): Promise<numbe
     .eq('empresa_id', alvo.origemEmpresaId)
     .select('id');
 
-  if (error) {
-    console.warn('[transferencia] acordos não recarimbados:', error.message);
-    return 0;
-  }
-  return data?.length ?? 0;
+  // Antes o erro sumia no console e a tela dizia «0 tabulações foram junto».
+  if (error) return { total: 0, erro: traduzirErro(error.message) };
+  return { total: data?.length ?? 0, erro: null };
 }
 
 async function apagarAcordos(

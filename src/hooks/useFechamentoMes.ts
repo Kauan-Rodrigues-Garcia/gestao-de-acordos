@@ -20,12 +20,20 @@
 import { useCallback, useMemo } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
-import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import {
-  estadoFechamento, estadoFechamentoDaData,
+  ACORDOS_FECHAM_COM_O_MES,
+  estadoFechamento, estadoFechamentoDaData, estadoFechamentoDoAcordo,
   mensagemFechamento, mensagemFechamentoLiberado,
   type EstadoFechamento,
 } from '@/lib/fechamentoMes';
+
+export interface OpcoesFechamento {
+  /**
+   * A tela é de ACORDO (lista, formulário, detalhe, lixeira). Acordo segue a
+   * `ACORDOS_FECHAM_COM_O_MES` em vez do cadeado geral.
+   */
+  acordos?: boolean;
+}
 
 export interface FechamentoDoMes extends EstadoFechamento {
   /** O mês avaliado, normalizado. */
@@ -45,19 +53,21 @@ export interface FechamentoDoMes extends EstadoFechamento {
   bloqueadoNaData: (data: string | null | undefined) => boolean;
 }
 
-export function useFechamentoMes(mes: string | null | undefined): FechamentoDoMes {
+export function useFechamentoMes(
+  mes: string | null | undefined,
+  { acordos = false }: OpcoesFechamento = {},
+): FechamentoDoMes {
   const { perfil } = useAuth();
-  const { temPermissaoExplicita } = useCargoPermissoes();
   const cargo = perfil?.perfil ?? null;
 
-  // `temPermissaoExplicita`, e não `temPermissao`: este é o poder que não se
-  // herda de "administrador pode tudo". Ver `PERMISSOES_EXPLICITAS`.
-  const liberadoPorPermissao = temPermissaoExplicita('ignorar_fechamento_mes');
-
+  const semCadeado = acordos && !ACORDOS_FECHAM_COM_O_MES;
   const estado = useMemo(
-    () => estadoFechamento({ mes, cargo, liberadoPorPermissao }),
-    [mes, cargo, liberadoPorPermissao],
+    () => (semCadeado
+      ? estadoFechamento({ mes: null, cargo })
+      : estadoFechamento({ mes, cargo })),
+    [semCadeado, mes, cargo],
   );
+  const estadoDaData = acordos ? estadoFechamentoDoAcordo : estadoFechamentoDaData;
 
   const mensagem = useMemo(
     () => (estado.liberadoPorCargo
@@ -77,12 +87,12 @@ export function useFechamentoMes(mes: string | null | undefined): FechamentoDoMe
 
   const bloqueadoNaData = useCallback(
     (data: string | null | undefined) =>
-      estadoFechamentoDaData({ data, cargo, liberadoPorPermissao }).bloqueado,
-    [cargo, liberadoPorPermissao],
+      estadoDaData({ data, cargo }).bloqueado,
+    [estadoDaData, cargo],
   );
 
   const impedirData = useCallback((data: string | null | undefined, acao?: string) => {
-    const doRegistro = estadoFechamentoDaData({ data, cargo, liberadoPorPermissao });
+    const doRegistro = estadoDaData({ data, cargo });
     if (!doRegistro.bloqueado) return false;
     const mesDoRegistro = String(data ?? '').slice(0, 7);
     toast.warning(
@@ -92,7 +102,7 @@ export function useFechamentoMes(mes: string | null | undefined): FechamentoDoMe
       { duration: 5000 },
     );
     return true;
-  }, [cargo, liberadoPorPermissao]);
+  }, [estadoDaData, cargo]);
 
   return {
     ...estado,

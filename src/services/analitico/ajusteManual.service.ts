@@ -63,6 +63,7 @@ import type { AnaliticoDashboardLinha, AnaliticoRecebimento } from '@/lib/supaba
 import { rpcSemTipo } from '@/lib/supabaseSemTipo';
 import { primeiroDiaDoMes, ultimoDiaDoMes } from '@/lib/mesReferencia';
 import { invalidarCache, lerComCache } from '@/lib/cacheCurto';
+import { prefixoCacheDoSinal } from '@/lib/sinais';
 import { ROTULO_AJUSTE } from '@/lib/formasPagamento';
 
 /**
@@ -212,9 +213,11 @@ export function primeiroDiaDaCompetencia(mes: string): string {
 export async function listarAjustes(
   empresaId: string, mes: string,
 ): Promise<AjusteManual[]> {
+  // Sem embed de `equipes`: desde 20261029221000 a coluna não tem FK — excluir
+  // a equipe não pode apagar o ajuste de um mês fechado. O nome vem à parte.
   const { data, error } = await db('analitico_ajustes_manuais')
     .select('*, perfis!analitico_ajustes_manuais_operador_id_fkey(nome), '
-      + 'equipes!analitico_ajustes_manuais_equipe_id_fkey(nome), setores!analitico_ajustes_manuais_setor_id_fkey(nome)')
+      + 'setores!analitico_ajustes_manuais_setor_id_fkey(nome)')
     .eq('empresa_id', empresaId)
     .eq('mes_referencia', primeiroDiaDaCompetencia(mes))
     .order('criado_em', { ascending: false });
@@ -225,7 +228,38 @@ export async function listarAjustes(
     }
     return [];
   }
-  return (data as Record<string, unknown>[]).map(paraAjuste);
+  const linhas = data as Record<string, unknown>[];
+  const nomes = await nomesDasEquipes(
+    empresaId, mes,
+    [...new Set(linhas.map(l => l.equipe_id as string | null).filter((id): id is string => !!id))],
+  );
+  return linhas.map(l => ({
+    ...paraAjuste(l),
+    equipeNome: l.equipe_id ? nomes.get(String(l.equipe_id)) ?? null : null,
+  }));
+}
+
+/**
+ * O nome de cada equipe: o de hoje, e o do retrato do mês para a que foi
+ * excluída depois — ela continua dona do ajuste daquele mês.
+ */
+async function nomesDasEquipes(
+  empresaId: string, mes: string, ids: string[],
+): Promise<Map<string, string>> {
+  const nomes = new Map<string, string>();
+  if (ids.length === 0) return nomes;
+  const [vivas, retrato] = await Promise.all([
+    db('equipes').select('id, nome').in('id', ids),
+    db('composicao_mes_equipe').select('equipe_id, nome')
+      .eq('empresa_id', empresaId).eq('mes', mes).in('equipe_id', ids),
+  ]);
+  for (const r of (retrato.data ?? []) as { equipe_id: string; nome: string }[]) {
+    nomes.set(r.equipe_id, r.nome);
+  }
+  for (const v of (vivas.data ?? []) as { id: string; nome: string }[]) {
+    if (!nomes.has(v.id)) nomes.set(v.id, v.nome);
+  }
+  return nomes;
 }
 
 /**
@@ -240,7 +274,7 @@ export async function listarAjustes(
  */
 export async function ajustesDoMes(empresaId: string, mes: string): Promise<AjusteDoDia[]> {
   const linhas = await lerComCache(
-    `${PREFIXO_SOMAS_AJUSTE}${empresaId}:${mes}`,
+    `${prefixoCacheDoSinal('ajustes', empresaId)}${mes}`,
     VALIDADE_SOMAS_AJUSTE_MS,
     async (): Promise<AjusteDoDia[] | null> => {
       const { data, error } = await rpcSemTipo<Record<string, unknown>[]>('fn_ajustes_recebimento', {
@@ -435,15 +469,18 @@ export async function listarEventos(ajusteId: string): Promise<EventoAjuste[]> {
 // ── Escrita ──────────────────────────────────────────────────────────────────
 
 /**
- * Quanto tempo as somas dos ajustes valem guardadas. Curto: é dinheiro no card.
- * Quem lança, edita ou cancela descarta na hora (`invalidarSomasDeAjuste`), e
- * as telas que ouvem `analitico_ajustes_manuais` também.
+ * Quanto tempo as somas dos ajustes valem guardadas. Quem lança, edita ou
+ * cancela descarta na hora (`invalidarSomasDeAjuste`), e o sinal `ajustes`
+ * derruba a guardada ao CHEGAR (`prefixoCacheDoSinal`) em toda aba que o ouve.
+ *
+ * Era 20 s: ~11 mil leituras por dia de `fn_ajustes_recebimento` a 86 ms, ~9%
+ * do banco na auditoria de 30/10/2026 — para uma tabela que muda poucas vezes
+ * no mês. Tela que não ouve o sinal vê o ajuste de outra pessoa em até 2 min.
  */
-export const VALIDADE_SOMAS_AJUSTE_MS = 20 * 1000;
-const PREFIXO_SOMAS_AJUSTE = 'ajustes-somas:';
+export const VALIDADE_SOMAS_AJUSTE_MS = 2 * 60 * 1000;
 
 export function invalidarSomasDeAjuste(): void {
-  invalidarCache(PREFIXO_SOMAS_AJUSTE);
+  invalidarCache(prefixoCacheDoSinal('ajustes'));
 }
 
 export async function lancarAjuste(params: {
@@ -543,7 +580,6 @@ export async function cancelarAjuste(params: {
 
 function paraAjuste(l: Record<string, unknown>): AjusteManual {
   const perfil = l.perfis as { nome?: string } | null;
-  const equipe = l.equipes as { nome?: string } | null;
   const setor = l.setores as { nome?: string } | null;
   return {
     id:                 String(l.id),
@@ -554,7 +590,7 @@ function paraAjuste(l: Record<string, unknown>): AjusteManual {
     setorId:            (l.setor_id as string | null) ?? null,
     setorNome:          setor?.nome ?? null,
     equipeId:           (l.equipe_id as string | null) ?? null,
-    equipeNome:         equipe?.nome ?? null,
+    equipeNome:         null,
     mesReferencia:      String(l.mes_referencia),
     valor:              Number(l.valor) || 0,
     motivo:             String(l.motivo ?? ''),

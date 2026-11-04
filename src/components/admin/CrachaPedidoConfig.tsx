@@ -7,13 +7,17 @@
  * quem já tinha crachá pelo RH e quem falta — por setor e pessoa a pessoa. O
  * número do crachá não vem para cá: quem confere é o RH, nas telas dele.
  *
+ * Nasce recolhido (03/11/2026): o cabeçalho mostra o andamento numa linha, e o
+ * resumo, os setores e a lista só abrem no clique. É só aqui — o cartão que a
+ * equipe vê não muda.
+ *
  * Regras e banco: `CrachaPendente/cracha.ts` e a migration 20261026180000.
  */
 import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Eye, IdCard, Loader2 } from 'lucide-react';
+import { ChevronDown, Eye, IdCard, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
@@ -72,6 +76,7 @@ export default function CrachaPedidoConfig() {
     retry: false,
   });
 
+  const [aberto, setAberto] = useState(false);
   const [confirmar, setConfirmar] = useState<boolean | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [filtro, setFiltro] = useState<SituacaoCracha | 'todas'>('respondeu');
@@ -111,19 +116,37 @@ export default function CrachaPedidoConfig() {
 
   return (
     <Card>
-      <CardHeader className="pb-3">
+      <CardHeader className={aberto ? 'pb-3' : undefined}>
         <div className="flex flex-wrap items-start gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-            <IdCard className="h-5 w-5 text-primary" />
-          </span>
-          <div className="min-w-[200px] flex-1">
-            <CardTitle className="text-sm font-semibold">Pedido do crachá</CardTitle>
-            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              Cartão no canto da tela que pede o número do crachá a quem ainda não tem um
-              cadastrado. O número vai para o RH (o mesmo que Premiações e Comissões leem).
-              Desligado, ninguém vê o cartão; quem já respondeu continua aqui.
-            </p>
-          </div>
+          <button
+            type="button"
+            onClick={() => setAberto(a => !a)}
+            aria-expanded={aberto}
+            className="flex min-w-[200px] flex-1 items-start gap-3 rounded-lg text-left"
+          >
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+              <IdCard className="h-5 w-5 text-primary" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="flex items-center gap-1.5 text-sm font-semibold leading-none tracking-tight">
+                Pedido do crachá
+                <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform', aberto && 'rotate-180')} />
+              </span>
+              {aberto ? (
+                <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
+                  Cartão no canto da tela que pede o número do crachá a quem ainda não tem um
+                  cadastrado. O número vai para o RH (o mesmo que Premiações e Comissões leem).
+                  Desligado, ninguém vê o cartão; quem já respondeu continua aqui.
+                </span>
+              ) : (
+                <span className="mt-1 block text-xs tabular-nums text-muted-foreground">
+                  {isLoading || error
+                    ? 'Clique para ver o andamento'
+                    : `${resumo.porSituacao.respondeu} de ${precisam} responderam · ${resumo.porSituacao.pendente} faltam`}
+                </span>
+              )}
+            </span>
+          </button>
           <div className="flex items-center gap-3">
             <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={abrirPreviaCracha}>
               <Eye className="h-3.5 w-3.5" /> Ver o cartão
@@ -143,7 +166,7 @@ export default function CrachaPedidoConfig() {
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-5">
+      {aberto && <CardContent className="space-y-5">
         {error ? (
           <p className="rounded-lg border border-warning/40 bg-warning/10 p-3 text-xs text-foreground">
             Não deu para ler o pedido do crachá. Se ele acabou de chegar, falta aplicar a migration
@@ -272,7 +295,7 @@ export default function CrachaPedidoConfig() {
             </div>
           </>
         )}
-      </CardContent>
+      </CardContent>}
 
       <AlertDialog open={confirmar !== null} onOpenChange={o => { if (!o) setConfirmar(null); }}>
         <AlertDialogContent>

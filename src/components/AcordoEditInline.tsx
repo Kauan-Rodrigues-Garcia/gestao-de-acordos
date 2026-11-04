@@ -19,7 +19,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEquipesDoPerfil } from '@/hooks/useEquipesDoPerfil';
 import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
 import { fetchIsDiretoExtraAtivo } from '@/services/direto_extra.service';
-import { converterParaExtra } from '@/services/diretoExtraRpc';
+import { converterParaExtra, vincularExtraAoDireto } from '@/services/diretoExtraRpc';
 import { tornarExtra, type ResultadoTornarDireto } from '@/services/tornarDireto.service';
 import { temVisaoAmpla } from '@/lib/deduplicarVinculados';
 import { ModalExtraParaDireto } from '@/components/AcordoDetalheInline/ModalExtraParaDireto';
@@ -50,7 +50,7 @@ import { abrirChatplay } from '@/lib/chatplay';
 import { camposComCpf, ERRO_CPF_NO_CODIGO } from '@/lib/cpf';
 import { ehSoNumeros, propsSoNumeros } from '@/lib/soNumeros';
 import {
-  estadoFechamentoDaData, mensagemFechamento, mesDaData,
+  estadoFechamentoDoAcordo, mensagemFechamento, mesDaData,
 } from '@/lib/fechamentoMes';
 import {
   formatBRL, temEntrada, valorDemaisParcelas, totalComEntrada,
@@ -230,8 +230,10 @@ export function AcordoEditInline({
     // Os DOIS meses precisam estar abertos: o de origem (o mês que perderia o
     // valor) e o de destino (o que ganharia). Checar só um deles deixaria mover
     // dinheiro para dentro ou para fora de um fechamento já apresentado.
+    // Desligado desde 03/11/2026: acordo não fecha com o mês
+    // (`ACORDOS_FECHAM_COM_O_MES`).
     for (const data of [acordo.vencimento, vencimento]) {
-      if (estadoFechamentoDaData({ data, cargo: perfil?.perfil }).bloqueado) {
+      if (estadoFechamentoDoAcordo({ data, cargo: perfil?.perfil }).bloqueado) {
         toast.error(mensagemFechamento(mesDaData(data)));
         return;
       }
@@ -431,13 +433,48 @@ export function AcordoEditInline({
 
             // CASO A — eu tenho a lógica e o dono não: o acordo que estou
             // editando passa a ser o EXTRA, e o dono segue DIRETO.
-            case 'eu_viro_extra':
-              await gravar(planoQuantidade, {
+            //
+            // O DIRETO do dono também precisa declarar o vínculo, ou o par
+            // fica pela metade e nada se sincroniza. Quem grava o lado dele é
+            // o servidor, o mesmo do cadastro novo (`vincularExtraAoDireto`).
+            case 'eu_viro_extra': {
+              const salvou = await gravar(planoQuantidade, {
                 tipo_vinculo:          'extra',
                 vinculo_operador_id:   decisao.operadorId,
                 vinculo_operador_nome: decisao.operadorNome,
               });
+              if (!salvou) return;
+              const rpcErr = await vincularExtraAoDireto({
+                diretoId:          decisao.acordoId,
+                extraOperadorId:   perfil.id,
+                extraOperadorNome: perfil.nome ?? 'Operador',
+                valor:       parseCurrencyInput(valor),
+                vencimento,
+                nomeCliente: nomeCliente.trim(),
+                tipo,
+                nrCliente:   nrCliente.trim(),
+                instituicao: instituicao.trim(),
+                whatsapp:    isPaguePlay ? formatarTelefonePP(whatsapp) : (whatsapp.trim() || null),
+                parcelas:    parseInt(parcelas || '1', 10) || 1,
+              });
+              if (rpcErr) {
+                toast.error(
+                  `Acordo salvo como EXTRA, mas o acordo de ${decisao.operadorNome} não foi vinculado: `
+                  + `${rpcErr.message}. Avise o líder.`,
+                  { duration: 9000 },
+                );
+                return;
+              }
+              await criarNotificacao({
+                usuario_id: decisao.operadorId,
+                titulo:     'Novo vínculo EXTRA no seu acordo',
+                mensagem:   `O operador ${perfil.nome ?? 'outro operador'} vinculou o ${label} "${valorNovo}" `
+                  + 'como EXTRA ao seu acordo. Seu acordo permanece como DIRETO.',
+                empresa_id: empresa.id,
+                acordo_id:  decisao.acordoId,
+              });
               return;
+            }
 
             // CASO B e C/D dependem do operador (ou do líder): guarda o estado
             // e devolve o controle para o modal.
@@ -486,10 +523,11 @@ export function AcordoEditInline({
     });
   }
 
+  /** `true` quando a linha foi gravada (mesmo que o grupo de parcelas não). */
   async function gravar(
     planoQuantidade: PlanoQuantidade | null,
     override: Record<string, unknown> = {},
-  ) {
+  ): Promise<boolean> {
     const parcelasNum = parseInt(parcelas || '1', 10);
 
     setSaving(true);
@@ -514,7 +552,7 @@ export function AcordoEditInline({
             ?? `Erro ao salvar: ${error.message}`,
           { duration: 7000 },
         );
-        return;
+        return false;
       }
 
       // Grupo depois da linha: se o UPDATE acima for recusado (RLS, validação
@@ -535,7 +573,7 @@ export function AcordoEditInline({
           // aconteceu, e o operador precisa saber o que conferir.
           toast.error(`Acordo salvo, mas a quantidade de parcelas não mudou: ${r.erro}`, { duration: 8000 });
           onSaved((updated ?? { ...acordo, ...payload }) as Acordo);
-          return;
+          return true;
         }
         if (r.criadas.length) toast.success(`${r.criadas.length} parcela(s) criada(s).`);
         if (r.removidas.length) toast.success(`${r.removidas.length} parcela(s) apagada(s).`);
@@ -556,12 +594,14 @@ export function AcordoEditInline({
       if (!isPaguePlay && (salvo.status !== acordo.status || salvo.tipo !== acordo.tipo)) {
         void registrarPixAoPagar(salvo);
       }
+      return true;
     } catch (e) {
       toast.error(
         mensagemErroNr(e, isPaguePlay ? 'Código' : 'NR')
           ?? (e instanceof Error ? e.message : 'Erro inesperado'),
         { duration: 7000 },
       );
+      return false;
     } finally {
       setSaving(false);
     }

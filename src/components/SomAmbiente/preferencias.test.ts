@@ -1,0 +1,127 @@
+import { beforeEach, describe, expect, it } from 'vitest';
+import {
+  LIMITE_PLAYLISTS, PADRAO, VOLUME_PADRAO, esquecerPosicao, gravarPosicao, gravarPreferencias, lerPosicao,
+  lerPreferencias, normalizar,
+} from './preferencias';
+
+const SPOTIFY = 'https://open.spotify.com/playlist/37i9dQZF1DX8Uebhn9wzrS';
+
+describe('preferências do Som ambiente', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('quem nunca abriu: «300 no 7», volume baixo, não toca sozinho, em sequência', () => {
+    expect(lerPreferencias('p1')).toEqual(PADRAO);
+    expect(PADRAO.faixa).toBe('trezentosno7');
+    expect(PADRAO.volume).toBe(VOLUME_PADRAO);
+    expect(VOLUME_PADRAO).toBeLessThanOrEqual(25);
+    expect(PADRAO.tocarAoEntrar).toBe(false);
+    expect(PADRAO.repetir).toBe(false);
+  });
+
+  it('grava e lê por pessoa', () => {
+    gravarPreferencias('p1', { faixa: 'mdt', volume: 55, tocarAoEntrar: true, repetir: true, videoFixo: true, playlists: [] });
+    expect(lerPreferencias('p1')).toMatchObject({ faixa: 'mdt', volume: 55, tocarAoEntrar: true, repetir: true, videoFixo: true });
+    expect(lerPreferencias('p2')).toEqual(PADRAO);
+  });
+
+  it('o padrão é 15%; quem ficou no padrão antigo (20, gravado antes da versão 2) desce junto', () => {
+    expect(VOLUME_PADRAO).toBe(15);
+    localStorage.setItem('som-ambiente:p1', JSON.stringify({ faixa: 'mdt', volume: 20 }));
+    expect(lerPreferencias('p1').volume).toBe(15);
+    // Escolheu outro volume: fica.
+    localStorage.setItem('som-ambiente:p2', JSON.stringify({ faixa: 'mdt', volume: 35 }));
+    expect(lerPreferencias('p2').volume).toBe(35);
+    // Escolheu 20 já na versão nova: fica.
+    gravarPreferencias('p3', { ...PADRAO, volume: 20 });
+    expect(lerPreferencias('p3').volume).toBe(20);
+  });
+
+  it('JSON quebrado volta ao padrão', () => {
+    localStorage.setItem('som-ambiente:p1', '{quebrado');
+    expect(lerPreferencias('p1')).toEqual(PADRAO);
+  });
+
+  it('prende o volume entre 0 e 100', () => {
+    expect(normalizar({ volume: 180 }).volume).toBe(100);
+    expect(normalizar({ volume: -3 }).volume).toBe(0);
+    expect(normalizar({ volume: 'alto' }).volume).toBe(VOLUME_PADRAO);
+  });
+
+  it('faixa que não existe mais (playlist removida ou som antigo) volta para o padrão', () => {
+    expect(normalizar({ faixa: 'spotify:playlist:sumiu' }).faixa).toBe('trezentosno7');
+    expect(normalizar({ faixa: 'chuva' }).faixa).toBe('trezentosno7');
+    expect(normalizar({ faixa: 'pos' }).faixa).toBe('pos');
+  });
+
+  it('quem tinha a faixa do Batman, que saiu do projeto, volta ao padrão', () => {
+    expect(normalizar({ faixa: 'batman' }).faixa).toBe('trezentosno7');
+  });
+
+  it('a posição da música volta no F5: por pessoa, e só de faixa que existe', () => {
+    gravarPosicao('p1', { faixa: 'mdt', t: 83.27 });
+    expect(lerPosicao('p1')).toEqual({ faixa: 'mdt', t: 83.3 });
+    expect(lerPosicao('p2')).toBeNull();
+    esquecerPosicao('p1');
+    expect(lerPosicao('p1')).toBeNull();
+    localStorage.setItem('som-ambiente-posicao:p1', JSON.stringify({ faixa: 'sumiu', t: 10 }));
+    expect(lerPosicao('p1')).toBeNull();
+    localStorage.setItem('som-ambiente-posicao:p1', '{quebrado');
+    expect(lerPosicao('p1')).toBeNull();
+    localStorage.setItem('som-ambiente-posicao:p1', JSON.stringify({ faixa: 'pos', t: -5 }));
+    expect(lerPosicao('p1')).toEqual({ faixa: 'pos', t: 0 });
+    // Os temas de terror saíram com o Halloween (03/11/2026): não voltam no F5.
+    localStorage.setItem('som-ambiente-posicao:p1', JSON.stringify({ faixa: 'saw', t: 10 }));
+    expect(lerPosicao('p1')).toBeNull();
+    // Faixa que saiu em 13/10 também não volta no F5.
+    localStorage.setItem('som-ambiente-posicao:p1', JSON.stringify({ faixa: 'candyman', t: 10 }));
+    expect(lerPosicao('p1')).toBeNull();
+    // Faixa que saiu do projeto (o Batman) não volta no F5.
+    localStorage.setItem('som-ambiente-posicao:p1', JSON.stringify({ faixa: 'batman', t: 10 }));
+    expect(lerPosicao('p1')).toBeNull();
+  });
+
+  it('quem tinha um tema de terror ou uma música que saiu fica com «300 no 7»', () => {
+    // Os temas de 13/10/2026 e os que saíram com o Halloween, em 03/11/2026.
+    for (const t of ['sexta13', 'candyman', 'pesadelo', 'pecadores', 'saw', 'deadsilence', 'it', 'halloween', 'stranger']) {
+      expect(normalizar({ faixa: t }).faixa).toBe('trezentosno7');
+    }
+    for (const m of ['rainha', 'boladao', 'numb', 'byob', 'bicho', 'gemebaixo', 'veigh', 'puxalanca', 'reliquia']) {
+      expect(normalizar({ faixa: m }).faixa).toBe('trezentosno7');
+    }
+    // As que saíram em 21/10/2026.
+    for (const m of ['provavelmente', 'raindance', 'leao', 'innerbloom', 'flexiona', 'malvadinho']) {
+      expect(normalizar({ faixa: m }).faixa).toBe('trezentosno7');
+    }
+  });
+
+  it('playlists: descarta link ruim, repetido e o que passa do limite', () => {
+    const muitas = Array.from({ length: LIMITE_PLAYLISTS + 5 }, (_, i) => ({
+      url: `https://www.youtube.com/playlist?list=PLlista${String(i).padStart(10, '0')}`, nome: `L${i}`,
+    }));
+    const p = normalizar({
+      playlists: [{ url: SPOTIFY, nome: '' }, { url: `${SPOTIFY}?si=x`, nome: 'dup' }, { url: 'lixo' }, 7, ...muitas],
+    });
+    expect(p.playlists).toHaveLength(LIMITE_PLAYLISTS);
+    expect(p.playlists[0]).toEqual({ id: 'spotify:playlist:37i9dQZF1DX8Uebhn9wzrS', url: SPOTIFY, nome: 'Spotify · Playlist' });
+  });
+
+  it('música da busca do YouTube guarda capa e canal; capa de fora é descartada', () => {
+    const p = normalizar({
+      playlists: [
+        { url: 'https://www.youtube.com/watch?v=jfKfPfyJRdk', nome: 'Lo-fi', capa: 'https://i.ytimg.com/vi/jfKfPfyJRdk/mqdefault.jpg', descricao: 'Lofi Girl' },
+        { url: 'https://www.youtube.com/watch?v=AAAAAAAAAAA', nome: 'Outra', capa: 'https://evil.example/x.jpg' },
+      ],
+    });
+    expect(p.playlists[0]).toEqual({
+      id: 'youtube:video:jfKfPfyJRdk', url: 'https://www.youtube.com/watch?v=jfKfPfyJRdk', nome: 'Lo-fi',
+      capa: 'https://i.ytimg.com/vi/jfKfPfyJRdk/mqdefault.jpg', descricao: 'Lofi Girl',
+    });
+    expect(p.playlists[1].capa).toBeUndefined();
+  });
+
+  it('mantém a playlist escolhida quando ela está salva', () => {
+    const p = normalizar({ faixa: 'spotify:playlist:37i9dQZF1DX8Uebhn9wzrS', playlists: [{ url: SPOTIFY, nome: 'Foco' }] });
+    expect(p.faixa).toBe('spotify:playlist:37i9dQZF1DX8Uebhn9wzrS');
+    expect(p.playlists[0].nome).toBe('Foco');
+  });
+});

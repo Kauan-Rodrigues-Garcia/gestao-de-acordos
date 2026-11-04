@@ -912,11 +912,13 @@ export default function MetasConfig() {
    *  daqui ou do setor de origem escreve a mesma linha. */
   async function buscarClonadosNoSetor(proprios: Operador[]): Promise<Operador[]> {
     if (!empresa?.id || !setorSelecionado) return [];
-    const { data: eqs } = await supabase.from("equipes").select("id").eq("setor_id", setorSelecionado);
+    // As duas leituras não dependem uma da outra: vão juntas.
+    const [{ data: eqs }, clones] = await Promise.all([
+      supabase.from("equipes").select("id").eq("setor_id", setorSelecionado),
+      listarClonesEquipes(empresa.id),  // null = migration pendente
+    ]);
     const eqIds = new Set(((eqs ?? []) as { id: string }[]).map(e => e.id));
     if (!eqIds.size) return [];
-
-    const clones = await listarClonesEquipes(empresa.id);  // null = migration pendente
     if (!clones?.length) return [];
 
     // operador → equipe DESTE setor em que ele é clone (para o filtro de equipe)
@@ -1038,7 +1040,7 @@ export default function MetasConfig() {
   /*
    * Mês fechado (01/10/2026): metas, dias úteis e comissão de um mês já
    * fechado são só leitura — a mesma régua do cadeado de acordos, com a mesma
-   * saída (super admin ou `ignorar_fechamento_mes`). O banco recusa do mesmo
+   * saída (só o super admin, desde 29/10). O banco recusa do mesmo
    * jeito (20261001130000); aqui é para a tela não oferecer o que não grava.
    */
   const fechamento = useFechamentoMes(`${ano}-${String(mes).padStart(2, "0")}`);

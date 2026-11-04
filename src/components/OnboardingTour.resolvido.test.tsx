@@ -1,9 +1,10 @@
 /**
  * O tutorial avisa quando sai do caminho (01/10/2026).
  *
- * A mensagem de Halloween espera o tutorial. Ela olhava `perfil.tour_visto_em`
- * — que o tutorial grava no banco, mas que o perfil em memória só enxerga
- * depois de recarregar. Numa conta nova, a mensagem não aparecia até o F5.
+ * Quem espera o tutorial (hoje, o crachá pendente; até 03/11/2026, também a
+ * mensagem de Halloween) olhava `perfil.tour_visto_em` — que o tutorial grava
+ * no banco, mas que o perfil em memória só enxerga depois de recarregar. Numa
+ * conta nova, a espera não acabava até o F5.
  * Agora o tutorial chama `onFinished` em três situações, e estes testes as
  * prendem: já visto (data no perfil), já visto nesta máquina, e concluído.
  */

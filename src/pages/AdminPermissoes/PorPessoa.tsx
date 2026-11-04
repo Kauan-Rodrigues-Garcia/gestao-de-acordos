@@ -33,7 +33,7 @@ import {
 } from '@/lib/permissoes-catalogo';
 import { montarPorAba } from '@/lib/permissoes-abas';
 import { cn } from '@/lib/utils';
-import { BlocoAba } from './BlocoAba';
+import { PainelDeModulos } from './PainelDeModulos';
 import { useRascunho, type ValorRascunho } from './useRascunho';
 import { usePessoasDaEmpresa } from './usePessoasDaEmpresa';
 import { rotuloDaPessoa, useSetoresDaEmpresa } from './useSetoresDaEmpresa';
@@ -268,42 +268,40 @@ export function PorPessoa() {
               placeholder="Buscar permissão desta pessoa..." className="h-9 pl-9 text-sm" />
           </div>
 
-          {blocos.map(bloco => (
-            <BlocoAba
-              key={bloco.aba}
-              bloco={bloco}
-              valorDe={valorEfetivo}
-              alterada={key => key in rascunho.alteracoes}
-              somenteLeitura={false}
-              filtro={buscaPermissao.trim().toLowerCase()}
-              renderControle={(p, contexto) => {
-                const estado = estadoDe(p.key);
-                const doCargo = valorDoCargo(pessoa.perfil, p.key, pessoa.setor_id);
-                return (
-                  <div className={cn('flex items-center gap-2', contexto.disabled && 'opacity-60')}>
-                    <span className="whitespace-nowrap text-[10px] text-muted-foreground">
-                      cargo: <strong className={doCargo ? 'text-emerald-600 dark:text-emerald-500' : 'text-muted-foreground'}>
-                        {doCargo ? 'sim' : 'não'}
-                      </strong>
-                    </span>
-                    <div className="inline-flex overflow-hidden rounded-lg border border-border">
-                      {ESTADOS.map(op => (
-                        <button key={op.valor} type="button" data-on={estado === op.valor}
-                          disabled={contexto.disabled}
-                          onClick={() => definirEstado(p.key, op.valor)}
-                          className={cn(
-                            'px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors',
-                            'hover:text-foreground disabled:cursor-not-allowed', op.classe,
-                          )}>
-                          {op.label}
-                        </button>
-                      ))}
-                    </div>
+          <PainelDeModulos
+            blocos={blocos}
+            interruptorNaLista={false}
+            valorDe={valorEfetivo}
+            alterada={key => key in rascunho.alteracoes}
+            somenteLeitura={false}
+            filtro={buscaPermissao.trim().toLowerCase()}
+            renderControle={(p, contexto) => {
+              const estado = estadoDe(p.key);
+              const doCargo = valorDoCargo(pessoa.perfil, p.key, pessoa.setor_id);
+              return (
+                <div className={cn('flex items-center gap-2', contexto.disabled && 'opacity-60')}>
+                  <span className="whitespace-nowrap text-[10px] text-muted-foreground">
+                    cargo: <strong className={doCargo ? 'text-emerald-600 dark:text-emerald-500' : 'text-muted-foreground'}>
+                      {doCargo ? 'sim' : 'não'}
+                    </strong>
+                  </span>
+                  <div className="inline-flex overflow-hidden rounded-lg border border-border">
+                    {ESTADOS.map(op => (
+                      <button key={op.valor} type="button" data-on={estado === op.valor}
+                        disabled={contexto.disabled}
+                        onClick={() => definirEstado(p.key, op.valor)}
+                        className={cn(
+                          'px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors',
+                          'hover:text-foreground disabled:cursor-not-allowed', op.classe,
+                        )}>
+                        {op.label}
+                      </button>
+                    ))}
                   </div>
-                );
-              }}
-            />
-          ))}
+                </div>
+              );
+            }}
+          />
         </div>
       )}
     </div>

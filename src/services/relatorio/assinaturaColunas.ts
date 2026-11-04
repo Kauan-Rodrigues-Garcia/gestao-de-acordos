@@ -31,7 +31,7 @@
 import { rpcSemTipo } from '@/lib/supabaseSemTipo';
 
 /** Os relatórios que o sistema conhece. Um formato guardado por empresa e tipo. */
-export type TipoRelatorio = 'analitico_pagueplay' | 'analitico_bookplay' | 'mestre_59';
+export type TipoRelatorio = 'analitico_pagueplay' | 'analitico_bookplay' | 'mestre_59' | 'analitico_994';
 
 export interface MudancaDeColunas {
   /** Colunas que o arquivo trouxe e o formato conhecido não tinha. */

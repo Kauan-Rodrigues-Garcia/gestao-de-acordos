@@ -42,7 +42,7 @@ export default function AcordoDetalhe() {
    * se olha um registro específico, que pode ter sido aberto por link direto de
    * uma notificação antiga.
    */
-  const fechamento = useFechamentoMes(mesDaData(acordo?.vencimento));
+  const fechamento = useFechamentoMes(mesDaData(acordo?.vencimento), { acordos: true });
 
   const fetchAcordo = useCallback(async () => {
     if (!id) return;

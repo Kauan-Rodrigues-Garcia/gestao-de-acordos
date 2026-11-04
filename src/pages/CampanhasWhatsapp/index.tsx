@@ -3,12 +3,13 @@
  *
  * O líder libera a campanha na Campanha Fácil; a parte de cada operador chega
  * aqui, uma mensagem por contato. O operador envia direto pelo WhatsApp (Web ou
- * o app do computador), pode editar a mensagem de um contato só, e fica
- * registrado o que já saiu e o que não deu para enviar.
+ * o app do computador), pode editar a mensagem de um contato só ou todas as
+ * pendentes de uma vez (28/10/2026, `EditarTodas.tsx`), e fica registrado o
+ * que já saiu e o que não deu para enviar.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Check, CheckCircle2, Clock, Copy, Inbox, Loader2, Monitor, Pencil, RotateCcw, Search, Send, Undo2, X, XCircle,
+  AlertTriangle, Check, CheckCircle2, ChevronDown, Clock, Copy, Inbox, Loader2, Monitor, Pencil, RotateCcw, Search, Send, Undo2, X, XCircle,
   Globe, History, Layers, NotebookPen, Repeat, ThumbsDown, ThumbsUp,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -22,10 +23,14 @@ import {
 import { cn } from '@/lib/utils';
 import { copiarTexto } from '@/lib/clipboard';
 import type { EnvioResumo } from '@/pages/CampanhaFacil/campanhaFacilEnvios.service';
+import {
+  ROTULO_ORIGEM, fraseRecebidos, horaDe, origemDoNumero, type Recebimento,
+} from '@/pages/CampanhaFacil/jaRecebeu';
 import { concluida, useCampanhasWhatsapp } from './useCampanhasWhatsapp';
 import { LIMITE_OBSERVACAO } from './campanhasWhatsapp.service';
 import { DialogoMesmaAba, DialogoTrocarApp } from './AjudaWhatsapp';
 import { HistoricoOperador } from './HistoricoOperador';
+import { DialogoEditarTodas } from './EditarTodas';
 import {
   filtrar, proximoPendente, telefoneLegivel, textoDoContato,
   type Contato, type Filtro, type ModoAbrir,
@@ -55,6 +60,7 @@ export default function CampanhasWhatsapp() {
   const [busca, setBusca] = useState('');
   const [limite, setLimite] = useState(POR_PAGINA);
   const [editando, setEditando] = useState<Contato | null>(null);
+  const [editandoTodas, setEditandoTodas] = useState(false);
   const [ajuda, setAjuda] = useState<'mesma-aba' | 'trocar-app' | null>(null);
   const [aba, setAba] = useState<'enviar' | 'historico'>('enviar');
   const lotesAtuais = useMemo(() => new Set(w.campanhas.map((c) => c.lote_id)), [w.campanhas]);
@@ -204,6 +210,13 @@ export default function CampanhasWhatsapp() {
                         {w.selecionada.repasse && ' · repasse de quem faltou'}
                       </p>
                     </div>
+                    <div className="flex flex-wrap gap-2">
+                    {contagem.pendentes > 0 && (
+                      <Button variant="outline" className="gap-2" onClick={() => setEditandoTodas(true)}
+                              title="Mudar o texto de todas as mensagens pendentes de uma vez">
+                        <Pencil className="h-4 w-4" /> Editar todas
+                      </Button>
+                    )}
                     <Button
                       className="gap-2 bg-emerald-600 text-white hover:bg-emerald-700"
                       disabled={!proximo}
@@ -213,6 +226,7 @@ export default function CampanhasWhatsapp() {
                       <Send className="h-4 w-4" />
                       {proximo ? 'Enviar a próxima' : contagem.pendentes > 0 ? 'Pendentes sem número' : 'Tudo enviado'}
                     </Button>
+                    </div>
                   </div>
 
                   <div className="space-y-1.5">
@@ -274,6 +288,7 @@ export default function CampanhasWhatsapp() {
                   {lista.slice(0, limite).map((c) => (
                     <LinhaContato
                       key={c.id} c={c} proximo={c.id === proximo?.id}
+                      recebidos={w.recebidos.get(c.id)}
                       onEnviar={() => w.enviar(c)}
                       onEnviar2={() => w.enviar(c, 2)}
                       onCopiar={() => void w.copiar(c)}
@@ -302,6 +317,13 @@ export default function CampanhasWhatsapp() {
           onFechar={() => setEditando(null)}
           onSalvar={async (texto) => { await w.salvarMensagem(editando, texto); setEditando(null); }}
           onCopiou={() => w.marcarEnviada(editando)}
+        />
+      )}
+      {editandoTodas && w.selecionada && (
+        <DialogoEditarTodas
+          envioId={w.selecionada.id}
+          onFechar={() => setEditandoTodas(false)}
+          onSalvar={w.reescreverTodas}
         />
       )}
       {ajuda === 'mesma-aba' && <DialogoMesmaAba instalado={w.mesmaAba} onFechar={() => setAjuda(null)} />}
@@ -497,8 +519,52 @@ function Aba({ ativo, onClick, rotulo, n, icone }: {
   );
 }
 
-function LinhaContato({ c, proximo, onEnviar, onEnviar2, onCopiar, onEditar, onNaoDeu, onVoltar }: {
-  c: Contato; proximo: boolean;
+/**
+ * «Já recebeu mensagem hoje» (26/10/2026, 20261026190000): o que saiu hoje pela
+ * Campanha Fácil para este Nr.Documento ou para estes números, de qualquer
+ * setor. Sem setor nem operador — só por onde chegou e a que horas.
+ */
+function JaRecebeuHoje({ c, lista }: { c: Contato; lista: readonly Recebimento[] }) {
+  const [aberto, setAberto] = useState(false);
+  return (
+    <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 text-xs">
+      <button
+        type="button" onClick={() => setAberto((a) => !a)} aria-expanded={aberto}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left"
+      >
+        <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+        <span className="min-w-0 flex-1 font-medium text-amber-800 dark:text-amber-300">{fraseRecebidos(lista)}</span>
+        <ChevronDown className={cn('h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform', aberto && 'rotate-180')} />
+      </button>
+      {aberto && (
+        <ul className="space-y-1 border-t border-amber-500/20 px-3 py-2">
+          {lista.map((r, i) => {
+            const origem = origemDoNumero(r.numero, c.whatsapp, c.whatsapp2);
+            return (
+              <li key={i} className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                <span className="w-11 shrink-0 font-semibold tabular-nums">{horaDe(r.enviado_em)}</span>
+                <span className={cn(origem === 'outro' && 'font-medium text-amber-800 dark:text-amber-300')}>
+                  {ROTULO_ORIGEM[origem]}
+                </span>
+                {r.numero && <span className="tabular-nums text-muted-foreground">{telefoneLegivel(r.numero, r.numero)}</span>}
+                {origem === 'outro' && <span className="text-muted-foreground">· não é nenhum dos números desta mensagem</span>}
+                {!r.mesmo_contrato && (
+                  <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">outro contrato</span>
+                )}
+              </li>
+            );
+          })}
+          <li className="pt-1 text-[11px] text-muted-foreground">
+            Aproximado: conta só o que saiu pela Campanha Fácil.
+          </li>
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function LinhaContato({ c, proximo, recebidos, onEnviar, onEnviar2, onCopiar, onEditar, onNaoDeu, onVoltar }: {
+  c: Contato; proximo: boolean; recebidos?: readonly Recebimento[];
   onEnviar: () => void; onEnviar2: () => void; onCopiar: () => void;
   onEditar: () => void; onNaoDeu: () => void; onVoltar: () => void;
 }) {
@@ -548,6 +614,7 @@ function LinhaContato({ c, proximo, onEnviar, onEnviar2, onCopiar, onEditar, onN
             <Campo rotulo="WhatsApp" valor={fone} copiavel />
             <Campo rotulo="Fone 2" valor={fone2} copiavel />
           </dl>
+          {recebidos && recebidos.length > 0 && <JaRecebeuHoje c={c} lista={recebidos} />}
         </div>
 
         <div className="flex shrink-0 flex-wrap items-center gap-1">

@@ -155,13 +155,13 @@ export function useAcordos(filtros?: UseAcordosOptions): UseAcordosResult {
       status, tipo, operador_id, setor_id, equipe_id, empresa_id,
       vencimento, data_inicio, data_fim, busca,
       apenas_hoje, page, perPage, enableRealtime, prioritize_today,
-      status_exceto, tag_ids,
+      status_exceto, tag_ids, ids, estado_uf,
     } = filtros;
     return JSON.stringify({
       status, tipo, operador_id, setor_id, equipe_id, empresa_id,
       vencimento, data_inicio, data_fim, busca,
       apenas_hoje, page, perPage, enableRealtime, prioritize_today,
-      status_exceto, tag_ids,
+      status_exceto, tag_ids, ids, estado_uf,
     });
   })();
 

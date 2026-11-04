@@ -33,9 +33,9 @@ import {
   LayoutDashboard, FileText, Plus, Users, Settings, Trash2, TrendingUp,
   BarChart3, Upload, Target, BarChart2, Megaphone, MessageSquarePlus,
   Ticket, ClipboardList, ClipboardCheck, Smartphone, MessageCircle, Gauge,
-  ShoppingBag, Handshake, Send, Zap,
+  ShoppingBag, Handshake, Send, Zap, Tv,
 } from 'lucide-react';
-import { ROUTE_PATHS } from '@/lib/index';
+import { CARGOS_MODO_TV, ROUTE_PATHS } from '@/lib/index';
 import { produtoPermite, type Produto } from '@/lib/produto';
 
 export interface NavItem {
@@ -226,6 +226,10 @@ export const NAV_ITEMS: NavItem[] = [
   // também para quem já tinha arrumado o menu antes dela existir.
   { label: 'Pix Automático',   icon: Zap,             to: ROUTE_PATHS.PIX_AUTOMATICO,      produtos: SO_COBRANCA, hiddenForPaguePay: true, permissaoKey: 'ver_pix_automatico', depoisDe: ROUTE_PATHS.ACORDO_NOVO },
   { label: 'Painel Líder',     icon: BarChart3,       to: ROUTE_PATHS.PAINEL_LIDER,        produtos: SO_COBRANCA, roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_painel_lider' },
+  // Modo TV 2 (27/10/2026). Por CARGO, sem chave: só líder, elite e acima
+  // (Cleber, 27/10). É a régua de `fn_tv_alvo_no_meu_alcance` no banco — uma
+  // chave configurável deixaria o menu dizer «pode» onde a RLS diz «não».
+  { label: 'Modo TV',          icon: Tv,              to: ROUTE_PATHS.MODO_TV,             produtos: SO_COBRANCA, roles: [...CARGOS_MODO_TV], depoisDe: ROUTE_PATHS.PAINEL_LIDER },
   { label: 'Painel Diretoria', icon: TrendingUp,      to: ROUTE_PATHS.PAINEL_DIRETORIA,    produtos: SO_COBRANCA, roles: ['diretoria','administrador'], permissaoKey: 'ver_painel_diretoria' },
   // Cadastrar gente é necessidade de qualquer operação, e a tela é sobre
   // pessoa, setor e equipe — vocabulário que Vendas e RH também usam.

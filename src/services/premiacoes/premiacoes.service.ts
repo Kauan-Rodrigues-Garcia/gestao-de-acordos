@@ -10,6 +10,7 @@
  */
 import { rpcSemTipo } from '@/lib/supabaseSemTipo';
 import type { TipoRemuneracao, VinculoSetor } from './calculoPremiacoes';
+import { buscarConfigDoMes } from '@/services/fechamento/configDoMes';
 
 interface RespostaDados {
   setores?: { setor_id: string; celula: string; tipo_remuneracao: string }[] | null;
@@ -54,12 +55,45 @@ export async function buscarDadosPremiacoes(
       vinculos.set(s.setor_id, { celula: s.celula, tipo: s.tipo_remuneracao });
     }
   }
+  const doMes = vinculosDoMes(
+    vinculos,
+    (await buscarConfigDoMes(empresaId, `${ano}-${String(mes).padStart(2, '0')}`))?.rhSetores ?? null,
+  );
+
   const crachas = new Map<string, string>();
   for (const c of data?.crachas ?? []) {
     const cracha = c.cracha?.trim();
     if (c.operador_id && cracha) crachas.set(c.operador_id, cracha);
   }
-  return { vinculos, crachas, disponivel: true, erro: null };
+  return { vinculos: doMes ?? vinculos, crachas, disponivel: true, erro: null };
+}
+
+/**
+ * Mês fechado (31/10/2026): os setores ligados ao RH e o tipo de remuneração
+ * DAQUELE mês (`composicao_mes_config.rh_setores`). Mudar um setor de premiação
+ * para comissão em novembro não muda como outubro é pago.
+ *
+ * A cidade vem pelo nome que a RPC devolve hoje — do próprio setor, ou de outro
+ * setor da mesma célula; setor cuja célula não aparece em lugar nenhum fica de
+ * fora. `null` = sem config do mês: vale a de hoje. Exportada para os testes.
+ */
+export function vinculosDoMes(
+  hoje: ReadonlyMap<string, VinculoSetor>,
+  rhSetores: readonly Record<string, unknown>[] | null,
+): Map<string, VinculoSetor> | null {
+  if (!rhSetores) return null;
+  const celulaPorId = new Map<string, string>();
+  for (const r of rhSetores) {
+    const nome = hoje.get(String(r.setor_id))?.celula;
+    if (nome && r.celula_id) celulaPorId.set(String(r.celula_id), nome);
+  }
+  const saida = new Map<string, VinculoSetor>();
+  for (const r of rhSetores) {
+    if (r.ativo === false || !ehTipo(r.tipo_remuneracao) || !r.setor_id) continue;
+    const celula = hoje.get(String(r.setor_id))?.celula ?? celulaPorId.get(String(r.celula_id));
+    if (celula) saida.set(String(r.setor_id), { celula, tipo: r.tipo_remuneracao });
+  }
+  return saida;
 }
 
 /** Grava (ou apaga, com `null`) o crachá do operador. */

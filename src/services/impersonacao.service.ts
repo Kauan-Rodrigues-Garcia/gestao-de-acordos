@@ -29,6 +29,13 @@ export interface ImpersonacaoAtiva {
   adminId: string;
   adminNome: string;
   inicio: string;
+  /** A tela do super admin quando entrou, para voltar a ela ao sair. */
+  voltarPara?: string;
+}
+
+/** O app do celular mora em `#/m`: lá a impersonação continua no app. */
+function ehAppDoCelular(hash: string): boolean {
+  return /^#\/m(?:[/?]|$)/.test(hash);
 }
 
 export function getImpersonacaoAtiva(): ImpersonacaoAtiva | null {
@@ -96,24 +103,72 @@ export async function iniciarImpersonacao(
     alvo: { id: string; nome: string };
   };
 
-  // 3) Troca a sessão do navegador para a do alvo
+  // 3) Guarda a volta ANTES de trocar a sessão. Gravada depois, uma aba que
+  // fechasse no meio deixava o super admin preso na conta do alvo, sem faixa
+  // e sem caminho de volta.
+  localStorage.setItem(K_ADMIN, JSON.stringify(salva));
+
+  // 4) Troca a sessão do navegador para a do alvo
   const { error } = await supabase.auth.verifyOtp({ token_hash, type: 'magiclink' });
   if (error) {
+    localStorage.removeItem(K_ADMIN);
     throw new Error(`Não foi possível assumir a sessão do usuário: ${error.message}`);
   }
 
-  // 4) Persiste estado e recarrega
-  localStorage.setItem(K_ADMIN, JSON.stringify(salva));
+  // 5) Persiste estado e recarrega. Fora do app do celular, a pessoa começa no
+  // início dela: a tela de onde o super admin saiu (Usuários) não é dela.
+  const voltarPara = window.location.hash;
   const ativa: ImpersonacaoAtiva = {
     alvoId: alvo.id,
     alvoNome: alvo.nome || 'usuário',
     adminId,
     adminNome,
     inicio: new Date().toISOString(),
+    voltarPara,
   };
   localStorage.setItem(K_ATIVA, JSON.stringify(ativa));
   notificar();
+  if (!ehAppDoCelular(voltarPara)) window.location.hash = '#/';
   window.location.reload();
+}
+
+/**
+ * Encerra no servidor a sessão que a impersonação abriu (28/10/2026).
+ *
+ * Só sair do navegador deixava a sessão do alvo viva no Supabase, com um
+ * refresh token que valia por semanas. `scope=local` encerra SÓ esta sessão:
+ * as da pessoa, no celular e no computador dela, seguem como estavam. Vai
+ * direto à API, e não por `supabase.auth.signOut`, para o app não receber um
+ * SIGNED_OUT no meio da volta. Nunca lança: a volta não depende disto.
+ */
+async function encerrarSessaoDoAlvo(): Promise<void> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+    const chave = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+    if (!session?.access_token || !url || !chave) return;
+    await fetch(`${url.replace(/\/$/, '')}/auth/v1/logout?scope=local`, {
+      method: 'POST',
+      headers: { apikey: chave, Authorization: `Bearer ${session.access_token}` },
+    });
+  } catch { /* a sessão expira sozinha */ }
+}
+
+/**
+ * As outras abas acompanham a troca de conta (28/10/2026).
+ *
+ * A sessão do Supabase é uma só para o navegador: entrar como alguém numa aba
+ * troca o token das outras também, mas elas seguiam desenhadas como o super
+ * admin, gravando com a mão do alvo. Quem muda a impersonação em outra aba
+ * recarrega esta. Devolve a função que desliga a escuta.
+ */
+export function vigiarImpersonacaoEntreAbas(): () => void {
+  if (typeof window === 'undefined') return () => undefined;
+  const aoMudar = (e: StorageEvent) => {
+    if (e.key === K_ATIVA && e.oldValue !== e.newValue) window.location.reload();
+  };
+  window.addEventListener('storage', aoMudar);
+  return () => window.removeEventListener('storage', aoMudar);
 }
 
 /** Volta a ser o super_admin. Recarrega ao final. */
@@ -123,9 +178,14 @@ export async function sairImpersonacao(): Promise<void> {
   localStorage.removeItem(K_ATIVA);
   localStorage.removeItem(K_ADMIN);
 
+  // Antes de trocar de volta: depois do `setSession` o token na mão já é o do
+  // super admin.
+  await encerrarSessaoDoAlvo();
+
   if (!raw) {
     // Sem sessão salva — melhor deslogar do que ficar preso como o alvo.
-    await supabase.auth.signOut();
+    // `local`: o padrão (global) derrubaria a pessoa em todos os aparelhos.
+    await supabase.auth.signOut({ scope: 'local' }).catch((): void => undefined);
     notificar();
     window.location.reload();
     return;
@@ -174,8 +234,11 @@ export async function sairImpersonacao(): Promise<void> {
 
   notificar();
   if (error) {
-    // Não conseguiu restaurar — desloga para não ficar preso como o alvo.
-    await supabase.auth.signOut();
+    // Não conseguiu restaurar — desloga para não ficar preso como o alvo. A
+    // sessão do alvo já foi encerrada acima; `local` só limpa este navegador.
+    await supabase.auth.signOut({ scope: 'local' }).catch((): void => undefined);
   }
+  // De volta à tela onde o super admin estava quando entrou.
+  if (!error && ativa?.voltarPara) window.location.hash = ativa.voltarPara;
   window.location.reload();
 }

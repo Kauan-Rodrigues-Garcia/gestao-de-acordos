@@ -26,6 +26,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { assinarTabela } from '@/lib/realtime';
+import { ESCUTAS_CANAL_PESSOAL, topicoPessoal } from '@/lib/canalPessoal';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import {
@@ -363,10 +364,13 @@ export function useChat(
     };
 
     return assinarTabela(
-      { topico: `chat:${meuId}`, escutas: [{ sinal: 'mensagem' }, { sinal: 'participante' }] },
+      { topico: topicoPessoal(meuId), escutas: ESCUTAS_CANAL_PESSOAL },
       {
         onSinal: (payload, sinal) => {
           if (ciclo !== sessao.current) return;
+
+          // O convite do Bingo usa o mesmo canal e não é da conta do chat.
+          if (sinal === 'bingo') return;
 
           // `participante`: leitura do outro, conversa revelada, apagada.
           if (sinal !== 'mensagem') { agendarRefazer(); return; }

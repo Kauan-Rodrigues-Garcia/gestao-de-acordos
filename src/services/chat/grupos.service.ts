@@ -127,6 +127,31 @@ export async function sairDoGrupo(conversaId: string): Promise<{ erro: string | 
   return { erro: error ? traduzir(error.message) : null };
 }
 
+/** Um grupo na lista do super admin: nome, foto e contagem — nada de mensagem. */
+export interface GrupoDoSistema {
+  id:                 string;
+  nome:               string;
+  foto_url:           string | null;
+  somente_lideranca:  boolean;
+  participantes:      number;
+  /** O super admin está dentro deste grupo. */
+  sou_parte:          boolean;
+  criado_em:          string;
+  ultima_mensagem_em: string | null;
+}
+
+/**
+ * Todos os grupos do chat, para o super admin administrar (29/10/2026).
+ *
+ * Administrar não é ler: `fn_chat_grupos_todos` não devolve mensagem, e as
+ * policies continuam escondendo a conversa de quem não está nela.
+ */
+export async function listarTodosOsGrupos(): Promise<{ grupos: GrupoDoSistema[]; erro: string | null }> {
+  const { data, error } = await rpcSemTipo<GrupoDoSistema[]>('fn_chat_grupos_todos', {});
+  if (error) return { grupos: [], erro: traduzir(error.message) };
+  return { grupos: data ?? [], erro: null };
+}
+
 export async function listarMembros(conversaId: string): Promise<MembroGrupo[]> {
   const { data, error } = await rpcSemTipo<MembroGrupo[]>('fn_chat_grupo_membros', {
     p_conversa: conversaId,

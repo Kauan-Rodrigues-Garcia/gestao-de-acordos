@@ -20,7 +20,7 @@ import { useAnaliticoDashboard, agregarAnalitico } from '@/hooks/useAnaliticoDas
 import { useEscopoAnalitico } from '@/hooks/useEscopoAnalitico';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
-import { useHoPercentual, repassePercentuais } from '@/lib/hoPercentual';
+import { repassePercentuais } from '@/lib/hoPercentual';
 import { useTenant } from '@/lib/tenant-config';
 import { formatBRL } from '@/lib/money';
 import { pctLimitado } from '@/lib/projecaoMetas';
@@ -51,6 +51,7 @@ import { DiretoriaSetores } from './DiretoriaSetores';
 import { esquecerLeiturasDo59 } from '@/services/mestre/cache59';
 import { corDaForma, iconeDaForma, EVOL_AGENDADO, EVOL_RECEBIDO } from './types';
 import { corTexto } from '@/lib/temas';
+import { useHoPercentualDoMes } from '@/hooks/useHoPercentualDoMes';
 
 /*
  * Carregada só quando a aba é aberta. Ela traz o parser do 59 e a tabela de
@@ -98,7 +99,9 @@ type AbaDoPainel = 'visao' | 'setores' | 'operadores' | 'equipes' | 'divergencia
  */
 export default function PainelDiretoria() {
   // H.O. configurado (aba Metas): só onde não há relatório — tabulação e agendado.
-  const ho = useHoPercentual();
+  // No mês fechado, o que valia NAQUELE mês (retrato, 31/10/2026).
+  const { mes: mesDoHo } = useMesGlobal();
+  const ho = useHoPercentualDoMes(mesDoHo);
   const repasse = repassePercentuais(ho);
   const { tickColor, gridColor } = useAxisColors();
   const { perfil } = useAuth();
@@ -380,7 +383,11 @@ export default function PainelDiretoria() {
 
   // `usaPainel59` e a aba moraram aqui até 17/09/2026; subiram para antes dos
   // hooks do painel antigo, que agora dependem deles para saber se buscam.
-  const podeVerRelatorioPP = isPP && temPermissao('ver_painel_diretoria') && temPermissao('painel_diretoria_escopo_todos_setores');
+  // Os relatórios da regra Cofen moram na PaguePlay: quem vê o Painel
+  // Diretoria dela vê e importa (30/10/2026; antes pedia também o escopo de
+  // todos os setores). O banco confere o mesmo (`fn_pp_relatorio_acesso`,
+  // 20261030233000).
+  const podeVerRelatorioPP = isPP && temPermissao('ver_painel_diretoria');
   /*
    * O botão «Atualizar» do cabeçalho para as abas do 59. Um contador em vez de
    * uma função de recarga vinda de baixo: cada aba busca dentro dela mesma, e

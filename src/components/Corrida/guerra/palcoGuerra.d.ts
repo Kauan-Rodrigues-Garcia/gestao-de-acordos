@@ -39,6 +39,7 @@ export interface OpcoesPalcoGuerra {
   /**
    * A medalha que sai dele quando cai e voa para o álbum do topo: 'real' (só se esta tela atirou; avisa o
    * álbum com o evento `insignia-ganha`), 'teste' (só a animação) ou nada (quem assiste como organizador).
+   * O álbum está em `arquivo-morto/halloween/` desde 03/11/2026: sem ele a medalha voa para o meio do topo.
    */
   medalha?: 'real' | 'teste';
 }

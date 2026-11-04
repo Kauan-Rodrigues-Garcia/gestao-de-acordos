@@ -238,8 +238,8 @@ interface OnboardingTourProps {
   termoLoading: boolean;
   /**
    * Chamado quando o tutorial deixa de estar no caminho: concluído, pulado,
-   * ou já visto antes (aí ele nem abre). Quem espera o tutorial — a mensagem
-   * de Halloween — escuta isto, e não `perfil.tour_visto_em`: a data é gravada
+   * ou já visto antes (aí ele nem abre). Quem espera o tutorial — o crachá
+   * pendente — escuta isto, e não `perfil.tour_visto_em`: a data é gravada
    * no banco, mas o perfil em memória só a vê depois de recarregar a página.
    * Passe uma função estável (`useCallback`).
    */
@@ -286,7 +286,7 @@ export function OnboardingTour({ precisaAceitar, termoLoading, onFinished }: Onb
     if (getImpersonacaoAtiva()) return;
     const chave = chaveDoTour(user.id);
     // Tutorial já visto: avisa que não vai abrir, para quem espera por ele
-    // (a mensagem de Halloween) seguir sem precisar recarregar a página.
+    // (o crachá pendente) seguir sem precisar recarregar a página.
     if (localStorage.getItem(chave)) { onFinished?.(); return; }
     if (tourVistoEm) {
       localStorage.setItem(chave, '1');

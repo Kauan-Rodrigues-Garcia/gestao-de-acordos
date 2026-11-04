@@ -5,7 +5,7 @@
  * tudo. A gravação aqui é a mesma do botão de verdade, só não sobe.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FastForward, Flag, Music, Play, RotateCcw, Video } from 'lucide-react';
+import { FastForward, Flag, Music, Play, RotateCcw, Video, Zap } from 'lucide-react';
 import { useAuthOpcional } from '@/hooks/useAuth';
 import { PalcoCorrida } from './PalcoCorrida';
 import { bichinhoDe } from './motor/bichinhos';
@@ -42,9 +42,11 @@ interface Props {
   premio: string; onFechar: () => void;
   /** Só no laboratório: o cenário, se você corre ou só assiste, e o palpite de mentira. */
   tema?: TemaLobby; visao?: 'corredor' | 'torcida'; palpiteDemo?: boolean;
+  /** A corrida especial (o mapa grande, fora da roleta). Dá para trocar na barra antes de gravar. */
+  especial?: boolean;
 }
 
-export default function TesteCorrida({ premio, onFechar, tema, visao = 'corredor', palpiteDemo }: Props) {
+export default function TesteCorrida({ premio, onFechar, tema, visao = 'corredor', palpiteDemo, especial: especialInicial = false }: Props) {
   const auth = useAuthOpcional();
   const eu = auth?.user?.id ?? 'eu-no-teste';
   const meuNome = (auth?.perfil as { nome?: string } | null | undefined)?.nome ?? 'Você';
@@ -55,6 +57,7 @@ export default function TesteCorrida({ premio, onFechar, tema, visao = 'corredor
   const [gravacao, setGravacao] = useState<{ rec: Gravacao; faixa: string[]; parada: number } | null>(null);
   const [videos, setVideos] = useState<VideosDaFesta | null>(null);
   const [gravando, setGravando] = useState<number | null>(null);
+  const [especial, setEspecial] = useState(especialInicial);
   const [, tique] = useState(0);
   const ID = -1;
 
@@ -114,7 +117,7 @@ export default function TesteCorrida({ premio, onFechar, tema, visao = 'corredor
     try {
       const r = await m.gravar({
         pessoas: base.filter(p => p.corre).map(p => ({ id: p.usuario, nome: p.nome, setor: p.setor, foto: p.foto, est: bichinhoDe(ID, p.usuario, p.escolha) })),
-        premio: premio || null, aoProgresso: f => setGravando(f),
+        premio: premio || null, especial, aoProgresso: f => setGravando(f),
       });
       if (!r) return;
       setGravacao({ rec: r.rec, faixa: r.faixa, parada: r.parada });
@@ -127,6 +130,10 @@ export default function TesteCorrida({ premio, onFechar, tema, visao = 'corredor
   const barra = (
     <div className="flex flex-wrap items-center gap-2 border-b border-[#ffd84d]/30 bg-[#ffd84d]/10 px-4 py-2 text-[13px]">
       <span className="font-bold uppercase tracking-wider text-[#ffd84d]">Teste · só na sua tela</span>
+      <button type="button" aria-pressed={especial} disabled={gravando != null} title="Corrida especial: o mapa grande (Fliperama Turbo). Vale para a próxima gravação."
+        className={`${btn} ${especial ? 'border-[#5ff0f0] bg-[#5ff0f0]/15 text-[#5ff0f0]' : ''}`} onClick={() => setEspecial(v => !v)}>
+        <Zap className="h-3.5 w-3.5" /> Especial {especial ? 'ligada' : 'desligada'}
+      </button>
       <button type="button" className={btn} onClick={() => { setAbertaEm(agoraLocal()); setIniciaEm(null); }}><RotateCcw className="h-3.5 w-3.5" /> Lobby do zero</button>
       <button type="button" className={btn} disabled={!!iniciaEm} onClick={() => setAbertaEm(agoraLocal() - 15)}><Music className="h-3.5 w-3.5" /> Música agora</button>
       <button type="button" className={btn} disabled={gravando != null} onClick={() => void gravar()}><Video className="h-3.5 w-3.5" /> {gravando != null ? `Gravando ${Math.round(gravando * 100)}%` : gravacao ? 'Gravar de novo' : 'Gravar'}</button>

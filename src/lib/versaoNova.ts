@@ -29,8 +29,14 @@
  *      pedaço do app não carrega. Em vez da tela de erro, recarrega — uma vez:
  *      se falhar de novo logo em seguida, o erro segue o caminho de sempre.
  *
+ *   5. A TV NA PAREDE (`/tv`, 29/10/2026) não tem quem aperte botão nem troca
+ *      de tela: lá não aparece aviso — ela recarrega sozinha assim que sabe da
+ *      versão nova. O pareamento fica no `localStorage`, a TV volta no mesmo
+ *      painel.
+ *
  * Nenhuma recarga em laço: cada versão recarrega sozinha no máximo uma vez por
- * aba. Se a CDN ainda estiver servindo a página velha, sobra o aviso.
+ * aba. Se a CDN ainda estiver servindo a página velha, sobra o aviso (na TV,
+ * nada: ela pega a versão no deploy seguinte).
  */
 
 declare const __APP_VERSION__: string;
@@ -54,6 +60,11 @@ function gravarSessao(chave: string, valor: string): void {
 /** A versão que esta aba está rodando. `'dev'` no `vite dev`. */
 export function versaoAtual(): string {
   return typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : 'dev';
+}
+
+/** A TV na parede (`/tv`): troca de versão sozinha, sem aviso. */
+export function ehTelaDeTv(pathname: string): boolean {
+  return pathname === '/tv' || pathname.startsWith('/tv/');
 }
 
 /** Esta aba já recarregou sozinha para esta versão? Então não de novo. */

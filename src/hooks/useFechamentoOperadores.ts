@@ -50,6 +50,7 @@ import {
   montarLinhaFechamento, ordenarLinhasFechamento, resumirFechamento,
   type LinhaFechamento, type ResumoFechamento,
 } from '@/services/fechamentoOperadores/calculoFechamento';
+import { buscarTreinamentoDasEquipes } from '@/services/fechamento/configDoMes';
 
 interface PerfilFechamento {
   id: string;
@@ -160,8 +161,8 @@ export function useFechamentoOperadores({
             .eq('empresa_id', empresaId).eq('tipo', 'operador')
             .eq('mes', mesNum).eq('ano', ano),
           getMetasConfig(empresaId, mesNum, ano),
-          supabase.from('equipes').select('id, treinamento, treinamento_inicio')
-            .eq('empresa_id', empresaId),
+          // Mês fechado: o treinamento DAQUELE mês (retrato).
+          buscarTreinamentoDasEquipes(empresaId, mes),
           buscarEquipesComOperadores(empresaId, mes),
           buscarManuaisDoMes(empresaId, ano, mesNum),
           // Mês fechado: a lista DAQUELE mês (ver `pessoasDoMes.ts`).

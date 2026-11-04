@@ -92,9 +92,8 @@ export function useEnviosCampanha(empresaId: string | null, perfil: Perfil | nul
     return () => { ativo = false; };
   }, [setorFixo, empresaId, perfil?.setor_id]);
 
-  // Operadores do setor. Todos começam marcados: o comum é a equipe inteira
-  // mandar, e desmarcar quem faltou é menos clique do que marcar quem veio.
-  // Os líderes vêm desmarcados: entram só quando o líder escolhe.
+  // Operadores do setor. Todos começam DESMARCADOS (Cleber, 29/10/2026): a
+  // campanha vai só para quem o líder marcar — antes vinham todos marcados.
   useEffect(() => {
     if (!empresaId || !setorId) { setOperadores([]); setSelecionados(new Set()); return; }
     let ativo = true;
@@ -104,7 +103,7 @@ export function useEnviosCampanha(empresaId: string | null, perfil: Perfil | nul
       .then((lista) => {
         if (!ativo) return;
         setOperadores(lista);
-        setSelecionados(new Set(lista.filter((o) => !o.lider).map((o) => o.id)));
+        setSelecionados(new Set());
       })
       .catch((err) => {
         console.error('[CampanhaFacil] operadores:', err);

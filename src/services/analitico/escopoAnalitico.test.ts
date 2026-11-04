@@ -260,3 +260,31 @@ describe('linha de contribuição (2ª perna do Integral)', () => {
     expect(linhaNoEscopo(contribuicaoPlay4, escopo)).toBe(false);
   });
 });
+
+/*
+ * 28/10/2026: o 994 é dono da Retenção. Quando o 59 lança o mesmo pagamento
+ * como extra para outro operador em outro setor, a linha do 994 é o espelho
+ * (`espelho_extra`): conta para a pessoa, a equipe e o setor dela; na empresa,
+ * o dinheiro já está no setor que o 59 creditou. Out/2026: NR 13052605, R$ 1.500
+ * na Jessica (994) e na Juliana (59).
+ */
+describe('espelho do extra da Retenção (994)', () => {
+  const JORNADA = 'setor-jornada';
+  const JESSICA = 'op-jessica';
+  const espelho: LinhaEscopavel = { operador_id: JESSICA, setor_id: JORNADA, espelho_extra: true };
+
+  it('não conta no total da empresa — já está no setor do extra', () => {
+    expect(linhaNoEscopo(espelho, ESCOPO_EMPRESA)).toBe(false);
+  });
+
+  it('conta para a pessoa, a equipe e o setor dela', () => {
+    expect(linhaNoEscopo(espelho, { tipo: 'operador', operadorId: JESSICA })).toBe(true);
+    expect(linhaNoEscopo(espelho, { tipo: 'equipe', operadores: new Set([JESSICA]) })).toBe(true);
+    const setor = escopoDeSetor({ setorId: JORNADA, alternativo: false, operadores: new Set([JESSICA]), temCarimbo: true });
+    expect(linhaNoEscopo(espelho, setor)).toBe(true);
+  });
+
+  it('a linha do 994 sem par no 59 conta na empresa como qualquer outra', () => {
+    expect(linhaNoEscopo({ ...espelho, espelho_extra: false }, ESCOPO_EMPRESA)).toBe(true);
+  });
+});

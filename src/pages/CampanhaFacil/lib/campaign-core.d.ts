@@ -10,10 +10,14 @@ export interface Discounts {
   annual: number;
   /** % de desconto do Pix Automático sobre o Valor Aberto (21/10/2026; antes, sobre o valor com juros). */
   pix_automatico: number;
+  /** % de desconto do Cartão Recorrente sobre o Valor Aberto — o Pix Automático clonado (27/10/2026). */
+  cartao_recorrente: number;
 }
 
 /** Os dados do cliente que vêm do mailing e viram variável da mensagem. */
-export type MailingFieldKey = 'endereco' | 'cidade' | 'local_trabalho' | 'ocupacao' | 'tempo_atraso';
+export type MailingFieldKey =
+  | 'endereco' | 'cidade' | 'local_trabalho' | 'ocupacao' | 'tempo_atraso'
+  | 'nome_avalista' | 'cpf_avalista';
 
 export interface MailingField {
   key: MailingFieldKey;
@@ -121,12 +125,25 @@ export interface CampaignItem {
    * em atraso.
    */
   pixAutoParcela: number | null;
+  /** Cartão Recorrente (27/10/2026): as mesmas contas do Pix Automático, com o % dele. */
+  cardRecurring: number | null;
+  cardRecurringDiscount: number | null;
+  cardRecurringParcela: number | null;
   /**
    * Cada modalidade parcelada em 12x, 20x e 21x (16/10/2026): a chave é o
    * número de parcelas. `null` no relatório sem valores. A junção (`bundle`)
    * sai em 6x e 12x (20/10/2026).
    */
-  installments: Record<'bundle' | 'cardSettlement' | 'cardAnnual' | 'pixAuto' | 'pixAutoDiscount', Record<number, number | null>>;
+  installments: Record<
+    'bundle' | 'cardSettlement' | 'cardAnnual' | 'pixAuto' | 'pixAutoDiscount' | 'cardRecurring' | 'cardRecurringDiscount',
+    Record<number, number | null>
+  >;
+  /**
+   * Variáveis refeitas para este cliente (27/10/2026): o parcelamento
+   * recalculado para a parcela não ficar abaixo do mínimo. `variablesFor`
+   * põe estas por cima das calculadas.
+   */
+  variableOverrides?: Record<string, string>;
   /** Os dados do cliente que vêm do mailing; vazio quando a coluna falta. */
   mailing: Record<MailingFieldKey, string>;
   saleType: string;

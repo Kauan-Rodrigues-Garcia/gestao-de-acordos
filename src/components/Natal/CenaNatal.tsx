@@ -2,8 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTheme } from 'next-themes';
 import { ehTemaEscuro } from '@/lib/temas';
 import { cn } from '@/lib/utils';
-import { EVENTO_ACORDO_SALVO } from '@/components/Halloween/tema';
-import { EVENTO_FESTA, EVENTO_TRENO, type CenaNatal } from './tema';
+import { EVENTO_ACORDO_SALVO, EVENTO_FESTA, EVENTO_TRENO, type CenaNatal } from './tema';
 import { VAO, naCurva } from './varal';
 import './natal.css';
 

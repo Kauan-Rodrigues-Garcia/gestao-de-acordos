@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/command';
 import { PERFIL_COLORS, PERFIL_LABELS } from '@/lib/index';
 import { cn } from '@/lib/utils';
-import { iniciais, mesmoDestino, type Destino, type OpcaoDeDestino, type PessoaEq } from './modelo';
+import { iniciais, mesmoDestino, nomeCurto, type Destino, type OpcaoDeDestino, type PessoaEq } from './modelo';
 
 // ── Mover para… ──────────────────────────────────────────────────────────────
 
@@ -90,6 +90,11 @@ export function PessoaLinha({
 }: PessoaLinhaProps) {
   const movel = podeMover && !transferida;
   const cargo = PERFIL_LABELS[pessoa.perfil] ?? pessoa.perfil;
+  // Operador é quase todo mundo: a etiqueta só aparece para o cargo que foge
+  // disso (elite, líder…), e o nome ganha o espaço.
+  const mostraCargo = pessoa.perfil !== 'operador';
+  const temEtiqueta = mostraCargo || transferida || emprestada.length > 0
+    || pessoa.situacao === 'desligado' || pessoa.situacao === 'ferias';
   return (
     <div
       className="eq-pessoa"
@@ -109,17 +114,24 @@ export function PessoaLinha({
         {pessoa.foto_url ? <img src={pessoa.foto_url} alt="" loading="lazy" /> : iniciais(pessoa.nome)}
         <i aria-hidden="true"><Check /></i>
       </button>
+      {/* O nome em cima, inteiro; as etiquetas embaixo. Ver `nomeCurto`. */}
       <div className="eq-pessoa-nome">
-        <span>{pessoa.nome}</span>
-        <span className={cn('eq-cargo', PERFIL_COLORS[pessoa.perfil] ?? 'border-border text-muted-foreground')}>{cargo}</span>
-        <TagDesligado situacao={pessoa.situacao} />
-        <TagFerias situacao={pessoa.situacao} feriasAte={pessoa.ferias_ate} />
-        {transferida && <span className="eq-selo transf"><ArrowRightLeft /> transferida</span>}
-        {emprestada.map(nome => (
-          <span key={nome} className="eq-selo clone" title={`Clonada em ${nome}: o recebimento conta neste setor e em ${nome}.`}>
-            <Copy /> {nome}
+        <span className="eq-nome" title={pessoa.nome}>{nomeCurto(pessoa.nome)}</span>
+        {temEtiqueta && (
+          <span className="eq-etiquetas">
+            {mostraCargo && (
+              <span className={cn('eq-cargo', PERFIL_COLORS[pessoa.perfil] ?? 'border-border text-muted-foreground')}>{cargo}</span>
+            )}
+            <TagDesligado situacao={pessoa.situacao} />
+            <TagFerias situacao={pessoa.situacao} feriasAte={pessoa.ferias_ate} />
+            {transferida && <span className="eq-selo transf"><ArrowRightLeft /> transferida</span>}
+            {emprestada.map(nome => (
+              <span key={nome} className="eq-selo clone" title={`Clonada em ${nome}: o recebimento conta neste setor e em ${nome}.`}>
+                <Copy /> {nome}
+              </span>
+            ))}
           </span>
-        ))}
+        )}
       </div>
       <div className="eq-acoes">
         {movel && (

@@ -38,7 +38,7 @@ import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { rotuloDoMes } from '@/lib/mesReferencia';
 import { cn } from '@/lib/utils';
 import {
-  TIPOS_AUSENCIA, rotuloDoTipo, diasDaAusencia, diasNoRecorte, estadoDaAusencia,
+  TIPOS_AUSENCIA, rotuloDoTipo, diasDaAusencia, diasNoRecorte, estadoDaAusencia, semDataDeVolta,
   primeiraSobreposta, validarAusencia, rotuloDoPeriodo, type RascunhoAusencia,
 } from '@/lib/ausencias';
 import {
@@ -520,7 +520,7 @@ export function AcompanhamentoPessoa({ pessoa, empresaId, onMudou, onFechar }: P
                         <td className="whitespace-nowrap px-3 py-2 tabular-nums text-muted-foreground">
                           {rotuloDoPeriodo(a)}
                         </td>
-                        <td className="px-3 py-2 text-right tabular-nums">{diasDaAusencia(a)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{semDataDeVolta(a.fim) ? '—' : diasDaAusencia(a)}</td>
                         <td className="max-w-[220px] truncate px-3 py-2 text-muted-foreground" title={a.observacao ?? undefined}>
                           {a.observacao ?? '—'}
                         </td>

@@ -19,6 +19,13 @@
  * administração DESTE grupo. Se a tela estiver aberta com informação velha —
  * alguém me tirou de administrador enquanto ela estava aberta —, a ação falha
  * lá e o erro aparece aqui. A tela é conveniência, não a régua.
+ *
+ * ## O super admin (29/10/2026)
+ *
+ * Administra qualquer grupo, mesmo sem estar nele (`fn_chat_grupo_administro`,
+ * migration 20261029140000). De fora, abre este painel pela lista «Gerenciar
+ * grupos» (`GruposTodosDialog`): mexe em foto, nome, trava e membros, e não lê
+ * mensagem nenhuma. Sem estar no grupo, não há de onde sair — o rodapé some.
  */
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -47,10 +54,17 @@ import { AvatarChat } from './comum';
 import { casaBusca, chaveDeBusca, palavrasDaBusca } from './busca';
 import { useFotoResolvida } from './useFotoResolvida';
 
+/** O que o painel usa da conversa — a lista do super admin monta só isto. */
+export type GrupoNoPainel = Pick<ConversaChat, 'id' | 'outro_nome' | 'outro_foto' | 'somente_lideranca' | 'sou_admin' | 'sai'>;
+
 interface Props {
   aberto:   boolean;
-  conversa: ConversaChat;
+  conversa: GrupoNoPainel;
   meuId:    string;
+  /** Super admin: administra qualquer grupo, mesmo sem ser admin dele. */
+  superAdmin?: boolean;
+  /** Aberto de fora, pela lista do super admin: não está no grupo, não sai dele. */
+  deFora?: boolean;
   onFechar: () => void;
   /** Recarrega a lista de conversas: nome e foto mudam a linha lá fora. */
   onMudou:  () => void;
@@ -67,7 +81,7 @@ interface Props {
 }
 
 export function ConfigGrupoDialog({
-  aberto, conversa, meuId, onFechar, onMudou, onSai, onApagar,
+  aberto, conversa, meuId, superAdmin = false, deFora = false, onFechar, onMudou, onSai, onApagar,
 }: Props) {
   const { temPermissao } = useCargoPermissoes();
   const [membros, setMembros] = useState<MembroGrupo[]>([]);
@@ -87,9 +101,10 @@ export function ConfigGrupoDialog({
   const fotoAtual = useFotoResolvida(conversa.outro_foto);
 
   const souAdmin = conversa.sou_admin;
-  const podeEditar    = souAdmin && temPermissao('chat_grupo_editar');
-  const podeAdicionar = souAdmin && temPermissao('chat_grupo_adicionar');
-  const podeRemover   = souAdmin && temPermissao('chat_grupo_remover');
+  const administro    = souAdmin || superAdmin;
+  const podeEditar    = administro && temPermissao('chat_grupo_editar');
+  const podeAdicionar = administro && temPermissao('chat_grupo_adicionar');
+  const podeRemover   = administro && temPermissao('chat_grupo_remover');
 
   const recarregar = () => {
     setCarregando(true);
@@ -199,7 +214,11 @@ export function ConfigGrupoDialog({
           <DialogDescription className="text-xs">
             {souAdmin
               ? 'Você administra este grupo.'
-              : 'Só quem administra o grupo pode alterar estas configurações.'}
+              : superAdmin
+                ? deFora
+                  ? 'Você não está neste grupo: administra como super admin, sem ler as mensagens.'
+                  : 'Você administra este grupo como super admin.'
+                : 'Só quem administra o grupo pode alterar estas configurações.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -310,7 +329,7 @@ export function ConfigGrupoDialog({
               <div className="mb-2 rounded-lg border border-dashed border-primary/40 bg-primary/5 p-2">
                 <div className="mb-1.5 flex items-center justify-between gap-2">
                   <p className="text-[11px] font-medium text-muted-foreground">
-                    Quem você alcança e ainda não está no grupo
+                    {superAdmin ? 'Quem ainda não está no grupo' : 'Quem você alcança e ainda não está no grupo'}
                   </p>
                   <button
                     type="button" onClick={() => setAdicionando(false)}
@@ -484,6 +503,7 @@ export function ConfigGrupoDialog({
           Fica no rodapé, separado, nos dois casos: é de todo mundo e não se
           desfaz sozinho. Longe dos controles que se usa todo dia.
         */}
+        {!deFora && (
         <div className="shrink-0 border-t border-border pt-3">
           {conversa.sai ? (
             <>
@@ -514,6 +534,7 @@ export function ConfigGrupoDialog({
             </Button>
           )}
         </div>
+        )}
       </DialogContent>
     </Dialog>
   );

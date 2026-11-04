@@ -1689,7 +1689,8 @@ gravado todo dia às 23:50 pelo cron `composicao-mes-congelar`):
 | foto | a de hoje, se a pessoa existe — é a mesma pessoa |
 | alcance de quem olha (que equipes/setores enxerga) | hoje — é permissão |
 
-**O que é só leitura no mês fechado** — acordos (cadeado de sempre), metas,
+**O que é só leitura no mês fechado** — ~~acordos (cadeado de sempre)~~ (ver
+abaixo, 03/11/2026), metas,
 dias úteis/quartis, comissão (config, faixas, exceções, bônus), Pix (registrar,
 importar, mudar valor/NR/dono, excluir não desaprovado) e ajuste manual. Trava na
 tela (`useFechamentoMes`) **e** no banco (gatilhos `trg_trava_mes_fechado`,
@@ -1710,6 +1711,112 @@ foi criado depois sem pagamento.
 **Excluir usuário** com qualquer histórico em mês fechado (acordo, analítico,
 diário, Pix, ajuste, comissão) é recusado no banco (`20261001120000`): a
 exclusão apagaria ou desvincularia números já fechados. O caminho é **Desligar**.
+
+#### Auditoria de fechamento — fase 1 (29/10/2026)
+
+**O retrato guarda também a configuração** (`20261029200000`): regra, cidade e
+tipo do setor; treinamento da equipe; se o cargo conta no recebimento e se a
+pessoa é robô; e, em `composicao_mes_config`, `empresas.config` (H.O.), cargos,
+critério do ranking, `pix_automatico_config` e o vínculo carteira → setor/equipe
+do 59. A config **nunca** é gravada para mês fechado. Meses fechados antes disso
+têm essas colunas nulas («não guardado»): quem lê cai na tabela de hoje.
+
+**Modo TV:** `tv_paineis_mes` guarda cada painel (telas, tema, alvo) e o pacote
+de números do último congelamento. O congelamento roda às 23:50 **e** às 23:59.
+
+**Selo do fechamento** (`20261029201000`): dia 1º às 00:02 (antes de arquivar
+os desligados), `fechamento_mes` + `fechamento_mes_numeros` gravam recebido,
+H.O., pagamentos e meta de cada setor, equipe e operador do mês que fechou. O
+selo **nunca** é alterado nem apagado; correção = versão nova, só super admin,
+com motivo (`fn_fechamento_mes_selar`), e só se algum número mudou. Setembro e
+antes não têm selo.
+
+~~**Excluir equipe** com comissão ou meta de Pix de mês fechado é recusado~~ —
+substituído na fase 2a, abaixo. A meta de Pix ganhou a trava de mês fechado que
+faltava (`20261029202000`).
+
+#### Auditoria de fechamento — fase 2a (29/10/2026)
+
+**Mês fechado é só do super admin** (`20261029220000`). A permissão «Escrever
+em mês fechado» (`ignorar_fechamento_mes`) saiu do catálogo e da trava do banco.
+Importação de relatório continua entrando em mês fechado.
+
+**Excluir equipe é permitido e não mexe em mês fechado** (`20261029221000`).
+Comissão, meta de Pix, ajuste, vendas, indicações, transferências e comemorações
+guardam o `equipe_id` sem FK, como `metas.referencia_id`; o nome do mês vem de
+`composicao_mes_equipe`. Só o mês em aberto perde a comissão e a meta de Pix da
+equipe (ou do subgrupo) excluída.
+
+#### Acordos saem do cadeado (03/11/2026)
+
+**Acordo é editável em qualquer mês**, fechado ou não: criar com vencimento em
+mês passado, editar, mudar status, reagendar, excluir, restaurar da lixeira e
+WhatsApp. Acordo é dado manual — não há relatório do outro lado para divergir —,
+e o dinheiro do fechamento vem do Analítico e do 59, que seguem travados.
+Metas, dias úteis, comissão, Pix e ajuste manual continuam só leitura. A chave é
+`ACORDOS_FECHAM_COM_O_MES` em `lib/fechamentoMes.ts`; a tabela `acordos` nunca
+teve gatilho de mês fechado no banco, então não há migration.
+
+**Recebido por equipe/setor de mês fechado lê o retrato** (`20261029222000`).
+`fn_recebido_por_equipe` e `fn_recebido_por_setor` (desafios, app, avisos, TV,
+selo) tiram cargo, equipe, situação, liderança, clones e a chave `alternativo`
+de `composicao_mes*` quando o mês fechou e tem retrato. Quem mudou de equipe no
+meio do mês conta o mês inteiro na equipe onde terminou (decisão do Cleber); o
+fantasma da transferência continua valendo. Mês corrente: igual ao de antes, com
+prova na própria migration.
+
+#### Fechamento de outubro (31/10/2026)
+
+**O retrato guarda também** (`20261031200000`) o subgrupo de cada pessoa
+(`composicao_mes.subgrupo_id`) e, em `composicao_mes_config`, os subgrupos da
+empresa, a remuneração do RH por setor (`rh_config_setores`), a lógica
+Direto/Extra (`direto_extra_config`) e o bônus de Pix cujo período toca o mês.
+Meses fechados antes disso: nulo / lista vazia («não guardado»).
+
+**O selo se refaz nos dias 1 a 5, às 00:02.** O do dia 1º é a prova da estrutura
+na virada; o relatório do último dia chega depois (em setembro, R$ 226 mil
+importados ao longo de 01/10). Dos dias 2 a 5 só nasce versão nova se algum
+número mudou, com o motivo «relatório importado depois da virada».
+
+**Travas de mês fechado que faltavam** (`20261031210000`): origens fora do
+acumulado (`analitico_exclusoes_setor`), meta de contribuição do Receptivo e
+bônus de Pix (pelo mês do início).
+
+**Decisão do Cleber (31/10/2026):** quem abre um mês fechado vê o setor e a
+equipe onde estava NAQUELE mês, com os números de lá, mesmo que hoje esteja em
+outro lugar.
+
+#### Mês fechado lê o mês (31/10/2026)
+
+| O quê | Mês fechado lê | Onde |
+|---|---|---|
+| meu setor e minhas equipes (o LUGAR) | retrato | banco: `fn_setores_do_operador_no_mes`, `fn_equipes_de_alcance_no_mes` nas RPCs do mês (`20261031220000`); tela: `useLugarNoMes` (RPC `fn_meu_lugar_no_mes`) |
+| o NÍVEL (equipe / setor / empresa) | hoje | é permissão |
+| treinamento da equipe | retrato | `buscarTreinamentoDasEquipes` (Quartis, Desempenho, Ranking, Meta diária, RH, Fechamento, Diretoria, Painel de Metas) |
+| subgrupo da pessoa e lista de subgrupos | retrato | comissão (`comPessoasDosSubgrupos`) e ranking |
+| config do Pix (percentual, dobra) | retrato | conta do Pix e o relatório de fechamento; o editor continua sobre a de hoje |
+| critério do ranking | retrato | `buscarRankingConfig(…, mes)` |
+| premiação × comissão do RH | retrato | `vinculosDoMes` em Premiações e Comissões |
+| H.O. configurado | retrato | `useHoPercentualDoMes` (Diretoria, Dashboard, Painel de Metas) |
+| Direto/Extra | retrato | `useDiretoExtraConfig(mes)` no Dashboard |
+| regra Cofen do setor | retrato | `useRegraDoSetorNoMes` na comissão pessoal |
+| carteira do 59, setor, regra e cidade | retrato | Painel Diretoria: `fn_setores_do_mes`, `fn_mestre_grupos_do_mes`, `fn_mestre_equipes_do_mes` (`20261031230000`, `20261031230100`) |
+| nome do setor no relatório de fechamento | retrato | `fechamento.service` |
+
+Mês aberto, ou mês fechado antes de outubro/2026 (sem esses dados guardados):
+a tabela de hoje, como sempre.
+
+**Selo na tela:** Fechamento › **Selo do mês** (chave `fechamento_sub_selo`,
+nasce igual a `ver_fechamento` — `20261031230200`). Mostra versões, motivo e os
+números por setor, equipe e pessoa no alcance da aba; o super admin sela de
+novo com motivo.
+
+**Excluir usuário** passa a contar também saldo e pagamento de premiação do Pix
+de mês fechado (`20261031230300`).
+
+**Campanha Fácil na virada — pendente de decisão.** A proposta de 25/10
+(encerrar tudo do mês anterior à 00:00 do dia 1º) contradiz a regra de 20/10
+(«a completa só vai para o histórico quando o líder finaliza»).
 
 ---
 

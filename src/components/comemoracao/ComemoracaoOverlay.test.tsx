@@ -44,7 +44,7 @@ const finalizarMock = vi.fn(() => Promise.resolve());
 
 vi.mock('@/services/comemoracoes.service', () => ({
   buscarComemoracoes: () => Promise.resolve({
-    data: linhas, dbAtiva: true, erro: null, agoraServidor: new Date().toISOString(),
+    data: linhas, dbAtiva: true, erro: null,
   }),
   buscarParabens: () => Promise.resolve(parabensNoBanco),
   parabenizar: (...a: unknown[]) => parabenizarMock(...(a as [])),

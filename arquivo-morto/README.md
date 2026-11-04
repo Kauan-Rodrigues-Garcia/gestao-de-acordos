@@ -46,3 +46,4 @@ alcançando a história dele.
 | [`comemoracoes-1.0/`](comemoracoes-1.0/README.md) | 15/10/2026 | A Comemorações 2.0 virou a versão oficial |
 | [`caca-zumbis-bruxas/`](caca-zumbis-bruxas/README.md) | 20/10/2026 | A Caça aos Zumbis e às Bruxas saiu; a gincana da vez é a Corrida da Sorte |
 | [`colchao-controle/`](colchao-controle/README.md) | 21/10/2026 | A aba Colchão do Analítico não era usada; a regra do colchão continua |
+| [`halloween/`](halloween/README.md) | 03/11/2026 | Acabou outubro: o tema, a mensagem, o Mural de Outubro, o Jumpscare, o álbum de insígnias e os temas de terror do player |

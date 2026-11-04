@@ -150,8 +150,12 @@ export const ROTULO_SEGMENTO: Record<string, Record<string, string>> = {
     geral: 'Geral', permissoes: 'Permissões', direto_extra: 'Direto e Extra',
     tags: 'Tags', logs: 'Logs', documentacoes: 'Documentações',
     multiempresa: 'Multiempresa', uso: 'Monitoramento de uso',
+    eventos: 'Eventos e gincanas', cargos: 'Cargos', dados: 'Banco de dados',
   },
-  'admin/configuracoes:permissoes': { cargo: 'Por cargo', pessoa: 'Por pessoa' },
+  'admin/configuracoes:permissoes': { cargo: 'Por cargo', setor: 'Por setor', pessoa: 'Por pessoa' },
+  'admin/configuracoes:eventos': {
+    corrida: 'Corrida da Sorte', sirene: 'Sirene', ranking_quitacao: 'Ranking de quitação',
+  },
   'admin/configuracoes:direto_extra': { setor: 'Por setor', equipe: 'Por equipe', usuario: 'Por usuário' },
   'admin/configuracoes:logs': { trilha: 'Trilha de auditoria', uso: 'Monitoramento de uso' },
   'admin/configuracoes:logs/uso': {

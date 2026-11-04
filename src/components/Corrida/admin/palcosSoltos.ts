@@ -9,7 +9,7 @@ import { useSyncExternalStore } from 'react';
 import type { TemaLobby } from '../lobbies/cena';
 
 export interface Assistindo { corridaId: number; cavalos: boolean }
-export interface Testando { cavalos: boolean; premio: string; tema: TemaLobby }
+export interface Testando { cavalos: boolean; premio: string; tema: TemaLobby; especial?: boolean }
 export interface PalcosDoOrganizador { assistindo: Assistindo | null; testando: Testando | null }
 
 let atual: PalcosDoOrganizador = { assistindo: null, testando: null };

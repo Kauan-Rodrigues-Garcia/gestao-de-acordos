@@ -63,7 +63,10 @@ describe('a chave de transferir tem onde agir', () => {
 describe('a lista de pessoas existe em UM lugar', () => {
   it('a aba Usuários é quem abre a transferência', () => {
     expect(usuarios).toContain('DialogTransferencia');
-    expect(usuarios).toMatch(/setTransferindo\(\[u\]\)/);
+    // Desde 03/11/2026 a linha passa por `transferirOuPedir`: o super admin
+    // transfere, os outros pedem (`DialogPedirTransferencia`).
+    expect(usuarios).toMatch(/transferirOuPedir\(\[u\]\)/);
+    expect(usuarios).toContain('DialogPedirTransferencia');
     // Seleção múltipla: transferir em lote veio junto, e é o que a barra usa.
     expect(usuarios).toContain('perfisSelecionados');
   });

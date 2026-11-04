@@ -76,7 +76,7 @@ async function subir(caminho: string, dados: Blob | Uint8Array, tipo: string): P
  * Grava a corrida: simula, grava a festa em vídeo, sobe os arquivos e salva o resumo.
  * `aoProgresso` vai de 0 a 1 (a simulação é a primeira metade, o vídeo a segunda).
  */
-export async function gravarCorrida(corrida: CorridaJson, pessoas: PessoaJson[], aoProgresso: (f: number, etapa: string) => void, cancelado: () => boolean): Promise<Painel | null> {
+export async function gravarCorrida(corrida: CorridaJson, pessoas: PessoaJson[], aoProgresso: (f: number, etapa: string) => void, cancelado: () => boolean, especial = false): Promise<Painel | null> {
   const corredores = pessoas.filter(p => p.corre);
   // O motor (os mapas, a física, o vídeo) só desce aqui: a aba Geral não carrega nada disso.
   const { criarMotor } = await import('../motor/motor');
@@ -87,6 +87,7 @@ export async function gravarCorrida(corrida: CorridaJson, pessoas: PessoaJson[],
     const r = await motor.gravar({
       pessoas: corredores.map(p => ({ id: p.usuario, nome: p.nome, setor: p.setor, foto: p.foto, est: bichinhoDe(corrida.id, p.usuario, p.escolha) })),
       premio: corrida.premio,
+      especial,
       aoProgresso: f => aoProgresso(f * 0.9, f < 0.5 ? 'Simulando a corrida' : 'Gravando a festa em vídeo'),
       cancelado,
     });

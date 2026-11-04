@@ -26,6 +26,7 @@ import { partesDoMes } from '@/lib/mesReferencia';
 import { mesLocalPix } from '@/lib/mesPix';
 import { pctLimitado } from '@/lib/projecaoMetas';
 import type { BlocoPixFechamento, MetaPixEquipe, LinhaPixOperador, NivelFechamento } from '../tipos';
+import { buscarConfigDoMes } from '@/services/fechamento/configDoMes';
 
 interface MetaPixRow {
   equipe_id: string;
@@ -81,7 +82,10 @@ export async function coletarPix(p: ParametrosPix): Promise<BlocoPixFechamento |
         operadorId: p.nivel === 'operador' ? (p.operadorId ?? undefined) : undefined,
         setorId: p.nivel === 'setor' ? p.setorId : null,
       }),
-      supabase.from('pix_automatico_config').select('*').eq('empresa_id', p.empresaId),
+      // Mês fechado: o percentual e a dobra DAQUELE mês (retrato, 31/10/2026).
+      buscarConfigDoMes(p.empresaId, p.mes).then(cfg => (cfg
+        ? { data: cfg.pixConfig as unknown as PixAutoConfig[], error: null as { message: string } | null }
+        : supabase.from('pix_automatico_config').select('*').eq('empresa_id', p.empresaId))),
       // `pix_automatico_metas` guarda mês e ano como smallint separados, e não
       // como 'yyyy-MM'. Passar a string faria o Postgres recusar o filtro.
       supabase.from('pix_automatico_metas')

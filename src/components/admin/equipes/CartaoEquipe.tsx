@@ -28,7 +28,7 @@ import {
 } from '@/components/ui/command';
 import { cn } from '@/lib/utils';
 import {
-  casaBusca, plural, repartirPorSubgrupo,
+  casaBusca, nomeCurto, plural, repartirPorSubgrupo,
   type Destino, type EquipeEq, type OpcaoDeDestino, type PessoaEq, type SubgrupoEq,
 } from './modelo';
 import { PessoaLinha } from './partes';
@@ -218,7 +218,7 @@ export function CartaoEquipe(p: CartaoEquipeProps) {
               {p.lideres.map(l => (
                 <li key={l.vinculoId} className={cn('eq-lider', l.naoResolvido && 'eq-sem-nome')}
                   title={l.naoResolvido ? 'Líder de outro setor: o seu acesso não mostra o nome dele.' : undefined}>
-                  <span>{l.nome}</span>
+                  <span title={l.nome}>{l.naoResolvido ? l.nome : nomeCurto(l.nome)}</span>
                   {l.outroSetor && <em>clone de {l.outroSetor}</em>}
                   {p.podeGerenciar && (
                     <button type="button" aria-label={`Tirar ${l.nome} da liderança`} title="Tirar da liderança"
@@ -303,7 +303,7 @@ export function CartaoEquipe(p: CartaoEquipeProps) {
             data-longe={buscando && !casaBusca(c.nome, p.busca) || undefined}>
             <span className="eq-av" aria-hidden="true"><Copy className="w-3 h-3" /></span>
             <div className="eq-clone-txt">
-              <b className={cn(c.naoResolvido && 'italic text-muted-foreground')}>{c.nome}</b>
+              <b className={cn(c.naoResolvido && 'italic text-muted-foreground')} title={c.nome}>{c.naoResolvido ? c.nome : nomeCurto(c.nome)}</b>
               <small>{c.origem}</small>
             </div>
             <label className="eq-receb" title="Contar o recebimento deste clone nesta equipe (desligado: não conta aqui nem no setor dela; a origem continua contando)">

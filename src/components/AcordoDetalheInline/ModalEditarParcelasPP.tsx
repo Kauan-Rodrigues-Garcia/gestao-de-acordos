@@ -40,7 +40,7 @@ import { parseCurrencyInput, STATUS_LABELS_PAGUEPLAY, STATUS_COLORS } from '@/li
 import {
   dataDaParcela, mudancasDaParcela, paraLinha, type LinhaParcelaPP,
 } from '@/services/parcelasPP';
-import { estadoFechamentoDaData, mensagemFechamento, mesDaData } from '@/lib/fechamentoMes';
+import { estadoFechamentoDoAcordo, mensagemFechamento, mesDaData } from '@/lib/fechamentoMes';
 
 interface Props {
   acordo: Acordo;
@@ -108,7 +108,7 @@ export function ModalEditarParcelasPP({ acordo, open, onClose, onSaved }: Props)
       // Mesma trava da edição: o mês que perde e o que ganha precisam estar
       // abertos.
       for (const data of [dataDaParcela(l.original), l.data]) {
-        if (estadoFechamentoDaData({ data, cargo: perfil?.perfil }).bloqueado) {
+        if (estadoFechamentoDoAcordo({ data, cargo: perfil?.perfil }).bloqueado) {
           toast.error(mensagemFechamento(mesDaData(data)));
           return;
         }
@@ -131,21 +131,8 @@ export function ModalEditarParcelasPP({ acordo, open, onClose, onSaved }: Props)
           return;
         }
         const salva = (data ?? { ...l.original, ...upd }) as Acordo;
+        // O par Direto↔Extra acompanha no banco (`trg_vinculo_par_upd`).
         gravadas.push(salva);
-
-        // Espelha no par Direto↔Extra, como o resto das telas de parcela faz.
-        if (salva.tipo_vinculo === 'extra' || salva.vinculo_operador_id) {
-          await supabase.rpc('fn_sync_par_vinculo', {
-            p_acordo_id:    salva.id,
-            p_valor:        salva.valor,
-            p_vencimento:   salva.vencimento,
-            p_nome_cliente: salva.nome_cliente,
-            p_tipo:         salva.tipo,
-            p_whatsapp:     salva.whatsapp ?? null,
-            p_parcelas:     salva.parcelas,
-            p_status:       salva.status,
-          });
-        }
       }
       toast.success(`${gravadas.length} parcela(s) atualizada(s).`);
       onSaved(gravadas);

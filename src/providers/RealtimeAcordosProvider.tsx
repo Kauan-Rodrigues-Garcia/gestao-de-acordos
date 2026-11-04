@@ -65,8 +65,17 @@ export interface AcordoRealtimeEvent {
 
 type Subscriber = (event: AcordoRealtimeEvent) => void;
 
-/** Janela em que os avisos dos dois tópicos se juntam numa releitura. */
-export const AGRUPAR_MS = 300;
+/**
+ * Janela em que os avisos se juntam numa releitura. Era 300 ms, só para juntar
+ * os dois tópicos; 2 s junta também os acordos salvos em sequência pela
+ * empresa (auditoria 30/10/2026: a releitura por ids era 10% do banco).
+ */
+export const AGRUPAR_MS = 2_000;
+/**
+ * Mais ids que isto numa releitura (aba que voltou depois de horas escondida,
+ * importação) e vale mais reler as listas inteiras uma vez.
+ */
+const LIMITE_RELEITURA = 300;
 /** Status «caído» só aparece se o canal não voltar neste tempo (troca de aba volta em ~1 s). */
 export const TOLERANCIA_QUEDA_MS = 3_000;
 /** Ids por `in(...)` na releitura: a lista vai na URL. */
@@ -158,6 +167,10 @@ export function ouveAEmpresa(cargo: string | null | undefined, permissoesDoCargo
     && NIVEIS_ALEM_DOS_MEUS.some(nivel => permissoesDoCargo[`${aba}_escopo_${nivel}`] === true));
 }
 
+function abaEscondida(): boolean {
+  return typeof document !== 'undefined' && document.visibilityState === 'hidden';
+}
+
 // ── Provider ──────────────────────────────────────────────────────────────────
 
 export function RealtimeAcordosProvider({ children }: { children: ReactNode }) {
@@ -208,18 +221,30 @@ export function RealtimeAcordosProvider({ children }: { children: ReactNode }) {
     let pendentes = novosPendentes();
     let timerAgrupar: ReturnType<typeof setTimeout> | null = null;
     let timerQueda:   ReturnType<typeof setTimeout> | null = null;
+    /** Chegou aviso com a aba escondida: a releitura espera ela voltar. */
+    let devendo = false;
 
     const avisar = (event: AcordoRealtimeEvent) => {
       subscribersRef.current.forEach(cb => cb(event));
     };
 
+    const agendar = () => {
+      if (!timerAgrupar) timerAgrupar = setTimeout(() => { void processar(); }, AGRUPAR_MS);
+    };
+
     const processar = async () => {
       timerAgrupar = null;
+      // Aba escondida não relê: ninguém está olhando. Os avisos ficam juntos em
+      // `pendentes` e saem numa releitura só quando a aba volta.
+      if (abaEscondida()) { devendo = true; return; }
       const p = pendentes;
       pendentes = novosPendentes();
       if (!vivo || !mountedRef.current) return;
 
-      if (p.recarregar) {
+      const reler = [...new Set([...p.inseridos, ...p.alterados])].filter(id => !p.apagados.has(id));
+      const recarregar = p.recarregar || reler.length > LIMITE_RELEITURA;
+
+      if (recarregar) {
         void queryClient.invalidateQueries({ queryKey: ['acordos'] });
         avisar({ eventType: 'UPDATE' });
       }
@@ -228,8 +253,8 @@ export function RealtimeAcordosProvider({ children }: { children: ReactNode }) {
 
       // Sem tela ouvindo, a releitura com joins iria para ninguém — quem montar
       // a lista depois lê do banco.
-      const reler = [...new Set([...p.inseridos, ...p.alterados])].filter(id => !p.apagados.has(id));
       if (!reler.length || subscribersRef.current.size === 0) return;
+      if (reler.length > LIMITE_RELEITURA) return;
 
       for (let i = 0; i < reler.length; i += IDS_POR_LEITURA) {
         const pedaco = reler.slice(i, i + IDS_POR_LEITURA);
@@ -244,8 +269,16 @@ export function RealtimeAcordosProvider({ children }: { children: ReactNode }) {
 
     const aoAviso = (payload: Record<string, unknown>) => {
       juntarAviso(pendentes, payload);
-      if (!timerAgrupar) timerAgrupar = setTimeout(() => { void processar(); }, AGRUPAR_MS);
+      if (abaEscondida()) { devendo = true; return; }
+      agendar();
     };
+
+    const aoTrocarVisibilidade = () => {
+      if (abaEscondida() || !devendo) return;
+      devendo = false;
+      agendar();
+    };
+    document.addEventListener('visibilitychange', aoTrocarVisibilidade);
 
     // Avisos perdidos durante a queda: relê o que estiver na tela.
     const aoReconectar = () => {
@@ -283,6 +316,7 @@ export function RealtimeAcordosProvider({ children }: { children: ReactNode }) {
       receptorRef.current = null;
       if (timerAgrupar) clearTimeout(timerAgrupar);
       if (timerQueda) clearTimeout(timerQueda);
+      document.removeEventListener('visibilitychange', aoTrocarVisibilidade);
       sairDono();
     };
   }, [empresaId, perfilId, queryClient, naRotaDoCelular]);

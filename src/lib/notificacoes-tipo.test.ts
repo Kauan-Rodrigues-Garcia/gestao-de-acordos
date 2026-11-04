@@ -39,7 +39,7 @@ const INVENTARIO: Caso[] = [
   ['Número pronto — (18) 99999-9999', '/meus-chips', 'numeros', 'atencao'],
 
   // ── Produtores em TypeScript ──────────────────────────────────────────────
-  // tratarExclusaoVinculo.ts / desligamento.service.ts
+  // desligamento.service.ts
   ['Seu acordo EXTRA virou DIRETO', null, 'vinculo', 'critica'],
   ['Vínculo EXTRA removido', null, 'vinculo', 'critica'],
   // desligamento.service.ts — o rótulo do NR muda por tenant

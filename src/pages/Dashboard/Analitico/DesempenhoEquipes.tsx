@@ -60,6 +60,8 @@ import { somarPorEquipe, diasDaEquipe } from './acumuladoDaEquipe';
 import { lideresDaEquipe, type PerfilLider } from './lideresDaEquipe';
 import { ehMesAtual } from '@/lib/mesReferencia';
 import { buscarPessoasDoRetrato, pessoasDoMes } from '@/services/analitico/pessoasDoMes';
+import { buscarTreinamentoDasEquipes } from '@/services/fechamento/configDoMes';
+import { useFechamentoMes } from '@/hooks/useFechamentoMes';
 
 interface DesempenhoEquipesProps {
   empresaId: string;
@@ -402,8 +404,12 @@ export function DesempenhoEquipes({
     });
   }, [isPP, contribDbAtiva, empresaId]);
 
+  // Mês fechado: a meta de contribuição é só leitura (20261031210000).
+  const fechamentoContrib = useFechamentoMes(mes);
+
   /** O lápis do card: grava só a meta. O acumulado vem do 59. */
   const salvarMetaContrib = useCallback(async (sid: string, meta: number) => {
+    if (fechamentoContrib.impedir('alterar a meta de contribuição')) return;
     setSalvandoContrib(sid);
     try {
       if (!contribDbAtiva) {
@@ -425,15 +431,15 @@ export function DesempenhoEquipes({
     } finally {
       setSalvandoContrib(null);
     }
-  }, [contribDbAtiva, empresaId, mes, perfil?.id]);
+  }, [contribDbAtiva, empresaId, mes, perfil?.id, fechamentoContrib]);
   // Equipes de treinamento: equipe_id → data de início (só as treinamento=true).
   // Fetch isolado e tolerante — coluna ausente não quebra o painel principal.
   const [treinoMap, setTreinoMap] = useState<Record<string, string | null>>({});
   useEffect(() => {
     let cancel = false;
     void (async () => {
-      const { data, error } = await supabase.from('equipes')
-        .select('id, treinamento, treinamento_inicio').eq('empresa_id', empresaId);
+      // Mês fechado: o treinamento DAQUELE mês (retrato).
+      const { data, error } = await buscarTreinamentoDasEquipes(empresaId, mes);
       if (cancel || error || !data) return;
       const m: Record<string, string | null> = {};
       for (const e of data as { id: string; treinamento: boolean | null; treinamento_inicio: string | null }[]) {
@@ -442,7 +448,7 @@ export function DesempenhoEquipes({
       setTreinoMap(m);
     })();
     return () => { cancel = true; };
-  }, [empresaId]);
+  }, [empresaId, mes]);
 
   const [anoNum, mesNum] = mes.split('-').map(Number);
 

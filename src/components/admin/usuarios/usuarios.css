@@ -33,7 +33,7 @@
 .us-ponto { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex: none; }
 .us-barra-sit { display: flex; height: 8px; border-radius: 8px; overflow: hidden; gap: 2px; background: var(--muted); }
 .us-barra-sit i { display: block; height: 100%; transition: flex-grow .5s var(--us-ease); }
-.us-sits { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.us-sits { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .us-sit { --s: var(--muted-foreground); text-align: left; border: 1px solid var(--border); background: var(--card); border-radius: 10px; padding: 6px 9px; cursor: pointer; color: var(--foreground); }
 .us-sit[aria-pressed="true"] { border-color: var(--s); box-shadow: inset 0 0 0 1px var(--s); }
 .us-sit small { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--muted-foreground); }

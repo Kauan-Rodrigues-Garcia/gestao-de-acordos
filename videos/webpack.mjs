@@ -29,6 +29,9 @@ export function ajustarWebpack(config) {
       modules: [...(comTailwind.resolve?.modules ?? ['node_modules']), modulos],
       alias: {
         ...(comTailwind.resolve?.alias ?? {}),
+        // O Halloween foi para o arquivo morto em 03/11/2026; o vídeo ainda mostra
+        // o tema (e o arquivo da Caça ainda o importa pelo caminho antigo).
+        '@/components/Halloween': path.join(raiz, '..', 'arquivo-morto', 'halloween', 'src', 'components', 'Halloween'),
         '@': path.join(raiz, '..', 'src'),
         react: path.join(modulos, 'react'),
         'react-dom': path.join(modulos, 'react-dom'),

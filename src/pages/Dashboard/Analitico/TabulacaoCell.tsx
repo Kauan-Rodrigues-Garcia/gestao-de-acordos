@@ -4,6 +4,9 @@
  * Estados:
  *   NÃO TABULADO → botão "Tabular acordo"
  *   TABULADO     → botão "Ver acordo" (abre detalhe no Dashboard)
+ *   EXTRA        → tabulado também: a linha é «Extra» no relatório e está
+ *                  ligada ao acordo DIRETO do colega (20261028180000). O
+ *                  botão diz de quem é o direto e abre esse acordo.
  *   DIVERGENTE   → botão "Divergente": o acordo do código é de outra pessoa.
  *                  Confirmar passa o acordo DIRETO para o operador da linha —
  *                  o pagamento já entrou em nome dele, então não há autorização
@@ -31,6 +34,7 @@ import {
   tabularDivergente,
 } from '@/services/analitico/analitico.service';
 import { ehLinhaDeAjuste } from '@/services/analitico/ajusteManual.service';
+import { ehComissaoExtra } from '@/services/analitico/analiticoComum';
 
 interface TabulacaoCellProps {
   linha: AnaliticoRecebimento;
@@ -60,6 +64,9 @@ export function TabulacaoCell({
   const [acordoIdLocal,    setAcordoIdLocal]    = useState<string | null>(linha.acordo_id);
   const [divergenteInfo,   setDivergenteInfo]   = useState<{ outroNome: string; acordoId: string } | null>(null);
   const [confirmandoDiv,   setConfirmandoDiv]   = useState(false);
+  /** Dono do acordo direto quando a linha é Extra tabulada nele; `''` = nome não sabido. */
+  const [donoDoDireto,     setDonoDoDireto]     = useState<string | null>(null);
+  const [vendoExtra,       setVendoExtra]       = useState(false);
 
   // Ref para evitar usar status stale dentro do setTimeout
   const statusRef = useRef(statusLocal);
@@ -82,10 +89,11 @@ export function TabulacaoCell({
     let cancelled = false;
     const timer = setTimeout(async () => {
       if (cancelled || statusRef.current === 'tabulado') return;
-      const { status, acordoId, outroOperadorNome } = await verificarStatusTabulacaoEmLote(linha.id);
+      const { status, acordoId, outroOperadorNome, extraDoDireto } = await verificarStatusTabulacaoEmLote(linha.id);
       if (cancelled) return;
       setStatusLocal(status);
       setAcordoIdLocal(acordoId);
+      setDonoDoDireto(extraDoDireto ? (outroOperadorNome ?? '') : null);
       setDivergenteInfo(
         status === 'divergente' && acordoId
           ? { outroNome: outroOperadorNome ?? 'outro operador', acordoId }
@@ -109,13 +117,16 @@ export function TabulacaoCell({
   async function handleTabular() {
     setCarregando(true);
     esquecerStatusTabulacao(linha.id);
-    const { status, acordoId, outroOperadorNome } = await verificarStatusTabulacao(linha.id);
+    const { status, acordoId, outroOperadorNome, extraDoDireto } = await verificarStatusTabulacao(linha.id);
 
     if (status === 'tabulado' && acordoId) {
       await atualizarTabulacao(linha.id, 'tabulado', acordoId);
       setStatusLocal('tabulado');
       setAcordoIdLocal(acordoId);
-      toast.success('Acordo já tabulado para este operador. Registro atualizado.');
+      setDonoDoDireto(extraDoDireto ? (outroOperadorNome ?? '') : null);
+      toast.success(extraDoDireto
+        ? `Extra: tabulado no acordo direto de ${outroOperadorNome ?? 'outro operador'}.`
+        : 'Acordo já tabulado para este operador. Registro atualizado.');
       onRefetch();
       setCarregando(false);
       return;
@@ -166,6 +177,13 @@ export function TabulacaoCell({
 
     setStatusLocal('tabulado');
     setAcordoIdLocal(r.acordoId);
+    if (r.resultado === 'extra_do_direto') {
+      // O servidor recusou a transferência: a linha é Extra e o direto é o par.
+      setDonoDoDireto(r.donoDoDiretoNome ?? '');
+      toast.success(`Extra: tabulado no acordo direto de ${r.donoDoDiretoNome ?? divergenteInfo.outroNome}. Nada foi transferido.`);
+      onRefetch();
+      return;
+    }
     toast.success(
       r.resultado === 'transferido'
         ? `Acordo transferido de ${r.operadorAnteriorNome ?? divergenteInfo.outroNome} para ${r.operadorNovoNome ?? operadorNome}.`
@@ -193,6 +211,74 @@ export function TabulacaoCell({
       >
         <SlidersHorizontal className="w-3 h-3" /> Ajuste manual
       </span>
+    );
+  }
+
+  /*
+   * «Extra»: o acordo ligado é o DIRETO do colega, quase sempre de outro setor.
+   * A lista de Acordos só mostra o que a permissão de quem clica deixa ver, e
+   * abri-la filtrada pelo NR dava uma página vazia (28/10/2026). Então o
+   * botão explica ali mesmo de quem é o direto. Se a conferência disser que o
+   * acordo é do próprio operador (um extra registrado por ele), aí abre a lista.
+   */
+  async function abrirExtra() {
+    if (donoDoDireto) { setVendoExtra(true); return; }
+    setCarregando(true);
+    esquecerStatusTabulacao(linha.id);
+    const r = await verificarStatusTabulacao(linha.id);
+    setCarregando(false);
+    if (r.status === 'tabulado' && r.acordoId && !r.extraDoDireto) {
+      onVerAcordo(r.acordoId, linha.codigo);
+      return;
+    }
+    setDonoDoDireto(r.extraDoDireto ? (r.outroOperadorNome ?? '') : '');
+    setVendoExtra(true);
+  }
+
+  // Extra do relatório: tabulado no direto do colega (ou num extra próprio).
+  if (statusLocal === 'tabulado' && acordoIdLocal
+      && (donoDoDireto !== null || ehComissaoExtra(linha.tipo_comissao) === true)) {
+    return (
+      <>
+        <Button
+          size="sm" variant="outline"
+          title="Extra no relatório: o acordo direto é do colega, e este pagamento é o extra dele."
+          className="h-7 gap-1.5 text-xs border-emerald-500/40 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950"
+          onClick={abrirExtra}
+          disabled={carregando}
+        >
+          {carregando ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
+          {donoDoDireto ? `Extra · direto de ${donoDoDireto.split(/\s+/)[0]}` : 'Extra'}
+        </Button>
+
+        <AlertDialog open={vendoExtra} onOpenChange={setVendoExtra}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2 text-emerald-600">
+                <CheckCircle2 className="w-5 h-5" /> Pagamento Extra
+              </AlertDialogTitle>
+              <AlertDialogDescription className="space-y-2 text-left">
+                <p>
+                  O relatório marca este pagamento como <strong>Extra</strong>: o acordo direto do
+                  código <strong>{linha.codigo}</strong> é de{' '}
+                  <strong>{donoDoDireto || 'outro operador'}</strong>, e{' '}
+                  <strong>{operadorNome}</strong> recebe como extra.
+                </p>
+                <p>
+                  A linha já está tabulada nesse acordo direto. Não é preciso registrar nada.
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Recebido: <strong>{formatBRL(linha.valor_recebido)}</strong> · Forma:{' '}
+                  <strong>{linha.forma_pagamento === 'cartao' ? 'Cartão' : 'Boleto/Pix'}</strong>
+                </p>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Fechar</AlertDialogCancel>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </>
     );
   }
 

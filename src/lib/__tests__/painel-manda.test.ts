@@ -112,7 +112,7 @@ const EXCECOES: Record<string, Excecao> = {
   },
   'components/Chat/BolhaChat.tsx': {
     linhas: 1, familia: 'chave-mestra',
-    motivo: 'a conversa de Autorizações fica DISCRETA para o super_admin (decisão do Cleber em 15/10/2026): sem aviso de pedido novo, sem contar na bolha. Não libera nem tira acesso — quem decide se ele vê a fila e se pode autorizar continua sendo `temPermissao`.',
+    motivo: 'a conversa de Autorizações fica DISCRETA para o super_admin (decisão do Cleber em 15/10/2026): sem aviso de pedido novo, sem contar na bolha. Não libera nem tira acesso — quem decide se ele vê a fila e se pode autorizar continua sendo `temPermissao`. A mesma linha mostra o «Gerenciar grupos» (29/10/2026): o banco deixa o super admin administrar qualquer grupo (`fn_chat_grupo_administro`), e o botão só aparece para quem o banco aceita.',
   },
   'pages/AdminLogs/index.tsx': {
     linhas: 1, familia: 'chave-mestra',
@@ -127,18 +127,15 @@ const EXCECOES: Record<string, Excecao> = {
     motivo: 'espelho da policy `acordos_sinal_empresa` (`OR fn_user_is_super_admin()`): decide só se vale ASSINAR o aviso da empresa, para não pedir um join que o servidor recusaria. Não libera dado — a releitura passa pela RLS de acordos.',
   },
   'components/Layout.tsx': {
-    linhas: 1, familia: 'chave-mestra',
-    motivo: 'o editor do menu lateral configura o que os outros cargos veem — quem edita o painel não pode ser configurável por ele.',
+    linhas: 2, familia: 'chave-mestra',
+    motivo: 'o editor do menu lateral configura o que os outros cargos veem — quem edita o painel não pode ser configurável por ele. '
+      + 'E o Creators Lab, fora do ar para todos desde 28/10/2026: só o super admin abre (o logo só conta clique para ele).',
   },
   'components/Corrida/cavalos/PalcoCavalos.tsx': {
     linhas: 1, familia: 'chave-mestra',
     motivo: 'o Cavalo da Guerra (Guerra na Corrida, 23/10/2026) faz com o super_admin o que a Bruxa do Pântano fazia: '
       + 'ouve o chefe a 100% (operador a 12%) e fica sem escudo — o clique dele no Gestão continua sendo clique, só vira '
       + 'tiro em cima de um alvo. Não libera tela nem dado: quem decide são as RPCs fn_corrida_guerra_*.',
-  },
-  'components/Halloween/preferencia.ts': {
-    linhas: 1, familia: 'chave-mestra',
-    motivo: 'pré-estreia do tema de Halloween: até `HALLOWEEN_LIBERADO` ser ligado, só o super_admin vê os enfeites e a mensagem de outubro. Não libera tela nem dado — é decoração, e o cargo deixa de decidir quando o tema for aberto a todos.',
   },
   'lib/mobile/preferencia.ts': {
     linhas: 1, familia: 'chave-mestra',

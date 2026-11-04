@@ -50,3 +50,19 @@ export const temFundo = (c: CenaNatal) => c.neve !== null || c.montes;
 export const EVENTO_TRENO = 'natal-treno';
 export const EVENTO_FESTA = 'natal-festa';
 export const EVENTO_GLOBO = 'natal-globo';
+
+/*
+ * Vieram de `Halloween/tema.ts`, que foi para o arquivo morto em 03/11/2026.
+ * Quem salva um acordo avisa; a festa do Natal (só no estilo detalhado) decide
+ * se é a vez dela. Sem o tema ninguém escuta e o aviso não faz nada.
+ */
+export const EVENTO_ACORDO_SALVO = 'acordo-salvo';
+export const avisarAcordoSalvo = () => { window.dispatchEvent(new Event(EVENTO_ACORDO_SALVO)); };
+
+/** Mesma pessoa, mesmo enfeite o mês todo: sai do nome, não do acaso. */
+export function indiceDaPessoa(chave: string, quantidade: number) {
+  let h = 2166136261;
+  for (const c of chave) h = Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0;
+  h ^= h >>> 15; h = Math.imul(h, 2246822507) >>> 0; h = (h ^ (h >>> 13)) >>> 0;
+  return h % quantidade;
+}

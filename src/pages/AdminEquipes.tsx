@@ -200,11 +200,15 @@ export default function AdminEquipes() {
         .order('nome');
       if (!isAdmin && perfil?.setor_id) equipesQuery = equipesQuery.eq('setor_id', perfil.setor_id) as typeof equipesQuery;
 
+      // Desligado de mês anterior (arquivado) não existe mais para a equipe:
+      // vive só no retrato do mês em que saiu e na aba Desligados. O desligado
+      // DESTE mês continua aqui, com a etiqueta, até a virada.
       let operadoresQuery = supabase
         .from('perfis')
         .select('id, nome, email, perfil, setor_id, equipe_id, empresa_id, situacao, ferias_ate, foto_url')
         .eq('empresa_id', empresaId)
         .in('perfil', ['operador', 'lider', 'elite'])
+        .not('arquivado', 'is', true)
         .order('nome');
       if (!isAdmin && perfil?.setor_id) operadoresQuery = operadoresQuery.eq('setor_id', perfil.setor_id) as typeof operadoresQuery;
 
@@ -222,23 +226,25 @@ export default function AdminEquipes() {
       setSetores(setoresList);
       setEquipes((equipesRes.data ?? []) as Equipe[]);
       setOperadores((operadoresRes.data ?? []) as unknown as Operador[]);
-      const [clonesData, lideresData, subgruposData] = await Promise.all([
+      /*
+       * O vínculo pessoa→subgrupo vem À PARTE: nomear uma coluna inexistente
+       * derruba a consulta INTEIRA no PostgREST, e um banco sem a migration
+       * mostraria a aba vazia em vez de mostrá-la sem subgrupos. Vai junto da
+       * mesma leva (uma viagem a menos); sem subgrupos, o resultado é ignorado.
+       */
+      const [clonesData, lideresData, subgruposData, vinculosRes] = await Promise.all([
         listarClonesEquipes(empresaId),
         listarLideresEquipes(empresaId),
         listarSubgrupos(empresaId),
+        supabase.from('perfis').select('id, subgrupo_id').eq('empresa_id', empresaId),
       ]);
       setClones(clonesData);
       setLideresEq(lideresData);
       setSubgrupos(subgruposData);
 
-      /*
-       * O vínculo pessoa→subgrupo vem À PARTE: nomear uma coluna inexistente
-       * derruba a consulta INTEIRA no PostgREST, e um banco sem a migration
-       * mostraria a aba vazia em vez de mostrá-la sem subgrupos.
-       */
-      if (subgruposData !== null) {
-        const { data: vinculos } = await supabase.from('perfis').select('id, subgrupo_id').eq('empresa_id', empresaId);
-        const mapa = new Map(((vinculos as { id: string; subgrupo_id: string | null }[]) ?? []).map(v => [v.id, v.subgrupo_id] as const));
+      if (subgruposData !== null && !vinculosRes.error) {
+        const vinculos = vinculosRes.data as { id: string; subgrupo_id: string | null }[] | null;
+        const mapa = new Map((vinculos ?? []).map(v => [v.id, v.subgrupo_id] as const));
         setOperadores(prev => prev.map(o => ({ ...o, subgrupo_id: mapa.get(o.id) ?? null })));
       }
 
@@ -643,6 +649,11 @@ export default function AdminEquipes() {
   const [equipeParaExcluir, setEquipeParaExcluir] = useState<Equipe | null>(null);
   const [excluindoEquipe, setExcluindoEquipe] = useState(false);
 
+  /**
+   * Excluir não mexe em mês fechado: o retrato guarda a equipe, e comissão,
+   * meta de Pix e ajuste do mês fechado ficam sem FK para ela
+   * (20261029221000). Só o mês em aberto perde a configuração.
+   */
   function solicitarExcluirEquipe(equipe: Equipe) {
     if (!isAdmin && equipe.setor_id !== perfil?.setor_id) { toast.error('Você só pode excluir equipes do seu próprio setor.'); return; }
     setEquipeParaExcluir(equipe);

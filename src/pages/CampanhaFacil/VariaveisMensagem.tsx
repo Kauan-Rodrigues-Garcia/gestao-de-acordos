@@ -21,7 +21,7 @@ import { cn } from '@/lib/utils';
 import { DETALHE_DA_VARIAVEL, valorCurto, type ExemploDaMensagem } from './detalheDasVariaveis';
 
 /** Um bloco por forma de pagamento (21/10/2026), mais os dados do cliente e os percentuais. */
-export type SecaoDeVariaveis = 'cliente' | 'pix_automatico' | 'quitacao' | 'atraso' | 'anual' | 'juros' | 'percentuais';
+export type SecaoDeVariaveis = 'cliente' | 'pix_automatico' | 'cartao_recorrente' | 'quitacao' | 'atraso' | 'anual' | 'juros' | 'percentuais';
 
 export interface GrupoDeVariaveis {
   titulo: string;
@@ -39,6 +39,7 @@ export interface GrupoDeVariaveis {
 export const SECOES: { id: SecaoDeVariaveis; titulo: string; dica: string; largo?: boolean }[] = [
   { id: 'cliente', titulo: 'Dados do cliente', dica: 'Sem valor — servem em qualquer relatório', largo: true },
   { id: 'pix_automatico', titulo: 'Pix Automático', dica: 'Parte do Valor Aberto' },
+  { id: 'cartao_recorrente', titulo: 'Cartão Recorrente', dica: 'Parte do Valor Aberto' },
   { id: 'quitacao', titulo: 'Quitação', dica: 'Parte do Valor Aberto' },
   { id: 'atraso', titulo: 'Atrasadas e junção', dica: 'Parte do valor das atrasadas' },
   { id: 'anual', titulo: 'Plano anual', dica: 'Parte de 1 parcela × 12' },
@@ -68,6 +69,8 @@ export const VARIABLE_GROUPS: GrupoDeVariaveis[] = [
     itens: [
       ['endereco', 'Endereço'], ['cidade', 'Cidade'], ['local_trabalho', 'Local de trabalho'],
       ['ocupacao', 'Ocupação'], ['tempo_atraso', 'Tempo de atraso'],
+      // O avalista (28/10/2026): o CPF sai mascarado como o do cliente.
+      ['nome_avalista', 'Nome do avalista'], ['cpf_avalista', 'CPF do avalista (5 últimos)'],
     ],
   },
   // Nos blocos de valor, o bloco e o grupo já dizem o que é: o botão leva só
@@ -87,6 +90,19 @@ export const VARIABLE_GROUPS: GrupoDeVariaveis[] = [
     // Automático (25/10/2026; antes, o da parcela).
     titulo: 'Só a parcela', dica: '1 parcela em atraso − % Pix Aut.', secao: 'pix_automatico', ...COM_DESCONTO,
     itens: [['pix_automatico_parcela', '1 parcela']],
+  },
+  // ── Cartão Recorrente (27/10/2026): o Pix Automático clonado, com o próprio %.
+  {
+    titulo: 'Parcelado', dica: 'Valor Aberto ÷ parcelas', secao: 'cartao_recorrente', ...SEM_DESCONTO,
+    itens: [['cartao_recorrente_12x', '12x'], ['cartao_recorrente_20x', '20x'], ['cartao_recorrente_21x', '21x']],
+  },
+  {
+    titulo: 'Parcelado', dica: '(Valor Aberto − % Cartão Rec.) ÷ parcelas', secao: 'cartao_recorrente', ...COM_DESCONTO,
+    itens: [['cartao_recorrente_desconto_12x', '12x'], ['cartao_recorrente_desconto_20x', '20x'], ['cartao_recorrente_desconto_21x', '21x']],
+  },
+  {
+    titulo: 'Só a parcela', dica: '1 parcela em atraso − % Cartão Rec.', secao: 'cartao_recorrente', ...COM_DESCONTO,
+    itens: [['cartao_recorrente_parcela', '1 parcela']],
   },
   // ── Quitação
   {
@@ -128,6 +144,7 @@ export const VARIABLE_GROUPS: GrupoDeVariaveis[] = [
     itens: [
       ['pct_atraso', '% parcela'], ['pct_juncao', '% junção'], ['pct_quitacao', '% quitação'],
       ['pct_juros', '% juros'], ['pct_anual', '% anual'], ['pct_pix_automatico', '% Pix Automático'],
+      ['pct_cartao_recorrente', '% Cartão Recorrente'],
     ],
   },
 ];

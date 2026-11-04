@@ -34,6 +34,7 @@ import { MudancasImportacao } from '@/pages/Dashboard/Analitico/MudancasImportac
 import { SeletorRecorte } from './SeletorRecorte';
 import { mesDoRecorte, recorteDaQuery, type Recorte } from './recorte';
 import { COLUNAS_SETOR_DO_FILTRO, setoresDosFiltros } from '@/lib/setoresDosFiltros';
+import { useLugarNoMes } from '@/hooks/useLugarNoMes';
 
 /** O `Select` do shadcn recusa `value=""`; o "todos" precisa de um valor. */
 const TODOS_SETORES = '__todos__';
@@ -74,7 +75,10 @@ export default function PaginaAnalitico() {
   const podeVerIndividual = niveis.includes('individual');
   const podeVerSetor      = niveis.includes('setor');
   const veTodosSetores    = niveis.includes('todos_setores');
-  const setorProprio      = perfil?.setor_id ?? null;
+  // O setor de quem olha NO MÊS: no mês fechado, o do retrato — quem mudou de
+  // setor vê o mês onde estava (decisão do Cleber, 31/10/2026).
+  const { mes: mesDoLugar } = useMesGlobal();
+  const setorProprio      = useLugarNoMes(mesDoLugar).setorId;
   // Validação de relatório. Nasceu como `isPerfilAdmin` — administrador e
   // super_admin, nunca diretoria —, e agora é chave: validar assina que o
   // número está certo, e quem assina é decisão de quem responde pelo dado.

@@ -186,9 +186,10 @@ export interface Perfil {
    * Ninguém lê este valor. Ele sai junto com a coluna, quando ela sair.
    */
   pet_despedida?: string | null;
-  /** Situação operacional (item 5): 'ativo' | 'ferias' | 'desligado'.
-   *  Férias/desligado somem de ranking e quartil; recebimento ainda conta.
-   *  Desligado não loga. Ver migration 20260723c. */
+  /** Situação operacional (item 5): 'ativo' | 'ferias' | 'afastado' | 'desligado'.
+   *  Férias/afastado/desligado somem de ranking e quartil; recebimento ainda
+   *  conta. Desligado não loga. Afastado = afastamento «fora das contas» em
+   *  curso (20261028100000). Ver migration 20260723c. */
   situacao?: SituacaoUsuario | null;
   /** Quando foi desligado — usado para arquivar na virada do mês. */
   desligado_em?: string | null;
@@ -224,7 +225,7 @@ export interface Perfil {
   empresas?: (Pick<Empresa, 'id' | 'nome'> & Partial<Empresa>) | null;
 }
 
-export type SituacaoUsuario = 'ativo' | 'ferias' | 'desligado';
+export type SituacaoUsuario = 'ativo' | 'ferias' | 'afastado' | 'desligado';
 
 /*
  * SQL para adicionar colunas de parcelamento (executar no Supabase SQL editor):
@@ -584,6 +585,12 @@ export interface AnaliticoDashboardLinha {
   contribuicao?: boolean;
   /** Só na contribuição: o setor de quem cobrou. */
   contribuicao_de_setor_id?: string | null;
+  /**
+   * Linha do 994 cujo pagamento o 59 já lançou como extra em outro setor
+   * (migration 20261028150000): conta na pessoa e no setor, não na empresa —
+   * ver `linhaNoEscopo`. `undefined` antes da migration.
+   */
+  espelho_extra?: boolean;
   /**
    * Ajuste de recebimento lançado para uma EQUIPE (26/10/2026): a linha não tem
    * operador e conta nesta equipe e no setor dela — ver `linhaNoEscopo`.

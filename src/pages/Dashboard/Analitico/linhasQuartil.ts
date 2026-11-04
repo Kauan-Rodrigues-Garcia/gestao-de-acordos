@@ -12,6 +12,7 @@ import { diasUteisDoSetor, type DiasUteisPorSetor } from '@/lib/diasUteisDoSetor
 import { calcularProjecao } from '@/lib/projecaoMetas';
 import { metaNaUnidade } from '@/lib/unidadeValor';
 import type { QuartilConfig } from '@/lib/supabase';
+import { situacaoForaDasContas } from '@/lib/situacao';
 import {
   setoresDoOperador,
   type OperadorEquipeInfo, type ResumoOperadorAnalitico,
@@ -179,7 +180,7 @@ export function montarLinhasQuartil(entrada: EntradaLinhasQuartil): LinhasQuarti
      */
     .filter(o => {
       const s = o.situacao ?? 'ativo';
-      return s !== 'ferias' && s !== 'desligado';
+      return !situacaoForaDasContas(s) && s !== 'desligado';
     })
     /*
      * Arquivado sai — mas so dos meses POSTERIORES a saida. Filtrar sempre

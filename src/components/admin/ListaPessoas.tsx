@@ -30,7 +30,6 @@ import {
   Users2, UserCircle2,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { ComChapeu } from '@/components/Halloween/Desenhos';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -66,10 +65,11 @@ const COL = {
 const SITU_DOT: Record<SituacaoUsuario, string> = {
   ativo:     'bg-success',
   ferias:    'bg-warning',
+  afastado:  'bg-info',
   desligado: 'bg-destructive',
 };
 const SITU_LABEL: Record<SituacaoUsuario, string> = {
-  ativo: 'Ativo', ferias: 'Férias', desligado: 'Desligado',
+  ativo: 'Ativo', ferias: 'Férias', afastado: 'Afastado', desligado: 'Desligado',
 };
 
 interface Props {
@@ -105,9 +105,13 @@ interface Props {
 
   onEditar: (u: Perfil) => void;
   onTransferir: (u: Perfil) => void;
+  /** «Solicitar transferência» para quem não é super admin (03/11/2026). */
+  rotuloTransferir?: string;
   onSituacao: (u: Perfil, s: SituacaoUsuario) => void;
   onEntrarComo: (u: Perfil) => void;
   onVerFoto: (f: { url: string; nome: string }) => void;
+  /** «Atestado até 05/11» de quem tem afastamento em curso ou marcado. */
+  rotuloAfastamento?: (u: Perfil) => string | null;
 }
 
 export function ListaPessoas({
@@ -116,7 +120,7 @@ export function ListaPessoas({
   onlineIds, perfilAtualId, impersonando,
   podeTransferir, podeGerenciarSituacao, podeImpersonar, podeEditar,
   mostrarEmpresa, nomeEmpresa, nomeEquipe, marcaDe, onAbrir, abertaId,
-  onEditar, onTransferir, onSituacao, onEntrarComo, onVerFoto,
+  onEditar, onTransferir, rotuloTransferir, onSituacao, onEntrarComo, onVerFoto, rotuloAfastamento,
 }: Props) {
   return (
     <div className="space-y-3">
@@ -247,9 +251,11 @@ export function ListaPessoas({
                             onAlternarSelecao={onAlternarSelecao}
                             onEditar={onEditar}
                             onTransferir={onTransferir}
+                            rotuloTransferir={rotuloTransferir}
                             onSituacao={onSituacao}
                             onEntrarComo={onEntrarComo}
                             onVerFoto={onVerFoto}
+                            afastamento={rotuloAfastamento ? rotuloAfastamento(u) : null}
                           />
                         ))}
                       </div>
@@ -287,16 +293,25 @@ interface LinhaProps {
   onAlternarSelecao: (id: string) => void;
   onEditar: (u: Perfil) => void;
   onTransferir: (u: Perfil) => void;
+  rotuloTransferir?: string;
   onSituacao: (u: Perfil, s: SituacaoUsuario) => void;
   onEntrarComo: (u: Perfil) => void;
   onVerFoto: (f: { url: string; nome: string }) => void;
+  afastamento: string | null;
 }
+
+/** O seletor de situação: férias e afastamento entram pelo mesmo «Afastar…». */
+const OPCOES_SITUACAO: readonly { s: SituacaoUsuario; rotulo: string }[] = [
+  { s: 'ativo', rotulo: 'Ativo' },
+  { s: 'afastado', rotulo: 'Afastar…' },
+  { s: 'desligado', rotulo: 'Desligado' },
+];
 
 function LinhaPessoa({
   u, online, souEu, selecionado, impersonando,
   podeTransferir, podeGerenciarSituacao, podeImpersonar, podeEditar,
   mostrarEmpresa, nomeEmpresa, nomeEquipe, marca, onAbrir, aberta,
-  onAlternarSelecao, onEditar, onTransferir, onSituacao, onEntrarComo, onVerFoto,
+  onAlternarSelecao, onEditar, onTransferir, rotuloTransferir, onSituacao, onEntrarComo, onVerFoto, afastamento,
 }: LinhaProps) {
   const ehClone = !!u._cloneDe;
   const situacao = u.situacao ?? 'ativo';
@@ -340,14 +355,12 @@ function LinhaPessoa({
             title={u.foto_url ? 'Ver foto em tamanho maior' : undefined}
             className={cn('block rounded-full transition-transform', u.foto_url && 'hover:scale-105')}
           >
-            <ComChapeu chave={u.nome} tamanho={36}>
-              <Avatar className="w-9 h-9">
-                {u.foto_url && <AvatarImage src={u.foto_url} alt={u.nome} />}
-                <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
-                  {iniciais}
-                </AvatarFallback>
-              </Avatar>
-            </ComChapeu>
+            <Avatar className="w-9 h-9">
+              {u.foto_url && <AvatarImage src={u.foto_url} alt={u.nome} />}
+              <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
+                {iniciais}
+              </AvatarFallback>
+            </Avatar>
           </button>
           <span
             className={cn(
@@ -454,7 +467,7 @@ function LinhaPessoa({
                 <span className={cn('inline-flex w-2 h-2 rounded-full shrink-0', SITU_DOT[situacao])} />
                 {SITU_LABEL[situacao]}
                 {/* A data responde «até quando», que é a pergunta seguinte. */}
-                {situacao === 'ferias' && u.ferias_ate && (
+                {situacao === 'ferias' && u.ferias_ate && !afastamento && (
                   <span className="tabular-nums text-muted-foreground">
                     até {u.ferias_ate.slice(8, 10)}/{u.ferias_ate.slice(5, 7)}
                   </span>
@@ -463,10 +476,10 @@ function LinhaPessoa({
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              {(['ativo', 'ferias', 'desligado'] as SituacaoUsuario[]).map(s => (
+              {OPCOES_SITUACAO.map(({ s, rotulo }) => (
                 <DropdownMenuItem key={s} className="gap-2 text-xs" onClick={() => onSituacao(u, s)}>
                   <span className={cn('inline-flex w-2 h-2 rounded-full', SITU_DOT[s])} />
-                  {SITU_LABEL[s]}
+                  {rotulo}
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>
@@ -475,6 +488,13 @@ function LinhaPessoa({
           <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
             <span className={cn('inline-flex w-2 h-2 rounded-full shrink-0', SITU_DOT[situacao])} />
             {SITU_LABEL[situacao]}
+          </span>
+        )}
+        {/* O motivo e a volta: «Atestado até 05/11». Vale também para quem
+            segue ativo com afastamento que não tira das contas. */}
+        {afastamento && (
+          <span className="mt-0.5 block truncate text-[10px] text-muted-foreground" title={afastamento}>
+            {afastamento}
           </span>
         )}
       </div>
@@ -511,7 +531,7 @@ function LinhaPessoa({
               <Button
                 variant="ghost" size="icon"
                 className="w-7 h-7 hover:text-primary hover:bg-primary/10"
-                title="Transferir de setor ou empresa"
+                title={rotuloTransferir ?? 'Transferir de setor ou empresa'}
                 onClick={() => onTransferir(u)}
               >
                 <ArrowRightLeft className="w-3.5 h-3.5" />

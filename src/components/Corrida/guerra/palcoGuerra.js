@@ -35,6 +35,11 @@
  * os raios dourados, e voa até a fileira de medalhas do topo do app (`medalha`:
  * 'real' só para quem atirou; 'teste' no teste, que não mexe no álbum).
  *
+ * O álbum foi para `arquivo-morto/halloween/` em 03/11/2026. A medalha continua
+ * igual (as regras `.ins-*` que ela usa foram copiadas para `guerra.css`); sem
+ * a fileira na tela ela voa para o meio do topo, e o `insignia-ganha` fica sem
+ * ninguém ouvindo. Se o álbum voltar, tudo volta a se encaixar sozinho.
+ *
  * ## O anjo
  *
  * Quando o banco cura (o diretor de ritmo achou que a vida caiu rápido demais),
@@ -45,7 +50,6 @@
  * opções estão em `palcoGuerra.d.ts`.
  */
 import './guerra.css';
-import '../../Insignias/insignias.css';
 import { retratoUrl } from './retrato.js';
 import { assarFogo, sprites, chama as chamaF, luz as luzF, tremula as tremulaF, particula as particulaF, explosaoFogo, poda, ESCUDO } from './fogo.js';
 import { CW, CH, CCHAO, CMEIO, CPIV, EXTENSAO, MARGEM_ALTO, MARGEM_TRAS, MAT, CAVALEIROS, criarDestino, construirCavalo, cabecaDo, pontaDaCabeca, noCavalo, naGrade, tipoDoAcerto } from './cavaloDaGuerra.js';

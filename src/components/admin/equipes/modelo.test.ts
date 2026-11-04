@@ -100,3 +100,20 @@ describe('fraseDoMovimento', () => {
     expect(fraseDoMovimento(v, null)).toBe('2 pessoas saíram da equipe');
   });
 });
+
+describe('nomeCurto (03/11/2026)', () => {
+  it('os dois primeiros nomes, inteiros', async () => {
+    const { nomeCurto } = await import('./modelo');
+    expect(nomeCurto('Gabriela Santana Ribeiro Costa')).toBe('Gabriela Santana');
+    expect(nomeCurto('Ana')).toBe('Ana');
+    expect(nomeCurto('  Eva   Deus ')).toBe('Eva Deus');
+  });
+
+  it('a ligação entre os dois vai junto, e nunca sobra no fim', async () => {
+    const { nomeCurto } = await import('./modelo');
+    expect(nomeCurto('Maria de Fátima Oliveira')).toBe('Maria de Fátima');
+    expect(nomeCurto('João dos Santos')).toBe('João dos Santos');
+    expect(nomeCurto('Maria de')).toBe('Maria');
+    expect(nomeCurto('de Souza')).toBe('Souza');
+  });
+});

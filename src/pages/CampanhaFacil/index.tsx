@@ -17,6 +17,7 @@ import {
   Upload, FileText, Trash2, Plus, Pencil, Copy, Download, Search,
   ChevronLeft, ChevronRight, MessageSquare, Percent,
   AlertTriangle, Eye, Users, Save, Sparkles, Lock, Send, Filter, UserX, Undo2, Star, Building2,
+  ArrowDownToLine, RefreshCw, Loader2, Calculator, Check,
 } from 'lucide-react';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
@@ -50,6 +51,8 @@ import { JanelaDaMensagem } from './JanelaDaMensagem';
 import { exemploDaMensagem } from './detalheDasVariaveis';
 import { CampoPercentual } from './CampoPercentual';
 import { textoDoPercentual } from './percentual';
+import { fraseRecebidos, horaDe, type Recebimento } from './jaRecebeu';
+import { telefoneLegivel } from '@/pages/CampanhasWhatsapp/whatsapp';
 
 /** Cada %, e o que ele muda (21/10/2026): um desconto, um grupo de variáveis. */
 const DISCOUNT_FIELDS: [keyof typeof CampaignCore.DEFAULT_DISCOUNTS, string, string][] = [
@@ -59,6 +62,7 @@ const DISCOUNT_FIELDS: [keyof typeof CampaignCore.DEFAULT_DISCOUNTS, string, str
   ['bundle', 'Junção', 'À vista, 6x e 12x'],
   ['annual', 'Anual', 'À vista e cartão'],
   ['pix_automatico', 'Pix Automático', 'Com desconto e só a parcela'],
+  ['cartao_recorrente', 'Cartão Recorrente', 'Com desconto e só a parcela'],
 ];
 
 export default function CampanhaFacil() {
@@ -200,6 +204,7 @@ export default function CampanhaFacil() {
   const outrasPendencias = cf.gruposDePendencia.filter((g) => !g.trava);
   const comPendencia = cf.stats.comPendencia;
   const motivoFiltrado = motivoDoFiltro(cf.statusFilter);
+  const jaRecebeuFiltrado = cf.statusFilter === 'ja-recebeu';
 
   return (
     <div className="mx-auto w-full max-w-[1400px] p-4 md:p-6">
@@ -554,8 +559,9 @@ export default function CampanhaFacil() {
                     </div>
                   </div>
 
-                  {/* Parcela mínima (26/10/2026): trava a campanha. A correção não
-                      é automática porque o número de vezes é texto da mensagem. */}
+                  {/* Parcela mínima (26/10/2026): trava a campanha. Desde 27/10/2026
+                      dá para recalcular (as vezes vêm na variável) e manter o
+                      resto — menos Pix Automático e Cartão Recorrente. */}
                   {travada && (
                     <div className="space-y-2 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm">
                       <div className="flex items-start gap-2">
@@ -568,12 +574,33 @@ export default function CampanhaFacil() {
                             A campanha não sai assim.
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            O número de vezes está escrito na mensagem, então o valor não se corrige sozinho. Tire esses clientes,
-                            troque a mensagem para menos vezes, ou edite a mensagem de cada um na prévia — ela mostra em quantas vezes o total cabe.
+                            Recalcular troca as vezes e o valor juntos — «21x de R$ 15,00» vira «10x de R$ 32,00», sem mudar o total.
+                            Também dá para tirar esses clientes, editar a mensagem, ou manter mesmo assim.
                           </p>
+                          {cf.parcelas.rigidas > 0 && (
+                            <p className="mt-1 text-xs font-medium text-destructive">
+                              {cf.parcelas.rigidas.toLocaleString('pt-BR')} {cf.parcelas.rigidas === 1 ? 'cliente tem' : 'clientes têm'} Pix Automático
+                              ou Cartão Recorrente abaixo de R$ 30: {cf.parcelas.rigidas === 1 ? 'esse não pode' : 'esses não podem'} ficar assim.
+                              Recalcule, edite ou tire.
+                            </p>
+                          )}
                         </div>
                       </div>
                       <div className="flex flex-wrap gap-2 pl-6">
+                        {!cf.recalcular && cf.parcelas.recalculaveis > 0 && (
+                          <Button size="sm" className="h-8 gap-1.5" onClick={() => cf.setRecalcular(true)}>
+                            <Calculator className="h-3.5 w-3.5" /> Recalcular parcelas ({cf.parcelas.recalculaveis.toLocaleString('pt-BR')})
+                          </Button>
+                        )}
+                        {!cf.manterBaixas && cf.parcelas.mantiveis > 0 && (
+                          <Button
+                            size="sm" variant="outline" className="h-8 gap-1.5"
+                            onClick={() => cf.setManterBaixas(true)}
+                            title="Libera a campanha com essas parcelas abaixo de R$ 30. Fica sob a responsabilidade de quem libera."
+                          >
+                            <Check className="h-3.5 w-3.5" /> Manter mesmo assim ({cf.parcelas.mantiveis.toLocaleString('pt-BR')})
+                          </Button>
+                        )}
                         <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => verNaTabela(`motivo:${PENDENCIA_PARCELA_MINIMA}`)}>
                           <Filter className="h-3.5 w-3.5" /> Ver e corrigir um a um
                         </Button>
@@ -588,6 +615,30 @@ export default function CampanhaFacil() {
                           <UserX className="h-3.5 w-3.5" /> Tirar {cf.stats.parcelaBaixa === 1 ? 'este cliente' : `os ${cf.stats.parcelaBaixa.toLocaleString('pt-BR')}`} da campanha
                         </Button>
                       </div>
+                    </div>
+                  )}
+                  {cf.recalcular && cf.parcelas.recalculadas > 0 && (
+                    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm">
+                      <Calculator className="h-4 w-4 text-muted-foreground" />
+                      <span>
+                        <strong>{cf.parcelas.recalculadas.toLocaleString('pt-BR')}</strong>{' '}
+                        {cf.parcelas.recalculadas === 1 ? 'cliente teve' : 'clientes tiveram'} o parcelamento refeito em menos vezes, com a parcela no mínimo de R$ 30.
+                      </span>
+                      <Button variant="link" className="ml-auto h-auto p-0 text-xs" onClick={() => cf.setRecalcular(false)}>
+                        <Undo2 className="mr-1 h-3.5 w-3.5" /> Desfazer
+                      </Button>
+                    </div>
+                  )}
+                  {cf.manterBaixas && cf.parcelas.mantidas > 0 && (
+                    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-sm">
+                      <AlertTriangle className="h-4 w-4 text-amber-700 dark:text-amber-500" />
+                      <span>
+                        <strong>{cf.parcelas.mantidas.toLocaleString('pt-BR')}</strong>{' '}
+                        {cf.parcelas.mantidas === 1 ? 'cliente sai' : 'clientes saem'} com parcela abaixo de R$ 30, mantida por você. Fica sob a responsabilidade de quem libera a campanha.
+                      </span>
+                      <Button variant="link" className="ml-auto h-auto p-0 text-xs" onClick={() => cf.setManterBaixas(false)}>
+                        <Undo2 className="mr-1 h-3.5 w-3.5" /> Desfazer
+                      </Button>
                     </div>
                   )}
 
@@ -648,6 +699,60 @@ export default function CampanhaFacil() {
                     </div>
                   )}
 
+                  {/* Já receberam mensagem hoje (26/10/2026, 20261026190000) */}
+                  {(cf.linhasJaRecebidas.length > 0 || cf.paraOFim > 0) && (
+                    <div className="space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+                      <div className="flex flex-wrap items-start gap-2">
+                        <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-700 dark:text-amber-500" />
+                        <p className="min-w-0 flex-1">
+                          <strong>
+                            {cf.linhasJaRecebidas.length.toLocaleString('pt-BR')} de {cf.stats.total.toLocaleString('pt-BR')}{' '}
+                            {cf.linhasJaRecebidas.length === 1 ? 'cliente já recebeu' : 'clientes já receberam'} mensagem hoje.
+                          </strong>{' '}
+                          <span className="text-muted-foreground">
+                            Pela Campanha Fácil de algum setor, pelo mesmo Nr.Documento ou para o mesmo número. Mensagem
+                            demais no mesmo dia faz o cliente denunciar o número.
+                          </span>
+                        </p>
+                        <Button
+                          size="sm" variant="ghost" className="h-8 gap-1.5 text-xs"
+                          disabled={cf.consultandoRecebidos} onClick={cf.atualizarRecebidos}
+                          title="Consultar de novo: os outros setores continuam enviando"
+                        >
+                          {cf.consultandoRecebidos ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                          Atualizar
+                        </Button>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 pl-6">
+                        {cf.linhasJaRecebidas.length > 0 && (
+                          <>
+                            <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => verNaTabela('ja-recebeu')}>
+                              <Filter className="h-3.5 w-3.5" /> Ver quais
+                            </Button>
+                            <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={cf.mandarRecebidosParaOFim}>
+                              <ArrowDownToLine className="h-3.5 w-3.5" /> Mandar para o fim da fila
+                            </Button>
+                            <Button
+                              size="sm" variant="outline"
+                              className="h-8 gap-1.5 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                              onClick={cf.tirarJaRecebidos}
+                            >
+                              <UserX className="h-3.5 w-3.5" /> Tirar da campanha ({cf.linhasJaRecebidas.length.toLocaleString('pt-BR')})
+                            </Button>
+                          </>
+                        )}
+                        {cf.paraOFim > 0 && (
+                          <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                            {cf.paraOFim.toLocaleString('pt-BR')} no fim da fila: cada operador envia esses por último.
+                            <Button variant="link" className="h-auto p-0 text-xs" onClick={cf.voltarDoFimDaFila}>
+                              <Undo2 className="mr-1 h-3.5 w-3.5" /> Voltar à posição original
+                            </Button>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Banner de validação */}
                   {cf.stats.critical === 0 && (cf.sendersList.length === 0 || (cf.parsed.missingHeaders?.length ?? 0) > 0) && (
                     <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
@@ -675,7 +780,7 @@ export default function CampanhaFacil() {
 
                   <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
                     {/* Tabela */}
-                    <Card id="cf-tabela" className={cn((cf.statusFilter === 'critico' || motivoFiltrado) && 'border-amber-500/50')}>
+                    <Card id="cf-tabela" className={cn((cf.statusFilter === 'critico' || jaRecebeuFiltrado || motivoFiltrado) && 'border-amber-500/50')}>
                       <CardContent className="p-4">
                         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                           <div>
@@ -684,11 +789,13 @@ export default function CampanhaFacil() {
                                 ? motivoFiltrado
                                 : cf.statusFilter === 'critico'
                                 ? 'Registros com pendência grave'
+                                : jaRecebeuFiltrado
+                                ? 'Já receberam mensagem hoje'
                                 : cf.relatorioSemValores ? 'Registros da campanha' : 'Contatos da campanha'}
                             </h3>
                             <p className="text-xs text-muted-foreground">
                               {cf.filtered.length.toLocaleString('pt-BR')} {cf.filtered.length === 1 ? 'registro' : 'registros'}
-                              {(cf.statusFilter === 'critico' || motivoFiltrado) && (
+                              {(cf.statusFilter === 'critico' || jaRecebeuFiltrado || motivoFiltrado) && (
                                 <>
                                   {' · '}
                                   <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={() => cf.setStatusFilter('all')}>
@@ -698,11 +805,13 @@ export default function CampanhaFacil() {
                               )}
                             </p>
                           </div>
-                          {(cf.statusFilter === 'critico' || motivoFiltrado) && cf.filtered.length > 0 && (
+                          {(cf.statusFilter === 'critico' || jaRecebeuFiltrado || motivoFiltrado) && cf.filtered.length > 0 && (
                             <Button
                               size="sm" variant="outline"
                               className="h-8 gap-1.5 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                              onClick={() => (motivoFiltrado ? cf.tirarComPendencia(motivoFiltrado) : cf.removerPendenciasGraves())}
+                              onClick={() => (motivoFiltrado ? cf.tirarComPendencia(motivoFiltrado)
+                                : jaRecebeuFiltrado ? cf.tirarJaRecebidos()
+                                : cf.removerPendenciasGraves())}
                             >
                               <UserX className="h-3.5 w-3.5" /> Tirar {cf.filtered.length === 1 ? 'este' : `estes ${cf.filtered.length.toLocaleString('pt-BR')}`} da campanha
                             </Button>
@@ -762,6 +871,7 @@ export default function CampanhaFacil() {
                                   <TableCell>
                                     <div className="font-medium">{item.name || 'Nome não informado'}</div>
                                     {!cf.relatorioSemValores && <div className="text-xs text-muted-foreground">Contrato {item.contract || '—'}</div>}
+                                    <JaRecebeuNaTabela lista={cf.recebidos.get(item.rowNumber)} />
                                   </TableCell>
                                   {cf.relatorioSemValores ? (
                                     <TableCell className="font-medium">{item.contract || 'Não informado'}</TableCell>
@@ -1135,6 +1245,19 @@ function StateBadge({ state }: { state: WorkspaceState }) {
   if (state === 'critical') return <Badge className="bg-destructive/15 text-destructive hover:bg-destructive/15">Pendência grave</Badge>;
   if (state === 'review') return <Badge className="bg-amber-500/15 text-amber-600 hover:bg-amber-500/15 dark:text-amber-400">Atenção</Badge>;
   return <Badge className="bg-emerald-500/15 text-emerald-600 hover:bg-emerald-500/15 dark:text-emerald-400">Validada</Badge>;
+}
+
+/** O cliente já recebeu mensagem hoje pela Campanha Fácil (26/10/2026). */
+function JaRecebeuNaTabela({ lista }: { lista?: readonly Recebimento[] }) {
+  if (!lista || lista.length === 0) return null;
+  const detalhe = lista
+    .map((r) => `${horaDe(r.enviado_em)} · ${r.numero ? telefoneLegivel(r.numero, r.numero) : 'mensagem copiada'}${r.mesmo_contrato ? '' : ' (outro contrato)'}`)
+    .join('\n');
+  return (
+    <div className="mt-0.5 text-xs font-medium text-amber-700 dark:text-amber-400" title={detalhe}>
+      {fraseRecebidos(lista)}
+    </div>
+  );
 }
 
 function StatCard({ icon, value, label, tone }: { icon: React.ReactNode; value: number; label: string; tone: 'blue' | 'amber' | 'violet' }) {

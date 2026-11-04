@@ -16,6 +16,9 @@
     ],
     "baseUrl": ".",
     "paths": {
+      "@/components/Halloween/*": [
+        "../arquivo-morto/halloween/src/components/Halloween/*"
+      ],
       "@/*": [
         "../src/*"
       ],

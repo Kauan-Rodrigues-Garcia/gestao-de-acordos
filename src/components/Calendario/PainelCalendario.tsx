@@ -41,9 +41,10 @@
  * grupo do setor — o mesmo caminho do «copiar imagem» do Plantão Elite.
  */
 import { useCallback, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useTheme } from 'next-themes';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import {
-  CalendarDays, ChevronLeft, ChevronRight, EyeOff, ImageDown, Loader2, Palette, Send, Wand2, X,
+  Building2, CalendarDays, ChevronLeft, ChevronRight, EyeOff, ImageDown, Loader2, Palette, Send, Wand2, X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -58,19 +59,19 @@ import { getTodayISO } from '@/lib/index';
 import { deslocarMes } from '@/lib/mesReferencia';
 import { produtoDaEmpresa } from '@/lib/produto';
 import { copiarImagemDoElemento } from '@/lib/copiarImagem';
+import { ehTemaEscuro } from '@/lib/temas';
 import {
-  corForte, eventosPorDia, feriadosDoMes, proximosEventos, resumoDoMes, rotuloDoMesLongo,
-  temaEfetivo, textoSobreCor, INFO_TIPO, TIPOS_EVENTO, type EventoCalendario, type TipoEvento,
+  corForte, eventosPorDia, feriadosDoMes, rotuloDoMesLongo, temaEfetivo, textoSobreCor,
+  type EventoCalendario,
 } from '@/lib/calendarioSetor';
+import { paletaGibi } from '@/lib/calendarioGibi';
 import {
   listarPessoasDoSetor, publicarMes, type PessoaDoSetor,
 } from '@/services/calendario/calendario.service';
-import { GradeDoMes } from './GradeDoMes';
 import { DialogoDia } from './DialogoDia';
 import { DialogoLote } from './DialogoLote';
 import { DialogoCapa } from './DialogoCapa';
-import { PainelLateral } from './PainelLateral';
-import { IconeTipo } from './tipos';
+import { CalendarioGibi } from './gibi/CalendarioGibi';
 import './calendario.css';
 
 interface Props {
@@ -116,9 +117,11 @@ function ConteudoCalendario() {
   const empresaId = empresa?.id ?? '';
   const produto = produtoDaEmpresa(empresa, tenantSlug);
   const hojeISO = getTodayISO();
+  const { resolvedTheme } = useTheme();
+  const escuro = ehTemaEscuro(resolvedTheme);
 
   const [mes, setMes] = useState(() => hojeISO.slice(0, 7));
-  const cal = useCalendarioSetor(empresaId, produto, perfil?.setor_id ?? null, mes);
+  const cal = useCalendarioSetor(perfil?.id, empresaId, produto, perfil?.setor_id ?? null, mes);
   const { setor, setorId, dados, ehDiaUtil, feriadosOficiais } = cal;
   const podeEditar = setor?.pode_editar === true;
 
@@ -151,26 +154,14 @@ function ConteudoCalendario() {
       '--cal-sobre-acento': textoSobreCor(forte),
     } as CSSProperties;
   }, [tema.acento]);
+  const paleta = useMemo(() => paletaGibi(tema, escuro), [tema, escuro]);
   const titulo = dados.capa?.titulo || tema.titulo || 'Calendário do setor';
   const frase = dados.capa?.frase || tema.frase;
 
   // ── O mês montado ─────────────────────────────────────────────────────────
   const porDia = useMemo(() => eventosPorDia(dados.eventos), [dados.eventos]);
   const feriados = useMemo(() => feriadosDoMes(mes, feriadosOficiais), [mes, feriadosOficiais]);
-  const resumo = useMemo(
-    () => resumoDoMes(mes, dados.eventos, ehDiaUtil, feriadosOficiais, hojeISO),
-    [mes, dados.eventos, ehDiaUtil, feriadosOficiais, hojeISO],
-  );
   const ehMesCorrente = hojeISO.slice(0, 7) === mes;
-  const agenda = useMemo(() => proximosEventos(mes, dados.eventos, hojeISO), [mes, dados.eventos, hojeISO]);
-  const aniversarios = useMemo(() => dados.eventos.filter(e => e.tipo === 'aniversario'), [dados.eventos]);
-  // O feriado da legenda é o das Metas, que tem linha própria logo abaixo.
-  const tiposNoMes = useMemo(
-    () => TIPOS_EVENTO.filter(t => t !== 'feriado' && dados.eventos.some(e => e.tipo === t)) as TipoEvento[],
-    [dados.eventos],
-  );
-  const temFolga = useMemo(() => [...feriados.values()].some(f => f.folga), [feriados]);
-  const temTrabalhado = useMemo(() => [...feriados.values()].some(f => !f.folga), [feriados]);
 
   const rascunho = dados.temPublicacao && !dados.publicado;
   // O operador num mês ainda não lançado: vê os dias úteis, sem os eventos.
@@ -185,7 +176,7 @@ function ConteudoCalendario() {
     setCopiando(true);
     try {
       const nome = `calendario-${(setor?.nome ?? 'setor').toLowerCase().replace(/\s+/g, '-')}-${mes}.png`;
-      const r = await copiarImagemDoElemento(cartaoRef.current, nome);
+      const r = await copiarImagemDoElemento(cartaoRef.current, nome, paleta.paper);
       toast.success(r === 'copiado' ? 'Imagem copiada — é só colar no grupo.' : 'Imagem baixada.');
     } catch {
       toast.error('Não foi possível gerar a imagem.');
@@ -269,14 +260,22 @@ function ConteudoCalendario() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {cal.setores.length > 1 && (
-            <Select value={setorId} onValueChange={cal.setSetorId}>
-              <SelectTrigger className="h-9 w-[190px]" aria-label="Setor"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {cal.setores.map(s => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          )}
+          {/* Qual setor está aberto, sempre à vista; quem enxerga mais de um troca aqui. */}
+          <div className="flex items-center gap-1.5">
+            <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+              <Building2 className="h-3.5 w-3.5" /> Setor
+            </span>
+            {cal.setores.length > 1 ? (
+              <Select value={setorId} onValueChange={cal.setSetorId}>
+                <SelectTrigger className="h-9 w-[200px] font-semibold" aria-label="Setor do calendário"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {cal.setores.map(s => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            ) : (
+              <span className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm font-semibold text-foreground">{setor?.nome}</span>
+            )}
+          </div>
           {!aguardandoLideranca && (
             <Button variant="outline" size="sm" className="gap-2" onClick={() => void copiarImagem()} disabled={copiando}
               title="Copiar o calendário como imagem, para colar no grupo">
@@ -346,68 +345,25 @@ function ConteudoCalendario() {
         <p className="rounded-xl border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive">{cal.erro}</p>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
-        {/* ── O cartão: é ele que vira imagem ──────────────────────────────── */}
-        <div ref={cartaoRef} className="overflow-hidden rounded-2xl border border-border bg-card">
-          <div className="cal-capa flex items-center gap-4 px-4 py-4 sm:px-6 sm:py-5">
-            <span className="cal-emoji h-12 w-12 shrink-0 text-2xl sm:h-14 sm:w-14 sm:text-3xl" aria-hidden>{tema.emoji}</span>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium text-muted-foreground">
-                {setor?.nome} · {rotuloDoMesLongo(mes)}
-              </p>
-              <h3 className="cal-capa-titulo truncate text-xl font-bold tracking-tight sm:text-2xl">{titulo}</h3>
-              {frase && <p className="mt-0.5 text-sm text-muted-foreground">{frase}</p>}
-            </div>
-            <div className="hidden shrink-0 text-right sm:block">
-              <p className="cal-capa-titulo text-3xl font-bold tabular-nums leading-none">{resumo.diasUteis}</p>
-              <p className="text-[11px] font-medium text-muted-foreground">dias úteis</p>
-            </div>
-          </div>
-
-          <GradeDoMes
-            mes={mes}
-            porDia={porDia}
-            ehDiaUtil={ehDiaUtil}
-            feriados={feriados}
-            hojeISO={hojeISO}
-            onAbrirDia={setDiaAberto}
-          />
-
-          {/* Legenda: só o que aparece neste mês, mais o dia não útil. */}
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-border px-4 py-2.5 text-[11px] text-muted-foreground sm:px-6">
-            {tiposNoMes.map(t => (
-              <span key={t} className="inline-flex items-center gap-1.5">
-                <IconeTipo tipo={t} className="h-5 w-5 rounded-md" tamanho="h-3 w-3" />
-                {INFO_TIPO[t].rotulo}
-              </span>
-            ))}
-            {temFolga && (
-              <span className="inline-flex items-center gap-1.5">
-                <span className="cal-feriado h-3.5 w-3.5 rounded border border-border" /> Feriado (não trabalha)
-              </span>
-            )}
-            {temTrabalhado && (
-              <span className="inline-flex items-center gap-1.5">
-                <span className="cal-ponto" style={{ '--tipo': '#0284C7' } as CSSProperties} /> Feriado com expediente
-              </span>
-            )}
-            <span className="inline-flex items-center gap-1.5">
-              <span className="cal-nao-util h-3.5 w-3.5 rounded border border-border" /> Não é dia útil
-            </span>
-            {podeEditar && <span className="ml-auto hidden sm:inline">Clique num dia para lançar</span>}
-          </div>
-        </div>
-
-        <PainelLateral
-          resumo={resumo}
-          capa={dados.capa}
-          aniversarios={aniversarios}
-          agenda={agenda}
-          ehMesCorrente={ehMesCorrente}
-          hojeISO={hojeISO}
-          onAbrirDia={setDiaAberto}
-        />
-      </div>
+      {/* ── O mês em gibi: é ele que vira imagem ─────────────────────────── */}
+      <CalendarioGibi
+        mes={mes}
+        setorNome={setor?.nome ?? null}
+        tema={tema}
+        paleta={paleta}
+        titulo={titulo}
+        frase={frase || null}
+        expedienteSemana={dados.capa?.expediente_semana ?? null}
+        expedienteSabado={dados.capa?.expediente_sabado ?? null}
+        eventos={dados.eventos}
+        porDia={porDia}
+        ehDiaUtil={ehDiaUtil}
+        feriados={feriados}
+        hojeISO={hojeISO}
+        podeEditar={podeEditar}
+        onAbrirDia={setDiaAberto}
+        cartaoRef={cartaoRef}
+      />
 
       <DialogoDia
         iso={diaAberto}

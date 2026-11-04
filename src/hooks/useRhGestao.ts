@@ -50,6 +50,7 @@ import {
   listarCelulas, listarFechamentos, listarLancamentos, listarCrachas,
   type RhCelulaRow, type RhFechamentoRow, type RhLancamento,
 } from '@/services/rh/rhGestao.service';
+import { buscarTreinamentoDasEquipes } from '@/services/fechamento/configDoMes';
 
 export interface PermissoesRh {
   /** A aba está aberta e há ao menos um nível de alcance. */
@@ -227,9 +228,8 @@ export function useRhGestao(): EstadoRhGestao {
         .eq('mes', mes).eq('ano', ano),
       getMetasConfig(empresaId, mes, ano),
       buscarResumoOperadoresAnalitico(empresaId, mesApuracao),
-      supabase.from('equipes')
-        .select('id, treinamento, treinamento_inicio')
-        .eq('empresa_id', empresaId),
+      // Mês fechado: o treinamento DAQUELE mês (retrato).
+      buscarTreinamentoDasEquipes(empresaId, mesApuracao),
     ]);
     if (!vivo.current) return;
 

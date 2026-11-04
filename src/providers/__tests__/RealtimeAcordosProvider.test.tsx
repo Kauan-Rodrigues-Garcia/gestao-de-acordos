@@ -255,6 +255,55 @@ describe('RealtimeAcordosProvider — aviso com os ids', () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
+  describe('aba escondida (auditoria 30/10/2026)', () => {
+    let visivel = 'hidden';
+    beforeEach(() => {
+      visivel = 'hidden';
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => visivel });
+    });
+    afterEach(() => {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+    });
+
+    it('não relê enquanto escondida; ao voltar, relê tudo numa leitura só', async () => {
+      linhasRelidasRef.current = [acordo('a1'), acordo('a2')];
+      const handler = vi.fn();
+      const { result } = renderHook(() => useRealtimeAcordos(), { wrapper: wrapper() });
+      act(() => { result.current.subscribe('s1', handler); });
+
+      await aviso(`acordos-op:${EU}`, { operacao: 'UPDATE', ids: ['a1'] });
+      await aviso(`acordos:${EMPRESA_ID}`, { operacao: 'UPDATE', ids: ['a2'] });
+      expect(idsPedidosRef.current).toEqual([]);
+      expect(handler).not.toHaveBeenCalled();
+
+      await act(async () => {
+        visivel = 'visible';
+        document.dispatchEvent(new Event('visibilitychange'));
+        await vi.advanceTimersByTimeAsync(AGRUPAR_MS + 1);
+      });
+
+      expect(idsPedidosRef.current).toEqual([['a1', 'a2']]);
+      expect(handler).toHaveBeenCalledTimes(2);
+    });
+
+    it('muitos ids acumulados viram uma releitura das listas, sem reler id por id', async () => {
+      const handler = vi.fn();
+      const { result } = renderHook(() => useRealtimeAcordos(), { wrapper: wrapper() });
+      act(() => { result.current.subscribe('s1', handler); });
+
+      const ids = Array.from({ length: 301 }, (_, i) => `x${i}`);
+      await aviso(`acordos:${EMPRESA_ID}`, { operacao: 'UPDATE', ids });
+      await act(async () => {
+        visivel = 'visible';
+        document.dispatchEvent(new Event('visibilitychange'));
+        await vi.advanceTimersByTimeAsync(AGRUPAR_MS + 1);
+      });
+
+      expect(idsPedidosRef.current).toEqual([]);
+      expect(handler).toHaveBeenCalledWith({ eventType: 'UPDATE' });
+    });
+  });
+
   it('desmontar cancela os dois tópicos', () => {
     const { unmount } = renderHook(() => useRealtimeAcordos(), { wrapper: wrapper() });
     unmount();

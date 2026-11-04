@@ -8,6 +8,9 @@
  *
  * O mês só aparece para quem tem meta individual. No setor de regra Cofen o
  * recebido e a meta vêm em H.O., como no Painel Líder.
+ *
+ * Os afastamentos (férias, atestado, licença…) têm seção própria, com o
+ * histórico e o «encerrar» (20261028100000).
  */
 import { useEffect, useState } from 'react';
 import { ArrowRightLeft, Copy, Edit, KeyRound, LogIn, Users2 } from 'lucide-react';
@@ -26,9 +29,10 @@ import { diasUteisDoSetor } from '@/lib/diasUteisDoSetor';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import type { InfoDeSetor } from './modelo';
+import { AfastamentosDaPessoa } from './AfastamentosDaPessoa';
 
-const ROTULO_SITUACAO: Record<SituacaoUsuario, string> = { ativo: 'Ativo', ferias: 'Férias', desligado: 'Desligado' };
-const COR_SITUACAO: Record<SituacaoUsuario, string> = { ativo: 'var(--success)', ferias: 'var(--warning)', desligado: 'var(--destructive)' };
+const ROTULO_SITUACAO: Record<SituacaoUsuario, string> = { ativo: 'Ativo', ferias: 'Férias', afastado: 'Afastado', desligado: 'Desligado' };
+const COR_SITUACAO: Record<SituacaoUsuario, string> = { ativo: 'var(--success)', ferias: 'var(--warning)', afastado: 'var(--info)', desligado: 'var(--destructive)' };
 
 interface MesDaPessoa {
   recebido: number;
@@ -69,13 +73,18 @@ async function lerMes(u: Perfil, meta: number, cofen: boolean): Promise<MesDaPes
 
 export function FichaPessoa({
   pessoa, aberta, onFechar, online, setor, equipe, empresa, meta,
-  podeEditar, podeTransferir, podeImpersonar, souEu, onEditar, onTransferir, onEntrarComo,
+  podeEditar, podeTransferir, podeImpersonar, souEu, onEditar, onTransferir, onEntrarComo, rotuloTransferir,
+  afastamentos,
 }: {
   pessoa: Perfil | null; aberta: boolean; onFechar: () => void; online: boolean;
   setor: { nome: string; info: InfoDeSetor | null } | null;
   equipe: string | null; empresa: string; meta: number | null;
   podeEditar: boolean; podeTransferir: boolean; podeImpersonar: boolean; souEu: boolean;
   onEditar: (u: Perfil) => void; onTransferir: (u: Perfil) => void; onEntrarComo: (u: Perfil) => void;
+  /** «Solicitar transferência» para quem não é super admin (03/11/2026). */
+  rotuloTransferir?: string;
+  /** A seção de afastamentos. Ausente: não aparece (ex.: clone de outro setor). */
+  afastamentos?: { podeAgir: boolean; versao: number; onAfastar: (u: Perfil) => void; onMudou: () => void };
 }) {
   const [mes, setMes] = useState<MesDaPessoa | null | undefined>(undefined);
   const cofen = setor?.info?.regra === 'cofen';
@@ -133,7 +142,7 @@ export function FichaPessoa({
           </div>
           <div className="flex flex-wrap gap-1.5">
             {podeEditar && <Button size="sm" className="h-8 gap-1.5" onClick={() => onEditar(u)}><Edit className="w-3.5 h-3.5" /> Editar</Button>}
-            {podeTransferir && <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => onTransferir(u)}><ArrowRightLeft className="w-3.5 h-3.5" /> Transferir</Button>}
+            {podeTransferir && <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => onTransferir(u)}><ArrowRightLeft className="w-3.5 h-3.5" /> {rotuloTransferir ?? 'Transferir'}</Button>}
             {podeEditar && <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => onEditar(u)}><KeyRound className="w-3.5 h-3.5" /> Senha e foto</Button>}
             {podeImpersonar && !souEu && <Button size="sm" variant="outline" className="h-8 gap-1.5 text-warning" onClick={() => onEntrarComo(u)}><LogIn className="w-3.5 h-3.5" /> Entrar como</Button>}
           </div>
@@ -185,6 +194,17 @@ export function FichaPessoa({
               <dt>Empresa</dt><dd>{empresa}{multiempresa && <span className="text-muted-foreground text-xs"> · vê as duas operações</span>}</dd>
             </dl>
           </section>
+
+          {afastamentos && (u.empresa_id ?? '') !== '' && (
+            <AfastamentosDaPessoa
+              operadorId={u.id}
+              empresaId={u.empresa_id as string}
+              podeAgir={afastamentos.podeAgir && situacao !== 'desligado'}
+              versao={afastamentos.versao}
+              onAfastar={() => afastamentos.onAfastar(u)}
+              onMudou={afastamentos.onMudou}
+            />
+          )}
 
           <section>
             <h3 className="us-rot mb-2">Como entra</h3>

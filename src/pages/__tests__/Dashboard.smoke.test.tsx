@@ -160,7 +160,6 @@ vi.mock('@/providers/RealtimeAcordosProvider', () => ({
 vi.mock('@/services/notificacoes.service',   () => ({ criarNotificacao: vi.fn() }));
 vi.mock('@/services/nr_registros.service',   () => ({ liberarNrPorAcordoId: vi.fn() }));
 vi.mock('@/services/lixeira.service',        () => ({ enviarParaLixeira: vi.fn() }));
-vi.mock('@/services/tratarExclusaoVinculo',  () => ({ tratarExclusaoVinculo: vi.fn() }));
 
 // Heavy child components
 vi.mock('@/components/AnalyticsPanel', () => ({
