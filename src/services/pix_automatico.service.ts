@@ -1248,7 +1248,9 @@ export interface PixLogItem {
   acao:
     | 'registrado' | 'restaurado' | 'editado'
     | 'aprovado' | 'desaprovado' | 'voltou_pendente'
-    | 'pago' | 'pagamento_desfeito' | 'excluido';
+    | 'pago' | 'pagamento_desfeito' | 'excluido'
+    /** «Manter com …» na disputa de NR (20261026200000). */
+    | 'nr_mantido';
   /** Frase pronta, montada no banco. A tela só desenha. */
   descricao: string;
   valor: number | null;
