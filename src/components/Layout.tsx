@@ -73,6 +73,7 @@ import { useEasterEggCriadores, DURACAO_ESCURECIMENTO_MS } from '@/hooks/useEast
 // só onde ela é criada. Só a aba de criação mudou de lugar.
 import { ComemoracaoOverlay } from './comemoracao/ComemoracaoOverlay';
 import { SireneOverlay } from './Sirene/SireneOverlay';
+import { AvisoVotacao } from './VotacaoLideres/AvisoVotacao';
 import { BingoNoSistema } from '@/pages/ModoTV/bingo/jogador/BingoNoSistema';
 import { useModoLeveZeradoPeloAdmin } from '@/lib/modoLeveZerado';
 import { useTermoUso } from '@/hooks/useTermoUso';
@@ -1028,6 +1029,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* O recuo acompanha o menu: 240 px aberto, 64 recolhido, mais 16 de
           respiro. Sem isto a gaveta abria POR CIMA do menu lateral. */}
       <AutorizacaoDock recuoEsquerda={(sidebarOpen ? 240 : 64) + 16} />
+      {/* Votação da Liderança (04/11/2026): «Votar agora» / «Ver resultado» no canto. Ver `VotacaoLideres/AvisoVotacao.tsx`. */}
+      <AvisoVotacao recuoEsquerda={(sidebarOpen ? 240 : 64) + 16} />
 
       {/* Chat interno — mesma quina do dock de autorizações, um degrau acima.
           Fica fora das rotas de propósito: conversar não é uma tela, é uma
