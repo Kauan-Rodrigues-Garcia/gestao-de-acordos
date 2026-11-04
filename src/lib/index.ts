@@ -54,6 +54,10 @@ export const ROUTE_PATHS = {
   SOLICITACOES_WHATSAPP: '/solicitacoes-whatsapp',
   TICKETS: '/tickets',
   RH_GESTAO: '/rh-gestao',
+  /** Jornada (04/11/2026): aba do subgrupo Suporte — NR + data de acesso, com meta. */
+  JORNADA_ACESSO: '/acesso',
+  /** Jornada (04/11/2026): aba do subgrupo Retenção — NR + data. */
+  JORNADA_RETENCAO: '/retencao',
   /**
    * O fechamento mensal por operador — a planilha de fechamento da gerência.
    * Não confundir com o relatório de fechamento (`BotaoFechamento`), que é um

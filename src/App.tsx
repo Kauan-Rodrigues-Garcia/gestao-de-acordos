@@ -66,6 +66,7 @@ const Dashboard         = lazy(() => import('@/pages/Dashboard'));
 const ProdutoEmMontagem = lazy(() => import('@/pages/ProdutoEmMontagem'));
 const Acordos           = lazy(() => import('@/pages/Acordos'));
 const PaginaPixAutomatico = lazy(() => import('@/pages/PixAutomatico'));
+const PaginaJornada       = lazy(() => import('@/pages/Jornada'));
 const AcordoForm        = lazy(() => import('@/pages/AcordoForm'));
 const AcordoDetalhe     = lazy(() => import('@/pages/AcordoDetalhe'));
 const PainelLider       = lazy(() => import('@/pages/PainelLider'));
@@ -488,6 +489,22 @@ export default function App() {
                 <LayoutWrapper>
                   <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_pix_automatico">
                     <PaginaPixAutomatico />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+              {/* Jornada (04/11/2026): Acesso (subgrupo Suporte) e Retenção.
+                  Sem chave: quem abre é o subgrupo, e a tela pergunta ao banco. */}
+              <Route path={ROUTE_PATHS.JORNADA_ACESSO} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COBRANCA}>
+                    <PaginaJornada tipo="acesso" />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+              <Route path={ROUTE_PATHS.JORNADA_RETENCAO} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COBRANCA}>
+                    <PaginaJornada tipo="retencao" />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />

@@ -33,7 +33,7 @@ import {
   LayoutDashboard, FileText, Plus, Users, Settings, Trash2, TrendingUp,
   BarChart3, Upload, Target, BarChart2, Megaphone, MessageSquarePlus,
   Ticket, ClipboardList, ClipboardCheck, Smartphone, MessageCircle, Gauge,
-  ShoppingBag, Handshake, Send, Zap, Tv,
+  ShoppingBag, Handshake, Send, Zap, Tv, KeyRound, ShieldCheck,
 } from 'lucide-react';
 import { CARGOS_MODO_TV, ROUTE_PATHS } from '@/lib/index';
 import { produtoPermite, type Produto } from '@/lib/produto';
@@ -225,6 +225,11 @@ export const NAV_ITEMS: NavItem[] = [
   // a de Acordos, de onde ela saiu. `depoisDe` a mantém embaixo de Novo Acordo
   // também para quem já tinha arrumado o menu antes dela existir.
   { label: 'Pix Automático',   icon: Zap,             to: ROUTE_PATHS.PIX_AUTOMATICO,      produtos: SO_COBRANCA, hiddenForPaguePay: true, permissaoKey: 'ver_pix_automatico', depoisDe: ROUTE_PATHS.ACORDO_NOVO },
+  // Jornada (04/11/2026): Acesso para quem está no grupo Suporte, Retenção para o
+  // grupo Retenção (equipe ou subgrupo). Sem chave nem cargo: quem decide é o
+  // GRUPO da pessoa (ou a liderança do setor dele) — ver `abasJornada` abaixo.
+  { label: 'Acesso',           icon: KeyRound,        to: ROUTE_PATHS.JORNADA_ACESSO,      produtos: SO_COBRANCA, depoisDe: ROUTE_PATHS.PIX_AUTOMATICO },
+  { label: 'Retenção',         icon: ShieldCheck,     to: ROUTE_PATHS.JORNADA_RETENCAO,    produtos: SO_COBRANCA, depoisDe: ROUTE_PATHS.JORNADA_ACESSO },
   { label: 'Painel Líder',     icon: BarChart3,       to: ROUTE_PATHS.PAINEL_LIDER,        produtos: SO_COBRANCA, roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_painel_lider' },
   // Modo TV 2 (27/10/2026). Por CARGO, sem chave: só líder, elite e acima
   // (Cleber, 27/10). É a régua de `fn_tv_alvo_no_meu_alcance` no banco — uma
@@ -275,6 +280,13 @@ export interface ContextoMenu {
   temPermissao: (chave: string) => boolean;
   /** Interruptor da empresa + cadastro de atendentes de Tickets. */
   acessoTickets: boolean;
+  /**
+   * As abas do Jornada que a PESSOA alcança pela equipe/subgrupo (Suporte → Acesso,
+   * Retenção → Retenção) ou pela liderança do setor. Depende de pessoa, não de
+   * cargo: na prévia por cargo do editor vem ausente, e as duas aparecem para
+   * o super_admin poder posicioná-las.
+   */
+  abasJornada?: { acesso: boolean; retencao: boolean };
 }
 
 /**
@@ -321,6 +333,15 @@ export function abasDoMenu(ctx: ContextoMenu): NavItem[] {
       // O que sobra aqui e o interruptor da empresa e o cadastro de
       // atendentes — dois controles que o proprio admin liga na tela.
       return ctx.acessoTickets;
+    }
+
+    // Jornada: pela equipe/subgrupo da pessoa (ou liderança do setor dele),
+    // como o banco responde. O super_admin vê sempre — sem grupo, a tela
+    // mostra a prévia com dados de exemplo.
+    if (item.to === ROUTE_PATHS.JORNADA_ACESSO || item.to === ROUTE_PATHS.JORNADA_RETENCAO) {
+      if (ctx.cargo === 'super_admin') return true;
+      const abas = ctx.abasJornada;
+      return (item.to === ROUTE_PATHS.JORNADA_ACESSO ? abas?.acesso : abas?.retencao) ?? true;
     }
 
     if (item.permissaoKey) return true;

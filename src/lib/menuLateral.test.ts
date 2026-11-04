@@ -358,3 +358,22 @@ describe('itemAcesoDoMenu — um item aceso por vez', () => {
     expect(itemAcesoDoMenu('/vendasx', comercial)).toBeNull();
   });
 });
+
+describe('abas do Jornada (Acesso e Retenção)', () => {
+  const nada = { acesso: false, retencao: false };
+
+  it('super_admin vê as duas mesmo sem subgrupo (ou sem a migration)', () => {
+    const abas = rotulos(abasDoMenu(ctx({ abasJornada: nada })));
+    expect(abas).toContain('Acesso');
+    expect(abas).toContain('Retenção');
+  });
+
+  it('os outros cargos dependem do subgrupo', () => {
+    const operador = (abasJornada: { acesso: boolean; retencao: boolean }) =>
+      rotulos(abasDoMenu(ctx({ cargo: 'operador', abasJornada })));
+    expect(operador(nada)).not.toContain('Acesso');
+    expect(operador(nada)).not.toContain('Retenção');
+    expect(operador({ acesso: true, retencao: false })).toContain('Acesso');
+    expect(operador({ acesso: true, retencao: false })).not.toContain('Retenção');
+  });
+});

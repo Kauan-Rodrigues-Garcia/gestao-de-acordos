@@ -142,8 +142,17 @@ const EXCECOES: Record<string, Excecao> = {
     motivo: 'super_admin abre a tela do celular só para TESTE e escolhe um operador antes (impersonação); não concede dado nenhum — a tela passa a ser a do operador escolhido.',
   },
   'lib/menuLateral.ts': {
+    linhas: 2, familia: 'chave-mestra',
+    motivo: 'fallback do item sem chave de permissão: só o Dashboard cai nele, e super_admin sempre passa. '
+      + 'E as abas Acesso/Retenção do Jornada (04/11/2026): quem as vê é o banco (fn_jornada_minhas_abas, pela '
+      + 'equipe/subgrupo); o super_admin vê sempre para abrir a prévia com dados de exemplo — não libera dado, '
+      + 'o painel real continua pedindo fn_jornada_gere/membro.',
+  },
+  'pages/Jornada/index.tsx': {
     linhas: 1, familia: 'chave-mestra',
-    motivo: 'fallback do item sem chave de permissão: só o Dashboard cai nele, e super_admin sempre passa.',
+    motivo: 'sem equipe/subgrupo Suporte ou Retenção, o super_admin vê a PRÉVIA com dados inventados (nada vai ao '
+      + 'banco), pedida em 04/11/2026 para ver a aba antes de existir o grupo. Não concede dado: o painel real '
+      + 'só abre pelo que fn_jornada_minhas_abas devolve.',
   },
   'pages/PainelDiretoria/index.tsx': {
     linhas: 1, familia: 'chave-mestra',

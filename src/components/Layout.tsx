@@ -34,6 +34,7 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useCargos } from '@/hooks/useCargos';
 import { useTicketsAcesso } from '@/hooks/useTicketsAcesso';
+import { useJornadaAbas } from '@/hooks/useJornadaAbas';
 import { ROUTE_PATHS, PERFIL_LABELS, PERFIL_COLORS } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -288,6 +289,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   useCargos();
   const { temPermissao, valorDoCargo, loading: permLoading } = useCargoPermissoes();
   const acessoTickets   = useTicketsAcesso();
+  // Abas Acesso/Retenção do Jornada: pelo subgrupo da pessoa.
+  const jornada         = useJornadaAbas();
   // Mesmo estado que o painel (ChatNotificacoes) usa — antes o header tinha um
   // canal e um SELECT count próprios, que podiam divergir da lista por instantes.
   const { naoLidas, animarBadge } = useNotificacoes();
@@ -352,9 +355,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     isBookplay: tenant.slug === 'bookplay',
     temPermissao: chave => !permLoading && temPermissao(chave),
     acessoTickets: acessoTickets.podeVerAba,
+    abasJornada: { acesso: jornada.acesso, retencao: jornada.retencao },
   }), [
     userRole, produto, isPP, tenant.slug, permLoading, temPermissao,
-    acessoTickets.podeVerAba,
+    acessoTickets.podeVerAba, jornada.acesso, jornada.retencao,
   ]);
 
   /*
