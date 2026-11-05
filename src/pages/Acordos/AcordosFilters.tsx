@@ -1,4 +1,4 @@
-import { Building2, Layers, Search, X } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -9,6 +9,7 @@ import { DatePickerField } from '@/components/DatePickerField';
 import { cn } from '@/lib/utils';
 import type { VisaoFiltroAcordos } from './helpers';
 import { BotaoMensagensWhatsapp } from './MensagensWhatsapp';
+import { SeletorAlcance } from './SeletorAlcance';
 import type { NivelEscopo } from '@/lib/permissoes-escopo';
 import type { AcordoTag } from '@/lib/supabase';
 
@@ -73,10 +74,6 @@ export function AcordosFilters({
   setCurrentPage, limparFiltros,
   onAbrirMensagens,
 }: AcordosFiltersProps) {
-  const mostrarEquipes = niveis.includes('equipe') && equipesDoSetor.length > 0;
-  // Um "individual" sozinho não é escolha — é a única coisa que a pessoa vê.
-  const mostrarIndividual = niveis.includes('individual') && niveis.length > 1;
-
   return (
     <>
       {/* Tabs */}
@@ -106,95 +103,14 @@ export function AcordosFilters({
             própria no menu, embaixo de Novo Acordo. */}
       </div>
 
-      {/* Seletor de visão — as opções saem dos NÍVEIS da aba Acordos.
-          Antes era `isLider || isElite` para os atalhos de equipe e `isElite`
-          para o "Individual", duas listas de cargo escritas à mão que
-          discordavam das permissões configuradas. */}
-      {/*
-        Setor e equipe em CASCATA, como no Dashboard e no Desempenho do Dia.
-
-        Antes cada equipe era um botão. Para quem enxerga um setor só isso
-        cabia; para quem tem `todos_setores` a consulta traz as equipes da
-        empresa inteira e a barra virava um tapete de dezenas de botões, sem
-        ordem e sem dizer de que setor cada uma é. Dois `Select` resolvem as
-        duas coisas: cabem em qualquer largura e o setor dá o contexto que o
-        nome da equipe sozinho não dá.
-
-        «Individual» continua botão porque não é item de lista — é outro MODO
-        de ver a tela, e o único que troca a pergunta de "de quem são estes
-        acordos" para "quais são os meus".
-      */}
-      {(mostrarEquipes || mostrarIndividual) && (
-        <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 mb-3 rounded-xl border border-border bg-card">
-          <span className="text-xs font-medium text-muted-foreground shrink-0">Visualizar acordos de:</span>
-
-          {setoresDisponiveis.length > 0 && (
-            <Select
-              value={filtroSetor ?? '__todos'}
-              onValueChange={v => {
-                setFiltroSetor(v === '__todos' ? null : v);
-                setCurrentPage(1);
-              }}
-            >
-              <SelectTrigger className="h-8 w-[190px] rounded-lg text-xs">
-                <Building2 className="w-3 h-3 shrink-0 text-muted-foreground" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__todos">Todos os setores</SelectItem>
-                {setoresDisponiveis.map(s => (
-                  <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-
-          {mostrarEquipes && (
-            <Select
-              value={visaoFiltroAcordos.startsWith('equipe:') ? visaoFiltroAcordos : '__setor'}
-              onValueChange={v => {
-                setVisaoFiltroAcordos((v === '__setor' ? 'setor' : v) as VisaoFiltroAcordos);
-                setCurrentPage(1);
-              }}
-              /* Sem equipe no recorte não há escolha a fazer, e um seletor de
-                 opção única promete recorte sem entregar. */
-              disabled={equipesDoSetor.length === 0}
-            >
-              <SelectTrigger className="h-8 w-[210px] rounded-lg text-xs">
-                <Layers className="w-3 h-3 shrink-0 text-muted-foreground" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__setor">
-                  {filtroSetor ? 'Todas as equipes do setor' : 'Todas as equipes'}
-                </SelectItem>
-                {equipesDoSetor.map(eq => (
-                  <SelectItem key={eq.id} value={`equipe:${eq.id}`}>{eq.nome}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-
-          {mostrarIndividual && (
-            <button
-              onClick={() => {
-                setVisaoFiltroAcordos(
-                  visaoFiltroAcordos === 'individual' ? 'setor' : 'individual',
-                );
-                setCurrentPage(1);
-              }}
-              className={cn(
-                'flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all',
-                visaoFiltroAcordos === 'individual'
-                  ? 'bg-role-elite text-white border-role-elite'
-                  : 'bg-background text-muted-foreground border-border hover:border-role-elite/40',
-              )}
-            >
-              Individual
-            </button>
-          )}
-        </div>
-      )}
+      {/* «Visualizar acordos de:» — setor, equipe e Individual, pelos NÍVEIS da aba
+          (`SeletorAlcance`, o mesmo da mesa da regra Cofen). */}
+      <SeletorAlcance
+        niveis={niveis} equipesDoSetor={equipesDoSetor} setoresDisponiveis={setoresDisponiveis}
+        filtroSetor={filtroSetor} setFiltroSetor={setFiltroSetor}
+        visao={visaoFiltroAcordos} setVisao={setVisaoFiltroAcordos}
+        aoMudar={() => setCurrentPage(1)}
+      />
 
       {/* Filtros */}
       <Card className="border-border mb-4" data-tour="filtros">

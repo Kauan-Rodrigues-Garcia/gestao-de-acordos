@@ -247,12 +247,13 @@ describe('catálogo — integridade', () => {
 });
 
 describe('recorte por operação', () => {
-  it('PaguePlay não recebe Pix automático nem Campanha Fácil', () => {
+  it('PaguePlay não recebe Pix automático nem Campanha Fácil, mas recebe a aba Acordos', () => {
     const chaves = catalogoDoTenant('pagueplay').map(p => p.key);
     expect(chaves).not.toContain('ver_pix_automatico');
     expect(chaves).not.toContain('aprovar_pix_automatico');
     expect(chaves).not.toContain('ver_campanha_facil');
-    expect(chaves).not.toContain('ver_acordos');
+    // A aba Acordos vale para as duas regras desde 05/11/2026 (a mesa da regra Cofen).
+    expect(chaves).toContain('ver_acordos');
   });
 
   it('o que não declara tenant aparece nas duas', () => {

@@ -78,7 +78,7 @@ export function CardAcordoVinculado({ m, meuId }: { m: MensagemChat; meuId: stri
           {acordoId ? (
             <Button
               size="sm" variant="outline" className="h-7 text-xs"
-              onClick={() => navigate(rotaDoAcordo(acordoId, tenant.isPaguePlay))}
+              onClick={() => navigate(rotaDoAcordo(acordoId))}
             >
               Ver acordo
             </Button>

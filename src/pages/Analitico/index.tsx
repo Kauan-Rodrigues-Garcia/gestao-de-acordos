@@ -408,9 +408,10 @@ export default function PaginaAnalitico() {
       navigate(ROUTE_PATHS.ACORDOS + (codigo ? '?busca=' + encodeURIComponent(codigo) : ''));
       return;
     }
+    // Regra Cofen: a mesa dela é a aba Acordos desde 05/11/2026 (antes, o Dashboard).
     const qs = new URLSearchParams({ verAcordo: acordoId });
     if (codigo) qs.set('busca', codigo);
-    navigate(ROUTE_PATHS.DASHBOARD + '?' + qs.toString());
+    navigate(ROUTE_PATHS.ACORDOS + '?' + qs.toString());
   }
 
   return (

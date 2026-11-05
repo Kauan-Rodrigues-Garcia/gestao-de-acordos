@@ -32,7 +32,7 @@ import { AcordoNovoInline } from '@/components/AcordoNovoInline';
 import { LinhaDoDiaAcordos, SetaDetalhe } from '@/components/AcordosDoDia';
 import type { Acordo } from '@/lib/supabase';
 import type { AcordoComVinculo } from '@/lib/deduplicarVinculados';
-import { ensureAbsoluteUrl } from './helpers';
+import { ensureAbsoluteUrl } from '@/pages/Dashboard/helpers';
 import { podeReagendar } from '@/services/reagendamento/reagendamento';
 import { BotaoReagendar } from '@/components/BotaoReagendar';
 

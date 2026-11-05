@@ -472,7 +472,7 @@ export default function App() {
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
-              {/* A lista da BookPlay. Era livre: qualquer cargo logado abria. */}
+              {/* A mesa de acordos, nas duas regras (05/11/2026): `pages/Acordos` escolhe a de cada uma. Era livre: qualquer cargo logado abria. */}
               <Route path={ROUTE_PATHS.ACORDOS} element={
                 <LayoutWrapper>
                   <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_acordos">

@@ -44,7 +44,6 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import type { Notificacao } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useNotificacoes } from '@/providers/NotificacoesProvider';
-import { useTenant } from '@/lib/tenant-config';
 import { rotaDaNotificacao } from '@/lib/notificacoes-rota';
 import {
   tipoDaNotificacao, apresentacaoDaNotificacao, categoriasPresentes,
@@ -294,7 +293,6 @@ function LinhaNotificacao({
 export function ChatNotificacoes() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const tenant   = useTenant();
 
   const [aberto, setAberto]       = useState(false);
   const [expandido, setExpandido] = useState(false);
@@ -402,13 +400,13 @@ export function ChatNotificacoes() {
 
   /** Vai para onde a notificação aponta. `false` = não há destino. */
   const navegarPara = useCallback((n: Notificacao): boolean => {
-    const destino = rotaDaNotificacao(n, tenant.isPaguePlay);
+    const destino = rotaDaNotificacao(n);
     if (!destino) return false;
     setAberto(false);
     setDetalhe(null);
     navigate(destino);
     return true;
-  }, [navigate, tenant.isPaguePlay]);
+  }, [navigate]);
 
   /**
    * Clique na notificação: leva para a aba de origem.
