@@ -74,9 +74,13 @@ async function lerMes(u: Perfil, meta: number, cofen: boolean): Promise<MesDaPes
 export function FichaPessoa({
   pessoa, aberta, onFechar, online, setor, equipe, empresa, meta,
   podeEditar, podeTransferir, podeImpersonar, souEu, onEditar, onTransferir, onEntrarComo, rotuloTransferir,
-  afastamentos,
+  afastamentos, onPedirResetSenha, resetSenhaPedido = false,
 }: {
   pessoa: Perfil | null; aberta: boolean; onFechar: () => void; online: boolean;
+  /** Pedir o reset de senha ao super admin (05/11/2026). Ausente: não pode pedir para esta pessoa. */
+  onPedirResetSenha?: (u: Perfil) => void;
+  /** Já há pedido de reset aberto para ela. */
+  resetSenhaPedido?: boolean;
   setor: { nome: string; info: InfoDeSetor | null } | null;
   equipe: string | null; empresa: string; meta: number | null;
   podeEditar: boolean; podeTransferir: boolean; podeImpersonar: boolean; souEu: boolean;
@@ -144,6 +148,11 @@ export function FichaPessoa({
             {podeEditar && <Button size="sm" className="h-8 gap-1.5" onClick={() => onEditar(u)}><Edit className="w-3.5 h-3.5" /> Editar</Button>}
             {podeTransferir && <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => onTransferir(u)}><ArrowRightLeft className="w-3.5 h-3.5" /> {rotuloTransferir ?? 'Transferir'}</Button>}
             {podeEditar && <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => onEditar(u)}><KeyRound className="w-3.5 h-3.5" /> Senha e foto</Button>}
+            {onPedirResetSenha && !souEu && (
+              resetSenhaPedido
+                ? <Button size="sm" variant="outline" className="h-8 gap-1.5" disabled title="Já há um pedido aguardando o super admin"><KeyRound className="w-3.5 h-3.5" /> Reset de senha pedido</Button>
+                : <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => onPedirResetSenha(u)}><KeyRound className="w-3.5 h-3.5" /> Solicitar reset de senha</Button>
+            )}
             {podeImpersonar && !souEu && <Button size="sm" variant="outline" className="h-8 gap-1.5 text-warning" onClick={() => onEntrarComo(u)}><LogIn className="w-3.5 h-3.5" /> Entrar como</Button>}
           </div>
         </div>

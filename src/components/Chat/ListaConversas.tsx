@@ -34,6 +34,7 @@ import { cargosChatLiberados } from '@/lib/permissoes-chat';
 import { StatusMensagem } from './StatusMensagem';
 import { LinhaAutorizacoes, type AutorizacoesNoChat } from './AutorizacoesChat';
 import { LinhaTransferencias, TITULO_TRANSFERENCIAS, type TransferenciasNoChat } from './TransferenciasChat';
+import { LinhaSenhas, TITULO_SENHAS, type SenhasNoChat } from './SenhasChat';
 import { posicaoDasAutorizacoes } from '@/components/Autorizacoes/resumoChat';
 import { estadoMensagem } from './estadoMensagem';
 
@@ -67,6 +68,11 @@ interface Props {
    * decide transferência, e a linha não existe.
    */
   transferencias?: TransferenciasNoChat;
+  /**
+   * O canal «Senhas» (05/11/2026). Ausente = quem olha não pede nem decide
+   * reset de senha, e a linha não existe.
+   */
+  senhas?: SenhasNoChat;
 }
 
 interface CardDisparoProps {
@@ -229,7 +235,7 @@ function CardDisparo({ disparo, online, onAbrir }: CardDisparoProps) {
 export function ListaConversas({
   conversas, disparos, online, digitando, selecionada, carregando, meuId,
   onAbrir, onApagar, onFixar, onVerMidias,
-  onNovaConversa, onNovoDisparo, onNovoGrupo, autorizacoes, transferencias,
+  onNovaConversa, onNovoDisparo, onNovoGrupo, autorizacoes, transferencias, senhas,
 }: Props) {
   const [aba, setAba] = useState<Aba>('conversas');
   const [busca, setBusca] = useState('');
@@ -302,8 +308,19 @@ export function ListaConversas({
     ? <LinhaTransferencias key="transferencias" {...transferencias} />
     : null;
 
-  /** As linhas fixas, cada uma na sua posição. Empate no topo: Transferências primeiro. */
+  // O canal «Senhas»: a mesma regra das Transferências.
+  const comSenhas = !!senhas && aba === 'conversas'
+    && (!palavras.length || casaBusca(chaveDeBusca(TITULO_SENHAS, 'senhas'), palavras));
+  const posSenhas = comSenhas && senhas
+    ? posicaoDasAutorizacoes(filtradas, { pendentes: senhas.emDestaque ? 1 : 0, ultimaEm: senhas.resumo.ultimaEm })
+    : -1;
+  const linhaSenhas = comSenhas && senhas
+    ? <LinhaSenhas key="senhas" {...senhas} />
+    : null;
+
+  /** As linhas fixas, cada uma na sua posição. Empate no topo: Senhas, Transferências, Autorizações. */
   const fixas = [
+    ...(linhaSenhas ? [{ pos: posSenhas, linha: linhaSenhas }] : []),
     ...(linhaTransferencias ? [{ pos: posTransferencias, linha: linhaTransferencias }] : []),
     ...(linhaAutorizacoes ? [{ pos: posAutorizacoes, linha: linhaAutorizacoes }] : []),
   ];

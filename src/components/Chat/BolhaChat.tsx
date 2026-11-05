@@ -59,6 +59,12 @@ import {
 import {
   decididosDesde, fraseDoPedido, pedidoAberto, pedidosNovos, resumoDasTransferencias,
 } from '@/lib/transferenciaPedidos';
+import { useSenhaPedidos } from '@/hooks/useSenhaPedidos';
+import { IconeSenhas } from './IconeSenhas';
+import { CONVERSA_SENHAS, EVENTO_ABRIR_SENHAS, consumirPedidoDeAbrirSenhas } from './abrirSenhas';
+import {
+  pedidoSenhaAberto, resumoDasSenhas, senhasDecididasDesde, senhasNovas,
+} from '@/lib/senhaPedidos';
 import { EscudoAutorizacoes } from '@/components/Autorizacoes/EscudoAutorizacoes';
 import { buscarNomeDoAlvo } from '@/services/comemoracoes.service';
 import type { PedidoAutorizacao } from '@/services/autorizacaoPedidos.service';
@@ -93,6 +99,7 @@ const GaleriaDialog      = lazy(() => carregarJanela().then(m => ({ default: m.G
 const BoasVindasChat     = lazy(() => carregarJanela().then(m => ({ default: m.BoasVindasChat })));
 const PainelAutorizacoes = lazy(() => carregarJanela().then(m => ({ default: m.PainelAutorizacoes })));
 const PainelTransferencias = lazy(() => carregarJanela().then(m => ({ default: m.PainelTransferencias })));
+const PainelSenhas       = lazy(() => carregarJanela().then(m => ({ default: m.PainelSenhas })));
 
 function precarregarJanela() {
   void carregarJanela().catch(() => {});
@@ -539,8 +546,85 @@ export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaI
     tocarSomChat();
   }, [souSuperAdmin, podeTransferencias, transferencias.carregando, transferencias.pedidos, perfil?.id, abrirTransferencias]);
 
-  /** Mensagem não lida + autorização esperando + transferência: o que a bolha conta. */
-  const avisosNaBolha = chat.naoLidasTotal + (autorizacoesDiscretas ? 0 : resumoAutorizacoes.pendentes) + avisosTransf;
+  /*
+   * ── Senhas: o canal dos pedidos de reset (05/11/2026) ─────────────────────
+   *
+   * O mesmo desenho das Transferências. Super admin: todos, no topo e aceso
+   * com pedido aberto. Quem pede (`ver_usuarios`): só os seus, depois do
+   * primeiro pedido, acendendo quando um é decidido.
+   */
+  const podeSenhas = podeVer && !!perfil?.id && (souSuperAdmin || temPermissao('ver_usuarios'));
+  const senhas = useSenhaPedidos(podeSenhas, souSuperAdmin);
+  const [vendoSenhas, setVendoSenhas] = useState(false);
+  const chaveVistoSenhas = perfil?.id ? `chat:senhas-visto:${perfil.id}` : null;
+  const [vistoSenhasEm, setVistoSenhasEm] = useState<string | null>(null);
+  useEffect(() => {
+    if (!chaveVistoSenhas) return;
+    try { setVistoSenhasEm(localStorage.getItem(chaveVistoSenhas)); } catch { setVistoSenhasEm(null); }
+  }, [chaveVistoSenhas]);
+  const resumoSenhas = resumoDasSenhas(senhas.pedidos, souSuperAdmin);
+  const senhasAbertas = senhas.pedidos.filter(pedidoSenhaAberto).length;
+  const mostraLinhaSenhas = podeSenhas && (souSuperAdmin || senhas.pedidos.length > 0);
+  const avisosSenhas = souSuperAdmin ? senhasAbertas : senhasDecididasDesde(senhas.pedidos, vistoSenhasEm);
+
+  const abrirSenhas = useCallback(() => {
+    chatRef.current?.abrir(null);
+    setVendoAutorizacoes(false);
+    setVendoTransferencias(false);
+    setVendoSenhas(true);
+    abertoRef.current = true;
+    setAberto(true);
+  }, []);
+
+  useEffect(() => {
+    if (!vendoSenhas || !chaveVistoSenhas) return;
+    const agora = new Date().toISOString();
+    setVistoSenhasEm(agora);
+    try { localStorage.setItem(chaveVistoSenhas, agora); } catch { /* sem storage */ }
+  }, [vendoSenhas, chaveVistoSenhas, senhas.pedidos]);
+
+  useEffect(() => {
+    if (chat.conversaAberta || vendoAutorizacoes || vendoTransferencias) setVendoSenhas(false);
+  }, [chat.conversaAberta, vendoAutorizacoes, vendoTransferencias]);
+
+  useEffect(() => {
+    if (!podeSenhas) return;
+    if (consumirPedidoDeAbrirSenhas()) abrirSenhas();
+    const aoPedir = () => { if (consumirPedidoDeAbrirSenhas()) abrirSenhas(); };
+    window.addEventListener(EVENTO_ABRIR_SENHAS, aoPedir);
+    return () => window.removeEventListener(EVENTO_ABRIR_SENHAS, aoPedir);
+  }, [podeSenhas, abrirSenhas]);
+
+  // Pedido novo (super admin): aviso no formato de mensagem, com o som do chat.
+  const vistosSenhasRef = useRef<Set<string> | null>(null);
+  const vendoSenhasRef = useRef(vendoSenhas);
+  vendoSenhasRef.current = vendoSenhas;
+  useEffect(() => {
+    if (!souSuperAdmin || !podeSenhas || senhas.carregando) return;
+    if (vistosSenhasRef.current === null) {
+      vistosSenhasRef.current = new Set(senhas.pedidos.map(p => p.id));
+      return;
+    }
+    const novos = senhasNovas(vistosSenhasRef.current, senhas.pedidos, perfil?.id ?? null);
+    for (const p of senhas.pedidos) vistosSenhasRef.current.add(p.id);
+    if (novos.length === 0 || (abertoRef.current && vendoSenhasRef.current)) return;
+    const p = novos[0];
+    const mais = novos.length > 1 ? ` (e mais ${novos.length - 1})` : '';
+    toastFlutuante.custom(id => (
+      <NotificacaoMensagem
+        nome="Senhas"
+        foto={p.solicitante_foto}
+        avatar={p.solicitante_foto ? undefined : <IconeSenhas tamanho={42} alerta />}
+        mensagem={`${p.solicitante_nome} pede resetar a senha de ${p.alvo_nome}${mais}`}
+        onFechar={() => toastFlutuante.dismiss(id)}
+        onAbrir={() => { toastFlutuante.dismiss(id); abrirSenhas(); }}
+      />
+    ), { duration: 12_000 });
+    tocarSomChat();
+  }, [souSuperAdmin, podeSenhas, senhas.carregando, senhas.pedidos, perfil?.id, abrirSenhas]);
+
+  /** Mensagem não lida + autorização esperando + transferência + senha: o que a bolha conta. */
+  const avisosNaBolha = chat.naoLidasTotal + (autorizacoesDiscretas ? 0 : resumoAutorizacoes.pendentes) + avisosTransf + avisosSenhas;
 
   // Contagem da própria aba do navegador. Mensagens lidas limpam o prefixo.
   useEffect(() => {
@@ -589,11 +673,16 @@ export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaI
       avisarAberta.current?.();
       return;
     }
+    if (conversaInicial === CONVERSA_SENHAS) {
+      if (podeSenhas) abrirSenhas();
+      avisarAberta.current?.();
+      return;
+    }
     chatRef.current?.abrir(conversaInicial);
     abertoRef.current = true;
     setAberto(true);
     avisarAberta.current?.();
-  }, [podeVer, conversaInicial, podeAutorizar, abrirAutorizacoes, podeTransferencias, abrirTransferencias]);
+  }, [podeVer, conversaInicial, podeAutorizar, abrirAutorizacoes, podeTransferencias, abrirTransferencias, podeSenhas, abrirSenhas]);
 
   // Celular, aberto: a tela de trás não rola por baixo do chat.
   useEffect(() => {
@@ -764,10 +853,11 @@ export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaI
    * resolvesse (conversa nova, ainda fora da lista), a janela ficava vazia:
    * lista escondida, conversa nula, nada desenhado.
    */
-  const mostraLista = largo || (!conversaAtual && !vendoAutorizacoes && !vendoTransferencias);
-  const mostraConversa = !!conversaAtual && !vendoAutorizacoes && !vendoTransferencias;
+  const mostraLista = largo || (!conversaAtual && !vendoAutorizacoes && !vendoTransferencias && !vendoSenhas);
+  const mostraConversa = !!conversaAtual && !vendoAutorizacoes && !vendoTransferencias && !vendoSenhas;
   const mostraAutorizacoes = vendoAutorizacoes && podeAutorizar;
   const mostraTransferencias = vendoTransferencias && podeTransferencias && !mostraAutorizacoes;
+  const mostraSenhas = vendoSenhas && podeSenhas && !mostraAutorizacoes && !mostraTransferencias;
 
   /*
    * A janela inteira mora dentro da casca sob demanda: se o pedaço não descer,
@@ -907,6 +997,13 @@ export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaI
                   selecionada: vendoTransferencias,
                   onAbrir: abrirTransferencias,
                 } : undefined}
+                senhas={mostraLinhaSenhas ? {
+                  resumo: resumoSenhas,
+                  avisos: avisosSenhas,
+                  emDestaque: souSuperAdmin && senhasAbertas > 0,
+                  selecionada: vendoSenhas,
+                  onAbrir: abrirSenhas,
+                } : undefined}
               />
             </div>
           )}
@@ -972,7 +1069,20 @@ export function BolhaChat({ modo = 'janela', conversaInicial = null, onConversaI
             </div>
           )}
 
-          {largo && !conversaAtual && !mostraAutorizacoes && !mostraTransferencias && (
+          {mostraSenhas && (
+            <div className="flex-1 min-w-0 min-h-0">
+              <PainelSenhas
+                pedidos={senhas.pedidos}
+                souSuperAdmin={souSuperAdmin}
+                meuId={perfil?.id ?? null}
+                onMudou={senhas.recarregar}
+                expandido={largo}
+                onVoltar={() => setVendoSenhas(false)}
+              />
+            </div>
+          )}
+
+          {largo && !conversaAtual && !mostraAutorizacoes && !mostraTransferencias && !mostraSenhas && (
             <div className="flex-1 flex items-center justify-center">
               <p className="text-xs text-muted-foreground">Escolha uma conversa</p>
             </div>

@@ -22,3 +22,4 @@ export { GaleriaDialog } from './GaleriaDialog';
 export { BoasVindasChat } from './BoasVindasChat';
 export { PainelAutorizacoes } from './AutorizacoesChat';
 export { PainelTransferencias } from './TransferenciasChat';
+export { PainelSenhas } from './SenhasChat';
