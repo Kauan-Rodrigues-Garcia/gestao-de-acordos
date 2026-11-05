@@ -10,7 +10,7 @@
  *     primeiros entram na fila, e leva esses cinco. Daí em diante segue o
  *     ciclo todo dia. `inicioMs` é quando o quinto entrou.
  *
- * Mora no banco (migration 20261104200000, `fn_natal_trem_estado`), igual para
+ * Mora no banco (migration 20261104200100, `fn_natal_trem_estado`), igual para
  * todo mundo, e é relida a cada `RELEITURA_MS` — o horário em si sai do
  * relógio (`horario.ts`), como sempre.
  *

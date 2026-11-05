@@ -2,7 +2,7 @@
 -- Natal: a agenda do trenzinho — ligado/desligado, horário e a primeira viagem
 -- ============================================================================
 --
--- Pedido do Cleber, 04/11/2026. Depende de 20261104120000 (a fila e o sorteio).
+-- Pedido do Cleber, 04/11/2026. Depende de 20261104120100 (a fila e o sorteio).
 --
 --   1. Ligado ou desligado. Desligado, o trem fica parado na estação «em
 --      manutenção», e não há sorteio.
@@ -268,7 +268,7 @@ GRANT EXECUTE ON FUNCTION public.fn_natal_trem_configurar(BOOLEAN, TIME, TIME) T
 GRANT EXECUTE ON FUNCTION public.fn_natal_trem_inscrever(BOOLEAN)              TO authenticated;
 GRANT EXECUTE ON FUNCTION public.fn_natal_trem_passageiros(BIGINT)             TO authenticated;
 
-COMMENT ON TABLE public.natal_trem_config IS 'Natal 2026: o trenzinho ligado ou não e o horário da estação (uma linha). Ver a migration 20261104200000.';
-COMMENT ON TABLE public.natal_trem_inicio IS 'Natal 2026: quando a fila do trenzinho chegou a cinco, por empresa e regra (a primeira viagem). Ver a migration 20261104200000.';
+COMMENT ON TABLE public.natal_trem_config IS 'Natal 2026: o trenzinho ligado ou não e o horário da estação (uma linha). Ver a migration 20261104200100.';
+COMMENT ON TABLE public.natal_trem_inicio IS 'Natal 2026: quando a fila do trenzinho chegou a cinco, por empresa e regra (a primeira viagem). Ver a migration 20261104200100.';
 
 COMMIT;

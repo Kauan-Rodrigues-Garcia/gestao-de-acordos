@@ -4,7 +4,7 @@
  * Quem quer viajar se inscreve UMA vez (clicando na estação) e entra em todos
  * os sorteios. Cada viagem leva até cinco, sorteados de surpresa, e ninguém
  * repete no mesmo dia. O sorteio é do banco e fica gravado (migration
- * 20261104120000): a primeira pergunta pela viagem sorteia, as outras leem —
+ * 20261104120100): a primeira pergunta pela viagem sorteia, as outras leem —
  * mesma viagem, mesmas pessoas para todo mundo. A chave de cada viagem é o
  * minuto da partida (`chaveDoSorteio`).
  *

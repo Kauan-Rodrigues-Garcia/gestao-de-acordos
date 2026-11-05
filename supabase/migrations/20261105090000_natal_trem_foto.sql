@@ -2,7 +2,7 @@
 -- Natal: o trenzinho só para quem tem foto de perfil
 -- ============================================================================
 --
--- Pedido do Cleber, 05/11/2026. Depende de 20261104120000 e 20261104200000.
+-- Pedido do Cleber, 05/11/2026. Depende de 20261104120100 e 20261104200100.
 --
 --   1. Sem foto de perfil, a pessoa não insere o ticket (não entra na fila):
 --      `fn_natal_trem_inscrever(true)` recusa com `SEM_FOTO`.
@@ -104,7 +104,7 @@ BEGIN
 END;
 $fn$;
 
--- ── Os passageiros: o mesmo de 20261104200000, só com quem tem foto ─────────
+-- ── Os passageiros: o mesmo de 20261104200100, só com quem tem foto ─────────
 
 CREATE OR REPLACE FUNCTION public.fn_natal_trem_passageiros(p_chave BIGINT)
 RETURNS TABLE(ordem INT, perfil_id UUID, nome TEXT, foto_url TEXT, setor_nome TEXT)

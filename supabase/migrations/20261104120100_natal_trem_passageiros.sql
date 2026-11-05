@@ -187,7 +187,7 @@ GRANT EXECUTE ON FUNCTION public.fn_natal_trem_inscricao()         TO authentica
 GRANT EXECUTE ON FUNCTION public.fn_natal_trem_inscrever(BOOLEAN)  TO authenticated;
 GRANT EXECUTE ON FUNCTION public.fn_natal_trem_passageiros(BIGINT) TO authenticated;
 
-COMMENT ON TABLE public.natal_trem_inscricoes IS 'Natal 2026: quem entrou na fila do trenzinho. Ver a migration 20261104120000.';
-COMMENT ON TABLE public.natal_trem_viagens IS 'Natal 2026: o sorteio gravado de cada viagem do trenzinho (ninguém repete no dia). Ver a migration 20261104120000.';
+COMMENT ON TABLE public.natal_trem_inscricoes IS 'Natal 2026: quem entrou na fila do trenzinho. Ver a migration 20261104120100.';
+COMMENT ON TABLE public.natal_trem_viagens IS 'Natal 2026: o sorteio gravado de cada viagem do trenzinho (ninguém repete no dia). Ver a migration 20261104120100.';
 
 COMMIT;
