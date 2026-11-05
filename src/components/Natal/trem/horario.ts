@@ -16,9 +16,11 @@
  * vai até o fim; depois o trem fica fechado na estação. Parado, `ondeEsta`
  * devolve a estação com `fechado` dizendo o porquê.
  *
- * As abas dependem da regra do setor (CLAUDE.md, «Cofen não é PaguePlay»):
- * Nosso produto passa por Dashboard, Acordos, Pix Automático e Analítico; a
- * regra Cofen, só por Dashboard e Analítico.
+ * O percurso é UM SÓ para todo mundo (`ROTA_DO_TREM`, Cleber, 05/11/2026:
+ * mesmo tempo e mesmo sorteio para todos): quem chama estas funções passa
+ * sempre ele. A regra do setor só decide em que abas cada um VÊ o trem
+ * (`abasDaRegra`): quem é Cofen não vê Acordos nem Pix — nesse trecho o trem
+ * está «no túnel» para ele, no mesmo relógio.
  *
  * O tempo é fixo em segundos, e não em pixels: cada pista da aba leva
  * `SEGUNDOS_POR_PISTA`, em qualquer tela — o trem entra e sai das abas no
@@ -28,7 +30,7 @@
 import { AGENDA_LIVRE, type AgendaDoTrem } from './agenda';
 import { PISTAS_DA_ABA, type AbaDoTrem } from './rota';
 
-export { ROTULO_ABA, rotaDaRegra, type AbaDoTrem } from './rota';
+export { ROTULO_ABA, ROTA_DO_TREM, abasDaRegra, type AbaDoTrem } from './rota';
 
 /**
  * O botão de velocidade: 1 é o ritmo de partida; 1,5 deixa tudo uma vez e

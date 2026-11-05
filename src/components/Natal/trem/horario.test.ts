@@ -2,19 +2,28 @@ import { describe, expect, it } from 'vitest';
 import { EPOCA } from '../musica';
 import {
   PARADA_ESTACAO_S, PARADA_FIM_S, SORTEIO_INICIO_S, SORTEIO_PASSO_S, chaveDoSorteio, chegaNaAbaEm,
-  duracaoDaVolta, etapaDoSorteio, ondeEsta, proximaVoltaEm, quantosABordo, rotaDaRegra, tempoNaAba,
+  duracaoDaVolta, etapaDoSorteio, ondeEsta, proximaVoltaEm, quantosABordo, tempoNaAba,
 } from './horario';
 import { AGENDA_LIVRE, type AgendaDoTrem } from './agenda';
+import { abasDaRegra, ROTA_DO_TREM } from './rota';
 
-const NOSSO = rotaDaRegra('nosso_produto');
-const COFEN = rotaDaRegra('cofen');
+const NOSSO = ROTA_DO_TREM;
 const em = (s: number) => EPOCA + s * 1000;
 
-describe('a rota pela regra do setor', () => {
-  it('Nosso produto passa pelas quatro abas; Cofen só por Dashboard e Analítico', () => {
-    expect(NOSSO).toEqual(['dashboard', 'acordos', 'pix', 'analitico']);
-    expect(COFEN).toEqual(['dashboard', 'analitico']);
-    expect(rotaDaRegra(null)).toEqual(NOSSO);
+describe('um trem só, para todo mundo', () => {
+  it('o percurso passa pelas quatro abas; quem é Cofen vê o trem só no Dashboard e no Analítico', () => {
+    expect(ROTA_DO_TREM).toEqual(['dashboard', 'acordos', 'pix', 'analitico']);
+    expect(abasDaRegra('nosso_produto')).toEqual(ROTA_DO_TREM);
+    expect(abasDaRegra(null)).toEqual(ROTA_DO_TREM);
+    expect(abasDaRegra('cofen')).toEqual(['dashboard', 'analitico']);
+  });
+
+  it('as abas de cada regra estão no percurso, na mesma ordem', () => {
+    for (const regra of ['nosso_produto', 'cofen'] as const) {
+      const abas = abasDaRegra(regra);
+      expect(abas.every(a => ROTA_DO_TREM.includes(a))).toBe(true);
+      expect([...abas]).toEqual(ROTA_DO_TREM.filter(a => abas.includes(a)));
+    }
   });
 });
 
@@ -46,17 +55,20 @@ describe('ondeEsta', () => {
     expect(ondeEsta(em(duracaoDaVolta(NOSSO) + 1), NOSSO)).toMatchObject({ viagem: 1, fase: 'estacao' });
   });
 
-  it('na rota Cofen o trem nunca passa por Acordos nem Pix', () => {
-    const abas = new Set<string>();
-    for (let s = 0; s < duracaoDaVolta(COFEN); s += 2) abas.add(ondeEsta(em(s), COFEN).aba);
-    expect([...abas].sort()).toEqual(['analitico', 'dashboard']);
+  it('a volta dura o mesmo para todo mundo: 5 min 22 s', () => {
+    expect(duracaoDaVolta(ROTA_DO_TREM)).toBe(322);
   });
 });
 
 describe('chegaNaAbaEm', () => {
   it('é 0 com o trem na aba e null para aba fora da rota', () => {
     expect(chegaNaAbaEm(em(1), NOSSO, 'dashboard')).toBe(0);
-    expect(chegaNaAbaEm(em(1), COFEN, 'acordos')).toBeNull();
+    expect(chegaNaAbaEm(em(1), ['dashboard', 'analitico'], 'acordos')).toBeNull();
+  });
+  it('para quem é Cofen, o trem chega ao Analítico na mesma hora que para todo mundo', () => {
+    // Saindo da estação: o trem passa por Acordos e Pix (o «túnel» do Cofen) e chega ao Analítico.
+    const s = chegaNaAbaEm(em(1), NOSSO, 'analitico')!;
+    expect(s).toBe(Math.ceil(PARADA_ESTACAO_S + tempoNaAba('dashboard') + tempoNaAba('acordos') + tempoNaAba('pix') - 1));
   });
   it('conta até a entrada do trem na aba', () => {
     const s = chegaNaAbaEm(em(1), NOSSO, 'acordos')!;

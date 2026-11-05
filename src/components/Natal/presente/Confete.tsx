@@ -56,12 +56,14 @@ const CORES_DO_CONFETE: readonly string[] = ['#e0283a', '#f4c542', '#2fa85a', '#
  * O estouro do pacote: confete em leque (com gravidade e o papel girando e
  * balançando ao cair) e faíscas de luz. Roda uns 4 s e para sozinho.
  */
-export function Confete({ origem, cores = CORES_DO_CONFETE, quantidade = 280, forca = 1 }: {
+export function Confete({ origem, cores = CORES_DO_CONFETE, quantidade = 280, forca = 1, className = 'np-confete' }: {
   origem: Ponto;
   cores?: readonly string[];
   quantidade?: number;
   /** Multiplica a velocidade do leque (o estouro do lacre é menor que o da festa). */
   forca?: number;
+  /** Onde o canvas fica (a cesta da bola usa a dela, acima da página). */
+  className?: string;
 }) {
   const tela = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
@@ -131,5 +133,5 @@ export function Confete({ origem, cores = CORES_DO_CONFETE, quantidade = 280, fo
     quadro = requestAnimationFrame(passo);
     return () => cancelAnimationFrame(quadro);
   }, [origem, cores, quantidade, forca]);
-  return <canvas ref={tela} className="np-confete" aria-hidden />;
+  return <canvas ref={tela} className={className} aria-hidden />;
 }

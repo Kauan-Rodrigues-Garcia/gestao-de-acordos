@@ -8,6 +8,16 @@
 -- em diante entra em todos os sorteios. Ninguém repete no mesmo dia — a não
 -- ser que todo mundo da fila já tenha viajado (aí volta quem viajou menos).
 --
+-- ## Um trem só, para o sistema inteiro
+--
+-- Decisão do Cleber, 05/11/2026: «tem que ser o mesmo tempo e o mesmo sorteio
+-- para todos» — todas as empresas e as duas regras (Nosso produto e Cofen)
+-- juntas. Uma fila, um sorteio por viagem, os mesmos cinco na tela de todo
+-- mundo. Nome, foto e nome do setor dos sorteados aparecem para qualquer
+-- pessoa do sistema, de qualquer empresa (o Cleber escolheu isso sabendo).
+-- A regra do setor só muda em que abas cada um VÊ o trem
+-- (`src/components/Natal/trem/rota.ts`), nunca o horário nem o sorteio.
+--
 -- ## Por que no banco
 --
 -- O sorteio tem de sair igual para todo mundo, e lembrar quem já viajou no
@@ -20,27 +30,29 @@
 -- ## Tabelas
 --
 -- `natal_trem_inscricoes` — quem está na fila (a pessoa e quando entrou).
--- `natal_trem_viagens`    — o sorteio de cada viagem: empresa, regra, chave
---                           (o minuto da partida, `chaveDoSorteio` em
+-- `natal_trem_viagens`    — o sorteio de cada viagem: a chave (o minuto da
+--                           partida, `chaveDoSorteio` em
 --                           `src/components/Natal/trem/horario.ts`), o dia
 --                           (Brasília) e os cinco, em ordem de embarque.
 -- As duas com RLS ligado e sem policy: só as funções abaixo mexem nelas.
 --
--- ## Funções (todas para `authenticated`, sobre quem pergunta)
+-- ## Funções (todas para `authenticated`)
 --
 -- `fn_natal_trem_inscricao()`            — estou na fila? e quantos estão.
 -- `fn_natal_trem_inscrever(p_entrar)`    — entra (true) ou sai (false).
 -- `fn_natal_trem_passageiros(p_chave)`   — os passageiros da viagem; sorteia
 --                                          na primeira pergunta.
 --
--- Quem viaja: os inscritos da empresa de quem pergunta e da mesma REGRA do
--- setor (Nosso produto ou Cofen — CLAUDE.md, «Cofen não é PaguePlay»: são
--- trens diferentes), ativos, não arquivados e não desligados. Primeiro quem
--- ainda não viajou no dia; acabando esses, completa com quem viajou menos
--- vezes (pedido do Cleber, 04/11/2026). O que sai: nome, foto e nome do
--- setor — de quem se inscreveu para isso.
+-- Quem viaja: os inscritos ativos, não arquivados e não desligados, de
+-- qualquer empresa e regra. Primeiro quem ainda não viajou no dia; acabando
+-- esses, completa com quem viajou menos vezes (pedido do Cleber, 04/11/2026).
 --
 -- Limite: só viagens a até 30 minutos de agora (a volta do trem tem ~5 min).
+--
+-- Antes de aplicar: esta migration nunca foi aplicada até 05/11/2026, e a
+-- versão de antes separava por empresa e regra. Se `natal_trem_viagens` já
+-- existir com as colunas `empresa_id`/`regra`, ela NÃO serve — conferir com
+-- `to_regclass('public.natal_trem_viagens')` antes.
 --
 -- Reaplicável.
 -- ============================================================================
@@ -58,15 +70,12 @@ CREATE TABLE IF NOT EXISTS public.natal_trem_inscricoes (
 ALTER TABLE public.natal_trem_inscricoes ENABLE ROW LEVEL SECURITY;
 
 CREATE TABLE IF NOT EXISTS public.natal_trem_viagens (
-  empresa_id  UUID   NOT NULL REFERENCES public.empresas(id) ON DELETE CASCADE,
-  regra       TEXT   NOT NULL,
-  chave       BIGINT NOT NULL,
+  chave       BIGINT PRIMARY KEY,
   dia         DATE   NOT NULL,
   passageiros UUID[] NOT NULL,
-  sorteado_em TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (empresa_id, regra, chave)
+  sorteado_em TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS natal_trem_viagens_do_dia ON public.natal_trem_viagens (empresa_id, regra, dia);
+CREATE INDEX IF NOT EXISTS natal_trem_viagens_do_dia ON public.natal_trem_viagens (dia);
 ALTER TABLE public.natal_trem_viagens ENABLE ROW LEVEL SECURITY;
 
 -- ── Estou na fila? ──────────────────────────────────────────────────────────
@@ -78,20 +87,12 @@ STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $fn$
-  WITH eu AS (
-    SELECT p.id, p.empresa_id, COALESCE(s.regra, 'nosso_produto') AS regra
-      FROM public.perfis p LEFT JOIN public.setores s ON s.id = p.setor_id
-     WHERE p.id = auth.uid()
-  )
-  SELECT EXISTS (SELECT 1 FROM public.natal_trem_inscricoes i, eu WHERE i.perfil_id = eu.id),
+  SELECT EXISTS (SELECT 1 FROM public.natal_trem_inscricoes i WHERE i.perfil_id = auth.uid()),
          (SELECT count(*)::INT
             FROM public.natal_trem_inscricoes i
             JOIN public.perfis p ON p.id = i.perfil_id
-            LEFT JOIN public.setores s ON s.id = p.setor_id, eu
-           WHERE p.empresa_id = eu.empresa_id
-             AND COALESCE(s.regra, 'nosso_produto') = eu.regra
-             AND p.ativo AND NOT p.arquivado AND p.situacao <> 'desligado')
-    FROM eu;
+           WHERE p.ativo AND NOT p.arquivado AND p.situacao <> 'desligado')
+   WHERE auth.uid() IS NOT NULL;
 $fn$;
 
 -- ── Entrar ou sair da fila ──────────────────────────────────────────────────
@@ -125,24 +126,15 @@ SET search_path = public
 AS $fn$
 #variable_conflict use_column
 DECLARE
-  v_eu      UUID := auth.uid();
-  v_empresa UUID;
-  v_regra   TEXT;
-  v_dia     DATE;
-  v_minuto  BIGINT := floor(extract(epoch FROM now()) / 60)::BIGINT;
-  v_lista   UUID[];
+  v_eu     UUID := auth.uid();
+  v_dia    DATE;
+  v_minuto BIGINT := floor(extract(epoch FROM now()) / 60)::BIGINT;
+  v_lista  UUID[];
 BEGIN
   IF v_eu IS NULL OR p_chave IS NULL OR p_chave NOT BETWEEN v_minuto - 30 AND v_minuto + 30 THEN RETURN; END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.perfis p WHERE p.id = v_eu) THEN RETURN; END IF;
 
-  SELECT p.empresa_id, COALESCE(s.regra, 'nosso_produto')
-    INTO v_empresa, v_regra
-    FROM public.perfis p LEFT JOIN public.setores s ON s.id = p.setor_id
-   WHERE p.id = v_eu;
-  IF v_empresa IS NULL THEN RETURN; END IF;
-
-  SELECT v.passageiros INTO v_lista
-    FROM public.natal_trem_viagens v
-   WHERE v.empresa_id = v_empresa AND v.regra = v_regra AND v.chave = p_chave;
+  SELECT v.passageiros INTO v_lista FROM public.natal_trem_viagens v WHERE v.chave = p_chave;
 
   IF v_lista IS NULL THEN
     v_dia := (to_timestamp(p_chave * 60) AT TIME ZONE 'America/Sao_Paulo')::DATE;
@@ -151,24 +143,18 @@ BEGIN
         SELECT p.id
           FROM public.natal_trem_inscricoes i
           JOIN public.perfis p ON p.id = i.perfil_id
-          LEFT JOIN public.setores s ON s.id = p.setor_id
-         WHERE p.empresa_id = v_empresa
-           AND COALESCE(s.regra, 'nosso_produto') = v_regra
-           AND p.ativo AND NOT p.arquivado AND p.situacao <> 'desligado'
+         WHERE p.ativo AND NOT p.arquivado AND p.situacao <> 'desligado'
          -- Primeiro quem ainda não viajou hoje; acabando, quem viajou menos vezes.
          ORDER BY (SELECT count(*) FROM public.natal_trem_viagens v
-                    WHERE v.empresa_id = v_empresa AND v.regra = v_regra AND v.dia = v_dia
-                      AND p.id = ANY (v.passageiros)),
+                    WHERE v.dia = v_dia AND p.id = ANY (v.passageiros)),
                   random()
          LIMIT 5
       ) x;
-    INSERT INTO public.natal_trem_viagens (empresa_id, regra, chave, dia, passageiros)
-    VALUES (v_empresa, v_regra, p_chave, v_dia, v_lista)
+    INSERT INTO public.natal_trem_viagens (chave, dia, passageiros)
+    VALUES (p_chave, v_dia, v_lista)
     ON CONFLICT DO NOTHING;
     -- Se outra pergunta sorteou ao mesmo tempo, vale a dela.
-    SELECT v.passageiros INTO v_lista
-      FROM public.natal_trem_viagens v
-     WHERE v.empresa_id = v_empresa AND v.regra = v_regra AND v.chave = p_chave;
+    SELECT v.passageiros INTO v_lista FROM public.natal_trem_viagens v WHERE v.chave = p_chave;
   END IF;
 
   RETURN QUERY
@@ -187,7 +173,7 @@ GRANT EXECUTE ON FUNCTION public.fn_natal_trem_inscricao()         TO authentica
 GRANT EXECUTE ON FUNCTION public.fn_natal_trem_inscrever(BOOLEAN)  TO authenticated;
 GRANT EXECUTE ON FUNCTION public.fn_natal_trem_passageiros(BIGINT) TO authenticated;
 
-COMMENT ON TABLE public.natal_trem_inscricoes IS 'Natal 2026: quem entrou na fila do trenzinho. Ver a migration 20261104120100.';
-COMMENT ON TABLE public.natal_trem_viagens IS 'Natal 2026: o sorteio gravado de cada viagem do trenzinho (ninguém repete no dia). Ver a migration 20261104120100.';
+COMMENT ON TABLE public.natal_trem_inscricoes IS 'Natal 2026: quem entrou na fila do trenzinho (uma fila só, todas as empresas). Ver a migration 20261104120100.';
+COMMENT ON TABLE public.natal_trem_viagens IS 'Natal 2026: o sorteio gravado de cada viagem do trenzinho, um só para o sistema inteiro (ninguém repete no dia). Ver a migration 20261104120100.';
 
 COMMIT;

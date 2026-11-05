@@ -22,6 +22,15 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
 import { VAO, naCurva } from './varal';
+import { Cesta } from './cesta/Cesta';
+import {
+  ajudarNaMira, baterNaPonta, frearNaRede, largouDeLonge, passouPeloAro, posicaoDoAro, subiuPeloAro,
+  velocidadeDoArremesso, type Amostra,
+} from './cesta/fisica';
+import { mirar, sortearErro, T_PEGA, T_SOLTA, type Lado } from './cesta/arremesso';
+import { bonecoDaCesta, type BonecoNaCesta } from './cesta/boneco';
+import { prepararSomDaCesta, somDaCesta, somDoArremessoDoBoneco, somDoAro, somDoBonecoPegando } from './cesta/som';
+import { Confete } from './presente/Confete';
 import './saudacao.css';
 
 /** A bola tem o diâmetro da linha da saudação (`text-2xl`, 32 px). */
@@ -200,11 +209,21 @@ function desenhar(cx: CanvasRenderingContext2D, giro: number) {
  *
  * Solta, ela tem o MESMO tamanho da pendurada e peso (05/11/2026: estava
  * maior e leve demais, batendo forte nas bordas; no mesmo dia, um tico mais
- * leve e quicando um pouco mais): arrastada, vem atrás do
- * mouse com um atraso de mola e cede um pouco à gravidade; o arremesso tem
- * teto, o ar freia, e a batida perde mais força quanto mais forte for — com
- * uma amassadinha na hora. Quica nas bordas da área do conteúdo; um clique
- * nela chuta para cima.
+ * leve e quicando um pouco mais; e de novo, mais leve e quicando bem mais:
+ * gravidade 2050 → 1500, ar 0,7 → 0,82, batida devolve 55–82% em vez de
+ * 36–68%, e só para de quicar abaixo de 70 px/s). Segurando, ela vai COLADA
+ * no mouse (antes vinha atrás numa mola e cedia à gravidade — «difícil
+ * demais», Cleber, 05/11/2026), e o arremesso sai com a velocidade do fim do
+ * gesto do mouse (`velocidadeDoArremesso`), com teto. No ar ela freia pouco,
+ * para o arco ser previsível; a batida perde mais força quanto mais forte for
+ * — com uma amassadinha na hora. Quica nas bordas da área do conteúdo; um
+ * clique nela chuta para cima.
+ *
+ * Solta, aparece a CESTA DE NATAL (`cesta/`, Cleber, 05/11/2026): as pontas
+ * do aro batem na bola, e cada cesta conta no placar, solta confete, balança
+ * a rede e toca o sininho. Só vale a bola SOLTA cruzando o aro de cima para
+ * baixo, arremessada de longe — segurando, largando colada no aro ou subindo
+ * pela rede não conta (as regras estão em `cesta/fisica.ts`).
  *
  * Depois de `DURACAO_JOGO_S` (30 s, sem aviso nem relógio na tela — Cleber,
  * 05/11/2026) ela congela onde estiver e volta voando para o fio, já
@@ -221,16 +240,25 @@ const ANGULO_MAX = 1.3;
 /** Menos que isso de movimento é um clique, não um puxão. */
 const CLIQUE_PX = 6;
 const R_SOLTA = RAIO;
-const GRAVIDADE = 2050;
-/** O ar freia (fração da velocidade que sobra a cada segundo). */
-const AR = 0.7;
+const GRAVIDADE = 1500;
+/** O ar freia (fração da velocidade que sobra a cada segundo): pouco, para o arco do arremesso ser previsível. */
+const AR = 0.95;
 /** Nenhum movimento passa disso (px/s): nada de bala de canhão. */
 const VELOCIDADE_MAX = 1600;
-/** A mola que puxa a bola arrastada até o mouse (rigidez e amortecimento). */
-const MOLA_DO_ARRASTO = 240;
-const FREIO_DO_ARRASTO = 25;
 /** Rolando no chão: fração da velocidade que sobra a cada segundo. */
-const ROLAGEM = 0.35;
+const ROLAGEM = 0.5;
+/** A física do voo, para a mira do boneco acertar com a mesma conta da bola. */
+const VOO = { gravidade: GRAVIDADE, ar: AR };
+/*
+ * O boneco de neve (`cesta/boneco.ts`): a bola a menos de `PERTO_DO_BONECO`
+ * px do colo dele o faz pedir; passando de `LONGE_DO_BONECO`, ele desiste
+ * (a folga entre os dois evita ele ficar piscando na borda). Solta, a bola
+ * chegando devagar a `NAS_MAOS` px ele pega sozinho.
+ */
+const PERTO_DO_BONECO = 62;
+const LONGE_DO_BONECO = 95;
+const NAS_MAOS = 34;
+type QuemArremessou = 'pessoa' | 'boneco';
 /** Depois de brincar, a bola descansa esse tanto (sem relógio: só as zoeiras dão a dica). */
 const PAUSA_MS = 5 * 60_000;
 const CHAVE_BRINCOU = 'natal:bola:brincou-em';
@@ -255,7 +283,7 @@ const brincouHaPouco = () => {
 const marcarBrincou = () => { try { localStorage.setItem(CHAVE_BRINCOU, String(Date.now())); } catch { /* modo privado */ } };
 
 /** Quanto da velocidade volta numa batida: menos quanto mais forte ela for. */
-const quique = (v: number) => Math.min(0.68, Math.max(0.36, 0.68 - Math.abs(v) / 5500));
+const quique = (v: number) => Math.min(0.82, Math.max(0.55, 0.82 - Math.abs(v) / 9000));
 const limitar = (v: number) => Math.max(-VELOCIDADE_MAX, Math.min(VELOCIDADE_MAX, v));
 
 /** As paredes: a área do conteúdo (o `<main>`), ou a janela. */
@@ -290,9 +318,37 @@ function BolaSolta({ de, pega, casa, aoChegando, aoTerminar }: {
   const faseAtual = useRef<FaseDaBola>('solta');
   // O estado da física, fora do React. `amassa`: o quanto ela está amassada, e em que eixo.
   const corpo = useRef({ x: de.x, y: de.y, vx: 0, vy: 0, rot: 0, giro: 0.4, amassa: 0, deitada: true });
-  const arrasto = useRef<(Pegada & { andou: number; x0: number; y0: number }) | null>(
-    pega ? { ...pega, andou: CLIQUE_PX, x0: pega.px, y0: pega.py } : null,
+  /*
+   * `amostras`: por onde o mouse passou, para medir o arremesso. `dx/dy` é a
+   * distância da bola ao mouse agora, e `alvoDx/alvoDy` a de onde a mão pegou:
+   * quando o fio arrebenta, a bola está atrás do mouse (o fio estica menos que
+   * o puxão), e em ~0,1 s ela alcança a mão em vez de dar um pulo.
+   */
+  const arrasto = useRef<(Pegada & { alvoDx: number; alvoDy: number; andou: number; x0: number; y0: number; amostras: Amostra[] }) | null>(
+    pega ? {
+      ...pega, dx: pega.px - de.x, dy: pega.py - de.y, alvoDx: pega.dx, alvoDy: pega.dy,
+      andou: CLIQUE_PX, x0: pega.px, y0: pega.py, amostras: [{ x: pega.px, y: pega.py, t: performance.now() }],
+    } : null,
   );
+  // A cesta: onde está o aro, se o arremesso de agora vale, e o placar.
+  const [aro, setAro] = useState(() => posicaoDoAro(paredes()));
+  const aroAtual = useRef(aro);
+  const arremessoVale = useRef(false);
+  const [acertos, setAcertos] = useState(0);
+  const [acertosBoneco, setAcertosBoneco] = useState(0);
+  const [ultima, setUltima] = useState<QuemArremessou | null>(null);
+  const [festas, setFestas] = useState<{ id: number; origem: Ponto }[]>([]);
+  /*
+   * O boneco de neve (`cesta/boneco.ts`): se a bola está perto dele (ele
+   * esperando), se está nas mãos dele (e desde quando), e se o arremesso dele
+   * está no ar (para ele comemorar ou ficar triste). `quem`: quem fez o
+   * arremesso que está voando.
+   */
+  const esperando = useRef(false);
+  const entregarAgora = useRef(false);
+  const comBoneco = useRef<{ inicio: number; de: Ponto; boneco: BonecoNaCesta } | null>(null);
+  const vooDoBoneco = useRef<{ desde: number } | null>(null);
+  const quem = useRef<QuemArremessou>('pessoa');
 
   const posicionar = useCallback(() => {
     const c = corpo.current;
@@ -316,8 +372,49 @@ function BolaSolta({ de, pega, casa, aoChegando, aoTerminar }: {
     const inicio = antes;
     // As paredes: medidas agora e quando a janela muda (ler o layout a cada quadro pesa).
     let p = paredes();
-    const remedir = () => { p = paredes(); };
+    const remedir = () => {
+      p = paredes();
+      aroAtual.current = posicaoDoAro(p);
+      setAro(aroAtual.current);
+    };
     window.addEventListener('resize', remedir);
+    let placar = 0, placarBoneco = 0;
+    const relogios: number[] = [];
+    const comemorar = (fez: QuemArremessou) => {
+      const k = aroAtual.current;
+      if (fez === 'boneco') {
+        setAcertosBoneco(++placarBoneco);
+        bonecoDaCesta()?.resultado(true);
+        vooDoBoneco.current = null;
+      } else {
+        setAcertos(++placar);
+      }
+      setUltima(fez);
+      const id = performance.now();
+      setFestas(f => [...f, { id, origem: { x: k.x, y: k.y + 24 } }]);
+      relogios.push(window.setTimeout(() => setFestas(f => f.filter(x => x.id !== id)), 4500));
+      somDaCesta(placar + placarBoneco);
+    };
+    /** A bola chegou às mãos do boneco: ele vira para a cesta e começa o arremesso. */
+    const entregar = (bn: BonecoNaCesta, colo: Ponto) => {
+      const c = corpo.current;
+      const lado: Lado = aroAtual.current.x >= colo.x ? 1 : -1;
+      comBoneco.current = { inicio: bn.receber(lado), de: { x: c.x, y: c.y }, boneco: bn };
+      esperando.current = false;
+      entregarAgora.current = false;
+      arremessoVale.current = false;
+      c.vx = 0;
+      c.vy = 0;
+      somDoBonecoPegando();
+    };
+    /** A brincadeira acabou (ou a bola sumiu): o boneco larga tudo. */
+    const largarBoneco = () => {
+      if (esperando.current || comBoneco.current || vooDoBoneco.current) bonecoDaCesta()?.cancelar();
+      esperando.current = false;
+      entregarAgora.current = false;
+      comBoneco.current = null;
+      vooDoBoneco.current = null;
+    };
     const bateu = (v: number, deitada: boolean) => {
       const c = corpo.current;
       if (Math.abs(v) < 220) return;
@@ -330,32 +427,111 @@ function BolaSolta({ de, pega, casa, aoChegando, aoTerminar }: {
       antes = agora;
       const c = corpo.current;
       const a = arrasto.current;
-      if (a) {
-        // Arrastada: uma mola puxa até o mouse, e o peso ainda puxa para baixo.
-        c.vx += ((a.px - a.dx - c.x) * MOLA_DO_ARRASTO - c.vx * FREIO_DO_ARRASTO) * dt;
-        c.vy += ((a.py - a.dy - c.y) * MOLA_DO_ARRASTO - c.vy * FREIO_DO_ARRASTO + GRAVIDADE) * dt;
+      const yAntes = c.y;
+      const k = aroAtual.current;
+      // Nas mãos do boneco: segue a pose dele até a hora de soltar.
+      let comEle = false;
+      const cb = comBoneco.current;
+      if (cb) {
+        const t = agora - cb.inicio;
+        if (t < T_SOLTA) {
+          comEle = true;
+          const alvo = cb.boneco.bolaEm(t);
+          // Do lugar onde estava até as mãos dele, assentando (depois, colada nelas).
+          const resta = Math.pow(1 - Math.min(1, t / T_PEGA), 3);
+          const nx = alvo.x + (cb.de.x - alvo.x) * resta, ny = alvo.y + (cb.de.y - alvo.y) * resta;
+          if (dt > 0) { c.vx = limitar((nx - c.x) / dt); c.vy = limitar((ny - c.y) / dt); }
+          c.x = nx;
+          c.y = ny;
+        } else {
+          // Soltou: mira na cesta com um erro sorteado, e a física decide.
+          const largura = Math.abs(k.x - c.x);
+          const folga = Math.min(220, 70 + largura * 0.22) * (0.85 + Math.random() * 0.3);
+          const v = mirar({ x: c.x, y: c.y }, { x: k.x + sortearErro(), y: k.y }, folga, p.cima + R_SOLTA + 24, VOO, dt || 1 / 60);
+          c.vx = v.vx;
+          c.vy = v.vy;
+          comBoneco.current = null;
+          quem.current = 'boneco';
+          arremessoVale.current = true;
+          vooDoBoneco.current = { desde: agora };
+          somDoArremessoDoBoneco();
+        }
+      }
+      if (comEle) {
+        // (a pose já pôs a bola no lugar)
+      } else if (a) {
+        // Segurando: colada no mouse. A velocidade aqui só serve para o giro do desenho.
+        const alcanca = 1 - Math.exp(-30 * dt);
+        a.dx += (a.alvoDx - a.dx) * alcanca;
+        a.dy += (a.alvoDy - a.dy) * alcanca;
+        const nx = a.px - a.dx, ny = a.py - a.dy;
+        if (dt > 0) { c.vx = limitar((nx - c.x) / dt); c.vy = limitar((ny - c.y) / dt); }
+        c.x = nx;
+        c.y = ny;
       } else {
         c.vy += GRAVIDADE * dt;
         const ar = Math.pow(AR, dt);
         c.vx *= ar;
         c.vy *= ar;
+        c.vx = limitar(c.vx);
+        c.vy = limitar(c.vy);
+        c.x += c.vx * dt;
+        c.y += c.vy * dt;
       }
-      c.vx = limitar(c.vx);
-      c.vy = limitar(c.vy);
-      c.x += c.vx * dt;
-      c.y += c.vy * dt;
-      if (c.x - R_SOLTA < p.esq) { c.x = p.esq + R_SOLTA; bateu(c.vx, false); c.vx = Math.abs(c.vx) * quique(c.vx); }
-      if (c.x + R_SOLTA > p.dir) { c.x = p.dir - R_SOLTA; bateu(c.vx, false); c.vx = -Math.abs(c.vx) * quique(c.vx); }
-      if (c.y - R_SOLTA < p.cima) { c.y = p.cima + R_SOLTA; bateu(c.vy, true); c.vy = Math.abs(c.vy) * quique(c.vy); }
-      if (c.y + R_SOLTA > p.baixo) {
-        c.y = p.baixo - R_SOLTA;
-        bateu(c.vy, true);
-        c.vy = Math.abs(c.vy) < 110 ? 0 : -Math.abs(c.vy) * quique(c.vy);
-        // No chão, rola e vai parando.
-        c.vx *= Math.pow(ROLAGEM, dt);
+      // As paredes (nas mãos do boneco, quem manda é a pose).
+      if (!comEle) {
+        if (c.x - R_SOLTA < p.esq) { c.x = p.esq + R_SOLTA; bateu(c.vx, false); c.vx = Math.abs(c.vx) * quique(c.vx); }
+        if (c.x + R_SOLTA > p.dir) { c.x = p.dir - R_SOLTA; bateu(c.vx, false); c.vx = -Math.abs(c.vx) * quique(c.vx); }
+        if (c.y - R_SOLTA < p.cima) { c.y = p.cima + R_SOLTA; bateu(c.vy, true); c.vy = Math.abs(c.vy) * quique(c.vy); }
+        if (c.y + R_SOLTA > p.baixo) {
+          c.y = p.baixo - R_SOLTA;
+          bateu(c.vy, true);
+          c.vy = Math.abs(c.vy) < 70 ? 0 : -Math.abs(c.vy) * quique(c.vy);
+          // No chão, rola e vai parando.
+          c.vx *= Math.pow(ROLAGEM, dt);
+        }
       }
-      // Rolando: gira com a velocidade de lado.
-      c.rot += (c.vx / R_SOLTA) * dt * 0.6;
+      // A cesta: só com a bola solta (segurando, ela atravessa tudo e não conta).
+      if (!a && !comEle) {
+        // A ajuda de mira é para gente; o boneco arremessa por conta própria.
+        if (quem.current === 'pessoa') ajudarNaMira(c, k, dt);
+        frearNaRede(c, k, dt);
+        // As duas pontas do aro batem na bola.
+        for (const lado of [-1, 1]) {
+          const forca = baterNaPonta(c, k.x + lado * k.meia, k.y, R_SOLTA, k.ponta);
+          if (forca > 220) { c.amassa = Math.min(0.16, forca / 6000); c.deitada = true; somDoAro(forca); }
+        }
+        // Um arremesso vale uma cesta só.
+        if (subiuPeloAro(yAntes, c, k)) arremessoVale.current = false;
+        else if (arremessoVale.current && passouPeloAro(yAntes, c, k)) { arremessoVale.current = false; comemorar(quem.current); }
+      }
+      // O arremesso do boneco que não entrou: passou do aro para baixo, demorou, ou alguém pegou a bola no ar.
+      const voo = vooDoBoneco.current;
+      if (voo && (a || (c.y > k.y + 140 && c.vy > 0) || agora - voo.desde > 3500)) {
+        vooDoBoneco.current = null;
+        bonecoDaCesta()?.resultado(false);
+      }
+      // O boneco: a bola chegando perto faz ele pedir; soltando ali (ou ela chegando devagar), ele pega.
+      const bn = bonecoDaCesta();
+      if (bn && !comBoneco.current && !vooDoBoneco.current) {
+        const colo = bn.colo();
+        if (colo) {
+          const d = Math.hypot(c.x - colo.x, c.y - colo.y);
+          const vel = Math.hypot(c.vx, c.vy);
+          if (d < PERTO_DO_BONECO && (a || vel < 900)) { esperando.current = true; bn.esperar(true, c.x); }
+          else if (esperando.current && d > LONGE_DO_BONECO) { esperando.current = false; bn.esperar(false); }
+          if (esperando.current && (entregarAgora.current || (!a && d < NAS_MAOS && vel < 700))) entregar(bn, colo);
+        }
+        entregarAgora.current = false;
+      }
+      if (comEle) {
+        // Nas mãos do boneco, a bola se endireita (a tampinha para cima), sem girar a volta toda.
+        const emPe = Math.round(c.rot / (Math.PI * 2)) * Math.PI * 2;
+        c.rot += (emPe - c.rot) * (1 - Math.exp(-10 * dt));
+      } else {
+        // Rolando: gira com a velocidade de lado.
+        c.rot += (c.vx / R_SOLTA) * dt * 0.6;
+      }
       c.amassa *= Math.exp(-16 * dt);
       c.giro += (GIRO_BASE + Math.min(14, Math.hypot(c.vx, c.vy) / 90)) * dt;
       desenhar(cx, c.giro);
@@ -363,6 +539,7 @@ function BolaSolta({ de, pega, casa, aoChegando, aoTerminar }: {
       const passou = (agora - inicio) / 1000;
       if (passou >= DURACAO_JOGO_S) {
         arrasto.current = null;
+        largarBoneco();
         c.amassa = 0;
         posicionar();
         faseAtual.current = 'congelando';
@@ -372,7 +549,13 @@ function BolaSolta({ de, pega, casa, aoChegando, aoTerminar }: {
       quadro = requestAnimationFrame(passo);
     };
     quadro = requestAnimationFrame(passo);
-    return () => { vivo = false; cancelAnimationFrame(quadro); window.removeEventListener('resize', remedir); };
+    return () => {
+      vivo = false;
+      cancelAnimationFrame(quadro);
+      window.removeEventListener('resize', remedir);
+      relogios.forEach(id => window.clearTimeout(id));
+      largarBoneco();
+    };
   }, [posicionar]);
 
   // O mouse, pela janela: o arrasto que começou no fio (antes desta bola existir) também passa por aqui.
@@ -382,6 +565,9 @@ function BolaSolta({ de, pega, casa, aoChegando, aoTerminar }: {
       if (!a) return;
       a.px = ev.clientX; a.py = ev.clientY;
       a.andou = Math.max(a.andou, Math.hypot(ev.clientX - a.x0, ev.clientY - a.y0));
+      const agora = performance.now();
+      a.amostras.push({ x: ev.clientX, y: ev.clientY, t: agora });
+      while (a.amostras.length > 2 && agora - a.amostras[0].t > 200) a.amostras.shift();
     };
     const soltar = () => {
       const a = arrasto.current;
@@ -391,9 +577,17 @@ function BolaSolta({ de, pega, casa, aoChegando, aoTerminar }: {
       if (a.andou < CLIQUE_PX) {
         // Um clique: chute para cima, para um lado sorteado.
         c.vy = -780 - Math.random() * 220;
-        c.vx += (Math.random() - 0.5) * 900;
+        c.vx = (Math.random() - 0.5) * 900;
+      } else {
+        // Arremesso: sai com a velocidade do fim do gesto do mouse (com teto).
+        const v = velocidadeDoArremesso(a.amostras, performance.now(), VELOCIDADE_MAX);
+        c.vx = v.vx;
+        c.vy = v.vy;
       }
-      // Arremesso: sai com a velocidade que ela já tinha na mola (já com teto).
+      // Soltou do lado do boneco que estava pedindo: é entrega (o laço passa para as mãos dele).
+      if (esperando.current) entregarAgora.current = true;
+      // Vale cesta se não foi largada colada em cima do aro.
+      arremessoVale.current = largouDeLonge(c.x, c.y, aroAtual.current);
     };
     window.addEventListener('pointermove', mover);
     window.addEventListener('pointerup', soltar);
@@ -457,12 +651,26 @@ function BolaSolta({ de, pega, casa, aoChegando, aoTerminar }: {
   // Pegar a bola: o resto (mover e soltar) é pela janela, acima.
   const aoApertar = (ev: React.PointerEvent) => {
     if (fase !== 'solta') return;
+    // Nas mãos do boneco, a bola é dele até o arremesso.
+    if (comBoneco.current) return;
     ev.preventDefault();
+    prepararSomDaCesta();
+    arremessoVale.current = false;
+    quem.current = 'pessoa';
     const c = corpo.current;
-    arrasto.current = { dx: ev.clientX - c.x, dy: ev.clientY - c.y, px: ev.clientX, py: ev.clientY, andou: 0, x0: ev.clientX, y0: ev.clientY };
+    arrasto.current = {
+      dx: ev.clientX - c.x, dy: ev.clientY - c.y, alvoDx: ev.clientX - c.x, alvoDy: ev.clientY - c.y,
+      px: ev.clientX, py: ev.clientY, andou: 0, x0: ev.clientX, y0: ev.clientY,
+      amostras: [{ x: ev.clientX, y: ev.clientY, t: performance.now() }],
+    };
   };
 
   return createPortal(
+    <>
+    <Cesta aro={aro} acertos={acertos} acertosBoneco={acertosBoneco} ultima={ultima} fase={fase} />
+    {festas.map(f => (
+      <Confete key={f.id} origem={f.origem} quantidade={90} forca={0.55} className="nt-cesta-confete" />
+    ))}
     <div
       ref={embrulho}
       className={cn('nt-bola-solta', fase !== 'solta' && 'nt-bola-' + fase)}
@@ -481,7 +689,8 @@ function BolaSolta({ de, pega, casa, aoChegando, aoTerminar }: {
           ))}
         </svg>
       )}
-    </div>,
+    </div>
+    </>,
     document.body,
   );
 }
@@ -674,6 +883,8 @@ export function BolaDaSaudacao() {
   const aoApertar = (ev: React.PointerEvent<HTMLCanvasElement>) => {
     if (solta) return;
     ev.preventDefault();
+    // Um gesto de verdade: libera o som da cesta, caso o fio arrebente neste puxão.
+    prepararSomDaCesta();
     ev.currentTarget.setPointerCapture(ev.pointerId);
     cancelAnimationFrame(quadroDaMola.current);
     empurrao.current?.getAnimations().forEach(a => a.cancel());

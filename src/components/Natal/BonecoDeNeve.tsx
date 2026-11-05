@@ -3,6 +3,8 @@ import { useTheme } from 'next-themes';
 import { ehTemaEscuro } from '@/lib/temas';
 import { useModoLeve } from '@/lib/modoLeve';
 import { cn } from '@/lib/utils';
+import { bolaNaPose, COLO, poseDoArremesso, T_FIM, type Lado, type Pose } from './cesta/arremesso';
+import { registrarBoneco } from './cesta/boneco';
 import './boneco.css';
 
 /*
@@ -21,6 +23,13 @@ import './boneco.css';
  * render do React por quadro; o resto é CSS (`boneco.css`).
  *
  * Clicar nele faz pular e acenar. No modo leve ele fica parado, sem animação.
+ *
+ * O segredo da cesta (Cleber, 05/11/2026 — só para quem perceber): durante a
+ * brincadeira da bola da saudação, levar a bola até ele faz o boneco notar
+ * («!»), parar, virar para ela e esticar os bracinhos pedindo. Entregando, ele
+ * abraça a bola, olha para a cesta, agacha, pula e arremessa — e comemora ou
+ * fica tristinho. A pose do arremesso é `cesta/arremesso.ts` (a bola usa a
+ * mesma conta para ficar nas mãos dele); a conversa com a bola é `cesta/boneco.ts`.
  */
 
 /** Quanto da camada fica acima da borda do card (a neve empilhada). */
@@ -280,7 +289,115 @@ function BonecoDeNeve({ geo, parado, rastro }: {
       });
     };
 
+    // ── A cesta: esperar a bola, arremessar, reagir ──
+    const cesta = { ativo: false, inicio: 0, lado: 1 as Lado, resultado: null as boolean | null, reagiu: false };
+    const VARIAVEIS = ['--py', '--psx', '--psy', '--pr', '--pbe', '--pbd', '--pbs'];
+    const aplicarPose = (p: Pose) => {
+      const s = el.style;
+      s.setProperty('--py', f(p.y));
+      s.setProperty('--psx', p.sx.toFixed(3));
+      s.setProperty('--psy', p.sy.toFixed(3));
+      s.setProperty('--pr', f(p.inclina));
+      s.setProperty('--pbe', f(p.bracoE));
+      s.setProperty('--pbd', f(p.bracoD));
+      s.setProperty('--pbs', p.estica.toFixed(3));
+    };
+    const limparPose = () => VARIAVEIS.forEach(v => el.style.removeProperty(v));
+    const terminarCesta = () => {
+      if (!cesta.ativo) return;
+      cesta.ativo = false;
+      cesta.reagiu = false;
+      el.classList.remove('na-cesta', 'focado', 'comemorando', 'triste');
+      limparPose();
+      e.ate = performance.now() + acaso(900, 1800);
+    };
+    /** Onde o boneco está na tela, e quantos px valem uma unidade do desenho. */
+    const naTela = () => { const r = el.getBoundingClientRect(); return { r, esc: r.width / 72 }; };
+
+    const desregistrar = registrarBoneco({
+      colo() {
+        const { r, esc } = naTela();
+        return r.width ? { x: r.left + COLO.x * esc, y: r.top + COLO.y * esc } : null;
+      },
+      esperar(sim, bolaX) {
+        if (cesta.ativo) {
+          // Ainda com a bola ou no meio do arremesso: não dá. Comemorando ou triste: larga e pede de novo.
+          if (performance.now() - cesta.inicio < T_FIM || !sim) return;
+          terminarCesta();
+        }
+        if (!sim) {
+          el.classList.remove('esperando');
+          e.ate = performance.now() + 900;
+          return;
+        }
+        if (!el.classList.contains('esperando')) {
+          el.classList.add('esperando');
+          el.classList.remove('notou');
+          void el.getBoundingClientRect(); // recomeça o «!»
+          el.classList.add('notou');
+          depois(1300, () => el.classList.remove('notou'));
+          e.movendo = false;
+          e.v = 0;
+          e.ate = Infinity;
+          el.classList.remove('deslizando', 'acenando', 'pulando');
+        }
+        if (bolaX != null) {
+          const { r } = naTela();
+          const lado = bolaX >= r.left + r.width / 2 ? 1 : -1;
+          if (lado !== e.dir) { e.dir = lado; virar(lado); }
+        }
+      },
+      receber(lado) {
+        cesta.ativo = true;
+        cesta.inicio = performance.now();
+        cesta.lado = lado;
+        cesta.resultado = null;
+        cesta.reagiu = false;
+        el.classList.remove('esperando', 'notou', 'acenando', 'deslizando', 'pulando', 'comemorando', 'triste');
+        el.classList.add('na-cesta');
+        el.style.setProperty('--vel', '0');
+        e.nevoa = 0;
+        e.movendo = false;
+        e.v = 0;
+        e.ate = Infinity;
+        e.dir = lado;
+        virar(lado);
+        aplicarPose(poseDoArremesso(0, lado));
+        return cesta.inicio;
+      },
+      bolaEm(t) {
+        const p = bolaNaPose(poseDoArremesso(t, cesta.lado));
+        const { r, esc } = naTela();
+        return { x: r.left + p.x * esc, y: r.top + p.y * esc };
+      },
+      resultado(acertou) { if (cesta.ativo) cesta.resultado = acertou; },
+      cancelar() { el.classList.remove('esperando', 'notou'); terminarCesta(); },
+    });
+
+    /** Um quadro da cesta (no lugar do passeio). */
+    const animarCesta = (agora: number) => {
+      const t = agora - cesta.inicio;
+      if (t < T_FIM) {
+        const p = poseDoArremesso(t, cesta.lado);
+        aplicarPose(p);
+        el.classList.toggle('focado', p.fase === 'mirando' || p.fase === 'agachando' || p.fase === 'subindo');
+        return;
+      }
+      if (el.classList.contains('na-cesta')) { el.classList.remove('na-cesta', 'focado'); limparPose(); }
+      if (cesta.resultado !== null && !cesta.reagiu) {
+        cesta.reagiu = true;
+        const reacao = cesta.resultado ? 'comemorando' : 'triste';
+        el.classList.add(reacao);
+        const inicio = cesta.inicio;
+        depois(cesta.resultado ? 1600 : 1450, () => { if (cesta.inicio === inicio) terminarCesta(); });
+      } else if (cesta.resultado === null && t > T_FIM + 4000) {
+        terminarCesta();
+      }
+    };
+
     cutucar.current = () => {
+      // Com a bola (ou esperando por ela), o clique não atrapalha.
+      if (cesta.ativo || el.classList.contains('esperando')) return;
       el.classList.remove('pulando');
       void el.offsetWidth; // reinicia o pulo se clicarem de novo
       el.classList.add('pulando');
@@ -300,6 +417,11 @@ function BonecoDeNeve({ geo, parado, rastro }: {
     let quadro = requestAnimationFrame(function laco(agora) {
       const dt = Math.min(0.05, (agora - antes) / 1000);
       antes = agora;
+      if (cesta.ativo) {
+        animarCesta(agora);
+        quadro = requestAnimationFrame(laco);
+        return;
+      }
       const [min, max] = limites();
       e.x = Math.min(max, Math.max(min, e.x));
       if (e.movendo) {
@@ -331,7 +453,9 @@ function BonecoDeNeve({ geo, parado, rastro }: {
     return () => {
       cancelAnimationFrame(quadro);
       relogios.forEach(t => window.clearTimeout(t));
-      el.classList.remove('deslizando', 'acenando', 'pulando');
+      desregistrar();
+      limparPose();
+      el.classList.remove('deslizando', 'acenando', 'pulando', 'esperando', 'notou', 'na-cesta', 'focado', 'comemorando', 'triste');
       cutucar.current = () => {};
     };
   }, [parado]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -339,6 +463,8 @@ function BonecoDeNeve({ geo, parado, rastro }: {
   return (
     <div ref={raiz} className="nt-bn dir" onClick={() => cutucar.current()}>
       <DesenhoBoneco />
+      {/* Notou a bola chegando. */}
+      <span className="nt-bn-nota" aria-hidden="true">!</span>
     </div>
   );
 }
@@ -439,7 +565,13 @@ function DesenhoBoneco() {
                   <circle cx="30.6" cy="27.5" r=".45" fill="#FFFFFF" opacity=".8" />
                   <circle cx="40.2" cy="27.5" r=".45" fill="#FFFFFF" opacity=".8" />
                 </g>
-                <path d="M33.6 34.6 Q36 36.8 38.4 34.6" stroke="#3A3440" strokeWidth="1.2" strokeLinecap="round" fill="none" />
+                {/* Olhinhos de alegria (^ ^), quando ele acerta a cesta. */}
+                <path className="bn-olhos-feliz" d="M29 27 Q31.2 23.4 33.4 27 M38.6 27 Q40.8 23.4 43 27"
+                  stroke="#2A2530" strokeWidth="1.7" strokeLinecap="round" fill="none" />
+                <path className="bn-boca" d="M33.6 34.6 Q36 36.8 38.4 34.6" stroke="#3A3440" strokeWidth="1.2" strokeLinecap="round" fill="none" />
+                {/* Boca aberta (esperando a bola, comemorando) e boquinha triste (errou). */}
+                <path className="bn-boca-aberta" d="M33.7 34.3 Q36 34.9 38.3 34.3 Q38 37.6 36 37.7 Q34 37.6 33.7 34.3Z" fill="#7A2E3A" />
+                <path className="bn-boca-triste" d="M33.9 36.2 Q36 34.4 38.1 36.2" stroke="#3A3440" strokeWidth="1.2" strokeLinecap="round" fill="none" />
                 {/* Cenourinha curta: troca de lado quando ele muda de direção */}
                 <g className="bn-nariz">
                   <path d="M35 30 Q35.6 29 36.8 29.3 L42.2 30.9 Q43 31.3 42.2 31.7 L36.8 32.9 Q35.4 33 35 31.8Z" fill={u('cenoura')} />

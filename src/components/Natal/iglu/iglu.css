@@ -102,6 +102,8 @@
   transform: rotate(45deg);
 }
 @keyframes nt-iglu-fala { from { opacity: 0; transform: translateY(6px) scale(0.9); } }
+/* O que o urso ainda não «falou»: ocupa o lugar, invisível. */
+.nt-iglu-fala-resto { visibility: hidden; }
 
 .nt-iglu-teste { position: absolute; right: 0; top: -14px; }
 

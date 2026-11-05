@@ -104,7 +104,7 @@ export default function TremNatalConfig() {
             <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
               {agenda.inicioMs === null
                 ? <>A primeira viagem ainda espera os {PRIMEIROS_DA_FILA} primeiros da fila: <b>{Math.min(agenda.inscritos, PRIMEIROS_DA_FILA)}/{PRIMEIROS_DA_FILA}</b>. Ela leva esses cinco, na ordem em que entraram.</>
-                : <>Rodando desde <b>{new Date(agenda.inicioMs).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' })}</b> · {agenda.inscritos} {agenda.inscritos === 1 ? 'pessoa' : 'pessoas'} na fila da sua empresa.</>}
+                : <>Rodando desde <b>{new Date(agenda.inicioMs).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' })}</b> · {agenda.inscritos} {agenda.inscritos === 1 ? 'pessoa' : 'pessoas'} na fila (um trem só para todas as empresas).</>}
               {agendaEhDoDev() && <> <b>(dev: gravado só neste navegador.)</b></>}
             </p>
           </>

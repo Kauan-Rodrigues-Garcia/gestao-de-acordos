@@ -285,9 +285,28 @@ function criarElementos(): [HTMLAudioElement, HTMLAudioElement] {
 const lado = (volta: number) => ((volta % 2) + 2) % 2;
 const doVolta = (volta: number) => elementos![lado(volta)];
 
+/**
+ * A rádio abaixada por outra música por um tempo (o bloco de gelo do
+ * Analítico, `gelo/`): 1 = normal. Não mexe na preferência de volume.
+ */
+let abaixada = 1;
+let quadroAbaixar = 0;
+/** Abaixa (ou devolve) a rádio, deslizando em `ms`. */
+export function abaixarRadio(fator: number, ms = 600) {
+  cancelAnimationFrame(quadroAbaixar);
+  const de = abaixada, inicio = performance.now();
+  const passo = (t: number) => {
+    const k = Math.min(1, (t - inicio) / ms);
+    abaixada = de + (fator - de) * k;
+    aplicarVolume();
+    if (k < 1) quadroAbaixar = requestAnimationFrame(passo);
+  };
+  quadroAbaixar = requestAnimationFrame(passo);
+}
+
 function aplicarVolume() {
   if (!elementos) return;
-  const v = Math.min(1, Math.max(0, volumeDoElemento(estado.volume) * fade));
+  const v = Math.min(1, Math.max(0, volumeDoElemento(estado.volume) * fade * abaixada));
   elementos.forEach(a => { a.volume = v; });
 }
 

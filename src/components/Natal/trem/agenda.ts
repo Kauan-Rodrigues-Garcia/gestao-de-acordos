@@ -32,7 +32,7 @@ export interface AgendaDoTrem {
   fechaMin: number;
   /** Quando o quinto da fila entrou (ms); `null`: o trem ainda espera os cinco primeiros. */
   inicioMs: number | null;
-  /** Quantos estão na fila (da empresa e da regra de quem olha). */
+  /** Quantos estão na fila — uma só, de todo mundo (um trem só para o sistema inteiro). */
   inscritos: number;
 }
 

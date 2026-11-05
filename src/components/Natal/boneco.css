@@ -142,6 +142,85 @@
   100% { transform: none; }
 }
 
+/* ── A cesta (`cesta/arremesso.ts`) ───────────────────────────────────────────
+   Expressões que só aparecem na brincadeira da bola: olhinhos ^ ^, boca aberta
+   e boquinha triste. */
+.bn-olhos-feliz, .bn-boca-aberta, .bn-boca-triste { opacity: 0; transition: opacity .18s ease; }
+.bn-boca { transition: opacity .18s ease; }
+.bn-boca-aberta { transform-box: fill-box; transform-origin: 50% 0; }
+
+/* O «!» de quem notou a bola chegando. */
+.nt-bn-nota {
+  position: absolute; left: 50%; top: -15px; margin-left: -6px;
+  width: 12px; height: 16px; border-radius: 6px;
+  background: #FFF6DC; border: 1.5px solid #2A2530; box-shadow: 1.5px 1.5px 0 #2A2530;
+  color: #D6403A; font: 900 11px/13px system-ui, sans-serif; text-align: center;
+  opacity: 0; pointer-events: none;
+}
+.nt-bn.notou .nt-bn-nota { animation: bn-nota 1.25s cubic-bezier(.3, 1.6, .5, 1) both; }
+@keyframes bn-nota {
+  0% { opacity: 0; transform: translateY(6px) scale(.3); }
+  18% { opacity: 1; transform: translateY(-3px) scale(1.15) rotate(-8deg); }
+  30% { transform: translateY(0) scale(1) rotate(6deg); }
+  42% { transform: rotate(0); }
+  80% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-6px); }
+}
+
+/* Esperando a bola: para, vira para ela, inclina, e pede com os dois bracinhos
+   (sobem e descem desencontrados), de boca aberta, dando pulinhos de ansiedade. */
+.nt-bn.esperando .bn-braco-e { animation: bn-pede-e .34s ease-in-out infinite alternate; }
+.nt-bn.esperando .bn-braco-d { animation: bn-pede-d .34s ease-in-out -.17s infinite alternate; }
+@keyframes bn-pede-e { from { transform: rotate(12deg); } to { transform: rotate(32deg); } }
+@keyframes bn-pede-d { from { transform: rotate(-12deg); } to { transform: rotate(-32deg); } }
+.nt-bn.esperando .bn-salto { animation: bn-ansioso .52s ease-in-out infinite; }
+@keyframes bn-ansioso { 0%, 100% { transform: none; } 50% { transform: translateY(-2.4px) scale(.98, 1.03); } }
+.nt-bn.esperando.dir .bn-inclina { transform: rotate(6deg); }
+.nt-bn.esperando.esq .bn-inclina { transform: rotate(-6deg); }
+.nt-bn.esperando .bn-boca { opacity: 0; }
+.nt-bn.esperando .bn-boca-aberta { opacity: 1; animation: bn-boca-pede .34s ease-in-out infinite alternate; }
+@keyframes bn-boca-pede { from { transform: scaleY(.75); } to { transform: scaleY(1.1); } }
+
+/* Com a bola: a pose vem do laço (`--py`, `--psx`… escritos a cada quadro). */
+.nt-bn.na-cesta .bn-salto { animation: none; transform: translateY(calc(var(--py, 0) * 1px)) scale(var(--psx, 1), var(--psy, 1)); }
+.nt-bn.na-cesta .bn-inclina { transition: none; transform: rotate(calc(var(--pr, 0) * 1deg)); }
+.nt-bn.na-cesta .bn-corpo, .nt-bn.na-cesta .bn-braco { animation: none; }
+.nt-bn.na-cesta .bn-braco-e { transform: rotate(calc(var(--pbe, 0) * 1deg)) scale(var(--pbs, 1)); }
+.nt-bn.na-cesta .bn-braco-d { transform: rotate(calc(var(--pbd, 0) * 1deg)) scale(var(--pbs, 1)); }
+/* Mirando: aperta os olhos e fecha a boca de concentração. */
+.nt-bn.focado .bn-olhos { animation: none; transform: scaleY(.55); transition: transform .15s ease; }
+.nt-bn.focado .bn-boca { transform-box: fill-box; transform-origin: center; transform: scaleX(.6); transition: transform .15s ease; }
+
+/* Acertou: dois pulos de alegria, bracinhos para cima balançando, olhos ^ ^ e boca aberta. */
+.nt-bn.comemorando .bn-salto { animation: bn-viva .74s cubic-bezier(.3, .7, .4, 1) 2; }
+@keyframes bn-viva {
+  0% { transform: none; }
+  16% { transform: scale(1.08, .9); }
+  46% { transform: translateY(-10px) scale(.95, 1.06) rotate(-4deg); }
+  76% { transform: translateY(0) scale(1.07, .92); }
+  100% { transform: none; }
+}
+.nt-bn.comemorando .bn-braco-e { animation: bn-viva-e .26s ease-in-out infinite alternate; }
+.nt-bn.comemorando .bn-braco-d { animation: bn-viva-d .26s ease-in-out -.13s infinite alternate; }
+@keyframes bn-viva-e { from { transform: rotate(38deg); } to { transform: rotate(62deg); } }
+@keyframes bn-viva-d { from { transform: rotate(-38deg); } to { transform: rotate(-62deg); } }
+.nt-bn.comemorando .bn-olhos { opacity: 0; }
+.nt-bn.comemorando .bn-olhos-feliz { opacity: 1; }
+.nt-bn.comemorando .bn-boca { opacity: 0; }
+.nt-bn.comemorando .bn-boca-aberta { opacity: 1; }
+.nt-bn.comemorando .bn-pompom { animation-duration: .4s; }
+
+/* Errou: balança a cabeça («não…»), bracinhos caídos, corpo murcho, boquinha triste. */
+.nt-bn.triste .bn-cabeca { animation: bn-nao .42s ease-in-out 2; }
+@keyframes bn-nao { 0%, 100% { transform: rotate(0); } 30% { transform: rotate(-8deg) translateY(.8px); } 70% { transform: rotate(7deg) translateY(.8px); } }
+.nt-bn.triste .bn-braco { animation: none; transition: transform .45s ease; }
+.nt-bn.triste .bn-braco-e { transform: rotate(-40deg); }
+.nt-bn.triste .bn-braco-d { transform: rotate(40deg); }
+.nt-bn.triste .bn-corpo { animation: none; transform: scale(1.025, .965); transition: transform .45s ease; }
+.nt-bn.triste .bn-boca { opacity: 0; }
+.nt-bn.triste .bn-boca-triste { opacity: 1; }
+.nt-bn.triste .bn-olhos { animation: none; transform: translateY(.9px) scaleY(.8); }
+
 /* Modo leve: tudo parado. */
 .nt-nevado.quieto, .nt-nevado.quieto * { animation: none !important; transition: none !important; }
 .nt-nevado.quieto .nt-neve-topo, .nt-nevado.quieto .nt-bn svg { filter: none; }

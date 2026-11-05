@@ -25,8 +25,8 @@ interface Parada { aba: AbaDoTrem; y: number }
 /** Ida e volta: o trem chega devagar e sai devagar de cada estação do mapa. */
 const suave = (t: number) => t * t * (3 - 2 * t);
 
-/** A posição no mapa, em «estações» (0 = a primeira da rota). */
-function noMapa(p: PosicaoDoTrem, rota: readonly AbaDoTrem[]): number {
+/** A posição no percurso, em «abas» (0 = a primeira da rota). */
+function noPercurso(p: PosicaoDoTrem, rota: readonly AbaDoTrem[]): number {
   const i = rota.indexOf(p.aba);
   const n = rota.length;
   if (p.fase === 'estacao') return 0;
@@ -35,7 +35,28 @@ function noMapa(p: PosicaoDoTrem, rota: readonly AbaDoTrem[]): number {
   return i > 0 ? i - suave(1 - p.progresso) : 0;
 }
 
-export function MapaDaLinha({ rota, nav }: { rota: readonly AbaDoTrem[]; nav: RefObject<HTMLElement> }) {
+/**
+ * Do percurso para as estações que a pessoa vê: entre duas delas, o
+ * trenzinho do mapa anda na proporção do caminho. Para quem é da regra Cofen
+ * (sem Acordos nem Pix), ele vai devagar do Dashboard ao Analítico enquanto o
+ * trem passa pelo «túnel» — e chega lá na mesma hora que para todo mundo.
+ */
+function noMapa(u: number, rota: readonly AbaDoTrem[], estacoes: readonly AbaDoTrem[]): number {
+  const pos = estacoes.map(a => rota.indexOf(a));
+  if (u <= pos[0]) return 0;
+  for (let k = 0; k < pos.length - 1; k++) {
+    if (u <= pos[k + 1]) return k + (u - pos[k]) / (pos[k + 1] - pos[k]);
+  }
+  return pos.length - 1;
+}
+
+export function MapaDaLinha({ rota, visiveis, nav }: {
+  /** O percurso do trem (o relógio, igual para todo mundo). */
+  rota: readonly AbaDoTrem[];
+  /** As abas em que a pessoa vê o trem (as estações do mapa dela). */
+  visiveis: readonly AbaDoTrem[];
+  nav: RefObject<HTMLElement>;
+}) {
   const [paradas, setParadas] = useState<Parada[]>([]);
   const [caixa, setCaixa] = useState({ largura: 0, altura: 0 });
   const trem = useRef<SVGGElement>(null);
@@ -49,7 +70,7 @@ export function MapaDaLinha({ rota, nav }: { rota: readonly AbaDoTrem[]; nav: Re
     if (!el) return;
     const medir = () => {
       const lista: Parada[] = [];
-      for (const aba of rota) {
+      for (const aba of visiveis) {
         const link = el.querySelector<HTMLElement>(`a[href="${CAMINHO_DA_ABA[aba]}"]`);
         if (link) lista.push({ aba, y: link.offsetTop + link.offsetHeight / 2 });
       }
@@ -62,7 +83,7 @@ export function MapaDaLinha({ rota, nav }: { rota: readonly AbaDoTrem[]; nav: Re
     const mo = new MutationObserver(medir);
     mo.observe(el, { childList: true, subtree: true });
     return () => { ro.disconnect(); mo.disconnect(); };
-  }, [nav, rota]);
+  }, [nav, visiveis]);
 
   // O trenzinho, num quadro por vez (e devagar: o mapa é pequeno).
   useEffect(() => {
@@ -75,9 +96,9 @@ export function MapaDaLinha({ rota, nav }: { rota: readonly AbaDoTrem[]; nav: Re
       if (t - ultimo < 250) return;
       ultimo = t;
       const p = ondeEsta(relogioNatal(), rota, agendaAgora());
-      // A rota pode ter abas que o menu não mostra: o mapa usa as que existem.
+      // As estações: as abas que a pessoa vê e que o menu mostra, na ordem do percurso.
       const naRota = rota.filter(a => paradas.some(pa => pa.aba === a));
-      const u = Math.min(naRota.length - 1, Math.max(0, noMapa({ ...p, aba: naRota.includes(p.aba) ? p.aba : naRota[0] }, naRota)));
+      const u = Math.min(naRota.length - 1, Math.max(0, noMapa(noPercurso(p, rota), rota, naRota)));
       const yDe = (k: number) => paradas.find(pa => pa.aba === naRota[k])!.y;
       const i = Math.min(naRota.length - 2, Math.floor(u));
       const y = yDe(i) + (yDe(i + 1) - yDe(i)) * (u - i);

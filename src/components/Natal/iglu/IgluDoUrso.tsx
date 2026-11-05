@@ -1,11 +1,18 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
+import { useAuthOpcional } from '@/hooks/useAuth';
 import { useRelogioDoTrem } from '../trem/comum';
 import { relogioNatal } from '../musica';
-import {
-  ENTRANDO_S, FRASES_DO_IGLU, FRASES_DO_URSO, SAINDO_S, chamarUrsoParaTeste, oUrsoAgora,
-} from './urso';
+import { ENTRANDO_S, SAINDO_S, chamarUrsoParaTeste, oUrsoAgora } from './urso';
+import { criarRodada, type MomentoDoUrso } from './falas';
 import './iglu.css';
+
+/** O balão escreve uma letra a cada tanto (ms), como quem está falando. */
+const MS_POR_LETRA = 26;
+/** Depois de escrita, a fala fica o tempo de ler: mais longa, mais tempo. */
+const tempoDeLer = (letras: number) => Math.min(5500, Math.max(2000, 1400 + 45 * letras));
+const primeiroNome = (nome: string | null | undefined) => (nome ?? '').trim().split(/\s+/)[0] || null;
+const semMovimento = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
 /*
  * O iglu do urso, no alto do Analítico (pedido do Cleber, 04/11/2026).
@@ -17,7 +24,10 @@ import './iglu.css';
  *
  * Quando o urso sai é o relógio que diz (`urso.ts`): raramente, e para todo
  * mundo ao mesmo tempo. Fora das visitas ele está lá dentro — porta fechada,
- * janelinha acesa. Clicar nele (ou no iglu) mostra uma frase.
+ * janelinha acesa. Clicar nele (ou no iglu) puxa conversa: o que ele fala, e
+ * em que ordem, é `falas.ts` (sorteado por rodada, sem repetir). O balão
+ * escreve letra por letra e, numa conversa de mais de uma fala, ele continua
+ * sozinho; um clique adianta.
  *
  * O iglu é bem mais alto que o urso (Cleber, 04/11/2026: «para fazer sentido o
  * tamanho da porta»): a porta tem a altura dele de gorro, e a cúpula passa
@@ -256,13 +266,30 @@ export function IgluDoUrso() {
   const agora = useRelogioDoTrem(rapido ? 200 : 1000);
   const { fase, t } = oUrsoAgora(agora);
   useEffect(() => { setRapido(fase !== 'dentro'); }, [fase]);
-  const [fala, setFala] = useState<{ texto: string; doUrso: boolean; id: number } | null>(null);
-  const proxima = useRef({ urso: 0, iglu: 0 });
+  const nome = primeiroNome(useAuthOpcional()?.perfil?.nome);
+  /** A conversa em andamento: as falas dela, qual está no balão, e quem fala. */
+  const [fala, setFala] = useState<{ linhas: string[]; i: number; doUrso: boolean; id: number } | null>(null);
+  /** Quantas letras da fala de agora já foram escritas. */
+  const [letras, setLetras] = useState(0);
+  /** A rodada de conversa (baralhos embaralhados); recomeça quando ele aparece ou entra. */
+  const rodada = useRef<ReturnType<typeof criarRodada> | null>(null);
 
+  // Escreve a fala letra por letra; lida, passa para a próxima da conversa (ou fecha o balão).
   useEffect(() => {
     if (!fala) return;
-    const id = window.setTimeout(() => setFala(null), 3800);
-    return () => window.clearTimeout(id);
+    const total = Array.from(fala.linhas[fala.i]).length;
+    const instantaneo = semMovimento();
+    let n = instantaneo ? total : 0;
+    setLetras(n);
+    const escreve = instantaneo ? 0 : window.setInterval(() => {
+      n = Math.min(total, n + 1);
+      setLetras(n);
+      if (n >= total) window.clearInterval(escreve);
+    }, MS_POR_LETRA);
+    const fim = window.setTimeout(() => {
+      setFala(f => (f && f.id === fala.id && f.i === fala.i ? (f.i + 1 < f.linhas.length ? { ...f, i: f.i + 1 } : null) : f));
+    }, (instantaneo ? 0 : total * MS_POR_LETRA) + tempoDeLer(total));
+    return () => { window.clearInterval(escreve); window.clearTimeout(fim); };
   }, [fala]);
 
   // Onde o urso está, se aparece, e a porta.
@@ -283,13 +310,21 @@ export function IgluDoUrso() {
   const acesa = fase === 'dentro' || (fase === 'entrando' && t > ENTRANDO_S - 0.25);
   const visivel = opacidade > 0.05;
 
+  // Uma rodada nova cada vez que ele aparece (e cada vez que ele entra, para o iglu).
+  useEffect(() => { rodada.current = null; }, [visivel]);
+
   const clicar = () => {
     const doUrso = visivel;
-    const lista = doUrso ? FRASES_DO_URSO : FRASES_DO_IGLU;
-    const chave = doUrso ? 'urso' : 'iglu';
-    const i = proxima.current[chave]++ % lista.length;
-    setFala({ texto: lista[i], doUrso, id: Date.now() });
+    // No meio de uma conversa: adianta para a próxima fala dela.
+    if (fala && fala.doUrso === doUrso && fala.i + 1 < fala.linhas.length) {
+      setFala({ ...fala, i: fala.i + 1 });
+      return;
+    }
+    rodada.current ??= criarRodada(nome, new Date().getHours());
+    const momento: MomentoDoUrso = !doUrso ? 'iglu' : fase === 'fisgou' || fase === 'entrando' ? 'fisgou' : 'pescando';
+    setFala({ linhas: rodada.current.proxima(momento), i: 0, doUrso, id: Date.now() });
   };
+  const texto = fala ? Array.from(fala.linhas[fala.i]) : [];
 
   return (
     <div className="nt-iglu" onClick={clicar} role="button" tabIndex={0} aria-label="O iglu do urso"
@@ -307,10 +342,12 @@ export function IgluDoUrso() {
         </g>
       </svg>
       {fala && (
-        <div key={fala.id} className="nt-iglu-fala"
+        <div key={`${fala.id}-${fala.i}`} className="nt-iglu-fala" role="status" aria-label={texto.join('')}
           // À esquerda de quem fala, na altura da cabeça: em cima seria cortado pelo alto da página.
           style={{ right: LARGURA - (fala.doUrso ? x - 16 : 140), bottom: fala.doUrso ? 46 : 40 }}>
-          {fala.texto}
+          {/* O resto da frase já ocupa o lugar (invisível): o balão nasce do tamanho certo e não pula. */}
+          <span aria-hidden="true">{texto.slice(0, letras).join('')}</span>
+          <span aria-hidden="true" className="nt-iglu-fala-resto">{texto.slice(letras).join('')}</span>
         </div>
       )}
       {import.meta.env.DEV && (

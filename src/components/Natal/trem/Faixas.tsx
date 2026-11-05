@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Bell, BellOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -13,7 +13,8 @@ import {
 import { PRIMEIROS_DA_FILA, agendaAgora, horaDe, useAgendaDoTrem, type AgendaDoTrem } from './agenda';
 import { MuralDaEstacao } from './MuralDaEstacao';
 import { useInscricao, usePassageiros } from './passageiros';
-import { PISTAS_DA_ABA } from './rota';
+import { PISTAS_DA_ABA, abasDaRegra } from './rota';
+import { ouvirRegraDaSessao, regraDaSessaoAtual } from '@/lib/regraDoSetor';
 import { IgluDoUrso } from '../iglu/IgluDoUrso';
 import { buzina, ligarSonsDoTrem, useSonsDoTrem } from './sons';
 import { adiantarRelogioNatalParaTeste, relogioNatal } from '../musica';
@@ -104,6 +105,9 @@ function Aviso({ aba, rota }: { aba: AbaDoTrem; rota: readonly AbaDoTrem[] }) {
   const pos = ondeEsta(agora, rota, agenda);
   const aqui = pos.aba === aba;
   const falta = aqui ? 0 : chegaNaAbaEm(agora, rota, aba, agenda);
+  // Quem é da regra Cofen não tem Acordos nem Pix: ali o trem está «a caminho», sem nome de aba.
+  const visiveis = abasDaRegra(useSyncExternalStore(ouvirRegraDaSessao, regraDaSessaoAtual));
+  const ondeVe = visiveis.includes(pos.aba);
   return (
     <div className="nt-trem-aviso">
       <span aria-hidden="true">{pos.fechado?.motivo === 'desligado' ? '🔧' : '🚂'}</span>
@@ -111,7 +115,7 @@ function Aviso({ aba, rota }: { aba: AbaDoTrem; rota: readonly AbaDoTrem[] }) {
         ? <span>{aba === rota[0] ? textoDoFechado(pos.fechado, agenda, agora) : <>O trem está na estação, no <b>{ROTULO_ABA[rota[0]]}</b> · {textoDoFechado(pos.fechado, agenda, agora)}</>}</span>
         : aqui
         ? <span>{pos.fase === 'fim' ? 'Fim da linha! O trem já vai voltar.' : 'O trem está passando por aqui!'}</span>
-        : <span>O trem está em <b>{ROTULO_ABA[pos.aba]}</b>{falta !== null && <> · chega aqui em <b>{relogioCurto(falta)}</b></>}</span>}
+        : <span>{ondeVe ? <>O trem está em <b>{ROTULO_ABA[pos.aba]}</b></> : 'O trem está a caminho'}{falta !== null && <> · chega aqui em <b>{relogioCurto(falta)}</b></>}</span>}
       <BotaoSons />
       <BotaoTestarBuzina />
     </div>

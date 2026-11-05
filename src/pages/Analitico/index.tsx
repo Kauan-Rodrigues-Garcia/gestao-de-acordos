@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { lazy, Suspense, useState, useCallback, useEffect, useMemo } from 'react';
 import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { BarChart2, User, Users, Building2, Trophy, Medal } from 'lucide-react';
@@ -35,6 +35,11 @@ import { SeletorRecorte } from './SeletorRecorte';
 import { mesDoRecorte, recorteDaQuery, type Recorte } from './recorte';
 import { COLUNAS_SETOR_DO_FILTRO, setoresDosFiltros } from '@/lib/setoresDosFiltros';
 import { useLugarNoMes } from '@/hooks/useLugarNoMes';
+import { useTemaNatal } from '@/components/Natal/tema';
+import { comNovaTentativa } from '@/lib/sobDemanda';
+
+// Tema de Natal: o bloco de gelo do cabeçalho só desce com ele ligado.
+const BlocoDeGelo = lazy(comNovaTentativa(() => import('@/components/Natal/gelo/BlocoDeGelo')));
 
 /** O `Select` do shadcn recusa `value=""`; o "todos" precisa de um valor. */
 const TODOS_SETORES = '__todos__';
@@ -51,6 +56,7 @@ export default function PaginaAnalitico() {
   // ── Todos os hooks ANTES de qualquer return condicional ──────────────────
   const { perfil }       = useAuth();
   const { empresa }      = useEmpresa();
+  const natal            = useTemaNatal();
   // `carregandoPermissoes` existe só para os avisos de "nada liberado": sem
   // ele, todo mundo veria a mensagem piscar antes do mapa chegar.
   const { temPermissao, loading: carregandoPermissoes } = useCargoPermissoes();
@@ -435,6 +441,8 @@ export default function PaginaAnalitico() {
               )}
             </p>
           </div>
+          {/* Natal: o cantor congelado, que derrete com os dias e canta com o mouse em cima. */}
+          {natal && <Suspense fallback={null}><BlocoDeGelo /></Suspense>}
         </div>
 
         {/* Alternador de visão — para quem tem os dois níveis (hoje, o elite) */}

@@ -6,8 +6,7 @@
  * para escolher a aba, a regra do setor e o momento da volta (o relógio do
  * laboratório é adiantado/atrasado à vontade). `?tema=dark`.
  */
-/* eslint-disable react-refresh/only-export-components -- entrada de página avulsa (como o index.html), não um módulo de componentes. */
-import { StrictMode, useMemo, useRef, useState } from 'react';
+import { StrictMode, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import '@/index.css';
 import { Toaster } from 'sonner';
@@ -18,7 +17,8 @@ import { MapaDaLinha } from './MapaDaLinha';
 import { chamarUrsoParaTeste } from '../iglu/urso';
 import { duracaoDaVolta, ondeEsta, PARADA_ESTACAO_S, PARADA_FIM_S, tempoNaAba } from './horario';
 import { AGENDA_LIVRE, definirAgendaParaLaboratorio, type AgendaDoTrem } from './agenda';
-import { ROTULO_ABA, rotaDaRegra, type AbaDoTrem } from './rota';
+import { ROTULO_ABA, ROTA_DO_TREM, abasDaRegra, type AbaDoTrem } from './rota';
+import { definirRegraDaSessao } from '@/lib/regraDoSetor';
 import { semearParaLaboratorio, type Sorteado } from './passageiros';
 
 const busca = new URLSearchParams(location.search);
@@ -37,7 +37,7 @@ window.fetch = (entrada, init) => (String(entrada).startsWith('/?relogio=')
 const meiaNoite = (ms: number) => Math.floor((ms - 3 * 3_600_000) / 86_400_000) * 86_400_000 + 3 * 3_600_000;
 
 /** Leva o relógio do laboratório a `segundos` do começo da volta atual. */
-function deslocarPara(segundos: number, rota: AbaDoTrem[]) {
+function deslocarPara(segundos: number, rota: readonly AbaDoTrem[]) {
   const volta = duracaoDaVolta(rota) * 1000;
   const dia = meiaNoite(relogioReal());
   const inicio = dia + Math.floor((relogioReal() - dia) / volta) * volta;
@@ -56,7 +56,8 @@ const AGENDAS_DO_LAB: Record<string, AgendaDoTrem> = {
 };
 definirAgendaParaLaboratorio(AGENDAS_DO_LAB[busca.get('agenda') ?? ''] ?? AGENDA_LIVRE);
 // `?t=` vale antes do primeiro render (a conferência de relógio começa nele).
-if (busca.get('t')) deslocarPara(Number(busca.get('t')), rotaDaRegra(busca.get('regra') === 'cofen' ? 'cofen' : 'nosso_produto'));
+// Um trem só para todo mundo: o relógio é sempre o do percurso inteiro.
+if (busca.get('t')) deslocarPara(Number(busca.get('t')), ROTA_DO_TREM);
 
 /** O menu de mentira: rótulo, caminho e a aba do trem (quando é uma). */
 const MENU: readonly [string, string, AbaDoTrem | null][] = [
@@ -77,7 +78,7 @@ const NOMES = [
 const pessoa = (i: number): Sorteado => ({ id: `p${i}`, nome: NOMES[i % NOMES.length][0], setor: NOMES[i % NOMES.length][1], foto: null });
 
 /** Os passageiros das voltas de perto de agora (a chave é o minuto da partida, `chaveDoSorteio`). */
-function semear(rota: AbaDoTrem[]) {
+function semear(rota: readonly AbaDoTrem[]) {
   const volta = duracaoDaVolta(rota);
   const dia = meiaNoite(Date.now());
   const agora = Math.floor((Date.now() - dia) / 1000 / volta);
@@ -125,7 +126,10 @@ function Lab() {
   const [aba, setAba] = useState<AbaDoTrem>((busca.get('aba') as AbaDoTrem) || 'dashboard');
   const [cofen, setCofen] = useState(busca.get('regra') === 'cofen');
   // Semeia já no render: a estação pede o sorteio no efeito dela, antes dos efeitos daqui.
-  const rota = useMemo(() => { const r = rotaDaRegra(cofen ? 'cofen' : 'nosso_produto'); semear(r); return r; }, [cofen]);
+  // O percurso (o relógio) é um só; a regra muda só as abas em que se vê o trem — e o aviso, pela regra da sessão.
+  const rota = useMemo(() => { semear(ROTA_DO_TREM); return ROTA_DO_TREM; }, []);
+  const visiveis = abasDaRegra(cofen ? 'cofen' : 'nosso_produto');
+  useEffect(() => { definirRegraDaSessao({ slug: 'laboratorio', regra: cofen ? 'cofen' : 'nosso_produto' }); }, [cofen]);
   const area = useRef<HTMLElement>(null);
   const menu = useRef<HTMLElement>(null);
   // `?eu=1`: o laboratório «é» o 3º sorteado da viagem de agora, para ver o aviso de quem embarca.
@@ -135,7 +139,7 @@ function Lab() {
 
   const irPara = (segundos: number) => { deslocarPara(segundos, rota); refazer(v => v + 1); };
 
-  const naRota = rota.includes(aba);
+  const naRota = visiveis.includes(aba);
   const ida = (ate: AbaDoTrem) => PARADA_ESTACAO_S + rota.slice(0, rota.indexOf(ate)).reduce((s, a) => s + tempoNaAba(a), 0);
   const fimDaIda = PARADA_ESTACAO_S + rota.reduce((s, a) => s + tempoNaAba(a), 0);
 
@@ -162,7 +166,7 @@ function Lab() {
           {/* Um menu lateral de mentira, com o mapa da linha (clicar troca de aba). */}
           <aside className="flex w-60 flex-shrink-0 flex-col border-r bg-sidebar">
             <nav ref={menu} className="relative flex-1 space-y-0.5 overflow-y-auto px-2 py-3">
-              <MapaDaLinha rota={rota} nav={menu} />
+              <MapaDaLinha rota={rota} visiveis={visiveis} nav={menu} />
               {MENU.map(([rotulo, caminho, a]) => (
                 <a
                   key={rotulo}
@@ -185,7 +189,7 @@ function Lab() {
             )}
             <PaginaFalsa aba={aba} />
             {naRota && <FaixaDoTremFim aba={aba} rota={rota} meuId={meuId} />}
-            {!naRota && <p className="p-6 text-sm text-muted-foreground">Esta aba não está na rota da regra Cofen.</p>}
+            {!naRota && <p className="p-6 text-sm text-muted-foreground">Quem é da regra Cofen não vê o trem nesta aba: aqui ele está «no túnel», no mesmo relógio de todo mundo.</p>}
           </main>
         </div>
       </div>

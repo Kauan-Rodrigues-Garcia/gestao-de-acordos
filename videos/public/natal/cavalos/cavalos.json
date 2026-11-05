@@ -1,0 +1,14 @@
+{
+  "janela": {
+    "x": 192,
+    "y": 14,
+    "largura": 1536,
+    "altura": 908
+  },
+  "trechos": {
+    "largada": 3.6,
+    "guerra": 9,
+    "chefe": 7
+  },
+  "fps": 60
+}

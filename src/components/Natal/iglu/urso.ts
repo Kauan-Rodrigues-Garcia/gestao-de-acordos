@@ -67,22 +67,4 @@ export function oUrsoAgora(agoraMs: number): { fase: FaseDoUrso; t: number } {
   return { fase: 'dentro', t: 0 };
 }
 
-/** As frases do urso, uma por clique. */
-export const FRASES_DO_URSO = [
-  'Psiu! Assim você espanta os peixes…',
-  'Aqui faz −30 °C e mesmo assim tem gente cobrando.',
-  'Esse lago tá mais parado que acordo sem pagamento.',
-  'Pescar é igual cobrança: paciência e linha firme.',
-  'O trenzinho passa e nem buzina pra mim…',
-  'Já bati a meta de peixes do mês! 🐟',
-  'Shhh… acho que tá mordendo!',
-  'Depois daqui é chocolate quente no iglu. ☕',
-  'Feliz Natal! 🎄',
-] as const;
-
-/** O que se ouve batendo no iglu com o urso lá dentro. */
-export const FRASES_DO_IGLU = [
-  'Zzz… o urso está lá dentro, quentinho.',
-  'A luz está acesa: ele está em casa.',
-  'Dizem que ele só sai pra pescar de vez em quando…',
-] as const;
+/* As falas do urso (e do iglu, com ele lá dentro) moram em `falas.ts`. */

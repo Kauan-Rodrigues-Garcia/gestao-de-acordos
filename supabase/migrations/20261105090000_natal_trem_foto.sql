@@ -11,6 +11,10 @@
 --   3. Os cinco primeiros (a primeira viagem) e o «quantos na fila» contam só
 --      quem tem foto.
 --
+-- Um trem só, para o sistema inteiro (Cleber, 05/11/2026): a fila, o sorteio
+-- e a primeira viagem são de todas as empresas e das duas regras juntas
+-- (ver 20261104120100).
+--
 -- A foto é lida na hora, de `perfis.foto_url` — não há nada guardado à parte.
 -- Quem põe a foto hoje já pode inserir o ticket e já concorre na próxima
 -- viagem que for sorteada.
@@ -26,7 +30,7 @@ SET LOCAL lock_timeout = '5s';
 
 -- ── Quantos da fila valem: agora só com foto ────────────────────────────────
 
-CREATE OR REPLACE FUNCTION public.fn_natal_trem_na_fila(p_empresa UUID, p_regra TEXT)
+CREATE OR REPLACE FUNCTION public.fn_natal_trem_na_fila()
 RETURNS INT
 LANGUAGE sql
 STABLE
@@ -36,10 +40,7 @@ AS $fn$
   SELECT count(*)::INT
     FROM public.natal_trem_inscricoes i
     JOIN public.perfis p ON p.id = i.perfil_id
-    LEFT JOIN public.setores s ON s.id = p.setor_id
-   WHERE p.empresa_id = p_empresa
-     AND COALESCE(s.regra, 'nosso_produto') = p_regra
-     AND p.ativo AND NOT p.arquivado AND p.situacao <> 'desligado'
+   WHERE p.ativo AND NOT p.arquivado AND p.situacao <> 'desligado'
      AND NULLIF(btrim(p.foto_url), '') IS NOT NULL;
 $fn$;
 
@@ -55,16 +56,11 @@ STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $fn$
-  WITH eu AS (
-    SELECT p.id, p.empresa_id, COALESCE(s.regra, 'nosso_produto') AS regra,
-           NULLIF(btrim(p.foto_url), '') IS NOT NULL AS tem_foto
-      FROM public.perfis p LEFT JOIN public.setores s ON s.id = p.setor_id
-     WHERE p.id = auth.uid()
-  )
-  SELECT EXISTS (SELECT 1 FROM public.natal_trem_inscricoes i WHERE i.perfil_id = eu.id),
-         public.fn_natal_trem_na_fila(eu.empresa_id, eu.regra),
-         eu.tem_foto
-    FROM eu;
+  SELECT EXISTS (SELECT 1 FROM public.natal_trem_inscricoes i WHERE i.perfil_id = p.id),
+         public.fn_natal_trem_na_fila(),
+         NULLIF(btrim(p.foto_url), '') IS NOT NULL
+    FROM public.perfis p
+   WHERE p.id = auth.uid();
 $fn$;
 
 -- ── Entrar (só com foto) ou sair da fila; o quinto grava o início ───────────
@@ -77,25 +73,18 @@ SECURITY DEFINER
 SET search_path = public
 AS $fn$
 DECLARE
-  v_empresa UUID;
-  v_regra   TEXT;
-  v_foto    BOOLEAN;
+  v_foto BOOLEAN;
 BEGIN
   IF auth.uid() IS NULL THEN RETURN; END IF;
   IF p_entrar THEN
-    SELECT p.empresa_id, COALESCE(s.regra, 'nosso_produto'), NULLIF(btrim(p.foto_url), '') IS NOT NULL
-      INTO v_empresa, v_regra, v_foto
-      FROM public.perfis p LEFT JOIN public.setores s ON s.id = p.setor_id
-     WHERE p.id = auth.uid();
+    SELECT NULLIF(btrim(p.foto_url), '') IS NOT NULL INTO v_foto FROM public.perfis p WHERE p.id = auth.uid();
     IF NOT COALESCE(v_foto, false) THEN
       RAISE EXCEPTION 'SEM_FOTO: só quem tem foto de perfil entra na fila do trenzinho' USING ERRCODE = 'P0001';
     END IF;
     INSERT INTO public.natal_trem_inscricoes (perfil_id) VALUES (auth.uid()) ON CONFLICT DO NOTHING;
-    -- A primeira viagem sai quando a fila chega a cinco (uma vez só por empresa e regra).
-    IF v_empresa IS NOT NULL AND public.fn_natal_trem_na_fila(v_empresa, v_regra) >= 5 THEN
-      INSERT INTO public.natal_trem_inicio (empresa_id, regra, inicio)
-      VALUES (v_empresa, v_regra, now())
-      ON CONFLICT DO NOTHING;
+    -- A primeira viagem sai quando a fila chega a cinco (uma vez só, para o sistema inteiro).
+    IF public.fn_natal_trem_na_fila() >= 5 THEN
+      INSERT INTO public.natal_trem_inicio (id, inicio) VALUES (true, now()) ON CONFLICT DO NOTHING;
     END IF;
   ELSE
     DELETE FROM public.natal_trem_inscricoes WHERE perfil_id = auth.uid();
@@ -116,32 +105,23 @@ AS $fn$
 #variable_conflict use_column
 DECLARE
   v_eu       UUID := auth.uid();
-  v_empresa  UUID;
-  v_regra    TEXT;
   v_dia      DATE;
   v_minuto   BIGINT := floor(extract(epoch FROM now()) / 60)::BIGINT;
   v_lista    UUID[];
   v_primeira BOOLEAN;
 BEGIN
   IF v_eu IS NULL OR p_chave IS NULL OR p_chave NOT BETWEEN v_minuto - 30 AND v_minuto + 30 THEN RETURN; END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.perfis p WHERE p.id = v_eu) THEN RETURN; END IF;
 
-  SELECT p.empresa_id, COALESCE(s.regra, 'nosso_produto')
-    INTO v_empresa, v_regra
-    FROM public.perfis p LEFT JOIN public.setores s ON s.id = p.setor_id
-   WHERE p.id = v_eu;
-  IF v_empresa IS NULL THEN RETURN; END IF;
-
-  SELECT v.passageiros INTO v_lista
-    FROM public.natal_trem_viagens v
-   WHERE v.empresa_id = v_empresa AND v.regra = v_regra AND v.chave = p_chave;
+  SELECT v.passageiros INTO v_lista FROM public.natal_trem_viagens v WHERE v.chave = p_chave;
 
   IF v_lista IS NULL THEN
     -- Trem desligado, ou a fila ainda sem os cinco primeiros: não há viagem para sortear.
     IF NOT EXISTS (SELECT 1 FROM public.natal_trem_config c WHERE c.id AND c.ativo)
-       OR NOT EXISTS (SELECT 1 FROM public.natal_trem_inicio n WHERE n.empresa_id = v_empresa AND n.regra = v_regra) THEN
+       OR NOT EXISTS (SELECT 1 FROM public.natal_trem_inicio n WHERE n.id) THEN
       RETURN;
     END IF;
-    v_primeira := NOT EXISTS (SELECT 1 FROM public.natal_trem_viagens v WHERE v.empresa_id = v_empresa AND v.regra = v_regra);
+    v_primeira := NOT EXISTS (SELECT 1 FROM public.natal_trem_viagens);
     v_dia := (to_timestamp(p_chave * 60) AT TIME ZONE 'America/Sao_Paulo')::DATE;
     SELECT COALESCE(array_agg(x.id ORDER BY x.n), '{}') INTO v_lista
       FROM (
@@ -150,26 +130,20 @@ BEGIN
                  ORDER BY CASE WHEN v_primeira THEN i.inscrito_em END,
                           -- Depois: primeiro quem ainda não viajou hoje; acabando, quem viajou menos vezes.
                           (SELECT count(*) FROM public.natal_trem_viagens v
-                            WHERE v.empresa_id = v_empresa AND v.regra = v_regra AND v.dia = v_dia
-                              AND p.id = ANY (v.passageiros)),
+                            WHERE v.dia = v_dia AND p.id = ANY (v.passageiros)),
                           random()) AS n
           FROM public.natal_trem_inscricoes i
           JOIN public.perfis p ON p.id = i.perfil_id
-          LEFT JOIN public.setores s ON s.id = p.setor_id
-         WHERE p.empresa_id = v_empresa
-           AND COALESCE(s.regra, 'nosso_produto') = v_regra
-           AND p.ativo AND NOT p.arquivado AND p.situacao <> 'desligado'
+         WHERE p.ativo AND NOT p.arquivado AND p.situacao <> 'desligado'
            -- Só quem tem foto de perfil (lida agora: quem pôs a foto hoje já concorre).
            AND NULLIF(btrim(p.foto_url), '') IS NOT NULL
       ) x
      WHERE x.n <= 5;
-    INSERT INTO public.natal_trem_viagens (empresa_id, regra, chave, dia, passageiros)
-    VALUES (v_empresa, v_regra, p_chave, v_dia, v_lista)
+    INSERT INTO public.natal_trem_viagens (chave, dia, passageiros)
+    VALUES (p_chave, v_dia, v_lista)
     ON CONFLICT DO NOTHING;
     -- Se outra pergunta sorteou ao mesmo tempo, vale a dela.
-    SELECT v.passageiros INTO v_lista
-      FROM public.natal_trem_viagens v
-     WHERE v.empresa_id = v_empresa AND v.regra = v_regra AND v.chave = p_chave;
+    SELECT v.passageiros INTO v_lista FROM public.natal_trem_viagens v WHERE v.chave = p_chave;
   END IF;
 
   RETURN QUERY
@@ -181,7 +155,7 @@ BEGIN
 END;
 $fn$;
 
-REVOKE ALL ON FUNCTION public.fn_natal_trem_na_fila(UUID, TEXT) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.fn_natal_trem_na_fila()           FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.fn_natal_trem_inscricao()         FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.fn_natal_trem_inscrever(BOOLEAN)  FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.fn_natal_trem_passageiros(BIGINT) FROM PUBLIC, anon;

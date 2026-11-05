@@ -72,7 +72,7 @@ import { TemaNatalContext, cenaDaRota as cenaNatalDaRota, soParado as natalSoPar
 import { EVENTO_REINICIAR_ABERTURA, abrirNatal, useNatal } from '@/components/Natal/previa';
 import { MarcaNatal } from '@/components/Natal/MarcaNatal';
 import { PreviaNatal } from '@/components/Natal/PreviaNatal';
-import { abaDoCaminho, rotaDaRegra, useTelaLarga } from '@/components/Natal/trem/rota';
+import { abaDoCaminho, abasDaRegra, ROTA_DO_TREM, useTelaLarga } from '@/components/Natal/trem/rota';
 import { useNotificacoes } from '@/providers/NotificacoesProvider';
 import { useEasterEggCriadores, DURACAO_ESCURECIMENTO_MS } from '@/hooks/useEasterEggCriadores';
 // O overlay continua no Layout: a comemoração explode em QUALQUER página, não
@@ -336,11 +336,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     const cena = cenaNatalDaRota(pathname, natal);
     return leve ? natalSoParado(cena) : cena;
   }, [pathname, natal, leve]);
-  // O trenzinho de Natal: só nas abas da rota da regra do setor, e nunca no celular.
+  // O trenzinho de Natal: um trem só, no mesmo relógio para todo mundo (`ROTA_DO_TREM`); cada um o vê
+  // só nas abas da regra do seu setor (`abasDaRegra`: a regra Cofen não vê Acordos nem Pix). Nunca no celular.
   const telaLarga = useTelaLarga();
-  const rotaDoTrem = useMemo(() => rotaDaRegra(regraDoSetor), [regraDoSetor]);
+  const abasDoTrem = abasDaRegra(regraDoSetor);
   const abaDoTrem = natal && telaLarga ? abaDoCaminho(pathname) : null;
-  const tremNaAba = abaDoTrem !== null && rotaDoTrem.includes(abaDoTrem) ? abaDoTrem : null;
+  const tremNaAba = abaDoTrem !== null && abasDoTrem.includes(abaDoTrem) ? abaDoTrem : null;
   // `valorDoCargo` é o que o editor de ordem usa para desenhar o menu de OUTRO
   // cargo: ele responde «o que este cargo concede», sem aplicar exceção de
   // pessoa nenhuma — que é exatamente a pergunta de uma prévia por cargo.
@@ -578,7 +579,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* Nav */}
       <nav ref={menuLateral} className={cn('flex-1 px-2 py-3 space-y-0.5 overflow-y-auto', natal && telaLarga && 'relative')}>
         {/* O mapa da linha do trenzinho de Natal: a linha na beirada do menu, as estações nas abas da rota. */}
-        {natal && telaLarga && <Suspense fallback={null}><MapaDaLinha rota={rotaDoTrem} nav={menuLateral} /></Suspense>}
+        {natal && telaLarga && <Suspense fallback={null}><MapaDaLinha rota={ROTA_DO_TREM} visiveis={abasDoTrem} nav={menuLateral} /></Suspense>}
         {navItensOrdenados.map(item => (
           <NavLink
             key={item.to}
@@ -753,12 +754,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           e aparece inteiro nas faixas do alto e do pé. */}
       {tremNaAba && (
         <Suspense fallback={null}>
-          <CamadaDoTrem aba={tremNaAba} rota={rotaDoTrem} raiz={areaConteudo} leve={leve} />
-          <FaixaDoTremTopo aba={tremNaAba} rota={rotaDoTrem} />
+          <CamadaDoTrem aba={tremNaAba} rota={ROTA_DO_TREM} raiz={areaConteudo} leve={leve} />
+          <FaixaDoTremTopo aba={tremNaAba} rota={ROTA_DO_TREM} />
         </Suspense>
       )}
       {children}
-      {tremNaAba && <Suspense fallback={null}><FaixaDoTremFim aba={tremNaAba} rota={rotaDoTrem} meuId={perfil?.id ?? null} /></Suspense>}
+      {tremNaAba && <Suspense fallback={null}><FaixaDoTremFim aba={tremNaAba} rota={ROTA_DO_TREM} meuId={perfil?.id ?? null} /></Suspense>}
       <BarraRolagemLateral raiz={areaConteudo} />
     </main>
   );

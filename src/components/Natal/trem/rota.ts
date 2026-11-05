@@ -16,12 +16,21 @@ export const ROTULO_ABA: Readonly<Record<AbaDoTrem, string>> = {
 };
 
 /**
- * Nosso produto passa por Dashboard, Acordos, Pix Automático e Analítico; a
- * regra Cofen, só por Dashboard e Analítico (CLAUDE.md, «Cofen não é
- * PaguePlay»: decide a regra do setor, nunca a empresa).
+ * O percurso do trem — UM SÓ, para todo mundo (Cleber, 05/11/2026: «tem que
+ * ser o mesmo tempo e o mesmo sorteio para todos»): Dashboard, Acordos, Pix
+ * Automático e Analítico, ida e volta. É ele que dá o relógio (`horario.ts`):
+ * o trem está no mesmo lugar, na mesma hora, para todas as empresas e regras.
  */
-export function rotaDaRegra(regra: RegraDoSetor | null): AbaDoTrem[] {
-  return regra === 'cofen' ? ['dashboard', 'analitico'] : ['dashboard', 'acordos', 'pix', 'analitico'];
+export const ROTA_DO_TREM: readonly AbaDoTrem[] = ['dashboard', 'acordos', 'pix', 'analitico'];
+
+/**
+ * As abas em que cada um VÊ o trem: Nosso produto, todas; a regra Cofen, só
+ * Dashboard e Analítico (CLAUDE.md, «Cofen não é PaguePlay»: decide a regra
+ * do setor, nunca a empresa). Enquanto o trem passa por Acordos e Pix, para
+ * quem é da regra Cofen ele está «no túnel» — fora da tela, no mesmo relógio.
+ */
+export function abasDaRegra(regra: RegraDoSetor | null): readonly AbaDoTrem[] {
+  return regra === 'cofen' ? ['dashboard', 'analitico'] : ROTA_DO_TREM;
 }
 
 /**
