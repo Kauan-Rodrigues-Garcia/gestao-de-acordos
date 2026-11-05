@@ -15,31 +15,27 @@ const base = { titulo: '', rota: null as string | null, acordo_id: null as strin
 
 describe('rotaDaNotificacao — coluna `rota` (produtores novos)', () => {
   it('analítico', () => {
-    expect(rotaDaNotificacao({ ...base, titulo: 'Analítico atualizado', rota: ROTA_ANALITICO }, true))
+    expect(rotaDaNotificacao({ ...base, titulo: 'Analítico atualizado', rota: ROTA_ANALITICO }))
       .toBe('/analitico');
   });
   it('recebimento diário abre a sub-aba certa', () => {
-    expect(rotaDaNotificacao({ ...base, titulo: 'Recebimento diário atualizado', rota: ROTA_DIARIO }, true))
+    expect(rotaDaNotificacao({ ...base, titulo: 'Recebimento diário atualizado', rota: ROTA_DIARIO }))
       .toBe('/analitico?aba=diario');
   });
   it('mensagem do chat', () => {
-    expect(rotaDaNotificacao({ ...base, titulo: 'Nova mensagem — MARIA', rota: ROTA_SOLICITACOES }, true))
+    expect(rotaDaNotificacao({ ...base, titulo: 'Nova mensagem — MARIA', rota: ROTA_SOLICITACOES }))
       .toBe('/solicitacoes-whatsapp');
   });
 });
 
 describe('rotaDaNotificacao — acordo tem precedência', () => {
-  it('PaguePlay manda para o dashboard filtrado no acordo', () => {
-    expect(rotaDaNotificacao({ ...base, titulo: 'Acordo transferido', acordo_id: 'abc' }, true))
-      .toBe('/?acordo=abc');
-  });
-  it('BookPlay manda para /acordos', () => {
-    expect(rotaDaNotificacao({ ...base, titulo: 'Acordo transferido', acordo_id: 'abc' }, false))
+  it('manda para a aba Acordos, filtrada no acordo — a mesma nas duas regras desde 05/11/2026', () => {
+    expect(rotaDaNotificacao({ ...base, titulo: 'Acordo transferido', acordo_id: 'abc' }))
       .toBe('/acordos?acordo=abc');
   });
   it('acordo vence a rota gravada — é o destino mais específico', () => {
-    expect(rotaDaNotificacao({ titulo: 'x', rota: ROTA_ANALITICO, acordo_id: 'abc' }, true))
-      .toBe('/?acordo=abc');
+    expect(rotaDaNotificacao({ titulo: 'x', rota: ROTA_ANALITICO, acordo_id: 'abc' }))
+      .toBe('/acordos?acordo=abc');
   });
 });
 
@@ -49,23 +45,23 @@ describe('rotaDaNotificacao — linhas antigas, sem a coluna `rota`', () => {
     ['Recebimento diário atualizado', ROTA_DIARIO],
     ['Nova mensagem — João',          ROTA_SOLICITACOES],
   ])('%s → %s', (titulo, esperado) => {
-    expect(rotaDaNotificacao({ ...base, titulo }, true)).toBe(esperado);
+    expect(rotaDaNotificacao({ ...base, titulo })).toBe(esperado);
   });
 
   it('"diário" não cai no analítico por engano', () => {
     // O título do diário não contém "analítico", mas a ordem dos testes no
     // palpite é o que garante isso — este caso trava a ordem.
-    expect(rotaDaNotificacao({ ...base, titulo: 'Recebimento diário atualizado' }, true))
+    expect(rotaDaNotificacao({ ...base, titulo: 'Recebimento diário atualizado' }))
       .not.toBe(ROTA_ANALITICO);
   });
 
   it('aguenta título sem acento', () => {
-    expect(rotaDaNotificacao({ ...base, titulo: 'Analitico atualizado' }, true)).toBe(ROTA_ANALITICO);
-    expect(rotaDaNotificacao({ ...base, titulo: 'Recebimento diario' }, true)).toBe(ROTA_DIARIO);
+    expect(rotaDaNotificacao({ ...base, titulo: 'Analitico atualizado' })).toBe(ROTA_ANALITICO);
+    expect(rotaDaNotificacao({ ...base, titulo: 'Recebimento diario' })).toBe(ROTA_DIARIO);
   });
 
   it('título desconhecido não inventa destino', () => {
-    expect(rotaDaNotificacao({ ...base, titulo: 'Bem-vindo ao sistema' }, true)).toBeNull();
+    expect(rotaDaNotificacao({ ...base, titulo: 'Bem-vindo ao sistema' })).toBeNull();
   });
 });
 
@@ -120,7 +116,7 @@ describe('rotaDaNotificacao — link antigo do Pix', () => {
   // As funções do banco ainda gravam `/acordos?tab=pix`, e a rota de Acordos
   // exige `ver_acordos`: sem esta troca, quem só tem o Pix caía no Dashboard.
   it('vai direto para a tela do Pix', () => {
-    expect(rotaDaNotificacao({ ...base, titulo: 'Pix automático — registro excluído', rota: '/acordos?tab=pix' }, false))
+    expect(rotaDaNotificacao({ ...base, titulo: 'Pix automático — registro excluído', rota: '/acordos?tab=pix' }))
       .toBe('/pix-automatico');
   });
   it('leva o resto da busca junto', () => {

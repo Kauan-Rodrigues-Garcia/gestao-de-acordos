@@ -151,7 +151,8 @@ export const MODULOS_PERMISSAO: readonly DefinicaoModulo[] = [
   {
     id: 'acordos', rotulo: 'Acordos', interruptor: 'ver_acordos', escopo: 'acordos',
     descricao: 'Lista, formulário e ações sobre acordos.', grupos: ['Acordos'],
-    chaves: ['filtrar_por_usuario'], tenants: ['bookplay'],
+    // As duas regras desde 05/11/2026 (a mesa da regra Cofen saiu do Dashboard).
+    chaves: ['filtrar_por_usuario'], tenants: ['bookplay', 'pagueplay'],
   },
   {
     id: 'pix', rotulo: 'Pix Automático', interruptor: 'ver_pix_automatico', escopo: 'pix',

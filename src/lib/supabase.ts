@@ -155,6 +155,8 @@ export interface Perfil {
   viu_notificacao_chatplay?: boolean | null;
   /** true após o usuário trocar a senha padrão pelo botão de chave (troca 1x) */
   senha_alterada?: boolean | null;
+  /** Senha resetada por pedido (canal «Senhas»): o sistema exige a troca (20261105100000). */
+  senha_troca_obrigatoria?: boolean | null;
   /**
    * Quando a pessoa leu as boas-vindas do chat (migration 20260825240000).
    * `null` = ainda não viu, e o cartão aparece antes da primeira conversa.

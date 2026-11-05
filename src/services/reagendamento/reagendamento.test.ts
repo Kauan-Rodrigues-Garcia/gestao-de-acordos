@@ -246,8 +246,8 @@ describe('o modal que abre ao marcar pago continua abrindo', () => {
   const raiz = path.resolve(__dirname, '../../');
   const ler = (f: string) => fs.readFileSync(path.join(raiz, f), 'utf8');
 
-  it('Dashboard', () => {
-    expect(ler('pages/Dashboard/index.tsx'))
+  it('mesa da regra Cofen (aba Acordos, até 05/11/2026 no Dashboard)', () => {
+    expect(ler('pages/Acordos/AcordosCofen.tsx'))
       .toContain("podeReagendar({ ...acordo, status: 'pago' }, isPP, parcelasExistentes)");
   });
   it('aba Acordos', () => {

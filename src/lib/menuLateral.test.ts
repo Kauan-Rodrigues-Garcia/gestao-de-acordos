@@ -48,9 +48,9 @@ describe('abasDoMenu', () => {
     expect(rotulos(abasDoMenu(ctx({ cargo: 'rh' })))).toContain('Dashboard');
   });
 
-  it('PaguePlay não tem Acordos, Novo Acordo nem Campanha Fácil', () => {
+  it('regra Cofen tem Acordos (a mesa dela, desde 05/11/2026), mas não Novo Acordo nem Campanha Fácil', () => {
     const pp = rotulos(abasDoMenu(ctx({ isPaguePlay: true, isBookplay: false })));
-    expect(pp).not.toContain('Acordos');
+    expect(pp).toContain('Acordos');
     expect(pp).not.toContain('Novo Acordo');
     expect(pp).not.toContain('Campanha Fácil');
   });

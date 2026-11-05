@@ -105,7 +105,7 @@ function Aviso({ aba, rota }: { aba: AbaDoTrem; rota: readonly AbaDoTrem[] }) {
   const pos = ondeEsta(agora, rota, agenda);
   const aqui = pos.aba === aba;
   const falta = aqui ? 0 : chegaNaAbaEm(agora, rota, aba, agenda);
-  // Quem é da regra Cofen não tem Acordos nem Pix: ali o trem está «a caminho», sem nome de aba.
+  // Quem é da regra Cofen não tem o Pix: ali o trem está «a caminho», sem nome de aba.
   const visiveis = abasDaRegra(useSyncExternalStore(ouvirRegraDaSessao, regraDaSessaoAtual));
   const ondeVe = visiveis.includes(pos.aba);
   return (

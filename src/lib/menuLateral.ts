@@ -217,7 +217,13 @@ export const NAV_ITEMS: NavItem[] = [
   // A lixeira do Comercial é outra TABELA (`lixeira_vendas`), não outro filtro.
   // `ver_lixeira` abre; `restaurar_vendas` é que deixa mexer.
   { label: 'Lixeira',          icon: Trash2,          to: ROUTE_PATHS.VENDAS_LIXEIRA,          produtos: SO_COMERCIAL, permissaoKey: 'ver_lixeira_vendas' },
-  { label: 'Acordos',          icon: FileText,        to: ROUTE_PATHS.ACORDOS,             produtos: SO_COBRANCA, roles: ['operador','lider','administrador','elite','gerencia','diretoria'], hiddenForPaguePay: true, permissaoKey: 'ver_acordos' },
+  // Acordos: a mesa de trabalho, nas DUAS regras desde 05/11/2026 (Cleber). Na
+  // regra Cofen ela morava dentro do Dashboard e esta aba era escondida; agora
+  // quem decide é a chave `ver_acordos` do painel, como em Nosso produto. A
+  // mesa de cada regra é escolhida em `pages/Acordos/index.tsx`.
+  // «Novo Acordo» continua fora da regra Cofen: lá o acordo nasce na própria
+  // tabela (o «+ Novo Acordo» da mesa), como sempre foi.
+  { label: 'Acordos',          icon: FileText,        to: ROUTE_PATHS.ACORDOS,             produtos: SO_COBRANCA, roles: ['operador','lider','administrador','elite','gerencia','diretoria'], permissaoKey: 'ver_acordos' },
   { label: 'Novo Acordo',      icon: Plus,            to: ROUTE_PATHS.ACORDO_NOVO,         produtos: SO_COBRANCA, roles: ['operador','lider','administrador','elite','gerencia'], hiddenForPaguePay: true, permissaoKey: 'criar_acordos' },
   // Pix Automático — tela própria desde 16/10/2026. Era a quinta aba DENTRO de
   // Acordos, e tudo (registro, metas, fila de NR, premiação, ranking, tabela)

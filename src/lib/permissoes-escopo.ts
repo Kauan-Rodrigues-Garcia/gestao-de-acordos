@@ -221,8 +221,10 @@ export const ABAS_COM_ESCOPO = {
    * pessoas aparecem nos seletores — de "o meu setor" para "a empresa". Quantas
    * linhas chegam continua sendo decisão do RLS.
    *
-   * Só existe na BookPlay: a PaguePlay lê acordos pelo Dashboard, que tem os
-   * próprios níveis.
+   * Vale para as duas regras desde 05/11/2026: a mesa da regra Cofen saiu do
+   * Dashboard e veio para a aba Acordos, com o alcance DESTA aba (antes ela
+   * herdava o recorte do Dashboard). Na mesa, `todos_setores` também dá o
+   * seletor de setor (`useAlcanceAcordos`).
    */
   acordos: {
     chaveAba: 'ver_acordos',

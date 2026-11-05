@@ -20,6 +20,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { RealtimeAcordosProvider } from '@/providers/RealtimeAcordosProvider';
 import { PresenceProvider } from '@/providers/PresenceProvider';
 import { RegistroAppInstalado } from '@/components/RegistroAppInstalado';
+import { TrocaDeSenhaObrigatoria } from '@/components/TrocaDeSenhaObrigatoria';
 import { RastreioUsoProvider } from '@/providers/RastreioUsoProvider';
 import { NotificacoesProvider } from '@/providers/NotificacoesProvider';
 import { MesProvider } from '@/providers/MesProvider';
@@ -85,6 +86,7 @@ const CampanhaFacil     = lazy(() => import('@/pages/CampanhaFacil'));
 const CampanhasWhatsapp = lazy(() => import('@/pages/CampanhasWhatsapp'));
 const AbrirAutorizacoes = lazy(() => import('@/pages/AbrirAutorizacoes'));
 const AbrirTransferencias = lazy(() => import('@/pages/AbrirTransferencias'));
+const AbrirSenhas       = lazy(() => import('@/pages/AbrirSenhas'));
 const SolicitacoesWpp   = lazy(() => import('@/pages/SolicitacoesWhatsapp'));
 const Tickets           = lazy(() => import('@/pages/Tickets'));
 const Vendas            = lazy(() => import('@/pages/Vendas'));
@@ -397,6 +399,8 @@ export default function App() {
           {/* Dentro do Router: a versão nova entra na próxima troca de tela. */}
           <VersionWatcher />
           <TemaDoApp onMudar={setSoClaro} />
+          {/* Senha resetada por pedido: troca obrigatória, no site e no app (05/11/2026). */}
+          <TrocaDeSenhaObrigatoria />
           {/* App aberto como instalado no celular: registra quem instalou. */}
           <RegistroAppInstalado />
           {/* DENTRO do Router: o rastreio lê a rota atual com `useLocation`, e
@@ -468,7 +472,7 @@ export default function App() {
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
-              {/* A lista da BookPlay. Era livre: qualquer cargo logado abria. */}
+              {/* A mesa de acordos, nas duas regras (05/11/2026): `pages/Acordos` escolhe a de cada uma. Era livre: qualquer cargo logado abria. */}
               <Route path={ROUTE_PATHS.ACORDOS} element={
                 <LayoutWrapper>
                   <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_acordos">
@@ -643,6 +647,15 @@ export default function App() {
                 <LayoutWrapper>
                   <ProtectedRoute>
                     <AbrirTransferencias />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+
+              {/* Senhas — não é tela: abre o chat no canal dos pedidos de reset e volta (05/11/2026). */}
+              <Route path={ROUTE_PATHS.SENHAS} element={
+                <LayoutWrapper>
+                  <ProtectedRoute>
+                    <AbrirSenhas />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />

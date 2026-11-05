@@ -11,11 +11,11 @@ const NOSSO = ROTA_DO_TREM;
 const em = (s: number) => EPOCA + s * 1000;
 
 describe('um trem só, para todo mundo', () => {
-  it('o percurso passa pelas quatro abas; quem é Cofen vê o trem só no Dashboard e no Analítico', () => {
+  it('o percurso passa pelas quatro abas; quem é Cofen vê no Dashboard, em Acordos e no Analítico (não tem Pix)', () => {
     expect(ROTA_DO_TREM).toEqual(['dashboard', 'acordos', 'pix', 'analitico']);
     expect(abasDaRegra('nosso_produto')).toEqual(ROTA_DO_TREM);
     expect(abasDaRegra(null)).toEqual(ROTA_DO_TREM);
-    expect(abasDaRegra('cofen')).toEqual(['dashboard', 'analitico']);
+    expect(abasDaRegra('cofen')).toEqual(['dashboard', 'acordos', 'analitico']);
   });
 
   it('as abas de cada regra estão no percurso, na mesma ordem', () => {
@@ -66,7 +66,7 @@ describe('chegaNaAbaEm', () => {
     expect(chegaNaAbaEm(em(1), ['dashboard', 'analitico'], 'acordos')).toBeNull();
   });
   it('para quem é Cofen, o trem chega ao Analítico na mesma hora que para todo mundo', () => {
-    // Saindo da estação: o trem passa por Acordos e Pix (o «túnel» do Cofen) e chega ao Analítico.
+    // Saindo da estação: o trem passa por Acordos e pelo Pix (o «túnel» do Cofen) e chega ao Analítico.
     const s = chegaNaAbaEm(em(1), NOSSO, 'analitico')!;
     expect(s).toBe(Math.ceil(PARADA_ESTACAO_S + tempoNaAba('dashboard') + tempoNaAba('acordos') + tempoNaAba('pix') - 1));
   });

@@ -133,12 +133,12 @@ describe('rota da notificação de campanha', () => {
 
   it('leva à aba, já na campanha', () => {
     const n = { titulo: 'Campanha de WhatsApp pronta', rota: rotaDaCampanhaWhatsapp(id), acordo_id: null };
-    expect(rotaDaNotificacao(n, false)).toBe(`/campanhas-whatsapp?envio=${id}`);
+    expect(rotaDaNotificacao(n)).toBe(`/campanhas-whatsapp?envio=${id}`);
   });
 
   it('a notificação antiga (baixar planilha) também leva à aba', () => {
     const n = { titulo: 'Campanha pronta — MENSAGEM', rota: `/campanha-facil/envio/${id}`, acordo_id: null };
-    expect(rotaDaNotificacao(n, false)).toBe(`/campanhas-whatsapp?envio=${id}`);
-    expect(rotaDaNotificacao({ ...n, rota: '/campanha-facil/envio/../admin' }, false)).toBe('/campanhas-whatsapp');
+    expect(rotaDaNotificacao(n)).toBe(`/campanhas-whatsapp?envio=${id}`);
+    expect(rotaDaNotificacao({ ...n, rota: '/campanha-facil/envio/../admin' })).toBe('/campanhas-whatsapp');
   });
 });

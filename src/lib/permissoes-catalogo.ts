@@ -361,7 +361,7 @@ export const PERMISSOES: PermissaoMeta[] = [
   {
     key: 'ver_acordos', label: 'Aba Acordos',
     descricao: 'Abrir a lista completa de acordos em /acordos',
-    grupo: 'Abas e telas', tenants: ['bookplay'], padrao: TODOS,
+    grupo: 'Abas e telas', tenants: ['bookplay', 'pagueplay'], padrao: TODOS,
   },
   {
     key: 'ver_analitico', label: 'Aba Analítico',
@@ -712,29 +712,32 @@ export const PERMISSOES: PermissaoMeta[] = [
    *
    * O teste "as chaves aposentadas não voltaram" a trava fora daqui.
    */
+  // As duas regras usam estas chaves desde 05/11/2026: a mesa da regra Cofen
+  // saiu do Dashboard e veio para a aba Acordos (`pages/Acordos`). Antes eram
+  // só da BookPlay, e o painel da PaguePlay nem as mostrava.
   // Os quatro níveis desta aba. `todos_setores` aqui NÃO acrescenta filtro de
   // setor (a tela não tem um): ele amplia as LISTAS de equipe e de pessoa, de
   // "o meu setor" para "a empresa". Ver `permissoes-escopo.ts`.
   {
     key: 'acordos_escopo_individual', label: 'Acordos: os próprios acordos',
     descricao: 'Ver na lista de acordos os da própria pessoa',
-    grupo: 'Acordos', tenants: ['bookplay'], padrao: TODOS,
+    grupo: 'Acordos', tenants: ['bookplay', 'pagueplay'], padrao: TODOS,
   },
   {
     key: 'acordos_escopo_equipe', label: 'Acordos: acordos da equipe',
     descricao: 'Ver na lista os acordos da equipe, com os atalhos de equipe no topo',
-    grupo: 'Acordos', tenants: ['bookplay'],
+    grupo: 'Acordos', tenants: ['bookplay', 'pagueplay'],
     padrao: { lider: true, elite: true, gerencia: true, ouvidoria: true },
   },
   {
     key: 'acordos_escopo_setor', label: 'Acordos: acordos do setor',
     descricao: 'Ver na lista os acordos de outras pessoas, e a coluna Operador',
-    grupo: 'Acordos', tenants: ['bookplay'], padrao: LIDERANCA,
+    grupo: 'Acordos', tenants: ['bookplay', 'pagueplay'], padrao: LIDERANCA,
   },
   {
     key: 'acordos_escopo_todos_setores', label: 'Acordos: todos os setores',
     descricao: 'Listar equipes e pessoas de qualquer setor nos filtros de Acordos',
-    grupo: 'Acordos', tenants: ['bookplay'], padrao: { gerencia: true, diretoria: true },
+    grupo: 'Acordos', tenants: ['bookplay', 'pagueplay'], padrao: { gerencia: true, diretoria: true },
   },
   {
     key: 'criar_acordos', label: 'Criar acordo',

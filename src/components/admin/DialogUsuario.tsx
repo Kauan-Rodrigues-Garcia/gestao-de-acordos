@@ -37,8 +37,9 @@
 import { useMemo } from 'react';
 import {
   Camera, Trash2, KeyRound, Save, Lock, ArrowRightLeft, Building2, Shield,
-  AlertTriangle, Loader2, UserPlus, IdCard, Briefcase, X, Bot,
+  AlertTriangle, Loader2, UserPlus, IdCard, Briefcase, X, Bot, Wand2,
 } from 'lucide-react';
+import { gerarSenhaAleatoria } from '@/lib/senhaAleatoria';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -161,6 +162,13 @@ interface Props {
   setNovaSenha: (v: string) => void;
   salvandoSenha: boolean;
   onSalvarSenha: () => void;
+  /**
+   * Quem não redefine senha pede o reset ao super admin (05/11/2026). Ausente =
+   * não pode pedir para esta pessoa (cúpula, desligada, a própria conta).
+   */
+  onPedirResetSenha?: () => void;
+  /** Já há pedido aberto para esta pessoa: o nome de quem pediu. */
+  resetSenhaPedidoPor?: string | null;
 
   // Exclusão
   onPedirExclusao: () => void;
@@ -235,6 +243,7 @@ export function DialogUsuario({
   salvando, onSalvar,
   uploadando, onEscolherFoto, onRemoverFoto,
   novaSenha, setNovaSenha, salvandoSenha, onSalvarSenha,
+  onPedirResetSenha, resetSenhaPedidoPor = null,
   onPedirExclusao, excluindo,
 }: Props) {
   const criando = !editando;
@@ -671,12 +680,22 @@ export function DialogUsuario({
             <Secao titulo="Acesso" Icone={KeyRound}>
               <div className="space-y-1.5">
                 <Label className="text-xs">Nova senha</Label>
-                <Input
-                  type="text" value={novaSenha}
-                  onChange={e => setNovaSenha(e.target.value)}
-                  placeholder="Deixe em branco para manter a senha atual"
-                  className="h-9 text-sm font-mono" autoComplete="off"
-                />
+                <div className="flex gap-1.5">
+                  <Input
+                    type="text" value={novaSenha}
+                    onChange={e => setNovaSenha(e.target.value)}
+                    placeholder="Deixe em branco para manter a senha atual"
+                    className="h-9 text-sm font-mono" autoComplete="off"
+                  />
+                  {/* 05/11/2026: senha aleatória de 6 caracteres, para não ser sempre 123456. */}
+                  <Button
+                    type="button" variant="outline" size="sm" className="h-9 shrink-0 gap-1.5"
+                    title="Gerar uma senha aleatória de 6 caracteres"
+                    onClick={() => setNovaSenha(gerarSenhaAleatoria())}
+                  >
+                    <Wand2 className="w-3.5 h-3.5" /> Gerar
+                  </Button>
+                </div>
                 <p className="text-[11px] text-muted-foreground leading-snug">
                   Mínimo {MIN_SENHA} caracteres. A senha atual não pode ser consultada —
                   só substituída. Informe a nova a {editando.nome.split(' ')[0]}; o botão
@@ -694,6 +713,31 @@ export function DialogUsuario({
                     : <KeyRound className="w-3.5 h-3.5" />}
                   {salvandoSenha ? 'Salvando senha...' : 'Salvar nova senha'}
                 </Button>
+              )}
+            </Secao>
+          )}
+
+          {/* ── Acesso, para quem não redefine senha (05/11/2026) ──────────────
+              Pede ao super admin. Aprovado, a senha provisória chega no chat de
+              quem pediu, e a pessoa é obrigada a trocar ao entrar. */}
+          {editando && !pode.senha && onPedirResetSenha && (
+            <Secao titulo="Acesso" Icone={KeyRound}>
+              {resetSenhaPedidoPor !== null ? (
+                <p className="rounded-md border border-amber-500/40 bg-amber-500/[0.07] px-3 py-2 text-xs">
+                  Reset de senha aguardando o super admin
+                  {resetSenhaPedidoPor ? <> · pedido por <strong>{resetSenhaPedidoPor}</strong></> : null}.
+                  A senha nova aparece no chat, canal «Senhas».
+                </p>
+              ) : (
+                <>
+                  <Button type="button" variant="secondary" size="sm" className="h-8 gap-1.5 w-full" onClick={onPedirResetSenha}>
+                    <KeyRound className="w-3.5 h-3.5" /> Solicitar reset de senha
+                  </Button>
+                  <p className="text-[11px] text-muted-foreground leading-snug">
+                    {editando.nome.split(' ')[0]} esqueceu a senha? O pedido vai para o super admin; aprovado, a
+                    senha provisória aparece no seu chat e {editando.nome.split(' ')[0]} cria uma nova ao entrar.
+                  </p>
+                </>
               )}
             </Secao>
           )}

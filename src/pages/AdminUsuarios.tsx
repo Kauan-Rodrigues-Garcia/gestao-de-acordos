@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useMemo, useDeferredValue, lazy, Suspense } from 'react';
+import { useCallback, useEffect, useState, useRef, useMemo, useDeferredValue, lazy, Suspense } from 'react';
 import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { useSearchParams } from 'react-router-dom';
 import { Users, Plus, RefreshCw, Building2, ArrowRightLeft, X, Trash2, Users2, Loader2, Target, PartyPopper, AlertTriangle, UserX, Search, UsersRound, Bot, Download } from 'lucide-react';
@@ -10,6 +10,8 @@ import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { filtrarUsuariosVisiveis } from '@/lib/usuarios-visibilidade';
 import { iniciarImpersonacao } from '@/services/impersonacao.service';
 import { redefinirSenhaDeUsuario, MIN_SENHA } from '@/services/senha.service';
+import { pedidosSenhaAbertos } from '@/services/senhaPedidos.service';
+import { DialogPedirResetSenha } from '@/components/admin/senha/DialogPedirResetSenha';
 import { criarUsuario } from '@/services/criarUsuario.service';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { AbasSegmentadas, type AbaSegmentada } from '@/components/AbasSegmentadas';
@@ -399,6 +401,26 @@ export default function AdminUsuarios() {
   const pedidosAbertos = pedidosTransf.pedidos.filter(pedidoAberto).length;
   /** O setor que a transferência abre já escolhido — o Núcleo, vindo da janela de usuário. */
   const [destinoTransferencia, setDestinoTransferencia] = useState<string | null>(null);
+
+  /*
+   * Reset de senha por pedido (05/11/2026). Quem acessa Usuários e não redefine
+   * senha pede ao super admin; quem redefine continua com o campo «Nova senha».
+   * O banco confere o setor (`fn_senha_pedir`); aqui só não se oferece o botão
+   * para quem nunca poderia ser pedido.
+   */
+  const podePedirSenha = !isSuperAdmin && !podeNoUsuario.senha && temPermissao('ver_usuarios');
+  const [pedindoSenha, setPedindoSenha] = useState<Perfil | null>(null);
+  const [senhasPedidas, setSenhasPedidas] = useState<Map<string, string>>(() => new Map());
+  const releSenhasPedidas = useCallback(() => {
+    if (!podePedirSenha) return;
+    void pedidosSenhaAbertos().then(setSenhasPedidas);
+  }, [podePedirSenha]);
+  useEffect(() => { releSenhasPedidas(); }, [releSenhasPedidas]);
+  const podePedirSenhaDe = (u: Perfil | null): boolean => !!u && podePedirSenha
+    && !(u as { _cloneDe?: unknown })._cloneDe
+    && u.id !== perfilAtual?.id
+    && !['super_admin', 'administrador', 'diretoria'].includes(u.perfil)
+    && (u.situacao ?? 'ativo') !== 'desligado';
 
   /*
    * As equipes, para a coluna «Equipe».
@@ -1898,6 +1920,8 @@ export default function AdminUsuarios() {
         setNovaSenha={setNovaSenha}
         salvandoSenha={salvandoSenha}
         onSalvarSenha={() => void alterarSenhaOperador()}
+        onPedirResetSenha={podePedirSenhaDe(editando) ? () => setPedindoSenha(editando) : undefined}
+        resetSenhaPedidoPor={editando && senhasPedidas.has(editando.id) ? senhasPedidas.get(editando.id) ?? '' : null}
         onPedirExclusao={() => { void abrirConfirmacaoExclusao(); }}
         excluindo={excluindoUsuario}
       />
@@ -1930,6 +1954,18 @@ export default function AdminUsuarios() {
           },
           onMudou: recarregarSituacoes,
         } : undefined}
+        onPedirResetSenha={podePedirSenhaDe(pessoaAberta) ? u => setPedindoSenha(u) : undefined}
+        resetSenhaPedido={!!pessoaAberta && senhasPedidas.has(pessoaAberta.id)}
+      />
+
+      {/* Pedido de reset de senha ao super admin (05/11/2026). */}
+      <DialogPedirResetSenha
+        alvo={pedindoSenha}
+        onFechar={() => setPedindoSenha(null)}
+        onPedido={alvoId => {
+          setSenhasPedidas(m => new Map(m).set(alvoId, perfilAtual?.nome ?? ''));
+          releSenhasPedidas();
+        }}
       />
 
       {/* #6: diálogo de confirmação de exclusão de usuário */}

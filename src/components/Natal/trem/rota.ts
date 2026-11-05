@@ -24,13 +24,14 @@ export const ROTULO_ABA: Readonly<Record<AbaDoTrem, string>> = {
 export const ROTA_DO_TREM: readonly AbaDoTrem[] = ['dashboard', 'acordos', 'pix', 'analitico'];
 
 /**
- * As abas em que cada um VÊ o trem: Nosso produto, todas; a regra Cofen, só
- * Dashboard e Analítico (CLAUDE.md, «Cofen não é PaguePlay»: decide a regra
- * do setor, nunca a empresa). Enquanto o trem passa por Acordos e Pix, para
+ * As abas em que cada um VÊ o trem: Nosso produto, todas; a regra Cofen,
+ * Dashboard, Acordos e Analítico — Acordos desde 05/11/2026, quando a mesa dela
+ * saiu do Dashboard (CLAUDE.md, «Cofen não é PaguePlay»: decide a regra
+ * do setor, nunca a empresa). Enquanto o trem passa pelo Pix, para
  * quem é da regra Cofen ele está «no túnel» — fora da tela, no mesmo relógio.
  */
 export function abasDaRegra(regra: RegraDoSetor | null): readonly AbaDoTrem[] {
-  return regra === 'cofen' ? ['dashboard', 'analitico'] : ROTA_DO_TREM;
+  return regra === 'cofen' ? ['dashboard', 'acordos', 'analitico'] : ROTA_DO_TREM;
 }
 
 /**

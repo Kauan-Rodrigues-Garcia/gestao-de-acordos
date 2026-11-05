@@ -30,7 +30,8 @@ import { formatDate, getTodayISO, ROUTE_PATHS, STATUS_LABELS, STATUS_LABELS_PAGU
 import {
   desfazerPagoNoBanco, esquecerPagoDesfazivel, guardarPagoDesfazivel, pagoDesfazivel,
 } from '@/lib/desfazerPago';
-import { niveisLiberados } from '@/lib/permissoes-escopo';
+import { useAlcanceAcordos } from './useAlcanceAcordos';
+import { AcordosCofen } from './AcordosCofen';
 import { useTenant } from '@/lib/tenant-config';
 import { acordoTemCpf } from '@/lib/cpf';
 import { alternarSelecaoDoDia } from '@/lib/acordosPorDia';
@@ -44,9 +45,8 @@ import { enviarParaLixeira }     from '@/services/lixeira.service';
 import { registrarLog }          from '@/services/logs.service';
 import { deduplicarVinculados, temVisaoAmpla, type AcordoComVinculo } from '@/lib/deduplicarVinculados';
 import { emGruposParalelos } from '@/lib/emGruposParalelos';
-import { COLUNAS_SETOR_DO_FILTRO, listaDoFiltroDeSetores } from '@/lib/setoresDosFiltros';
 import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
-import { PER_PAGE, getPageNumbers, type VisaoFiltroAcordos } from './helpers';
+import { PER_PAGE, getPageNumbers } from './helpers';
 import { useMensagensWhatsapp } from '@/hooks/useMensagensWhatsapp';
 import {
   grupoDoStatus, mensagemParaAcordo, mensagensDoGrupo,
@@ -68,7 +68,7 @@ import { AcordosModals } from './AcordosModals';
  */
 const STATUSES_ANALITICO_EXCLUIDOS = ['pago', 'nao_pago'];
 
-export default function Acordos() {
+function AcordosNossoProduto() {
   const { perfil } = useAuth();
   const { principal: equipePrincipal } = useEquipesDoPerfil();
   const { empresa } = useEmpresa();
@@ -89,101 +89,19 @@ export default function Acordos() {
   const [filtroTag, setFiltroTag]       = useState(searchParams.get('tag') || '');
   const [currentPage, setCurrentPage]   = useState(Number(searchParams.get('page')) || 1);
 
-  const [visaoFiltroAcordos, setVisaoFiltroAcordos] = useState<VisaoFiltroAcordos>('setor');
-  const [equipesDoSetor, setEquipesDoSetor] = useState<{ id: string; nome: string }[]>([]);
-  /**
-   * Setor em foco no filtro. `null` = todos.
-   *
-   * Só existe para quem tem `todos_setores`: quem enxerga um setor só já está
-   * preso a ele pela própria consulta, e o seletor não teria o que oferecer.
-   */
-  const [filtroSetor, setFiltroSetor] = useState<string | null>(null);
-  // As linhas de `setores` como vieram; o seletor recorta pelo mês olhado
-  // (`setoresDoFiltro`, mais abaixo, depois de `mesFiltro`).
-  const [setoresDisponiveis, setSetoresDisponiveis] = useState<
-    { id: string; nome: string; ativo: boolean; tipo: string | null }[]
-  >([]);
-
   /*
-   * Alcance DESTA aba, e de nenhuma outra.
-   *
-   * Antes vinha de duas chaves globais e de uma lista de cargo escrita aqui:
-   * `ver_acordos_gerais` decidia se a consulta ficava presa ao próprio
-   * operador, `ver_todos_setores` decidia se as listas de equipe e de pessoa
-   * passavam do próprio setor, e `isLider || isElite` decidia se os atalhos de
-   * equipe apareciam. As mesmas duas chaves mandavam no Dashboard e na
-   * Lixeira — mexer no alcance daqui mexia lá.
-   *
-   * `todos_setores` passou a ACRESCENTAR um filtro de setor (08/09/2026). Antes
-   * o nível só ampliava as listas dos seletores: quem enxergava tudo recebia as
-   * equipes da empresa inteira numa fileira de botões, sem contexto de setor e
-   * sem caber na tela. Agora é setor → equipe em cascata, como no Dashboard, e
-   * o setor escolhido recorta também a consulta. Quem NÃO tem o nível continua
-   * sem seletor de setor, preso ao próprio, exatamente como antes.
+   * O mês é o do sistema (`MesProvider`), não desta tela: escolher agosto no
+   * Dashboard e clicar em Acordos tem que continuar em agosto.
    */
-  // Memoizado porque desce como prop: `niveisLiberados` devolve um array novo
-  // a cada chamada, e um array novo por render remontaria o filtro à toa.
-  const niveis         = useMemo(() => niveisLiberados('acordos', temPermissao), [temPermissao]);
-  const podeVerSetor   = niveis.includes('setor');
-  const podeVerEquipe  = niveis.includes('equipe');
-  const verTodosSetores = niveis.includes('todos_setores');
+  const { mes: mesFiltro, setMes: setMesFiltro } = useMesGlobal();
 
-  /*
-   * A lista de setores do seletor. Só para quem tem `todos_setores`; para os
-   * demais fica vazia, e o seletor nem é desenhado.
-   */
-  useEffect(() => {
-    if (!verTodosSetores || !empresa?.id) { setSetoresDisponiveis([]); return; }
-    supabase.from('setores').select(COLUNAS_SETOR_DO_FILTRO)
-      .eq('empresa_id', empresa.id).order('nome')
-      .then(({ data }) => {
-        setSetoresDisponiveis(
-          (data as unknown as { id: string; nome: string; ativo: boolean; tipo: string | null }[] | null) ?? [],
-        );
-      });
-  }, [verTodosSetores, empresa?.id]);
-
-  /*
-   * As equipes seguem o setor em foco — é a cascata do Dashboard.
-   *
-   * Sem ela, quem tem `todos_setores` recebia as equipes da empresa inteira
-   * numa lista só, sem dizer de que setor era cada uma. Com o setor escolhido,
-   * a lista é a daquele setor; com «Todos os setores», continua sendo tudo.
-   */
-  useEffect(() => {
-    if (!podeVerEquipe || !empresa?.id) return;
-    const setorDaVez = verTodosSetores ? filtroSetor : (perfil?.setor_id ?? null);
-    if (!setorDaVez && !verTodosSetores) return;
-    let q = supabase
-      .from('equipes')
-      .select('id, nome')
-      .eq('empresa_id', empresa.id);
-    if (setorDaVez) q = q.eq('setor_id', setorDaVez);
-    q.order('nome')
-      .then(({ data }) => {
-        setEquipesDoSetor((data as { id: string; nome: string }[]) ?? []);
-      });
-  }, [podeVerEquipe, perfil?.setor_id, empresa?.id, verTodosSetores, filtroSetor]);
-
-  /*
-   * Trocar de setor solta a equipe escolhida.
-   *
-   * Sem isto, escolher «Play 3» com a equipe «Tauana» (do Play 5) marcada
-   * deixava a lista vazia e o seletor mostrando uma equipe que não está mais
-   * entre as opções — a tela dizendo que filtra por algo que ela não oferece.
-   */
-  useEffect(() => {
-    if (!visaoFiltroAcordos.startsWith('equipe:')) return;
-    const id = visaoFiltroAcordos.replace('equipe:', '');
-    if (equipesDoSetor.length > 0 && !equipesDoSetor.some(e => e.id === id)) {
-      setVisaoFiltroAcordos('setor');
-    }
-  }, [equipesDoSetor, visaoFiltroAcordos]);
-
-  const equipeFiltroAtivo  = visaoFiltroAcordos.startsWith('equipe:')
-    ? visaoFiltroAcordos.replace('equipe:', '')
-    : null;
-  const isVisaoIndividual  = visaoFiltroAcordos === 'individual';
+  // O alcance da aba (setor, equipe, só os meus), igual ao da mesa da regra Cofen: `useAlcanceAcordos`.
+  const {
+    niveis, podeVerSetor, verTodosSetores,
+    visao: visaoFiltroAcordos, setVisao: setVisaoFiltroAcordos,
+    isVisaoIndividual, equipeFiltroAtivo,
+    filtroSetor, setFiltroSetor, equipesDoSetor, setoresDoFiltro,
+  } = useAlcanceAcordos(mesFiltro);
   const [activeTab, setActiveTab] = useState<'analitico' | 'todos' | 'pagos' | 'nao_pagos'>(
     (searchParams.get('tab') as 'analitico' | 'todos' | 'pagos' | 'nao_pagos') || 'todos',
   );
@@ -232,18 +150,6 @@ export default function Acordos() {
   const highlightFoundRef  = useRef(false);
   const findAttemptsRef    = useRef(0);
 
-  /*
-   * O mês é o do sistema (`MesProvider`), não desta tela: escolher agosto no
-   * Dashboard e clicar em Acordos tem que continuar em agosto.
-   */
-  const { mes: mesFiltro, setMes: setMesFiltro } = useMesGlobal();
-
-  // Sem setor de sistema, e sem inativo do mês corrente em diante — mês
-  // passado mantém o setor que existia nele. Ver `lib/setoresDosFiltros`.
-  const setoresDoFiltro = useMemo(
-    () => listaDoFiltroDeSetores(setoresDisponiveis, null, { mes: mesFiltro }),
-    [setoresDisponiveis, mesFiltro],
-  );
 
   /**
    * Cadeado do mês. A lista é recortada por `vencimento` dentro de `mesFiltro`,
@@ -853,7 +759,6 @@ export default function Acordos() {
     });
   }, [acordos, acordoFoco, visaoAmpla, usuarioTemLogicaDiretoExtra, filtroVinculo, isPP, hoje]);
 
-  if (isPP) return <Navigate to="/" replace />;
   if (linkAntigoDoPix) {
     const resto = new URLSearchParams(searchParams);
     resto.delete('tab');
@@ -1171,4 +1076,21 @@ export default function Acordos() {
       />
     </div>
   );
+}
+
+/**
+ * A aba Acordos, com a mesa da regra do setor (Cleber, 05/11/2026: «deixar a
+ * aba separada tanto nosso produto quanto cofen»).
+ *
+ * Até aqui a regra Cofen não tinha esta aba: a mesa dela morava DENTRO do
+ * Dashboard, e quem abria `/acordos` voltava para lá. Agora as duas regras têm
+ * a mesma estrutura — Dashboard para os indicadores, Acordos para a mesa de
+ * trabalho. As mesas continuam diferentes porque os DADOS são (colunas,
+ * status, estado, link): a de Nosso produto mora acima, a da regra Cofen em
+ * `AcordosCofen.tsx`. Quem decide é a regra do setor (`tenant.isPaguePlay`
+ * responde por ela — `lib/index.ts`), nunca a empresa.
+ */
+export default function Acordos() {
+  const { isPaguePlay } = useTenant();
+  return isPaguePlay ? <AcordosCofen /> : <AcordosNossoProduto />;
 }

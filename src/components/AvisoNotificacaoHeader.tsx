@@ -45,7 +45,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
 import type { Notificacao } from '@/lib/supabase';
 import { useNotificacoes } from '@/providers/NotificacoesProvider';
-import { useTenant } from '@/lib/tenant-config';
 import { rotaDaNotificacao } from '@/lib/notificacoes-rota';
 import {
   tipoDaNotificacao, apresentacaoDaNotificacao,
@@ -92,7 +91,6 @@ function abrirPainelDoSino() {
 export function AvisoNotificacaoHeader() {
   const { notificacoes, marcarLida, cargaInicialConcluida } = useNotificacoes();
   const navigate = useNavigate();
-  const tenant   = useTenant();
 
   const [fila, setFila]         = useState<Notificacao[]>([]);
   const [excedente, setExcedente] = useState(0);
@@ -208,12 +206,12 @@ export function AvisoNotificacaoHeader() {
   }, []);
 
   const abrir = useCallback((n: Notificacao) => {
-    const destino = rotaDaNotificacao(n, tenant.isPaguePlay);
+    const destino = rotaDaNotificacao(n);
     if (!n.lida) void marcarLida(n.id);
     setAtivo(null);
     setPausado(false);
     if (destino) navigate(destino);
-  }, [marcarLida, navigate, tenant.isPaguePlay]);
+  }, [marcarLida, navigate]);
 
   /** Quantas ainda esperam, somando as que nem entraram na fila. */
   const aguardando = fila.length + excedente;
@@ -239,7 +237,7 @@ export function AvisoNotificacaoHeader() {
         {ativo && (() => {
           const { notificacao: n, tipo, restanteMs, duracaoMs } = ativo;
           const vis = apresentacaoDaNotificacao(n);
-          const temDestino = rotaDaNotificacao(n, tenant.isPaguePlay) !== null;
+          const temDestino = rotaDaNotificacao(n) !== null;
 
           return (
             <motion.div

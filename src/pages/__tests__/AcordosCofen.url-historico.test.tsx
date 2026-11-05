@@ -1,5 +1,8 @@
 /**
- * Dashboard (PaguePlay) — uma troca de filtro, UMA entrada no histórico.
+ * A mesa da regra Cofen (aba Acordos) — uma troca de filtro, UMA entrada no histórico.
+ *
+ * Até 05/11/2026 a mesa morava no Dashboard e o teste era do Dashboard; ela
+ * veio para a aba Acordos (`pages/Acordos/AcordosCofen.tsx`) e o teste, junto.
  *
  * Aqui o defeito NUNCA existiu, e o teste é uma guarda. O efeito que escreve
  * os filtros na URL deixava `setSearchParams` fora das dependências — o lint
@@ -9,7 +12,7 @@
  * escrita reagendaria o efeito. Conferido: com a função nas dependências, este
  * teste falha com 2 entradas.
  *
- * A sincronia só existe na PaguePlay — por isso o tenant difere do smoke.
+ * A mesa é a da regra Cofen — por isso o tenant responde `isPaguePlay: true`.
  */
 import React, { useRef } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -17,7 +20,7 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, useLocation, useNavigationType } from 'react-router-dom';
 
-import Dashboard from '../Dashboard';
+import { AcordosCofen } from '../Acordos/AcordosCofen';
 
 // ── Hook / lib mocks ────────────────────────────────────────────────────────
 
@@ -237,14 +240,14 @@ async function esperarEscritas() {
   }
 }
 
-describe('Dashboard PaguePlay — filtros na URL', () => {
+describe('mesa da regra Cofen — filtros na URL', () => {
   it('digitar na busca grava a URL uma vez só', async () => {
     historico.pushes = 0;
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={['/dashboard']}>
-          <Dashboard />
+        <MemoryRouter initialEntries={['/acordos']}>
+          <AcordosCofen />
           <Sonda />
         </MemoryRouter>
       </QueryClientProvider>,
