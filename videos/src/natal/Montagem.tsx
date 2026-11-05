@@ -42,7 +42,8 @@ import { Seta } from './Seta';
 import { A, Ceu, L, sorteio } from './Ceu';
 import { CAVALO_DA_GUERRA, COMENTARIOS, CORRIDAS, PESQUISA } from './dados';
 import './montagem.css';
-import { Laco, estiloDaFita, estiloDoPapel } from '@/components/Natal/presente/arte';
+import { Laco } from '@/components/Natal/presente/arte';
+import { estiloDaFita, estiloDoPapel } from '@/components/Natal/presente/papel';
 
 fonteNunito('normal', { weights: ['600', '700', '800', '900'], subsets: ['latin', 'latin-ext'] });
 fonteCaveat('normal', { weights: ['700'], subsets: ['latin', 'latin-ext'] });
@@ -632,7 +633,7 @@ const Explosao: React.FC<{ de: number; x: number; y: number }> = ({ de, x, y }) 
     for (const v of vivas) bola(v.x, v.y + v.r * 0.12, v.r, FOGO[Math.min(4, 2 + Math.floor(v.idade * 2.5))]);
     for (const v of vivas) bola(v.x, v.y, v.r * 0.8, FOGO[Math.min(3, 1 + Math.floor(v.idade * 2.2))]);
     for (const v of vivas) if (v.idade < 0.7) bola(v.x - v.r * 0.15, v.y - v.r * 0.2, v.r * 0.42, FOGO[v.idade < 0.3 ? 0 : 1]);
-  }, [t]);
+  }, [t, x, y]);
   if (t <= 0) return null;
   const clarao = t < 0.12 ? 1 - t / 0.12 : 0;
   const cheia = entre(f, de + s(1.1), de + s(1.5), 0, 1);

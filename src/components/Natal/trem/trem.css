@@ -1,0 +1,551 @@
+/* O trenzinho de Natal (`Trem.tsx`). Tudo que mexe mora aqui. */
+
+.nt-trem {
+  /* Uma volta das rodas. O trilho ajusta pela velocidade do trem. */
+  --nt-trem-volta: 0.8s;
+  display: block;
+  overflow: visible;
+}
+
+.nt-trem-roda,
+.nt-trem-olhos,
+.nt-trem-estrela,
+.nt-trem-laco,
+.nt-trem-aceno,
+.nt-trem-fumaca circle {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.nt-trem-roda { animation: nt-trem-gira var(--nt-trem-volta) linear infinite; }
+@keyframes nt-trem-gira { to { transform: rotate(360deg); } }
+
+/* A biela dá a volta junto com as rodas. */
+.nt-trem-biela { animation: nt-trem-biela var(--nt-trem-volta) linear infinite; }
+@keyframes nt-trem-biela {
+  0%   { transform: translate(0, -2.2px); }
+  25%  { transform: translate(2.2px, 0); }
+  50%  { transform: translate(0, 2.2px); }
+  75%  { transform: translate(-2.2px, 0); }
+  100% { transform: translate(0, -2.2px); }
+}
+
+/* Cada carro sacode um pouco, fora de fase com o vizinho. */
+.nt-trem-sacode { animation: nt-trem-sacode 0.42s ease-in-out infinite alternate; }
+@keyframes nt-trem-sacode { to { transform: translateY(-0.9px); } }
+
+.nt-trem-fumaca circle { animation: nt-trem-fumaca 1.8s ease-out infinite; opacity: 0; fill: #DCE3EA; }
+.dark .nt-trem-fumaca circle { fill: #F4F6F8; }
+@keyframes nt-trem-fumaca {
+  0%   { transform: translate(0, 4px) scale(0.5); opacity: 0; }
+  15%  { opacity: 0.9; }
+  100% { transform: translate(-22px, -18px) scale(1.9); opacity: 0; }
+}
+
+/* Luzinhas: dois estados (aceso/apagado) em vez de um degradê a cada quadro — bem mais leve. */
+.nt-trem-luz { animation: nt-trem-luz 1.6s steps(1) infinite; }
+@keyframes nt-trem-luz { 50% { opacity: 0.35; } }
+
+.nt-trem-estrela { animation: nt-trem-estrela 2.4s ease-in-out infinite; }
+@keyframes nt-trem-estrela { 50% { transform: scale(1.14) rotate(8deg); } }
+
+.nt-trem-farol { animation: nt-trem-farol 2s ease-in-out infinite; }
+@keyframes nt-trem-farol { 50% { fill: #FFF3CF; } }
+
+/* O facho do farol: um leque fraquinho que respira junto com ele. */
+.nt-trem-facho { opacity: 0.22; animation: nt-trem-facho 2s ease-in-out infinite; }
+@keyframes nt-trem-facho { 50% { opacity: 0.38; } }
+
+.nt-trem-olhos { animation: nt-trem-pisca 4.2s infinite; }
+@keyframes nt-trem-pisca {
+  0%, 93%, 100% { transform: scaleY(1); }
+  95.5%         { transform: scaleY(0.1); }
+}
+
+/* O biscoito acena pelo ombro (o ponto de baixo do braço). */
+.nt-trem-aceno { transform-origin: 0% 100%; animation: nt-trem-aceno 1.1s ease-in-out infinite alternate; }
+@keyframes nt-trem-aceno { from { transform: rotate(-14deg); } to { transform: rotate(16deg); } }
+
+.nt-trem-laco { animation: nt-trem-laco 1.3s ease-in-out infinite alternate; }
+@keyframes nt-trem-laco { to { transform: rotate(6deg); } }
+
+/* No sistema, quem gira as rodas e a biela é a camada, pela distância andada. */
+.nt-trem-guiado .nt-trem-roda,
+.nt-trem-guiado .nt-trem-biela { animation: none; }
+
+/* Os passageiros: entram com um pulinho e balançam de leve na viagem. */
+.nt-trem-passageiro,
+.nt-trem-cabeca { transform-box: fill-box; transform-origin: 50% 100%; }
+.nt-trem-passageiro { animation: nt-trem-embarca 0.65s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+@keyframes nt-trem-embarca { from { opacity: 0; transform: translateY(16px) scale(0.2); } }
+.nt-trem-cabeca { animation: nt-trem-cabeca 1.9s ease-in-out infinite alternate; }
+@keyframes nt-trem-cabeca {
+  from { transform: rotate(-3.5deg); }
+  to   { transform: rotate(3.5deg) translateY(-1.2px); }
+}
+
+/* Parado na estação ou no fim da linha: as rodas param, a fumaça continua. */
+.nt-trem-freado .nt-trem-roda,
+.nt-trem-freado .nt-trem-biela,
+.nt-trem-freado .nt-trem-sacode { animation-play-state: paused; }
+
+.nt-trem-parado *,
+.nt-trem-parado { animation: none !important; }
+/* Fora da janela (rolou a página): tudo do trem para de animar até voltar. */
+.nt-trem-pausado * { animation-play-state: paused !important; }
+.nt-trem-parado .nt-trem-fumaca { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .nt-trem * { animation: none !important; }
+  .nt-trem .nt-trem-fumaca { display: none; }
+}
+
+/* ── No sistema: a camada, as faixas e o cartão ───────────────────────────── */
+
+/* Na frente do conteúdo, cobrindo a página inteira; o clique atravessa. */
+.nt-trem-camada {
+  position: absolute;
+  inset: 0 0 auto 0;
+  z-index: 4;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.nt-faixa-trem { position: relative; }
+
+.nt-trem-aviso {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: 9999px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  padding: 0.28rem 0.35rem 0.28rem 0.75rem;
+  font-size: 0.75rem;
+  color: hsl(var(--foreground));
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.06);
+  white-space: nowrap;
+}
+.nt-trem-botao-som {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 9999px;
+  color: hsl(var(--muted-foreground));
+  transition: background-color 0.15s, color 0.15s;
+}
+.nt-trem-botao-som:hover { background: hsl(var(--muted)); color: hsl(var(--foreground)); }
+
+/* A estação é um botão: abre o mural da fila. */
+.nt-trem-estacao-botao {
+  display: block;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.25s ease;
+  transform-origin: 50% 100%;
+}
+.nt-trem-estacao-botao:hover { transform: scale(1.05); filter: drop-shadow(0 6px 10px rgb(214 64 58 / 0.25)); }
+.nt-trem-estacao-botao:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 4px; }
+/* O balãozinho «Entre na fila!» para quem ainda não entrou. */
+.nt-trem-estacao-balao {
+  position: absolute;
+  left: 50%;
+  top: -10px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  border-radius: 9999px;
+  background: #D6403A;
+  color: #FFFFFF;
+  padding: 0.12rem 0.55rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  box-shadow: 0 4px 10px -4px rgb(122 36 51 / 0.6);
+  animation: nt-trem-balao 1.6s ease-in-out infinite;
+}
+@keyframes nt-trem-balao { 50% { transform: translateX(-50%) translateY(-3px); } }
+
+/* O bilhete do sorteio: o presente tremendo, depois quem saiu. */
+.nt-trem-bilhete {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 15rem;
+  max-width: 19rem;
+  border-radius: 14px;
+  border: 2px dashed #E6D8C2;
+  background: hsl(var(--card));
+  padding: 0.4rem 0.8rem 0.4rem 0.45rem;
+  color: hsl(var(--foreground));
+  box-shadow: 0 8px 20px -12px rgb(0 0 0 / 0.35);
+  animation: nt-trem-bilhete 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@keyframes nt-trem-bilhete { from { opacity: 0; transform: translateY(-6px) scale(0.92); } }
+.nt-trem-bilhete-eu { border-color: #F2B544; background: linear-gradient(135deg, #FFF6DD, #FFE7B0); color: #5A3B28; }
+.nt-trem-sorteando { flex-shrink: 0; animation: nt-trem-treme 0.32s ease-in-out infinite; }
+@keyframes nt-trem-treme {
+  0%, 100% { transform: rotate(-7deg); }
+  50%      { transform: rotate(7deg) translateY(-2px); }
+}
+
+/* O aviso de quem acabou de ser sorteado (o toast). */
+.nt-trem-aviso-sorteado {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 22rem;
+  max-width: calc(100vw - 2rem);
+  border-radius: 14px;
+  padding: 0.8rem 1rem;
+  color: #FFFFFF;
+  background: linear-gradient(160deg, #D6403A 0%, #A92F35 100%);
+  box-shadow: 0 12px 28px -8px rgb(122 36 51 / 0.55), inset 0 0 0 2px rgb(246 240 231 / 0.35);
+}
+
+/* O ticket da estação: uma passagem de trem de papel, com canhoto picotado. */
+.nt-ticket {
+  position: relative;
+  display: flex;
+  border-radius: 14px;
+  color: #3B2418;
+  filter: drop-shadow(0 22px 34px rgb(40 16 8 / 0.45));
+  animation: nt-ticket-chega 0.5s cubic-bezier(0.2, 1.3, 0.4, 1) both;
+}
+@keyframes nt-ticket-chega { from { opacity: 0; transform: translateY(18px) rotate(-3deg) scale(0.94); } }
+.nt-ticket-corpo, .nt-ticket-canhoto {
+  position: relative;
+  background:
+    radial-gradient(circle at 18% 12%, rgb(255 255 255 / 0.7), transparent 42%),
+    repeating-linear-gradient(135deg, rgb(201 162 74 / 0.06) 0 2px, transparent 2px 9px),
+    #FBF2DF;
+}
+/* Os entalhes do picote: meia-lua em cima e embaixo, entre o corpo e o canhoto. */
+.nt-ticket-corpo {
+  flex: 1;
+  min-width: 0;
+  border-radius: 14px 0 0 14px;
+  padding: 0 1.25rem 1rem;
+  -webkit-mask: radial-gradient(circle 11px at 100% 0, #0000 98%, #000) top / 100% 51% no-repeat,
+                radial-gradient(circle 11px at 100% 100%, #0000 98%, #000) bottom / 100% 51% no-repeat;
+          mask: radial-gradient(circle 11px at 100% 0, #0000 98%, #000) top / 100% 51% no-repeat,
+                radial-gradient(circle 11px at 100% 100%, #0000 98%, #000) bottom / 100% 51% no-repeat;
+}
+.nt-ticket-canhoto {
+  width: 5.25rem;
+  flex-shrink: 0;
+  border-radius: 0 14px 14px 0;
+  border-left: 2px dashed #C9A24A;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 0 0.9rem;
+  -webkit-mask: radial-gradient(circle 11px at 0 0, #0000 98%, #000) top / 100% 51% no-repeat,
+                radial-gradient(circle 11px at 0 100%, #0000 98%, #000) bottom / 100% 51% no-repeat;
+          mask: radial-gradient(circle 11px at 0 0, #0000 98%, #000) top / 100% 51% no-repeat,
+                radial-gradient(circle 11px at 0 100%, #0000 98%, #000) bottom / 100% 51% no-repeat;
+}
+.nt-ticket-topo {
+  margin: 0 -1.25rem 0.9rem;
+  padding: 0.7rem 1.25rem 0.6rem;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  color: #FFF6E4;
+  background: linear-gradient(100deg, #B5232F, #D6403A 60%, #B5232F);
+  border-bottom: 3px double #E8C46A;
+}
+.nt-ticket-marca { font: 800 0.78rem/1 Inter, system-ui, sans-serif; letter-spacing: 0.22em; text-transform: uppercase; }
+.nt-ticket-numero { font: 600 0.72rem/1 ui-monospace, 'Courier New', monospace; letter-spacing: 0.12em; opacity: 0.85; }
+.nt-ticket-titulo {
+  margin: 0;
+  font: 600 1.45rem/1.15 Fraunces, Georgia, 'Times New Roman', serif;
+  letter-spacing: -0.01em;
+  color: #2F5E3A;
+}
+.nt-ticket-texto { margin: 0.35rem 0 0; font-size: 0.88rem; line-height: 1.45; color: #5A3B28; }
+.nt-ticket-texto b { color: #B5232F; }
+.nt-ticket-campos {
+  margin: 0.85rem 0 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem 0.9rem;
+  padding-top: 0.75rem;
+  border-top: 1px dashed #D9C59B;
+}
+.nt-ticket-campos dt { font: 700 0.62rem/1 Inter, system-ui, sans-serif; letter-spacing: 0.16em; text-transform: uppercase; color: #A27B4A; }
+.nt-ticket-campos dd { margin: 0.2rem 0 0; font: 700 0.92rem/1.1 ui-monospace, 'Courier New', monospace; color: #3B2418; }
+.nt-ticket-primeira {
+  margin: 0.8rem 0 0;
+  padding: 0.35rem 0.6rem;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #7A5200;
+  background: rgb(232 196 106 / 0.28);
+}
+.nt-ticket-saida { margin: 0.75rem 0 0; font-size: 0.75rem; color: #7A5236; }
+.nt-ticket-canhoto-texto {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font: 800 0.7rem/1 Inter, system-ui, sans-serif;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: #B5232F;
+}
+/* O código de barras, desenhado com listras. */
+.nt-ticket-barras {
+  width: 2.1rem;
+  height: 4.2rem;
+  background: repeating-linear-gradient(0deg, #3B2418 0 2px, transparent 2px 4px, #3B2418 4px 5px, transparent 5px 8px, #3B2418 8px 11px, transparent 11px 13px);
+  opacity: 0.8;
+}
+/* O furo do picotador: aparece quando o ticket é validado. */
+.nt-ticket-furo {
+  width: 1rem;
+  height: 1rem;
+  border-radius: 9999px;
+  background: #3B2418;
+  box-shadow: inset 0 2px 3px rgb(0 0 0 / 0.6);
+  opacity: 0;
+  transform: scale(0.3);
+}
+.nt-ticket.valido .nt-ticket-furo { opacity: 0.75; transform: none; transition: all 0.25s cubic-bezier(0.2, 1.6, 0.4, 1); }
+/* Validando: o ticket desce na validadora e volta. */
+.nt-ticket.validando { animation: nt-ticket-valida 0.9s ease-in-out; }
+@keyframes nt-ticket-valida {
+  0% { transform: none; }
+  35% { transform: translateY(26px) scale(0.97); filter: drop-shadow(0 6px 10px rgb(40 16 8 / 0.4)) brightness(0.9); }
+  60% { transform: translateY(26px) scale(0.97); filter: drop-shadow(0 6px 10px rgb(40 16 8 / 0.4)) brightness(0.9); }
+  100% { transform: none; }
+}
+.nt-ticket-carimbo {
+  position: absolute;
+  right: 6.4rem;
+  top: 3.6rem;
+  padding: 0.3rem 0.7rem;
+  border: 3px solid #2E7A47;
+  border-radius: 8px;
+  font: 800 0.95rem/1 Inter, system-ui, sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #2E7A47;
+  background: rgb(251 242 223 / 0.7);
+  transform: rotate(-12deg);
+  mix-blend-mode: multiply;
+  animation: nt-ticket-carimba 0.4s cubic-bezier(0.2, 1.6, 0.4, 1) both;
+  pointer-events: none;
+}
+@keyframes nt-ticket-carimba { from { opacity: 0; transform: rotate(-12deg) scale(1.8); } }
+.nt-ticket-acoes { margin-top: 1rem; display: flex; flex-direction: column; align-items: center; gap: 0.75rem; }
+.nt-ticket-botao {
+  border-radius: 12px;
+  padding: 0.7rem 1.6rem;
+  font-weight: 800;
+  color: #FFFFFF;
+  background: #3F9A5B;
+  box-shadow: 0 4px 0 #2E7A47, 0 10px 20px -8px rgb(0 0 0 / 0.5);
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+.nt-ticket-botao:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 5px 0 #2E7A47, 0 12px 22px -8px rgb(0 0 0 / 0.5); }
+.nt-ticket-botao:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 #2E7A47; }
+.nt-ticket-botao:disabled { cursor: not-allowed; }
+/* Sem foto: o botão cinza de verdade (não só apagado). */
+.nt-ticket.sem-foto ~ .nt-ticket-acoes .nt-ticket-botao { color: #F2F2F2; background: #9A9A9A; box-shadow: 0 4px 0 #767676; }
+.nt-ticket-tirar { font-size: 0.75rem; color: #F6E7CF; text-decoration: underline; text-underline-offset: 2px; opacity: 0.9; }
+.nt-ticket-tirar:hover:not(:disabled) { opacity: 1; }
+.nt-ticket-tirar:disabled { opacity: 0.5; }
+.nt-ticket-sem-foto {
+  width: 100%;
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+  text-align: center;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: #4A3020;
+  background: #FFF6DC;
+  border: 2px solid #E8C46A;
+  box-shadow: 0 10px 20px -10px rgb(0 0 0 / 0.5);
+}
+.nt-ticket-sem-foto-titulo { margin: 0 0 0.25rem; font-size: 1.15rem; font-weight: 800; color: #B5232F; }
+.nt-ticket-botao-foto {
+  margin-top: 0.6rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: 9999px;
+  padding: 0.4rem 1rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #FFFFFF;
+  background: #B5232F;
+}
+.nt-ticket-botao-foto:hover { filter: brightness(1.08); }
+@media (prefers-reduced-motion: reduce) {
+  .nt-ticket, .nt-ticket.validando, .nt-ticket-carimbo { animation: none; }
+}
+
+.nt-trem-lampiao { animation: nt-trem-lampiao 2.6s ease-in-out infinite; }
+@keyframes nt-trem-lampiao { 50% { opacity: 0.6; } }
+
+/* A nuvem de vapor que esconde a virada do trem nas paradas. */
+.nt-trem-nuvem { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+.nt-trem-nuvem span {
+  position: absolute;
+  border-radius: 9999px;
+  background: #FFFFFF;
+  opacity: 0;
+  transform: scale(0.3);
+}
+.dark .nt-trem-nuvem span { background: #E9EEF3; }
+.nt-trem-nuvem-viva span { animation: nt-trem-puf 1.4s ease-out forwards; }
+@keyframes nt-trem-puf {
+  0%   { opacity: 0; transform: scale(0.3); }
+  30%  { opacity: 0.95; transform: scale(1); }
+  70%  { opacity: 0.85; transform: scale(1.12) translateY(-6px); }
+  100% { opacity: 0; transform: scale(1.3) translateY(-14px); }
+}
+
+.nt-cartao-passageiro {
+  position: fixed;
+  z-index: 200;
+  pointer-events: none;
+  overflow: hidden;
+  border-radius: 16px;
+  color: #FFFFFF;
+  background: linear-gradient(160deg, #D6403A 0%, #A92F35 100%);
+  box-shadow: 0 12px 28px -8px rgb(122 36 51 / 0.55), inset 0 0 0 2px rgb(246 240 231 / 0.35);
+  animation: nt-cartao-entra 0.18s ease-out;
+}
+.nt-cartao-neve { position: absolute; left: 0; top: 0; width: 100%; height: 14px; }
+.nt-cartao-azevinho { position: absolute; right: 8px; bottom: 6px; opacity: 0.95; }
+@keyframes nt-cartao-entra { from { opacity: 0; margin-top: 6px; } }
+
+/* O botão de testar a buzina (só no `npm run dev`). */
+.nt-trem-botao-teste {
+  border-radius: 9999px;
+  border: 1px dashed hsl(var(--border));
+  padding: 0.12rem 0.55rem;
+  font-size: 0.68rem;
+  color: hsl(var(--muted-foreground));
+}
+.nt-trem-botao-teste:hover { background: hsl(var(--muted)); color: hsl(var(--foreground)); }
+
+/* ── O cenário do trilho (`Cenario.tsx`) ──────────────────────────────────── */
+
+/* O sinal de passagem: apagado; com o trem perto, as luzes piscam alternadas e o sino balança. */
+.nt-pn-luz { fill: #5A2A2E; }
+.nt-atracao.perto .nt-pn-luz-a { animation: nt-pn-pisca 0.7s steps(1) infinite; }
+.nt-atracao.perto .nt-pn-luz-b { animation: nt-pn-pisca 0.7s steps(1) infinite 0.35s; }
+@keyframes nt-pn-pisca {
+  0%   { fill: #FF3B3B; }
+  50%  { fill: #5A2A2E; }
+}
+.nt-pn-sino { transform-box: fill-box; transform-origin: 50% 0%; }
+.nt-atracao.perto .nt-pn-sino { animation: nt-pn-sino 0.35s ease-in-out infinite alternate; }
+@keyframes nt-pn-sino { from { transform: rotate(-22deg); } to { transform: rotate(22deg); } }
+
+/* O boneco de neve acena quando o trem passa. */
+.nt-boneco-braco { transform-box: fill-box; transform-origin: 0% 100%; transition: transform 0.4s ease; }
+.nt-atracao.perto .nt-boneco-braco { animation: nt-boneco-acena 0.45s ease-in-out infinite alternate; }
+@keyframes nt-boneco-acena { from { transform: rotate(-30deg); } to { transform: rotate(18deg); } }
+.nt-atracao.perto .nt-boneco-trilho { animation: nt-boneco-pula 0.9s ease-in-out infinite; }
+@keyframes nt-boneco-pula { 50% { transform: translateY(-2px); } }
+
+/* A fumacinha da chaminé do vilarejo e os pinheiros ao vento. */
+.nt-vila-fumaca { fill: #DCE3EA; transform-box: fill-box; transform-origin: center; animation: nt-vila-fumaca 3s ease-out infinite; opacity: 0; }
+.nt-vila-fumaca-2 { animation-delay: 1.5s; }
+.dark .nt-vila-fumaca { fill: #F4F6F8; }
+@keyframes nt-vila-fumaca {
+  0%   { opacity: 0; transform: translate(0, 0) scale(0.6); }
+  20%  { opacity: 0.8; }
+  100% { opacity: 0; transform: translate(-8px, -16px) scale(1.8); }
+}
+.nt-pinheiro { transform-box: fill-box; transform-origin: 50% 100%; animation: nt-pinheiro 3.6s ease-in-out infinite alternate; }
+@keyframes nt-pinheiro { from { transform: rotate(-1.6deg); } to { transform: rotate(1.6deg); } }
+
+/* ── O mapa da linha, no menu lateral (`MapaDaLinha.tsx`) ─────────────────── */
+
+.nt-mapa { position: absolute; inset: 0 0 auto 0; pointer-events: none; z-index: 1; }
+.nt-mapa svg { overflow: visible; }
+.nt-mapa-pulso { fill: rgb(214 64 58 / 0.35); opacity: 0; transform-box: fill-box; transform-origin: center; }
+.nt-mapa-estacao.aqui .nt-mapa-pulso { animation: nt-mapa-pulso 1.6s ease-out infinite; }
+@keyframes nt-mapa-pulso {
+  0%   { opacity: 0.9; transform: scale(0.5); }
+  100% { opacity: 0; transform: scale(1.6); }
+}
+.nt-mapa-fumaca { fill: #DCE3EA; transform-box: fill-box; transform-origin: center; animation: nt-mapa-fumaca 1.4s ease-out infinite; }
+@keyframes nt-mapa-fumaca {
+  0%   { opacity: 0.9; transform: translateY(0) scale(0.6); }
+  100% { opacity: 0; transform: translateY(-6px) scale(1.5); }
+}
+
+/* Vagão espelhado (andando para a esquerda): o rosto do passageiro é desvirado. */
+.nt-trem-rosto { transform-box: fill-box; transform-origin: center; }
+.nt-espelhado .nt-trem-rosto { transform: scaleX(-1); }
+
+/* O pisca-pisca do trilho: três grupos piscando defasados, aos saltos (sem sombra animada: é leve). */
+.nt-pisca { animation: nt-pisca 1.8s steps(1) infinite; }
+.nt-pisca-1 { animation-delay: -0.6s; }
+.nt-pisca-2 { animation-delay: -1.2s; }
+@keyframes nt-pisca { 50% { opacity: 0.3; } }
+.nt-brilho-neve { animation: nt-brilho-neve 2.4s steps(1) infinite; }
+@keyframes nt-brilho-neve { 50% { opacity: 0.15; } }
+
+/* O trenzinho do mapa é reposicionado 4 vezes por segundo; a transição alisa o caminho. */
+.nt-mapa svg g[style] { transition: transform 0.25s linear; }
+
+/* Nenhuma faixa do trem à vista: a camada inteira para de animar (`CamadaDoTrem`). */
+.nt-camada-quieta * { animation-play-state: paused !important; }
+
+/* A placa da plataforma com o trem parado (`PlacaDaEstacao`, em `Faixas.tsx`):
+   madeira num poste, a palavra grande e a hora embaixo. Balança de leve. */
+.nt-trem-placa {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  min-width: 92px;
+  padding: 5px 10px 6px;
+  border-radius: 6px;
+  background: linear-gradient(180deg, #9a6a43, #7a5236);
+  box-shadow: inset 0 0 0 2px #5e3d26, 0 6px 10px -6px rgba(40, 20, 10, .6);
+  color: #fff6e6;
+  font-family: system-ui, sans-serif;
+  text-align: center;
+  transform-origin: 50% -16px;
+  animation: nt-trem-placa 4s ease-in-out infinite;
+}
+.nt-trem-placa::before {
+  /* o poste */
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  width: 5px;
+  height: 34px;
+  margin-left: -2.5px;
+  background: #5e3d26;
+  border-radius: 0 0 2px 2px;
+  z-index: -1;
+}
+.nt-trem-placa::after {
+  /* a neve em cima da placa */
+  content: '';
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  top: -4px;
+  height: 7px;
+  border-radius: 6px 6px 3px 3px;
+  background: #fff;
+}
+.nt-trem-placa-titulo { font-size: 11px; font-weight: 900; letter-spacing: .12em; }
+.nt-trem-placa-linha { font-size: 10px; font-weight: 600; opacity: .9; white-space: nowrap; }
+.nt-trem-placa-fechado .nt-trem-placa-titulo { color: #ffd0cc; }
+.nt-trem-placa-desligado { background: repeating-linear-gradient(135deg, #f2b544 0 9px, #3a2f3b 9px 18px); box-shadow: 0 6px 10px -6px rgba(40, 20, 10, .6); }
+.nt-trem-placa-desligado .nt-trem-placa-titulo,
+.nt-trem-placa-desligado .nt-trem-placa-linha { background: rgba(58, 47, 59, .85); padding: 0 5px; border-radius: 3px; }
+.nt-trem-placa-esperando .nt-trem-placa-titulo { color: #ffe9a6; }
+@keyframes nt-trem-placa { 0%, 100% { transform: rotate(-1.5deg); } 50% { transform: rotate(1.5deg); } }

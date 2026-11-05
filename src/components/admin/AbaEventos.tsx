@@ -5,18 +5,19 @@
  * eram cards soltos na aba Geral, entre o crachá e o banco de dados. Evento
  * novo entra na lista `EVENTOS` e ganha o seu botão — não volta para a Geral.
  *
- * Quem decide continua sendo o banco: `fn_corrida_*` e `fn_sirene_*` só aceitam
- * super_admin, e `fn_ranking_quitacao_definir_setor` confere
+ * Quem decide continua sendo o banco: `fn_corrida_*`, `fn_sirene_*` e
+ * `fn_natal_trem_configurar` só aceitam super_admin, e `fn_ranking_quitacao_definir_setor` confere
  * `ranking_quitacao_configurar`. Esconder o botão é só conveniência.
  */
 import { useState, type ReactNode } from 'react';
-import { Flag, Siren, Medal, type LucideIcon } from 'lucide-react';
+import { Flag, Siren, Medal, TrainFront, type LucideIcon } from 'lucide-react';
 import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { cn } from '@/lib/utils';
 import { NOME_CORRIDA } from '@/components/Corrida/nome';
 import CorridaConfig from '@/components/admin/CorridaConfig';
 import SireneConfig from '@/components/admin/SireneConfig';
 import RankingQuitacaoConfig from '@/components/admin/RankingQuitacaoConfig';
+import TremNatalConfig from '@/components/admin/TremNatalConfig';
 
 interface Props {
   ehSuperAdmin: boolean;
@@ -43,6 +44,12 @@ export default function AbaEventos({ ehSuperAdmin, podeConfigurarRankingQuitacao
       id: 'sirene', rotulo: 'Sirene', icone: Siren, visivel: ehSuperAdmin,
       descricao: 'Luz e som por horário, cor, setor e equipe.',
       conteudo: <SireneConfig />,
+    },
+    {
+      // O tema de Natal ainda é prévia do super_admin (`Natal/previa.ts`).
+      id: 'trem_natal', rotulo: 'Trenzinho de Natal', icone: TrainFront, visivel: ehSuperAdmin,
+      descricao: 'Ligado ou em manutenção, e o horário da estação.',
+      conteudo: <TremNatalConfig />,
     },
     {
       id: 'ranking_quitacao', rotulo: 'Ranking de quitação', icone: Medal,

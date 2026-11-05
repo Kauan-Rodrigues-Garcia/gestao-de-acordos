@@ -28,6 +28,14 @@
  * desmontado, em `App.tsx`. E o modo leve foi desligado uma vez em todos os
  * computadores (`modoLeveZerado.ts`): por isso a hora em que cada máquina
  * ligou o modo fica guardada (`ligadoEm`) — quem religar depois fica ligado.
+ *
+ * ## A pausa (04/11/2026)
+ *
+ * A abertura do Natal (o presente, o vídeo, o bilhete e a nevasca) roda inteira
+ * para todo mundo, com o modo leve ou sem: «o modo leve só vai funcionar depois
+ * que tudo isso passar» (Cleber). `pausarModoLeve` suspende o modo enquanto
+ * ela dura — a escolha gravada não muda, e o menu de temas continua mostrando
+ * a escolha (`useModoLeveEscolhido`). Soltou a pausa, o modo volta sozinho.
  */
 import { useSyncExternalStore } from 'react';
 
@@ -44,18 +52,52 @@ function ler(): boolean {
 }
 
 let ligado = typeof window !== 'undefined' ? ler() : false;
+/** Quantas pausas estão de pé (`pausarModoLeve`); com alguma, o modo não vale. */
+let pausas = 0;
 const ouvintes = new Set<() => void>();
 
-function aplicarNoHtml(v: boolean) {
+/** O que vale agora: a escolha, menos a pausa. */
+const emVigor = () => ligado && pausas === 0;
+
+function aplicarNoHtml() {
   if (typeof document === 'undefined') return;
-  if (v) document.documentElement.setAttribute('data-leve', '');
+  if (emVigor()) document.documentElement.setAttribute('data-leve', '');
   else document.documentElement.removeAttribute('data-leve');
 }
-aplicarNoHtml(ligado);
+aplicarNoHtml();
 
-/** Leitura fora do React (hooks de dados, laços de animação). */
+function avisar() {
+  for (const o of ouvintes) {
+    try { o(); } catch { /* quem ouve não derruba o interruptor */ }
+  }
+}
+
+/** Leitura fora do React (hooks de dados, laços de animação): o que vale agora. */
 export function modoLeveLigado(): boolean {
+  return emVigor();
+}
+
+/** A escolha da pessoa, com pausa ou sem (o menu de temas mostra esta). */
+export function modoLeveEscolhido(): boolean {
   return ligado;
+}
+
+/**
+ * Suspende o modo leve até a função devolvida ser chamada (uma vez; chamar de
+ * novo não faz nada). Várias pausas juntas: o modo volta quando a última sai.
+ */
+export function pausarModoLeve(): () => void {
+  pausas += 1;
+  aplicarNoHtml();
+  avisar();
+  let solta = false;
+  return () => {
+    if (solta) return;
+    solta = true;
+    pausas = Math.max(0, pausas - 1);
+    aplicarNoHtml();
+    avisar();
+  };
 }
 
 export function definirModoLeve(v: boolean): void {
@@ -65,10 +107,8 @@ export function definirModoLeve(v: boolean): void {
     if (v) localStorage.setItem(CHAVE_LIGADO_EM, String(Date.now()));
     else localStorage.removeItem(CHAVE_LIGADO_EM);
   } catch { /* modo privado: vale até recarregar */ }
-  aplicarNoHtml(v);
-  for (const o of ouvintes) {
-    try { o(); } catch { /* quem ouve não derruba o interruptor */ }
-  }
+  aplicarNoHtml();
+  avisar();
 }
 
 /** Quando o modo leve foi ligado neste computador; `null` se não se sabe (ligado antes de 29/10/2026). */
@@ -90,6 +130,11 @@ export function useModoLeve(): boolean {
   return useSyncExternalStore(assinar, modoLeveLigado, () => false);
 }
 
+/** A escolha gravada, sem a pausa — só para o interruptor do menu de temas. */
+export function useModoLeveEscolhido(): boolean {
+  return useSyncExternalStore(assinar, modoLeveEscolhido, () => false);
+}
+
 // ── Oferta recusada ─────────────────────────────────────────────────────────
 
 export function recusarSugestao(agora = Date.now()): void {
@@ -98,7 +143,8 @@ export function recusarSugestao(agora = Date.now()): void {
 
 /** A oferta pode aparecer? Não com o modo já ligado, nem dentro do silêncio. */
 export function podeSugerir(agora = Date.now()): boolean {
-  if (ligado) return false;
+  // Ligado, ou no meio da abertura do Natal (que pesa de propósito): não oferece.
+  if (ligado || pausas > 0) return false;
   try {
     const em = Number(localStorage.getItem(CHAVE_RECUSA));
     return !(Number.isFinite(em) && em > 0 && agora - em < SILENCIO_MS);
@@ -169,5 +215,5 @@ export function deveSugerir(travadas: readonly Travada[], agora: number, dicas: 
  * horário de pico.
  */
 export function esperaDaReleitura(): { esperaMs: number; tetoMs: number } {
-  return ligado ? { esperaMs: 3_000, tetoMs: 10_000 } : { esperaMs: 300, tetoMs: 1_200 };
+  return emVigor() ? { esperaMs: 3_000, tetoMs: 10_000 } : { esperaMs: 300, tetoMs: 1_200 };
 }

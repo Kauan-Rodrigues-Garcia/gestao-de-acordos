@@ -31,6 +31,30 @@
  * Ligada e volume ficam no `localStorage` deste navegador. O navegador só deixa
  * tocar depois de um clique: com a música ligada da última vez, ela volta no
  * primeiro clique ou tecla da pessoa na página.
+ *
+ * ## O volume (Cleber, 04/11/2026)
+ *
+ * «Não pode ficar alto para ninguém»: a barra vai de 0 a 100, sem número na
+ * tela, e por trás isso é de 0 a `TETO_DO_VOLUME` (25%) do volume do
+ * elemento. O padrão é o alto da barra, os 25%.
+ *
+ * ## A primeira vez (Cleber, 04/11/2026)
+ *
+ * Quem abre o presente ouve a faixa DO COMEÇO, só ela, no volume da barra
+ * (`tocarAbertura`). Quando essa primeira volta chega ao fim, a rádio de
+ * todo mundo entra por cima do fade-out dela, como na emenda de sempre — e
+ * daí em diante a pessoa ouve o mesmo que todos. Enquanto ela toca, a rádio
+ * não entra — nem quando o botão da música monta, com o tema chegando atrás
+ * do bilhete (05/11/2026: entrava, e a música tocava dobrada).
+ *
+ * ## Uma aba só (05/11/2026)
+ *
+ * Com o sistema aberto em duas abas, cada uma tocava a sua cópia — a música
+ * soava dobrada. Agora só uma aba tem a vez de soar (Web Locks, `pedirAVez`):
+ * a primeira que pede; as outras esperam na fila, caladas, e uma delas assume
+ * se aquela fechar. Ligar a música no botão ou abrir o presente toma a vez
+ * para a aba onde se clicou. Ligar, desligar e o volume valem para todas as
+ * abas (o evento `storage`).
  */
 import { useSyncExternalStore } from 'react';
 
@@ -45,14 +69,19 @@ export const SOBREPOSICAO = 4;
 /** De um começo de volta ao próximo. */
 export const PERIODO = FIM_S - INICIO_S - SOBREPOSICAO;
 
-export const VOLUME_PADRAO = 30;
+/** A barra (0–100) vira, por trás, de 0 a este tanto do volume do elemento. */
+export const TETO_DO_VOLUME = 0.25;
+/** O alto da barra: os 25%. */
+export const VOLUME_PADRAO = 100;
+
 const FADE_MS = 700;
 const CONFERENCIA_MS = 20_000;
 const DERIVA_MAX_S = 0.6;
 const TOLERANCIA_RELOGIO_MS = 2_000;
 
 const CHAVE_LIGADA = 'natal:musica';
-const CHAVE_VOLUME = 'natal:musica-volume';
+/** `-2`: a barra mudou de escala em 04/11/2026 (o volume antigo não vale mais). */
+const CHAVE_VOLUME = 'natal:musica-volume-2';
 
 // ── O tempo (puro) ────────────────────────────────────────────────────────────
 
@@ -75,8 +104,8 @@ export function oQueSoa(agoraMs: number): { volta: number; tempo: number }[] {
   return soando;
 }
 
-/** Volume da tela (0–100) → do elemento. Quadrático: o ouvido não é linear. */
-export const volumeDoElemento = (v: number) => Math.min(1, Math.max(0, v / 100)) ** 2;
+/** Volume da barra (0–100) → do elemento: de 0 a `TETO_DO_VOLUME`. */
+export const volumeDoElemento = (v: number) => TETO_DO_VOLUME * Math.min(1, Math.max(0, v / 100));
 
 // ── Preferência deste navegador ──────────────────────────────────────────────
 
@@ -90,7 +119,13 @@ function gravar(chave: string, valor: string) {
   try { localStorage.setItem(chave, valor); } catch { /* modo privado */ }
 }
 
-export interface EstadoMusica { ligada: boolean; volume: number; tocando: boolean }
+export interface EstadoMusica {
+  ligada: boolean;
+  volume: number;
+  tocando: boolean;
+  /** O aviso de «dá para desligar aqui», uma vez, depois da abertura (`agendarAvisoDaMusica`). */
+  aviso: boolean;
+}
 
 let estado: EstadoMusica = {
   ligada: typeof window !== 'undefined' && ler(CHAVE_LIGADA, false, v => v === '1'),
@@ -98,6 +133,7 @@ let estado: EstadoMusica = {
     ? ler(CHAVE_VOLUME, VOLUME_PADRAO, v => { const n = Number(v); return Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : undefined; })
     : VOLUME_PADRAO,
   tocando: false,
+  aviso: false,
 };
 const ouvintes = new Set<() => void>();
 function mudar(parcial: Partial<EstadoMusica>) {
@@ -118,6 +154,16 @@ export function useMusicaNatal(): EstadoMusica {
 let desvioMs = 0;
 let relogioConferido = false;
 const agora = () => Date.now() + desvioMs;
+
+/** O mesmo relógio da rádio, para o que mais anda junto para todos (o trenzinho). */
+export const relogioNatal = agora;
+export const conferirRelogioNatal = () => { void conferirRelogio().then(corrigiu => { if (ativo && corrigiu) sintonizar(); }); };
+/** Só no `npm run dev`: adianta o relógio do Natal (o «Ver o sorteio agora» do trenzinho). */
+export const adiantarRelogioNatalParaTeste = (ms: number) => {
+  if (!import.meta.env.DEV) return;
+  desvioMs += ms;
+  if (ativo) sintonizar();
+};
 
 /**
  * O cabeçalho `Date` tem segundo inteiro: só corrige relógio bem errado.
@@ -148,6 +194,83 @@ let fade = 0;               // 0–1, multiplica o volume
 let relogios: number[] = [];
 let quadroFade = 0;
 let esperandoGesto = false;
+/** A primeira volta de quem abriu o presente, do começo (`tocarAbertura`). */
+let abertura: HTMLAudioElement | null = null;
+/** Quantos botões de música estão na tela (o tema de Natal ligado). */
+let montados = 0;
+
+// ── Uma aba só ────────────────────────────────────────────────────────────────
+
+const NOME_DA_VEZ = 'natal:musica';
+const temTrava = typeof navigator !== 'undefined' && 'locks' in navigator;
+/** Esta aba pode soar? Sem a Web Locks (navegador antigo), sempre. */
+let vez = !temTrava;
+let soltarVez: (() => void) | null = null;
+/** O pedido que ganhou a vez (para saber, quando um pedido cai, se era ele). */
+let donoDaVez: object | null = null;
+let pedidoNaFila: AbortController | null = null;
+const querSoar = () => ativo || abertura !== null;
+
+/** Pede a vez de soar. `roubar`: toma de quem estiver com ela (foi um clique aqui). */
+function pedirAVez(roubar: boolean) {
+  if (!temTrava || vez) return;
+  if (!roubar && pedidoNaFila) return;
+  pedidoNaFila?.abort();
+  const fila = roubar ? null : new AbortController();
+  pedidoNaFila = fila;
+  const pedido = {};
+  navigator.locks.request(NOME_DA_VEZ, fila ? { signal: fila.signal } : { steal: true }, () => new Promise<void>(soltar => {
+    if (pedidoNaFila === fila) pedidoNaFila = null;
+    vez = true;
+    soltarVez = soltar;
+    donoDaVez = pedido;
+    ganhouAVez();
+  })).catch(() => {
+    // Desistiu da fila, ou outra aba tomou a vez desta.
+    if (fila && pedidoNaFila === fila) pedidoNaFila = null;
+    if (donoDaVez !== pedido) return;
+    donoDaVez = null;
+    vez = false;
+    soltarVez = null;
+    perdeuAVez();
+  });
+}
+
+/** Ninguém mais quer soar nesta aba: larga a vez (e sai da fila). */
+function soltarAVez() {
+  pedidoNaFila?.abort();
+  pedidoNaFila = null;
+  if (!temTrava || !vez) return;
+  const soltar = soltarVez;
+  vez = false;
+  soltarVez = null;
+  donoDaVez = null;
+  soltar?.();
+}
+
+function ganhouAVez() {
+  if (!querSoar()) { soltarAVez(); return; }
+  sintonizar();
+}
+
+/** Outra aba tomou a vez: esta se cala e volta para a fila. */
+function perdeuAVez() {
+  limparRelogios();
+  elementos?.forEach(a => a.pause());
+  if (abertura) {
+    // A primeira volta não continua em outra aba: aqui, vira a rádio na fila.
+    abertura.pause();
+    abertura = null;
+    if (estado.ligada && montados > 0 && !ativo) {
+      ativo = true;
+      elementos ??= criarElementos();
+      fade = 1;
+      aplicarVolume();
+    }
+  }
+  mudar({ tocando: false });
+  if (querSoar()) pedirAVez(false);
+}
 
 function criarElementos(): [HTMLAudioElement, HTMLAudioElement] {
   const novo = () => {
@@ -202,7 +325,7 @@ async function tocar(a: HTMLAudioElement, tempo: number) {
 
 /** Sintoniza: toca o que deve estar soando agora e agenda a próxima volta. */
 function sintonizar() {
-  if (!elementos || !ativo) return;
+  if (!elementos || !ativo || !vez) return;
   limparRelogios();
   // Posicionar antes de o arquivo carregar faria a música entrar atrasada
   // pelo tempo do download: espera e sintoniza com a hora de quando chegou.
@@ -230,7 +353,7 @@ function sintonizar() {
 }
 
 function conferir() {
-  if (!elementos || !ativo) return;
+  if (!elementos || !ativo || !vez) return;
   const agoraMs = agora();
   const [atual] = oQueSoa(agoraMs);
   const a = doVolta(atual.volta);
@@ -252,13 +375,16 @@ function aguardarGesto() {
   window.addEventListener('keydown', voltar, true);
 }
 
-function ligarMotor() {
-  if (ativo) return;
+/** `roubar`: a vez vem para esta aba mesmo que outra esteja tocando (clique aqui). */
+function ligarMotor(roubar = false) {
+  if (ativo) { if (roubar) pedirAVez(true); return; }
   ativo = true;
   elementos ??= criarElementos();
   fade = 0;
   aplicarVolume();
   void conferirRelogio().then(corrigiu => { if (ativo && corrigiu) sintonizar(); });
+  // Sem a vez, fica na fila calada; `ganhouAVez` sintoniza quando ela chegar.
+  pedirAVez(roubar);
   sintonizar();
   animarFade(1);
 }
@@ -271,20 +397,14 @@ function desligarMotor() {
   animarFade(0, () => {
     if (!ativo) elementos?.forEach(a => a.pause());
   });
+  if (!querSoar()) soltarAVez();
 }
 
-// ── A abertura: a mesma faixa, do 0:00, só para quem abriu o presente ─────────
-//
-// O vídeo do presente acaba e a música começa do início, na hora, para aquela
-// pessoa — a rádio de todos só entra quando a mensagem de boas-vindas sai da
-// tela (`passarParaRadio`). Enquanto a abertura toca, a rádio espera.
+// ── A abertura do presente ────────────────────────────────────────────────────
 
-let abertura: HTMLAudioElement | null = null;
-/** Mais alto que o volume ambiente: é o momento da música, não o fundo do trabalho. */
-const VOLUME_ABERTURA = 0.35;
-const FADE_ABERTURA_MS = 1600;
+const FADE_ABERTURA_MS = 1200;
 
-/** Leva o volume de um elemento até `alvo`, sem depender do fade da rádio. */
+/** Leva o volume de um elemento até `alvo` (sem mexer no fade da rádio). */
 function fadeDoElemento(a: HTMLAudioElement, alvo: number, ms: number, depois?: () => void) {
   const de = a.volume;
   const inicio = performance.now();
@@ -297,39 +417,75 @@ function fadeDoElemento(a: HTMLAudioElement, alvo: number, ms: number, depois?: 
   requestAnimationFrame(passo);
 }
 
-/** O vídeo acabou: a faixa começa do 0:00, só aqui. */
+/** A primeira volta acabou (ou quase): a rádio entra e a abertura termina sozinha no fade-out dela. */
+function passarParaRadio() {
+  const a = abertura;
+  abertura = null;
+  if (a) a.addEventListener('ended', () => a.pause(), { once: true });
+  // A vez desta aba passa da primeira volta para a rádio, sem soltar no meio.
+  if (estado.ligada) ligarMotor();
+  else if (!querSoar()) soltarAVez();
+}
+
+/** Para a abertura de vez (desligou a música, ou o tema saiu). */
+function pararAbertura() {
+  const a = abertura;
+  abertura = null;
+  if (a) fadeDoElemento(a, 0, 500, () => a.pause());
+  if (a && !ativo) mudar({ tocando: false });
+  if (a && !querSoar()) soltarAVez();
+}
+
+/**
+ * O bilhete do presente entrou: a faixa toca DO COMEÇO, só aqui, no volume da
+ * barra. A rádio entra quando ela chega à emenda (`SOBREPOSICAO` antes do fim).
+ */
 export function tocarAbertura() {
-  abertura?.pause();
+  pararAbertura();
+  if (ativo) desligarMotor();
+  gravar(CHAVE_LIGADA, '1');
+  mudar({ ligada: true });
   const a = new Audio(ARQUIVO);
   a.volume = 0;
   abertura = a;
+  // Abriu o presente aqui: a vez de soar é desta aba (as outras se calam).
+  pedirAVez(true);
+  const naEmenda = () => {
+    if (abertura === a && a.currentTime >= FIM_S - SOBREPOSICAO) {
+      a.removeEventListener('timeupdate', naEmenda);
+      passarParaRadio();
+    }
+  };
+  a.addEventListener('timeupdate', naEmenda);
+  a.addEventListener('ended', () => { if (abertura === a) passarParaRadio(); }, { once: true });
   void a.play().then(
-    () => fadeDoElemento(a, Math.max(VOLUME_ABERTURA, volumeDoElemento(estado.volume)), FADE_ABERTURA_MS),
-    () => { if (abertura === a) abertura = null; },
+    () => { mudar({ tocando: true }); fadeDoElemento(a, volumeDoElemento(estado.volume), FADE_ABERTURA_MS); },
+    // Sem permissão para tocar (não deveria: veio de um clique): vai direto para a rádio.
+    () => { if (abertura === a) { abertura = null; ligarMotor(); } },
   );
 }
 
-/** A abertura sai devagar (sem ligar nem desligar a rádio). */
-function encerrarAbertura() {
-  const a = abertura;
-  abertura = null;
-  if (a) fadeDoElemento(a, 0, FADE_ABERTURA_MS, () => a.pause());
+let relogioDoAviso = 0;
+/** Depois da abertura, uma vez: o aviso de onde se desliga a música. */
+export function agendarAvisoDaMusica(ms: number) {
+  window.clearTimeout(relogioDoAviso);
+  relogioDoAviso = window.setTimeout(() => mudar({ aviso: true }), ms);
 }
-
-/** A mensagem saiu: a abertura dá lugar à rádio, a mesma para todo mundo. */
-export function passarParaRadio() {
-  encerrarAbertura();
-  ligarMusica(true);
+export function fecharAvisoDaMusica() {
+  window.clearTimeout(relogioDoAviso);
+  if (estado.aviso) mudar({ aviso: false });
 }
 
 // ── O que a tela usa ─────────────────────────────────────────────────────────
 
 export function ligarMusica(ligada: boolean) {
-  // Mexer no botão durante a abertura já é escolher a rádio: a abertura sai.
-  encerrarAbertura();
+  // Desligar no meio da primeira volta para ela; ligar com ela tocando não faz nada.
+  if (!ligada) pararAbertura();
+  else if (abertura) { gravar(CHAVE_LIGADA, '1'); mudar({ ligada: true }); return; }
   gravar(CHAVE_LIGADA, ligada ? '1' : '0');
   mudar({ ligada });
-  if (ligada) ligarMotor(); else desligarMotor();
+  // Ligou aqui, num clique: a música vem para esta aba.
+  if (ligada) ligarMotor(true); else desligarMotor();
 }
 
 export function mudarVolume(volume: number) {
@@ -337,15 +493,53 @@ export function mudarVolume(volume: number) {
   gravar(CHAVE_VOLUME, String(v));
   mudar({ volume: v });
   aplicarVolume();
+  if (abertura) abertura.volume = volumeDoElemento(v);
 }
 
 /** O botão montou (tema de Natal ligado): volta a tocar se estava ligada. */
 export function entrarNaRadio() {
-  // O tema entra no meio da abertura: a rádio espera a vez dela.
+  montados++;
+  // Com a primeira volta tocando (o tema acabou de entrar atrás do bilhete),
+  // a rádio espera a vez dela: `passarParaRadio`.
   if (estado.ligada && !abertura) ligarMotor();
 }
 
 /** O botão saiu da tela (tema desligado): silencia sem mudar a preferência. */
 export function sairDaRadio() {
+  montados = Math.max(0, montados - 1);
   desligarMotor();
+  // A primeira volta só para se o botão não voltou logo em seguida (remontagem).
+  window.setTimeout(() => { if (montados === 0) pararAbertura(); }, 0);
+}
+
+// ── As outras abas ───────────────────────────────────────────────────────────
+
+/** Ligou, desligou ou mexeu no volume em outra aba: vale aqui também. */
+function aoMudarEmOutraAba(e: StorageEvent) {
+  if (e.key === CHAVE_VOLUME && e.newValue !== null) {
+    const v = Number(e.newValue);
+    if (!Number.isFinite(v)) return;
+    mudar({ volume: v });
+    aplicarVolume();
+    if (abertura) abertura.volume = volumeDoElemento(v);
+  } else if (e.key === CHAVE_LIGADA) {
+    const ligada = e.newValue === '1';
+    if (ligada === estado.ligada) return;
+    mudar({ ligada });
+    if (!ligada) { pararAbertura(); desligarMotor(); }
+    else if (montados > 0 && !abertura) ligarMotor();
+  }
+}
+if (typeof window !== 'undefined') window.addEventListener('storage', aoMudarEmOutraAba);
+
+// No `npm run dev`, recarregar este arquivo deixava a música antiga tocando
+// por baixo da nova (dobrada): cala tudo antes.
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    window.removeEventListener('storage', aoMudarEmOutraAba);
+    limparRelogios();
+    elementos?.forEach(a => a.pause());
+    abertura?.pause();
+    soltarAVez();
+  });
 }

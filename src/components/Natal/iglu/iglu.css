@@ -1,0 +1,124 @@
+/* O iglu do urso (`IgluDoUrso.tsx`). */
+
+.nt-iglu { position: relative; cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent; }
+.nt-iglu:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 4px; border-radius: 12px; }
+.nt-iglu svg { display: block; overflow: visible; }
+
+/* O urso anda entre a porta e a beira do lago; a posição vem em passos, a transição alisa. */
+.nt-urso { transition: transform 0.2s linear, opacity 0.35s ease; }
+.nt-urso-corpo,
+.nt-urso-cabeca,
+.nt-urso-cachecol,
+.nt-urso-pompom,
+.nt-urso-olho,
+.nt-urso-vara,
+.nt-urso-ondinha,
+.nt-urso-boia { transform-box: fill-box; }
+
+/* Andando: gingado de urso. */
+.nt-urso-corpo { transform-origin: 50% 100%; }
+.nt-urso.andando .nt-urso-corpo { animation: nt-urso-ginga 0.34s ease-in-out infinite alternate; }
+@keyframes nt-urso-ginga { from { transform: rotate(-6deg) translateY(0); } to { transform: rotate(6deg) translateY(-1.5px); } }
+
+/* Parado: olha em volta devagar, pisca, o pompom e o cachecol balançam no vento. */
+.nt-urso-cabeca { transform-origin: 70% 90%; animation: nt-urso-olha 7s ease-in-out infinite; }
+@keyframes nt-urso-olha {
+  0%, 40%, 100% { transform: rotate(0deg); }
+  50%, 62%      { transform: rotate(6deg); }
+  75%           { transform: rotate(-3deg); }
+}
+.nt-urso-olho { transform-origin: center; animation: nt-urso-pisca 4.6s infinite; }
+@keyframes nt-urso-pisca { 0%, 94%, 100% { transform: scaleY(1); } 96.5% { transform: scaleY(0.12); } }
+.nt-urso-pompom { transform-origin: 50% 100%; animation: nt-urso-pompom 1.8s ease-in-out infinite alternate; }
+@keyframes nt-urso-pompom { to { transform: translate(-0.6px, -0.8px) scale(1.06); } }
+.nt-urso-cachecol { transform-origin: 0% 0%; animation: nt-urso-cachecol 1.1s ease-in-out infinite alternate; }
+@keyframes nt-urso-cachecol { from { transform: rotate(-8deg); } to { transform: rotate(10deg); } }
+
+/* A pesca: a boia sobe e desce e às vezes afunda; a vara mexe de leve; ondinhas no buraco. */
+.nt-urso-linha { fill: none; stroke: #9AA3AE; stroke-width: 0.6; }
+.nt-urso-linha.esticada { stroke: #7C8794; stroke-width: 0.8; }
+.nt-urso-boia { transform-origin: center; animation: nt-urso-boia 2.4s ease-in-out infinite; }
+@keyframes nt-urso-boia {
+  0%, 100% { transform: translateY(0); }
+  20%      { transform: translateY(-0.8px); }
+  40%      { transform: translateY(0.4px); }
+  78%      { transform: translateY(0); }
+  84%      { transform: translateY(1.8px); }
+  90%      { transform: translateY(-0.4px); }
+}
+.nt-urso-vara { transform-origin: 100% 100%; animation: nt-urso-vara 2.4s ease-in-out infinite; }
+@keyframes nt-urso-vara { 0%, 100% { transform: rotate(0deg); } 84% { transform: rotate(3deg); } }
+.nt-urso-vara.puxando { animation: nt-urso-puxa 0.5s ease-out 1 forwards; }
+@keyframes nt-urso-puxa { 0% { transform: rotate(4deg); } 60% { transform: rotate(-16deg); } 100% { transform: rotate(-10deg); } }
+.nt-urso-ondinha { transform-origin: center; animation: nt-urso-ondinha 2.4s ease-out infinite; }
+@keyframes nt-urso-ondinha { 0% { opacity: 0.9; transform: scale(1); } 100% { opacity: 0; transform: scale(1.9); } }
+
+/* O peixe: pula do buraco num arco, dando cambalhota, e cai na pata. */
+.nt-urso-peixe.pulando { animation: nt-urso-peixe 1.4s cubic-bezier(0.3, 0.7, 0.4, 1) 1 forwards; }
+.nt-urso-peixe.na-pata { transform: translate(-15px, -27px) rotate(-62deg); }
+@keyframes nt-urso-peixe {
+  0%   { transform: translate(var(--bx), var(--by)) rotate(0deg) scale(0.6); }
+  45%  { transform: translate(-36px, -60px) rotate(-170deg) scale(1); }
+  100% { transform: translate(-15px, -27px) rotate(-302deg) scale(1); }
+}
+
+/* A porta abre pela dobradiça; a janela acende com o urso lá dentro. */
+.nt-iglu-porta { transform-box: fill-box; transform-origin: 0% 50%; transition: transform 0.45s ease; }
+.nt-iglu-porta.aberta { transform: scaleX(0.14); }
+.nt-iglu-vidro { fill: #3B5672; transition: fill 0.6s ease; }
+.nt-iglu-vidro.acesa { fill: #FFD98A; animation: nt-iglu-vela 3.2s ease-in-out infinite; }
+@keyframes nt-iglu-vela { 0%, 100% { fill: #FFD98A; } 30% { fill: #FFE7B0; } 55% { fill: #F8C76A; } }
+.nt-iglu-brilho { opacity: 0; transition: opacity 0.8s ease; transform-box: fill-box; transform-origin: center; }
+.nt-iglu-brilho.acesa { opacity: 1; animation: nt-iglu-brilho 3.2s ease-in-out infinite; }
+@keyframes nt-iglu-brilho { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12); } }
+
+/* O balão de fala. */
+.nt-iglu-fala {
+  position: absolute;
+  max-width: 13.5rem;
+  width: max-content;
+  border-radius: 12px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+  padding: 0.4rem 0.65rem;
+  font-size: 0.75rem;
+  line-height: 1.25;
+  box-shadow: 0 8px 20px -10px rgb(0 0 0 / 0.35);
+  pointer-events: none;
+  animation: nt-iglu-fala 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  z-index: 5;
+}
+.nt-iglu-fala::after {
+  content: '';
+  position: absolute;
+  right: -6px;
+  bottom: 0.7rem;
+  width: 10px;
+  height: 10px;
+  background: inherit;
+  border-right: 1px solid hsl(var(--border));
+  border-top: 1px solid hsl(var(--border));
+  transform: rotate(45deg);
+}
+@keyframes nt-iglu-fala { from { opacity: 0; transform: translateY(6px) scale(0.9); } }
+
+.nt-iglu-teste { position: absolute; right: 0; top: -14px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .nt-iglu * { animation: none !important; transition: none !important; }
+}
+
+/* Com o urso em casa: luz quente pelas frestas da porta e o reflexo da janela na neve. */
+.nt-iglu-fresta { opacity: 0; transition: opacity 0.8s ease; }
+.nt-iglu-fresta.acesa { opacity: 0.9; animation: nt-iglu-fresta 3.2s ease-in-out infinite; }
+@keyframes nt-iglu-fresta { 50% { opacity: 0.55; } }
+.nt-iglu-reflexo { opacity: 0; transition: opacity 0.8s ease; }
+.nt-iglu-reflexo.acesa { opacity: 0.35; }
+
+/* Os brilhinhos do gelo. */
+.nt-iglu-brilhinho { transform-box: fill-box; transform-origin: center; animation: nt-iglu-brilhinho 2.8s ease-in-out infinite; opacity: 0; }
+@keyframes nt-iglu-brilhinho {
+  0%, 100% { opacity: 0; transform: scale(0.3) rotate(0deg); }
+  50%      { opacity: 1; transform: scale(1) rotate(45deg); }
+}

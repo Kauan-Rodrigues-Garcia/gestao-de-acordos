@@ -343,31 +343,162 @@ function Festa() {
 // ── Revoada: o trenó ──────────────────────────────────────────────────────────
 
 /**
- * De tempos em tempos (2 a 4 min; o primeiro logo depois de entrar), o Papai
- * Noel cruza o alto da tela da direita para a esquerda, com as renas, e deixa
- * um rastro de brilho. Só no estilo detalhado.
+ * De tempos em tempos o Papai Noel cruza o alto da tela com as renas, deixando
+ * um rastro de brilho e faíscas caindo. Só no estilo detalhado.
+ *
+ * Tudo sorteado a cada voo (Cleber, 04/11/2026: «melhorar a aleatoriedade»):
+ *   quando — um intervalo «sem memória» (exponencial, média de ~3 min, entre
+ *            40 s e 7 min): não dá para adivinhar a próxima;
+ *   lado   — da direita para a esquerda ou o contrário;
+ *   altura, velocidade e tamanho — mais longe = menor, mais lento e mais
+ *            apagado;
+ *   arco   — sobe ou desce um pouco no meio do caminho, e chega mais alto ou
+ *            mais baixo do que saiu.
  */
+interface Voo {
+  id: number;
+  paraDireita: boolean;
+  altura: number;
+  duracao: number;
+  escala: number;
+  curva: number;
+  desvio: number;
+  largura: number;
+}
+
+function sortearVoo(largura: number): Voo {
+  const escala = acaso(0.72, 1.12);
+  return {
+    id: Date.now(),
+    paraDireita: Math.random() < 0.5,
+    altura: acaso(40, 170),
+    // Mais longe (menor) também é mais lento.
+    duracao: acaso(12, 17) / (0.55 + escala * 0.45),
+    escala,
+    curva: acaso(-34, 26),
+    desvio: acaso(-40, 40),
+    largura,
+  };
+}
+
+/** Onde fica a traseira do trenó no desenho (fração da largura, voando para a esquerda). */
+const TRASEIRA_DO_TRENO = 0.97;
+
+interface Faisca { x: number; y: number; vx: number; vy: number; vida: number; dura: number; tam: number; cor: number; fase: number }
+
+/** Um brilho redondo pronto (desenhado uma vez): cada faísca é só um `drawImage` dele. */
+function criarBrilho(cor: string): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  c.width = c.height = 24;
+  const g = c.getContext('2d')!;
+  const grad = g.createRadialGradient(12, 12, 0, 12, 12, 12);
+  grad.addColorStop(0, '#FFFFFF');
+  grad.addColorStop(0.25, cor);
+  grad.addColorStop(1, 'rgba(255, 233, 166, 0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 24, 24);
+  return c;
+}
+
+/** O próximo voo: exponencial em torno de 3 min, nunca antes de 40 s nem depois de 7 min. */
+const proximoVooEm = () => Math.min(420_000, Math.max(40_000, -Math.log(1 - Math.random()) * 180_000));
+
 export function RevoadaNatal({ cena }: { cena: CenaNatal }) {
-  const [voo, setVoo] = useState<{ id: number; altura: number } | null>(null);
+  const [voo, setVoo] = useState<Voo | null>(null);
+  const caixa = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!cena.treno) return;
     let t: number | undefined;
     const voar = () => {
-      setVoo({ id: Date.now(), altura: acaso(56, 150) });
+      setVoo(sortearVoo(caixa.current?.clientWidth ?? window.innerWidth));
       window.clearTimeout(t);
-      t = window.setTimeout(voar, acaso(120_000, 240_000));
+      t = window.setTimeout(voar, proximoVooEm());
     };
-    t = window.setTimeout(voar, 7000);
+    t = window.setTimeout(voar, acaso(6_000, 50_000));
     window.addEventListener(EVENTO_TRENO, voar);
     return () => { window.clearTimeout(t); window.removeEventListener(EVENTO_TRENO, voar); };
   }, [cena.treno]);
-  if (!cena.treno || !voo) return null;
+  // O rastro: faíscas que saem da traseira do trenó e ficam no céu onde nasceram.
+  const rastro = useRef<HTMLCanvasElement>(null);
+  const vira = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!voo) return;
+    const cv = rastro.current, caixaEl = caixa.current;
+    const ctx = cv?.getContext('2d');
+    if (!cv || !caixaEl || !ctx) return;
+    cv.width = caixaEl.clientWidth;
+    cv.height = caixaEl.clientHeight;
+    const brilhos = [criarBrilho('#FFE9A6'), criarBrilho('#FFFFFF'), criarBrilho('#FFD54F')];
+    const faiscas: Faisca[] = [];
+    let antes = performance.now(), quadro = 0;
+    const passo = (agora: number) => {
+      const dt = Math.min(0.05, (agora - antes) / 1000);
+      antes = agora;
+      // Onde está a traseira do trenó agora (o trenó fica na ponta direita do desenho).
+      const svg = vira.current?.querySelector('svg');
+      if (svg) {
+        const r = svg.getBoundingClientRect(), c = caixaEl.getBoundingClientRect();
+        const fracao = voo.paraDireita ? 1 - TRASEIRA_DO_TRENO : TRASEIRA_DO_TRENO;
+        const x = r.left - c.left + r.width * fracao;
+        const y = r.top - c.top + r.height * 0.66;
+        const recua = voo.paraDireita ? -1 : 1;     // as faíscas saem para trás
+        for (let i = 0; i < 2; i++) {
+          faiscas.push({
+            x: x + acaso(-6, 6), y: y + acaso(-5, 5),
+            vx: recua * acaso(10, 50), vy: acaso(-10, 25),
+            vida: 0, dura: acaso(0.8, 1.7), tam: acaso(3, 7.5) * voo.escala,
+            cor: Math.floor(acaso(0, brilhos.length)), fase: acaso(0, Math.PI * 2),
+          });
+        }
+      }
+      ctx.clearRect(0, 0, cv.width, cv.height);
+      for (let i = faiscas.length - 1; i >= 0; i--) {
+        const f = faiscas[i];
+        f.vida += dt;
+        if (f.vida >= f.dura) { faiscas.splice(i, 1); continue; }
+        f.vy += 45 * dt;
+        f.x += f.vx * dt;
+        f.y += f.vy * dt;
+        const resta = 1 - f.vida / f.dura;
+        // Cintila enquanto apaga.
+        ctx.globalAlpha = resta * (0.65 + 0.35 * Math.sin(f.fase + f.vida * 18));
+        const t = f.tam * (0.5 + resta * 0.5);
+        ctx.drawImage(brilhos[f.cor], f.x - t, f.y - t, t * 2, t * 2);
+      }
+      ctx.globalAlpha = 1;
+      quadro = requestAnimationFrame(passo);
+    };
+    quadro = requestAnimationFrame(passo);
+    return () => { cancelAnimationFrame(quadro); ctx.clearRect(0, 0, cv.width, cv.height); };
+  }, [voo]);
+
+  if (!cena.treno) return null;
+  const fora = 340;
   return (
-    <div className="nt-revoada" aria-hidden="true">
-      <div key={voo.id} className="nt-treno" style={{ top: voo.altura }} onAnimationEnd={() => setVoo(null)}>
-        <span className="rastro" />
-        <Treno />
-      </div>
+    <div ref={caixa} className="nt-revoada" aria-hidden="true">
+      {voo && <canvas ref={rastro} className="nt-revoada-rastro" />}
+      {voo && (
+        <div
+          key={voo.id}
+          className="nt-treno"
+          style={{
+            top: voo.altura,
+            ['--x0' as string]: `${voo.paraDireita ? -fora : voo.largura + 20}px`,
+            ['--x1' as string]: `${voo.paraDireita ? voo.largura + 20 : -fora}px`,
+            ['--dur' as string]: `${voo.duracao.toFixed(1)}s`,
+            ['--curva' as string]: `${voo.curva.toFixed(0)}px`,
+            ['--desvio' as string]: `${voo.desvio.toFixed(0)}px`,
+            opacity: 0.75 + (voo.escala - 0.72) * 0.6,
+          }}
+          onAnimationEnd={e => { if (e.target === e.currentTarget) setVoo(null); }}
+        >
+          <div className="nt-treno-arco">
+            <div ref={vira} className="nt-treno-vira" style={{ transform: `scale(${voo.escala.toFixed(2)}) scaleX(${voo.paraDireita ? -1 : 1})` }}>
+              <Treno />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

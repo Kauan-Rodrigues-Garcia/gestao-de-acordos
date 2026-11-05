@@ -1161,10 +1161,14 @@
    `pages/ModoTV/bingo/BingoTv.tsx`). O Mural (`data-portal-anima`) foi para
    `arquivo-morto/halloween/` em 03/11/2026.
 
+   A abertura do Natal (`data-anima-sempre`, 04/11/2026) também fica de fora:
+   o presente esperando em cima do chat pisca para todo mundo, e do clique em
+   diante o modo leve fica em pausa (`pausarModoLeve`).
+
    ─────────────────────────────────────────────────────────────────────────── */
-html[data-leve] *:not([data-bingo-anima], [data-bingo-anima] *),
-html[data-leve] *:not([data-bingo-anima], [data-bingo-anima] *)::before,
-html[data-leve] *:not([data-bingo-anima], [data-bingo-anima] *)::after {
+html[data-leve] *:not([data-bingo-anima], [data-bingo-anima] *, [data-anima-sempre], [data-anima-sempre] *),
+html[data-leve] *:not([data-bingo-anima], [data-bingo-anima] *, [data-anima-sempre], [data-anima-sempre] *)::before,
+html[data-leve] *:not([data-bingo-anima], [data-bingo-anima] *, [data-anima-sempre], [data-anima-sempre] *)::after {
   animation-duration: 1ms !important;
   animation-delay: 0ms !important;
   animation-iteration-count: 1 !important;

@@ -14,7 +14,8 @@
   left: 50%;
   top: calc(var(--argola) - var(--fio));
   width: 1px;
-  height: calc(var(--fio) - 2px);
+  /* `--puxa`: o quanto o puxão estica o fio (a bola desce junto). */
+  height: calc(var(--fio) - 2px + var(--puxa, 0px));
   margin-left: -.5px;
   background: linear-gradient(oklch(0.45 0.03 80 / .75), oklch(0.78 0.1 85 / .95));
 }
@@ -22,4 +23,86 @@
 .nt-saud-laco path { fill: #D32F2F; stroke: #9A1B1B; stroke-width: .6; }
 .nt-saud-laco .no { fill: #B71C1C; }
 
-.nt-saud-bola canvas { position: absolute; left: 0; top: 0; cursor: pointer; filter: drop-shadow(0 4px 5px oklch(0.2 0.04 25 / .35)); }
+.nt-saud-bola canvas { position: absolute; left: 0; top: 0; translate: 0 var(--puxa, 0px); cursor: grab; touch-action: none; filter: drop-shadow(0 4px 5px oklch(0.2 0.04 25 / .35)); }
+.nt-saud-bola canvas:active { cursor: grabbing; }
+
+/* ── A brincadeira: puxar arrebenta o fio (`BolaSolta`) ───────────────────────── */
+
+/* O fio arrebenta (some de baixo para cima) e, quando a bola volta, cresce de novo. */
+.nt-saud-fio { transform-origin: top; }
+.nt-saud-fio.arrebentado { animation: nt-fio-arrebenta 0.35s ease-in forwards; }
+@keyframes nt-fio-arrebenta { to { transform: scaleY(0.15); opacity: 0.4; } }
+.nt-saud-fio.religando { animation: nt-fio-religa 0.5s ease-out; }
+@keyframes nt-fio-religa { from { transform: scaleY(0); } }
+
+.nt-bola-solta {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 60;
+  cursor: grab;
+  touch-action: none;
+  will-change: transform;
+  filter: drop-shadow(0 6px 8px oklch(0.2 0.04 25 / .35));
+}
+.nt-bola-solta:active { cursor: grabbing; }
+.nt-bola-solta canvas { display: block; }
+
+/* Congelando: treme, fica azulada de gelo e aparecem os cristais. */
+.nt-bola-congelando { animation: nt-bola-treme 0.45s ease-in-out 2; }
+@keyframes nt-bola-treme {
+  0%, 100% { translate: 0 0; }
+  20% { translate: -3px 0; }
+  40% { translate: 3px -1px; }
+  60% { translate: -2px 1px; }
+  80% { translate: 2px 0; }
+}
+.nt-bola-solta canvas { transition: filter 0.6s ease; }
+.nt-bola-congelando canvas { filter: saturate(0.35) brightness(1.25) hue-rotate(160deg); }
+/* Voltando, ela descongela no caminho: chega ao fio com a cor da pendurada. */
+.nt-bola-voltando canvas { filter: none; transition: filter 1.1s ease-in; }
+.nt-bola-gelo { position: absolute; pointer-events: none; animation: nt-bola-gelo 0.6s ease-out both; filter: drop-shadow(0 0 4px #9fdcff); }
+@keyframes nt-bola-gelo { from { opacity: 0; transform: scale(0.3) rotate(-40deg); } }
+.nt-bola-voltando .nt-bola-gelo { animation: nt-bola-degelo 1s ease-in forwards; }
+@keyframes nt-bola-degelo { to { opacity: 0; transform: scale(1.4) rotate(30deg); } }
+
+/* A zoeira (a bola descansando): um balão cartoon, NA FRENTE da bola e por cima de tudo. */
+.nt-bola-zoeira {
+  position: fixed;
+  z-index: 2147483000;
+  max-width: 15rem;
+  width: max-content;
+  padding: 0.6rem 0.9rem;
+  border-radius: 18px 18px 18px 6px;
+  border: 3px solid #2A2530;
+  background: #FFF6DC;
+  color: #2A2530;
+  font-size: 0.86rem;
+  font-weight: 800;
+  line-height: 1.25;
+  text-align: center;
+  box-shadow: 4px 5px 0 #2A2530;
+  pointer-events: none;
+  translate: -50% -50%;
+  animation: nt-bola-zoeira-entra 0.55s cubic-bezier(0.34, 1.7, 0.5, 1) both,
+             nt-bola-zoeira-sai 0.35s ease-in 3.25s forwards;
+}
+.dark .nt-bola-zoeira { background: #FFE9B8; }
+@keyframes nt-bola-zoeira-entra {
+  0%   { opacity: 0; transform: scale(0.2) rotate(-14deg); }
+  60%  { opacity: 1; transform: scale(1.12) rotate(4deg); }
+  80%  { transform: scale(0.95) rotate(-4deg); }
+  100% { transform: scale(1) rotate(-2.5deg); }
+}
+@keyframes nt-bola-zoeira-sai { to { opacity: 0; transform: scale(0.6) rotate(8deg) translateY(-10px); } }
+.nt-bola-zoeira-estrela {
+  position: absolute;
+  top: -12px;
+  right: -8px;
+  color: #F2B544;
+  font-size: 1.1rem;
+  text-shadow: 1px 1px 0 #2A2530;
+  animation: nt-bola-zoeira-pisca 0.6s ease-in-out infinite alternate;
+}
+.nt-bola-zoeira-estrela.outra { top: auto; right: auto; bottom: -10px; left: -6px; color: #D6403A; animation-delay: -0.3s; font-size: 0.85rem; }
+@keyframes nt-bola-zoeira-pisca { from { transform: scale(0.7) rotate(0deg); } to { transform: scale(1.15) rotate(25deg); } }

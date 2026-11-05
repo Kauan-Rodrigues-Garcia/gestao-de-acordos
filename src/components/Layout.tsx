@@ -23,6 +23,7 @@
  */
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { lazy, Suspense, useState, useRef, useEffect, useMemo, useCallback, useSyncExternalStore } from 'react';
+import { flushSync } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LogOut, Menu, X, ChevronRight,
@@ -67,9 +68,10 @@ import { BolhaChat } from '@/components/Chat/BolhaChat';
 import { getImpersonacaoAtiva, sairImpersonacao } from '@/services/impersonacao.service';
 import { CrachaPendente } from '@/components/CrachaPendente';
 import { TemaNatalContext, cenaDaRota as cenaNatalDaRota, soParado as natalSoParado, temFundo as temFundoNatal } from '@/components/Natal/tema';
-import { abrirNatal, useNatal } from '@/components/Natal/previa';
+import { EVENTO_REINICIAR_ABERTURA, abrirNatal, useNatal } from '@/components/Natal/previa';
 import { MarcaNatal } from '@/components/Natal/MarcaNatal';
 import { PreviaNatal } from '@/components/Natal/PreviaNatal';
+import { abaDoCaminho, rotaDaRegra, useTelaLarga } from '@/components/Natal/trem/rota';
 import { useNotificacoes } from '@/providers/NotificacoesProvider';
 import { useEasterEggCriadores, DURACAO_ESCURECIMENTO_MS } from '@/hooks/useEasterEggCriadores';
 // O overlay continua no Layout: a comemoração explode em QUALQUER página, não
@@ -94,6 +96,7 @@ import { useSobreposicaoUso } from '@/providers/RastreioUsoProvider';
 import { useMarca } from '@/hooks/useMarca';
 import { ouvirRegraDaSessao, regraDaSessaoAtual } from '@/lib/regraDoSetor';
 import { DesfazTemaDaMarca } from '@/components/TemaDaMarca';
+import { avisarFotoMudou, ouvirPedidoDeFoto } from '@/lib/fotoDoPerfil';
 
 /*
  * Painéis que só aparecem com um clique — fora do pacote de entrada.
@@ -129,8 +132,16 @@ const RevoadaNatal      = lazy(() => carregarNatal().then(m => ({ default: m.Rev
 // A abertura do Natal (o presente, o vídeo e a mensagem): só desce para quem ainda não abriu.
 const AberturaNatal     = lazy(() => comNovaTentativa(() => import('@/components/Natal/presente/AberturaNatal'))()
   .then(m => ({ default: m.AberturaNatal })));
-const BotaoMusicaNatal  = lazy(() => comNovaTentativa(() => import('@/components/Natal/BotaoMusicaNatal'))()
-  .then(m => ({ default: m.BotaoMusicaNatal })));
+const carregarBotaoMusica = comNovaTentativa(() => import('@/components/Natal/BotaoMusicaNatal'));
+const BotaoMusicaNatal  = lazy(() => carregarBotaoMusica().then(m => ({ default: m.BotaoMusicaNatal })));
+// O trenzinho: a camada (trilho e trem) e as faixas do alto e do pé da aba.
+const carregarTrem      = comNovaTentativa(() => import('@/components/Natal/trem/sistema'));
+const CamadaDoTrem      = lazy(() => carregarTrem().then(m => ({ default: m.CamadaDoTrem })));
+const FaixaDoTremTopo   = lazy(() => carregarTrem().then(m => ({ default: m.FaixaDoTremTopo })));
+const FaixaDoTremFim    = lazy(() => carregarTrem().then(m => ({ default: m.FaixaDoTremFim })));
+const MapaDaLinha       = lazy(() => carregarTrem().then(m => ({ default: m.MapaDaLinha })));
+/** A abertura chama durante o vídeo: o código do tema desce antes de ele montar atrás do bilhete. */
+const prepararNatal = () => Promise.all([carregarNatal(), carregarTrem(), carregarBotaoMusica()]);
 
 /*
  * A lista e o filtro mudaram de casa: `src/lib/menuLateral.ts`.
@@ -159,6 +170,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   // (`BarraRolagemLateral`), e as fileiras de abas rolam com o mouse no app
   // inteiro (`lib/rolagemLateral.ts`). Ver o defeito de 19/10/2026 lá.
   const areaConteudo = useRef<HTMLElement>(null);
+  /** O `<nav>` do menu: o mapa da linha do trenzinho mora nele. */
+  const menuLateral = useRef<HTMLElement>(null);
   useEffect(() => ligarRolagemLateral(), []);
   const [fotoUrl, setFotoUrl] = useState<string | null>((perfil as { foto_url?: string | null } | null)?.foto_url ?? null);
   const [uploadingFoto, setUploadingFoto] = useState(false);
@@ -241,6 +254,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     };
   }, [perfil?.id]);
 
+  // O trenzinho de Natal pede a foto (só entra na fila quem tem): abre o menu do perfil.
+  useEffect(() => ouvirPedidoDeFoto(() => setPerfilPopoverOpen(true)), []);
+
   async function handleFotoUpload(file: File) {
     if (!perfil?.id) return;
     if (!file.type.startsWith('image/')) { toast.error('Arquivo inválido. Envie uma imagem.'); return; }
@@ -256,6 +272,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       const { error: dbErr } = await supabase.from('perfis').update({ foto_url: urlFinal }).eq('id', perfil.id);
       if (dbErr) throw dbErr;
       setFotoUrl(urlFinal);
+      avisarFotoMudou();
       toast.success('Foto de perfil atualizada!');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -276,6 +293,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       const ext = fotoUrl.split('?')[0].split('.').pop() ?? 'jpg';
       await supabase.storage.from('perfis').remove([`avatars/${perfil.id}.${ext}`]);
       setFotoUrl(null);
+      avisarFotoMudou();
       toast.success('Foto removida!');
       setPerfilPopoverOpen(false);
     } catch (err: unknown) {
@@ -300,15 +318,27 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const leve = useModoLeve();
   // Tema de Natal (novembro) — em prévia, só no navegador de quem pede
   // (`Natal/previa.ts`).
-  const { podeVer: podeVerNatal, estilo: natal, pessoa: pessoaNatal, aberto: natalAberto } = useNatal();
-  // O tema entra no meio da abertura (na nevasca), com o cartão ainda na tela:
+  const { podeVer: podeVerNatal, estilo: natal, pessoa: pessoaNatal, aberto: natalAberto, presenteOculto } = useNatal();
+  // O tema entra no meio da abertura (atrás do bilhete), com ela ainda na tela:
   // a abertura fica montada até avisar que terminou.
   const [aberturaNatalViva, setAberturaNatalViva] = useState(false);
+  // «Reiniciar a abertura» da prévia: outra chave, outra abertura, do zero.
+  const [chaveAbertura, setChaveAbertura] = useState(0);
+  useEffect(() => {
+    const reiniciar = () => { setAberturaNatalViva(false); setChaveAbertura(k => k + 1); };
+    window.addEventListener(EVENTO_REINICIAR_ABERTURA, reiniciar);
+    return () => window.removeEventListener(EVENTO_REINICIAR_ABERTURA, reiniciar);
+  }, []);
   const cenaNatal = useMemo(() => {
     if (!natal) return null;
     const cena = cenaNatalDaRota(pathname, natal);
     return leve ? natalSoParado(cena) : cena;
   }, [pathname, natal, leve]);
+  // O trenzinho de Natal: só nas abas da rota da regra do setor, e nunca no celular.
+  const telaLarga = useTelaLarga();
+  const rotaDoTrem = useMemo(() => rotaDaRegra(regraDoSetor), [regraDoSetor]);
+  const abaDoTrem = natal && telaLarga ? abaDoCaminho(pathname) : null;
+  const tremNaAba = abaDoTrem !== null && rotaDoTrem.includes(abaDoTrem) ? abaDoTrem : null;
   // `valorDoCargo` é o que o editor de ordem usa para desenhar o menu de OUTRO
   // cargo: ele responde «o que este cargo concede», sem aplicar exceção de
   // pessoa nenhuma — que é exatamente a pergunta de uma prévia por cargo.
@@ -541,7 +571,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
+      <nav ref={menuLateral} className={cn('flex-1 px-2 py-3 space-y-0.5 overflow-y-auto', natal && telaLarga && 'relative')}>
+        {/* O mapa da linha do trenzinho de Natal: a linha na beirada do menu, as estações nas abas da rota. */}
+        {natal && telaLarga && <Suspense fallback={null}><MapaDaLinha rota={rotaDoTrem} nav={menuLateral} /></Suspense>}
         {navItensOrdenados.map(item => (
           <NavLink
             key={item.to}
@@ -709,10 +741,19 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   );
 
   const conteudo = (
-    <main ref={areaConteudo} className={cn('flex-1 overflow-y-auto', natal && 'relative', cenaNatal && temFundoNatal(cenaNatal) ? 'z-[1] bg-transparent' : 'bg-background')}>
+    <main ref={areaConteudo} className={cn('flex-1 overflow-y-auto', natal && 'relative', tremNaAba && 'isolate', cenaNatal && temFundoNatal(cenaNatal) ? 'z-[1] bg-transparent' : 'bg-background')}>
       {/* As camadas do Natal moram no alto do conteúdo e rolam com a página. */}
       {cenaNatal && <Suspense fallback={null}><CamadaNatal cena={cenaNatal} /></Suspense>}
+      {/* O trem corre por trás do conteúdo (`isolate` no <main> segura o z-index dele)
+          e aparece inteiro nas faixas do alto e do pé. */}
+      {tremNaAba && (
+        <Suspense fallback={null}>
+          <CamadaDoTrem aba={tremNaAba} rota={rotaDoTrem} raiz={areaConteudo} leve={leve} />
+          <FaixaDoTremTopo aba={tremNaAba} rota={rotaDoTrem} />
+        </Suspense>
+      )}
       {children}
+      {tremNaAba && <Suspense fallback={null}><FaixaDoTremFim aba={tremNaAba} rota={rotaDoTrem} meuId={perfil?.id ?? null} /></Suspense>}
       <BarraRolagemLateral raiz={areaConteudo} />
     </main>
   );
@@ -1013,25 +1054,34 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <ChevronRight className={cn('w-3 h-3 transition-transform', sidebarOpen && 'rotate-180')} />
         </button>
 
-        {cenaNatal ? (
-          // Caixa própria para as camadas do tema: a coluna de fora não pode
-          // virar `relative`, senão o botão de recolher o menu muda de lugar.
-          <div className="relative flex-1 min-h-0 flex flex-col bg-background">
-            <Suspense fallback={null}>{temFundoNatal(cenaNatal) && <FundoNatal cena={cenaNatal} />}</Suspense>
-            {conteudo}
+        {/* Caixa própria para as camadas do tema: a coluna de fora não pode
+            virar `relative`, senão o botão de recolher o menu muda de lugar.
+            Fica sempre, com ou sem Natal: trocar a caixa quando o tema entra
+            (atrás do bilhete da abertura) montava a página de novo. */}
+        <div className="relative flex-1 min-h-0 flex flex-col bg-background">
+          {cenaNatal && <Suspense fallback={null}>{temFundoNatal(cenaNatal) && <FundoNatal cena={cenaNatal} />}</Suspense>}
+          {conteudo}
+          {cenaNatal && (
             <Suspense fallback={null}>
               <SobreposicaoNatal cena={cenaNatal} />
               <RevoadaNatal cena={cenaNatal} />
             </Suspense>
-          </div>
-        ) : conteudo}
-        {podeVerNatal && (import.meta.env.DEV || natal) && <PreviaNatal estilo={natal} />}
+          )}
+        </div>
+        {/* A prévia (e os botões de teste da abertura) fica à mão mesmo antes de abrir o presente. */}
+        {podeVerNatal && <PreviaNatal estilo={natal} presenteAberto={natalAberto} presenteOculto={presenteOculto} />}
         {/* O presente do Natal: uma vez por pessoa, depois do termo e do tutorial,
-            e nunca na impersonação. `?natal=presente` devolve. */}
+            e nunca na impersonação. `?natal=presente` (ou a prévia) devolve. */}
         {(aberturaNatalViva || (podeVerNatal && !natalAberto && !termoLoading && !precisaAceitar && tourJaVisto && !getImpersonacaoAtiva())) && (
           <Suspense fallback={null}>
             <AberturaNatal
-              aoTemaEntrar={() => { setAberturaNatalViva(true); abrirNatal(pessoaNatal); }}
+              key={chaveAbertura}
+              oculto={presenteOculto}
+              aoPreparar={prepararNatal}
+              // `flushSync`: «a abertura segue viva» entra antes de «o presente
+              // foi aberto» (que chega por `useSyncExternalStore`, num render à
+              // parte) — senão um render sem as duas desmontava o bilhete.
+              aoTemaEntrar={() => { flushSync(() => setAberturaNatalViva(true)); abrirNatal(pessoaNatal); }}
               aoTerminar={() => setAberturaNatalViva(false)}
             />
           </Suspense>

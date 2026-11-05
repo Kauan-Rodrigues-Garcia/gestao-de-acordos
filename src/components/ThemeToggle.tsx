@@ -1,5 +1,6 @@
 import { Moon, Sun, Monitor, Flower2, Leaf, Droplets, PanelLeft, Feather } from 'lucide-react';
-import { definirModoLeve, useModoLeve } from '@/lib/modoLeve';
+import { definirModoLeve, useModoLeveEscolhido } from '@/lib/modoLeve';
+import { CHAVE_MENU_ESCURO, aplicarMenuEscuro } from '@/lib/menuEscuro';
 import { useEffect, useState } from 'react';
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
@@ -25,31 +26,6 @@ import {
  * tema da carga, e com «Sistema» na carga o next-themes seguia reagindo à troca
  * do SO — punha `.dark` por cima do Rosa escolhido depois. Agora há um dono só.
  */
-
-/**
- * Menu lateral escuro sobre tema claro.
- *
- * Interruptor independente do tema: liga e o <aside> fica escuro mesmo com o
- * resto da tela claro. Quem faz o trabalho e o CSS — a classe redefine so os
- * tokens `--sidebar-*`, e o seletor dela ignora os temas que ja sao escuros,
- * para nao sobrescrever o sidebar proprio do Cinza Escuro e do Azul Profundo.
- * No Rosa e no Verde o menu escurece no tom do tema. Ver o bloco
- * `.menu-lateral-escuro` em `index.css`.
- *
- * A classe mora fora da lista de temas do next-themes: ele so remove do <html>
- * as classes de tema, entao esta sobrevive a qualquer troca.
- */
-const CLASSE_MENU_ESCURO = 'menu-lateral-escuro';
-const CHAVE_MENU_ESCURO = 'menuLateralEscuro';
-
-/** O menu lateral está escuro agora? (A abertura do Natal confere: o vídeo é o sistema com o menu claro.) */
-export const menuEscuroLigado = () => document.documentElement.classList.contains(CLASSE_MENU_ESCURO);
-
-export function aplicarMenuEscuro(ligado: boolean) {
-  document.documentElement.classList.toggle(CLASSE_MENU_ESCURO, ligado);
-  try { localStorage.setItem(CHAVE_MENU_ESCURO, ligado ? 'true' : 'false'); }
-  catch { /* modo privado */ }
-}
 
 /**
  * Troca de cor sem animação — o mesmo que o `disableTransitionOnChange` do
@@ -98,7 +74,7 @@ export function ThemeToggle() {
   const atual = (theme ?? 'system') as EscolhaTema;
   const escuroEmVigor = ehTemaEscuro(resolvedTheme);
   const [menuEscuro, setMenuEscuro] = useState(lerMenuEscuro);
-  const leve = useModoLeve();
+  const leve = useModoLeveEscolhido();
 
   // Reaplica na montagem: o script do index.html ja pos a classe antes da
   // pintura, isto so garante o estado caso ele nao tenha rodado.

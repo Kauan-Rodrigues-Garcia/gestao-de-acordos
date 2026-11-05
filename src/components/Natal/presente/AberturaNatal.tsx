@@ -1,137 +1,343 @@
 /**
- * AberturaNatal — a passagem de outubro para o Natal (Cleber, 28/10/2026).
+ * AberturaNatal — a passagem de outubro para o Natal (Cleber, 28/10/2026;
+ * refeita em 04/11/2026). Cada pessoa abre o seu presente na hora que quiser.
  *
- *   1. O presente: grande, no alto e no meio da tela, no caminho. O sistema
- *      segue usável, mas só ele leva adiante.
- *   2. O clique: quem não está no tema claro padrão (claro, com o menu claro)
- *      vê um aviso junto do botão de tema, e o tema muda — o vídeo é o
- *      sistema nesse tema.
- *   3. A luz: sai do presente e toma a tela. É a mesma luz do primeiro quadro
- *      do vídeo, então a troca não aparece: o vídeo «é» o sistema se animando.
- *      Nada de carregando: o vídeo já desceu enquanto o presente esperava.
- *   4. O vídeo acaba no mural embrulhado no papel deste presente
- *      (`arte.tsx`). Ele encolhe e é sugado de volta para dentro do presente,
- *      e o sistema atrás fica cinza. A música de Natal começa do 0:00, só para
- *      quem abriu (`tocarAbertura`).
- *   5. O presente estoura numa nevasca (`Nevasca.tsx`) que leva o tema: por
- *      onde a neve passa, o cinza sai e o Natal aparece. Do presente sai o
- *      cartão de boas-vindas, de gorro (`Cartao.tsx`). (Cleber, 29/10/2026.)
- *   6. «Entrar no Natal»: o cartão sai, a neve assenta e a música passa para
- *      a rádio, a mesma para todo mundo (`passarParaRadio`).
+ *   1. A espera: um presente pequeno, bem detalhado e piscando
+ *      (`PresenteDetalhado.tsx`), em cima da bolha do chat, com o balão «Veja
+ *      esta mensagem de 2 minutos para desbloquear o tema de Natal». O balão
+ *      fica até a pessoa fechar no ×, e volta depois de `DICA_VOLTA_MS`.
+ *   2. O clique pergunta antes: é um vídeo de 2 minutos, para ver com tempo.
+ *      «Não tenho agora» devolve o presente; «Tenho agora» segue. O vídeo só
+ *      começa a baixar aqui (23 MB: baixar para todo mundo que só vê o
+ *      presente pesaria na rede da operação).
+ *   3. Quem não está no tema claro padrão (claro, com o menu claro) vê um
+ *      aviso junto do botão de tema, e o tema muda — o vídeo é o sistema nesse
+ *      tema.
+ *   4. O presente abre: chacoalha, a tampa salta e sai a luz amarela de
+ *      dentro, que toma a tela. É a mesma luz do primeiro quadro do vídeo.
+ *   5. O vídeo, com pausar, tirar o som e fechar no canto de cima. Fechar
+ *      devolve o presente (dá para ver depois).
+ *   6. O vídeo acaba no mural embrulhado no papel do presente, que encolhe e
+ *      vira a carta do Polo Norte (`Carta.tsx`): o lacre racha em purpurina,
+ *      a aba abre e a carta sobe — e vira o bilhete (`Cartao.tsx`), com o
+ *      sistema embaçado atrás. Junto com o bilhete a música começa DO COMEÇO,
+ *      só para esta pessoa (`tocarAbertura`); quando a faixa acaba, entra a
+ *      rádio de todo mundo.
+ *   7. Enquanto a pessoa lê, o Natal monta atrás do embaçado (`aoTemaEntrar`;
+ *      o código dele desce durante o vídeo, por `aoPreparar`). O botão libera
+ *      depois de 5 s.
+ *   8. «Entrar no Natal»: o bilhete sai e uma nevasca (`Nevasca.tsx`) abre o
+ *      embaçado de dentro para fora, e o Natal aparece por onde a neve passa.
+ *      Uns segundos depois, o botão da música avisa que dá para desligar
+ *      (`agendarAvisoDaMusica`).
  *
- * Dois avisos para quem monta: `aoTemaEntrar` no estouro (o tema liga atrás
- * do véu, com a abertura ainda na tela) e `aoTerminar` quando ela some.
+ * O modo leve fica em pausa do «Tenho agora» até o fim (`pausarModoLeve`): a
+ * abertura roda inteira para todo mundo, e o modo volta sozinho depois.
+ *
+ * `aoTemaEntrar` liga o tema (com a abertura ainda na tela) e `aoTerminar`
+ * avisa que ela sumiu. Os botões de teste da prévia (`PreviaNatal.tsx`) pulam
+ * etapas pelo evento `EVENTO_ABERTURA`.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTheme } from 'next-themes';
-import { aplicarMenuEscuro, menuEscuroLigado } from '@/components/ThemeToggle';
-import { passarParaRadio, tocarAbertura } from '../musica';
-import { Laco, estiloDaFita, estiloDoPapel } from './arte';
-import { Cartao } from './Cartao';
+import { Pause, Play, Volume2, VolumeX, X } from 'lucide-react';
+import { aplicarMenuEscuro, menuEscuroLigado } from '@/lib/menuEscuro';
+import { pausarModoLeve } from '@/lib/modoLeve';
+import { agendarAvisoDaMusica, tocarAbertura } from '../musica';
+import { EVENTO_ABERTURA, type PuloDaAbertura } from '../previa';
+import { ALTURA_DA_CARTA, Carta, LARGURA_DA_CARTA, SUBIDA_DA_CARTA, type EtapaDaCarta } from './Carta';
+import { CONTAGEM_DO_CARTAO_S, Cartao } from './Cartao';
+import { Confete, PURPURINA } from './Confete';
 import { Nevasca, type FaseNevasca } from './Nevasca';
+import { PresenteDetalhado } from './PresenteDetalhado';
+import { carregarFonteDoNatal } from '../fonteDoNatal';
 import './presente.css';
-
-/** A letra do cartão: serifada e macia. Desce enquanto o vídeo toca. */
-const FONTE_DO_CARTAO = 'https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600;1,9..144,500&display=swap';
-function carregarFonteDoCartao() {
-  if (document.getElementById('np-fonte-cartao')) return;
-  const l = document.createElement('link');
-  l.id = 'np-fonte-cartao';
-  l.rel = 'stylesheet';
-  l.href = FONTE_DO_CARTAO;
-  document.head.appendChild(l);
-}
 
 /** O vídeo (`videos/`, composição `AberturaNatal`, versão para a web). */
 export const VIDEO_ABERTURA = '/video/natal/abertura.mp4';
 /** A luz do presente: a mesma do primeiro quadro do vídeo (`videos/src/natal/VideoNatal.tsx`, `Luz`). */
 const LUZ = 'radial-gradient(circle at 50% 14%, #fffdf2 0%, #fff1c2 26%, #f8d474 58%, #eeb23c 100%)';
 
-type Fase = 'presente' | 'tema' | 'luz' | 'video' | 'volta' | 'fecha' | 'nevasca' | 'saindo';
+/** Fechou o balão no ×: ele volta depois disso. */
+const DICA_VOLTA_MS = 45_000;
+/** Do «Entrar no Natal» até a neve assentar: o tempo da frente cobrir a tela (`Nevasca.tsx`). */
+const NEVASCA_MS = 5_600;
+/** Do bilhete na tela até o Natal montar atrás dele. */
+const TEMA_ENTRA_MS = 1_600;
+/** Depois que tudo acabou, quando o botão da música avisa. */
+const AVISO_DA_MUSICA_MS = 6_000;
 
-const NEVASCA: Partial<Record<Fase, FaseNevasca>> = { volta: 'cinza', fecha: 'cinza', nevasca: 'solta', saindo: 'acalma' };
+type Fase = 'espera' | 'confirma' | 'tema' | 'abrindo' | 'luz' | 'video' | 'carta' | 'bilhete' | 'nevasca' | 'assenta';
+
+const NEVASCA: Partial<Record<Fase, FaseNevasca>> = { carta: 'cinza', bilhete: 'cinza', nevasca: 'solta', assenta: 'acalma' };
+
+type Ponto = { x: number; y: number };
 
 const espera = (ms: number) => new Promise(r => window.setTimeout(r, ms));
+/** O envelope fica no meio da tela, um pouco acima. */
+const pontoDaCarta = (): Ponto => ({ x: window.innerWidth / 2, y: window.innerHeight * 0.52 });
+/** O meio do bilhete (`.np-cartao`, top 57%): de onde a nevasca sai. */
+const pontoDoCartao = (): Ponto => ({ x: window.innerWidth / 2, y: window.innerHeight * 0.57 });
 
-export function AberturaNatal({ aoTemaEntrar, aoTerminar }: { aoTemaEntrar: () => void; aoTerminar: () => void }) {
-  const [fase, setFase] = useState<Fase>('presente');
-  /** De onde a nevasca sai: o meio do presente. */
-  const [origem, setOrigem] = useState({ x: window.innerWidth / 2, y: 148 });
+export function AberturaNatal({ aoTemaEntrar, aoTerminar, aoPreparar, oculto = false }: {
+  aoTemaEntrar: () => void;
+  aoTerminar: () => void;
+  /** Baixa o código do tema (as camadas, o trem, o botão da música): chamado durante o vídeo. */
+  aoPreparar?: () => Promise<unknown>;
+  /** A prévia escondeu o presente (só vale na espera: aberto, vai até o fim). */
+  oculto?: boolean;
+}) {
+  const [fase, setFase] = useState<Fase>('espera');
+  const faseAtual = useRef<Fase>('espera');
+  const irPara = useCallback((f: Fase) => { faseAtual.current = f; setFase(f); }, []);
+  /** De onde a luz e a nevasca saem, e para onde o cartão nasce. */
+  const [origem, setOrigem] = useState<Ponto>({ x: window.innerWidth - 52, y: window.innerHeight - 130 });
+  const [dica, setDica] = useState(true);
+  const [falta, setFalta] = useState(CONTAGEM_DO_CARTAO_S);
+  const [carta, setCarta] = useState<{ etapa: EtapaDaCarta; ponto: Ponto } | null>(null);
+  const [purpurina, setPurpurina] = useState<Ponto | null>(null);
+  const [videoPausado, setVideoPausado] = useState(false);
+  const [videoMudo, setVideoMudo] = useState(false);
   const botaoEntrar = useRef<HTMLButtonElement>(null);
-  useEffect(carregarFonteDoCartao, []);
+  const botaoTenho = useRef<HTMLButtonElement>(null);
   const { resolvedTheme, setTheme } = useTheme();
   const video = useRef<HTMLVideoElement>(null);
   const presente = useRef<HTMLButtonElement>(null);
-  const [avisoTema, setAvisoTema] = useState<{ x: number; y: number } | null>(null);
-  /** Para onde o vídeo encolhe: o meio do presente, e a escala até o tamanho dele. */
-  const [destino, setDestino] = useState<{ x: number; y: number; escala: number } | null>(null);
+  const [avisoTema, setAvisoTema] = useState<Ponto | null>(null);
+  /** Para onde o vídeo encolhe: o meio da tela, no tamanho do envelope. */
+  const [encolhe, setEncolhe] = useState<number | null>(null);
+  const vivo = useRef(true);
+  /** Sobe a cada «fechar o vídeo»: o que estava esperando para continuar desiste. */
+  const rodada = useRef(0);
+  const soltarLeve = useRef<(() => void) | null>(null);
+  const preparo = useRef<Promise<unknown> | null>(null);
+  const temaLigado = useRef(false);
 
-  const medirPresente = useCallback(() => {
-    const r = presente.current?.getBoundingClientRect();
-    if (!r) return null;
-    return { x: r.left + r.width / 2, y: r.top + r.height / 2, largura: r.width };
+  useEffect(carregarFonteDoNatal, []);
+  useEffect(() => {
+    vivo.current = true;
+    return () => {
+      vivo.current = false;
+      // Saiu no meio (a prévia reiniciou, a pessoa saiu da conta): o modo leve volta.
+      soltarLeve.current?.();
+      soltarLeve.current = null;
+    };
   }, []);
 
+  /** Espera e diz se ainda vale continuar (a abertura na tela, e o vídeo não foi fechado). */
+  const aguardar = useCallback(async (ms: number) => {
+    const r = rodada.current;
+    await espera(ms);
+    return vivo.current && rodada.current === r;
+  }, []);
+
+  const soltarModoLeve = useCallback(() => {
+    soltarLeve.current?.();
+    soltarLeve.current = null;
+  }, []);
+
+  const preparar = useCallback(() => {
+    if (preparo.current || !aoPreparar) return;
+    // Na folga do navegador: o vídeo tocando não pode engasgar.
+    const ocioso = (window as Window & { requestIdleCallback?: (f: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
+    preparo.current = new Promise(res => {
+      const ir = () => { aoPreparar().then(res, res); };
+      if (ocioso) ocioso(ir, { timeout: 4000 }); else window.setTimeout(ir, 1200);
+    });
+  }, [aoPreparar]);
+
+  const ligarTema = useCallback(() => {
+    if (temaLigado.current) return;
+    temaLigado.current = true;
+    aoTemaEntrar();
+  }, [aoTemaEntrar]);
+
+  /** Começa a baixar o vídeo (só depois do clique no presente). */
+  const baixarVideo = useCallback(() => {
+    const v = video.current;
+    if (!v || v.preload === 'auto') return;
+    v.preload = 'auto';
+    v.load();
+  }, []);
+
+  // ── 1. O balão: fica até a pessoa fechar; fechado, volta depois de um tempo ──
+  useEffect(() => {
+    if (fase !== 'espera' || dica) return;
+    const id = window.setTimeout(() => setDica(true), DICA_VOLTA_MS);
+    return () => window.clearTimeout(id);
+  }, [fase, dica]);
+
+  // ── 7. O bilhete, a música do começo, o Natal atrás e a contagem ──
+  const mostrarBilhete = useCallback(async (de: Ponto) => {
+    setOrigem(de);
+    setFalta(CONTAGEM_DO_CARTAO_S);
+    irPara('bilhete');
+    tocarAbertura();
+    if (!(await aguardar(TEMA_ENTRA_MS))) return;
+    // O código já desceu no vídeo; se não, espera um pouco por ele (sem travar o bilhete).
+    preparar();
+    await Promise.race([preparo.current, espera(1500)]);
+    if (!vivo.current) return;
+    ligarTema();
+  }, [aguardar, irPara, ligarTema, preparar]);
+
+  // A contagem anda com o bilhete na tela (começa depois que ele chega).
+  useEffect(() => {
+    if (fase !== 'bilhete') return;
+    let id = 0;
+    const comeca = window.setTimeout(() => {
+      id = window.setInterval(() => setFalta(f => Math.max(0, f - 1)), 1000);
+    }, 900);
+    return () => { window.clearTimeout(comeca); window.clearInterval(id); };
+  }, [fase]);
+  useEffect(() => {
+    if (fase === 'bilhete' && falta === 0) botaoEntrar.current?.focus({ preventScroll: true });
+  }, [fase, falta]);
+
+  // ── 6. O vídeo acaba e vira a carta do Polo Norte ──
+  const aoAcabar = useCallback(async () => {
+    if (faseAtual.current !== 'video' && faseAtual.current !== 'espera' && faseAtual.current !== 'confirma') return;
+    soltarLeve.current ??= pausarModoLeve();
+    const p = pontoDaCarta();
+    setEncolhe(LARGURA_DA_CARTA / window.innerWidth);
+    setCarta({ etapa: 'chega', ponto: p });
+    irPara('carta');
+    if (!(await aguardar(2100))) return;
+    setCarta({ etapa: 'lacre', ponto: p });
+    if (!(await aguardar(1050))) return;
+    // O lacre racha: purpurina dourada de onde ele estava (na ponta da aba).
+    setPurpurina({ x: p.x, y: p.y - ALTURA_DA_CARTA / 2 + ALTURA_DA_CARTA * 0.58 });
+    setCarta({ etapa: 'abre', ponto: p });
+    if (!(await aguardar(650))) return;
+    setCarta({ etapa: 'sai', ponto: p });
+    if (!(await aguardar(850))) return;
+    setCarta({ etapa: 'vai', ponto: p });
+    void mostrarBilhete({ x: p.x, y: p.y - SUBIDA_DA_CARTA / 2 });
+  }, [aguardar, irPara, mostrarBilhete]);
+
+  // ── 2. O clique no presente: pergunta antes ──
+  const perguntar = useCallback(() => {
+    if (faseAtual.current !== 'espera') return;
+    setDica(false);
+    baixarVideo();
+    irPara('confirma');
+  }, [baixarVideo, irPara]);
+  useEffect(() => { if (fase === 'confirma') botaoTenho.current?.focus({ preventScroll: true }); }, [fase]);
+
+  const naoAgora = useCallback(() => {
+    if (faseAtual.current === 'confirma') irPara('espera');
+  }, [irPara]);
+
+  // ── 3 a 5: o tema claro, o presente abrindo, a luz e o vídeo ──
   const abrir = useCallback(async () => {
-    if (fase !== 'presente') return;
+    if (faseAtual.current !== 'confirma') return;
+    soltarLeve.current ??= pausarModoLeve();
+    const r = presente.current?.getBoundingClientRect();
+    if (r) setOrigem({ x: r.left + r.width / 2, y: r.top + r.height * 0.45 });
     // O vídeo é o sistema no tema claro com o menu claro: quem está em outro, troca (com aviso).
     if (resolvedTheme !== 'light' || menuEscuroLigado()) {
       const botao = document.querySelector<HTMLElement>('[data-tema-botao]')?.getBoundingClientRect();
       setAvisoTema(botao ? { x: botao.left + botao.width / 2, y: botao.bottom + 10 } : { x: window.innerWidth - 220, y: 64 });
-      setFase('tema');
-      await espera(500);
+      irPara('tema');
+      if (!(await aguardar(500))) return;
       setTheme('light');
       aplicarMenuEscuro(false);
-      await espera(1900);
+      if (!(await aguardar(1900))) return;
       setAvisoTema(null);
     }
-    setFase('luz');
+    irPara('abrindo');
+    if (!(await aguardar(1250))) return;
+    irPara('luz');
+    preparar();
     const v = video.current;
     // O clique liberou o som; o vídeo começa quando a luz já tomou a tela.
-    await espera(650);
+    if (!(await aguardar(700))) return;
     if (v) {
       v.currentTime = 0;
-      try { await v.play(); } catch { v.muted = true; await v.play().catch((): void => undefined); }
+      v.muted = false;
+      setVideoMudo(false);
+      setVideoPausado(false);
+      try { await v.play(); } catch { v.muted = true; setVideoMudo(true); await v.play().catch((): void => undefined); }
     }
-    setFase('video');
-  }, [fase, resolvedTheme, setTheme]);
+    // (Lido de novo depois das esperas: o vídeo pode ter sido fechado ou pulado no meio.)
+    if (vivo.current && (faseAtual.current as Fase) === 'luz') irPara('video');
+  }, [aguardar, irPara, preparar, resolvedTheme, setTheme]);
 
-  // O fim do vídeo: a música começa, ele encolhe até o presente, o presente
-  // fecha e estoura na nevasca, que traz o tema.
-  const aoAcabar = useCallback(async () => {
-    tocarAbertura();
-    const p = medirPresente();
-    if (p) {
-      setDestino({ x: p.x - window.innerWidth / 2, y: p.y - window.innerHeight / 2, escala: (p.largura * 0.82) / window.innerWidth });
-      setOrigem({ x: p.x, y: p.y });
-    }
-    setFase('volta');
-    await espera(1150);
-    setFase('fecha');
-    await espera(700);
-    aoTemaEntrar();
-    setFase('nevasca');
-    await espera(900);
-    botaoEntrar.current?.focus({ preventScroll: true });
-  }, [medirPresente, aoTemaEntrar]);
+  // ── 5. Os botões do vídeo ──
+  const alternarPausa = useCallback(() => {
+    const v = video.current;
+    if (!v) return;
+    if (v.paused) { void v.play().catch((): void => undefined); setVideoPausado(false); }
+    else { v.pause(); setVideoPausado(true); }
+  }, []);
+  const alternarSom = useCallback(() => {
+    const v = video.current;
+    if (!v) return;
+    v.muted = !v.muted;
+    setVideoMudo(v.muted);
+  }, []);
+  /** Fechar o vídeo: o presente volta a esperar (dá para ver depois), e o modo leve volta. */
+  const fecharVideo = useCallback(() => {
+    rodada.current += 1;
+    const v = video.current;
+    if (v) { v.pause(); v.currentTime = 0; }
+    setEncolhe(null);
+    setVideoPausado(false);
+    soltarModoLeve();
+    irPara('espera');
+  }, [irPara, soltarModoLeve]);
 
-  // O cartão sai primeiro; a rádio só entra com ele fora da tela.
+  // ── 8. A nevasca leva o embaçado e a neve assenta ──
   const entrar = useCallback(async () => {
-    setFase('saindo');
-    await espera(450);
-    passarParaRadio();
-    await espera(500);
+    if (faseAtual.current !== 'bilhete') return;
+    ligarTema();
+    setOrigem(pontoDoCartao());
+    irPara('nevasca');
+    if (!(await aguardar(NEVASCA_MS))) return;
+    irPara('assenta');
+    if (!(await aguardar(1100))) return;
+    agendarAvisoDaMusica(AVISO_DA_MUSICA_MS);
+    soltarModoLeve();
     aoTerminar();
-  }, [aoTerminar]);
+  }, [aguardar, aoTerminar, irPara, ligarTema, soltarModoLeve]);
 
-  // Do vídeo ao cartão, a página não rola (a abertura está «no lugar» dela).
+  // Os botões de teste da prévia: pular para o fim do vídeo ou direto para o bilhete.
   useEffect(() => {
-    if (fase === 'presente' || fase === 'tema') return;
+    const pular = (e: Event) => {
+      const pulo = (e as CustomEvent<PuloDaAbertura>).detail;
+      const v = video.current;
+      if (pulo === 'fim-do-video') {
+        if (faseAtual.current === 'video' && v?.duration) v.currentTime = Math.max(0, v.duration - 3);
+        else if (faseAtual.current === 'espera' || faseAtual.current === 'confirma') void aoAcabar();
+      } else if (pulo === 'bilhete' && ['espera', 'confirma', 'video', 'carta'].includes(faseAtual.current)) {
+        soltarLeve.current ??= pausarModoLeve();
+        rodada.current += 1;
+        v?.pause();
+        setCarta(null);
+        const p = pontoDaCarta();
+        void mostrarBilhete({ x: p.x, y: p.y - SUBIDA_DA_CARTA / 2 });
+      }
+    };
+    window.addEventListener(EVENTO_ABERTURA, pular);
+    return () => window.removeEventListener(EVENTO_ABERTURA, pular);
+  }, [aoAcabar, mostrarBilhete]);
+
+  // Do presente abrindo ao fim, a página não rola (a abertura está «no lugar» dela).
+  useEffect(() => {
+    if (fase === 'espera' || fase === 'confirma' || fase === 'tema') return;
     const antes = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = antes; };
   }, [fase]);
+
+  // Na pergunta, Esc é «Não tenho agora».
+  useEffect(() => {
+    if (fase !== 'confirma') return;
+    const tecla = (e: KeyboardEvent) => { if (e.key === 'Escape') naoAgora(); };
+    window.addEventListener('keydown', tecla);
+    return () => window.removeEventListener('keydown', tecla);
+  }, [fase, naoAgora]);
 
   /*
    * O vídeo vai inteiro na tela (sem cortar a borda), e a sobra dos lados ou de
@@ -141,7 +347,7 @@ export function AberturaNatal({ aoTemaEntrar, aoTerminar }: { aoTemaEntrar: () =
    * nada pesa.
    */
   useEffect(() => {
-    if (fase !== 'video' && fase !== 'volta') return;
+    if (fase !== 'video') return;
     const v = video.current;
     const tela = document.createElement('canvas');
     tela.width = 16; tela.height = 16;
@@ -174,34 +380,58 @@ export function AberturaNatal({ aoTemaEntrar, aoTerminar }: { aoTemaEntrar: () =
     return () => window.clearInterval(id);
   }, [fase]);
 
-  const tampaAberta = fase === 'luz' || fase === 'video' || fase === 'volta';
+  if (oculto && fase === 'espera') return null;
 
   const faseDaNevasca = NEVASCA[fase];
+  const presenteNaTela = fase === 'espera' || fase === 'confirma' || fase === 'tema' || fase === 'abrindo' || fase === 'luz';
 
   return createPortal(
-    <div className={`np-abertura np-fase-${fase}`} style={{ ['--np-ox' as string]: `${origem.x}px`, ['--np-oy' as string]: `${origem.y}px` }}>
+    <div
+      className={`np-abertura np-fase-${fase}`}
+      // A abertura anima mesmo no modo leve (ver `index.css`): na espera a pausa ainda não começou.
+      data-anima-sempre=""
+      style={{ ['--np-ox' as string]: `${origem.x}px`, ['--np-oy' as string]: `${origem.y}px` }}
+    >
       {faseDaNevasca && <Nevasca fase={faseDaNevasca} origem={origem} />}
 
-      {(
-        <button
-          ref={presente}
-          type="button"
-          className={`np-presente${tampaAberta ? ' np-presente-aberto' : ''}`}
-          onClick={() => void abrir()}
-          aria-label="Abrir o presente"
-          disabled={fase !== 'presente'}
-        >
-          <span className="np-brilho" aria-hidden />
-          <span className="np-caixa" style={estiloDoPapel(15)}>
-            <span className="np-fita-v" style={estiloDaFita(true)} />
-            <span className="np-fita-h" style={estiloDaFita(false)} />
-          </span>
-          <span className="np-tampa" style={estiloDoPapel(15)}>
-            <span className="np-fita-v" style={estiloDaFita(true)} />
-            <Laco largura={92} className="np-laco" />
-          </span>
-          {fase === 'presente' && <span className="np-dica">Clique para abrir</span>}
-        </button>
+      {/* 1–4: o presente em cima do chat */}
+      {presenteNaTela && (
+        <div className="np-espera">
+          {dica && fase === 'espera' && (
+            <div className="np-espera-dica" role="status">
+              <button type="button" className="np-espera-dica-fechar" onClick={() => setDica(false)} aria-label="Fechar o aviso do presente">
+                <X className="h-3.5 w-3.5" />
+              </button>
+              <b>🎁 Um presente para você!</b>
+              <span>Veja esta mensagem de 2 minutos para desbloquear o tema de Natal.</span>
+            </div>
+          )}
+          {fase === 'confirma' && (
+            <div className="np-confirma" role="dialog" aria-modal="false" aria-labelledby="np-confirma-titulo">
+              <b id="np-confirma-titulo">Tem 2 minutinhos livres? ⏱️</b>
+              <span>
+                Este presente é um vídeo de 2 minutos, com som, que desbloqueia o tema de Natal.
+                Abra quando tiver um tempinho — ele fica aqui esperando por você.
+              </span>
+              <div className="np-confirma-botoes">
+                <button type="button" onClick={naoAgora}>Não tenho agora</button>
+                <button ref={botaoTenho} type="button" className="principal" onClick={() => void abrir()}>Tenho agora</button>
+              </div>
+            </div>
+          )}
+          <button
+            ref={presente}
+            type="button"
+            className="np-espera-presente"
+            onClick={perguntar}
+            aria-label="Abrir o presente de Natal (uma mensagem de 2 minutos que desbloqueia o tema de Natal)"
+            disabled={fase !== 'espera'}
+          >
+            <span className="np-espera-halo" aria-hidden />
+            <span className="np-espera-raios" aria-hidden />
+            <PresenteDetalhado aberto={fase === 'abrindo' || fase === 'luz'} />
+          </button>
+        </div>
       )}
 
       {avisoTema && (
@@ -212,25 +442,43 @@ export function AberturaNatal({ aoTemaEntrar, aoTerminar }: { aoTemaEntrar: () =
         </div>
       )}
 
-      {/* A luz do presente tomando a tela (a mesma do primeiro quadro do vídeo). */}
+      {/* A luz de dentro do presente tomando a tela (a mesma do primeiro quadro do vídeo). */}
       <div className="np-luz" style={{ background: LUZ }} aria-hidden />
 
-      {/* O vídeo: sempre montado, baixando desde que o presente apareceu. */}
+      {/* O vídeo: só baixa depois do clique no presente (`baixarVideo`). */}
       <video
         ref={video}
         className="np-video"
         src={VIDEO_ABERTURA}
-        preload="auto"
+        preload="none"
         playsInline
         disablePictureInPicture
         controlsList="nodownload nofullscreen noremoteplayback"
         onEnded={() => void aoAcabar()}
-        style={destino ? { ['--np-x' as string]: `${destino.x}px`, ['--np-y' as string]: `${destino.y}px`, ['--np-escala' as string]: destino.escala } : undefined}
+        style={encolhe ? { ['--np-escala' as string]: encolhe } : undefined}
         aria-hidden
       />
+      {fase === 'video' && (
+        <div className="np-video-controles">
+          <button type="button" onClick={alternarPausa} aria-label={videoPausado ? 'Continuar o vídeo' : 'Pausar o vídeo'} title={videoPausado ? 'Continuar' : 'Pausar'}>
+            {videoPausado ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
+          </button>
+          <button type="button" onClick={alternarSom} aria-label={videoMudo ? 'Ligar o som do vídeo' : 'Tirar o som do vídeo'} title={videoMudo ? 'Ligar o som' : 'Tirar o som'}>
+            {videoMudo ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+          </button>
+          <button type="button" onClick={fecharVideo} aria-label="Fechar o vídeo (o presente continua esperando)" title="Fechar (dá para ver depois)">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
-      {(fase === 'nevasca' || fase === 'saindo') && (
-        <Cartao ref={botaoEntrar} aoEntrar={() => void entrar()} saindo={fase === 'saindo'} />
+      {/* 6: a carta do Polo Norte, e a purpurina do lacre */}
+      {carta && (fase === 'carta' || fase === 'bilhete') && <Carta etapa={carta.etapa} x={carta.ponto.x} y={carta.ponto.y} />}
+      {purpurina && fase === 'carta' && <Confete origem={purpurina} cores={PURPURINA} quantidade={110} forca={0.5} />}
+      {fase === 'bilhete' && <div className="np-clarao" aria-hidden />}
+
+      {(fase === 'bilhete' || fase === 'nevasca') && (
+        <Cartao ref={botaoEntrar} aoEntrar={() => void entrar()} saindo={fase === 'nevasca'} falta={falta} />
       )}
     </div>,
     document.body,

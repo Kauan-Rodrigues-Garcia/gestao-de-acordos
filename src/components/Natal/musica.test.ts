@@ -45,10 +45,12 @@ describe('a rádio do Natal', () => {
     expect(oQueSoa(em(PERIODO + SOBREPOSICAO + 0.01))).toHaveLength(1);
   });
 
-  it('volume: zero é mudo, cem é cheio, e o meio é mais baixo que a metade', () => {
+  it('volume: a barra vai de mudo a 25% do volume, nunca acima', () => {
+    // A barra inteira é de 0 a 25% do volume: não fica alto para ninguém.
     expect(volumeDoElemento(0)).toBe(0);
-    expect(volumeDoElemento(100)).toBe(1);
-    expect(volumeDoElemento(50)).toBeLessThan(0.5);
-    expect(volumeDoElemento(150)).toBe(1);
+    expect(volumeDoElemento(100)).toBe(0.25);
+    expect(volumeDoElemento(50)).toBe(0.125);
+    expect(volumeDoElemento(150)).toBe(0.25);
+    expect(volumeDoElemento(-10)).toBe(0);
   });
 });

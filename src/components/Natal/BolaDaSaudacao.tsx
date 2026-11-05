@@ -8,12 +8,18 @@
  * porque é a luz da sala, não a bola. O clique dá um giro forte, que vai
  * perdendo força, e um empurrão no balanço.
  *
- * O fio sobe até o varal: a bola mede onde o fio do varal passa em cima dela
+ * Com o trenzinho na tela, o fio sai do trilho da estação, logo acima (desde
+ * 04/11/2026: a estação entrou entre o varal e a saudação, e o fio ficava
+ * comprido demais). Sem ele, o fio sobe até o varal: a bola mede onde o fio do varal passa em cima dela
  * (`varal.ts`, a mesma curva que o desenha) e estica a linha até lá. As bolas
  * de enfeite do varal que caírem em cima dela ficam escondidas enquanto ela
  * está na tela, para não penduradas duas no mesmo lugar.
+ *
+ * Puxar a bola estica o fio até ele arrebentar: aí ela sai na mão, quica e dá
+ * para brincar com ela por uns segundos (`BolaSolta`, mais abaixo).
  */
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
 import { VAO, naCurva } from './varal';
 import './saudacao.css';
@@ -183,6 +189,318 @@ function desenhar(cx: CanvasRenderingContext2D, giro: number) {
   cx.beginPath(); cx.arc(CX, ARGOLA_Y, 2.6, 0, Math.PI * 2); cx.stroke();
 }
 
+// ── A brincadeira: puxar a bola arrebenta o fio ──────────────────────────────
+
+/*
+ * Pedido do Cleber, 05/11/2026 (antes eram cinco cliques): segurar a bola e
+ * puxar estica o fio — ele vira para o lado do puxão e estica com resistência,
+ * e a bola treme perto do limite. Passou de `ARREBENTA_PX`, o fio arrebenta e
+ * a bola sai na mão, já sendo arrastada. Soltou antes, ela volta como mola.
+ * Um clique (sem puxar) só dá o giro de sempre.
+ *
+ * Solta, ela tem o MESMO tamanho da pendurada e peso (05/11/2026: estava
+ * maior e leve demais, batendo forte nas bordas; no mesmo dia, um tico mais
+ * leve e quicando um pouco mais): arrastada, vem atrás do
+ * mouse com um atraso de mola e cede um pouco à gravidade; o arremesso tem
+ * teto, o ar freia, e a batida perde mais força quanto mais forte for — com
+ * uma amassadinha na hora. Quica nas bordas da área do conteúdo; um clique
+ * nela chuta para cima.
+ *
+ * Depois de `DURACAO_JOGO_S` (30 s, sem aviso nem relógio na tela — Cleber,
+ * 05/11/2026) ela congela onde estiver e volta voando para o fio, já
+ * encaixando no caminho. Depois, por `PAUSA_MS` (5 min, sem relógio na tela:
+ * é surpresa), o fio não arrebenta: a bola volta e ganha uma zoeira.
+ */
+const DURACAO_JOGO_S = 30;
+/** Quanto o puxão estica o fio (antes da resistência) até ele arrebentar. */
+const ARREBENTA_PX = 70;
+/** O fio estica menos do que o puxão: a resistência. */
+const ELASTICO = 0.45;
+/** O fio vira até esse tanto (rad) para o lado do puxão. */
+const ANGULO_MAX = 1.3;
+/** Menos que isso de movimento é um clique, não um puxão. */
+const CLIQUE_PX = 6;
+const R_SOLTA = RAIO;
+const GRAVIDADE = 2050;
+/** O ar freia (fração da velocidade que sobra a cada segundo). */
+const AR = 0.7;
+/** Nenhum movimento passa disso (px/s): nada de bala de canhão. */
+const VELOCIDADE_MAX = 1600;
+/** A mola que puxa a bola arrastada até o mouse (rigidez e amortecimento). */
+const MOLA_DO_ARRASTO = 240;
+const FREIO_DO_ARRASTO = 25;
+/** Rolando no chão: fração da velocidade que sobra a cada segundo. */
+const ROLAGEM = 0.35;
+/** Depois de brincar, a bola descansa esse tanto (sem relógio: só as zoeiras dão a dica). */
+const PAUSA_MS = 5 * 60_000;
+const CHAVE_BRINCOU = 'natal:bola:brincou-em';
+const ZOEIRAS = [
+  'Você não pode ficar brincando, ao trabalho! 😄',
+  'Ei! O chefe tá olhando… disfarça! 👀',
+  'Acabou o recreio! 🔔',
+  'Primeiro bate a meta, depois brinca! 📈',
+  'A bola foi tomar um chocolate quente. ☕',
+  'Shhh… a bola tá cochilando. 😴',
+  'O Papai Noel tá vendo quem tá trabalhando… 🎅',
+  'Hmm… talvez você devesse voltar daqui uns 5 minutos. 🎄',
+  'A bola tá descansando. Tenta de novo daqui a pouquinho! 😉',
+  'Tem acordo te esperando, hein! 💼',
+  'Essa bola não é de futebol, viu? ⚽❌',
+  'Bola cansada. Volta mais tarde! 💤',
+] as const;
+
+const brincouHaPouco = () => {
+  try { return Date.now() - Number(localStorage.getItem(CHAVE_BRINCOU) ?? 0) < PAUSA_MS; } catch { return false; }
+};
+const marcarBrincou = () => { try { localStorage.setItem(CHAVE_BRINCOU, String(Date.now())); } catch { /* modo privado */ } };
+
+/** Quanto da velocidade volta numa batida: menos quanto mais forte ela for. */
+const quique = (v: number) => Math.min(0.68, Math.max(0.36, 0.68 - Math.abs(v) / 5500));
+const limitar = (v: number) => Math.max(-VELOCIDADE_MAX, Math.min(VELOCIDADE_MAX, v));
+
+/** As paredes: a área do conteúdo (o `<main>`), ou a janela. */
+function paredes() {
+  const r = document.querySelector('main')?.getBoundingClientRect();
+  return r ? { esq: r.left, dir: r.right, cima: r.top, baixo: r.bottom } : { esq: 0, dir: window.innerWidth, cima: 0, baixo: window.innerHeight };
+}
+
+type FaseDaBola = 'solta' | 'congelando' | 'voltando';
+type Ponto = { x: number; y: number };
+/** Onde o mouse pegou a bola (em relação ao centro dela) e onde ele está. */
+type Pegada = { dx: number; dy: number; px: number; py: number };
+
+/**
+ * A bola solta, por cima de tudo (portal no `body`). Física num
+ * `requestAnimationFrame` só, escrevendo o `transform` direto no elemento.
+ */
+function BolaSolta({ de, pega, casa, aoChegando, aoTerminar }: {
+  de: Ponto;
+  /** O fio arrebentou com o mouse segurando: ela já sai arrastada. */
+  pega: Pegada | null;
+  /** Onde está AGORA o centro da bola pendurada (ela balança: a volta mira nela a cada quadro). */
+  casa: () => Ponto;
+  /** Quase chegando: o fio começa a crescer de novo. */
+  aoChegando: () => void;
+  /** Encaixou; `giro` é onde o desenho parou, para a pendurada continuar dali sem pulo. */
+  aoTerminar: (giro: number) => void;
+}) {
+  const embrulho = useRef<HTMLDivElement>(null);
+  const tela = useRef<HTMLCanvasElement>(null);
+  const [fase, setFase] = useState<FaseDaBola>('solta');
+  const faseAtual = useRef<FaseDaBola>('solta');
+  // O estado da física, fora do React. `amassa`: o quanto ela está amassada, e em que eixo.
+  const corpo = useRef({ x: de.x, y: de.y, vx: 0, vy: 0, rot: 0, giro: 0.4, amassa: 0, deitada: true });
+  const arrasto = useRef<(Pegada & { andou: number; x0: number; y0: number }) | null>(
+    pega ? { ...pega, andou: CLIQUE_PX, x0: pega.px, y0: pega.py } : null,
+  );
+
+  const posicionar = useCallback(() => {
+    const c = corpo.current;
+    const e = embrulho.current;
+    if (!e) return;
+    // Amassada no eixo da batida: chão e teto achatam, paredes afinam.
+    const a = c.amassa, sx = c.deitada ? 1 + a : 1 - a, sy = c.deitada ? 1 - a : 1 + a;
+    e.style.transform = `translate(${(c.x - CX).toFixed(1)}px, ${(c.y - CY).toFixed(1)}px) scale(${sx.toFixed(3)}, ${sy.toFixed(3)})`;
+    if (tela.current) tela.current.style.transform = `rotate(${c.rot.toFixed(3)}rad)`;
+  }, []);
+
+  useEffect(() => {
+    const cv = tela.current;
+    const cx = cv?.getContext('2d');
+    if (!cv || !cx) return;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    cv.width = LARGURA * dpr;
+    cv.height = ALTURA * dpr;
+    cx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    let antes = performance.now(), quadro = 0, vivo = true;
+    const inicio = antes;
+    // As paredes: medidas agora e quando a janela muda (ler o layout a cada quadro pesa).
+    let p = paredes();
+    const remedir = () => { p = paredes(); };
+    window.addEventListener('resize', remedir);
+    const bateu = (v: number, deitada: boolean) => {
+      const c = corpo.current;
+      if (Math.abs(v) < 220) return;
+      c.amassa = Math.min(0.24, Math.abs(v) / 5000);
+      c.deitada = deitada;
+    };
+    const passo = (agora: number) => {
+      if (!vivo) return;
+      const dt = Math.min(0.033, (agora - antes) / 1000);
+      antes = agora;
+      const c = corpo.current;
+      const a = arrasto.current;
+      if (a) {
+        // Arrastada: uma mola puxa até o mouse, e o peso ainda puxa para baixo.
+        c.vx += ((a.px - a.dx - c.x) * MOLA_DO_ARRASTO - c.vx * FREIO_DO_ARRASTO) * dt;
+        c.vy += ((a.py - a.dy - c.y) * MOLA_DO_ARRASTO - c.vy * FREIO_DO_ARRASTO + GRAVIDADE) * dt;
+      } else {
+        c.vy += GRAVIDADE * dt;
+        const ar = Math.pow(AR, dt);
+        c.vx *= ar;
+        c.vy *= ar;
+      }
+      c.vx = limitar(c.vx);
+      c.vy = limitar(c.vy);
+      c.x += c.vx * dt;
+      c.y += c.vy * dt;
+      if (c.x - R_SOLTA < p.esq) { c.x = p.esq + R_SOLTA; bateu(c.vx, false); c.vx = Math.abs(c.vx) * quique(c.vx); }
+      if (c.x + R_SOLTA > p.dir) { c.x = p.dir - R_SOLTA; bateu(c.vx, false); c.vx = -Math.abs(c.vx) * quique(c.vx); }
+      if (c.y - R_SOLTA < p.cima) { c.y = p.cima + R_SOLTA; bateu(c.vy, true); c.vy = Math.abs(c.vy) * quique(c.vy); }
+      if (c.y + R_SOLTA > p.baixo) {
+        c.y = p.baixo - R_SOLTA;
+        bateu(c.vy, true);
+        c.vy = Math.abs(c.vy) < 110 ? 0 : -Math.abs(c.vy) * quique(c.vy);
+        // No chão, rola e vai parando.
+        c.vx *= Math.pow(ROLAGEM, dt);
+      }
+      // Rolando: gira com a velocidade de lado.
+      c.rot += (c.vx / R_SOLTA) * dt * 0.6;
+      c.amassa *= Math.exp(-16 * dt);
+      c.giro += (GIRO_BASE + Math.min(14, Math.hypot(c.vx, c.vy) / 90)) * dt;
+      desenhar(cx, c.giro);
+      posicionar();
+      const passou = (agora - inicio) / 1000;
+      if (passou >= DURACAO_JOGO_S) {
+        arrasto.current = null;
+        c.amassa = 0;
+        posicionar();
+        faseAtual.current = 'congelando';
+        setFase('congelando');
+        return;
+      }
+      quadro = requestAnimationFrame(passo);
+    };
+    quadro = requestAnimationFrame(passo);
+    return () => { vivo = false; cancelAnimationFrame(quadro); window.removeEventListener('resize', remedir); };
+  }, [posicionar]);
+
+  // O mouse, pela janela: o arrasto que começou no fio (antes desta bola existir) também passa por aqui.
+  useEffect(() => {
+    const mover = (ev: PointerEvent) => {
+      const a = arrasto.current;
+      if (!a) return;
+      a.px = ev.clientX; a.py = ev.clientY;
+      a.andou = Math.max(a.andou, Math.hypot(ev.clientX - a.x0, ev.clientY - a.y0));
+    };
+    const soltar = () => {
+      const a = arrasto.current;
+      arrasto.current = null;
+      if (!a || faseAtual.current !== 'solta') return;
+      const c = corpo.current;
+      if (a.andou < CLIQUE_PX) {
+        // Um clique: chute para cima, para um lado sorteado.
+        c.vy = -780 - Math.random() * 220;
+        c.vx += (Math.random() - 0.5) * 900;
+      }
+      // Arremesso: sai com a velocidade que ela já tinha na mola (já com teto).
+    };
+    window.addEventListener('pointermove', mover);
+    window.addEventListener('pointerup', soltar);
+    window.addEventListener('pointercancel', soltar);
+    return () => {
+      window.removeEventListener('pointermove', mover);
+      window.removeEventListener('pointerup', soltar);
+      window.removeEventListener('pointercancel', soltar);
+    };
+  }, []);
+
+  // Congelou: treme um pouco, fica branquinha de gelo e volta voando para o fio.
+  useEffect(() => {
+    if (fase !== 'congelando') return;
+    const id = window.setTimeout(() => { faseAtual.current = 'voltando'; setFase('voltando'); }, 1400);
+    return () => window.clearTimeout(id);
+  }, [fase]);
+  /*
+   * A volta: num quadro por vez, mirando na bola pendurada de agora (ela
+   * balança no fio), num arco por cima. No caminho ela já vai encaixando —
+   * endireita o giro do corpo e o enfeite vai desacelerando até o giro de
+   * repouso. Quando chega, está exatamente onde a pendurada está, e a troca
+   * não dá pulo.
+   */
+  useEffect(() => {
+    if (fase !== 'voltando') return;
+    const e = embrulho.current, cv = tela.current;
+    const cx = cv?.getContext('2d');
+    if (!e || !cv || !cx) return;
+    const c = corpo.current;
+    const x0 = c.x, y0 = c.y, rot0 = c.rot;
+    // Gira pelo menos uma volta e para em pé (múltiplo de uma volta).
+    const rotFim = Math.ceil(rot0 / (Math.PI * 2)) * Math.PI * 2 + Math.PI * 2;
+    const DURACAO = 1300;
+    const inicio = performance.now();
+    let antes = inicio, quadro = 0, avisou = false, vivo = true;
+    const suave = (k: number) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
+    const passo = (agora: number) => {
+      if (!vivo) return;
+      const dt = Math.min(0.05, (agora - antes) / 1000);
+      antes = agora;
+      const k = Math.min(1, (agora - inicio) / DURACAO);
+      const u = suave(k);
+      const alvo = casa();
+      const mx = (x0 + alvo.x) / 2, my = Math.min(y0, alvo.y) - 140;
+      const x = (1 - u) * (1 - u) * x0 + 2 * (1 - u) * u * mx + u * u * alvo.x;
+      const y = (1 - u) * (1 - u) * y0 + 2 * (1 - u) * u * my + u * u * alvo.y;
+      c.rot = rot0 + (rotFim - rot0) * u;
+      c.giro += (GIRO_BASE + 9 * (1 - k) * (1 - k)) * dt;
+      desenhar(cx, c.giro);
+      e.style.transform = `translate(${(x - CX).toFixed(1)}px, ${(y - CY).toFixed(1)}px)`;
+      cv.style.transform = `rotate(${c.rot.toFixed(3)}rad)`;
+      if (k > 0.72 && !avisou) { avisou = true; aoChegando(); }
+      if (k < 1) quadro = requestAnimationFrame(passo);
+      else aoTerminar(c.giro);
+    };
+    quadro = requestAnimationFrame(passo);
+    return () => { vivo = false; cancelAnimationFrame(quadro); };
+  }, [fase, casa, aoChegando, aoTerminar]);
+
+  // Pegar a bola: o resto (mover e soltar) é pela janela, acima.
+  const aoApertar = (ev: React.PointerEvent) => {
+    if (fase !== 'solta') return;
+    ev.preventDefault();
+    const c = corpo.current;
+    arrasto.current = { dx: ev.clientX - c.x, dy: ev.clientY - c.y, px: ev.clientX, py: ev.clientY, andou: 0, x0: ev.clientX, y0: ev.clientY };
+  };
+
+  return createPortal(
+    <div
+      ref={embrulho}
+      className={cn('nt-bola-solta', fase !== 'solta' && 'nt-bola-' + fase)}
+      style={{ width: LARGURA, height: ALTURA, transformOrigin: `${CX}px ${CY}px`, transform: `translate(${de.x - CX}px, ${de.y - CY}px)` }}
+      onPointerDown={aoApertar}
+    >
+      <canvas ref={tela} style={{ width: LARGURA, height: ALTURA, transformOrigin: `${CX}px ${CY}px` }} />
+      {fase !== 'solta' && (
+        <svg className="nt-bola-gelo" viewBox="-30 -30 60 60" width={R_SOLTA * 2.6} height={R_SOLTA * 2.6}
+          style={{ left: CX - R_SOLTA * 1.3, top: CY - R_SOLTA * 1.3 }} aria-hidden="true">
+          {[0, 60, 120].map(a => (
+            <g key={a} transform={`rotate(${a})`} stroke="#E6F6FF" strokeWidth={1.6} strokeLinecap="round">
+              <line x1={0} y1={-27} x2={0} y2={27} />
+              <path d="M-4 -21 L0 -16 L4 -21 M-4 21 L0 16 L4 21" fill="none" />
+            </g>
+          ))}
+        </svg>
+      )}
+    </div>,
+    document.body,
+  );
+}
+
+/** O puxão na bola pendurada, do aperto ao soltar. */
+interface Puxao {
+  /** De onde o mouse saiu. */
+  x0: number; y0: number;
+  /** O laço (de onde o fio sai) e o centro da bola em repouso, na tela. */
+  laco: Ponto; centro: Ponto;
+  /** O comprimento do fio, do laço ao centro da bola, em repouso. */
+  comprimento: number;
+  andou: number;
+  /** O ângulo e o quanto o fio está esticado agora (o que está na tela). */
+  angulo: number; estica: number;
+  /** Já acabou (a bola descansando voltou com zoeira): o resto do arrasto não conta. */
+  acabou: boolean;
+}
+
 export function BolaDaSaudacao() {
   const caixa = useRef<HTMLSpanElement>(null);
   const tela = useRef<HTMLCanvasElement>(null);
@@ -190,7 +508,42 @@ export function BolaDaSaudacao() {
   const [fio, setFio] = useState(0);
   const empurrao = useRef<HTMLSpanElement>(null);
   const velocidade = useRef(GIRO_BASE);
+  /** Onde está o giro do desenho (a bola solta devolve o dela ao encaixar). */
+  const giroPendurada = useRef(0.4);
   const [parada] = useState(movimentoReduzido);
+  /** Solta (a brincadeira), com o centro de onde ela saiu e o mouse que a segura; `null` = pendurada. */
+  const [solta, setSolta] = useState<{ de: Ponto; pega: Pegada | null } | null>(null);
+  /** Voltou para o fio: o fio cresce de novo (a chave remonta a animação). */
+  const [religou, setReligou] = useState(0);
+  const [zoeira, setZoeira] = useState<{ texto: string; x: number; y: number; id: number } | null>(null);
+  const zoeiraVez = useRef(-1);
+  const puxao = useRef<Puxao | null>(null);
+  const quadroDaMola = useRef(0);
+
+  useEffect(() => {
+    if (!zoeira) return;
+    const id = window.setTimeout(() => setZoeira(null), 3600);
+    return () => window.clearTimeout(id);
+  }, [zoeira]);
+  useEffect(() => () => cancelAnimationFrame(quadroDaMola.current), []);
+
+  /**
+   * O centro da bola pendurada, na tela, com o balanço do fio (pelo canvas dela:
+   * o meio dele, mais o desvio do centro da bola, que fica abaixo do meio).
+   */
+  const centroDaBola = useCallback(() => {
+    const r = tela.current?.getBoundingClientRect() ?? caixa.current?.getBoundingClientRect();
+    return r ? { x: r.left + r.width / 2, y: r.top + r.height / 2 + (CY - ALTURA / 2) } : { x: window.innerWidth / 2, y: 120 };
+  }, []);
+  /** Quase chegando: o fio cresce de novo. */
+  const [chegando, setChegando] = useState(false);
+  const aoChegando = useCallback(() => { setChegando(true); setReligou(v => v + 1); }, []);
+  const voltou = useCallback((giro: number) => {
+    giroPendurada.current = giro;
+    velocidade.current = GIRO_BASE;
+    setSolta(null);
+    setChegando(false);
+  }, []);
 
   // O giro.
   useEffect(() => {
@@ -201,17 +554,19 @@ export function BolaDaSaudacao() {
     cv.width = LARGURA * dpr;
     cv.height = ALTURA * dpr;
     cx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    let giro = 0.4, antes = performance.now(), quadro = 0, visivel = true;
+    let antes = performance.now(), quadro = 0, visivel = true;
     const passo = (agora: number) => {
+      // 30 quadros por segundo bastam para um enfeite girando (e pesam metade).
+      if (agora - antes < 31) { if (visivel && !parada) quadro = requestAnimationFrame(passo); return; }
       const dt = Math.min(0.1, (agora - antes) / 1000);
       antes = agora;
       const v = velocidade.current;
       velocidade.current = GIRO_BASE + (v - GIRO_BASE) * Math.exp(-FREIO * dt);
-      giro += velocidade.current * dt;
-      desenhar(cx, giro);
+      giroPendurada.current += velocidade.current * dt;
+      desenhar(cx, giroPendurada.current);
       if (visivel && !parada) quadro = requestAnimationFrame(passo);
     };
-    desenhar(cx, giro);
+    desenhar(cx, giroPendurada.current);
     // Fora da tela (rolou para baixo), para de desenhar.
     const obs = new IntersectionObserver(([e]) => {
       visivel = e.isIntersecting;
@@ -229,8 +584,16 @@ export function BolaDaSaudacao() {
     let escondidas: HTMLElement[] = [];
     const mostrar = () => { escondidas.forEach(b => { b.style.visibility = ''; }); escondidas = []; };
     const medir = () => {
-      const varal = document.querySelector<HTMLElement>('.nt-varal');
       mostrar();
+      // Com o trenzinho, a estação fica entre o varal e a saudação: o fio sai do trilho dela.
+      const faixa = document.querySelector<HTMLElement>('[data-faixa-trem="topo"]');
+      if (faixa) {
+        const f = faixa.getBoundingClientRect(), b = el.getBoundingClientRect();
+        const trilho = f.bottom - Number(faixa.dataset.trilho ?? 0) + 4;   // a borda de baixo do trilho
+        setFio(Math.max(0, Math.round(b.top + ARGOLA_Y - trilho)));
+        return true;
+      }
+      const varal = document.querySelector<HTMLElement>('.nt-varal');
       if (!varal) { setFio(0); return false; }
       const v = varal.getBoundingClientRect(), b = el.getBoundingClientRect();
       const meio = b.left + b.width / 2;
@@ -242,9 +605,10 @@ export function BolaDaSaudacao() {
       });
       return true;
     };
-    // O varal desce num pedaço à parte (lazy): tenta de novo até ele chegar.
+    // O varal e a estação descem em pedaços à parte (lazy): remede por uns segundos,
+    // até os dois chegarem (a estação, chegando depois do varal, muda o ponto do fio).
     let tentativas = 0;
-    const procurar = window.setInterval(() => { if (medir() || ++tentativas > 20) window.clearInterval(procurar); }, 250);
+    const procurar = window.setInterval(() => { medir(); if (++tentativas > 24) window.clearInterval(procurar); }, 250);
     medir();
     const obs = new ResizeObserver(() => { medir(); });
     obs.observe(el.closest('main') ?? document.body);
@@ -257,10 +621,37 @@ export function BolaDaSaudacao() {
     };
   }, []);
 
+  /** Vira o fio para o lado do puxão e estica (escrito direto no elemento: é a cada movimento do mouse). */
+  const mostrarPuxada = useCallback((angulo: number, estica: number) => {
+    const e = empurrao.current;
+    if (!e) return;
+    e.style.rotate = angulo ? `${(-angulo).toFixed(4)}rad` : '';
+    e.style.setProperty('--puxa', `${estica.toFixed(1)}px`);
+  }, []);
+
+  /** Soltou sem arrebentar: volta como mola, balançando, e o fio desestica. */
+  const voltarComoMola = useCallback((angulo: number, estica: number) => {
+    cancelAnimationFrame(quadroDaMola.current);
+    let a = angulo, va = 0, s = estica, vs = 0, antes = performance.now();
+    const passo = (agora: number) => {
+      const dt = Math.min(0.033, (agora - antes) / 1000);
+      antes = agora;
+      va += (-90 * a - 6 * va) * dt;
+      a += va * dt;
+      vs += (-500 * s - 32 * vs) * dt;
+      s += vs * dt;
+      if (Math.abs(a) < 0.002 && Math.abs(va) < 0.02 && Math.abs(s) < 0.3) { mostrarPuxada(0, 0); return; }
+      mostrarPuxada(a, Math.max(0, s));
+      quadroDaMola.current = requestAnimationFrame(passo);
+    };
+    quadroDaMola.current = requestAnimationFrame(passo);
+  }, [mostrarPuxada]);
+
   /*
    * Duas camadas que balançam do mesmo ponto (o laço no varal) e se somam: o
    * balanço de sempre (CSS) e, por cima, o empurrão do clique (uma animação
-   * avulsa, que pode recomeçar sem remontar o canvas).
+   * avulsa, que pode recomeçar sem remontar o canvas). O puxão usa a mesma
+   * camada do empurrão.
    */
   const empurrar = () => {
     velocidade.current = GIRO_CLIQUE;
@@ -269,6 +660,75 @@ export function BolaDaSaudacao() {
       [{ rotate: '0deg' }, { rotate: '14deg' }, { rotate: '-10deg' }, { rotate: '6deg' }, { rotate: '-3deg' }, { rotate: '1deg' }, { rotate: '0deg' }],
       { duration: 2600, easing: 'ease-out' },
     );
+  };
+
+  const zoar = () => {
+    const c = centroDaBola();
+    // Uma zoeira sorteada, sem repetir a última.
+    let i = Math.floor(Math.random() * ZOEIRAS.length);
+    if (i === zoeiraVez.current) i = (i + 1) % ZOEIRAS.length;
+    zoeiraVez.current = i;
+    setZoeira({ texto: ZOEIRAS[i], x: c.x, y: c.y, id: Date.now() });
+  };
+
+  const aoApertar = (ev: React.PointerEvent<HTMLCanvasElement>) => {
+    if (solta) return;
+    ev.preventDefault();
+    ev.currentTarget.setPointerCapture(ev.pointerId);
+    cancelAnimationFrame(quadroDaMola.current);
+    empurrao.current?.getAnimations().forEach(a => a.cancel());
+    mostrarPuxada(0, 0);
+    const centro = centroDaBola();
+    const laco = { x: centro.x, y: centro.y - (CY - ARGOLA_Y) - fio };
+    puxao.current = {
+      x0: ev.clientX, y0: ev.clientY, laco, centro, comprimento: centro.y - laco.y,
+      andou: 0, angulo: 0, estica: 0, acabou: false,
+    };
+  };
+
+  const aoMover = (ev: React.PointerEvent<HTMLCanvasElement>) => {
+    const p = puxao.current;
+    if (!p || p.acabou) return;
+    const dx = ev.clientX - p.x0, dy = ev.clientY - p.y0;
+    p.andou = Math.max(p.andou, Math.hypot(dx, dy));
+    if (parada || p.andou < CLIQUE_PX) return;
+    // Para onde o puxão leva a bola, visto do laço.
+    const alvo = { x: p.centro.x + dx - p.laco.x, y: p.centro.y + dy - p.laco.y };
+    const comprimento = Math.hypot(alvo.x, alvo.y);
+    const esticou = comprimento - p.comprimento;
+    if (esticou > ARREBENTA_PX) {
+      if (brincouHaPouco()) {
+        // Descansando: o fio aguenta, a bola volta e ganha uma zoeira.
+        p.acabou = true;
+        voltarComoMola(p.angulo, p.estica);
+        zoar();
+        return;
+      }
+      // Arrebentou: a bola sai na mão, de onde ela estava na tela.
+      marcarBrincou();
+      const raio = p.comprimento + p.estica;
+      const de = { x: p.laco.x + Math.sin(p.angulo) * raio, y: p.laco.y + Math.cos(p.angulo) * raio };
+      ev.currentTarget.releasePointerCapture(ev.pointerId);
+      puxao.current = null;
+      mostrarPuxada(0, 0);
+      setSolta({ de, pega: { dx: p.x0 - p.centro.x, dy: p.y0 - p.centro.y, px: ev.clientX, py: ev.clientY } });
+      return;
+    }
+    const angulo = Math.max(-ANGULO_MAX, Math.min(ANGULO_MAX, Math.atan2(alvo.x, alvo.y)));
+    const estica = Math.max(0, esticou) * ELASTICO;
+    // Perto de arrebentar, o fio treme.
+    const tensao = Math.max(0, esticou / ARREBENTA_PX - 0.7) / 0.3;
+    p.angulo = angulo;
+    p.estica = estica;
+    mostrarPuxada(angulo + (Math.random() - 0.5) * 0.05 * tensao, estica + (Math.random() - 0.5) * 2 * tensao);
+  };
+
+  const aoSoltar = () => {
+    const p = puxao.current;
+    puxao.current = null;
+    if (!p) return;
+    if (p.andou < CLIQUE_PX) { empurrar(); return; }
+    if (!p.acabou) voltarComoMola(p.angulo, p.estica);
   };
 
   return (
@@ -282,7 +742,7 @@ export function BolaDaSaudacao() {
         <span ref={empurrao} className="nt-saud-empurrao">
           {fio > 0 && (
             <>
-              <span className="nt-saud-fio" />
+              <span key={religou} className={cn('nt-saud-fio', solta && !chegando && 'arrebentado', religou > 0 && 'religando')} />
               <svg className="nt-saud-laco" viewBox="0 0 20 12" width="16" height="10">
                 <path d="M10 6 C6 0 0 1 1.5 6 C3 10 7 8 10 6 Z" />
                 <path d="M10 6 C14 0 20 1 18.5 6 C17 10 13 8 10 6 Z" />
@@ -290,9 +750,26 @@ export function BolaDaSaudacao() {
               </svg>
             </>
           )}
-          <canvas ref={tela} style={{ width: LARGURA, height: ALTURA }} onClick={empurrar} />
+          <canvas
+            ref={tela}
+            style={{ width: LARGURA, height: ALTURA, visibility: solta ? 'hidden' : undefined }}
+            onPointerDown={aoApertar}
+            onPointerMove={aoMover}
+            onPointerUp={aoSoltar}
+            onPointerCancel={aoSoltar}
+          />
         </span>
       </span>
+      {solta && <BolaSolta de={solta.de} pega={solta.pega} casa={centroDaBola} aoChegando={aoChegando} aoTerminar={voltou} />}
+      {zoeira && createPortal(
+        // Na frente da bola (centrado nela) e por cima de tudo.
+        <div key={zoeira.id} className="nt-bola-zoeira" style={{ left: zoeira.x, top: zoeira.y }} role="status">
+          <span className="nt-bola-zoeira-estrela" aria-hidden="true">✦</span>
+          <span className="nt-bola-zoeira-estrela outra" aria-hidden="true">✦</span>
+          {zoeira.texto}
+        </div>,
+        document.body,
+      )}
     </span>
   );
 }

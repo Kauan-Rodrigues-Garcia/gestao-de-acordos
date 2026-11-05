@@ -1,8 +1,10 @@
 /**
- * Cartao — as boas-vindas do Natal, que saem do presente depois do vídeo
- * (Cleber, 29/10/2026): papel creme, filete dourado, neve assentada na borda
- * de cima e um gorro de Papai Noel enfiado no canto. Cores próprias, iguais em
- * qualquer tema: é um objeto, como o presente.
+ * Cartao — as boas-vindas do Natal, que saem da carta do Polo Norte depois do
+ * vídeo (Cleber, 29/10/2026): papel creme, filete dourado, neve assentada na
+ * borda de cima com um varal de luzinhas, e um gorro de Papai Noel enfiado no
+ * canto. O texto é o do Cleber (05/11/2026): «Novembro chegou e já entramos em
+ * clima natalino. Tudo foi feito do zero e pensado com carinho…». Cores
+ * próprias, iguais em qualquer tema: é um objeto, como o presente.
  */
 import { forwardRef } from 'react';
 
@@ -142,7 +144,7 @@ function NeveDaBorda() {
   );
 }
 
-/** Um floco desenhado, para o divisor e a nota. */
+/** Um floco desenhado, para a assinatura. */
 function Floquinho({ tamanho = 14 }: { tamanho?: number }) {
   return (
     <svg viewBox="-10 -10 20 20" width={tamanho} height={tamanho} aria-hidden>
@@ -158,32 +160,98 @@ function Floquinho({ tamanho = 14 }: { tamanho?: number }) {
   );
 }
 
-export const Cartao = forwardRef<HTMLButtonElement, { aoEntrar: () => void; saindo: boolean }>(
-  function Cartao({ aoEntrar, saindo }, botao) {
+/** As cores das luzinhas do varal, na ordem em que se repetem. */
+const LUZES = ['#e0283a', '#f4c542', '#2f9e5b', '#3a8ee6', '#f07c2a'];
+/** O fio do varal: cai da neve da borda, com duas barrigas. */
+const fioDoVaral = (x: number) => 6 + 14 * Math.abs(Math.sin((Math.PI * x) / 150));
+
+/** O varal de luzinhas pendurado na neve da borda de cima (piscam uma depois da outra). */
+function Varal() {
+  const lampadas = Array.from({ length: 11 }, (_, i) => 10 + i * 28);
+  return (
+    <svg className="np-cartao-varal" viewBox="0 0 300 40" preserveAspectRatio="none" aria-hidden>
+      <path
+        d={`M0 ${fioDoVaral(0)} ${Array.from({ length: 61 }, (_, i) => `L${i * 5} ${fioDoVaral(i * 5).toFixed(1)}`).join(' ')}`}
+        fill="none" stroke="#3d5a40" strokeWidth="1.4"
+      />
+      {lampadas.map((x, i) => {
+        const y = fioDoVaral(x);
+        return (
+          <g key={x} transform={`translate(${x} ${y.toFixed(1)}) rotate(${(i % 2 ? 8 : -8)})`}>
+            <rect x="-2" y="0" width="4" height="4" rx="1" fill="#5b6b5c" />
+            <ellipse className="np-cartao-luz" cx="0" cy="9" rx="3.6" ry="5.4" fill={LUZES[i % LUZES.length]}
+              style={{ animationDelay: `${(i % 4) * 0.35}s`, color: LUZES[i % LUZES.length] }} />
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+/** Um raminho de azevinho, para o divisor. */
+function Azevinho() {
+  return (
+    <svg viewBox="-16 -10 32 20" width={32} height={20} aria-hidden>
+      <path d="M0 2 C-4 -5 -11 -8 -15 -6 C-13 -4 -14 -2 -11 -1 C-13 1 -11 3 -9 3 C-6 5 -3 4 0 2 Z" fill="#2f8a50" />
+      <path d="M0 2 C4 -5 11 -8 15 -6 C13 -4 14 -2 11 -1 C13 1 11 3 9 3 C6 5 3 4 0 2 Z" fill="#247a44" />
+      <path d="M0 2 C-5 -1 -9 -3 -13 -5 M0 2 C5 -1 9 -3 13 -5" fill="none" stroke="#145a2e" strokeWidth=".8" />
+      <circle cx="-2.6" cy="2.4" r="2.9" fill="#d62828" />
+      <circle cx="2.6" cy="2.4" r="2.9" fill="#c01f24" />
+      <circle cx="0" cy="-1.4" r="2.9" fill="#e23a3a" />
+      <circle cx="-3.4" cy="1.5" r=".8" fill="#fff" opacity=".7" />
+      <circle cx="-.8" cy="-2.3" r=".8" fill="#fff" opacity=".7" />
+    </svg>
+  );
+}
+
+/** Quantos segundos o bilhete segura o botão (Cleber, 04/11/2026: «uma contagenzinha de 5 segundos»). */
+export const CONTAGEM_DO_CARTAO_S = 5;
+
+export const Cartao = forwardRef<HTMLButtonElement, {
+  aoEntrar: () => void;
+  saindo: boolean;
+  /** Segundos que faltam para o botão liberar (0: liberado). */
+  falta: number;
+}>(
+  function Cartao({ aoEntrar, saindo, falta }, botao) {
     return (
       <div className="np-cartao" role="dialog" aria-modal="true" aria-labelledby="np-cartao-titulo">
         <Gorro className="np-gorro" />
         <NeveDaBorda />
-        <p className="np-cartao-olho">Feliz Natal</p>
-        <h2 id="np-cartao-titulo" className="np-cartao-titulo">O Natal chegou por aqui</h2>
+        <Varal />
+        <p className="np-cartao-olho">Natal 2026</p>
+        <h2 id="np-cartao-titulo" className="np-cartao-titulo">Feliz Natal!</h2>
         <div className="np-cartao-divisor" aria-hidden>
           <span />
-          <Floquinho />
+          <Azevinho />
           <span />
         </div>
         <p className="np-cartao-texto">
-          Cada detalhe deste tema foi feito com carinho — a neve, as luzes, a árvore
-          da meta e a música que está tocando agora — para deixar o clima natalino
-          ainda mais gostoso no seu dia a dia.
+          Novembro chegou, e com ele já entramos no <b>clima natalino</b>.
         </p>
         <p className="np-cartao-texto">
-          Obrigado por fazer parte de cada conquista deste ano.
-          Que o fim de ano venha leve, aconchegante e cheio de bons momentos.
+          Tudo o que você vai ver foi feito do zero e pensado com muito carinho,
+          para todo mundo aproveitar ainda mais esta época tão especial.
         </p>
-        <button ref={botao} type="button" className="np-cartao-botao" onClick={aoEntrar} disabled={saindo}>
+        <p className="np-cartao-assinatura">Boas festas! <Floquinho tamanho={13} /></p>
+        <button
+          ref={botao}
+          type="button"
+          className={`np-cartao-botao${falta > 0 ? ' esperando' : ''}`}
+          onClick={aoEntrar}
+          disabled={saindo || falta > 0}
+          aria-label={falta > 0 ? `Entrar no Natal, libera em ${falta} segundos` : 'Entrar no Natal'}
+        >
+          {falta > 0 && (
+            <span className="np-cartao-contagem" style={{ ['--np-falta' as string]: falta / CONTAGEM_DO_CARTAO_S }} aria-hidden>
+              <span key={falta}>{falta}</span>
+            </span>
+          )}
           Entrar no Natal
         </button>
-        <p className="np-cartao-nota">A música continua no botão de música, no alto da tela.</p>
+        <p className="np-cartao-nota">
+          {falta > 0 ? 'Enquanto você lê, o Natal vai se arrumando aí atrás…' : 'A música continua no botão de música, no alto da tela.'}
+        </p>
       </div>
     );
   },
