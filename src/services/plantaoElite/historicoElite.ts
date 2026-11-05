@@ -7,11 +7,11 @@
  *
  * O banco (`fn_elite_plantao_historico`, migration 20261105160000) devolve um
  * item por dia: a dupla que estava de plantão NAQUELE dia (a escala tem
- * histórico — a troca de 04/11 não reescreve os dias antigos), quanto cada um
+ * histórico — a troca de 01/11 não reescreve os dias antigos), quanto cada um
  * recebeu e o total do setor. Aqui só se agrupa e se compara.
  *
  * A dupla é identificada pelas PESSOAS, não pelo dia: Tiago + Agatha são a
- * mesma dupla no ímpar (até 03/11) e no par (desde 04/11).
+ * mesma dupla no ímpar (até 31/10) e no par (desde 01/11).
  */
 import { rpcSemTipo } from '@/lib/supabaseSemTipo';
 import { primeiroNome, type MembroElite, type Plantao } from './plantaoElite';

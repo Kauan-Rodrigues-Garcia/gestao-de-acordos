@@ -8,7 +8,7 @@
 -- ## O problema que vem antes do histórico: a escala não tinha passado
 --
 -- `elite_plantao` guarda só a escala de HOJE (quem é ímpar, quem é par). Em
--- 04/11/2026 as duplas trocaram de dia: Tiago + Agatha, que eram do ímpar,
+-- 01/11/2026 as duplas trocaram de dia: Tiago + Agatha, que eram do ímpar,
 -- passaram para o par; Matheus + Gabriel, do par para o ímpar. Lendo só a
 -- tabela, todo dia antes da troca sairia com a dupla ERRADA — no histórico e
 -- também no quadro do dia (que hoje já erra os dias antigos).
@@ -20,7 +20,7 @@
 --
 -- Retratos semeados aqui:
 --   19/09/2026  a escala do início — a de hoje com os dias trocados;
---   04/11/2026  a escala de hoje (a data da troca: ajuste `v_troca` abaixo se
+--   01/11/2026  a escala de hoje (a data da troca: ajuste `v_troca` abaixo se
 --               a troca valeu de outro dia).
 --
 -- ## O que muda
@@ -62,12 +62,15 @@ COMMENT ON TABLE public.elite_plantao_escala IS
 ALTER TABLE public.elite_plantao_escala ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.elite_plantao_escala FROM anon, authenticated;
 
--- ── 2. Semear: o início e a troca de 04/11 ─────────────────────────────────
+-- ── 2. Semear: o início e a troca de 01/11 ─────────────────────────────────
 
 DO $$
 DECLARE
   v_inicio CONSTANT DATE := '2026-09-19';  -- o plantão começou aqui
-  v_troca  CONSTANT DATE := '2026-11-04';  -- as duplas trocaram de dia aqui
+  -- As duplas trocaram de dia aqui. Era 04/11 (o dia em que a troca foi
+  -- anotada); os recebimentos mostram que valeu de 01/11 — corrigido no banco
+  -- em 05/11/2026 (UPDATE de desde 04/11 → 01/11, 4 linhas).
+  v_troca  CONSTANT DATE := '2026-11-01';
   e RECORD;
   n_impar INTEGER;
   n_par   INTEGER;
@@ -81,7 +84,7 @@ BEGIN
       INTO n_impar, n_par
       FROM public.elite_plantao WHERE empresa_id = e.empresa_id;
 
-    -- A troca de 04/11 inverteu duas duplas de duas pessoas. Escala diferente
+    -- A troca de 01/11 inverteu duas duplas de duas pessoas. Escala diferente
     -- disso não é a que se conhece: melhor parar do que gravar passado errado.
     IF n_impar <> 2 OR n_par <> 2 THEN
       RAISE EXCEPTION 'Plantão Elite: esperava 2 pessoas no ímpar e 2 no par, achei % e %.', n_impar, n_par;

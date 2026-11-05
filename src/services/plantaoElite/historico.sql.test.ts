@@ -3,7 +3,7 @@
  * A migration 20261105160000 (histórico do Plantão Elite) num Postgres de
  * verdade (PGlite, LOCAL — não é o banco de produção), sobre o mínimo das
  * tabelas do analítico: aplica, reaplica, e prova que cada dia sai com a dupla
- * que estava NAQUELE dia — antes e depois da troca de 04/11.
+ * que estava NAQUELE dia — antes e depois da troca de 01/11.
  */
 import { PGlite } from '@electric-sql/pglite';
 import { readFileSync } from 'node:fs';
@@ -93,7 +93,7 @@ beforeAll(async () => {
       ('${OPERADOR}','Operador',       'op',             'operador', '${REC}', null),
       ('${FORA}',    'De fora',        'fora',           'operador', '${OUTRO}', null);
 
-    -- A escala de hoje: a de depois da troca de 04/11.
+    -- A escala de hoje: a de depois da troca de 01/11.
     insert into public.elite_plantao (empresa_id, perfil_id, plantao, ordem) values
       ('${EMP}', '${TIAGO}',   'par',   1), ('${EMP}', '${AGATHA}',  'par',   2),
       ('${EMP}', '${MATHEUS}', 'impar', 1), ('${EMP}', '${GABRIEL}', 'impar', 2);
@@ -122,13 +122,13 @@ beforeAll(async () => {
 afterAll(async () => { await db.close(); });
 
 describe('migration 20261105160000 — histórico do Plantão Elite', () => {
-  it('semeia o início com os dias trocados e a troca de 04/11 com a escala de hoje', async () => {
+  it('semeia o início com os dias trocados e a troca de 01/11 com a escala de hoje', async () => {
     const r = await db.query<{ desde: string; plantao: string; n: number }>(`
       select desde::text, plantao, count(*)::int n from public.elite_plantao_escala
        where perfil_id in ('${TIAGO}', '${AGATHA}') group by 1, 2 order by 1`);
     expect(r.rows).toEqual([
       { desde: '2026-09-19', plantao: 'impar', n: 2 },
-      { desde: '2026-11-04', plantao: 'par', n: 2 },
+      { desde: '2026-11-01', plantao: 'par', n: 2 },
     ]);
   });
 
@@ -162,15 +162,15 @@ describe('migration 20261105160000 — histórico do Plantão Elite', () => {
     expect(d05.membros.map(m => [m.id, Number(m.valor)])).toEqual([[MATHEUS, 80], [GABRIEL, 20]]);
     expect(Number(d05.setor_total)).toBe(600); // em novembro a origem Play 1 conta
 
-    expect(h.dias[1].membros.map(m => m.id)).toEqual([TIAGO, AGATHA]); // 01/11 ainda era a escala antiga
+    expect(h.dias[1].membros.map(m => m.id)).toEqual([MATHEUS, GABRIEL]); // 01/11 já é a escala nova
     expect(h.pessoas.map(p => p.id).sort()).toEqual([TIAGO, AGATHA, MATHEUS, GABRIEL].sort());
   });
 
   it('quem é de dupla vê só os dias em que esteve de plantão', async () => {
     const h = await historico(TIAGO, '2026-10-31', '2026-11-05');
     expect(h.sou_da_dupla).toBe(true);
-    // 31/10 e 01/11 (ímpar, antiga), 03/11 (ímpar, antiga), 04/11 (par, nova).
-    expect(h.dias.map(d => d.data)).toEqual(['2026-10-31', '2026-11-01', '2026-11-03', '2026-11-04']);
+    // 31/10 (ímpar, antiga), 02/11 e 04/11 (par, nova).
+    expect(h.dias.map(d => d.data)).toEqual(['2026-10-31', '2026-11-02', '2026-11-04']);
     expect(h.pessoas.map(p => p.id).sort()).toEqual([TIAGO, AGATHA].sort());
   });
 
