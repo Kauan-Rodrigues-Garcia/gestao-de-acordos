@@ -6,10 +6,10 @@
  */
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import {
   BarChart2, TrendingUp, Calendar,
-  ChevronDown, ChevronUp, RefreshCw, XCircle,
+  RefreshCw, XCircle,
   Clock, Percent, Target,
 } from 'lucide-react';
 import { useAnalytics } from '@/hooks/useAnalytics';
@@ -86,8 +86,13 @@ export function AnalyticsPanel({
   const mostraAgendadoRestante = tenant.slug === 'pagueplay' || tenant.slug === 'bookplay';
   // Ambos os tenants importam relatório analítico (BookPlay sem H.O.)
   const temAnalitico = tenant.slug === 'pagueplay' || tenant.slug === 'bookplay';
-  const alwaysOpen = !isPP;
-  const [open, setOpen] = useState(() => !isPP);
+  /*
+   * O painel vem sempre aberto, nas duas regras. Na regra Cofen ele nascia
+   * fechado, com um «Ocultar / Ver Analíticos»: a mesa de acordos ficava logo
+   * abaixo dele no Dashboard e o painel recolhido dava espaço a ela. Desde
+   * 05/11/2026 a mesa é a aba Acordos e o Dashboard é igual ao de Nosso
+   * produto (Cleber): sem opção de minimizar.
+   */
 
   /**
    * Mês em análise. Nasce no corrente — quem não mexer no seletor vê exatamente
@@ -615,155 +620,135 @@ export function AnalyticsPanel({
               (carregando || atualizando) && 'animate-spin',
             )} />
           </Button>
-          {!alwaysOpen && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs gap-1.5 rounded-lg border-border/70"
-              onClick={() => setOpen(v => !v)}
-            >
-              {open ? (
-                <><ChevronUp className="w-3 h-3" /> Ocultar</>
-              ) : (
-                <><ChevronDown className="w-3 h-3" /> Ver Analíticos</>
-              )}
-            </Button>
-          )}
         </div>
       </motion.div>
 
-      {/* Painel expandido */}
-      <AnimatePresence>
-        {(open || alwaysOpen) && (
-          <motion.div
-            key="analytics-body"
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.28, ease: 'easeInOut' }}
-            className="overflow-hidden"
-          >
-            <motion.div
-              variants={containerVariants}
-              initial="hidden"
-              animate="visible"
-              className="space-y-4 pt-1"
-            >
-              {/* Metric cards */}
-              {carregando ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
-                </div>
-              ) : (
-                /* O corpo é o painel de metas nas DUAS operações.
-                   Ele SUBSTITUI os cards soltos e os gráficos que viviam aqui —
-                   o donut da meta e o Recebido vs Agendado foram absorvidos por
-                   ele, e o que sobrou virou o bloco recolhível `secundarios`.
-                   A PaguePlay entrou nesse caminho em 2026-08-15; o que a
-                   distingue é o alternador H.O./Bruto no cabeçalho. */
-                <PainelMetas
-                  mes={mesAnalise}
-                  setorFiltro={setorEmFoco}
-                  equipeFiltroExterno={equipeFiltroExterno}
-                  operadorFiltroExterno={operadorFiltroExterno}
-                  temLogicaDiretoExtra={temLogicaDiretoExtra}
-                  unidade={unidade}
-                  secundarios={cardsSecundarios}
+      {/* O painel: sempre aberto, nas duas regras (05/11/2026). */}
+      <motion.div
+        initial={{ opacity: 0, height: 0 }}
+        animate={{ opacity: 1, height: 'auto' }}
+        transition={{ duration: 0.28, ease: 'easeInOut' }}
+        className="overflow-hidden"
+      >
+        <motion.div
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+          className="space-y-4 pt-1"
+        >
+          {/* Metric cards */}
+          {carregando ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
+            </div>
+          ) : (
+            /* O corpo é o painel de metas nas DUAS operações.
+               Ele SUBSTITUI os cards soltos e os gráficos que viviam aqui —
+               o donut da meta e o Recebido vs Agendado foram absorvidos por
+               ele, e o que sobrou virou o bloco recolhível `secundarios`.
+               A PaguePlay entrou nesse caminho em 2026-08-15; o que a
+               distingue é o alternador H.O./Bruto no cabeçalho. */
+            <PainelMetas
+              mes={mesAnalise}
+              setorFiltro={setorEmFoco}
+              equipeFiltroExterno={equipeFiltroExterno}
+              operadorFiltroExterno={operadorFiltroExterno}
+              temLogicaDiretoExtra={temLogicaDiretoExtra}
+              unidade={unidade}
+              secundarios={cardsSecundarios}
+            />
+          )}
+
+          {/* ROW 3 — Métricas adicionais. Só na PaguePlay: na BookPlay
+              Taxa de conversão e Ticket médio foram para o bloco recolhível
+              do PainelMetas, e "Projeção do mês" saiu de cena — o painel
+              novo projeta contra a meta e os dias úteis, não contra dias
+              corridos, e dois números chamados "projeção" na mesma tela
+              discordariam por construção. */}
+          {!carregando && isPP && (
+            <motion.div variants={itemVariants} className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <motion.div
+                variants={itemVariants}
+                whileHover={{ y: -2 }}
+                className={cn(
+                  'relative flex flex-col gap-2 rounded-xl border p-4 overflow-hidden shadow-sm',
+                  taxaConversao >= 70
+                    ? 'border-emerald-500/30 bg-emerald-500/5'
+                    : taxaConversao >= 40
+                    ? 'border-amber-500/30 bg-amber-500/5'
+                    : 'border-red-500/30 bg-red-500/5',
+                )}
+              >
+                <div
+                  className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-xl"
+                  style={{
+                    background: taxaConversao >= 70 ? '#22c55e' : taxaConversao >= 40 ? '#f59e0b' : '#ef4444',
+                  }}
                 />
-              )}
+                <div className="flex items-center justify-between pl-1">
+                  <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+                    Taxa de conversão
+                  </span>
+                  <Percent
+                    className="w-3.5 h-3.5"
+                    style={{
+                      color: corTexto(taxaConversao >= 70 ? '#22c55e' : taxaConversao >= 40 ? '#f59e0b' : '#ef4444'),
+                    }}
+                  />
+                </div>
+                <span
+                  className="text-2xl font-extrabold tabular-nums font-mono pl-1"
+                  style={{
+                    color: corTexto(taxaConversao >= 70 ? '#22c55e' : taxaConversao >= 40 ? '#f59e0b' : '#ef4444'),
+                  }}
+                >
+                  {taxaConversao}%
+                </span>
+                <span className="text-[11px] text-muted-foreground pl-1">
+                  {totalPagosVencidos} de {totalAcordosVencidos} já vencidos
+                </span>
+              </motion.div>
 
-              {/* ROW 3 — Métricas adicionais. Só na PaguePlay: na BookPlay
-                  Taxa de conversão e Ticket médio foram para o bloco recolhível
-                  do PainelMetas, e "Projeção do mês" saiu de cena — o painel
-                  novo projeta contra a meta e os dias úteis, não contra dias
-                  corridos, e dois números chamados "projeção" na mesma tela
-                  discordariam por construção. */}
-              {!carregando && isPP && (
-                <motion.div variants={itemVariants} className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <motion.div
-                    variants={itemVariants}
-                    whileHover={{ y: -2 }}
-                    className={cn(
-                      'relative flex flex-col gap-2 rounded-xl border p-4 overflow-hidden shadow-sm',
-                      taxaConversao >= 70
-                        ? 'border-emerald-500/30 bg-emerald-500/5'
-                        : taxaConversao >= 40
-                        ? 'border-amber-500/30 bg-amber-500/5'
-                        : 'border-red-500/30 bg-red-500/5',
-                    )}
-                  >
-                    <div
-                      className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-xl"
-                      style={{
-                        background: taxaConversao >= 70 ? '#22c55e' : taxaConversao >= 40 ? '#f59e0b' : '#ef4444',
-                      }}
-                    />
-                    <div className="flex items-center justify-between pl-1">
-                      <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
-                        Taxa de conversão
-                      </span>
-                      <Percent
-                        className="w-3.5 h-3.5"
-                        style={{
-                          color: corTexto(taxaConversao >= 70 ? '#22c55e' : taxaConversao >= 40 ? '#f59e0b' : '#ef4444'),
-                        }}
-                      />
-                    </div>
-                    <span
-                      className="text-2xl font-extrabold tabular-nums font-mono pl-1"
-                      style={{
-                        color: corTexto(taxaConversao >= 70 ? '#22c55e' : taxaConversao >= 40 ? '#f59e0b' : '#ef4444'),
-                      }}
-                    >
-                      {taxaConversao}%
-                    </span>
-                    <span className="text-[11px] text-muted-foreground pl-1">
-                      {totalPagosVencidos} de {totalAcordosVencidos} já vencidos
-                    </span>
-                  </motion.div>
+              <motion.div
+                variants={itemVariants}
+                whileHover={{ y: -2 }}
+                className="relative flex flex-col gap-2 rounded-xl border border-indigo-500/30 bg-indigo-500/5 p-4 overflow-hidden shadow-sm"
+              >
+                <div className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-xl bg-indigo-500" />
+                <div className="flex items-center justify-between pl-1">
+                  <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+                    Ticket médio
+                  </span>
+                  <TrendingUp className="w-3.5 h-3.5 text-indigo-500" />
+                </div>
+                <span className="text-xl font-bold tabular-nums font-mono text-indigo-500 pl-1 leading-tight">
+                  {formatCurrency(ticketMedio)}
+                </span>
+                <span className="text-[11px] text-muted-foreground pl-1">{ticketMedioSub}</span>
+              </motion.div>
 
-                  <motion.div
-                    variants={itemVariants}
-                    whileHover={{ y: -2 }}
-                    className="relative flex flex-col gap-2 rounded-xl border border-indigo-500/30 bg-indigo-500/5 p-4 overflow-hidden shadow-sm"
-                  >
-                    <div className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-xl bg-indigo-500" />
-                    <div className="flex items-center justify-between pl-1">
-                      <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
-                        Ticket médio
-                      </span>
-                      <TrendingUp className="w-3.5 h-3.5 text-indigo-500" />
-                    </div>
-                    <span className="text-xl font-bold tabular-nums font-mono text-indigo-500 pl-1 leading-tight">
-                      {formatCurrency(ticketMedio)}
-                    </span>
-                    <span className="text-[11px] text-muted-foreground pl-1">{ticketMedioSub}</span>
-                  </motion.div>
-
-                  <motion.div
-                    variants={itemVariants}
-                    whileHover={{ y: -2 }}
-                    className="relative flex flex-col gap-2 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 overflow-hidden shadow-sm"
-                  >
-                    <div className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-xl bg-amber-500" />
-                    <div className="flex items-center justify-between pl-1">
-                      <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
-                        Projeção do mês
-                      </span>
-                      <Target className="w-3.5 h-3.5 text-amber-700 dark:text-amber-500" />
-                    </div>
-                    <span className="text-xl font-bold tabular-nums font-mono text-amber-700 dark:text-amber-500 pl-1 leading-tight" data-alvo-feitico="valor" data-nome-feitico="Projeção do mês">
-                      {formatCurrency(projecaoMes)}
-                    </span>
-                    <span className="text-[11px] text-muted-foreground pl-1">ritmo atual</span>
-                  </motion.div>
-                </motion.div>
-              )}
-
+              <motion.div
+                variants={itemVariants}
+                whileHover={{ y: -2 }}
+                className="relative flex flex-col gap-2 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 overflow-hidden shadow-sm"
+              >
+                <div className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-xl bg-amber-500" />
+                <div className="flex items-center justify-between pl-1">
+                  <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+                    Projeção do mês
+                  </span>
+                  <Target className="w-3.5 h-3.5 text-amber-700 dark:text-amber-500" />
+                </div>
+                <span className="text-xl font-bold tabular-nums font-mono text-amber-700 dark:text-amber-500 pl-1 leading-tight" data-alvo-feitico="valor" data-nome-feitico="Projeção do mês">
+                  {formatCurrency(projecaoMes)}
+                </span>
+                <span className="text-[11px] text-muted-foreground pl-1">ritmo atual</span>
+              </motion.div>
             </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          )}
+
+        </motion.div>
+      </motion.div>
     </div>
   );
 }
