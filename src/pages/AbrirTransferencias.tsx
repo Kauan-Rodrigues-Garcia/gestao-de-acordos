@@ -9,13 +9,13 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { abrirTransferenciasNoChat } from '@/components/Chat/abrirTransferencias';
+import { temTelaAnterior } from '@/hooks/useVoltar';
 
 export default function AbrirTransferencias(): null {
   const navigate = useNavigate();
   useEffect(() => {
     abrirTransferenciasNoChat();
-    const temAnterior = ((window.history.state as { idx?: number } | null)?.idx ?? 0) > 0;
-    if (temAnterior) navigate(-1);
+    if (temTelaAnterior()) navigate(-1);
     else navigate('/', { replace: true });
   }, [navigate]);
   return null;

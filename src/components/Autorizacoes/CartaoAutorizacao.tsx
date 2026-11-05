@@ -222,6 +222,11 @@ export function CartaoAutorizacao({ pedido, souAutorizador, meuId, onDecidido }:
                   lixeira e o {pedido.nr_label} passa para{' '}
                   <strong>{pedido.solicitante_nome}</strong>
                   {ehTornarDireto ? ', que deixa de ser EXTRA e vira DIRETO' : ''}. Os dois são notificados.
+                  {/* A transferência mantém o EXTRA desde 20261104150000: quem
+                      assume vira o DIRETO dele, e ele é avisado. */}
+                  {pedido.modo === 'transferencia_completa' && (
+                    <> Se houver EXTRA nesse acordo, ele continua, agora com {pedido.solicitante_nome}.</>
+                  )}
                 </span>
               </p>
               <div className="flex gap-2">

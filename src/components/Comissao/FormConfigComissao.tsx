@@ -11,6 +11,16 @@
  * percentual não vai, exceção nunca leva a regra do setor, e reformatar um campo
  * não escreve nada.
  *
+ * ## Prêmio em reais (26/10/2026)
+ *
+ * Na faixa em que todo mundo da configuração tem a mesma meta, digita-se o
+ * prêmio na meta (R$ 300,00) e grava-se o percentual que o paga (0,333333%) —
+ * a conta mora em `premio.ts`. O percentual aparece ao lado, curto.
+ *
+ * «Preencher por: Valor (R$) | Porcentagem (%)» é a escolha de quem configura,
+ * lembrada entre as telas. Sem meta comum em faixa nenhuma, só a porcentagem
+ * faz sentido, e o valor fica desligado com o porquê.
+ *
  * ## Outra pessoa salvou
  *
  * As configurações chegam em tempo real. Se o servidor mudar e este formulário
@@ -23,9 +33,14 @@ import { Check, Loader2, Plus, TriangleAlert, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useEstadoLembrado } from '@/hooks/useEstadoLembrado';
+import { chaveDeCache } from '@/lib/cacheInstantaneo';
+import { formatBRL } from '@/lib/money';
 import { cn } from '@/lib/utils';
 import type { ConfigComissao, ModoIndireta, RegraSetor } from '@/services/comissao/comissao';
 import { salvarConfig } from '@/services/comissao/comissao.service';
+import { formatarPct, lerPct, lerReais, mascararReais, paraCampo, reaisParaCampo } from './formato';
+import { pctDoPremio, premioDoPct } from './premio';
 import {
   assinaturaDo, comFaixaNova, faixasSemPct, payloadDe, rascunhoDe, semFaixa,
   type AlvoConfig, type RascunhoConfig, type RascunhoFaixa,
@@ -42,6 +57,11 @@ interface FormConfigComissaoProps {
   /** A regra da linha do setor — decide se o % especial aparece nas exceções. */
   regraDoSetor: RegraSetor;
   desabilitado: boolean;
+  /**
+   * A meta de cada faixa, quando é a mesma para todos da configuração; `null`
+   * na faixa em que diverge. Ausente = sem prêmio em reais (ver `premio.ts`).
+   */
+  metasReferencia?: readonly (number | null)[];
   onSalvo?: () => void;
 }
 
@@ -88,6 +108,69 @@ function CampoPct({ rotulo, valor, invalido, desabilitado, visivel, onMudar, onS
   );
 }
 
+/** O prêmio na meta, em reais; o percentual que ele vira aparece ao lado. */
+function CampoPremio({ rotulo, valor, pct, desabilitado, onMudar, onSair }: {
+  rotulo: string;
+  valor: string;
+  /** O percentual gravado — o que de fato vai para o banco. */
+  pct: number | null;
+  desabilitado: boolean;
+  onMudar: (v: string) => void;
+  onSair: () => void;
+}) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className="text-xs text-muted-foreground" aria-hidden="true">R$</span>
+      <Input
+        inputMode="numeric"
+        placeholder="0,00"
+        aria-label={rotulo}
+        className="h-8 w-28 text-right text-sm tabular-nums"
+        value={valor}
+        disabled={desabilitado}
+        onChange={e => onMudar(e.target.value)}
+        onBlur={onSair}
+      />
+      <span className="w-16 text-[11px] tabular-nums text-muted-foreground">{pct === null ? '' : formatarPct(pct)}</span>
+    </span>
+  );
+}
+
+type PreencherPor = 'reais' | 'pct';
+
+/** «Preencher por»: o valor do prêmio ou a porcentagem. */
+function EscolhaPreenchimento({ valor, reaisDesligado, onEscolher }: {
+  valor: PreencherPor;
+  /** Sem meta comum: o motivo, mostrado no botão desligado. */
+  reaisDesligado: string | null;
+  onEscolher: (v: PreencherPor) => void;
+}) {
+  const botao = (v: PreencherPor, rotulo: string, desligado: boolean, titulo?: string) => (
+    <button
+      type="button"
+      aria-pressed={valor === v}
+      disabled={desligado}
+      title={titulo}
+      onClick={() => onEscolher(v)}
+      className={cn(
+        'h-7 rounded-md px-2.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+        valor === v ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+      )}
+    >
+      {rotulo}
+    </button>
+  );
+  return (
+    <div className="inline-flex items-center gap-2">
+      <span className="text-xs text-muted-foreground">Preencher por</span>
+      <div role="group" aria-label="Preencher por" className="inline-flex rounded-lg bg-muted p-0.5">
+        {botao('reais', 'Valor (R$)', reaisDesligado !== null, reaisDesligado ?? undefined)}
+        {botao('pct', 'Porcentagem (%)', false)}
+      </div>
+    </div>
+  );
+}
+
 function Opcao<T extends string>({ nome, valor, atual, rotulo, onEscolher }: {
   nome: string; valor: T; atual: T; rotulo: string; onEscolher: (v: T) => void;
 }) {
@@ -107,7 +190,7 @@ function Opcao<T extends string>({ nome, valor, atual, rotulo, onEscolher }: {
 }
 
 export function FormConfigComissao({
-  config, alvo, ehPadrao, isPaguePlay, regraDoSetor, desabilitado, onSalvo,
+  config, alvo, ehPadrao, isPaguePlay, regraDoSetor, desabilitado, metasReferencia, onSalvo,
 }: FormConfigComissaoProps) {
   const id = useId();
   const doServidor = useMemo(() => (config ? rascunhoDe(config) : null), [config]);
@@ -176,65 +259,132 @@ export function FormConfigComissao({
   const mostraEspecial = regraVigente === 'percentual_especial';
   const semPct = faixasSemPct(rascunho);
 
+  // ── Prêmio em reais ──────────────────────────────────────────────────────
+  const temReferencia = (metasReferencia ?? []).some(m => m !== null);
+  const [preencherPor, setPreencherPor] = useEstadoLembrado<PreencherPor>(
+    chaveDeCache('comissao', 'preencher-por'), 'reais',
+  );
+  const usaReais = temReferencia && preencherPor === 'reais';
+  const reaisDesligado = temReferencia ? null
+    : metasReferencia && metasReferencia.length > 0
+      ? 'As pessoas desta configuração têm metas diferentes, e o mesmo % pagaria um prêmio diferente para cada uma: preencha pela porcentagem.'
+      : 'Ninguém desta configuração tem uma meta comum neste mês para converter o valor: preencha pela porcentagem.';
+  /** O texto do campo de reais enquanto se digita — `índice:campo`. Fora disso, vem do percentual. */
+  const [digitando, setDigitando] = useState<Record<string, string>>({});
+  const metaDaFaixa = (i: number) => (usaReais ? metasReferencia?.[i] ?? null : null);
+
+  const campoPremio = (i: number, f: RascunhoFaixa, campo: 'pct' | 'pctEspecial', meta: number, rotulo: string) => {
+    const chave = `${i}:${campo}`;
+    const pct = lerPct(f[campo]);
+    return (
+      <CampoPremio
+        rotulo={rotulo}
+        valor={digitando[chave] ?? reaisParaCampo(premioDoPct(pct, meta))}
+        pct={pct}
+        desabilitado={desabilitado}
+        onMudar={texto => {
+          const mascarado = mascararReais(texto);
+          setDigitando(d => ({ ...d, [chave]: mascarado }));
+          const premio = lerReais(mascarado);
+          mudarFaixa(i, { [campo]: premio === null ? '' : paraCampo(pctDoPremio(premio, meta)) });
+        }}
+        onSair={() => {
+          setDigitando(({ [chave]: _, ...resto }) => resto);
+          void gravar();
+        }}
+      />
+    );
+  };
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-xs text-muted-foreground">
-          O valor de cada faixa é a meta do operador; aqui fica o percentual.
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <EscolhaPreenchimento
+          valor={usaReais ? 'reais' : 'pct'}
+          reaisDesligado={reaisDesligado}
+          onEscolher={setPreencherPor}
+        />
         <SeloEstado estado={estado} />
       </div>
+      <p className="text-xs text-muted-foreground">
+        {usaReais
+          ? 'Digite o valor do prêmio em cada meta; a porcentagem sai dele (prêmio ÷ meta).'
+          : reaisDesligado
+            ? `Valor (R$) indisponível aqui. ${reaisDesligado}`
+            : 'O valor de cada faixa é a meta do operador; aqui fica a porcentagem.'}
+      </p>
 
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-[11px] uppercase tracking-wide text-muted-foreground">
               <th className="py-1 pr-3 font-medium">Faixa</th>
-              <th className="py-1 pr-3 font-medium">% normal</th>
-              {mostraEspecial && <th className="py-1 pr-3 font-medium">% quando o setor bate a meta</th>}
+              {usaReais && <th className="py-1 pr-3 font-medium">Meta</th>}
+              <th className="py-1 pr-3 font-medium">{usaReais ? 'Prêmio' : '% normal'}</th>
+              {mostraEspecial && (
+                <th className="py-1 pr-3 font-medium">
+                  {usaReais ? 'Prêmio quando o setor bate a meta' : '% quando o setor bate a meta'}
+                </th>
+              )}
               <th className="py-1"><span className="sr-only">Remover</span></th>
             </tr>
           </thead>
           <tbody>
-            {rascunho.faixas.map((f, i) => (
-              <tr key={f.ordem} className="border-t border-border/60">
-                <td className="whitespace-nowrap py-1.5 pr-3 font-medium">{f.ordem}ª Meta</td>
-                <td className="py-1.5 pr-3">
-                  <CampoPct
-                    rotulo={`% normal da ${f.ordem}ª Meta`}
-                    valor={f.pct}
-                    invalido={semPct.includes(f.ordem)}
-                    desabilitado={desabilitado}
-                    onMudar={v => mudarFaixa(i, { pct: v })}
-                    onSair={() => void gravar()}
-                  />
-                </td>
-                {mostraEspecial && (
+            {rascunho.faixas.map((f, i) => {
+              const meta = metaDaFaixa(i);
+              return (
+                <tr key={f.ordem} className="border-t border-border/60">
+                  <td className="whitespace-nowrap py-1.5 pr-3 font-medium">{f.ordem}ª Meta</td>
+                  {usaReais && (
+                    <td className="whitespace-nowrap py-1.5 pr-3 text-xs tabular-nums text-muted-foreground">
+                      {meta === null ? 'metas diferentes' : formatBRL(meta)}
+                    </td>
+                  )}
                   <td className="py-1.5 pr-3">
-                    <CampoPct
-                      rotulo={`% especial da ${f.ordem}ª Meta`}
-                      valor={f.pctEspecial}
-                      desabilitado={desabilitado}
-                      onMudar={v => mudarFaixa(i, { pctEspecial: v })}
-                      onSair={() => void gravar()}
-                    />
+                    {meta !== null
+                      ? campoPremio(i, f, 'pct', meta, `Prêmio da ${f.ordem}ª Meta`)
+                      : (
+                        <CampoPct
+                          rotulo={`% normal da ${f.ordem}ª Meta`}
+                          valor={f.pct}
+                          invalido={semPct.includes(f.ordem)}
+                          desabilitado={desabilitado}
+                          onMudar={v => mudarFaixa(i, { pct: v })}
+                          onSair={() => void gravar()}
+                        />
+                      )}
                   </td>
-                )}
-                <td className="py-1.5 text-right">
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    className="h-7 w-7"
-                    aria-label={`Remover a ${f.ordem}ª Meta`}
-                    disabled={desabilitado || rascunho.faixas.length <= 1}
-                    onClick={() => { setRascunho(r => semFaixa(r, i)); agendar(); }}
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </Button>
-                </td>
-              </tr>
-            ))}
+                  {mostraEspecial && (
+                    <td className="py-1.5 pr-3">
+                      {meta !== null
+                        ? campoPremio(i, f, 'pctEspecial', meta, `Prêmio da ${f.ordem}ª Meta quando o setor bate a meta`)
+                        : (
+                          <CampoPct
+                            rotulo={`% especial da ${f.ordem}ª Meta`}
+                            valor={f.pctEspecial}
+                            desabilitado={desabilitado}
+                            onMudar={v => mudarFaixa(i, { pctEspecial: v })}
+                            onSair={() => void gravar()}
+                          />
+                        )}
+                    </td>
+                  )}
+                  <td className="py-1.5 text-right">
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7"
+                      aria-label={`Remover a ${f.ordem}ª Meta`}
+                      disabled={desabilitado || rascunho.faixas.length <= 1}
+                      onClick={() => { setRascunho(r => semFaixa(r, i)); agendar(); }}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -252,7 +402,7 @@ export function FormConfigComissao({
         </Button>
         {semPct.length > 0 && (
           <p className="text-xs text-amber-700 dark:text-amber-400">
-            {`Preencha o % da ${semPct.map(o => `${o}ª`).join(', ')} Meta para salvar.`}
+            {`Preencha ${usaReais ? 'o prêmio ou o %' : 'o %'} da ${semPct.map(o => `${o}ª`).join(', ')} Meta para salvar.`}
           </p>
         )}
       </div>

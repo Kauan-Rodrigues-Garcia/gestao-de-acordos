@@ -184,13 +184,17 @@ export function DialogoDia({
                       <p className="text-sm font-semibold text-foreground">
                         {e.titulo}
                         {e.tipo === 'aniversario' && e.pessoa_nome && <span className="font-normal"> · {e.pessoa_nome}</span>}
+                        {e.pessoa_diretoria && <span className="ml-1.5 rounded-full bg-warning/15 px-1.5 py-0.5 text-[10px] font-semibold text-warning">Diretoria</span>}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {[INFO_TIPO[e.tipo].rotulo, e.detalhe].filter(Boolean).join(' · ')}
                         {e.destaque && ' · em destaque'}
+                        {/* Vem de outro setor (o aniversário da diretoria, 20261104160000):
+                            corrige e apaga quem lançou, lá. */}
+                        {e.de_outro_setor && ` · lançado por ${e.setor_origem ?? 'outro setor'}, aparece em todos os setores`}
                       </p>
                     </div>
-                    {podeEditar && (
+                    {podeEditar && !e.de_outro_setor && (
                       confirmarExclusao === e.id ? (
                         <div className="flex shrink-0 items-center gap-1">
                           <Button size="sm" variant="destructive" disabled={salvando} onClick={() => void excluir(e.id)}>

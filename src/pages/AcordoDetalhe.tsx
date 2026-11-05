@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Edit, MessageSquare, CheckCircle2, Clock, Hash, User, Calendar, DollarSign, Smartphone, FileText, AlertCircle, Building2, MapPin, Link2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,21 +15,24 @@ import {
   formatCurrency, formatDate, isAtrasado,
   TIPO_LABELS_PAGUEPLAY,
   getEstadoFromAcordo, extractLinkAcordo,
+  ROUTE_PATHS,
 } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import { cn } from '@/lib/utils';
 import { CadeadoMes } from '@/components/CadeadoMes';
 import { useFechamentoMes } from '@/hooks/useFechamentoMes';
 import { useRegistrarPixAoPagar } from '@/hooks/useRegistrarPixAoPagar';
+import { useVoltar } from '@/hooks/useVoltar';
 import { mesDaData } from '@/lib/fechamentoMes';
 
 export default function AcordoDetalhe() {
   const { id } = useParams<{ id: string }>();
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
-  const navigate = useNavigate();
   const tenant = useTenant();
   const isPP = tenant.isPaguePlay;
+  // Na PaguePlay a lista de acordos é o próprio Dashboard.
+  const voltar = useVoltar(isPP ? ROUTE_PATHS.DASHBOARD : ROUTE_PATHS.ACORDOS);
   const statusLabels = tenant.statusLabels;
   const [acordo, setAcordo] = useState<Acordo | null>(null);
   const [historico, setHistorico] = useState<HistoricoAcordo[]>([]);
@@ -102,7 +105,7 @@ export default function AcordoDetalhe() {
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <div className="flex items-center gap-3 mb-6">
-        <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="h-8 w-8">
+        <Button variant="ghost" size="icon" onClick={voltar} className="h-8 w-8">
           <ArrowLeft className="w-4 h-4" />
         </Button>
         <div className="flex-1">

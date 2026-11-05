@@ -126,6 +126,19 @@ describe('ProtectedRoute — só por cargo (sem requiredPermissao)', () => {
     renderizar({ allowedProfiles: ['lider'] });
     expect(passou()).toBe(true);
   });
+
+  // Até 30/10/2026 o `perfil &&` liberava a rota quando o perfil faltava.
+  it('não libera enquanto o perfil carrega', () => {
+    authRef.current = { user: { id: 'u1' }, perfil: null, loading: false, perfilLoading: true };
+    renderizar({ roles: ['super_admin'] });
+    expect(passou()).toBe(false);
+  });
+
+  it('não libera quando o perfil não veio', () => {
+    authRef.current = { user: { id: 'u1' }, perfil: null, loading: false, perfilLoading: false };
+    renderizar({ roles: ['super_admin'] });
+    expect(passou()).toBe(false);
+  });
 });
 
 /*

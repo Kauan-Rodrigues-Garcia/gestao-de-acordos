@@ -238,8 +238,8 @@ export interface QuitacaoLinha {
 
 /**
  * A cena de quitação, nas mesmas regras da aba do Analítico (`AbaRankingQuitacao`):
- * prêmio até o 6º, «falta para passar» do 7º ao 10º. O valor é o Valor Acordo
- * quitado — não tem H.O.
+ * prêmio até o 6º, «falta para passar» do 7º ao 10º. O valor é o recebido no
+ * mês dos acordos quitados (desde 04/11/2026; antes, o Valor Acordo) — não tem H.O.
  */
 export function quitacaoDaTela(v: Pick<VisaoTv, 'quitacao' | 'setorNome' | 'mesIso'>): QuitacaoNaTela {
   const vazio = (motivo: string): QuitacaoNaTela => ({ motivo, podio: [], premiados: [], perseguindo: [], participantes: 0 });

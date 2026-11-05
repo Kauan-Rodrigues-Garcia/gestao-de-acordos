@@ -46,6 +46,7 @@ import {
 import { processarImportacaoEmLote } from '@/services/importar_excel_batch.service';
 import { autenticarLider, type AutorizadorInfo } from '@/services/autorizacao_lider.service';
 import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
+import { useVoltar } from '@/hooks/useVoltar';
 import { resolverDiretoExtraAtivo } from '@/services/direto_extra.service';
 import {
   parsearPlanilha,
@@ -166,6 +167,7 @@ export default function ImportarExcel() {
   const { empresa }                     = useEmpresa();
   const { isPaguePlay }                 = useTenant();
   const navigate                        = useNavigate();
+  const voltar                          = useVoltar(isPaguePlay ? ROUTE_PATHS.DASHBOARD : ROUTE_PATHS.ACORDOS);
   const inputRef                        = useRef<HTMLInputElement>(null);
   const { configs: configsDiretoExtra } = useDiretoExtraConfig();
 
@@ -484,7 +486,7 @@ export default function ImportarExcel() {
     <div className="p-6 max-w-5xl mx-auto">
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
-        <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="h-8 w-8">
+        <Button variant="ghost" size="icon" onClick={voltar} className="h-8 w-8">
           <ArrowLeft className="w-4 h-4" />
         </Button>
         <div className="flex-1">

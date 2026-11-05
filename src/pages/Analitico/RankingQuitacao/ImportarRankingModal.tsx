@@ -89,7 +89,8 @@ export function ImportarRankingModal({ aberto, empresaId, onFechar, onImportado 
             com «Situação Atual» Quitação e a data da quitação dentro do mês — e a Junção que
             quitou o contrato (saldo zerado e data da quitação). Pagamento desmembrado no mesmo
             contrato conta como uma quitação, e a quitação que pagou o saldo de um Parcelamento
-            soma o que já tinha sido pago nele.
+            leva junto o que ele recebeu no mês. O valor de cada quitação é o RECEBIDO no mês
+            (coluna «Recebido»), não o valor do acordo inteiro.
           </DialogDescription>
         </DialogHeader>
 

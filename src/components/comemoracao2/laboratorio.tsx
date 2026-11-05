@@ -7,7 +7,6 @@
  * com o MESMO `CardV2` da festa. Serve para avaliar o visual sem montar uma
  * comemoração de verdade. O build de produção leva só o `index.html`.
  */
-/* eslint-disable react-refresh/only-export-components -- entrada de página avulsa (como o index.html), não um módulo de componentes. */
 import { StrictMode, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import '@/index.css';

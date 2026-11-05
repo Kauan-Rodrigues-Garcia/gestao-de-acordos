@@ -5,9 +5,9 @@
  *   ┌ capa: desenho do tema · título com contorno · balão com a frase · dias úteis ┐
  *   ├ régua do mês: o que passou, hoje, feriados                                   ┤
  *   ├ grade de quadrinhos                         │ Faltam (próximo marco)         ┤
- *   │ (o «hoje» estoura, figurinha no destaque    │ O dia escolhido                │
- *   │  e no aniversário)                          │ Expediente · Aniversariantes   │
- *   │                                             │ Mural (avisos) · Próximos dias │
+ *   │ (o «hoje» estoura, figurinha no destaque    │ Aniversariantes (em destaque)  │
+ *   │  e no aniversário)                          │ O dia escolhido · Expediente   │
+ *   │                                             │ Próximos dias                  │
  *   └─────────────────────────────────────────────┴────────────────────────────────┘
  *
  * Só desenha: quem lê o banco e decide dia útil e feriado é o painel
@@ -28,11 +28,11 @@
  * (`data-html2canvas-ignore`): a imagem é o mês, não a tela de quem copiou.
  */
 import { useEffect, useMemo, useState, type CSSProperties, type Ref } from 'react';
-import { CalendarDays, Cake, Clock, Megaphone, PartyPopper, Pin, Target } from 'lucide-react';
+import { CalendarDays, Cake, ChevronDown, Clock, Megaphone, PartyPopper, Target } from 'lucide-react';
 import { AvatarParticipante } from '@/pages/Analitico/Desafios/AvatarParticipante';
 import { cn } from '@/lib/utils';
 import {
-  INFO_TIPO, SEMANA_CURTA, TIPOS_EVENTO, diaDaSemana, rotuloDoDia, rotuloDoMesLongo, semanasDoMes,
+  INFO_TIPO, SEMANA_CURTA, TIPOS_EVENTO, agendaPorDia, diaDaSemana, rotuloDoDia, rotuloDoMesLongo, semanasDoMes,
   type EventoCalendario, type FeriadoDoDia, type PaletaGibi, type TemaCalendario, type TipoEvento,
 } from '@/lib/calendarioSetor';
 import { misturar, primeiroNome, proximoMarco, reguaDoMes, varsDaPaleta } from '@/lib/calendarioGibi';
@@ -46,8 +46,8 @@ const COR_FERIADO = '#DC2626';
 const COR_FERIADO_TRABALHADO = '#0284C7';
 /** Quantos eventos cabem por extenso num quadrinho. */
 const VISIVEIS = 3;
-/** Quantos dias a agenda do lado lista antes do «e mais». */
-const AGENDA = 6;
+/** Quantas coisas de um mesmo dia a agenda do lado escreve antes do «+N neste dia». */
+const POR_DIA_NA_AGENDA = 5;
 /** Até onde a caixa e o toque se comportam como no celular (a grade vira pontos). */
 const ESTREITO = '(max-width: 900px)';
 
@@ -99,8 +99,12 @@ export function CalendarioGibi(p: PropsCalendarioGibi) {
   );
   const desde = regua.tempo === 'corrente' ? hojeISO : `${mes}-01`;
   const aniversarios = useMemo(() => eventos.filter(e => e.tipo === 'aniversario'), [eventos]);
-  const avisos = useMemo(() => eventos.filter(e => e.tipo === 'aviso' && e.dia >= desde).slice(0, 3), [eventos, desde]);
-  const agenda = useMemo(() => eventos.filter(e => e.dia >= desde && e.tipo !== 'banco_horas'), [eventos, desde]);
+  // A diretoria ganha o cartão grande; o resto segue na lista (04/11/2026).
+  const niverDiretoria = useMemo(() => aniversarios.filter(a => a.pessoa_diretoria && a.pessoa_nome), [aniversarios]);
+  const niverDemais = useMemo(() => aniversarios.filter(a => !(a.pessoa_diretoria && a.pessoa_nome)), [aniversarios]);
+  const [agendaAberta, setAgendaAberta] = useState(lerAgendaAberta);
+  const alternarAgenda = () => setAgendaAberta(v => { gravarAgendaAberta(!v); return !v; });
+  const agenda = useMemo(() => agendaPorDia(eventos, feriados, desde), [eventos, feriados, desde]);
   const tiposNoMes = useMemo(
     () => TIPOS_EVENTO.filter(t => t !== 'feriado' && eventos.some(e => e.tipo === t)),
     [eventos],
@@ -115,6 +119,8 @@ export function CalendarioGibi(p: PropsCalendarioGibi) {
     '--listra': misturar(paleta.ink, 8, paleta.surf),
     '--feriado-1': misturar(COR_FERIADO, 20, paleta.surf),
     '--feriado-2': misturar(COR_FERIADO, 30, paleta.surf),
+    '--niver': misturar(INFO_TIPO.aniversario.cor ?? paleta.ac, 16, paleta.surf),
+    '--niver-forte': misturar(INFO_TIPO.aniversario.cor ?? paleta.ac, 38, paleta.surf),
   } as CSSProperties;
   const nomeDoMes = rotuloDoMesLongo(mes).replace(' de ', ' ');
 
@@ -214,6 +220,34 @@ export function CalendarioGibi(p: PropsCalendarioGibi) {
               </section>
             )}
 
+            {/* Aniversariantes logo abaixo do «Faltam» e em destaque (04/11/2026):
+                não é todo dia, e é o que mais se procura no calendário. O Mural
+                saiu no mesmo dia: repetia os avisos que já estão em «Próximos
+                dias» e na grade. */}
+            {aniversarios.length > 0 && (
+              <section className="gb-box gb-box-niver">
+                <h4><Cake className="h-4 w-4" aria-hidden />Aniversariantes</h4>
+                {niverDiretoria.map(a => (
+                  <DestaqueDiretoria key={a.id} evento={a} hojeISO={hojeISO} paleta={paleta} onAbrir={() => escolher(a.dia)} />
+                ))}
+                {niverDemais.length > 0 && (
+                <ul className="gb-niver">
+                  {niverDemais.map(a => (
+                    <li key={a.id} data-passou={a.dia < hojeISO ? '' : undefined}>
+                      <button type="button" onClick={() => escolher(a.dia)}>
+                        <AvatarParticipante nome={a.pessoa_nome ?? a.titulo} fotoUrl={a.pessoa_foto} className="gb-av h-9 w-9" />
+                        <span className="min-w-0">
+                          <b className="truncate">{a.pessoa_nome ?? a.titulo}</b>
+                          <span>{a.dia === hojeISO ? 'Hoje! 🎉' : `Dia ${Number(a.dia.slice(8, 10))}`}</span>
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                )}
+              </section>
+            )}
+
             <CaixaDoDia
               iso={sel}
               hojeISO={hojeISO}
@@ -234,61 +268,70 @@ export function CalendarioGibi(p: PropsCalendarioGibi) {
               </section>
             )}
 
-            {aniversarios.length > 0 && (
-              <section className="gb-box">
-                <h4><Cake className="h-4 w-4" aria-hidden />Aniversariantes</h4>
-                <ul className="gb-niver">
-                  {aniversarios.map(a => (
-                    <li key={a.id}>
-                      <button type="button" onClick={() => escolher(a.dia)}>
-                        <AvatarParticipante nome={a.pessoa_nome ?? a.titulo} fotoUrl={a.pessoa_foto} className="gb-av h-9 w-9" />
-                        <span className="min-w-0">
-                          <b className="truncate">{a.pessoa_nome ?? a.titulo}</b>
-                          <span>{a.dia === hojeISO ? 'Hoje! 🎉' : `Dia ${Number(a.dia.slice(8, 10))}`}</span>
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
-
-            {avisos.length > 0 && (
-              <section className="gb-box">
-                <h4><Pin className="h-4 w-4" aria-hidden />Mural</h4>
-                <div className="gb-mural">
-                  {avisos.map(e => (
-                    <div key={e.id} className="gb-bilhete">
-                      {e.titulo}{e.detalhe ? `, ${e.detalhe}` : ''}
-                      <small>Aviso · dia {e.dia.slice(8, 10)}</small>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
-
             <section className="gb-box">
-              <h4><Megaphone className="h-4 w-4" aria-hidden />{regua.tempo === 'corrente' ? 'Próximos dias' : 'Agenda do mês'}</h4>
-              {agenda.length === 0 ? (
+              {/* Minimizar é escolha de quem olha, e fica lembrada neste navegador
+                  (04/11/2026). Na cópia em imagem o botão não entra. */}
+              <div className="gb-box-topo">
+                <h4><Megaphone className="h-4 w-4" aria-hidden />{regua.tempo === 'corrente' ? 'Próximos dias' : 'Agenda do mês'}</h4>
+                {agenda.dias.length > 0 && (
+                  <button type="button" className="gb-recolher" onClick={alternarAgenda} aria-expanded={agendaAberta}
+                    aria-controls="gb-agenda-lista" data-html2canvas-ignore>
+                    {agendaAberta ? 'Minimizar' : 'Mostrar'}
+                    <ChevronDown aria-hidden className={cn('h-3.5 w-3.5 transition-transform', agendaAberta && 'rotate-180')} />
+                  </button>
+                )}
+              </div>
+              {agenda.dias.length > 0 && !agendaAberta ? (
+                <button type="button" className="gb-agenda-resumo" onClick={alternarAgenda}>
+                  {resumoDaAgenda(agenda.dias)}
+                </button>
+              ) : agenda.dias.length === 0 ? (
                 <p className="gb-vazio">{regua.tempo === 'corrente' ? 'Nada marcado daqui até o fim do mês.' : 'Nada marcado neste mês.'}</p>
               ) : (
-                <ol className="gb-agenda">
-                  {agenda.slice(0, AGENDA).map(e => (
-                    <li key={e.id}>
-                      <button type="button" onClick={() => escolher(e.dia)}>
-                        <span className="gb-ag-data">
-                          <b>{e.dia.slice(8, 10)}</b>
-                          <span>{e.dia === hojeISO ? 'hoje' : SEMANA_CURTA[diaDaSemana(e.dia)]}</span>
-                        </span>
-                        <span className="gb-ag-txt" style={estiloTipo(corDoTipo(e.tipo))}>
-                          <b>{e.tipo === 'aniversario' && e.pessoa_nome ? `Aniversário: ${e.pessoa_nome}` : e.titulo}</b>
-                          {e.detalhe && <span>{e.detalhe}</span>}
-                        </span>
+                <ol className="gb-agenda" id="gb-agenda-lista">
+                  {agenda.dias.map(d => {
+                    const visiveis = d.eventos.slice(0, POR_DIA_NA_AGENDA - (d.feriado ? 1 : 0));
+                    const sobra = d.eventos.length - visiveis.length;
+                    return (
+                      <li key={d.dia}>
+                        <button type="button" onClick={() => escolher(d.dia)} aria-label={`Abrir ${rotuloDoDia(d.dia)}`}>
+                          <span className={cn('gb-ag-data', d.dia === hojeISO && 'gb-ag-hoje')}>
+                            <b>{d.dia.slice(8, 10)}</b>
+                            <span>{d.dia === hojeISO ? 'hoje' : SEMANA_CURTA[diaDaSemana(d.dia)]}</span>
+                          </span>
+                          <span className="gb-ag-itens">
+                            {d.feriado && (
+                              <span className="gb-ag-item" style={estiloTipo(d.feriado.folga ? COR_FERIADO : COR_FERIADO_TRABALHADO)}>
+                                <span className="gb-ag-txt">
+                                  <b>{d.feriado.nome}</b>
+                                  <span>{d.feriado.folga ? 'Feriado: não trabalha' : 'Feriado com expediente normal'}</span>
+                                </span>
+                              </span>
+                            )}
+                            {visiveis.map(e => (
+                              <span key={e.id} className="gb-ag-item" style={estiloTipo(corDoTipo(e.tipo))}>
+                                {e.tipo === 'aniversario' && e.pessoa_nome && (
+                                  <AvatarParticipante nome={e.pessoa_nome} fotoUrl={e.pessoa_foto} className="gb-av gb-ag-av h-7 w-7 text-[9px]" />
+                                )}
+                                <span className="gb-ag-txt">
+                                  <b>{e.tipo === 'aniversario' && e.pessoa_nome ? `Aniversário: ${e.pessoa_nome}` : e.titulo}</b>
+                                  {e.detalhe && <span>{e.detalhe}</span>}
+                                </span>
+                              </span>
+                            ))}
+                            {sobra > 0 && <span className="gb-ag-mais">+{sobra} neste dia</span>}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                  {agenda.proximoOculto && (
+                    <li>
+                      <button type="button" className="gb-ag-rodape" onClick={() => escolher(agenda.proximoOculto!)}>
+                        <span>{agenda.ocultos === 1 ? 'Mais 1 dia marcado' : `Mais ${agenda.ocultos} dias marcados`}</span>
+                        <b>Ver o dia {agenda.proximoOculto.slice(8, 10)} →</b>
                       </button>
                     </li>
-                  ))}
-                  {agenda.length > AGENDA && (
-                    <li className="gb-vazio">e mais {agenda.length - AGENDA} — toque no dia na grade para ver</li>
                   )}
                 </ol>
               )}
@@ -318,15 +361,22 @@ function Quadrinho({ iso, eventos, util, feriado, hoje, escolhido, tema, paleta,
   const folga = feriado?.folga === true;
   const banco = eventos.some(e => e.tipo === 'banco_horas');
   const aniversario = eventos.some(e => e.tipo === 'aniversario');
+  const aniversariante = eventos.find(e => e.tipo === 'aniversario' && e.pessoa_nome) ?? null;
+  const diretoria = eventos.some(e => e.tipo === 'aniversario' && e.pessoa_diretoria);
   const corFeriado = folga ? COR_FERIADO : COR_FERIADO_TRABALHADO;
 
-  const linhas: { chave: string; titulo: string; detalhe: string | null; cor: string }[] = [
-    ...(feriado ? [{ chave: 'feriado', titulo: feriado.nome, detalhe: folga ? null : 'expediente normal', cor: corFeriado }] : []),
+  const linhas: {
+    chave: string; titulo: string; detalhe: string | null; cor: string;
+    /** O aniversariante marcado: a foto vai na etiqueta, ao lado do nome. */
+    pessoa: { nome: string; foto: string | null } | null;
+  }[] = [
+    ...(feriado ? [{ chave: 'feriado', titulo: feriado.nome, detalhe: folga ? null : 'expediente normal', cor: corFeriado, pessoa: null }] : []),
     ...eventos.map(e => ({
       chave: e.id,
       titulo: e.tipo === 'aniversario' && e.pessoa_nome ? primeiroNome(e.pessoa_nome) : e.titulo,
       detalhe: e.detalhe,
       cor: corDoTipo(e.tipo),
+      pessoa: e.tipo === 'aniversario' && e.pessoa_nome ? { nome: e.pessoa_nome, foto: e.pessoa_foto } : null,
     })),
   ];
 
@@ -350,6 +400,7 @@ function Quadrinho({ iso, eventos, util, feriado, hoje, escolhido, tema, paleta,
         'gb-dia',
         forte ? 'gb-forte' : folga ? 'gb-feriado' : banco ? 'gb-tinta' : !util && 'gb-nao-util',
         hoje && 'gb-hoje',
+        diretoria && 'gb-dia-dir',
       )}
     >
       <span className="gb-dia-top">
@@ -363,6 +414,9 @@ function Quadrinho({ iso, eventos, util, feriado, hoje, escolhido, tema, paleta,
       <span className="gb-evs" aria-hidden>
         {linhas.slice(0, VISIVEIS).map(l => (
           <span key={l.chave} className="gb-ev" style={estiloTipo(l.cor)}>
+            {l.pessoa && (
+              <AvatarParticipante nome={l.pessoa.nome} fotoUrl={l.pessoa.foto} className="gb-av gb-ev-av h-[22px] w-[22px] text-[8px]" />
+            )}
             <span className="gb-ev-tx">
               <span className="gb-ev-t">{l.titulo}</span>
               {l.detalhe && <span className="gb-ev-d">{l.detalhe}</span>}
@@ -378,9 +432,17 @@ function Quadrinho({ iso, eventos, util, feriado, hoje, escolhido, tema, paleta,
         </span>
       )}
 
+      {/* A foto do aniversariante marcado (04/11/2026). Na casa larga ela vai na
+          etiqueta, ao lado do nome (acima); na estreita a casa só tem pontos, e
+          a foto toma o canto no lugar da figurinha — ver `gibi.css`. */}
+      {aniversariante && (
+        <span className="gb-niver-foto" aria-hidden>
+          <AvatarParticipante nome={aniversariante.pessoa_nome ?? aniversariante.titulo} fotoUrl={aniversariante.pessoa_foto} className="gb-av gb-niver-av h-full w-full text-[8px]" />
+        </span>
+      )}
       {forte
-        ? <span className="gb-figurinha" aria-hidden><Motivo id={tema.motivo} cores={paleta} /></span>
-        : aniversario && <span className="gb-figurinha" aria-hidden><Bolo cores={paleta} /></span>}
+        ? <span className={cn('gb-figurinha', aniversariante && 'gb-fig-com-foto')} aria-hidden><Motivo id={tema.motivo} cores={paleta} /></span>
+        : aniversario && <span className={cn('gb-figurinha', aniversariante && 'gb-fig-com-foto')} aria-hidden><Bolo cores={paleta} /></span>}
     </button>
   );
 }
@@ -422,7 +484,9 @@ function CaixaDoDia({ iso, hojeISO, eventos, util, feriado, podeEditar, onAbrir 
             const Icone = ICONE_TIPO[e.tipo];
             return (
               <li key={e.id} className="gb-item">
-                <span className="gb-ic" style={estiloTipo(corDoTipo(e.tipo))}><Icone aria-hidden /></span>
+                {e.tipo === 'aniversario' && e.pessoa_nome
+                  ? <AvatarParticipante nome={e.pessoa_nome} fotoUrl={e.pessoa_foto} className="gb-av h-9 w-9" />
+                  : <span className="gb-ic" style={estiloTipo(corDoTipo(e.tipo))}><Icone aria-hidden /></span>}
                 <div>
                   <b>{e.tipo === 'aniversario' && e.pessoa_nome ? e.pessoa_nome : e.titulo}</b>
                   <span>{e.tipo === 'aniversario' ? 'Aniversário' : (e.detalhe || INFO_TIPO[e.tipo].rotulo)}</span>
@@ -438,4 +502,64 @@ function CaixaDoDia({ iso, hojeISO, eventos, util, feriado, podeEditar, onAbrir 
       </button>
     </section>
   );
+}
+
+// ── O aniversário da diretoria, em destaque (04/11/2026) ─────────────────────
+
+/** Dias de `de` até `ate` (datas ISO), contando pelo calendário, não pelo fuso. */
+function diasEntre(de: string, ate: string): number {
+  const [a, b, c] = de.split('-').map(Number);
+  const [x, y, z] = ate.split('-').map(Number);
+  return Math.round((Date.UTC(x, y - 1, z) - Date.UTC(a, b - 1, c)) / 86_400_000);
+}
+
+function contagem(dia: string, hojeISO: string): string {
+  const n = diasEntre(hojeISO, dia);
+  if (n === 0) return 'É hoje! 🎉';
+  if (n === 1) return 'É amanhã!';
+  if (n > 1) return `Faltam ${n} dias`;
+  return n === -1 ? 'Foi ontem' : `Foi há ${-n} dias`;
+}
+
+function DestaqueDiretoria({ evento, hojeISO, paleta, onAbrir }: {
+  evento: EventoCalendario;
+  hojeISO: string;
+  paleta: PaletaGibi;
+  onAbrir: () => void;
+}) {
+  const nome = evento.pessoa_nome ?? evento.titulo;
+  return (
+    <button type="button" className="gb-dir" data-hoje={evento.dia === hojeISO ? '' : undefined}
+      data-passou={evento.dia < hojeISO ? '' : undefined} onClick={onAbrir}
+      aria-label={`Aniversário de ${nome}, da diretoria: ${rotuloDoDia(evento.dia)}`}>
+      <span className="gb-dir-selo">Diretoria</span>
+      <AvatarParticipante nome={nome} fotoUrl={evento.pessoa_foto} className="gb-av gb-dir-av h-16 w-16 text-base" />
+      <span className="gb-dir-txt">
+        <small>Aniversário</small>
+        <b>{nome}</b>
+        <span>{rotuloDoDia(evento.dia)}</span>
+        <em>{contagem(evento.dia, hojeISO)}</em>
+      </span>
+      <span className="gb-dir-bolo" aria-hidden><Bolo cores={paleta} /></span>
+    </button>
+  );
+}
+
+// ── «Próximos dias» minimizado ───────────────────────────────────────────────
+
+const CHAVE_AGENDA = 'calendario:proximos-dias:aberta';
+
+function lerAgendaAberta(): boolean {
+  try { return window.localStorage.getItem(CHAVE_AGENDA) !== 'nao'; } catch { return true; }
+}
+
+function gravarAgendaAberta(aberta: boolean): void {
+  try { window.localStorage.setItem(CHAVE_AGENDA, aberta ? 'sim' : 'nao'); } catch { /* sem armazenamento: só não lembra */ }
+}
+
+/** «4 coisas marcadas nos próximos 3 dias · toque para ver». */
+function resumoDaAgenda(dias: readonly { feriado: unknown; eventos: readonly unknown[] }[]): string {
+  const coisas = dias.reduce((n, d) => n + d.eventos.length + (d.feriado ? 1 : 0), 0);
+  const quantos = dias.length === 1 ? 'no próximo dia' : `nos próximos ${dias.length} dias`;
+  return `${coisas} ${coisas === 1 ? 'coisa marcada' : 'coisas marcadas'} ${quantos} · toque para ver`;
 }

@@ -71,6 +71,7 @@ import {
   celulaCsv,
   expurgarLogs,
   RESUMO_VAZIO,
+  rotaAtual,
 } from './logs.service';
 
 beforeEach(() => {
@@ -376,5 +377,17 @@ describe('expurgarLogs', () => {
     const r = await expurgarLogs(5);
     expect(r.removidos).toBe(0);
     expect(r.erro).toBe('Retenção mínima de 30 dias');
+  });
+});
+
+describe('rotaAtual', () => {
+  // HashRouter: a rota mora depois do `#`, e `pathname` é sempre `/`.
+  it('lê a rota do hash, sem a busca', () => {
+    window.location.hash = '#/acordos?busca=12345';
+    expect(rotaAtual()).toBe('/acordos');
+  });
+  it('sem hash, fica com o pathname', () => {
+    window.location.hash = '';
+    expect(rotaAtual()).toBe(window.location.pathname);
   });
 });

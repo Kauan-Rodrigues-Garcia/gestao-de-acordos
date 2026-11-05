@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-  MODELOS, TIPOS_EVENTO, TIPOS_LANCAVEIS, corForte, diasDaRegra, diasDoMes, eventosPorDia,
+  MODELOS, TIPOS_EVENTO, TIPOS_LANCAVEIS, agendaPorDia, corForte, diasDaRegra, diasDoMes, eventosPorDia,
   faltaNoHorarioBanco, feriadosDoMes, lerHorarioBanco, proximosEventos, resumoDoMes, rotuloDoDia,
   semanasDoMes, temaEfetivo, textoDoBanco, textoSobreCor, type EventoCalendario,
 } from './calendarioSetor';
@@ -183,5 +183,48 @@ describe('contrato com o banco', () => {
     const bloco = /CONSTRAINT calendario_eventos_tipo CHECK \(tipo IN \(([\s\S]*?)\)\)/.exec(sql)?.[1] ?? '';
     const noSql = [...bloco.matchAll(/'([a-z_]+)'/g)].map(m => m[1]);
     expect(noSql.sort()).toEqual([...TIPOS_EVENTO].sort());
+  });
+});
+
+describe('a agenda «Próximos dias», por dia', () => {
+  const sem = new Map<string, { nome: string; folga: boolean }>();
+
+  it('junta tudo o que há no dia, banco de horas incluído', () => {
+    const a = agendaPorDia([
+      ev('2026-11-05', 'banco_horas'), ev('2026-11-05', 'evento'),
+      ev('2026-11-05', 'aniversario', { pessoa_id: 'p1', pessoa_nome: 'Ana' }),
+      ev('2026-11-09', 'aviso'),
+    ], sem, '2026-11-04');
+    expect(a.dias.map(d => [d.dia, d.eventos.map(e => e.tipo)])).toEqual([
+      ['2026-11-05', ['banco_horas', 'evento', 'aniversario']],
+      ['2026-11-09', ['aviso']],
+    ]);
+    expect(a.ocultos).toBe(0);
+  });
+
+  it('mostra só os três próximos dias, e aponta o primeiro que ficou de fora', () => {
+    const a = agendaPorDia(
+      ['05', '06', '09', '10', '11'].map(d => ev(`2026-11-${d}`, 'aviso')),
+      sem, '2026-11-04',
+    );
+    expect(a.dias.map(d => d.dia)).toEqual(['2026-11-05', '2026-11-06', '2026-11-09']);
+    expect(a.ocultos).toBe(2);
+    expect(a.proximoOculto).toBe('2026-11-10');
+  });
+
+  it('o dia cheio continua inteiro: o limite é de dias, não de coisas', () => {
+    const cheio = ['banco_horas', 'evento', 'folga', 'aviso', 'horario'].map(t => ev('2026-11-05', t as EventoCalendario['tipo']));
+    expect(agendaPorDia(cheio, sem, '2026-11-04').dias[0].eventos).toHaveLength(5);
+  });
+
+  it('o feriado entra no dia dele', () => {
+    const feriados = new Map([['2026-11-15', { nome: 'Proclamação da República', folga: true }]]);
+    const a = agendaPorDia([ev('2026-11-15', 'aviso')], feriados, '2026-11-04');
+    expect(a.dias).toEqual([{ dia: '2026-11-15', feriado: feriados.get('2026-11-15'), eventos: [expect.objectContaining({ tipo: 'aviso' })] }]);
+  });
+
+  it('nada antes de hoje', () => {
+    const feriados = new Map([['2026-11-02', { nome: 'Finados', folga: true }]]);
+    expect(agendaPorDia([ev('2026-11-03', 'aviso')], feriados, '2026-11-04').dias).toEqual([]);
   });
 });

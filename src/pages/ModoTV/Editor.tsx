@@ -38,7 +38,7 @@ import {
   CATEGORIAS, MAX_TELAS, SEGUNDOS_MAX, SEGUNDOS_MIN, TEMAS, TEMPLATES, TEMPOS_PRONTOS,
   campoVisivel, noRodizio, novaTela, opcao, rotuloTempo, segundosDaTela, segundosDoArquivo, templateDe, type CampoOpcao,
 } from './templates';
-import { CORES } from './TelaTv';
+import { CORES } from './cores';
 import { Rodizio } from './Rodizio';
 import { numerosDemo } from './demo';
 import { montarVisao } from './numeros';

@@ -76,6 +76,12 @@ export default tseslint.config(
     files: ["videos/**"],
     rules: { "react-refresh/only-export-components": "off" },
   },
+  // As páginas de laboratório (`lab-*.html` na raiz) montam a arte sozinhas com
+  // `createRoot`: são ponto de entrada, não módulo que o fast refresh troca.
+  {
+    files: ["**/laboratorio.tsx", "lab-*.tsx", "lab-*/**/*.tsx"],
+    rules: { "react-refresh/only-export-components": "off" },
+  },
   // Arquivos core (fronteiras Supabase) — exigência de tipagem estrita, sem `any`.
   // Este override foi adicionado após o sweep de remoção de `any`;
   // novo `any` aqui deve ser rejeitado pelo CI até refatoração explícita.

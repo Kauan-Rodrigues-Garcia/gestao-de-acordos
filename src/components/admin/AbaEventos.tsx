@@ -10,7 +10,7 @@
  * `ranking_quitacao_configurar`. Esconder o botão é só conveniência.
  */
 import { useState, type ReactNode } from 'react';
-import { Flag, Siren, Medal, TrainFront, type LucideIcon } from 'lucide-react';
+import { Flag, Siren, Medal, TrainFront, Vote, type LucideIcon } from 'lucide-react';
 import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { cn } from '@/lib/utils';
 import { NOME_CORRIDA } from '@/components/Corrida/nome';
@@ -18,6 +18,7 @@ import CorridaConfig from '@/components/admin/CorridaConfig';
 import SireneConfig from '@/components/admin/SireneConfig';
 import RankingQuitacaoConfig from '@/components/admin/RankingQuitacaoConfig';
 import TremNatalConfig from '@/components/admin/TremNatalConfig';
+import VotacaoLideresConfig from '@/components/admin/VotacaoLideresConfig';
 
 interface Props {
   ehSuperAdmin: boolean;
@@ -56,6 +57,12 @@ export default function AbaEventos({ ehSuperAdmin, podeConfigurarRankingQuitacao
       visivel: podeConfigurarRankingQuitacao,
       descricao: 'Em que setor o ranking aparece e os prêmios do 1º ao 6º.',
       conteudo: <RankingQuitacaoConfig />,
+    },
+    {
+      // Por enquanto só demonstração: nada gravado (04/11/2026).
+      id: 'votacao_lideres', rotulo: 'Votação da Liderança', icone: Vote, visivel: ehSuperAdmin,
+      descricao: 'Os líderes escolhem o colega de cada categoria: o mais comunicativo, o mais inspirador… (demonstração).',
+      conteudo: <VotacaoLideresConfig />,
     },
   ];
   const visiveis = EVENTOS.filter(e => e.visivel);

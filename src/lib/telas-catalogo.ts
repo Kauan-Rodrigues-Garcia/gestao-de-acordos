@@ -46,6 +46,8 @@ export const TELA_LABEL: Record<string, string> = {
   // Tela própria desde 16/10/2026. Antes era a sub-aba `acordos:pix`, que fica
   // no catálogo abaixo porque o histórico de uso já gravou com ela.
   'pix-automatico':            'Pix Automático',
+  'acesso':                    'Acesso (Jornada)',
+  'retencao':                  'Retenção (Jornada)',
   'analitico':                 'Analítico',
   'lider':                     'Painel do Líder',
   // Aba removida em 31/08/2026. O rótulo FICA: já há histórico de uso gravado

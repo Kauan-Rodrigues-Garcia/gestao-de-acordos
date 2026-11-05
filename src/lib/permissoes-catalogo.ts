@@ -414,6 +414,23 @@ export const PERMISSOES: PermissaoMeta[] = [
     descricao: 'Abrir o painel de Pix automático e o ranking de comissão',
     grupo: 'Abas e telas', tenants: ['bookplay'], padrao: TODOS,
   },
+  /*
+   * Jornada (04/11/2026). As duas abas nascem ligadas para a operação inteira
+   * porque quem as vê, de fato, é o GRUPO: só quem está na equipe/subgrupo
+   * Suporte ou Retenção do setor Jornada (ou é liderança dele). A chave é o
+   * interruptor por cima — desligar tira a aba do cargo, e o banco recusa
+   * (`fn_jornada_chave_ok`, migration 20261104210000).
+   */
+  {
+    key: 'ver_jornada_acesso', label: 'Aba Acesso (Jornada)',
+    descricao: 'Lançar e acompanhar os acessos (NR + data) da equipe Suporte do Jornada',
+    grupo: 'Abas e telas', padrao: TODOS,
+  },
+  {
+    key: 'ver_jornada_retencao', label: 'Aba Retenção (Jornada)',
+    descricao: 'Lançar e acompanhar as retenções (NR + data) da equipe Retenção do Jornada',
+    grupo: 'Abas e telas', padrao: TODOS,
+  },
   {
     /*
      * O chat NASCE fechado para todo mundo, e `padrao: {}` sozinho não garante

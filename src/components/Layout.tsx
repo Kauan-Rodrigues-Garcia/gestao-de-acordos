@@ -35,6 +35,7 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useCargos } from '@/hooks/useCargos';
 import { useTicketsAcesso } from '@/hooks/useTicketsAcesso';
+import { useJornadaAbas } from '@/hooks/useJornadaAbas';
 import { ROUTE_PATHS, PERFIL_LABELS, PERFIL_COLORS } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -78,6 +79,7 @@ import { useEasterEggCriadores, DURACAO_ESCURECIMENTO_MS } from '@/hooks/useEast
 // só onde ela é criada. Só a aba de criação mudou de lugar.
 import { ComemoracaoOverlay } from './comemoracao/ComemoracaoOverlay';
 import { SireneOverlay } from './Sirene/SireneOverlay';
+import { AvisoVotacao } from './VotacaoLideres/AvisoVotacao';
 import { BingoNoSistema } from '@/pages/ModoTV/bingo/jogador/BingoNoSistema';
 import { useModoLeve } from '@/lib/modoLeve';
 import { useModoLeveZeradoPeloAdmin } from '@/lib/modoLeveZerado';
@@ -347,6 +349,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   useCargos();
   const { temPermissao, valorDoCargo, loading: permLoading } = useCargoPermissoes();
   const acessoTickets   = useTicketsAcesso();
+  // Abas Acesso/Retenção do Jornada: pelo subgrupo da pessoa.
+  const jornada         = useJornadaAbas();
   // Mesmo estado que o painel (ChatNotificacoes) usa — antes o header tinha um
   // canal e um SELECT count próprios, que podiam divergir da lista por instantes.
   const { naoLidas, animarBadge } = useNotificacoes();
@@ -411,9 +415,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     isBookplay: tenant.slug === 'bookplay',
     temPermissao: chave => !permLoading && temPermissao(chave),
     acessoTickets: acessoTickets.podeVerAba,
+    abasJornada: { acesso: jornada.acesso, retencao: jornada.retencao },
   }), [
     userRole, produto, isPP, tenant.slug, permLoading, temPermissao,
-    acessoTickets.podeVerAba,
+    acessoTickets.podeVerAba, jornada.acesso, jornada.retencao,
   ]);
 
   /*
@@ -1138,6 +1143,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* O recuo acompanha o menu: 240 px aberto, 64 recolhido, mais 16 de
           respiro. Sem isto a gaveta abria POR CIMA do menu lateral. */}
       <AutorizacaoDock recuoEsquerda={(sidebarOpen ? 240 : 64) + 16} />
+      {/* Votação da Liderança (04/11/2026): «Votar agora» / «Ver resultado» no canto. Ver `VotacaoLideres/AvisoVotacao.tsx`. */}
+      <AvisoVotacao recuoEsquerda={(sidebarOpen ? 240 : 64) + 16} />
 
       {/* Chat interno — mesma quina do dock de autorizações, um degrau acima.
           Fica fora das rotas de propósito: conversar não é uma tela, é uma
