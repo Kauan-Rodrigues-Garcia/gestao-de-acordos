@@ -106,13 +106,16 @@ import { AbaComissao } from "@/components/Comissao/AbaComissao";
 import type { MetaLinhaBruta } from "@/services/comissao/entradaDoOperador";
 import { COLUNAS_SETOR_DO_FILTRO, setoresDosFiltros } from '@/lib/setoresDosFiltros';
 import { ehRegraDoSetor } from '@/lib/regraDoSetor';
+import { useDivisoes } from '@/hooks/useDivisoes';
+import { divisaoDaEquipe, divisoesDoSetor } from '@/services/setores/divisoes';
 
 const MESES = [
   "Janeiro","Fevereiro","Março","Abril","Maio","Junho",
   "Julho","Agosto","Setembro","Outubro","Novembro","Dezembro",
 ];
 
-type TipoMeta = "setor" | "equipe" | "operador";
+/** `divisao` = divisão do setor (05/11/2026, migration 20261105120500). */
+type TipoMeta = "setor" | "divisao" | "equipe" | "operador";
 
 interface Meta {
   id?: string;
@@ -694,8 +697,10 @@ export default function MetasConfig() {
   const [inputMetas, setInputMetas] = useState<Record<string, MetaInput>>({});
   // As linhas de meta do mês como vieram do banco — a aba Comissão lê daqui.
   const [metasDoMes, setMetasDoMes] = useState<MetaLinhaBruta[]>([]);
+  // Divisões do setor: metas separadas dentro do mesmo setor (05/11/2026).
+  const { divisoes: todasDivisoes } = useDivisoes();
   // Campos extras visíveis por seção (BP): padrão 0, "+" adiciona p/ todos
-  const [extraCampos, setExtraCampos] = useState<Record<TipoMeta, number>>({ setor: 0, equipe: 0, operador: 0 });
+  const [extraCampos, setExtraCampos] = useState<Record<TipoMeta, number>>({ setor: 0, divisao: 0, equipe: 0, operador: 0 });
 
   // Meta em lote: quem está marcado e o formulário que vai para todos eles.
   const [selecionadosOp, setSelecionadosOp] = useState<string[]>([]);
@@ -962,7 +967,7 @@ export default function MetasConfig() {
       const loaded: Meta[] = (data ?? []) as Meta[];
       setMetasDoMes(loaded as unknown as MetaLinhaBruta[]);
       const newInputs: Record<string, MetaInput> = {};
-      const maxExtras: Record<TipoMeta, number> = { setor: 0, equipe: 0, operador: 0 };
+      const maxExtras: Record<TipoMeta, number> = { setor: 0, divisao: 0, equipe: 0, operador: 0 };
       for (const m of loaded) {
         if (!m?.referencia_id) continue;
         const v = Number(m.meta_valor) || 0;
@@ -1469,6 +1474,10 @@ export default function MetasConfig() {
   }, [configAlterada, salvarConfigMes]);
 
   const setorNome = setores.find(s => s.id === setorSelecionado)?.nome ?? "";
+  const divisoesDoSetorAtual = useMemo(
+    () => divisoesDoSetor(todasDivisoes, setorSelecionado),
+    [todasDivisoes, setorSelecionado],
+  );
 
   // O cartão do setor só nasce da leitura do mês em tela (ver `configLida`).
   const podeCartaoDoSetor = temConfigMes && configDbAtiva && configCarregada && diasPorSetorAtiva
@@ -1741,6 +1750,45 @@ export default function MetasConfig() {
             )}
           </SectionCard>
 
+          {/* Meta por Divisão — só no setor que tem divisões (05/11/2026) */}
+          {divisoesDoSetorAtual.length > 0 && (
+            <SectionCard title="Meta por Divisão"
+              description={`Metas separadas dentro de ${setorNome}. A meta do setor acima continua valendo para o setor inteiro.`}
+              icon={<Layers className="h-4 w-4" />} badge={divisoesDoSetorAtual.length}>
+              {loadingMetas ? <Skeleton className="h-8 w-full my-2" /> : (
+                <>
+                  {divisoesDoSetorAtual.map(d => (
+                    <MetaRow key={d.id} label={d.nome}
+                      sublabel={`Divisão · ${d.equipes.length} ${d.equipes.length === 1 ? 'equipe' : 'equipes'}`
+                        + (d.recebedores.length ? ` · ${d.recebedores.length} sem equipe` : '')}
+                      icon={<Layers className="h-4 w-4" />}
+                      input={getInput(d.id)}
+                      onGravar={(patch) => void salvarLinha("divisao", d.id, patch)}
+                      onExcluir={podeExcluirLinha(d.id)
+                        ? () => setExcluindo({ tipo: "divisao", ids: [d.id], rotulo: `da divisão ${d.nome}` })
+                        : undefined}
+                      estado={estadoLinhas[d.id]}
+                      disabled={!podeGerenciarMetas || metaTravada}
+                      mostrarHO={isPP}
+                      numExtras={extraCampos.divisao}
+                      onChangeExtra={(i, v) => onChangeExtra(d.id, i, v)}
+                      onChangeExtraHO={(i, v) => onChangeExtraHO(d.id, i, v)}
+                      onChangeValor={v => onChangeValor(d.id, v)}
+                      onChangeHO={v => onChangeHO(d.id, v)}
+                      proporcional={getInput(d.id).proporcional}
+                      onChangeProporcional={v => onChangeProporcional(d.id, v)} />
+                  ))}
+                  {podeGerenciarMetas && (
+                    <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground mt-1"
+                      onClick={() => setExtraCampos(p => ({ ...p, divisao: p.divisao + 1 }))}>
+                      <Plus className="h-3.5 w-3.5" /> Adicionar {extraCampos.divisao + 2}ª meta (todas as divisões)
+                    </Button>
+                  )}
+                </>
+              )}
+            </SectionCard>
+          )}
+
           {/* Meta por Equipe */}
           <SectionCard title="Meta por Equipe"
             description={`Metas individuais por equipe do setor ${setorNome}`}
@@ -1752,7 +1800,10 @@ export default function MetasConfig() {
             ) : (
               <div>
                 {equipes.filter(eq => typeof eq?.id === "string" && eq.id.length > 0).map(eq => (
-                  <MetaRow key={eq.id} label={String(eq.nome ?? "")} sublabel="Equipe"
+                  <MetaRow key={eq.id} label={String(eq.nome ?? "")}
+                    sublabel={divisoesDoSetorAtual.length
+                      ? `Equipe · ${divisaoDaEquipe(divisoesDoSetorAtual, eq.id)?.nome ?? 'sem divisão'}`
+                      : "Equipe"}
                     icon={<Users className="h-4 w-4" />}
                     input={getInput(eq.id)}
                     onGravar={(patch) => void salvarLinha("equipe", eq.id, patch)}

@@ -99,6 +99,7 @@ function filtroDoEscopo(escopo: EscopoAnalitico): FiltroEscopo {
     case 'operador':
       return { coluna: 'operador_id', igual: escopo.operadorId };
     case 'equipe':
+    case 'divisao':
       return montarFiltroDeOperadores(escopo.operadores);
     case 'setor':
       return escopo.porRelatorio

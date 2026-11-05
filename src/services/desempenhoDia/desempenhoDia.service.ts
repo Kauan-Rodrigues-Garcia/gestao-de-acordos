@@ -27,6 +27,7 @@
  */
 
 import { supabase } from '@/lib/supabase';
+import { rpcSemTipo } from '@/lib/supabaseSemTipo';
 import type { NivelEscopo } from '@/lib/permissoes-escopo';
 import {
   linhaNoEscopo, ESCOPO_EMPRESA, type EscopoAnalitico,
@@ -59,6 +60,8 @@ export interface LinhaPixDia {
   status: string | null;
   valor: number | null;
   pct_comissao: number | null;
+  /** Comissão fixa (regra do Jornada). Ausente antes da migration 20261105150000. */
+  comissao_fixa?: number | null;
 }
 
 /**
@@ -295,6 +298,58 @@ export async function contarFormalizadosDoDia(params: RecorteConsulta & {
  * de ontem aprovado hoje continua sendo produção de ontem, e mudá-lo de dia
  * reescreveria um número que a equipe já leu.
  */
+// ── Jornada: acessos e retenções ─────────────────────────────────────────────
+
+/**
+ * Quantos Acessos e Retenções foram lançados (abas do Jornada, 05/11/2026).
+ * Só o setor Jornada tem isso.
+ */
+export interface ContagemJornadaDia {
+  acesso: number;
+  retencao: number;
+  /** Do dia 1 do mês até o dia escolhido. */
+  acessoMes: number;
+  retencaoMes: number;
+  /** O recorte tem gente num grupo Suporte (Acesso) / Retenção? */
+  temAcesso: boolean;
+  temRetencao: boolean;
+}
+
+interface ContagemJornadaDoBanco {
+  acesso: number; retencao: number; acesso_mes: number; retencao_mes: number;
+  tem_acesso: boolean; tem_retencao: boolean;
+}
+
+/**
+ * A contagem do Jornada no recorte do painel, ou `null` — e `null` é o caso
+ * comum: o banco (`fn_jornada_contagem_dia`, migration 20261105170000) só
+ * conta gente do setor Jornada e devolve nada para qualquer outro recorte.
+ * Também `null` se a função ainda não estiver no banco ou se o recorte não
+ * tiver nenhuma das duas abas: o bloco simplesmente não aparece.
+ */
+export async function buscarJornadaDoDia(params: RecorteConsulta & {
+  dia: string;
+}): Promise<ContagemJornadaDia | null> {
+  const { data, error } = await rpcSemTipo<ContagemJornadaDoBanco | null>('fn_jornada_contagem_dia', {
+    p_empresa_id: params.empresaId,
+    p_dia: params.dia,
+    p_operador_id: params.operadorId ?? null,
+    p_operadores: params.operadores?.length ? [...params.operadores] : null,
+    p_setor_id: params.setorId ?? null,
+  });
+  if (error || !data) return null;
+  const c: ContagemJornadaDia = {
+    acesso: Number(data.acesso) || 0,
+    retencao: Number(data.retencao) || 0,
+    acessoMes: Number(data.acesso_mes) || 0,
+    retencaoMes: Number(data.retencao_mes) || 0,
+    temAcesso: !!data.tem_acesso,
+    temRetencao: !!data.tem_retencao,
+  };
+  const temAlgo = c.temAcesso || c.temRetencao || c.acessoMes > 0 || c.retencaoMes > 0;
+  return temAlgo ? c : null;
+}
+
 export async function buscarPixDoDia(params: RecorteConsulta & {
   dia: string;
   isPaguePlay: boolean;
@@ -303,19 +358,22 @@ export async function buscarPixDoDia(params: RecorteConsulta & {
   if (isPaguePlay) return [];
 
   const amanha = diaSeguinte(dia);
-  const q = aplicarRecorte(
+  const consulta = (colunas: string) => aplicarRecorte(
     supabase
       .from('pix_automatico_acordos')
-      .select('status, valor, pct_comissao')
+      .select(colunas)
       .eq('empresa_id', empresaId)
       .gte('criado_em', `${dia}T00:00:00`)
       .lt('criado_em', `${amanha}T00:00:00`),
     params,
   );
 
-  const { data, error } = await q;
+  // Com a comissão fixa (20261105150000); sem a coluna, a leitura de sempre.
+  const comFixa = await consulta('status, valor, pct_comissao, comissao_fixa');
+  if (!comFixa.error) return (comFixa.data as unknown as LinhaPixDia[] | null) ?? [];
+  const { data, error } = await consulta('status, valor, pct_comissao');
   if (error) return [];
-  return (data as LinhaPixDia[] | null) ?? [];
+  return (data as unknown as LinhaPixDia[] | null) ?? [];
 }
 
 /**

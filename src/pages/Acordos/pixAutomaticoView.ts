@@ -30,7 +30,7 @@ import { pctLimitado } from '@/lib/projecaoMetas';
 import {
   comissaoDe, valorAPagarDe, PIX_META_ACORDOS_DOBRA, metaDobraDoSetor,
   PIX_DIAS_UTEIS_EXPURGO,
-  type PixAutoAcordo, type PixAutoStatus,
+  type MetaModoPix, type PixAutoAcordo, type PixAutoStatus,
 } from '@/services/pix_automatico.service';
 
 export interface OperadorInfo {
@@ -867,6 +867,12 @@ export function itensDoSetorPix(
 
 export interface EntradaMetaPix {
   itens: PixAutoAcordo[];
+  /**
+   * Como o setor mede a meta do Pix (05/11/2026, regra do Jornada): em R$
+   * (`valor`, o padrão) ou em quantidade de acordos (`quantidade`). Decide o
+   * %, a projeção e o «bateu».
+   */
+  modo?: MetaModoPix;
   /** Meta de valor do setor no mês. 0/null = sem meta de valor. */
   metaValor: number | null;
   /** Meta de quantidade de acordos no mês. 0/null = sem meta de quantidade. */
@@ -877,6 +883,10 @@ export interface EntradaMetaPix {
 }
 
 export interface ResumoMetaPix {
+  /** Como esta meta é medida: R$ ou quantidade de acordos. */
+  modo: MetaModoPix;
+  /** % da meta NO MODO dela (R$ ou quantidade), teto 999. É o que a tela mostra. */
+  pct: number;
   /** Valor somado dos acordos feitos no mês. */
   realizado: number;
   /** Quantidade de acordos feitos no mês. */
@@ -913,16 +923,23 @@ export interface ResumoMetaPix {
  * R$ 0,00" seria uma afirmação falsa sobre uma pergunta que ninguém fez.
  */
 export function calcularMetaPix(e: EntradaMetaPix): ResumoMetaPix | null {
+  const modo: MetaModoPix = e.modo ?? 'valor';
   const metaValor   = Number(e.metaValor ?? 0)   || 0;
   const metaAcordos = Number(e.metaAcordos ?? 0) || 0;
   if (metaValor <= 0 && metaAcordos <= 0) return null;
+  // Medida em quantidade, sem meta de quantidade: não há o que medir.
+  if (modo === 'quantidade' && metaAcordos <= 0) return null;
 
   const doMes = e.itens.filter(i => ehAcordoFeito(i) && noMesPix(i.criado_em, e.mes));
   const realizado = doMes.reduce((s, i) => s + Number(i.valor), 0);
   const acordos   = doMes.length;
 
+  // O que a projeção e o % medem: R$ ou quantidade, conforme o setor.
+  const metaMedida = modo === 'quantidade' ? metaAcordos : metaValor;
+  const feitoMedido = modo === 'quantidade' ? acordos : realizado;
+
   let projecao = 0;
-  if (metaValor > 0 && e.configMes) {
+  if (metaMedida > 0 && e.configMes) {
     const { ano, mes } = partesDoMes(e.mes);
     const totalUteis = diasUteisDoMes(ano, mes, e.configMes.feriados);
     if (totalUteis > 0) {
@@ -933,23 +950,31 @@ export function calcularMetaPix(e: EntradaMetaPix): ResumoMetaPix | null {
       // `Math.max(decorridos, 1)`: no primeiro dia do mês, zero dia decorrido
       // daria divisão por zero e projeção infinita. Um dia é o piso — mesma
       // regra de `calcularBonusMeta`.
-      const esperado = (metaValor / totalUteis) * Math.max(decorridos, 1);
-      projecao = esperado > 0 ? Math.min(Math.round((realizado / esperado) * 100), 999) : 0;
+      const esperado = (metaMedida / totalUteis) * Math.max(decorridos, 1);
+      projecao = esperado > 0 ? Math.min(Math.round((feitoMedido / esperado) * 100), 999) : 0;
     }
   }
 
+  const pctValor = metaValor > 0 ? Math.min(Math.round((realizado / metaValor) * 100), 999) : 0;
+  const pctAcordos = metaAcordos > 0 ? Math.min(Math.round((acordos / metaAcordos) * 100), 999) : 0;
+
   return {
+    modo,
+    pct: modo === 'quantidade' ? pctAcordos : pctValor,
     realizado,
     acordos,
     metaValor,
     metaAcordos,
     faltaValor:   metaValor   > 0 ? Math.max(metaValor - realizado, 0) : 0,
     faltaAcordos: metaAcordos > 0 ? Math.max(metaAcordos - acordos, 0) : 0,
-    pctValor:     metaValor   > 0 ? Math.min(Math.round((realizado / metaValor) * 100), 999) : 0,
+    pctValor,
     projecao,
-    metaBatida:
-      (metaValor   <= 0 || realizado >= metaValor)
-      && (metaAcordos <= 0 || acordos >= metaAcordos),
+    // Em quantidade, só a quantidade decide; em valor, como sempre foi (as
+    // duas metas, quando as duas existem).
+    metaBatida: modo === 'quantidade'
+      ? acordos >= metaAcordos
+      : (metaValor   <= 0 || realizado >= metaValor)
+        && (metaAcordos <= 0 || acordos >= metaAcordos),
   };
 }
 
@@ -1071,13 +1096,16 @@ export interface ConsolidadoMetaPix {
 export function calcularMetaPixPorEquipe(p: {
   itens: PixAutoAcordo[];
   metas: MetaEquipeEntrada[];
+  /** Como o setor mede a meta (R$ ou quantidade). Omitido = R$. */
+  modo?: MetaModoPix;
   /** operador_id → equipe_id */
   equipePorOperador: Record<string, string>;
   configMes: MetasConfigMes | null;
   mes: MesRef;
   hojeISO: string;
 }): ConsolidadoMetaPix {
-  const base = { configMes: p.configMes, mes: p.mes, hojeISO: p.hojeISO };
+  const base = { configMes: p.configMes, mes: p.mes, hojeISO: p.hojeISO, modo: p.modo };
+  const metaMedida = (r: ResumoMetaPix) => (r.modo === 'quantidade' ? r.metaAcordos : r.metaValor);
 
   const equipes: LinhaMetaEquipe[] = p.metas
     .map(m => ({
@@ -1091,7 +1119,7 @@ export function calcularMetaPixPorEquipe(p: {
       }),
     }))
     .filter(l => l.resumo !== null)
-    .sort((a, b) => (b.resumo!.metaValor - a.resumo!.metaValor));
+    .sort((a, b) => (metaMedida(b.resumo!) - metaMedida(a.resumo!)));
 
   // Setor: metas somadas, realizado do setor inteiro (inclui quem está fora de
   // equipe). Passa pela MESMA função, então projeção e % seguem uma regra só.

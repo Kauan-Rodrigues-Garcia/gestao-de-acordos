@@ -172,6 +172,44 @@ describe('FaixaContexto — blocos por operação', () => {
   });
 });
 
+describe('FaixaContexto — Jornada (Acessos e Retenções)', () => {
+  const contagem = {
+    acesso: 12, retencao: 5, acessoMes: 140, retencaoMes: 60, temAcesso: true, temRetencao: true,
+  };
+
+  it('setor Jornada: os dois números do dia, com o mês ao lado', () => {
+    render(<FaixaContexto diretoExtra={null} pix={null} tags={[]} jornada={contagem} />);
+    expect(screen.getByText('Jornada')).toBeTruthy();
+    expect(screen.getByText('12')).toBeTruthy();
+    expect(screen.getByText('Acessos')).toBeTruthy();
+    expect(screen.getByText('5')).toBeTruthy();
+    expect(screen.getByText('Retenções')).toBeTruthy();
+    expect(screen.getByText('140 no mês')).toBeTruthy();
+  });
+
+  it('equipe Suporte: só Acesso, sem linha de Retenção zerada', () => {
+    render(
+      <FaixaContexto diretoExtra={null} pix={null} tags={[]}
+        jornada={{ ...contagem, retencao: 0, retencaoMes: 0, temRetencao: false }} />,
+    );
+    expect(screen.getByText('Acessos')).toBeTruthy();
+    expect(screen.queryByText(/Retenç/)).toBeNull();
+  });
+
+  it('dia sem lançamento ainda mostra o zero do dia (é do Jornada)', () => {
+    render(
+      <FaixaContexto diretoExtra={null} pix={null} tags={[]}
+        jornada={{ ...contagem, acesso: 0, retencao: 0 }} />,
+    );
+    expect(screen.getAllByText('0')).toHaveLength(2);
+  });
+
+  it('qualquer outro setor (sem contagem): nada do Jornada', () => {
+    const { container } = render(<FaixaContexto diretoExtra={null} pix={null} tags={[]} jornada={null} />);
+    expect(container.firstChild).toBeNull();
+  });
+});
+
 describe('FaixaOperacao — a barra de três estados', () => {
   it('mostra os três estados com os rótulos certos', () => {
     render(<FaixaOperacao estados={BARRA} formalizados={12} valorPago={8940} />);

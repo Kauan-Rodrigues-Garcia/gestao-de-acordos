@@ -55,6 +55,8 @@ interface AnalyticsPanelProps {
   setorFiltro?: string | null;
   equipeFiltroExterno?: string | null;
   operadorFiltroExterno?: string | null;
+  /** Divisão do setor em foco (05/11/2026) — ver `services/setores/divisoes.ts`. */
+  divisaoFiltroExterno?: string | null;
   temLogicaDiretoExtra?: boolean;
 }
 
@@ -62,6 +64,7 @@ export function AnalyticsPanel({
   setorFiltro: setorExterno,
   equipeFiltroExterno,
   operadorFiltroExterno,
+  divisaoFiltroExterno,
   temLogicaDiretoExtra = false,
 }: AnalyticsPanelProps = {}) {
   // Direto/Extra pagos são ACORDOS: sem H.O. de relatório, converte.
@@ -156,6 +159,7 @@ export function AnalyticsPanel({
     setSetorFiltro,
     setEquipeFiltro,
     setOperadorFiltro,
+    setDivisaoFiltro,
   } = useAnalytics(mesAnalise, {
     niveis: niveisDashboard,
     // A chave decide sozinha — ver o comentário em `useSetoresEquipes`, que faz
@@ -215,16 +219,44 @@ export function AnalyticsPanel({
   // resolvidos pelo hook, que é o MESMO usado pelo Painel Diretoria. Enquanto
   // cada painel montava esse conjunto à mão, um somava clone com a caixinha
   // desligada e nenhum dos dois sabia da flag de setor alternativo.
-  const { escopo, pendente: escopoPendente } = useEscopoAnalitico({
+  const { escopo, pendente: escopoPendente, escopoSemDivisao } = useEscopoAnalitico({
     ativo:       temAnalitico,
     empresaId:   empresa?.id,
     isPaguePlay: isPP,
     setorId:     setorEmFoco,
     equipeId:    equipeFiltroExterno,
     operadorId:  operadorFiltroExterno,
+    divisaoId:   divisaoFiltroExterno,
     mes:         mesAnalise,
     linhas:      analiticoDash.linhas,
   });
+
+  /*
+   * Divisão do setor (05/11/2026): os acordos (`useAnalytics`) recortam pelas
+   * MESMAS pessoas que o escopo do analítico pôs na divisão — o recebido e o
+   * agendado da tela falam do mesmo grupo.
+   */
+  const operadoresDaDivisaoChave = escopo?.tipo === 'divisao' && !escopo.resto
+    ? [...escopo.operadores].sort().join(',')
+    : '';
+  useEffect(() => {
+    if (escopo?.tipo === 'divisao' && !escopo.resto && divisaoFiltroExterno) {
+      setDivisaoFiltro({
+        id: divisaoFiltroExterno,
+        operadores: operadoresDaDivisaoChave ? operadoresDaDivisaoChave.split(',') : [],
+      });
+    } else {
+      setDivisaoFiltro(null);
+    }
+    // `escopo` entra pela chave: o objeto muda de identidade a cada leitura.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [divisaoFiltroExterno, operadoresDaDivisaoChave, escopo?.tipo, setDivisaoFiltro]);
+
+  /** «Sem divisão»: o que é do setor e não cabe em divisão nenhuma. */
+  const brutoSemDivisao = useMemo(
+    () => (escopoSemDivisao ? agregarAnalitico(analiticoDash.linhas, escopoSemDivisao).bruto : 0),
+    [analiticoDash.linhas, escopoSemDivisao],
+  );
 
   const anal = useMemo(
     () => agregarAnalitico(analiticoDash.linhas, escopo ?? ESCOPO_EMPRESA),
@@ -636,6 +668,15 @@ export function AnalyticsPanel({
           animate="visible"
           className="space-y-4 pt-1"
         >
+          {/* Divisões do setor: o que ficou fora de todas (05/11/2026). */}
+          {!carregando && brutoSemDivisao > 0.004 && (
+            <p className="text-xs text-muted-foreground px-1">
+              <span className="font-medium text-warning">Sem divisão:</span>{' '}
+              {formatCurrency(brutoSemDivisao)} do setor não está em nenhuma divisão
+              (contribuição, equipe ou login fora das divisões). Conta só no setor inteiro.
+            </p>
+          )}
+
           {/* Metric cards */}
           {carregando ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -653,6 +694,7 @@ export function AnalyticsPanel({
               setorFiltro={setorEmFoco}
               equipeFiltroExterno={equipeFiltroExterno}
               operadorFiltroExterno={operadorFiltroExterno}
+              divisaoFiltro={divisaoFiltroExterno}
               temLogicaDiretoExtra={temLogicaDiretoExtra}
               unidade={unidade}
               secundarios={cardsSecundarios}

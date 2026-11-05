@@ -33,6 +33,60 @@ export function percentual(feito: number, meta: number | null): number | null {
   return Math.floor((feito / meta) * 100);
 }
 
+// ─── Até quatro metas no mês (05/11/2026) ──────────────────────────────────
+
+/** Quantas metas o mês pode ter: a 1ª e mais três faixas. */
+export const MAX_METAS = 4;
+export const ORDINAIS = ['1ª', '2ª', '3ª', '4ª'] as const;
+
+export interface SituacaoMetas {
+  /** Quantas metas a pessoa já bateu (0 a 4). */
+  batidas: number;
+  /** A próxima meta a bater; a última, quando bateu todas. `null` sem meta. */
+  alvo: number | null;
+  /** Índice do alvo (0 = 1ª). */
+  indiceAlvo: number;
+  /** Quanto falta para o alvo. Zero quando bateu todas. */
+  faltam: number;
+  /** Bateu a última meta configurada. */
+  todas: boolean;
+}
+
+/**
+ * Onde a pessoa está nas metas do mês: quantas bateu e qual é a próxima.
+ * `metas` em ordem crescente (a 1ª primeiro); vazia = sem meta.
+ */
+export function situacaoMetas(feito: number, metas: readonly number[]): SituacaoMetas {
+  const validas = metas.filter(m => m > 0);
+  if (validas.length === 0) return { batidas: 0, alvo: null, indiceAlvo: 0, faltam: 0, todas: false };
+  const batidas = validas.filter(m => feito >= m).length;
+  const todas = batidas === validas.length;
+  const indiceAlvo = todas ? validas.length - 1 : batidas;
+  const alvo = validas[indiceAlvo];
+  return { batidas, alvo, indiceAlvo, faltam: Math.max(alvo - feito, 0), todas };
+}
+
+/**
+ * As metas digitadas (texto) viram números, ou o motivo de não poderem:
+ * campo do meio em branco, fora do limite ou fora de ordem crescente.
+ * Em branco no fim é só não ter aquela faixa.
+ */
+export function lerMetas(campos: readonly string[], limite = 100000): { metas: number[]; erro: string | null } {
+  let ultimo = campos.length - 1;
+  while (ultimo >= 0 && !campos[ultimo]) ultimo--;
+  const usados = campos.slice(0, ultimo + 1);
+  if (usados.some(c => !c)) return { metas: [], erro: 'Preencha as metas em ordem, sem pular.' };
+  const metas = usados.map(Number);
+  if (metas.some(m => !Number.isFinite(m) || m < 1 || m > limite)) {
+    return { metas: [], erro: `Cada meta vai de 1 a ${limite.toLocaleString('pt-BR')}.` };
+  }
+  for (let i = 1; i < metas.length; i++) {
+    if (metas[i] <= metas[i - 1]) {
+      return { metas: [], erro: `A ${ORDINAIS[i]} meta tem de ser maior que a ${ORDINAIS[i - 1]}.` };
+    }
+  }
+  return { metas, erro: null };
+}
 
 /** Todos os dias do mês de `diaISO` até `limiteISO` (inclusive), em ISO. */
 export function diasDoMesAte(diaISO: string, limiteISO: string): string[] {

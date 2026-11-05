@@ -28,7 +28,8 @@ import { useEstadoLembrado } from '@/hooks/useEstadoLembrado';
 import {
   PIX_AUTO_PCT_PADRAO, PIX_LINHAS_POR_PAGINA, aplicarSaldoNoAcordo, avaliarAcordoPix,
   comissaoDe, editarAcordoPix, excluirAcordoPix, marcarComissaoPaga, normalizarNr,
-  pctDaLinha, quemJaDecidiuPix, reavaliarAcordoPix, retirarSaldoDoAcordo, valorAPagarDe,
+  comissaoFixaDaLinha, pctDaLinha, quemJaDecidiuPix, reavaliarAcordoPix, retirarSaldoDoAcordo,
+  valorAPagarDe, valorFixoDoSetor,
   type PixAutoAcordo, type PixAutoSaldo,
 } from '@/services/pix_automatico.service';
 import { textoPrazoExpurgo } from './pixAutomaticoView';
@@ -113,6 +114,8 @@ export function PixTabelaRegistros({ pix }: { pix: PixTela }) {
         id: item.id,
         aprovar,
         pctAtual: pctDaLinha,
+        // Setor que paga por Pix (regra do Jornada): o valor fixo trava junto.
+        fixoAtual: valorFixoDoSetor(pctPorSetor, item.setor_id),
         avaliadorId: perfil.id,
         avaliadorNome: perfil.nome ?? perfil.email ?? '—',
       });
@@ -133,7 +136,7 @@ export function PixTabelaRegistros({ pix }: { pix: PixTela }) {
   async function voltarPendente(item: PixAutoAcordo) {
     setAvaliandoId(item.id);
     try {
-      const { ok, error } = await reavaliarAcordoPix(item.id);
+      const { ok, error } = await reavaliarAcordoPix(item.id, item.comissao_fixa != null);
       if (!ok) { toast.error('Erro: ' + error); return; }
       toast.success('Acordo voltou para pendente.');
       await carregar();
@@ -292,6 +295,7 @@ export function PixTabelaRegistros({ pix }: { pix: PixTela }) {
                 {daPagina.map((item) => {
                   const comissao = comissaoDe(item, pctPorSetor);
                   const pctLinha = pctDaLinha(item, pctPorSetor);
+                  const fixaLinha = comissaoFixaDaLinha(item, pctPorSetor);
                   const sInfo = STATUS_INFO[item.status];
                   const desaprovado = item.status === 'desaprovado';
                   const emEdicao = editandoId === item.id;
@@ -368,7 +372,9 @@ export function PixTabelaRegistros({ pix }: { pix: PixTela }) {
                         <span className={cn('font-mono font-bold', desaprovado ? 'text-muted-foreground line-through' : 'text-primary')}>
                           {formatCurrency(comissao)}
                         </span>
-                        <span className="text-[10px] text-muted-foreground ml-1">({fmtPct(pctLinha)})</span>
+                        <span className="text-[10px] text-muted-foreground ml-1">
+                          ({fixaLinha != null ? 'fixo' : fmtPct(pctLinha)})
+                        </span>
                         {/* A correção fica ao lado da comissão, e não somada
                             dentro dela: quem confere precisa ver os dois
                             números para saber por que o total mudou. */}

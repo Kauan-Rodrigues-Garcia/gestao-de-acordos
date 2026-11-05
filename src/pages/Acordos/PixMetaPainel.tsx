@@ -36,6 +36,12 @@
  *
  * As contas ficam em `calcularMetaPixPorEquipe` (pura, com teste). A projeção
  * usa a mesma mecânica de dias úteis do dashboard, para os dois não discordarem.
+ *
+ * ## Meta em quantidade (05/11/2026, regra do Jornada)
+ *
+ * O setor escolhe, na configuração do Pix, se a meta é em R$ ou em quantidade
+ * de acordos. Em quantidade, o anel, a barra, o «falta» e o ritmo contam
+ * acordos, e a edição pede só a quantidade — o valor fica como estava.
  */
 import { useState } from 'react';
 import { motion } from 'framer-motion';
@@ -49,6 +55,7 @@ import { formatCurrency } from '@/lib/index';
 import { corProjecao } from '@/lib/diasUteis';
 import { cn } from '@/lib/utils';
 import type { ConsolidadoMetaPix, ResumoMetaPix } from './pixAutomaticoView';
+import type { MetaModoPix } from '@/services/pix_automatico.service';
 import { corTexto } from '@/lib/temas';
 
 export interface EquipeOpcao { id: string; nome: string }
@@ -65,6 +72,13 @@ export interface PixMetaPainelProps {
   onSalvar: (equipeId: string, metaValor: number, metaAcordos: number) => void;
   /** Converte "1.234,56" digitado em número — o mesmo parser do resto da tela. */
   parseValor: (v: string) => number;
+  /** Meta em R$ (padrão) ou em quantidade de acordos — configuração do setor. */
+  metaModo?: MetaModoPix;
+}
+
+/** «12 acordos», «1 acordo». */
+function qtdAcordos(n: number): string {
+  return `${n.toLocaleString('pt-BR')} ${n === 1 ? 'acordo' : 'acordos'}`;
 }
 
 /** O anel do setor: % da meta no meio, a cor é a do ritmo. */
@@ -131,8 +145,9 @@ function Numero({ rotulo, children, cls }: { rotulo: string; children: React.Rea
 
 export function PixMetaPainel({
   consolidado, nomeSetor, equipes, metasAtuais,
-  podeEditar, salvando, onSalvar, parseValor,
+  podeEditar, salvando, onSalvar, parseValor, metaModo = 'valor',
 }: PixMetaPainelProps) {
+  const emQuantidade = metaModo === 'quantidade';
   const [editandoEquipe, setEditandoEquipe] = useState<string | null>(null);
   const [valorInput, setValorInput]     = useState('');
   const [acordosInput, setAcordosInput] = useState('');
@@ -153,7 +168,10 @@ export function PixMetaPainel({
   }
 
   function salvar(equipeId: string) {
-    const valor   = valorInput.trim()   ? parseValor(valorInput) : 0;
+    // Em quantidade o campo de R$ nem aparece: o valor gravado fica como está.
+    const valor   = emQuantidade
+      ? (metasAtuais[equipeId]?.valor ?? 0)
+      : (valorInput.trim() ? parseValor(valorInput) : 0);
     const acordos = acordosInput.trim() ? parseInt(acordosInput.replace(/\D/g, ''), 10) : 0;
     if (isNaN(valor) || valor < 0)     return;
     if (isNaN(acordos) || acordos < 0) return;
@@ -176,7 +194,7 @@ export function PixMetaPainel({
         <div className="flex flex-wrap items-center gap-x-6 gap-y-4 px-5 py-4">
           <div className="flex min-w-0 items-center gap-4">
             {setor ? (
-              <Anel pct={setor.pctValor} cor={corSetor} batida={setor.metaBatida} />
+              <Anel pct={setor.pct} cor={corSetor} batida={setor.metaBatida} />
             ) : (
               <span className="flex h-[88px] w-[88px] shrink-0 items-center justify-center rounded-full border-[8px] border-muted">
                 <Target className="h-6 w-6 text-muted-foreground/50" />
@@ -185,6 +203,7 @@ export function PixMetaPainel({
             <div className="min-w-0">
               <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 <Target className="h-3.5 w-3.5" /> Meta de Pix do setor
+                {emQuantidade && <span className="normal-case tracking-normal font-medium">· em quantidade</span>}
               </p>
               <h3 className="mt-0.5 truncate text-base font-bold text-foreground">{nomeSetor ?? 'Setor'}</h3>
               {setor ? (
@@ -197,7 +216,20 @@ export function PixMetaPainel({
             </div>
           </div>
 
-          {setor && (
+          {setor && emQuantidade && (
+            <div className="grid min-w-0 flex-1 grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
+              <Numero rotulo="Realizado" cls="text-primary">
+                <span className="font-sans">{qtdAcordos(setor.acordos)}</span>
+              </Numero>
+              <Numero rotulo="Meta"><span className="font-sans">{qtdAcordos(setor.metaAcordos)}</span></Numero>
+              <Numero rotulo="Falta" cls={setor.faltaAcordos > 0 ? undefined : 'text-success'}>
+                <span className="font-sans">{setor.faltaAcordos > 0 ? qtdAcordos(setor.faltaAcordos) : 'nada'}</span>
+              </Numero>
+              <Numero rotulo="Valor">{formatCurrency(setor.realizado)}</Numero>
+            </div>
+          )}
+
+          {setor && !emQuantidade && (
             <div className="grid min-w-0 flex-1 grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
               <Numero rotulo="Realizado" cls="text-primary">
                 {formatCurrency(setor.realizado)}
@@ -260,8 +292,8 @@ export function PixMetaPainel({
 
                     {emEdicao ? (
                       <div className="space-y-2">
-                        <div className="grid grid-cols-[1fr_88px] gap-2">
-                          <div className="space-y-1">
+                        <div className={cn('grid gap-2', emQuantidade ? 'grid-cols-1' : 'grid-cols-[1fr_88px]')}>
+                          {!emQuantidade && <div className="space-y-1">
                             <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Meta em R$</p>
                             <Input
                               value={valorInput}
@@ -271,15 +303,18 @@ export function PixMetaPainel({
                               autoFocus
                               onKeyDown={e => { if (e.key === 'Enter') salvar(eq.id); }}
                             />
-                          </div>
+                          </div>}
                           <div className="space-y-1">
-                            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Acordos</p>
+                            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                              {emQuantidade ? 'Meta em quantidade de acordos' : 'Acordos'}
+                            </p>
                             <Input
                               value={acordosInput}
                               onChange={e => setAcordosInput(e.target.value.replace(/\D/g, ''))}
                               placeholder="Qtd."
                               inputMode="numeric"
                               className="h-8 font-mono text-xs"
+                              autoFocus={emQuantidade}
                               onKeyDown={e => { if (e.key === 'Enter') salvar(eq.id); }}
                             />
                           </div>
@@ -300,23 +335,32 @@ export function PixMetaPainel({
                       <>
                         <div className="flex items-baseline justify-between gap-2">
                           <span className="font-mono text-[15px] font-bold tabular-nums text-foreground">
-                            {formatCurrency(r.realizado)}
+                            {emQuantidade ? qtdAcordos(r.acordos) : formatCurrency(r.realizado)}
                           </span>
                           <span className="truncate text-[11px] tabular-nums text-muted-foreground">
-                            de {formatCurrency(r.metaValor)}
+                            de {emQuantidade ? r.metaAcordos.toLocaleString('pt-BR') : formatCurrency(r.metaValor)}
                           </span>
                         </div>
                         <div className="h-2 overflow-hidden rounded-full bg-muted">
                           <div
                             className="h-full rounded-full transition-all duration-700"
-                            style={{ width: `${Math.min(r.pctValor, 100)}%`, background: cor }}
+                            style={{ width: `${Math.min(r.pct, 100)}%`, background: cor }}
                           />
                         </div>
                         <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5">
                           <span className="text-[11px] tabular-nums text-muted-foreground">
-                            <strong className="text-foreground">{r.pctValor}%</strong>
-                            {r.faltaValor > 0 && <> · faltam {formatCurrency(r.faltaValor)}</>}
-                            {r.metaAcordos > 0 && <> · {r.acordos}/{r.metaAcordos} acordos</>}
+                            <strong className="text-foreground">{r.pct}%</strong>
+                            {emQuantidade ? (
+                              <>
+                                {r.faltaAcordos > 0 && <> · faltam {qtdAcordos(r.faltaAcordos)}</>}
+                                {' · '}{formatCurrency(r.realizado)}
+                              </>
+                            ) : (
+                              <>
+                                {r.faltaValor > 0 && <> · faltam {formatCurrency(r.faltaValor)}</>}
+                                {r.metaAcordos > 0 && <> · {r.acordos}/{r.metaAcordos} acordos</>}
+                              </>
+                            )}
                           </span>
                           <Ritmo r={r} />
                         </div>

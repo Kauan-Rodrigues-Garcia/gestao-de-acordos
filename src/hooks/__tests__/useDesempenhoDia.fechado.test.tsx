@@ -21,6 +21,7 @@ const chamadas = vi.hoisted(() => ({
   pix: vi.fn(),
   meta: vi.fn(),
   escopo: vi.fn(),
+  jornada: vi.fn(),
 }));
 
 vi.mock('@/services/desempenhoDia/desempenhoDia.service', async () => {
@@ -47,6 +48,10 @@ vi.mock('@/services/desempenhoDia/desempenhoDia.service', async () => {
     },
     buscarMetaDoEscopo: (...a: unknown[]) => {
       chamadas.meta(...a);
+      return Promise.resolve(null);
+    },
+    buscarJornadaDoDia: (...a: unknown[]) => {
+      chamadas.jornada(...a);
       return Promise.resolve(null);
     },
     // Também é consulta ao banco: fechado, nem o escopo deve ser resolvido.
@@ -110,12 +115,14 @@ describe('useDesempenhoDia — fechado não consulta nada', () => {
     expect(chamadas.formalizados).not.toHaveBeenCalled();
     expect(chamadas.pix).not.toHaveBeenCalled();
     expect(chamadas.meta).not.toHaveBeenCalled();
+    expect(chamadas.jornada).not.toHaveBeenCalled();
   });
 
   it('aberto, busca uma vez', async () => {
     renderHook(() => useDesempenhoDia({ ...BASE, aberto: true }));
     await waitFor(() => expect(chamadas.analitico).toHaveBeenCalledTimes(1));
     expect(chamadas.acordos).toHaveBeenCalledTimes(1);
+    expect(chamadas.jornada).toHaveBeenCalledTimes(1);
   });
 
   /**

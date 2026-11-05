@@ -27,6 +27,8 @@ const SQL = [
   ler('20261104180000_jornada_acesso_e_retencao.sql'),
   ler('20261104200000_jornada_por_equipe.sql'),
   ler('20261104210000_jornada_meta_individual.sql'),
+  ler('20261105140000_jornada_quatro_metas.sql'),
+  ler('20261105170000_jornada_no_desempenho_do_dia.sql'),
 ];
 
 let db: PGlite;
@@ -94,7 +96,7 @@ beforeAll(async () => {
                         where p.id = auth.uid()), false) $$;
   `);
   for (const s of SQL) await db.exec(s);
-  for (const s of SQL.slice(1)) await db.exec(s); // reaplicar 200000 e 210000 não quebra
+  for (const s of SQL.slice(1)) await db.exec(s); // reaplicar 200000, 210000 e 140000 não quebra
 });
 
 afterAll(async () => { await db.close(); });
@@ -154,5 +156,114 @@ describe('migrations do Jornada (180000 → 200000 → 210000)', () => {
     expect(r.rows.map(x => x.t)).toEqual(['jornada_registros', 'jornada_metas', 'jornada_metas_pessoa']);
     const p = await db.query<{ v: boolean }>(`select has_table_privilege('authenticated', 'public.jornada_registros', 'select') v`);
     expect(p.rows[0].v).toBe(false);
+  });
+});
+
+describe('quatro metas do Jornada (20261105140000)', () => {
+  const LIDER = '00000000-0000-4000-8000-0000000000d1';
+
+  beforeAll(async () => {
+    await db.exec(`
+      insert into public.perfis (id, nome, perfil, empresa_id, setor_id)
+        values ('${LIDER}', 'Lider', 'lider', '${EMP}', '${JOR}') on conflict do nothing;`);
+    await como(LIDER, `select public.fn_jornada_meta_salvar($1, 100, 'mes') v`, [EQ_SUP]);
+    await como(LIDER, `select public.fn_jornada_meta_pessoas_salvar($1, $2::jsonb) v`,
+      [EQ_SUP, JSON.stringify([{ perfil_id: ANA, meta: 110 }])]);
+  });
+
+  it('a liderança grava 2ª, 3ª e 4ª do grupo e da pessoa; a 1ª continua onde estava', async () => {
+    await como(LIDER, 'select public.fn_jornada_faixas_salvar($1, $2::int[], $3::jsonb) v',
+      [EQ_SUP, '{120,140,160}', JSON.stringify([{ perfil_id: ANA, extras: [130, 150] }])]);
+    const f = await como<{ grupo: number[]; pessoas: { perfil_id: string; extras: number[] }[] }>(
+      LIDER, 'select public.fn_jornada_faixas($1) v', [EQ_SUP]);
+    expect(f.grupo).toEqual([120, 140, 160]);
+    expect(f.pessoas).toEqual([{ perfil_id: ANA, extras: [130, 150] }]);
+    const base = await db.query<{ meta: number }>('select meta from public.jornada_metas where grupo_id = $1', [EQ_SUP]);
+    expect(base.rows[0].meta).toBe(100);
+  });
+
+  it('mudar a 1ª pela função antiga não apaga as faixas', async () => {
+    await como(LIDER, `select public.fn_jornada_meta_salvar($1, 105, 'mes') v`, [EQ_SUP]);
+    const f = await como<{ grupo: number[] }>(LIDER, 'select public.fn_jornada_faixas($1) v', [EQ_SUP]);
+    expect(f.grupo).toEqual([120, 140, 160]);
+  });
+
+  it('recusa faixa fora de ordem, mais de 4 metas e operador gravando', async () => {
+    await expect(como(LIDER, 'select public.fn_jornada_faixas_salvar($1, $2::int[], null) v', [EQ_SUP, '{90}']))
+      .rejects.toThrow(/maior que a anterior/);
+    await expect(como(LIDER, 'select public.fn_jornada_faixas_salvar($1, $2::int[], null) v', [EQ_SUP, '{120,140,160,180}']))
+      .rejects.toThrow(/ate 4 metas/);
+    await expect(como(ANA, 'select public.fn_jornada_faixas_salvar($1, $2::int[], null) v', [EQ_SUP, '{120}']))
+      .rejects.toThrow(/lideranca/);
+  });
+
+  it('o membro lê as faixas do grupo e só as próprias', async () => {
+    const f = await como<{ grupo: number[]; pessoas: { perfil_id: string }[] }>(ANA, 'select public.fn_jornada_faixas($1) v', [EQ_SUP]);
+    expect(f.grupo).toEqual([120, 140, 160]);
+    expect(f.pessoas.map(p => p.perfil_id)).toEqual([ANA]);
+  });
+
+  it('tirar a 1ª meta leva as faixas junto', async () => {
+    await como(LIDER, `select public.fn_jornada_meta_pessoas_salvar($1, $2::jsonb) v`,
+      [EQ_SUP, JSON.stringify([{ perfil_id: ANA, meta: null }])]);
+    const f = await como<{ pessoas: unknown[] }>(LIDER, 'select public.fn_jornada_faixas($1) v', [EQ_SUP]);
+    expect(f.pessoas).toEqual([]);
+  });
+});
+
+describe('20261105170000 — acessos e retenções no Desempenho do Dia', () => {
+  const EQ_RET3 = '00000000-0000-4000-8000-0000000000b4'; // equipe Retenção 3 (Jornada)
+  const EQ_RECEB = '00000000-0000-4000-8000-0000000000b5'; // equipe Recebimento (Jornada, sem aba)
+  const DUDA = '00000000-0000-4000-8000-0000000000f1';  // Retenção 3
+  const EDU = '00000000-0000-4000-8000-0000000000f2';   // Recebimento
+  const GER = '00000000-0000-4000-8000-0000000000f3';   // gerência
+  const LID_REC = '00000000-0000-4000-8000-0000000000f4'; // líder do Receptivo
+  const DIA = '2026-11-05';
+  const contar = (uid: string, args: { op?: string; ops?: string[]; setor?: string }) =>
+    como<Record<string, number | boolean> | null>(uid,
+      'select public.fn_jornada_contagem_dia($1, $2, $3, $4, $5) v',
+      [EMP, DIA, args.op ?? null, args.ops ?? null, args.setor ?? null]);
+
+  beforeAll(async () => {
+    await db.exec(`
+      insert into public.equipes values
+        ('${EQ_RET3}', 'Retenção 3', '${JOR}', '${EMP}'), ('${EQ_RECEB}', 'Recebimento', '${JOR}', '${EMP}');
+      insert into public.perfis (id, nome, perfil, empresa_id, setor_id, equipe_id) values
+        ('${DUDA}', 'Duda', 'operador', '${EMP}', '${JOR}', '${EQ_RET3}'),
+        ('${EDU}', 'Edu', 'operador', '${EMP}', '${JOR}', '${EQ_RECEB}'),
+        ('${GER}', 'Gê', 'gerencia', '${EMP}', '${REC}', null),
+        ('${LID_REC}', 'Lia', 'lider', '${EMP}', '${REC}', null);
+      delete from public.jornada_registros;
+      insert into public.jornada_registros (empresa_id, tipo, equipe_id, perfil_id, nr, data, apagado_em) values
+        ('${EMP}', 'acesso',   '${EQ_SUP}',  '${ANA}',  '1', '${DIA}', null),
+        ('${EMP}', 'acesso',   '${EQ_SUP}',  '${ANA}',  '2', '${DIA}', null),
+        ('${EMP}', 'acesso',   '${EQ_SUP}',  '${ANA}',  '3', '${DIA}', now()),       -- na lixeira: não conta
+        ('${EMP}', 'acesso',   '${EQ_SUP}',  '${ANA}',  '4', '2026-11-02', null),   -- conta só no mês
+        ('${EMP}', 'acesso',   '${EQ_SUP}',  '${ANA}',  '5', '2026-10-30', null),   -- outro mês: não conta
+        ('${EMP}', 'retencao', '${EQ_RET3}', '${DUDA}', '9', '${DIA}', null);`);
+  });
+
+  it('o setor Jornada: o dia, o mês e as abas que ele tem', async () => {
+    expect(await contar(GER, { setor: JOR })).toEqual({
+      acesso: 2, retencao: 1, acesso_mes: 3, retencao_mes: 1, tem_acesso: true, tem_retencao: true,
+    });
+  });
+
+  it('qualquer outro setor, ou a empresa inteira, não tem bloco', async () => {
+    expect(await contar(GER, { setor: REC })).toBeNull();
+    expect(await contar(GER, {})).toBeNull();
+    expect(await contar(GER, { op: BIA })).toBeNull();
+  });
+
+  it('a equipe conta só a gente do Jornada', async () => {
+    expect(await contar(GER, { ops: [ANA, BIA] })).toMatchObject({ acesso: 2, retencao: 0, tem_acesso: true, tem_retencao: false });
+    // Recebimento é do Jornada, mas não tem aba: bloco sem linha nenhuma.
+    expect(await contar(GER, { ops: [EDU] })).toMatchObject({ acesso: 0, retencao: 0, tem_acesso: false, tem_retencao: false });
+  });
+
+  it('operador só se vê; líder de outro setor não vê o Jornada', async () => {
+    expect(await contar(ANA, { setor: JOR })).toMatchObject({ acesso: 2, retencao: 0 });
+    expect(await contar(ANA, { op: DUDA })).toBeNull();
+    expect(await contar(LID_REC, { setor: JOR })).toBeNull();
   });
 });

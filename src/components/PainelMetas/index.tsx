@@ -40,6 +40,8 @@ interface PainelMetasProps {
   setorFiltro?: string | null;
   equipeFiltroExterno?: string | null;
   operadorFiltroExterno?: string | null;
+  /** Divisão do setor em foco (05/11/2026). */
+  divisaoFiltro?: string | null;
   temLogicaDiretoExtra?: boolean;
   /**
    * H.O. ou bruto. Vem de fora pelo mesmo motivo que o `mes`: o alternador
@@ -60,6 +62,7 @@ export function PainelMetas({
   setorFiltro,
   equipeFiltroExterno,
   operadorFiltroExterno,
+  divisaoFiltro,
   temLogicaDiretoExtra = false,
   unidade,
   secundarios,
@@ -71,6 +74,7 @@ export function PainelMetas({
     setorId:    setorFiltro,
     equipeId:   equipeFiltroExterno,
     operadorId: operadorFiltroExterno,
+    divisaoId:  divisaoFiltro,
     temLogicaDiretoExtra,
     unidade,
   });

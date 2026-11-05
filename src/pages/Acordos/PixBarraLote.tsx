@@ -11,6 +11,7 @@ import { copiarTexto } from '@/lib/clipboard';
 import {
   PIX_AUTO_PCT_PADRAO, avaliarAcordoPix, excluirAcordoPix, formatarCopiaPix,
   formatarCopiaPixPorOperador, marcarComissaoPaga, separarParaCopiaPix, valorAPagarDe,
+  valorFixoDoSetor,
 } from '@/services/pix_automatico.service';
 import type { PixTela } from './usePixAutomatico';
 
@@ -104,6 +105,8 @@ export function PixBarraLote({ pix }: { pix: PixTela }) {
           : PIX_AUTO_PCT_PADRAO;
         const r = await avaliarAcordoPix({
           id: item.id, aprovar, pctAtual: pctDaLinha,
+          // Setor que paga por Pix (regra do Jornada): o valor fixo trava junto.
+          fixoAtual: valorFixoDoSetor(pctPorSetor, item.setor_id),
           avaliadorId: perfil.id, avaliadorNome: perfil.nome ?? perfil.email ?? '—',
         });
         if (r.ok) feitos += 1;

@@ -8,7 +8,7 @@ import { Download, History, RefreshCw, Trash2, Upload, Zap } from 'lucide-react'
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { SeletorMes } from '@/components/AnalyticsPanel/SeletorMes';
-import { parseCurrencyInput } from '@/lib/index';
+import { formatCurrency, parseCurrencyInput } from '@/lib/index';
 import { cn } from '@/lib/utils';
 import { gruposDeNumeros, soNumeros } from '@/lib/soNumeros';
 import {
@@ -23,7 +23,7 @@ import type { PixTela } from './usePixAutomatico';
 
 export function PixCabecalho({ pix }: { pix: PixTela }) {
   const {
-    empresa, perfil, mes, setMes, loading, carregar, visiveis, pctPorSetor, pctDoMeuSetor,
+    empresa, perfil, mes, setMes, loading, carregar, visiveis, pctPorSetor, pctDoMeuSetor, fixoDoMeuSetor,
     operadores, podeVerDeOutros, podeAgirSobreOutros, noMesAtual, diaNovo, fechamento,
     meusDesaprovados, quemExclui,
   } = pix;
@@ -224,7 +224,8 @@ export function PixCabecalho({ pix }: { pix: PixTela }) {
             {/* Título da TELA desde 16/10/2026 — antes era o de uma aba de Acordos. */}
             <h1 className="text-xl font-bold text-foreground leading-tight">Pix Automático</h1>
             <p className="text-[11px] text-muted-foreground">
-              Comissão de {fmtPct(pctDoMeuSetor)} por acordo aprovado — sem vínculo com a lista de acordos.
+              Comissão de {fixoDoMeuSetor != null ? formatCurrency(fixoDoMeuSetor) : fmtPct(pctDoMeuSetor)} por acordo
+              aprovado — sem vínculo com a lista de acordos.
             </p>
             {/* O MESMO seletor do Dashboard e do Analítico, ligado ao mesmo
                 mês: a aba inteira (lista, metas, dobra, ranking, premiação)

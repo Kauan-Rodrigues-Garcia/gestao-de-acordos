@@ -68,6 +68,7 @@ import { configComDiasDoSetor, type DiasUteisPorSetor } from '@/lib/diasUteisDoS
 import { buscarResumoOperadoresAnalitico } from '@/services/analitico/analitico.service';
 import {
   PixAutoAcordo, PixAutoConfig, PIX_AUTO_PCT_PADRAO, PIX_META_ACORDOS_DOBRA,
+  regrasDeComissao, valorFixoDoSetor, type ComissaoModoPix, type MetaModoPix,
   fetchAcordosPix, fetchConfigsPix, PIX_LINHAS_POR_PAGINA, metasDobraPorSetor,
   normalizarNr, fetchMetasPixEquipes, expurgarDesaprovadosVencidos,
   fetchSaldosPix, saldosPorOperador,
@@ -553,18 +554,20 @@ export function usePixAutomatico() {
   }, [empresa?.id, mes]);
   const configsDaConta = configsDoMes ?? configs;
 
-  const pctPorSetor = useMemo(() => {
-    const m: Record<string, number> = {};
-    Object.values(configsDaConta).forEach(c => { m[c.setor_id] = Number(c.pct); });
-    return m;
-  }, [configsDaConta]);
-  /** O percentual de HOJE — o do editor e o do registro novo. */
-  const pctPorSetorHoje = useMemo(() => {
-    const m: Record<string, number> = {};
-    Object.values(configs).forEach(c => { m[c.setor_id] = Number(c.pct); });
-    return m;
-  }, [configs]);
+  // O % de cada setor e, no setor que paga por Pix (regra do Jornada), o valor
+  // fixo — no mesmo mapa, ver `regrasDeComissao`.
+  const pctPorSetor = useMemo(
+    () => regrasDeComissao(Object.values(configsDaConta)),
+    [configsDaConta],
+  );
+  /** O percentual de HOJE — o do editor, o do registro novo e o da aprovação. */
+  const pctPorSetorHoje = useMemo(
+    () => regrasDeComissao(Object.values(configs)),
+    [configs],
+  );
 
+  /** Setor da pessoa que paga por Pix (regra do Jornada): o valor fixo; senão `null`. */
+  const fixoDoMeuSetor = valorFixoDoSetor(pctPorSetorHoje, meuSetor);
   const pctDoMeuSetor = meuSetor != null
     ? (pctPorSetorHoje[meuSetor] ?? PIX_AUTO_PCT_PADRAO)
     : PIX_AUTO_PCT_PADRAO;
@@ -579,6 +582,19 @@ export function usePixAutomatico() {
   const metaDobraSetorConfig = setorConfig != null
     ? (Number(configs[setorConfig]?.meta_acordos_dobra) || PIX_META_ACORDOS_DOBRA)
     : PIX_META_ACORDOS_DOBRA;
+  /*
+   * Regra do Jornada (05/11/2026, migration 20261105150000): a meta do Pix em
+   * quantidade e a comissão em valor fixo por Pix. Ausente = o de sempre.
+   */
+  const metaModoSetorConfig: MetaModoPix = (setorConfig != null && configs[setorConfig]?.meta_modo) || 'valor';
+  const comissaoModoSetorConfig: ComissaoModoPix =
+    (setorConfig != null && configs[setorConfig]?.comissao_modo) || 'percentual';
+  const valorFixoSetorConfig = setorConfig != null
+    ? (configs[setorConfig]?.comissao_valor_fixo ?? null)
+    : null;
+  /** As colunas da regra do Jornada já existem no banco? (configs lidas com `*`) */
+  const regraJornadaDisponivel = Object.values(configs).some(c => 'comissao_modo' in c)
+    || Object.keys(configs).length === 0;
   // Operador só registra com o interruptor do PRÓPRIO setor ligado
   const podeRegistrar = podeAgirSobreOutros
     || meuSetor == null
@@ -1265,6 +1281,8 @@ export function usePixAutomatico() {
     return ids.map(sid => ({
       setorId: sid,
       nome: nomeSetor.get(sid) ?? 'Setor',
+      // Meta em R$ ou em quantidade, conforme o setor (regra do Jornada).
+      metaModo: (configsDaConta[sid]?.meta_modo ?? 'valor') as MetaModoPix,
       equipes: equipes.filter(e => e.setor_id === sid),
       metasAtuais: Object.fromEntries(
         metasPix
@@ -1292,10 +1310,11 @@ export function usePixAutomatico() {
         equipePorOperador: operadorEquipe,
         configMes: configComDiasDoSetor(configMes, diasPorSetor, sid),
         mes, hojeISO: getTodayISO(),
+        modo: (configsDaConta[sid]?.meta_modo ?? 'valor') as MetaModoPix,
       }),
     }));
   }, [podeVerDeOutros, itens, itensDoCarimbo, metasPix, equipes, setores, setorFoco, setorEscopo,
-      operadorEquipe, operadorSetor, configMes, diasPorSetor, mes]);
+      operadorEquipe, operadorSetor, configMes, diasPorSetor, mes, configsDaConta]);
 
   /** Quem está executando — vai para a lixeira, para a auditoria ter nome. */
   const quemExclui = { id: perfil?.id ?? null, nome: perfil?.nome ?? perfil?.email ?? null };
@@ -1349,7 +1368,8 @@ export function usePixAutomatico() {
     filtroPagamento, setFiltroPagamento, dataDe, setDataDe, dataAte, setDataAte,
     metaPorOperador, metasPix,
     setorFoco, setorConfig, equipesDoFoco,
-    pctPorSetor, pctDoMeuSetor, pctSetorConfig, registroLigadoSetorConfig, metaDobraSetorConfig,
+    pctPorSetor, pctPorSetorHoje, pctDoMeuSetor, fixoDoMeuSetor, pctSetorConfig, registroLigadoSetorConfig, metaDobraSetorConfig,
+    metaModoSetorConfig, comissaoModoSetorConfig, valorFixoSetorConfig, regraJornadaDisponivel,
     operadoresFiltro, operadoresDoSeletor, visiveis,
     setPagina, totalPaginas, paginaAtual, daPagina,
     totais, pagamento, meusDesaprovados, saldoPorOperador, nrPorAcordo,

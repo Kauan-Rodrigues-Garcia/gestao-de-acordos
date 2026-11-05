@@ -21,9 +21,10 @@ import { getMetasConfig } from '@/services/metas/metasConfig.service';
 import { diasUteisDoSetor } from '@/lib/diasUteisDoSetor';
 import {
   buscarAnaliticoPeriodo, somarPorDia, buscarAcordosDoDia,
-  contarFormalizadosDoDia, buscarPixDoDia, buscarMetaDoEscopo,
+  contarFormalizadosDoDia, buscarPixDoDia, buscarMetaDoEscopo, buscarJornadaDoDia,
   resolverEscopoDoDia, aplicarEquipeEscolhida, diasAntes,
   type AcordoDoDia, type LinhaPixDia, type EscopoDoDia, type EquipeDoEscopo,
+  type ContagemJornadaDia,
 } from '@/services/desempenhoDia/desempenhoDia.service';
 import {
   barraEstados, metaDoDia, variacao, mediaDiasUteisAnteriores,
@@ -97,6 +98,8 @@ export interface DadosDesempenhoDia {
   diretoExtra: { direto: number; extra: number } | null;
   pix: ResumoPixDia | null;
   tags: FatiaTag[];
+  /** Acessos e Retenções lançados — só no setor Jornada; `null` em todo o resto. */
+  jornada: ContagemJornadaDia | null;
 
   /** O que o painel está somando: «Equipe Matheus», «Setor Receptivo»… */
   escopoRotulo: string;
@@ -134,6 +137,7 @@ export function useDesempenhoDia(params: ParametrosDesempenhoDia): DadosDesempen
   const [formalizados, setFormalizados] = useState(0);
   const [linhasPix, setLinhasPix]     = useState<LinhaPixDia[]>([]);
   const [metaMensal, setMetaMensal]   = useState<number | null>(null);
+  const [jornada, setJornada]         = useState<ContagemJornadaDia | null>(null);
   const [feriados, setFeriados]       = useState<string[]>([]);
   const [carregando, setCarregando]   = useState(true);
 
@@ -210,7 +214,7 @@ export function useDesempenhoDia(params: ParametrosDesempenhoDia): DadosDesempen
       : [];
 
     try {
-      const [analitico, doDia, qtdFormalizados, pix, meta, config] = await Promise.all([
+      const [analitico, doDia, qtdFormalizados, pix, meta, config, contagemJornada] = await Promise.all([
         buscarAnaliticoPeriodo({
           empresaId: empresa.id,
           de: diasAntes(dia, JANELA_DIAS),
@@ -240,6 +244,12 @@ export function useDesempenhoDia(params: ParametrosDesempenhoDia): DadosDesempen
           operadoresDoEscopo: membros,
         }),
         getMetasConfig(empresa.id, mesNum, ano),
+        // Só o Jornada responde; os outros setores recebem `null` do banco.
+        buscarJornadaDoDia({
+          empresaId: empresa.id, dia,
+          operadorId: opDaQuery, setorId: setorDaQuery,
+          operadores: membros,
+        }),
       ]);
 
       if (meu !== requisicao.current) return;   // chegou tarde: outra data manda
@@ -251,13 +261,14 @@ export function useDesempenhoDia(params: ParametrosDesempenhoDia): DadosDesempen
       setFormalizados(qtdFormalizados);
       setLinhasPix(pix);
       setMetaMensal(meta);
+      setJornada(contagemJornada);
       // Os feriados do setor do recorte (ou do próprio): a exceção dele, se houver.
       setFeriados(diasUteisDoSetor(config, setorDaQuery ?? perfil.setor_id ?? null).feriados);
     } catch (e) {
       if (meu !== requisicao.current) return;
       console.warn('[useDesempenhoDia]', e);
       setPorDiaBruto({}); setPorDiaHo({}); setAcordos([]);
-      setFormalizados(0); setLinhasPix([]); setMetaMensal(null);
+      setFormalizados(0); setLinhasPix([]); setMetaMensal(null); setJornada(null);
     } finally {
       if (meu === requisicao.current) setCarregando(false);
     }
@@ -356,6 +367,7 @@ export function useDesempenhoDia(params: ParametrosDesempenhoDia): DadosDesempen
     diretoExtra,
     pix,
     tags: fatias,
+    jornada,
     escopoRotulo: escopoDoDia?.rotulo ?? '',
     equipes: escopoBase?.equipes ?? [],
     refetch: buscar,

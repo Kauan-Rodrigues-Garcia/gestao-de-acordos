@@ -2,9 +2,18 @@
  * PixConfigSetor — a configuração do setor em foco (líder+ com a chave):
  * % de comissão, meta da comissão dobrada e o registro manual pelos
  * operadores. Os campos são estado daqui, e não da tela inteira.
+ *
+ * ## Regra do Jornada (05/11/2026)
+ *
+ * Duas escolhas por setor, gravadas em `pix_automatico_config` (migration
+ * 20261105150000):
+ *
+ *   • Comissão: percentual do valor (como sempre) ou VALOR FIXO por Pix
+ *     aprovado. Vale para as próximas aprovações; a aprovada fica travada.
+ *   • Meta do Pix: em R$ (como sempre) ou em QUANTIDADE de acordos.
  */
-import { useState } from 'react';
-import { Building2, Percent, RefreshCw, Save, Zap } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Building2, DollarSign, Hash, Percent, RefreshCw, Save, Target, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,6 +25,9 @@ import {
 import { setPermiteRegistroOperador, upsertConfigPix } from '@/services/pix_automatico.service';
 import { useEstadoLembrado } from '@/hooks/useEstadoLembrado';
 import { fmtPct, SO_MEMORIA } from './pixTelaComum';
+import { formatCurrency, parseCurrencyInput } from '@/lib/index';
+import { cn } from '@/lib/utils';
+import type { ComissaoModoPix, MetaModoPix } from '@/services/pix_automatico.service';
 import type { PixTela } from './usePixAutomatico';
 
 /** O texto digitado e o valor gravado de quando ele foi digitado. */
@@ -25,7 +37,21 @@ export function PixConfigSetor({ pix }: { pix: PixTela }) {
   const {
     empresa, perfil, setores, setorConfig, pctSetorConfig, metaDobraSetorConfig,
     registroLigadoSetorConfig, carregar, chaveAba,
+    metaModoSetorConfig, comissaoModoSetorConfig, valorFixoSetorConfig, regraJornadaDisponivel,
   } = pix;
+
+  // ── Regra do Jornada: comissão fixa e meta em quantidade ──────────────────
+  const [modoComissao, setModoComissao] = useState<ComissaoModoPix>(comissaoModoSetorConfig);
+  const [fixoInput, setFixoInput] = useState('');
+  const [confirmandoFixo, setConfirmandoFixo] = useState<number | null>(null);
+  const [salvandoRegra, setSalvandoRegra] = useState(false);
+  // Trocou de setor ou o gravado mudou: o editor volta ao que está no banco.
+  useEffect(() => {
+    setModoComissao(comissaoModoSetorConfig);
+    setFixoInput(valorFixoSetorConfig != null
+      ? Number(valorFixoSetorConfig).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : '');
+  }, [setorConfig, comissaoModoSetorConfig, valorFixoSetorConfig]);
   /*
    * O que foi digitado sobrevive a trocar de sub-aba (04/11/2026), como quando
    * estes campos moravam na tela. O rascunho guarda também o valor GRAVADO de
@@ -56,8 +82,74 @@ export function PixConfigSetor({ pix }: { pix: PixTela }) {
     if (!setorConfig) return;
     const pct = parseFloat(pctInput.replace(',', '.'));
     if (isNaN(pct) || pct < 0 || pct > 100) { toast.error('Percentual inválido (0 a 100)'); return; }
-    if (pct === pctSetorConfig) { toast.info('O percentual não mudou.'); return; }
+    // Voltar do valor fixo para o percentual é mudança mesmo com o % igual.
+    if (pct === pctSetorConfig && comissaoModoSetorConfig === 'percentual') {
+      toast.info('O percentual não mudou.');
+      return;
+    }
     setConfirmandoPct(pct);
+  }
+
+  /** Valor fixo por Pix: valida e abre a confirmação. */
+  function pedirConfirmacaoFixo() {
+    if (!setorConfig) return;
+    const valor = fixoInput.trim() ? parseCurrencyInput(fixoInput) : NaN;
+    if (!Number.isFinite(valor) || valor < 0 || valor > 100000) {
+      toast.error('Valor fixo inválido (R$ 0,00 a R$ 100.000,00).');
+      return;
+    }
+    if (comissaoModoSetorConfig === 'fixo' && valor === Number(valorFixoSetorConfig)) {
+      toast.info('O valor fixo não mudou.');
+      return;
+    }
+    setConfirmandoFixo(valor);
+  }
+
+  /** Grava a comissão em valor fixo por Pix (confirmada). */
+  async function salvarFixoConfirmado() {
+    const valor = confirmandoFixo;
+    setConfirmandoFixo(null);
+    if (!empresa?.id || !perfil?.id || !setorConfig || valor == null) return;
+    setSalvandoRegra(true);
+    try {
+      const { ok, error } = await upsertConfigPix({
+        empresaId: empresa.id,
+        setorId: setorConfig,
+        pct: pctSetorConfig,
+        comissaoModo: 'fixo',
+        comissaoValorFixo: valor,
+        atualizadoPor: perfil.id,
+        atualizadoPorNome: perfil.nome ?? perfil.email ?? '—',
+      });
+      if (!ok) { toast.error('Erro ao salvar o valor fixo: ' + error); return; }
+      toast.success(`Comissão do setor: ${formatCurrency(valor)} por Pix aprovado. Vale para novas aprovações.`);
+      await carregar();
+    } finally {
+      setSalvandoRegra(false);
+    }
+  }
+
+  /** Meta do Pix em R$ ou em quantidade — não mexe em dinheiro, grava direto. */
+  async function salvarMetaModo(modo: MetaModoPix) {
+    if (!empresa?.id || !perfil?.id || !setorConfig || modo === metaModoSetorConfig) return;
+    setSalvandoRegra(true);
+    try {
+      const { ok, error } = await upsertConfigPix({
+        empresaId: empresa.id,
+        setorId: setorConfig,
+        pct: pctSetorConfig,
+        metaModo: modo,
+        atualizadoPor: perfil.id,
+        atualizadoPorNome: perfil.nome ?? perfil.email ?? '—',
+      });
+      if (!ok) { toast.error('Erro ao salvar o tipo de meta: ' + error); return; }
+      toast.success(modo === 'quantidade'
+        ? 'Meta do Pix agora em quantidade de acordos.'
+        : 'Meta do Pix agora em valor (R$).');
+      await carregar();
+    } finally {
+      setSalvandoRegra(false);
+    }
   }
 
   /** Passo 2: usuário confirmou no diálogo — grava o % do setor. */
@@ -71,6 +163,9 @@ export function PixConfigSetor({ pix }: { pix: PixTela }) {
         empresaId: empresa.id,
         setorId: setorConfig,
         pct,
+        // Confirmar o % é escolher a comissão percentual. A coluna só viaja com
+        // a migration 20261105150000 aplicada; antes dela, todo setor já é %.
+        ...(regraJornadaDisponivel ? { comissaoModo: 'percentual' as const } : {}),
         atualizadoPor: perfil.id,
         atualizadoPorNome: perfil.nome ?? perfil.email ?? '—',
       });
@@ -150,16 +245,62 @@ export function PixConfigSetor({ pix }: { pix: PixTela }) {
           {setores.find(s => s.id === setorConfig)?.nome ?? 'Meu setor'}
         </span>
         <div className="flex items-center gap-1.5">
-          <Percent className="w-3.5 h-3.5 text-primary shrink-0" />
+          {modoComissao === 'fixo'
+            ? <DollarSign className="w-3.5 h-3.5 text-primary shrink-0" />
+            : <Percent className="w-3.5 h-3.5 text-primary shrink-0" />}
           <span className="text-[11px] text-muted-foreground shrink-0">Comissão do setor:</span>
-          <Input value={pctInput} onChange={e => setPctInput(e.target.value)} aria-label="Comissão do setor (%)"
-            className="h-7 w-16 text-xs text-center font-mono" />
-          <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs text-primary hover:text-primary"
-            onClick={pedirConfirmacaoPct} disabled={salvandoPct} title="Confirmar novo percentual do setor">
-            {salvandoPct ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-            Confirmar
-          </Button>
+          {regraJornadaDisponivel && (
+            <Alternador
+              valor={modoComissao}
+              opcoes={[
+                { valor: 'percentual', rotulo: '%', titulo: 'Percentual do valor do Pix' },
+                { valor: 'fixo', rotulo: 'R$ fixo', titulo: 'Valor fixo por Pix aprovado' },
+              ]}
+              onTrocar={v => setModoComissao(v)}
+              desabilitado={salvandoRegra || salvandoPct}
+              rotuloGrupo="Tipo de comissão"
+            />
+          )}
+          {modoComissao === 'fixo' ? (
+            <>
+              <Input value={fixoInput} onChange={e => setFixoInput(e.target.value)} aria-label="Comissão fixa por Pix (R$)"
+                placeholder="0,00" className="h-7 w-20 text-xs text-center font-mono" />
+              <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs text-primary hover:text-primary"
+                onClick={pedirConfirmacaoFixo} disabled={salvandoRegra} title="Confirmar o valor fixo por Pix">
+                {salvandoRegra ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                Confirmar
+              </Button>
+            </>
+          ) : (
+            <>
+              <Input value={pctInput} onChange={e => setPctInput(e.target.value)} aria-label="Comissão do setor (%)"
+                className="h-7 w-16 text-xs text-center font-mono" />
+              <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs text-primary hover:text-primary"
+                onClick={pedirConfirmacaoPct} disabled={salvandoPct} title="Confirmar novo percentual do setor">
+                {salvandoPct ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                Confirmar
+              </Button>
+            </>
+          )}
         </div>
+
+        {/* Meta do Pix em R$ ou em quantidade (regra do Jornada). */}
+        {regraJornadaDisponivel && (
+          <div className="flex items-center gap-1.5">
+            <Target className="w-3.5 h-3.5 text-primary shrink-0" />
+            <span className="text-[11px] text-muted-foreground shrink-0">Meta do Pix:</span>
+            <Alternador
+              valor={metaModoSetorConfig}
+              opcoes={[
+                { valor: 'valor', rotulo: 'R$', titulo: 'Meta em valor (R$)' },
+                { valor: 'quantidade', rotulo: 'Qtd.', titulo: 'Meta em quantidade de acordos', icone: <Hash className="w-3 h-3" /> },
+              ]}
+              onTrocar={v => void salvarMetaModo(v)}
+              desabilitado={salvandoRegra}
+              rotuloGrupo="Tipo de meta do Pix"
+            />
+          </div>
+        )}
 
         {/* Meta da comissão dobrada. Era 18 fixo no código; agora é por
             setor. Sem diálogo de confirmação, ao contrário do percentual:
@@ -200,6 +341,25 @@ export function PixConfigSetor({ pix }: { pix: PixTela }) {
         </div>
       </div>
 
+      {/* Confirmação do valor fixo por Pix */}
+      <AlertDialog open={confirmandoFixo != null} onOpenChange={aberto => { if (!aberto) setConfirmandoFixo(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Comissão em valor fixo?</AlertDialogTitle>
+            <AlertDialogDescription>
+              O setor <strong>{setores.find(s => s.id === setorConfig)?.nome ?? 'atual'}</strong> passa a pagar{' '}
+              <strong>{confirmandoFixo != null ? formatCurrency(confirmandoFixo) : ''}</strong> por Pix aprovado,
+              em vez de percentual. Vale para as próximas aprovações — acordos já aprovados não mudam.
+              O bônus por período (pontos de %) não se aplica a valor fixo.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={salvarFixoConfirmado}>Sim, alterar</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Confirmação de alteração do % */}
       <AlertDialog open={confirmandoPct != null} onOpenChange={aberto => { if (!aberto) setConfirmandoPct(null); }}>
         <AlertDialogContent>
@@ -221,5 +381,39 @@ export function PixConfigSetor({ pix }: { pix: PixTela }) {
         </AlertDialogContent>
       </AlertDialog>
     </>
+  );
+}
+
+/** Duas opções lado a lado — a escolhida em destaque. */
+function Alternador<T extends string>({
+  valor, opcoes, onTrocar, desabilitado, rotuloGrupo,
+}: {
+  valor: T;
+  opcoes: { valor: T; rotulo: string; titulo: string; icone?: React.ReactNode }[];
+  onTrocar: (v: T) => void;
+  desabilitado?: boolean;
+  rotuloGrupo: string;
+}) {
+  return (
+    <div className="flex items-center rounded-md border border-border p-0.5" role="group" aria-label={rotuloGrupo}>
+      {opcoes.map(o => (
+        <button
+          key={o.valor}
+          type="button"
+          title={o.titulo}
+          aria-pressed={valor === o.valor}
+          disabled={desabilitado}
+          onClick={() => onTrocar(o.valor)}
+          className={cn(
+            'inline-flex h-6 items-center gap-1 rounded px-2 text-[11px] font-medium transition-colors',
+            valor === o.valor
+              ? 'bg-primary text-primary-foreground'
+              : 'text-muted-foreground hover:text-foreground',
+          )}
+        >
+          {o.icone}{o.rotulo}
+        </button>
+      ))}
+    </div>
   );
 }

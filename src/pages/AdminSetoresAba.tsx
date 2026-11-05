@@ -47,7 +47,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import {
   Building2, Plus, GripVertical, Edit, Save, X, Power, Users, ArrowRight,
-  Trash2, Loader2, AlertTriangle, MapPin,
+  Trash2, Loader2, AlertTriangle, MapPin, Layers,
 } from 'lucide-react';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { Card, CardContent } from '@/components/ui/card';
@@ -75,6 +75,9 @@ import {
   buscarImpedimentosDeExclusao, excluirSetor, rotuloDoImpedimento,
   type ImpedimentoExclusao,
 } from '@/services/setores/excluirSetor.service';
+import { DivisoesDoSetor } from '@/components/admin/setores/DivisoesDoSetor';
+import { useDivisoes } from '@/hooks/useDivisoes';
+import { divisoesDoSetor } from '@/services/setores/divisoes';
 
 // ─── Drag state (module-level, evita stale closures) ────────────────────────
 let draggedSetorId: string | null = null;
@@ -120,6 +123,10 @@ export default function AdminSetoresAba() {
 
   const [setores, setSetores] = useState<Setor[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Divisões do setor (05/11/2026): metas separadas dentro do mesmo setor.
+  const { divisoes: todasDivisoes } = useDivisoes();
+  const [divisoesDe, setDivisoesDe] = useState<{ id: string; nome: string } | null>(null);
   const [saving,  setSaving]  = useState(false);
 
   // Dialog criar/editar
@@ -611,6 +618,17 @@ export default function AdminSetoresAba() {
                           Inativo
                         </span>
                       )}
+                      {(() => {
+                        const divs = divisoesDoSetor(todasDivisoes, s.id);
+                        return divs.length > 0 ? (
+                          <span
+                            className="text-[10px] uppercase tracking-wide font-semibold bg-primary/10 text-primary border border-primary/30 rounded-full px-2 py-0.5 shrink-0"
+                            title={`Metas separadas: ${divs.map(d => d.nome).join(' · ')}`}
+                          >
+                            {divs.length} {divs.length === 1 ? 'divisão' : 'divisões'}
+                          </span>
+                        ) : null;
+                      })()}
                     </div>
                     {ehCobranca && <p className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
                       <MapPin className="w-3 h-3 shrink-0" />
@@ -662,6 +680,15 @@ export default function AdminSetoresAba() {
                         onClick={() => toggleAtivo(s)}
                       >
                         <Power className={cn('w-3.5 h-3.5', s.ativo ? 'text-success' : 'text-muted-foreground')} />
+                      </Button>
+                    )}
+                    {podeCriarEditar && ehCobranca && (
+                      <Button
+                        variant="ghost" size="icon" className="w-7 h-7"
+                        title="Divisões do setor (metas separadas)"
+                        onClick={() => setDivisoesDe({ id: s.id, nome: s.nome })}
+                      >
+                        <Layers className="w-3.5 h-3.5" />
                       </Button>
                     )}
                     {podeCriarEditar && (
@@ -914,6 +941,15 @@ export default function AdminSetoresAba() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {empresaAtual?.id && (
+        <DivisoesDoSetor
+          aberto={!!divisoesDe}
+          onFechar={() => setDivisoesDe(null)}
+          empresaId={empresaAtual.id}
+          setor={divisoesDe}
+        />
+      )}
     </div>
   );
 }

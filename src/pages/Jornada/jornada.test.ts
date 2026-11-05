@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  contagem, diaDaSemana, diaPorExtenso, diasDoMesAte, iniciais,
-  percentual, somarDias,
+  contagem, diaDaSemana, diaPorExtenso, diasDoMesAte, iniciais, lerMetas,
+  percentual, situacaoMetas, somarDias,
 } from './jornada';
 
 describe('jornada — contas da aba Acesso/Retenção', () => {
@@ -33,5 +33,27 @@ describe('jornada — contas da aba Acesso/Retenção', () => {
     expect(diaPorExtenso('2026-11-04')).toBe('quarta, 04 de novembro');
     expect(iniciais('Ana Paula Souza')).toBe('AS');
     expect(iniciais('kauan')).toBe('K');
+  });
+});
+
+
+describe('jornada — até quatro metas no mês', () => {
+  it('diz quantas bateu e qual é a próxima', () => {
+    expect(situacaoMetas(50, [100, 120, 140, 160])).toEqual({ batidas: 0, alvo: 100, indiceAlvo: 0, faltam: 50, todas: false });
+    expect(situacaoMetas(125, [100, 120, 140, 160])).toEqual({ batidas: 2, alvo: 140, indiceAlvo: 2, faltam: 15, todas: false });
+    expect(situacaoMetas(170, [100, 120, 140, 160])).toEqual({ batidas: 4, alvo: 160, indiceAlvo: 3, faltam: 0, todas: true });
+    expect(situacaoMetas(10, [])).toEqual({ batidas: 0, alvo: null, indiceAlvo: 0, faltam: 0, todas: false });
+  });
+
+  it('uma meta só continua funcionando como antes', () => {
+    expect(situacaoMetas(100, [100])).toMatchObject({ batidas: 1, alvo: 100, todas: true });
+  });
+
+  it('lê as metas digitadas: em ordem, sem pular, crescentes', () => {
+    expect(lerMetas(['100', '120', '', ''])).toEqual({ metas: [100, 120], erro: null });
+    expect(lerMetas(['', '', '', ''])).toEqual({ metas: [], erro: null });
+    expect(lerMetas(['100', '', '140', '']).erro).toMatch(/sem pular/);
+    expect(lerMetas(['100', '90', '', '']).erro).toMatch(/2ª meta tem de ser maior/);
+    expect(lerMetas(['0', '', '', '']).erro).toMatch(/de 1 a/);
   });
 });

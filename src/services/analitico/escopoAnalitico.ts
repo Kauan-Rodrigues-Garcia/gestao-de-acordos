@@ -45,6 +45,11 @@ import { origemDaLinha, origemConta, type OrigemKey } from './composicaoAcumulad
 export interface LinhaEscopavel {
   operador_id: string | null;
   /**
+   * Login da linha SEM conta (órfã), minúsculo — `null` na linha com operador.
+   * Chega desde a migration 20261105130000; serve só à divisão do setor.
+   */
+  operador_usuario?: string | null;
+  /**
    * A linha é Contribuição Receptivo (`procedencia = contribuicao_59`, 14/09/2026):
    * a 2ª perna do Integral que outro setor cobrou para este. Conta no setor que
    * recebeu e NÃO na empresa — o mesmo dinheiro já está no total do Receptivo.
@@ -131,7 +136,36 @@ export type EscopoAnalitico =
       origensExcluidas: ReadonlySet<OrigemKey>;
       /** Setor de uma pessoa, para casar a linha com a origem excluída. */
       setorDoOperador: (id: string) => string | null | undefined;
+    }
+  | {
+      /**
+       * Uma DIVISÃO do setor (05/11/2026 — Receptivo «0800» / «Time a vencer»).
+       *
+       * Recorte de leitura por cima do setor: a linha tem de caber no setor
+       * primeiro (carimbo, órfãs, origens excluídas — tudo igual), e só então
+       * se pergunta de quem ela é. Assim a divisão nunca soma o que o setor
+       * não soma, e as divisões + «Sem divisão» fecham o total do setor.
+       */
+      tipo: 'divisao';
+      setor: EscopoSetor;
+      /** Membros e clones que contam das equipes da divisão + os recebedores sem equipe. */
+      operadores: ReadonlySet<string>;
+      /** Equipes da divisão — para o ajuste lançado PARA a equipe, que não tem operador. */
+      equipes: ReadonlySet<string>;
+      /**
+       * Logins (minúsculos) que recebem sem conta — casam a linha ÓRFÃ pelo
+       * `operador_usuario` (migration 20261105130000).
+       */
+      usuarios: ReadonlySet<string>;
+      /**
+       * true = «Sem divisão»: o que é do setor e não está em divisão nenhuma.
+       * Aí `operadores` e `equipes` são os de TODAS as divisões do setor.
+       */
+      resto?: boolean;
     };
+
+/** O recorte de um setor, sozinho — o que a divisão usa como base. */
+export type EscopoSetor = Extract<EscopoAnalitico, { tipo: 'setor' }>;
 
 export const ESCOPO_EMPRESA: EscopoAnalitico = { tipo: 'empresa' };
 
@@ -253,6 +287,19 @@ export function linhaNoEscopo(linha: LinhaEscopavel, escopo: EscopoAnalitico): b
         origemDaLinha(linha.operador_id, escopo.setorDoOperador, linha.contribuicao_de_setor_id),
         escopo.origensExcluidas,
       );
+    }
+
+    case 'divisao': {
+      if (!linhaNoEscopo(linha, escopo.setor)) return false;
+      const dela = linha.operador_id !== null
+        ? escopo.operadores.has(linha.operador_id)
+        // Órfã: é da divisão quando é o ajuste lançado para uma equipe dela, ou
+        // quando o login dela é um recebedor da divisão. O resto das órfãs
+        // (contribuição, login de ninguém) fica em «Sem divisão».
+        : (!!linha.ajuste_equipe_id && escopo.equipes.has(linha.ajuste_equipe_id))
+          || (!!linha.operador_usuario
+              && escopo.usuarios.has(linha.operador_usuario.trim().toLowerCase()));
+      return escopo.resto ? !dela : dela;
     }
   }
 }

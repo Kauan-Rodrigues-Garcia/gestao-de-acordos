@@ -24,10 +24,11 @@ describe('prévia da aba do Jornada', () => {
 
   it('a meta individual vale só para a pessoa; o resto segue a do grupo', () => {
     const estado = gerarPrevia('acesso', '2026-11-04', eu);
-    const painel = painelDaPrevia({ ...estado, meta: 100, metasPessoa: { 'previa-1': 150 } }, 'acesso', '2026-11-04');
+    const painel = painelDaPrevia({ ...estado, metas: [100, 130], metasPessoa: { 'previa-1': [150, 170, 190] } }, 'acesso', '2026-11-04');
     const bruno = painel.pessoas.find(p => p.id === 'previa-1')!;
     const ana = painel.pessoas.find(p => p.id === 'previa-0')!;
-    expect([bruno.meta, bruno.meta_propria]).toEqual([150, true]);
-    expect([ana.meta, ana.meta_propria]).toEqual([100, false]);
+    expect([bruno.meta, bruno.meta_propria, bruno.metas]).toEqual([150, true, [150, 170, 190]]);
+    expect([ana.meta, ana.meta_propria, ana.metas]).toEqual([100, false, [100, 130]]);
+    expect(painel.metas).toEqual([100, 130]);
   });
 });
