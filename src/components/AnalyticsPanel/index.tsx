@@ -5,11 +5,11 @@
  *   • Ao expandir (clicar "Ver Breakdown"): mostra % por forma de pagamento
  */
 
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import {
   BarChart2, TrendingUp, Calendar,
-  RefreshCw, XCircle,
+  XCircle,
   Clock, Percent, Target,
 } from 'lucide-react';
 import { useAnalytics } from '@/hooks/useAnalytics';
@@ -25,15 +25,13 @@ import {
   buscarContribuicoesReceptivo, receptivoDoEscopo, receptivoSomaPorCima,
 } from '@/services/analitico/contribuicaoReceptivo.service';
 import { formatCurrency } from '@/lib/index';
-import { formatarPctDaMeta, pctLimitado } from '@/lib/projecaoMetas';
 import { useTenant } from '@/lib/tenant-config';
 import { diasDecorridos, diasNoMes, ehMesAtual } from '@/lib/mesReferencia';
 import { useMesGlobal } from '@/providers/MesProvider';
-import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { containerVariants, itemVariants } from './constants';
 import { SeletorMes } from './SeletorMes';
-import { SkeletonCard, MetricCard, MiniSparkline } from './SubComponents';
+import { SkeletonCard, MetricCard } from './SubComponents';
 import { PainelMetas } from '@/components/PainelMetas';
 import { SeletorUnidade } from '@/components/PainelMetas/SeletorUnidade';
 import { BotaoFechamento } from '@/components/Fechamento/BotaoFechamento';
@@ -44,7 +42,6 @@ import {
 // desenhava viraram a evolução diária e o donut do PainelMetas. O arquivo
 // segue no repositório enquanto houver quem o importe.
 import { PPMetrics } from './PPMetrics';
-import { CHART_RECEBIDO } from './constants';
 import { ValorAnimado } from '@/components/ValorAnimado';
 
 import { corTexto } from '@/lib/temas';
@@ -58,6 +55,11 @@ interface AnalyticsPanelProps {
   /** Divisão do setor em foco (05/11/2026) — ver `services/setores/divisoes.ts`. */
   divisaoFiltroExterno?: string | null;
   temLogicaDiretoExtra?: boolean;
+  /**
+   * Onde os controles do painel (mês, H.O./Bruto, fechamento) são desenhados.
+   * O Dashboard os entrega ao card do recorte; sem isto, saem soltos no topo.
+   */
+  renderFiltro?: (controles: ReactNode) => ReactNode;
 }
 
 export function AnalyticsPanel({
@@ -66,6 +68,7 @@ export function AnalyticsPanel({
   operadorFiltroExterno,
   divisaoFiltroExterno,
   temLogicaDiretoExtra = false,
+  renderFiltro,
 }: AnalyticsPanelProps = {}) {
   // Direto/Extra pagos são ACORDOS: sem H.O. de relatório, converte.
   // O H.O. do mês olhado: no mês fechado, o do retrato (31/10/2026).
@@ -149,13 +152,8 @@ export function AnalyticsPanel({
     totalPendentes,
     totalAcordosVencidos,
     totalPagosVencidos,
-    meta,
-    percMeta,
-    porDia,
     acordosMes,
     loading,
-    atualizando,
-    refetch,
     setSetorFiltro,
     setEquipeFiltro,
     setOperadorFiltro,
@@ -312,27 +310,8 @@ export function AnalyticsPanel({
    * "não tabulado" cita, porque só o que veio no arquivo pode ser tabulado.
    */
   const brutoComReceptivo = anal.bruto + receptivoNoEscopo;
-
-  // % da meta: acumulado do analítico × meta total. Fallback: tabulação.
-  // Usa o acumulado COM Receptivo — mesma decisão do card de setor no Painel
-  // Líder: o Receptivo soma no realizado, a meta segue sendo a da aba Metas.
-  const percMetaAnalitico = meta && meta.meta_valor > 0
-    ? pctLimitado(brutoComReceptivo, meta.meta_valor)
-    : 0;
-  const percMetaFinal = usarAnalitico && meta ? percMetaAnalitico : percMeta;
-
-  const valorPrincipal  = isPP
-    ? (usarAnalitico ? anal.ho : (temLogicaDiretoExtra ? valorHOMes : valorHODireto))
-    : (usarAnalitico ? brutoComReceptivo : valorRecebidoMes);
-  // Linha verde do gráfico: valor total do analítico por dia (o toggle H.O./Total
-  // da PP é resolvido dentro do ChartsSection usando o campo `ho`)
-  const porDiaChart = usarAnalitico
-    ? porDia.map(d => ({
-        ...d,
-        recebido: anal.porDia[Number(d.dia)]?.bruto ?? 0,
-        ho:       anal.porDia[Number(d.dia)]?.ho ?? 0,
-      }))
-    : porDia;
+  // O H.O./Bruto, a % da meta e o ritmo que viviam aqui eram da faixa «Dados
+  // Analíticos», removida em 05/11/2026: o PainelMetas já mostra os três.
 
   useEffect(() => {
     if (setorExterno !== undefined) setSetorFiltro(setorExterno ?? null);
@@ -392,18 +371,9 @@ export function AnalyticsPanel({
     return Math.round((baseProjecao / decorridos) * diasNoMes(mesAnalise));
   }, [baseProjecao, mesAnalise]);
 
-  const donutColor = percMetaFinal >= 100
-    ? '#22c55e'
-    : percMetaFinal >= 70
-    ? '#6366f1'
-    : percMetaFinal >= 40
-    ? '#f59e0b'
-    : '#ef4444';
-
   // `donutPercent` e `donutSublabel` saíram junto com o `ChartsSection`: o
   // donut da meta agora é o `CardMetaDonut`, dentro do PainelMetas, e calcula a
   // própria porcentagem a partir de recebido e meta na unidade em exibição.
-  const sparklineData = porDiaChart.map(d => ({ value: d.recebido ?? 0 }));
 
   /**
    * Esqueleto enquanto QUALQUER peça do número ainda falta.
@@ -526,134 +496,36 @@ export function AnalyticsPanel({
   /** O bloco recolhível do painel, seja qual for a operação. */
   const cardsSecundarios = isPP ? ppSecundarios : bpSecundarios;
 
+  /*
+   * Os controles do painel — mês e, na regra Cofen, H.O. ⇄ Bruto.
+   *
+   * Até 05/11/2026 moravam numa faixa própria («Dados Analíticos»), com
+   * título, ritmo, os totais de H.O./Bruto e o botão de atualizar. Os totais
+   * repetiam o que o painel de metas logo abaixo já mostra, e a faixa era um
+   * card inteiro para dois filtros. Pedido do Cleber: a faixa sai, e os dois
+   * filtros vão para o card do recorte (Minha visão · equipe · setor), que é
+   * onde a tela já pergunta «o que estou olhando?».
+   *
+   * O «Baixar fechamento» vai junto: só aparece em mês fechado e baixa o MÊS
+   * escolhido aqui — separado do seletor, a pergunta «de qual mês?» volta.
+   */
+  const controles = (
+    <div className="flex items-center gap-2 flex-wrap">
+      <SeletorMes mes={mesAnalise} onChange={setMesAnalise} desabilitado={carregando} />
+      {/* PaguePlay só: a BookPlay não tem H.O. */}
+      {isPP && <SeletorUnidade valor={unidade} onChange={trocarUnidade} />}
+      <BotaoFechamento
+        mes={mesAnalise}
+        setorId={setorEmFoco}
+        temLogicaDiretoExtra={temLogicaDiretoExtra}
+      />
+    </div>
+  );
+
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-3">
-      {/* Header compacto sempre visível */}
-      <motion.div
-        initial={{ opacity: 0, y: -6 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-        className="flex items-center justify-between px-4 py-3 rounded-xl border border-border/70 bg-card shadow-sm"
-      >
-        {/*
-          Na BookPlay esta faixa é só a barra de controles.
-
-          O título «Dados Analíticos», o ritmo, o Recebido e o Agendado saíram
-          em 08/09/2026: o painel de metas logo abaixo já é o assunto da tela e
-          já mostra recebido, projeção e meta com muito mais contexto. Repetir
-          dois desses números numa faixa acima obrigava a ler a mesma coisa
-          duas vezes, e o título anunciava uma seção que ocupa a página inteira.
-
-          O seletor de mês FICA — ele recorta tudo o que vem abaixo — e passa a
-          morar junto dos outros controles, à direita, onde já estão o
-          fechamento e o atualizar. Na PaguePlay a faixa continua como era: lá
-          o alternador H.O./Bruto depende dela e os números do topo são a
-          leitura em bruto que o painel não repete.
-        */}
-        {isPP ? (
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-primary/10 shrink-0">
-                <BarChart2 className="w-3.5 h-3.5 text-primary" />
-              </div>
-              <div>
-                <span className="text-sm font-semibold leading-none">Dados Analíticos</span>
-                <div className="mt-0.5 -ml-1.5 flex items-center gap-2 flex-wrap">
-                  <SeletorMes mes={mesAnalise} onChange={setMesAnalise} desabilitado={carregando} />
-                  {/* Ao lado do mês porque os dois recortam o MESMO painel logo
-                      abaixo. PaguePlay só: a BookPlay não tem H.O. */}
-                  <SeletorUnidade valor={unidade} onChange={trocarUnidade} />
-                </div>
-              </div>
-            </div>
-            {!carregando && sparklineData.length > 0 && (
-              <div className="hidden lg:flex items-center gap-2 ml-2 pl-3 border-l border-border/60">
-                <MiniSparkline data={sparklineData} color={CHART_RECEBIDO} />
-                <span className="text-[11px] text-muted-foreground">ritmo</span>
-              </div>
-            )}
-          </div>
-        ) : (
-          <SeletorMes mes={mesAnalise} onChange={setMesAnalise} desabilitado={carregando} />
-        )}
-
-        {!carregando && isPP && (
-          <div className="hidden md:flex items-center gap-5 text-xs">
-            <div className="flex flex-col items-end">
-              <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
-                {isPP ? 'H.O.' : 'Recebido'}
-              </span>
-              {/* `data-alvo-feitico`: a Fome do Cavalo da Guerra «come» o valor por uns segundos (só visual). */}
-              <span className="font-bold text-emerald-600 dark:text-emerald-500 tabular-nums font-mono" data-alvo-feitico="valor" data-nome-feitico={isPP ? 'H.O.' : 'Recebido'}>
-                {formatCurrency(valorPrincipal)}
-              </span>
-            </div>
-            {isPP && !temLogicaDiretoExtra && (
-              <div className="flex flex-col items-end">
-                <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Bruto</span>
-                <span className="font-semibold tabular-nums font-mono">
-                  {formatCurrency(usarAnalitico ? anal.bruto : valorRecebidoMes)}
-                </span>
-              </div>
-            )}
-            {isPP && temLogicaDiretoExtra && (
-              <>
-                <div className="flex flex-col items-end">
-                  <span className="text-[10px] text-muted-foreground uppercase tracking-wide">H.O Direto</span>
-                  <span className="font-semibold tabular-nums font-mono text-emerald-600 dark:text-emerald-500">{formatCurrency(valorHODireto)}</span>
-                </div>
-                <div className="flex flex-col items-end">
-                  <span className="text-[10px] text-muted-foreground uppercase tracking-wide">H.O Extra</span>
-                  <span className="font-semibold tabular-nums font-mono text-violet-500">{formatCurrency(valorHOExtra)}</span>
-                </div>
-              </>
-            )}
-            {!isPP && (
-              <div className="flex flex-col items-end">
-                <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Agendado</span>
-                <span className="font-semibold tabular-nums font-mono">{formatCurrency(valorAgendadoMes)}</span>
-              </div>
-            )}
-            {meta && (
-              <div className="flex flex-col items-end">
-                <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Meta</span>
-                <span className="font-bold tabular-nums font-mono" style={{ color: corTexto(donutColor) }}>
-                  {formatarPctDaMeta(percMetaFinal)}
-                </span>
-              </div>
-            )}
-          </div>
-        )}
-
-        <div className="flex items-center gap-2">
-          {/* Baixa o fechamento do MÊS QUE ESTÁ NA TELA — por isso mora aqui, na
-              mesma faixa do seletor de mês, e não numa aba própria. */}
-          <BotaoFechamento
-            mes={mesAnalise}
-            setorId={setorEmFoco}
-            temLogicaDiretoExtra={temLogicaDiretoExtra}
-          />
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 rounded-lg"
-            onClick={refetch}
-            disabled={carregando || atualizando}
-            title="Atualizar dados"
-          >
-            {/* Gira com `atualizando`, não com `carregando`.
-                Desde que a releitura deixou de trocar o painel por esqueleto,
-                `carregando` só é verdadeiro na primeira carga — e o botão de
-                atualizar ficava parado enquanto a busca acontecia, dando a
-                impressão de que o clique não tinha pegado. */}
-            <RefreshCw className={cn(
-              'w-3.5 h-3.5 text-muted-foreground',
-              (carregando || atualizando) && 'animate-spin',
-            )} />
-          </Button>
-        </div>
-      </motion.div>
+      {renderFiltro ? renderFiltro(controles) : controles}
 
       {/* O painel: sempre aberto, nas duas regras (05/11/2026). */}
       <motion.div

@@ -51,8 +51,10 @@ function montar(over: {
   equipes?: { id: string; nome: string }[];
   onVisao?: (v: VisaoEscopo) => void;
   onSetor?: (id: string | null) => void;
+  controles?: React.ReactNode;
 }) {
   const props = {
+    controles: over.controles,
     niveis: over.niveis,
     setores: SETORES,
     setorFiltro: over.setorFiltro ?? null,
@@ -72,6 +74,21 @@ function degraus(): string[] {
   const grupo = screen.getByRole('group', { name: 'Nível de visualização' });
   return within(grupo).getAllByRole('button').map(b => b.textContent?.trim() ?? '');
 }
+
+describe('FiltroEscopo — mês e H.O./Bruto no mesmo card', () => {
+  it('os controles do painel aparecem junto da régua', () => {
+    montar({ niveis: TUDO, setorFiltro: 's-1', controles: <span>Novembro 2026</span> });
+    expect(degraus()).toEqual(['Minha visão', 'Minha equipe', 'Meu setor']);
+    expect(screen.getByText('Novembro 2026')).toBeInTheDocument();
+  });
+
+  it('sem régua nem setor, o card fica de pé só pelos controles', () => {
+    // Quem só tem «individual»: antes o card sumia — e o mês sumiria junto.
+    montar({ niveis: ['individual'], equipeDoPerfil: null, controles: <span>Novembro 2026</span> });
+    expect(screen.queryByRole('group', { name: 'Nível de visualização' })).toBeNull();
+    expect(screen.getByText('Novembro 2026')).toBeInTheDocument();
+  });
+});
 
 describe('FiltroEscopo — a régua de visões', () => {
   it('sobe na ordem pedida: Minha visão → Minha equipe → Meu setor', () => {
