@@ -6,6 +6,10 @@
  *
  * `?tema=halloween&escuro=1&hoje=2026-10-29&largura=390` abre já escolhido
  * (é por aqui que dá para tirar print de cada tema).
+ *
+ * O tempo (06/11/2026), sem rede: `?clima=chuva&noite=1&estacao=inverno&chao=cidade&temp=31`,
+ * `&tempo=1` já abre o card do tempo, e `&galeria=1` mostra todos os
+ * personagens e cenários da estação.
  */
 import { StrictMode, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -17,6 +21,10 @@ import { paletaGibi } from '@/lib/calendarioGibi';
 import { copiarImagemDoElemento } from '@/lib/copiarImagem';
 import { BotaoDoMes } from './BotaoDoMes';
 import { CalendarioGibi } from './CalendarioGibi';
+import { CaixaDoTempo } from '../clima/CaixaDoTempo';
+import { BotaoDoTempo } from '../clima/BotaoDoTempo';
+import { CHAOS, CONDICOES, ESTACOES, GaleriaDoTempo, previsaoDeExemplo, type Chao } from '../clima/laboratorioClima';
+import { estacaoDoDia, resumoDoClima, type CondicaoClima, type Estacao } from '@/lib/clima';
 
 const URL_INICIAL = new URLSearchParams(window.location.search);
 
@@ -70,8 +78,16 @@ function Laboratorio() {
   const [editor, setEditor] = useState(URL_INICIAL.get('editor') === '1');
   const [hojeISO, setHojeISO] = useState(URL_INICIAL.get('hoje') ?? '2026-10-08');
   const [largura, setLargura] = useState(Number(URL_INICIAL.get('largura')) || 0);
-  const [chamando, setChamando] = useState(true);
+  const [chamando, setChamando] = useState(URL_INICIAL.get('tempo') !== '1');
   const [aviso, setAviso] = useState('');
+  const [condicao, setCondicao] = useState<CondicaoClima>((URL_INICIAL.get('clima') as CondicaoClima | null) ?? 'limpo');
+  const [noite, setNoite] = useState(URL_INICIAL.get('noite') === '1');
+  const [estacaoForcada, setEstacaoForcada] = useState<Estacao | ''>((URL_INICIAL.get('estacao') as Estacao | null) ?? '');
+  const [chao, setChao] = useState<Chao | ''>((URL_INICIAL.get('chao') as Chao | null) ?? '');
+  const [variante, setVariante] = useState(Number(URL_INICIAL.get('variante')) || 0);
+  const [temp, setTemp] = useState(Number(URL_INICIAL.get('temp')) || 29);
+  const [galeria, setGaleria] = useState(URL_INICIAL.get('galeria') === '1');
+  const [tempoAberto, setTempoAberto] = useState(URL_INICIAL.get('tempo') === '1');
   const cartao = useRef<HTMLDivElement>(null);
 
   const mes = hojeISO.slice(0, 7);
@@ -87,6 +103,8 @@ function Laboratorio() {
   const feriados = useMemo(() => feriadosDoMes(mes, oficiais), [mes, oficiais]);
   const ehDiaUtil = useMemo(() => regraDoDia(oficiais), [oficiais]);
   const hoje = porDia.get(hojeISO) ?? [];
+  const previsao = useMemo(() => previsaoDeExemplo(condicao, noite, temp, hojeISO), [condicao, noite, temp, hojeISO]);
+  const estacao = estacaoForcada || estacaoDoDia(hojeISO);
 
   const fundo: CSSProperties = escuro
     ? { background: '#0F1115', color: '#ECEEF3', colorScheme: 'dark' }
@@ -136,6 +154,31 @@ function Laboratorio() {
           {aviso && <span>{aviso}</span>}
         </header>
 
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', fontSize: 14 }}>
+          <b>Tempo:</b>
+          <select value={condicao} onChange={e => setCondicao(e.target.value as CondicaoClima)}>
+            {CONDICOES.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <label><input type="checkbox" checked={noite} onChange={e => setNoite(e.target.checked)} /> Noite</label>
+          <label>Estação{' '}
+            <select value={estacaoForcada} onChange={e => setEstacaoForcada(e.target.value as Estacao | '')}>
+              <option value="">Pelo dia</option>
+              {ESTACOES.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </label>
+          <label>Chão{' '}
+            <select value={chao} onChange={e => setChao(e.target.value as Chao | '')}>
+              <option value="">Pelo dia</option>
+              {CHAOS.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </label>
+          <label>Acessório <select value={variante} onChange={e => setVariante(Number(e.target.value))}><option value={0}>1</option><option value={1}>2</option></select></label>
+          <label>Temp <input type="number" value={temp} onChange={e => setTemp(Number(e.target.value))} style={{ width: 56 }} /></label>
+          <label><input type="checkbox" checked={galeria} onChange={e => setGaleria(e.target.checked)} /> Galeria</label>
+        </div>
+
+        {galeria && <GaleriaDoTempo cores={paleta} estacao={estacao} variante={variante} />}
+
         {/* `relative`, como o header do app: no celular o lembrete se mede por esta barra. */}
         <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', borderRadius: 12, border: '1px solid #8884', minHeight: 56 }}>
           <span style={{ fontWeight: 700 }}>Barra do app:</span>
@@ -149,6 +192,23 @@ function Laboratorio() {
             onAbrir={() => setChamando(false)}
             onDispensar={() => setChamando(false)}
           />
+          <BotaoDoTempo
+            paleta={paleta}
+            clima={{ condicao, noite, temp, estacao, variante, resumo: resumoDoClima('birigui', previsao) }}
+            aberto={tempoAberto}
+            onAlternar={() => setTempoAberto(v => !v)}
+            onFechar={() => setTempoAberto(false)}
+          >
+            <CaixaDoTempo
+              cidade="birigui"
+              previsao={previsao}
+              geradoEm={new Date().toISOString()}
+              carregando={false}
+              hojeISO={hojeISO}
+              cores={paleta}
+              forcar={{ estacao, chao: chao || undefined, variante }}
+            />
+          </BotaoDoTempo>
           {!chamando && hoje.length > 0 && (
             <button type="button" onClick={() => setChamando(true)} style={{ marginLeft: 'auto', textDecoration: 'underline' }}>
               Mostrar o lembrete de novo
@@ -156,7 +216,7 @@ function Laboratorio() {
           )}
         </div>
 
-        <div style={{ maxWidth: largura || undefined, width: '100%', margin: largura ? '0 auto' : undefined, marginTop: chamando ? 260 : 0 }}>
+        <div style={{ maxWidth: largura || undefined, width: '100%', margin: largura ? '0 auto' : undefined, marginTop: chamando || tempoAberto ? (tempoAberto ? 620 : 260) : 0 }}>
           <CalendarioGibi
             mes={mes}
             setorNome="Receptivo"

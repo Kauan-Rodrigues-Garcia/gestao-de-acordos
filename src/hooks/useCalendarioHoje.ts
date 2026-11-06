@@ -22,14 +22,22 @@ import {
 export interface CalendarioHoje {
   /** A pessoa alcança algum setor. Sem setor, o botão não aparece. */
   temSetor: boolean;
+  /** O setor cujo dia o botão mostra (o próprio, senão o primeiro alcançado): o tempo é o da cidade dele. */
+  setorId: string | null;
   eventosHoje: EventoCalendario[];
   /** O mês corrente está em rascunho e esta pessoa monta o calendário. */
   rascunhoParaPublicar: boolean;
   /** O tema escolhido na capa do mês (`null` = Automático), para o botão vestir o gibi do mês. */
   tema: string | null;
+  /**
+   * O tema do mês só se ele está liberado para a operação (publicado); senão
+   * `null`. É a cor do botão do tempo (06/11/2026): o rascunho que o líder
+   * ainda monta não pinta o tempo de ninguém.
+   */
+  temaLiberado: string | null;
 }
 
-const NADA: CalendarioHoje = { temSetor: false, eventosHoje: [], rascunhoParaPublicar: false, tema: null };
+const NADA: CalendarioHoje = { temSetor: false, setorId: null, eventosHoje: [], rascunhoParaPublicar: false, tema: null, temaLiberado: null };
 
 /** Na volta à aba, só relê se a última leitura passou disto (ou se virou o dia). */
 const RELER_NO_FOCO_MS = 10 * 60 * 1000;
@@ -71,9 +79,11 @@ export function useCalendarioHoje(
       if (!vivo) return;
       setEstado({
         temSetor: true,
+        setorId: setor.id,
         eventosHoje: mes.publicado || setor.pode_editar ? mes.eventos.filter(e => e.dia === hoje) : [],
         rascunhoParaPublicar: setor.pode_editar && mes.temPublicacao && !mes.publicado && mes.eventos.length > 0,
         tema: mes.capa?.tema ?? null,
+        temaLiberado: mes.publicado ? mes.capa?.tema ?? null : null,
       });
     })().catch(() => { if (vivo) setEstado(NADA); });
     return () => { vivo = false; };
