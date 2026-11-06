@@ -29,7 +29,7 @@ import {
 } from 'lucide-react';
 import { formatBRL } from '@/lib/money';
 import { COR_QUARTIL, corProjecao } from '@/lib/diasUteis';
-import { calcularProjecao, degrausComAmanha } from '@/lib/projecaoMetas';
+import { calcularProjecao, degrausComAmanha, formatarPctDaMeta } from '@/lib/projecaoMetas';
 import { corTexto } from '@/lib/temas';
 import { cn } from '@/lib/utils';
 import { copiarTexto } from '@/lib/clipboard';
@@ -106,9 +106,15 @@ interface Leitura {
   rotulo: string | null;
   d: DetalheEquipe;
   esperado: number | null;
+  /** % de projeção inteira — a que decide faixa e cor, igual ao resto do app. */
   pct: number | null;
+  /** A mesma %, sem arredondar: é a que a tela escreve (uma casa, cortada). */
+  pctExato: number | null;
   cor: string;
 }
+
+/** «92,4%» — uma casa, cortada para baixo (`formatarPctDaMeta`). */
+const pctTexto = (v: number | null) => (v === null ? '—' : formatarPctDaMeta(v));
 
 function ler(alvo: AlvoPainel): Leitura {
   // A mesma unidade do CardEquipe: em H.O., barra, projeção e falta em H.O.
@@ -123,8 +129,10 @@ function ler(alvo: AlvoPainel): Leitura {
     ? (meta / alvo.totalUteis) * Math.max(alvo.decorridos, 1)
     : null;
   const pct = d.projecaoPct;
+  // Mesma conta de `calcularProjecao` (piso de 1 dia), antes do `Math.round`.
+  const pctExato = pct !== null && esperado !== null && esperado > 0 ? (acum / esperado) * 100 : null;
   const rotulo = emHO ? 'H.O.' : alvo.cofen ? 'Bruto' : null;
-  return { alvo, acum, meta, emHO, rotulo, d, esperado, pct, cor: pct !== null ? corProjecao(pct) : 'var(--muted-foreground)' };
+  return { alvo, acum, meta, emHO, rotulo, d, esperado, pct, pctExato, cor: pct !== null ? corProjecao(pct) : 'var(--muted-foreground)' };
 }
 
 const sinal = (v: number) => `${v >= 0 ? '+' : '−'}${formatBRL(Math.abs(v))}`;
@@ -333,6 +341,7 @@ function BotaoCopiar({ l, mes, ehSetor }: { l: Leitura; mes: string; ehSetor?: b
             acumuladoHO: !l.emHO && l.alvo.cofen ? l.alvo.acumuladoHO : null,
             acumuladoBruto: l.emHO ? l.alvo.acumulado : null,
             detalhe: l.d,
+            projecaoPctExata: l.pctExato,
           }),
           'Texto copiado — é só colar no WhatsApp.',
           'Não foi possível copiar o texto.',
@@ -360,7 +369,7 @@ function Frase({ l, mes }: { l: Leitura; mes: string }) {
   return (
     <>
       {l.alvo.titulo} está a{' '}
-      <span className="font-mono tabular-nums" style={{ color: corTexto(l.cor) }}>{l.pct}%</span>{' '}
+      <span className="font-mono tabular-nums" style={{ color: corTexto(l.cor) }}>{pctTexto(l.pctExato)}</span>{' '}
       do ritmo da meta
     </>
   );
@@ -506,13 +515,13 @@ function Pista({
                 </span>
                 <span className="text-right sm:order-last">
                   <span className="block font-mono tabular-nums font-bold text-lg leading-none" style={{ color: corTexto(l.cor) }}>
-                    {l.pct !== null ? `${l.pct}%` : '—'}
+                    {pctTexto(l.pctExato)}
                   </span>
                   <span className="block text-[11px] font-mono tabular-nums text-muted-foreground mt-1">{formatBRL(l.acum)}</span>
                 </span>
                 <span className="col-span-2 sm:col-span-1">
                   {l.pct !== null ? (
-                    <Trilho pct={l.pct} quartis={quartis} cor={l.cor}
+                    <Trilho pct={l.pctExato} quartis={quartis} cor={l.cor}
                       marcador={
                         <span className="block rounded-full p-0.5 shadow-md" style={{ background: l.cor }}>
                           <Lideres lideres={l.alvo.lideres.slice(0, 1)} tamanho="sm" />
@@ -577,6 +586,8 @@ function Escada({ d }: { d: DetalheEquipe }) {
 interface PessoaLida {
   op: OperadorNaEquipe;
   pct: number | null;
+  /** A % sem arredondar, para escrever e ordenar (ver `Leitura.pctExato`). */
+  pctExato: number | null;
   quartil: number | null;
   paraSubir: number | null;
   proximo: number | null;
@@ -596,16 +607,17 @@ function lerPessoas(alvo: AlvoPainel): PessoaLida[] {
     return {
       op,
       pct: p?.projecaoPct ?? null,
+      pctExato: p && p.esperado > 0 ? (op.recebido / p.esperado) * 100 : null,
       quartil: atual,
       paraSubir: p?.paraSubir ?? null,
       proximo: p?.proximo?.quartil ?? null,
       ficarAmanha: degraus.find(g => g.quartil === atual)?.faltaAmanha ?? null,
     };
   }).sort((a, b) => {
-    if (a.pct === null && b.pct === null) return b.op.recebido - a.op.recebido;
-    if (a.pct === null) return 1;
-    if (b.pct === null) return -1;
-    return b.pct - a.pct || b.op.recebido - a.op.recebido;
+    if (a.pctExato === null && b.pctExato === null) return b.op.recebido - a.op.recebido;
+    if (a.pctExato === null) return 1;
+    if (b.pctExato === null) return -1;
+    return b.pctExato - a.pctExato || b.op.recebido - a.op.recebido;
   });
 }
 
@@ -644,12 +656,12 @@ function Pessoas({ alvo, d, rotulo }: { alvo: AlvoPainel; d: DetalheEquipe; rotu
               </span>
               <span className="md:order-none order-last col-span-2 md:col-span-1">
                 {p.pct !== null
-                  ? <Trilho compacto pct={p.pct} quartis={alvo.quartis} cor={cor}
+                  ? <Trilho compacto pct={p.pctExato} quartis={alvo.quartis} cor={cor}
                       marcador={<span className="block w-3 h-3 rounded-full border-2 border-card shadow" style={{ background: cor }} />} />
                   : <span className="text-[11px] text-muted-foreground">sem meta individual</span>}
               </span>
               <span className="text-right font-mono tabular-nums font-bold text-sm" style={{ color: corTexto(cor) }}>
-                {p.pct !== null ? `${p.pct}%` : '—'}
+                {pctTexto(p.pctExato)}
               </span>
               <span className="hidden md:block text-right text-xs font-mono tabular-nums">
                 {formatBRL(p.op.recebido)}
@@ -706,7 +718,7 @@ function DetalheDaEquipe({ l, mes }: { l: Leitura; mes: string }) {
         <div className="flex items-center gap-3">
           <div className="text-right">
             <p className="font-mono tabular-nums font-extrabold text-3xl leading-none" style={{ color: corTexto(l.cor) }}>
-              {l.pct !== null ? `${l.pct}%` : '—'}
+              {pctTexto(l.pctExato)}
             </p>
             <p className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1">do ritmo</p>
           </div>
@@ -737,10 +749,10 @@ function BlocoSetor({ g, mes, equipePreferida, mostrarNome }: {
 }) {
   const setorLido = useMemo(() => (g.setor ? ler(g.setor) : null), [g.setor]);
   const equipes = useMemo(() => g.equipes.map(ler).sort((a, b) => {
-    if (a.pct === null && b.pct === null) return b.acum - a.acum;
-    if (a.pct === null) return 1;
-    if (b.pct === null) return -1;
-    return b.pct - a.pct || b.acum - a.acum;
+    if (a.pctExato === null && b.pctExato === null) return b.acum - a.acum;
+    if (a.pctExato === null) return 1;
+    if (b.pctExato === null) return -1;
+    return b.pctExato - a.pctExato || b.acum - a.acum;
   }), [g.equipes]);
 
   const [sel, setSel] = useState<string | null>(null);

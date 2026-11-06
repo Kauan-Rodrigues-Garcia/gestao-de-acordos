@@ -30,6 +30,7 @@
  * Função pura. Copiar é assunto de quem chama.
  */
 import { formatBRL } from '@/lib/money';
+import { formatarPctDaMeta } from '@/lib/projecaoMetas';
 import type { DetalheEquipe } from './desempenhoEquipe';
 import { mesPorExtenso } from './mensagemOperador';
 
@@ -58,6 +59,11 @@ export interface EntradaMensagemEquipe {
   acumuladoBruto?: number | null;
   /** O detalhe já calculado — a MESMA fonte que desenha o card. */
   detalhe: DetalheEquipe;
+  /**
+   * A % de projeção sem o arredondamento de `detalhe.projecaoPct` (o Painel
+   * do Líder novo mostra uma casa, cortada). Ausente = a de `detalhe`.
+   */
+  projecaoPctExata?: number | null;
 }
 
 function pessoas(qtd: number): string {
@@ -72,7 +78,7 @@ function pessoas(qtd: number): string {
  */
 export function montarMensagemEquipe(entrada: EntradaMensagemEquipe): string {
   const {
-    titulo, ehSetor, mes, acumulado, meta, rotuloUnidade, acumuladoHO, acumuladoBruto, detalhe: d,
+    titulo, ehSetor, mes, acumulado, meta, rotuloUnidade, acumuladoHO, acumuladoBruto, detalhe: d, projecaoPctExata,
   } = entrada;
   const linhas: string[] = [];
 
@@ -85,11 +91,12 @@ export function montarMensagemEquipe(entrada: EntradaMensagemEquipe): string {
   if (acumuladoHO !== null) linhas.push(`*H.O.:* ${formatBRL(acumuladoHO)}`);
   if (acumuladoBruto != null) linhas.push(`*Bruto:* ${formatBRL(acumuladoBruto)}`);
   if (meta !== null && meta > 0) {
-    linhas.push(`*Meta:* ${formatBRL(meta)} (${Math.round((acumulado / meta) * 100)}% da meta)`);
+    linhas.push(`*Meta:* ${formatBRL(meta)} (${formatarPctDaMeta((acumulado / meta) * 100)} da meta)`);
   }
   if (d.projecaoPct !== null) {
     const faixa = d.faixaAtual ? ` — ${d.faixaAtual.quartil}º quartil` : '';
-    linhas.push(`*Projeção:* ${d.projecaoPct}%${faixa}`);
+    const pct = projecaoPctExata != null ? formatarPctDaMeta(projecaoPctExata) : `${d.projecaoPct}%`;
+    linhas.push(`*Projeção:* ${pct}${faixa}`);
   }
 
   // ── Ritmo ──────────────────────────────────────────────────────────────────
