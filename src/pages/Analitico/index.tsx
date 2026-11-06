@@ -16,6 +16,7 @@ import { supabase } from '@/lib/supabase';
 import { aplicarOrdemSetores } from '@/lib/setores-ordem';
 import { toast } from 'sonner';
 import { logger } from '@/lib/logger';
+import { cn } from '@/lib/utils';
 import { useAnalitico } from '@/hooks/useAnalitico';
 import { AnaliticoOperador } from '@/pages/Dashboard/Analitico/AnaliticoOperador';
 import { AnaliticoLider } from '@/pages/Dashboard/Analitico/AnaliticoLider';
@@ -131,7 +132,10 @@ export default function PaginaAnalitico() {
    * haver algo para mostrar.
    */
   const abasPrincipais = useMemo(() => ([
-    { key: 'analitico', label: 'Analítico', Icon: BarChart2, permissao: 'analitico_sub_analitico', extra: true },
+    // «Recebimentos», e não «Analítico» (25/10/2026): a página inteira já se
+    // chama Analítico, e uma seção com o nome da página não dizia o que tinha.
+    // A chave continua `analitico` — URL, permissão e uso de tela não mudam.
+    { key: 'analitico', label: 'Recebimentos', Icon: BarChart2, permissao: 'analitico_sub_analitico', extra: true },
     // A aba "Recebimento diário" virou o recorte Dia da lente, logo abaixo. A
     // chave `analitico_sub_recebimento_diario` continua existindo e continua
     // querendo dizer a mesma coisa — ela agora libera o recorte, não uma aba.
@@ -414,12 +418,24 @@ export default function PaginaAnalitico() {
     navigate(ROUTE_PATHS.ACORDOS + '?' + qs.toString());
   }
 
+  // Validação do relatório — `analitico_validar_relatorio`, e só com um setor
+  // em foco: ela assina o número de UM setor.
+  const setorDaValidacao = veTodosSetores ? filtroSetorId : setorProprio;
+  const validacao = podeValidarRelatorio && setorDaValidacao ? (
+    <ValidacaoRelatorioSetor
+      empresaId={empresa.id}
+      setorId={setorDaValidacao}
+      setorNome={setores.find(s => s.id === setorDaValidacao)?.nome ?? ''}
+      mes={mesDaLente}
+    />
+  ) : null;
+
   return (
-    <div className="mx-auto max-w-[1400px] space-y-5 p-4 sm:p-6">
+    <div className="mx-auto max-w-[1400px] space-y-4 p-4 sm:p-6">
 
       {/* Cabeçalho. A marca saiu do subtítulo: ela é da cidade do setor
           (`lib/marca.ts`), não da empresa, e aqui não há setor único. */}
-      <header className="flex flex-wrap items-center justify-between gap-3">
+      <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary/12 text-primary ring-1 ring-primary/20">
             <BarChart2 className="h-5 w-5" />
@@ -427,7 +443,7 @@ export default function PaginaAnalitico() {
           <div className="min-w-0">
             <h1 className="text-2xl font-bold leading-tight tracking-tight text-foreground">Analítico</h1>
             <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground">
-              Recebimentos do relatório do ERP
+              Quanto entrou, de quem e quando — pelo relatório do ERP
               {novosCount > 0 && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
                   <span className="h-1.5 w-1.5 rounded-full bg-primary" />
@@ -449,18 +465,34 @@ export default function PaginaAnalitico() {
         )}
       </header>
 
-      {/* Barra de comando: a seção à esquerda, o recorte (lente + setor) à
-          direita. Uma superfície só — antes eram três faixas soltas. */}
-      <div className="flex flex-col gap-2 rounded-2xl border border-border bg-card/70 p-2 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-        {/* Abas internas: Analítico × Ranking de quitação × Desafios */}
-        <AbasSegmentadas
-          abas={abasDaRegua}
-          ativa={abaVisivel}
-          onTrocar={(k: AbaPrincipal) => setAbaPrincipal(k)}
-          rotulo="Seção do Analítico"
-        />
+      {/*
+       * As seções da página, sublinhadas. Até 25/10/2026 eram pílulas iguais às
+       * abas de dentro (Por operador, Ranking…), e dois níveis com o mesmo
+       * desenho não diziam qual mandava em qual. Uma seção só não vira régua.
+       */}
+      {abasDaRegua.length > 1 && (
+        <nav aria-label="Seção do Analítico"
+          className="fileira-rola flex gap-1 overflow-x-auto border-b border-border">
+          {abasDaRegua.map(({ key, label, Icon }) => (
+            <button key={key} type="button"
+              aria-current={abaVisivel === key ? 'page' : undefined}
+              onClick={() => setAbaPrincipal(key)}
+              className={cn(
+                '-mb-px flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-medium transition-colors',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
+                abaVisivel === key
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:border-border hover:text-foreground',
+              )}>
+              <Icon className="h-4 w-4 shrink-0" aria-hidden="true" /> {label}
+            </button>
+          ))}
+        </nav>
+      )}
 
-        <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+      {/* O recorte: lente de tempo e setor. */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {/* A lente não vale para Desafios: o recorte de lá é o PERÍODO da
               campanha, que pode atravessar a virada do mês. O filtro de setor
               logo abaixo continua valendo — ele é o recorte de quem olha. */}
@@ -472,7 +504,9 @@ export default function PaginaAnalitico() {
               somenteMes={lenteSoMes}
             />
           )}
+        </div>
 
+        <div className="flex flex-wrap items-center gap-2">
           {/* Filtro de setor — para quem tem o nível `todos_setores` nesta aba.
               Quem não tem fica no próprio setor e vê a etiqueta abaixo. */}
           {podeVerSetor && veTodosSetores && setores.length > 0 && (
@@ -525,15 +559,9 @@ export default function PaginaAnalitico() {
         </div>
       )}
 
-      {/* Validação do relatório (Fase 1) — só administrador/super_admin */}
-      {abaVisivel === 'analitico' && podeValidarRelatorio && (
-        <ValidacaoRelatorioSetor
-          empresaId={empresa.id}
-          setorId={veTodosSetores ? filtroSetorId : setorProprio}
-          setorNome={setores.find(s => s.id === (veTodosSetores ? filtroSetorId : setorProprio))?.nome ?? ''}
-          mes={mesDaLente}
-        />
-      )}
+      {/* Validação do relatório fora da visão geral. Na visão geral ela mora na
+          Conferência do relatório, junto do resto do que é manutenção. */}
+      {abaVisivel === 'analitico' && !mostrarVisaoGeral && validacao}
 
       {/* Conteúdo por cargo — aba Analítico */}
       {abaVisivel === 'analitico' && mostrarVisaoIndividual && (
@@ -566,6 +594,7 @@ export default function PaginaAnalitico() {
           onVerAcordo={onVerAcordo}
           onRefetch={refetchOperador}
           onAbaMudou={setAbaDaVisao}
+          conferenciaExtra={validacao}
         />
       )}
 

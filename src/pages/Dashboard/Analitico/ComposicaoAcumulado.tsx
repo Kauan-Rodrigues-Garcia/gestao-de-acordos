@@ -42,6 +42,11 @@ interface Props {
   salvando: boolean;
   /** Recebe o conjunto COMPLETO de origens que ficam fora. */
   onSalvar: (excluidas: Set<OrigemKey>) => void;
+  /**
+   * Já aberto, sem a linha de abrir. É como a Conferência do relatório o usa:
+   * ela própria já é o «abrir», e um segundo clique dentro dela seria eco.
+   */
+  semRecolher?: boolean;
 }
 
 function rotulo(origem: OrigemDoAcumulado, nomeDoSetor: Props['nomeDoSetor']): string {
@@ -50,9 +55,10 @@ function rotulo(origem: OrigemDoAcumulado, nomeDoSetor: Props['nomeDoSetor']): s
 }
 
 export function ComposicaoAcumulado({
-  origens, nomeDoSetor, podeEditar, salvando, onSalvar,
+  origens, nomeDoSetor, podeEditar, salvando, onSalvar, semRecolher = false,
 }: Props) {
-  const [aberto, setAberto] = useState(false);
+  const [abertoAqui, setAberto] = useState(false);
+  const aberto = semRecolher || abertoAqui;
 
   // Uma origem só: o relatório veio limpo, não há o que compor. A linha some em
   // vez de virar um controle que nunca faz nada.
@@ -70,8 +76,8 @@ export function ComposicaoAcumulado({
   }
 
   return (
-    <div className="mt-2">
-      <button
+    <div className={semRecolher ? undefined : 'mt-2'}>
+      {!semRecolher && <button
         type="button"
         onClick={() => setAberto(a => !a)}
         aria-expanded={aberto}
@@ -85,7 +91,7 @@ export function ComposicaoAcumulado({
             − {formatBRL(totalFora)} fora
           </span>
         )}
-      </button>
+      </button>}
 
       {aberto && (
         <div className="mt-2 rounded-lg border border-border bg-muted/30 p-3 space-y-2">
