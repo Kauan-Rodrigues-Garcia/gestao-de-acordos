@@ -11,11 +11,11 @@ multiplicar chamadas de API.
 | Ponto | Decisão |
 |---|---|
 | Quanto mostrar | Agora + hoje detalhado + 5 dias seguintes |
-| Onde, no calendário | Caixa «O tempo» no alto da coluna do lado (`gb-lado`) |
-| Onde, no topo | Dentro do botão do mês: personagem 26 px + temperatura |
+| Onde | Botão próprio no topo, colado ao do Calendário (mesmo traço e paleta do mês): personagem + temperatura. O clique abre só o card do tempo. O calendário não tem nada do tempo (revisão do Cleber, 06/11: a coluna do lado já estava cheia) |
+| Card | Temperatura, condição e máx/mín no alto, FORA do desenho; depois o cenário sozinho; sensação, chuva, umidade, vento; 5 dias |
+| Quem vê | Quem está logado, mesmo sem calendário |
 | Desenho | Botão e faixa de dias: personagem com carinha. Caixa: cenário da estação com o personagem grande no céu |
 | Cidade | Do setor (`setores.cidade_id` › `rh_celulas.nome`). Sem cidade, ou outra cidade: Birigui |
-| Copiar imagem | A caixa fica de fora (`data-html2canvas-ignore`) |
 | Fonte | MET Norway (api.met.no): grátis inclusive para uso comercial, sem chave; pede User-Agent, cache e crédito. O Open-Meteo foi descartado por ser grátis só para uso não comercial |
 
 ## Dados
@@ -58,14 +58,19 @@ multiplicar chamadas de API.
   com cores da estação (inverno seco com ipê-roxo, primavera com ipê-amarelo).
   De noite o chão escurece e janelas e poste acendem.
 - Sorteio: `varianteDoDia(data, semente)` — mesmo desenho para todos no dia.
-- `CaixaDoTempo.tsx` (só desenho), `TempoDoSetor.tsx` (lê o setor).
+- `CaixaDoTempo.tsx` (o card, só desenho), `BotaoDoTempo.tsx` (botão + card
+  que desce, fecha no clique fora/Esc), `BotaoClima.tsx` (lê a previsão e
+  baixa o card só no primeiro clique). O `BotaoCalendario` devolve os dois
+  botões lado a lado, sem mexer no `Layout`.
 
 ## Movimento
 
-Só CSS (`transform`, `translate`, `opacity`), tudo dentro de
-`prefers-reduced-motion: no-preference`. Parado, o desenho está completo.
-Na caixa, laço enquanto o calendário está aberto; no botão do topo, o
-personagem entra com um pulinho e fica parado, mexendo só com o mouse em cima.
+Só CSS (`transform`, `translate`, `opacity`). Roda MESMO com «reduzir
+animações» do Windows ligado (revisão do Cleber, 06/11, como o Bingo); quem
+desliga é o Modo leve (`html[data-leve]` › `animation-name: none`). Parado, o
+desenho está completo. No card, laço enquanto está aberto; no botão do topo,
+o personagem entra com um pulinho e fica parado, mexendo só com o mouse em
+cima.
 
 ## Fora do escopo
 
@@ -78,4 +83,6 @@ Alerta de tempestade, push, previsão hora a hora, outras cidades, banco.
 - `src/lib/__tests__/clima.test.ts` — cidade, estação, sorteio, textos.
 - `src/hooks/__tests__/useClima.test.tsx` — cidade do setor, busca única,
   releitura de 30 min, última boa.
-- Lab: `lab-calendario.html?clima=chuva&noite=1&estacao=inverno&chao=cidade&temp=31&galeria=1`.
+- `src/components/Calendario/clima/__tests__/BotaoDoTempo.test.tsx` — abre o
+  card, fecha no Esc e no clique fora.
+- Lab: `lab-calendario.html?clima=chuva&noite=1&estacao=inverno&chao=cidade&temp=31&tempo=1&galeria=1`.

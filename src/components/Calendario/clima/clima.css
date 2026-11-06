@@ -1,108 +1,132 @@
 /*
- * A previsão do tempo no Calendário em gibi (06/11/2026): a caixa do tempo, o
- * pedaço do botão do topo e o movimento dos desenhos.
+ * A previsão do tempo em gibi (06/11/2026): o botão do tempo no topo, o card
+ * que desce dele e o movimento dos desenhos.
  *
- * As cores vêm da paleta do gibi (`--ol`, `--ac`, `--surf`…), postas pelo
- * contêiner `.gb` / `.gb-sys`, como no resto do calendário.
+ * As cores vêm da paleta do gibi do mês (`--ol`, `--ac`, `--surf`…), postas
+ * no `.gb-sys` pelo `BotaoDoTempo`, como no botão do Calendário.
  *
  * ## Movimento
  *
  * Só `transform`, `translate` e `opacity`, que o navegador faz sem refazer a
- * página. Tudo dentro de `prefers-reduced-motion: no-preference`: quem pediu ao
- * sistema para reduzir movimento vê o desenho parado, e parado ele já está
- * inteiro (as gotas no lugar, o raio aceso, a neblina estendida).
+ * página. Roda MESMO com «reduzir animações» ligado no Windows (Cleber,
+ * 06/11/2026), como o Bingo: imagem corporativa vem com os efeitos do Windows
+ * desligados para economizar máquina, e ninguém ali pediu tempo parado. Quem
+ * desliga é o Modo leve do sistema (`html[data-leve]`, `lib/modoLeve.ts`),
+ * no fim deste arquivo. Parado, o desenho já está inteiro: as gotas no lugar,
+ * o raio aceso, a neblina estendida.
  *
- * O tempo é a exceção ao «nada em laço» do calendário, porque chuva parada
- * não chove. Mesmo assim, o laço fica onde se olha por pouco tempo:
- *   - na caixa do tempo, que só existe com o calendário aberto;
- *   - no botão do topo, que fica a tela inteira à vista, o personagem entra
- *     com um pulinho e fica PARADO; só se mexe com o mouse em cima.
- * Aba escondida o navegador já não pinta, então nada roda à toa.
+ * No botão do topo, que fica a tela inteira à vista, o personagem entra com
+ * um pulinho e fica parado; com o mouse em cima, ele vive. No card, que só
+ * existe aberto, o tempo acontece o tempo todo. Aba escondida o navegador não
+ * pinta, então nada roda à toa.
  */
 
-/* ── A caixa ──────────────────────────────────────────────────────────────── */
-.gb .cl-box { background: var(--surf); }
-.gb .cl-cidade {
-  display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 800; color: var(--muted);
-}
-.gb .cl-cidade svg { width: 13px; height: 13px; }
+.cl-sys { --gb-titulo: 'Bangers', 'Impact', 'Arial Black', sans-serif; }
 
-.gb .cl-cena {
-  position: relative; margin-top: 10px; aspect-ratio: 2 / 1; overflow: hidden;
-  border: 2.5px solid var(--ol); border-radius: 10px; box-shadow: 3px 3px 0 var(--ol);
-  background: var(--soft);
-}
-.gb .cl-cena > svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-.gb .cl-agora-num {
-  position: absolute; left: 8px; top: 6px; display: flex; flex-direction: column; align-items: flex-start; gap: 3px;
-  pointer-events: none;
-}
-.gb .cl-agora-num b {
-  font-family: var(--gb-titulo); font-weight: 400; font-size: 42px; line-height: .9; letter-spacing: 1px;
-  color: #fff; -webkit-text-stroke: 2.5px var(--ol); paint-order: stroke fill; text-shadow: 3px 3px 0 var(--ol);
-  font-variant-numeric: tabular-nums;
-}
-.gb .cl-agora-num span {
-  font-family: var(--gb-titulo); font-weight: 400; font-size: 14px; letter-spacing: 1px; line-height: 1;
-  background: var(--surf); color: var(--ink); border: 2px solid var(--ol); border-radius: 5px;
-  padding: 2px 6px 1px; transform: rotate(-3deg);
-}
-.gb .cl-agora-num small {
-  font-size: 11px; font-weight: 800; color: #fff; text-shadow: 1px 1px 0 var(--ol), -1px -1px 0 var(--ol), 1px -1px 0 var(--ol), -1px 1px 0 var(--ol);
-}
-.gb .cl-esperando {
-  display: grid; place-items: center; font-family: var(--gb-titulo); font-size: 18px; letter-spacing: 1px; color: var(--muted);
-}
-
-.gb .cl-dados { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 10px; }
-.gb .cl-dados div {
-  display: flex; flex-direction: column; min-width: 0; padding: 4px 8px;
-  background: var(--soft); border: 2px solid var(--ol); border-radius: 8px;
-}
-.gb .cl-dados dt { font-size: 10px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
-.gb .cl-dados dd { font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; }
-
-.gb .cl-dias { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; margin-top: 10px; }
-.gb .cl-dias li {
-  display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 0; padding: 4px 0 5px;
-  border: 2px solid var(--ol); border-radius: 8px; background: var(--surf);
-}
-.gb .cl-dias li > span { font-family: var(--gb-titulo); font-size: 13px; letter-spacing: .5px; line-height: 1; }
-.gb .cl-dias svg { width: 34px; height: 34px; display: block; }
-.gb .cl-dias b { font-size: 13px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
-.gb .cl-dias small { font-size: 11px; font-weight: 700; color: var(--muted); line-height: 1.1; font-variant-numeric: tabular-nums; }
-.gb .cl-rodape { margin-top: 8px; font-size: 10.5px; color: var(--muted); }
-
-/* ── O botão do topo ──────────────────────────────────────────────────────── */
-.gb-sys .gb-bt-clima { display: inline-flex; align-items: center; gap: 4px; flex: none; }
-.gb-sys .gb-bt-clima > i { width: 2px; height: 16px; background: currentColor; opacity: .35; margin-right: 2px; }
-.gb-sys .gb-bt-clima-ic { width: 26px; height: 26px; flex: none; margin-top: -3px; }
-.gb-sys .gb-bt-clima-ic svg { width: 100%; height: 100%; display: block; overflow: visible; }
-.gb-sys .gb-bt-clima b {
-  font-family: 'Bangers', 'Impact', sans-serif; font-weight: 400; font-size: 18px; letter-spacing: .5px; line-height: 1;
+/* ── O botão ──────────────────────────────────────────────────────────────── */
+.gb-sys .cl-bt { gap: 5px; padding: 0 10px 0 6px; }
+.gb-sys .cl-bt-ic { width: 28px; height: 28px; flex: none; margin-top: -4px; }
+.gb-sys .cl-bt-ic svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.gb-sys .cl-bt b {
+  font-family: var(--gb-titulo); font-weight: 400; font-size: 19px; letter-spacing: .5px; line-height: 1;
   padding-top: 2px; font-variant-numeric: tabular-nums;
 }
 
-/* ── Movimento ────────────────────────────────────────────────────────────── */
-@media (prefers-reduced-motion: no-preference) {
-  .cl-raios   { transform-box: fill-box; transform-origin: center; animation: cl-gira 40s linear infinite; }
-  .cl-respira { transform-box: fill-box; transform-origin: 50% 100%; animation: cl-respira 3.2s ease-in-out infinite alternate; }
-  .cl-deriva  { animation: cl-deriva 9s ease-in-out infinite alternate; }
-  .cl-deriva-2 { animation-duration: 12s; animation-direction: alternate-reverse; }
-  .cl-nevoa   { animation: cl-nevoa 7s ease-in-out infinite alternate; }
-  .cl-gota    { animation: cl-pinga 1s linear infinite; }
-  .cl-chuva   { animation: cl-cai .8s linear infinite; }
-  .cl-estrela { transform-box: fill-box; transform-origin: center; animation: cl-pisca 2.4s ease-in-out infinite alternate; }
-  .cl-zz      { animation: cl-zz 3.4s ease-in-out infinite; }
-  .cl-raio    { animation: cl-relampago 5s linear infinite; }
-  .cl-flash   { animation: cl-flash 5s linear infinite; }
-
-  /* O botão: entra com um pulinho e fica parado; com o mouse em cima, vive. */
-  .gb-sys .gb-bt-clima-ic { animation: cl-entra 520ms cubic-bezier(0.34, 1.56, 0.64, 1); }
-  .gb-sys .gb-bt-clima-ic * { animation-play-state: paused; }
-  .gb-sys .gb-bt:hover .gb-bt-clima-ic *,
-  .gb-sys .gb-bt:focus-visible .gb-bt-clima-ic * { animation-play-state: running; }
+/* ── O card que desce do botão ────────────────────────────────────────────── */
+.cl-pop {
+  position: absolute; left: 0; top: calc(100% + 14px); z-index: 41; /* por cima do lembrete do dia */
+  width: min(20.5rem, calc(100vw - 1rem));
+  color: var(--ink); text-align: left; white-space: normal; font-weight: 600; font-size: 14px; line-height: 1.35;
 }
+.cl-pop-seta {
+  position: absolute; top: -9px; left: 20px; width: 16px; height: 16px; transform: rotate(45deg); z-index: 1;
+  background: var(--surf); border-left: 3px solid var(--ol); border-top: 3px solid var(--ol);
+}
+.cl-pop p, .cl-pop h4, .cl-pop ol, .cl-pop dl, .cl-pop dd { margin: 0; }
+.cl-pop ol { padding: 0; list-style: none; }
+.cl-pop .gb-box { box-shadow: 6px 6px 0 var(--ol); }
+
+/* No celular o card, preso ao botão, passaria da borda: ele se mede pela barra
+   do topo (o `header` é `relative`), como o lembrete do Calendário. */
+@media (max-width: 640px) {
+  .gb-sys.cl-sys { position: static; }
+  .cl-pop { left: .5rem; right: .5rem; width: auto; top: calc(100% + 8px); }
+  .cl-pop-seta { display: none; }
+}
+
+/* ── A caixa ──────────────────────────────────────────────────────────────── */
+.cl-box { background: var(--surf); }
+.cl-cidade {
+  display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 800; color: var(--muted);
+}
+.cl-cidade svg { width: 13px; height: 13px; }
+
+/* O agora, no alto e fora do desenho: o número grande, a condição e a máxima e a mínima. */
+.cl-agora { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+.cl-agora-temp {
+  font-family: var(--gb-titulo); font-weight: 400; font-size: 52px; line-height: .85; letter-spacing: 1px;
+  color: var(--ac); -webkit-text-stroke: 2.5px var(--ol); paint-order: stroke fill; text-shadow: 3px 3px 0 var(--ol);
+  font-variant-numeric: tabular-nums; flex: none;
+}
+.cl-agora-txt { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.cl-agora-cond {
+  font-family: var(--gb-titulo); font-weight: 400; font-size: 18px; letter-spacing: 1px; line-height: 1;
+  background: var(--ac2); color: var(--onac2); border: 2px solid var(--ol); border-radius: 6px;
+  padding: 3px 8px 1px; transform: rotate(-2deg);
+}
+.cl-agora-maxmin { display: flex; gap: 10px; font-size: 14px; font-weight: 700; color: var(--muted); }
+.cl-agora-maxmin b { color: var(--ink); font-weight: 800; font-size: 16px; font-variant-numeric: tabular-nums; }
+
+.cl-cena {
+  position: relative; margin-top: 12px; aspect-ratio: 2 / 1; overflow: hidden;
+  border: 2.5px solid var(--ol); border-radius: 10px; box-shadow: 3px 3px 0 var(--ol);
+  background: var(--soft);
+}
+.cl-cena > svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.cl-esperando {
+  display: grid; place-items: center; font-family: var(--gb-titulo); font-size: 18px; letter-spacing: 1px; color: var(--muted);
+}
+
+/* Um respiro entre o desenho, os dados e os dias (06/11/2026: «tá muito colado»). A sombra dura do desenho come 3 px. */
+.cl-dados { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 16px; }
+.cl-dados div {
+  display: flex; flex-direction: column; min-width: 0; padding: 4px 8px;
+  background: var(--soft); border: 2px solid var(--ol); border-radius: 8px;
+}
+.cl-dados dt { font-size: 10px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.cl-dados dd { font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; }
+
+.cl-dias { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; margin-top: 14px; }
+.cl-dias li {
+  display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 0; padding: 4px 0 5px;
+  border: 2px solid var(--ol); border-radius: 8px; background: var(--surf);
+}
+.cl-dias li > span { font-family: var(--gb-titulo); font-size: 13px; letter-spacing: .5px; line-height: 1; }
+.cl-dias svg { width: 34px; height: 34px; display: block; }
+.cl-dias b { font-size: 13px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.cl-dias small { font-size: 11px; font-weight: 700; color: var(--muted); line-height: 1.1; font-variant-numeric: tabular-nums; }
+.cl-rodape { margin-top: 10px; font-size: 10.5px; color: var(--muted); }
+
+/* ── Movimento (com ou sem «reduzir animações» do sistema) ──────────────── */
+.cl-raios   { transform-box: fill-box; transform-origin: center; animation: cl-gira 40s linear infinite; }
+.cl-respira { transform-box: fill-box; transform-origin: 50% 100%; animation: cl-respira 3.2s ease-in-out infinite alternate; }
+.cl-deriva  { animation: cl-deriva 9s ease-in-out infinite alternate; }
+.cl-deriva-2 { animation-duration: 12s; animation-direction: alternate-reverse; }
+.cl-nevoa   { animation: cl-nevoa 7s ease-in-out infinite alternate; }
+.cl-gota    { animation: cl-pinga 1s linear infinite; }
+.cl-chuva   { animation: cl-cai .8s linear infinite; }
+.cl-estrela { transform-box: fill-box; transform-origin: center; animation: cl-pisca 2.4s ease-in-out infinite alternate; }
+.cl-zz      { animation: cl-zz 3.4s ease-in-out infinite; }
+.cl-raio    { animation: cl-relampago 5s linear infinite; }
+.cl-flash   { animation: cl-flash 5s linear infinite; }
+
+/* O botão: entra com um pulinho e fica parado; com o mouse em cima, vive. */
+.gb-sys .cl-bt-ic { animation: cl-entra 520ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+.gb-sys .cl-bt-ic * { animation-play-state: paused; }
+.gb-sys .cl-bt:hover .cl-bt-ic *,
+.gb-sys .cl-bt:focus-visible .cl-bt-ic * { animation-play-state: running; }
+/* O card desce do botão. */
+.cl-pop { animation: cl-desce 200ms ease-out; }
 
 @keyframes cl-gira     { to { transform: rotate(360deg); } }
 @keyframes cl-respira  { to { transform: scale(1.035, .97); } }
@@ -122,3 +146,14 @@
   92% { opacity: .35; }
 }
 @keyframes cl-entra { from { transform: scale(.4) rotate(-20deg); opacity: 0; } }
+@keyframes cl-desce { from { opacity: 0; translate: 0 -6px; } }
+
+/* ── Modo leve: aí sim, tudo parado ─────────────────────────────────────────
+   O `index.css` já encurta toda animação para 1 ms no modo leve; aqui o tempo
+   fica sem animação nenhuma, no desenho parado (que já é o completo). */
+html[data-leve] .cl-raios, html[data-leve] .cl-respira, html[data-leve] .cl-deriva,
+html[data-leve] .cl-nevoa, html[data-leve] .cl-gota, html[data-leve] .cl-chuva,
+html[data-leve] .cl-estrela, html[data-leve] .cl-zz, html[data-leve] .cl-raio,
+html[data-leve] .cl-flash, html[data-leve] .cl-bt-ic, html[data-leve] .cl-pop {
+  animation-name: none !important;
+}

@@ -7,31 +7,16 @@ import type { CSSProperties } from 'react';
 import { rotuloDoMesLongo, type EventoCalendario, type PaletaGibi, type TemaCalendario } from '@/lib/calendarioSetor';
 import { primeiroNome, varsDaPaleta } from '@/lib/calendarioGibi';
 import { LembreteDoDia } from '../LembreteDoDia';
-import { PersonagemDoTempo } from '../clima/personagens';
-import type { CondicaoClima, Estacao } from '@/lib/clima';
 import { Motivo } from './desenhos';
 import './gibi.css';
 
-/** O tempo de agora no botão (06/11/2026): o personagem e a temperatura. */
-export interface ClimaDoBotao {
-  condicao: CondicaoClima;
-  noite: boolean;
-  temp: number;
-  estacao: Estacao;
-  variante: number;
-  /** «Birigui: 31°, sol, máx 34° mín 21°», para o título e o leitor de tela. */
-  resumo: string;
-}
-
-export function BotaoDoMes({ tema, paleta, hojeISO, eventosHoje, chamando, rascunhoParaPublicar, clima, onAbrir, onDispensar }: {
+export function BotaoDoMes({ tema, paleta, hojeISO, eventosHoje, chamando, rascunhoParaPublicar, onAbrir, onDispensar }: {
   tema: TemaCalendario;
   paleta: PaletaGibi;
   hojeISO: string;
   eventosHoje: EventoCalendario[];
   chamando: boolean;
   rascunhoParaPublicar: boolean;
-  /** Sem previsão (ainda não chegou, ou falhou): o botão fica só com o mês. */
-  clima?: ClimaDoBotao | null;
   onAbrir: () => void;
   onDispensar: () => void;
 }) {
@@ -44,7 +29,6 @@ export function BotaoDoMes({ tema, paleta, hojeISO, eventosHoje, chamando, rascu
 
   const titulo = [
     `Calendário de ${nomeDoMes.toLowerCase()}`,
-    clima?.resumo ?? null,
     hoje ? `Hoje: ${hoje}${primeiro?.detalhe ? ` · ${primeiro.detalhe}` : ''}${eventosHoje.length > 1 ? ` +${eventosHoje.length - 1}` : ''}` : null,
     rascunhoParaPublicar ? 'O mês está em rascunho: a operação ainda não vê' : null,
   ].filter(Boolean).join(' — ');
@@ -61,22 +45,6 @@ export function BotaoDoMes({ tema, paleta, hojeISO, eventosHoje, chamando, rascu
       >
         <span className="gb-bt-ic" aria-hidden><Motivo id={tema.motivo} cores={paleta} /></span>
         <span className="gb-bt-mes hidden sm:inline">{nomeDoMes}</span>
-        {clima && (
-          <span className="gb-bt-clima" aria-hidden>
-            <i />
-            <span className="gb-bt-clima-ic">
-              <PersonagemDoTempo
-                condicao={clima.condicao}
-                noite={clima.noite}
-                estacao={clima.estacao}
-                variante={clima.variante}
-                temp={clima.temp}
-                cores={paleta}
-              />
-            </span>
-            <b>{clima.temp}°</b>
-          </span>
-        )}
         {hoje && (
           <span className="gb-bt-hoje">
             <i aria-hidden />

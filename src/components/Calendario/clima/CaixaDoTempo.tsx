@@ -1,12 +1,12 @@
 /**
- * A caixa do tempo, no alto da coluna do lado do Calendário em gibi
- * (06/11/2026): o cenário do dia com o personagem do tempo, a temperatura de
- * agora, a máxima e a mínima, chuva, umidade e vento, e os cinco dias
- * seguintes, cada um com o seu personagem.
+ * O card do tempo, que desce do botão do tempo no topo (06/11/2026): a
+ * temperatura de agora, a condição e a máxima e a mínima no alto; embaixo, o
+ * cenário do dia com o personagem do tempo, sozinho (o desenho é detalhado, e
+ * texto por cima dele não se lia); depois sensação, chuva, umidade, vento e os
+ * cinco dias seguintes, cada um com o seu personagem.
  *
- * Só desenha: quem lê a previsão é `TempoDoSetor` (o painel), e o laboratório
- * passa uma previsão de exemplo. Fica fora do «Copiar imagem»
- * (`data-html2canvas-ignore`): a imagem é o mês, e a previsão envelhece.
+ * Só desenha: quem lê a previsão é `BotaoClima`, e o laboratório passa uma
+ * previsão de exemplo. Baixado só no primeiro clique no botão.
  */
 import { CloudSun, MapPin } from 'lucide-react';
 import {
@@ -45,7 +45,7 @@ export function CaixaDoTempo({ cidade, previsao, geradoEm, carregando, hojeISO, 
   const chao = forcar?.chao ?? CHAOS[varianteDoDia(hojeISO, `chao-${semente}`, CHAOS.length)];
 
   return (
-    <section className="gb-box cl-box" data-html2canvas-ignore aria-label={nome ? `Previsão do tempo em ${nome}` : 'Previsão do tempo'}>
+    <section className="gb-box cl-box" aria-label={nome ? `Previsão do tempo em ${nome}` : 'Previsão do tempo'}>
       <div className="gb-box-topo">
         <h4><CloudSun className="h-4 w-4" aria-hidden />O tempo</h4>
         {nome && <span className="cl-cidade"><MapPin aria-hidden />{nome}</span>}
@@ -53,6 +53,19 @@ export function CaixaDoTempo({ cidade, previsao, geradoEm, carregando, hojeISO, 
 
       {previsao ? (
         <>
+          <div className="cl-agora">
+            <b className="cl-agora-temp">{previsao.agora.temp}°</b>
+            <div className="cl-agora-txt">
+              <span className="cl-agora-cond">{rotuloDaCondicao(previsao.agora.condicao, previsao.agora.noite)}</span>
+              {hoje && (
+                <span className="cl-agora-maxmin">
+                  <span>máx <b>{hoje.max}°</b></span>
+                  <span>mín <b>{hoje.min}°</b></span>
+                </span>
+              )}
+            </div>
+          </div>
+
           <div className="cl-cena">
             <CenarioDoTempo
               condicao={previsao.agora.condicao}
@@ -63,11 +76,6 @@ export function CaixaDoTempo({ cidade, previsao, geradoEm, carregando, hojeISO, 
               temp={previsao.agora.temp}
               cores={cores}
             />
-            <div className="cl-agora-num">
-              <b>{previsao.agora.temp}°</b>
-              <span>{rotuloDaCondicao(previsao.agora.condicao, previsao.agora.noite)}</span>
-              {hoje && <small>máx {hoje.max}° · mín {hoje.min}°</small>}
-            </div>
           </div>
 
           <dl className="cl-dados">

@@ -4,8 +4,7 @@
  *
  *   ┌ capa: desenho do tema · título com contorno · balão com a frase · dias úteis ┐
  *   ├ régua do mês: o que passou, hoje, feriados                                   ┤
- *   ├ grade de quadrinhos                         │ O tempo (cidade do setor)      ┤
- *   │                                             │ Faltam (próximo marco)         │
+ *   ├ grade de quadrinhos                         │ Faltam (próximo marco)         ┤
  *   │ (o «hoje» estoura, figurinha no destaque    │ Aniversariantes (em destaque)  │
  *   │  e no aniversário)                          │ O dia escolhido · Expediente   │
  *   │                                             │ Próximos dias                  │
@@ -28,7 +27,7 @@
  * No «Copiar imagem», a caixa do dia escolhido fica de fora
  * (`data-html2canvas-ignore`): a imagem é o mês, não a tela de quem copiou.
  */
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode, type Ref } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties, type Ref } from 'react';
 import { CalendarDays, Cake, ChevronDown, Clock, Megaphone, PartyPopper, Target } from 'lucide-react';
 import { AvatarParticipante } from '@/pages/Analitico/Desafios/AvatarParticipante';
 import { cn } from '@/lib/utils';
@@ -68,8 +67,6 @@ export interface PropsCalendarioGibi {
   hojeISO: string;
   podeEditar: boolean;
   onAbrirDia: (iso: string) => void;
-  /** A caixa do tempo (06/11/2026), no alto da coluna do lado. Fica fora do «Copiar imagem». */
-  tempo?: ReactNode;
   /** O que vira imagem no «Copiar imagem». */
   cartaoRef?: Ref<HTMLDivElement>;
 }
@@ -85,7 +82,7 @@ function estiloTipo(cor: string): CSSProperties {
 export function CalendarioGibi(p: PropsCalendarioGibi) {
   const {
     mes, setorNome, tema, paleta, titulo, frase, eventos, porDia, ehDiaUtil, feriados, hojeISO,
-    podeEditar, onAbrirDia, cartaoRef, tempo,
+    podeEditar, onAbrirDia, cartaoRef,
   } = p;
 
   useEffect(carregarFontesGibi, []);
@@ -206,7 +203,6 @@ export function CalendarioGibi(p: PropsCalendarioGibi) {
           </div>
 
           <aside className="gb-lado">
-            {tempo}
             {regua.tempo !== 'passado' && (
               <section className="gb-box gb-box-proximo">
                 <h4><Target className="h-4 w-4" aria-hidden />Faltam</h4>

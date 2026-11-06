@@ -8,7 +8,8 @@
  * (é por aqui que dá para tirar print de cada tema).
  *
  * O tempo (06/11/2026), sem rede: `?clima=chuva&noite=1&estacao=inverno&chao=cidade&temp=31`,
- * e `&galeria=1` mostra todos os personagens e cenários da estação.
+ * `&tempo=1` já abre o card do tempo, e `&galeria=1` mostra todos os
+ * personagens e cenários da estação.
  */
 import { StrictMode, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -21,6 +22,7 @@ import { copiarImagemDoElemento } from '@/lib/copiarImagem';
 import { BotaoDoMes } from './BotaoDoMes';
 import { CalendarioGibi } from './CalendarioGibi';
 import { CaixaDoTempo } from '../clima/CaixaDoTempo';
+import { BotaoDoTempo } from '../clima/BotaoDoTempo';
 import { CHAOS, CONDICOES, ESTACOES, GaleriaDoTempo, previsaoDeExemplo, type Chao } from '../clima/laboratorioClima';
 import { estacaoDoDia, resumoDoClima, type CondicaoClima, type Estacao } from '@/lib/clima';
 
@@ -76,7 +78,7 @@ function Laboratorio() {
   const [editor, setEditor] = useState(URL_INICIAL.get('editor') === '1');
   const [hojeISO, setHojeISO] = useState(URL_INICIAL.get('hoje') ?? '2026-10-08');
   const [largura, setLargura] = useState(Number(URL_INICIAL.get('largura')) || 0);
-  const [chamando, setChamando] = useState(true);
+  const [chamando, setChamando] = useState(URL_INICIAL.get('tempo') !== '1');
   const [aviso, setAviso] = useState('');
   const [condicao, setCondicao] = useState<CondicaoClima>((URL_INICIAL.get('clima') as CondicaoClima | null) ?? 'limpo');
   const [noite, setNoite] = useState(URL_INICIAL.get('noite') === '1');
@@ -85,6 +87,7 @@ function Laboratorio() {
   const [variante, setVariante] = useState(Number(URL_INICIAL.get('variante')) || 0);
   const [temp, setTemp] = useState(Number(URL_INICIAL.get('temp')) || 29);
   const [galeria, setGaleria] = useState(URL_INICIAL.get('galeria') === '1');
+  const [tempoAberto, setTempoAberto] = useState(URL_INICIAL.get('tempo') === '1');
   const cartao = useRef<HTMLDivElement>(null);
 
   const mes = hojeISO.slice(0, 7);
@@ -186,10 +189,26 @@ function Laboratorio() {
             eventosHoje={hoje}
             chamando={chamando}
             rascunhoParaPublicar={editor}
-            clima={{ condicao, noite, temp, estacao, variante, resumo: resumoDoClima('birigui', previsao) }}
             onAbrir={() => setChamando(false)}
             onDispensar={() => setChamando(false)}
           />
+          <BotaoDoTempo
+            paleta={paleta}
+            clima={{ condicao, noite, temp, estacao, variante, resumo: resumoDoClima('birigui', previsao) }}
+            aberto={tempoAberto}
+            onAlternar={() => setTempoAberto(v => !v)}
+            onFechar={() => setTempoAberto(false)}
+          >
+            <CaixaDoTempo
+              cidade="birigui"
+              previsao={previsao}
+              geradoEm={new Date().toISOString()}
+              carregando={false}
+              hojeISO={hojeISO}
+              cores={paleta}
+              forcar={{ estacao, chao: chao || undefined, variante }}
+            />
+          </BotaoDoTempo>
           {!chamando && hoje.length > 0 && (
             <button type="button" onClick={() => setChamando(true)} style={{ marginLeft: 'auto', textDecoration: 'underline' }}>
               Mostrar o lembrete de novo
@@ -197,7 +216,7 @@ function Laboratorio() {
           )}
         </div>
 
-        <div style={{ maxWidth: largura || undefined, width: '100%', margin: largura ? '0 auto' : undefined, marginTop: chamando ? 260 : 0 }}>
+        <div style={{ maxWidth: largura || undefined, width: '100%', margin: largura ? '0 auto' : undefined, marginTop: chamando || tempoAberto ? (tempoAberto ? 620 : 260) : 0 }}>
           <CalendarioGibi
             mes={mes}
             setorNome="Receptivo"
@@ -214,17 +233,6 @@ function Laboratorio() {
             hojeISO={hojeISO}
             podeEditar={editor}
             onAbrirDia={iso => setAviso(`Abriria o dia ${rotuloDoDia(iso)}`)}
-            tempo={(
-              <CaixaDoTempo
-                cidade="birigui"
-                previsao={previsao}
-                geradoEm={new Date().toISOString()}
-                carregando={false}
-                hojeISO={hojeISO}
-                cores={paleta}
-                forcar={{ estacao, chao: chao || undefined, variante }}
-              />
-            )}
             cartaoRef={cartao}
           />
         </div>
