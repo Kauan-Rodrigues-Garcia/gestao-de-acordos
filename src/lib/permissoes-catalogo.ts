@@ -431,6 +431,24 @@ export const PERMISSOES: PermissaoMeta[] = [
     descricao: 'Lançar e acompanhar as retenções (NR + data) da equipe Retenção do Jornada',
     grupo: 'Abas e telas', padrao: TODOS,
   },
+  /*
+   * Ouvidoria da regra Cofen (06/11/2026). Existe no painel de todo cargo e de
+   * toda empresa, mas só vale em setor Cofen (hoje o Conecta Play): fora dele a
+   * chave ligada não abre nada. Nasce só no líder, que escolhe na própria aba
+   * quem do setor atende — isso grava a exceção por pessoa desta chave.
+   * Migration 20261106150000.
+   */
+  {
+    key: 'ver_ouvidoria_cofen', label: 'Aba Ouvidoria (regra Cofen)',
+    descricao: 'Registrar e acompanhar as reclamações do 0800 no setor de regra Cofen',
+    grupo: 'Abas e telas', padrao: { lider: true },
+  },
+  {
+    key: 'ouvidoria_cofen_gerenciar', label: 'Ouvidoria: escolher quem atende e excluir',
+    descricao: 'Liberar ou tirar, na própria aba, quem do setor atende a Ouvidoria, e excluir registros',
+    grupo: 'Abas e telas', padrao: { lider: true },
+    depende: { chaves: ['ver_ouvidoria_cofen'], motivo: 'A aba Ouvidoria precisa estar ligada.' },
+  },
   {
     /*
      * O chat NASCE fechado para todo mundo, e `padrao: {}` sozinho não garante

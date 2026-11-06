@@ -66,21 +66,22 @@ describe('abasDoMenu', () => {
   });
 
   /*
-   * A aba Ouvidoria saiu do produto em 05/09/2026 — o código foi para
-   * `arquivo-morto/ouvidoria/`. O CARGO `ouvidoria` continua existindo, e é
-   * por isso que o teste acima ainda o usa como contexto: quem tinha esse cargo
-   * continua trabalhando, só não tem mais essa aba.
-   *
-   * Nenhum produto, nenhum cargo, nenhuma permissão traz a aba de volta.
+   * A Ouvidoria saiu em 05/09/2026 (`arquivo-morto/ouvidoria/`) e voltou em
+   * 06/11/2026 como aba da regra Cofen: aparece só com a chave
+   * `ver_ouvidoria_cofen` E quando a pessoa alcança um setor Cofen
+   * (`ctx.ouvidoria`, que vem do banco). O CARGO `ouvidoria` não tem nada com
+   * ela: sem a chave, ele não a vê.
    */
-  it('a aba Ouvidoria não existe mais para ninguém', () => {
-    for (const contexto of [
-      ctx({ cargo: 'ouvidoria' }),
-      ctx({ cargo: 'ouvidoria', isPaguePlay: true, isBookplay: false }),
-      ctx({ cargo: 'super_admin', isPaguePlay: true, isBookplay: false }),
-    ]) {
-      expect(rotulos(abasDoMenu(contexto))).not.toContain('Ouvidoria');
-    }
+  it('a Ouvidoria pede a chave e um setor de regra Cofen', () => {
+    const comChave = (chave: string) => chave === 'ver_ouvidoria_cofen';
+    const semChave = (chave: string) => chave !== 'ver_ouvidoria_cofen';
+    expect(rotulos(abasDoMenu(ctx({ cargo: 'lider', temPermissao: comChave, ouvidoria: true })))).toContain('Ouvidoria');
+    // A chave ligada num setor Nosso produto não abre nada.
+    expect(rotulos(abasDoMenu(ctx({ cargo: 'lider', temPermissao: comChave, ouvidoria: false })))).not.toContain('Ouvidoria');
+    // Setor Cofen sem a chave: nada.
+    expect(rotulos(abasDoMenu(ctx({ cargo: 'ouvidoria', temPermissao: semChave, ouvidoria: true })))).not.toContain('Ouvidoria');
+    // Prévia por cargo (sem pessoa): decide só a chave.
+    expect(rotulos(abasDoMenu(ctx({ cargo: 'lider', temPermissao: comChave })))).toContain('Ouvidoria');
   });
 
   it('Tickets depende do interruptor da empresa, e não só da permissão', () => {

@@ -68,6 +68,7 @@ const ProdutoEmMontagem = lazy(() => import('@/pages/ProdutoEmMontagem'));
 const Acordos           = lazy(() => import('@/pages/Acordos'));
 const PaginaPixAutomatico = lazy(() => import('@/pages/PixAutomatico'));
 const PaginaJornada       = lazy(() => import('@/pages/Jornada'));
+const PaginaOuvidoria     = lazy(() => import('@/pages/Ouvidoria'));
 const AcordoForm        = lazy(() => import('@/pages/AcordoForm'));
 const AcordoDetalhe     = lazy(() => import('@/pages/AcordoDetalhe'));
 const PainelLider       = lazy(() => import('@/pages/PainelLider'));
@@ -509,6 +510,15 @@ export default function App() {
                 <LayoutWrapper>
                   <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_jornada_retencao">
                     <PaginaJornada tipo="retencao" />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+              {/* Ouvidoria (06/11/2026): só setor de regra Cofen. A chave liga
+                  por cargo (ou o líder libera na aba); o setor, a tela pergunta ao banco. */}
+              <Route path={ROUTE_PATHS.OUVIDORIA} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_ouvidoria_cofen">
+                    <PaginaOuvidoria />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />

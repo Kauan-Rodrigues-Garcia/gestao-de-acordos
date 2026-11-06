@@ -27,6 +27,7 @@ export type ModuloPermissaoId =
   | 'pix'
   | 'jornada_acesso'
   | 'jornada_retencao'
+  | 'ouvidoria'
   | 'painel_lider'
   | 'painel_diretoria'
   | 'usuarios'
@@ -170,6 +171,16 @@ export const MODULOS_PERMISSAO: readonly DefinicaoModulo[] = [
   {
     id: 'jornada_retencao', rotulo: 'Retenção (Jornada)', interruptor: 'ver_jornada_retencao',
     descricao: 'NR + data de retenção da equipe Retenção do Jornada, com meta do mês.',
+  },
+  {
+    /*
+     * Ouvidoria da regra Cofen (06/11/2026). Sem alcance: vale só no setor de
+     * regra Cofen da pessoa, e quem atende é escolhido pelo líder na própria
+     * aba (exceção por pessoa de `ver_ouvidoria_cofen`).
+     */
+    id: 'ouvidoria', rotulo: 'Ouvidoria (regra Cofen)', interruptor: 'ver_ouvidoria_cofen',
+    descricao: 'Reclamações do 0800 do setor de regra Cofen: histórico e acompanhamento.',
+    chaves: ['ouvidoria_cofen_gerenciar'],
   },
   {
     id: 'painel_lider', rotulo: 'Painel Líder', interruptor: 'ver_painel_lider',

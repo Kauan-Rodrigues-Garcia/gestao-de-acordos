@@ -72,9 +72,9 @@ export const TELA_LABEL: Record<string, string> = {
   'admin/configuracoes:permissoes': 'Configurações · Permissões',
   'rh-gestao':                 'RH Gestão',
   'fechamento':                'Fechamento',
-  // Aba arquivada em 05/09/2026 (`arquivo-morto/ouvidoria/`). O rótulo fica:
-  // `uso_telas` guarda o que foi aberto enquanto ela existia, e sem ele o
-  // histórico vira uma chave crua no Monitoramento de uso.
+  // A Ouvidoria da regra Cofen (06/11/2026) usa a mesma rota da aba arquivada
+  // em 05/09/2026 (`arquivo-morto/ouvidoria/`): o histórico de `uso_telas` das
+  // duas fica sob o mesmo rótulo.
   'ouvidoria':                 'Ouvidoria',
   'campanha-facil':            'Campanha Fácil',
   'campanhas-whatsapp':        'Campanhas de WhatsApp',
