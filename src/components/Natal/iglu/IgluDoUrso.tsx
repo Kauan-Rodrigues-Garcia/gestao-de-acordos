@@ -8,7 +8,12 @@ import { agendaAgora } from '../trem/agenda';
 import { ROTA_DO_TREM } from '../trem/rota';
 import { relogioNatal } from '../musica';
 import { ENTRANDO_S, SAINDO_S, beliscada, chamarUrsoParaTeste, oUrsoAgora, tremPassaPeloIglu } from './urso';
-import { criarRodada, type MomentoDoUrso } from './falas';
+import { criarRodada, SILENCIO_MS, type MomentoDoUrso } from './falas';
+import { DentroDoIglu } from './DentroDoIglu';
+import { cortinaFechadaAte, fecharCortina, sortearAtividade, type AtividadeDoUrso } from './espiar';
+import { invasaoRecente } from '../noticiaDoGrinch';
+import { Urso } from './DesenhoDoUrso';
+import { BURACO, CHAO, DESCE, ESTRELINHA, X_PORTA, X_SENTADO, limitar, suave } from './medidas';
 import './iglu.css';
 
 /** O balão escreve uma letra a cada tanto (ms), como quem está falando. */
@@ -54,6 +59,11 @@ function useRelogioFino(ativo: boolean): number {
  * escreve letra por letra e, numa conversa de mais de uma fala, ele continua
  * sozinho; um clique adianta.
  *
+ * Desde 06/11/2026: depois de 10 conversas ele cansa e fica quieto (`falas.ts`),
+ * e com ele em casa dá para ESPIAR pela janelinha — um zoom abre o lado de
+ * dentro (`DentroDoIglu.tsx`); quem fica olhando é pego e a cortina fecha
+ * (`espiar.ts`).
+ *
  * O iglu é bem mais alto que o urso (Cleber, 04/11/2026: «para fazer sentido o
  * tamanho da porta»): a porta tem a altura dele de gorro, e a cúpula passa
  * dele com folga.
@@ -63,136 +73,6 @@ function useRelogioFino(ativo: boolean): number {
 
 export const LARGURA = 300;
 export const ALTURA = 132;
-const CHAO = 126;
-/** O lago e a plaquinha foram desenhados com o chão em 92 e descem até o chão de agora. */
-const DESCE = CHAO - 92;
-/** Onde o urso senta (na beira do lago) e onde fica a porta. */
-const X_SENTADO = 104;
-const X_PORTA = 163;
-/** O buraco no gelo, onde vai a boia. */
-const BURACO = { x: 76, y: 89.6 + DESCE };
-
-/** Um brilhinho de quatro pontas. */
-const ESTRELINHA = 'M0 -3.2 L0.8 -0.8 L3.2 0 L0.8 0.8 L0 3.2 L-0.8 0.8 L-3.2 0 L-0.8 -0.8 Z';
-
-const limitar = (v: number) => Math.max(0, Math.min(1, v));
-const suave = (t: number) => t * t * (3 - 2 * t);
-
-const Urso = memo(function Urso({ feliz, vara, peixe, fisgando, atento, acenando, pulando }: {
-  feliz: boolean; vara: boolean; peixe: 'nao' | 'pulando' | 'na-pata'; fisgando: boolean;
-  /** Uma beliscada na isca (0 a 1 dela), ou `null`: a boia afunda, a vara verga, ele se inclina. */
-  atento: number | null;
-  /** O trem passando: o braço livre acena. */
-  acenando: boolean;
-  /** Fisgou: dá dois pulinhos de alegria. */
-  pulando: boolean;
-}) {
-  // Coordenadas do urso: (0, 0) é o chão embaixo do bloco onde ele senta.
-  const boia = { x: BURACO.x - X_SENTADO, y: BURACO.y - CHAO };
-  // A beliscada: um puxão que vai e volta (seno), com uma tremidinha no meio.
-  const puxao = atento === null ? 0 : Math.sin(Math.PI * atento) * (0.85 + 0.15 * Math.sin(atento * 40));
-  const afunda = puxao * 2.6;
-  const verga = puxao * 7;
-  const inclina = atento === null ? 0 : -5 * Math.sin(Math.PI * Math.min(1, atento * 1.4));
-  return (
-    <g>
-      {vara && (
-        <>
-          {/* a linha, da ponta da vara até a boia no buraco */}
-          <path className={cn('nt-urso-linha', (fisgando || atento !== null) && 'esticada')}
-            d={`M-46 ${-50 + verga * 0.6} Q-40 -26 ${boia.x} ${boia.y - 1.5 + afunda}`} />
-          <g transform={`translate(${boia.x} ${(boia.y - 1.5 + afunda).toFixed(2)})`}>
-            <g className="nt-urso-boia">
-              <circle r={1.9} fill="#FFFFFF" />
-              <path d="M-1.9 0 A1.9 1.9 0 0 1 1.9 0 Z" fill="#D6403A" />
-            </g>
-          </g>
-        </>
-      )}
-      <g transform={`rotate(${inclina.toFixed(2)} 0 0)`}>
-      <g className={cn('nt-urso-corpo', pulando && 'pulando')}>
-        {/* o pé de trás, o corpo (que respira), a sombra e a barriga */}
-        <ellipse className="nt-urso-pe tras" cx={4} cy={-2.8} rx={5.6} ry={3.2} fill="#ECEFF2" />
-        <g className="nt-urso-respira">
-        <ellipse cx={1} cy={-19} rx={13} ry={14} fill="#F7F5F0" />
-        <path d="M6 -32 Q15 -24 13 -12 Q11 -5 4 -5 Q10 -16 6 -32 Z" fill="#E3E9EF" />
-        <ellipse cx={-4} cy={-15.5} rx={7} ry={9} fill="#FFFFFF" />
-        </g>
-        {/* o pé da frente, com a almofadinha */}
-        <g className="nt-urso-pe frente">
-          <ellipse cx={-8} cy={-3.2} rx={6.2} ry={3.5} fill="#F7F5F0" />
-          <ellipse cx={-12.4} cy={-3.2} rx={1.7} ry={2.2} fill="#CDB9A8" />
-        </g>
-        {/* o braço livre, acenando para o trem */}
-        {acenando && (
-          <g transform="translate(7 -27)">
-            <g className="nt-urso-tchau">
-              <ellipse cx={3.4} cy={-7} rx={3.6} ry={7.4} fill="#F7F5F0" transform="rotate(24 3.4 -7)" />
-              <circle cx={6.6} cy={-13.4} r={3.6} fill="#FFFFFF" />
-              <ellipse cx={6.4} cy={-12.6} rx={1.5} ry={1.2} fill="#CDB9A8" />
-            </g>
-          </g>
-        )}
-        {/* o cachecol, com a ponta voando */}
-        <path d="M-10 -29.5 Q0 -25.5 9 -29.5 L9 -25 Q0 -21 -10 -25 Z" fill="#D6403A" />
-        <path d="M-6 -28 L-6 -23.5 M0 -27 L0 -22.5 M6 -28 L6 -23.5" stroke="#FFFFFF" strokeWidth={1.2} opacity={0.85} />
-        <g className="nt-urso-cachecol">
-          <path d="M5 -27 L13 -15 L9.2 -14 L2.4 -25 Z" fill="#D6403A" />
-          <path d="M8.4 -21.6 L11 -17.6" stroke="#FFFFFF" strokeWidth={1.3} />
-        </g>
-        {/* o braço que segura a vara (ou o peixe) */}
-        <ellipse cx={-9} cy={-21.5} rx={4.4} ry={6.4} fill="#F7F5F0" transform="rotate(-48 -9 -21.5)" />
-        <circle cx={-13.2} cy={-25.2} r={3.3} fill="#FFFFFF" />
-        {vara && (
-          <g transform={`rotate(${(-verga).toFixed(2)} -11 -23)`}>
-            <g className={cn('nt-urso-vara', fisgando && 'puxando')}>
-              <path d={`M-11 -23 Q-30 ${(-40 + verga * 0.8).toFixed(1)} -46 ${(-50 + verga).toFixed(1)}`} stroke="#7A5236" strokeWidth={1.8} strokeLinecap="round" fill="none" />
-              <circle cx={-14} cy={-25.6} r={2.1} fill="#3A2F3B" />
-            </g>
-          </g>
-        )}
-        {/* a cabeça: orelhas, gorro com pompom, focinho, olho e bochecha */}
-        <g className="nt-urso-cabeca">
-          <circle cx={1.6} cy={-44.4} r={3.3} fill="#E3E9EF" />
-          <circle cx={-5} cy={-37} r={10.2} fill="#F7F5F0" />
-          <path d="M2 -44 Q6.4 -38 3.6 -30 Q1 -28 -1 -28.4 Q4 -36 2 -44 Z" fill="#E3E9EF" />
-          <circle cx={-6.6} cy={-46.4} r={3.4} fill="#F7F5F0" />
-          <circle cx={-6.6} cy={-46.4} r={1.6} fill="#F3C4CF" />
-          <path d="M-14.6 -41.6 Q-13.6 -52 -4.4 -52.4 Q4.8 -52 6 -42.4 Z" fill="#3F9A5B" />
-          <rect x={-15.6} y={-44} width={22.4} height={4.4} rx={2.2} fill="#2E7A47" />
-          <path d="M-12 -44 V-40 M-7.5 -44 V-40 M-3 -44 V-40 M1.5 -44 V-40" stroke="#3F9A5B" strokeWidth={1} />
-          <circle className="nt-urso-pompom" cx={-3.4} cy={-53.6} r={3.1} fill="#FFFFFF" />
-          <ellipse cx={-13} cy={-34.4} rx={6.4} ry={4.7} fill="#FFFFFF" />
-          <ellipse cx={-18.3} cy={-36} rx={2.4} ry={1.75} fill="#2A2530" />
-          <path d="M-16.2 -32.4 Q-14 -30.6 -11.8 -32.4" stroke="#2A2530" strokeWidth={0.9} strokeLinecap="round" fill="none" />
-          {feliz
-            ? <path d="M-10.6 -38.4 Q-8.6 -41 -6.6 -38.4" stroke="#2A2530" strokeWidth={1.3} strokeLinecap="round" fill="none" />
-            : (
-              <g className="nt-urso-olho">
-                <circle cx={-8.6} cy={-39.2} r={1.55} fill="#2A2530" />
-                <circle cx={-8.1} cy={-39.8} r={0.5} fill="#FFFFFF" />
-              </g>
-            )}
-          <ellipse cx={-8.8} cy={-34.4} rx={2.1} ry={1.25} fill="#FF94AA" opacity={0.6} />
-          {/* boquinha aberta: comemorando ou falando com o trem */}
-          {(feliz || acenando) && <ellipse cx={-14.4} cy={-31.2} rx={1.5} ry={1.1} fill="#7A2E3A" />}
-        </g>
-        {/* a beliscada: um «!» em cima da cabeça */}
-        {atento !== null && <text className="nt-urso-alerta" x={-4} y={-60} textAnchor="middle">!</text>}
-      </g>
-      </g>
-      {peixe !== 'nao' && (
-        <g className={cn('nt-urso-peixe', peixe === 'pulando' ? 'pulando' : 'na-pata')}
-          style={{ ['--bx' as string]: `${boia.x}px`, ['--by' as string]: `${boia.y}px` }}>
-          <ellipse cx={0} cy={0} rx={5.4} ry={2.7} fill="#F28C3A" />
-          <path d="M4.6 0 L9 -3 L8.2 0 L9 3 Z" fill="#E06E1F" />
-          <circle cx={-2.8} cy={-0.6} r={0.7} fill="#2A2530" />
-          <path d="M-0.4 -2.4 Q1.6 -3.6 3 -2.2" stroke="#FFD0A6" strokeWidth={0.8} fill="none" />
-        </g>
-      )}
-    </g>
-  );
-});
 
 const CenaDoIglu = memo(function CenaDoIglu({ porta, acesa, ondinha }: { porta: boolean; acesa: boolean; ondinha: boolean }) {
   // As fileiras de blocos da cúpula (de baixo para cima) e as do túnel.
@@ -342,6 +222,12 @@ export function IgluDoUrso() {
   const [letras, setLetras] = useState(0);
   /** A rodada de conversa (baralhos embaralhados); recomeça quando ele aparece ou entra. */
   const rodada = useRef<ReturnType<typeof criarRodada> | null>(null);
+  /** Quando ele ficou calado (passou do limite de conversas). */
+  const caladoDesde = useRef<number | null>(null);
+  /** A espiada pela janela, aberta agora. */
+  const [espiada, setEspiada] = useState<{ origem: DOMRect; atividade: AtividadeDoUrso; id: number } | null>(null);
+  /** Até quando a cortina da janelinha fica fechada (ele pegou alguém espiando). */
+  const [cortinaAte, setCortinaAte] = useState(cortinaFechadaAte);
 
   // Escreve a fala letra por letra; lida, passa para a próxima da conversa (ou fecha o balão).
   useEffect(() => {
@@ -380,7 +266,8 @@ export function IgluDoUrso() {
   const visivel = opacidade > 0.05;
 
   // Uma rodada nova cada vez que ele aparece (e cada vez que ele entra, para o iglu).
-  useEffect(() => { rodada.current = null; }, [visivel]);
+  useEffect(() => { rodada.current = null; caladoDesde.current = null; }, [visivel]);
+  const cortinaFechada = lento < cortinaAte;
 
   // O tchauzinho para o trem: uma fala por passagem (a viagem e o sentido dizem qual).
   const passagem = acenando ? `${posDoTrem.partidaMs}-${posDoTrem.fase}` : null;
@@ -388,7 +275,7 @@ export function IgluDoUrso() {
   useEffect(() => {
     if (!passagem || ultimaPassagem.current === passagem) return;
     ultimaPassagem.current = passagem;
-    rodada.current ??= criarRodada(nome, new Date().getHours());
+    rodada.current ??= criarRodada(nome, new Date().getHours(), Math.random, invasaoRecente());
     setFala({ linhas: rodada.current.proxima('trem'), i: 0, doUrso: true, id: Date.now() });
   }, [passagem, nome]);
 
@@ -399,9 +286,34 @@ export function IgluDoUrso() {
       setFala({ ...fala, i: fala.i + 1 });
       return;
     }
-    rodada.current ??= criarRodada(nome, new Date().getHours());
-    const momento: MomentoDoUrso = !doUrso ? 'iglu' : fase === 'fisgou' || fase === 'entrando' ? 'fisgou' : 'pescando';
-    setFala({ linhas: rodada.current.proxima(momento), i: 0, doUrso, id: Date.now() });
+    // Calado há tempo bastante, volta a conversar (rodada nova).
+    if (caladoDesde.current !== null && Date.now() - caladoDesde.current > SILENCIO_MS) { rodada.current = null; caladoDesde.current = null; }
+    rodada.current ??= criarRodada(nome, new Date().getHours(), Math.random, invasaoRecente());
+    const momento: Exclude<MomentoDoUrso, 'trem'> = !doUrso ? 'iglu' : fase === 'fisgou' || fase === 'entrando' ? 'fisgou' : 'pescando';
+    const linhas = rodada.current.conversar(momento);
+    // Passou do limite: ele já se despediu e não responde mais nesta rodada.
+    if (!linhas) return;
+    if (rodada.current.calado) caladoDesde.current = Date.now();
+    setFala({ linhas, i: 0, doUrso, id: Date.now() });
+  };
+
+  /** Clique na janelinha (com ele em casa): abre a espiada — ou avisa que a cortina está fechada. */
+  const espiar = (e: React.MouseEvent<SVGCircleElement>) => {
+    e.stopPropagation();
+    if (espiada) return;
+    if (cortinaFechada) {
+      setFala({ linhas: ['A cortina está fechada.', 'Melhor deixar o urso em paz um pouquinho…'], i: 0, doUrso: false, id: Date.now() });
+      return;
+    }
+    setFala(null);
+    setEspiada({ origem: e.currentTarget.getBoundingClientRect(), atividade: sortearAtividade(), id: Date.now() });
+  };
+  const fimDaEspiada = (pego: boolean) => {
+    setEspiada(null);
+    if (pego) {
+      setCortinaAte(fecharCortina());
+      setFala({ linhas: ['Lá de dentro: «E NÃO VOLTA!»', 'A cortina ficou fechada.'], i: 0, doUrso: false, id: Date.now() });
+    }
   };
   const texto = fala ? Array.from(fala.linhas[fala.i]) : [];
 
@@ -410,6 +322,26 @@ export function IgluDoUrso() {
       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); clicar(); } }}>
       <svg viewBox={`0 0 ${LARGURA} ${ALTURA}`} width={LARGURA} height={ALTURA} overflow="visible">
         <CenaDoIglu porta={porta} acesa={acesa} ondinha={fase === 'pescando' || fase === 'fisgou'} />
+        {/* A janelinha: a cortina (quando ele pegou alguém espiando) e, com ele em casa, o clique para espiar. */}
+        {cortinaFechada && (
+          <g className="nt-iglu-cortina">
+            <clipPath id="nt-iglu-vidro"><circle cx={242} cy={86} r={8.2} /></clipPath>
+            <g clipPath="url(#nt-iglu-vidro)">
+              <path d="M233 77 H242.4 Q240 86 242.4 95 H233 Z" />
+              <path d="M251 77 H241.6 Q244 86 241.6 95 H251 Z" />
+              <path className="dobra" d="M236.6 77 V95 M247.4 77 V95" />
+            </g>
+            <path d="M242 77.8 V94.2 M233.8 86 H250.2" stroke="#BFD0DE" strokeWidth={1.6} />
+          </g>
+        )}
+        {fase === 'dentro' && (
+          <>
+            <circle className="nt-iglu-janela-mira" cx={242} cy={86} r={12.6} />
+            <circle className={cn('nt-iglu-janela-clique', cortinaFechada && 'fechada')} cx={242} cy={86} r={13} onClick={espiar}>
+              <title>{cortinaFechada ? 'A cortina está fechada' : 'Espiar pela janela'}</title>
+            </circle>
+          </>
+        )}
         {/* Voltando para casa, ele vira para a porta (o desenho olha para a esquerda). */}
         <g className={cn('nt-urso', andando && 'andando')}
           style={{ transform: `translate(${x.toFixed(2)}px, ${CHAO}px)${fase === 'entrando' ? ' scaleX(-1)' : ''}`, opacity: opacidade }}>
@@ -432,6 +364,9 @@ export function IgluDoUrso() {
           <span aria-hidden="true">{texto.slice(0, letras).join('')}</span>
           <span aria-hidden="true" className="nt-iglu-fala-resto">{texto.slice(letras).join('')}</span>
         </div>
+      )}
+      {espiada && (
+        <DentroDoIglu key={espiada.id} origem={espiada.origem} atividade={espiada.atividade} emCasa={fase === 'dentro'} onFechar={fimDaEspiada} />
       )}
       {import.meta.env.DEV && (
         <button type="button" className="nt-trem-botao-teste nt-iglu-teste" title="Só no npm run dev"

@@ -5,13 +5,18 @@
  * como no Nosso produto; `?regra=cofen` imita o cabeçalho da regra Cofen, sem
  * abas antes do seletor), dentro de um `<main>`, com a camada do Natal de
  * verdade. `?tema=dark`.
+ *
+ * Sem StrictMode, como o app (ele roda os efeitos duas vezes e esconde
+ * defeito de montagem). Os botões no pé chamam o Grinch na hora; `?grinch=`
+ * `invadir` ou `espiar` faz o mesmo ao abrir, e `?duendes=1` chama os
+ * duendes assim que a bagunça estiver feita.
  */
-import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ChevronLeft, ChevronRight, MessageSquare, Plus, RefreshCw } from 'lucide-react';
 import '@/index.css';
 import { CamadaNatal } from '../CenaNatal';
-import { cenaDaRota } from '../tema';
+import { avisarAcordoSalvo, cenaDaRota } from '../tema';
+import { EVENTO_DUENDES, EVENTO_GRINCH_ESPIAR, EVENTO_GRINCH_INVADIR } from './grinch/roteiro';
 
 const busca = new URLSearchParams(location.search);
 if (busca.get('tema') === 'dark') document.documentElement.classList.add('dark');
@@ -58,7 +63,13 @@ function Lab() {
                 ))}
               </div>
             )}
-            <div className="mb-4 h-14 rounded-xl border bg-card" />
+            <div className="mb-4 flex h-14 items-center gap-2 rounded-xl border bg-card px-4 text-xs">
+              <span className="text-muted-foreground">Grinch:</span>
+              <button type="button" className="rounded border px-2 py-1" onClick={() => window.dispatchEvent(new Event(EVENTO_GRINCH_INVADIR))}>invadir o chalé</button>
+              <button type="button" className="rounded border px-2 py-1" onClick={() => window.dispatchEvent(new Event(EVENTO_GRINCH_ESPIAR))}>só espiar</button>
+              <button type="button" className="rounded border px-2 py-1" onClick={() => window.dispatchEvent(new Event(EVENTO_DUENDES))}>chamar os duendes agora</button>
+              <button type="button" className="rounded border px-2 py-1" onClick={avisarAcordoSalvo}>salvar acordo (também chama)</button>
+            </div>
             <div className="h-14 rounded-xl border bg-card" />
             <div className="mt-4 h-[600px] rounded-xl border bg-card" />
           </div>
@@ -68,4 +79,18 @@ function Lab() {
   );
 }
 
-createRoot(document.getElementById('lab')!).render(<StrictMode><Lab /></StrictMode>);
+createRoot(document.getElementById('lab')!).render(<Lab />);
+
+// `?grinch=espiar|roubar|feliz`: chama o Grinch logo que o chalé aparece (para fotografar).
+const pedido = busca.get('grinch');
+if (pedido) {
+  window.setTimeout(() => {
+    if (pedido === 'espiar') window.dispatchEvent(new Event(EVENTO_GRINCH_ESPIAR));
+    if (pedido === 'invadir') window.dispatchEvent(new Event(EVENTO_GRINCH_INVADIR));
+  }, 600);
+}
+// `?duendes=1`: chama os duendes logo que a bagunça termina (para fotografar o conserto).
+if (busca.get('duendes')) {
+  const tentar = window.setInterval(() => window.dispatchEvent(new Event(EVENTO_DUENDES)), 500);
+  window.setTimeout(() => window.clearInterval(tentar), 20000);
+}

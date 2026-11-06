@@ -105,6 +105,46 @@ const PESCANDO: Conversa[] = [
   ['Tava pensando aqui…', 'Será que o peixe também tá com frio?', 'Vou levar ele pro iglu, por educação.'],
 ];
 
+/**
+ * Os duendes e o «monstro do Natal» (06/11/2026, pedido do Kauan): o Urso
+ * conhece os duendes do chalé de Acordos e não gosta nada do Grinch. Entram
+ * no meio das conversas de pescaria.
+ */
+const DUENDES_E_GRINCH: Conversa[] = [
+  ['Sabe os duendes lá do chalé de Acordos?', 'Gente boa. Trabalham mais que eu.', 'Tá, isso não é difícil.'],
+  ['Um duende passou aqui pedindo peixe.', 'Duende come peixe? Eu não sabia.', 'Agora eu sei. Comeu três.'],
+  ['Os duendes me chamam de «chefe do gelo».', 'Eu nunca pedi. Mas gostei.'],
+  ['Tem um bicho verde rondando o Natal…', 'O Grinch. Peludo, mal-humorado, com um gorro roubado.'],
+  ['O Grinch odeia o Natal.', 'Eu odeio quem odeia o Natal.', '…é complicado, mas faz sentido.'],
+  ['Se o Grinch aparecer aqui no lago…', 'Eu jogo um peixe nele. Um gelado.'],
+  ['Dizem que o coração do Grinch é dois números menor.', 'O meu é tamanho urso. Cabe todo mundo.'],
+  ['O Grinch mora no Monte Crumpit, sabia?', 'Com um cachorro chamado Max.', 'O Max é legal. O Grinch, nem tanto.'],
+  ['Os duendes têm uma prancheta só pra anotar o que o Grinch apronta.', 'A lista já tá do tamanho do lago.'],
+  ['Uma vez o Grinch tentou levar meu iglu.', 'Iglu é pesado, né? Desistiu na primeira parede.'],
+  ['Natal sem Grinch é Natal tranquilo.', 'Mas aí os duendes ficam sem assunto.'],
+  ['O duende do martelo é o mais resmungão.', 'O da vassoura canta o tempo todo.', 'E o da prancheta… esse me conta tudo.'],
+  ['Prometi pros duendes:', 'se o Grinch passar por aqui, eu aviso. Com um rugido.'],
+  ['Você sabia que duende tem medo de urso?', 'Brincadeira. Duende não tem medo de nada.', 'Só do Grinch quando tá com fome.'],
+  ['Dizem que um dia o coração do Grinch vai crescer.', 'Eu tô torcendo. De longe. Com a vara de pescar na mão.'],
+  ['O Grinch disfarçado de Papai Noel…', 'Quem cai nessa? Papai Noel é gordinho e simpático.', 'Tipo eu, só que sem pelo.'],
+];
+
+/**
+ * A fofoca (06/11/2026): o Grinch invadiu o chalé de Acordos há pouco
+ * (`noticiaDoGrinch.ts`) e os duendes vieram contar. O Urso puxa o assunto
+ * logo depois do cumprimento — uma vez por rodada.
+ */
+const FOFOCA_DO_GRINCH: Conversa[] = [
+  ['Você soube?', 'O Grinch quebrou a janela do chalé de Acordos!', 'Os duendes vieram correndo me contar.'],
+  ['Os duendes me caguetaram tudo…', 'Árvore torta, presente amassado, meia no chão.', 'Esse Grinch não aprende.'],
+  ['Chegou um duende aqui todo esbaforido:', '«Urso! O Grinch atacou de novo!»', 'Já tô de olho, viu?'],
+  ['Recebi o relatório do duende da prancheta.', 'Quatro páginas. Frente e verso.', 'O Grinch aprontou feio no chalé.'],
+  ['Sabe o que os duendes me pediram?', 'Pra eu fazer plantão no chalé de Acordos.', 'Mas e os meus peixes?'],
+  ['O Grinch bagunçou o chalé e fugiu pela janela.', 'Se ele passar por aqui, vai levar um peixe na cara.'],
+  ['Os duendes já arrumaram tudo lá em Acordos.', 'Rápidos, eles. Eu ainda tava passando o café.'],
+  ['Ouvi dizer que o gato do chalé fugiu de medo do Grinch.', 'Coitadinho. Aqui no iglu ele é bem-vindo.'],
+];
+
 const FISGOU: Conversa[] = [
   ['PEGUEI! PEGUEI!'],
   ['Olha o tamanho desse! 🐟', '…tá, de perto ele é menor.'],
@@ -167,6 +207,34 @@ const IGLU: Conversa[] = [
   ['Quem sabe, voltando mais tarde, você pega ele pescando…'],
   ['O tapete da porta diz «Bem-vindo».', 'Mas a porta tá trancada.'],
   ['Lá dentro, uma voz sonolenta: «Já vou… já vou…»', '…ele não veio.'],
+  ['Tem um bilhete dos duendes preso na porta:', '«Urso, o Grinch atacou de novo. Ass.: Os duendes.»'],
+  ['Pegadas verdes na neve, perto do iglu…', 'Tomara que não seja quem eu tô pensando.'],
+];
+
+/**
+ * O limite (06/11/2026, pedido do Kauan): «um limitador nas falas do urso,
+ * para a pessoa não ficar clicando sempre». Depois de `LIMITE_DE_CONVERSAS`
+ * conversas puxadas por clique na mesma rodada, ele se despede uma vez
+ * (`CANSOU`) e fica quieto até a rodada recomeçar — quando ele sai ou entra
+ * no iglu, ou depois de `SILENCIO_MS` (ver `IgluDoUrso`). O tchauzinho para o
+ * trem não conta: é ele que puxa.
+ */
+export const LIMITE_DE_CONVERSAS = 10;
+/** Calado, ele volta a conversar depois disso, mesmo sem sair do lugar. */
+export const SILENCIO_MS = 8 * 60_000;
+
+const CANSOU: Conversa[] = [
+  ['Ufa… chega de papo por hoje!', 'Os peixes tão reclamando do barulho. Volta mais tarde? 🎣'],
+  ['Tá bom, tá bom… acabou o meu estoque de assunto.', 'Agora é silêncio e pescaria. Combinado?'],
+  ['Dez conversas! Isso é mais do que eu falo num inverno inteiro.', 'Vou ficar quietinho agora, tá?'],
+  ['{nome}, eu adoro a conversa…', 'Mas urso também precisa se concentrar.', 'Depois a gente continua!'],
+  ['Shhh… agora é hora do peixe.', 'Me chama mais tarde, que eu conto mais história.'],
+];
+
+const CANSOU_IGLU: Conversa[] = [
+  ['Lá de dentro: «Chega de bater na porta! Tô descansando!»'],
+  ['Apareceu uma plaquinha na porta: «Não perturbe. Ass.: o Urso.»'],
+  ['Silêncio total… o urso cansou de atender.', 'Melhor voltar mais tarde.'],
 ];
 
 /** A partir de quantas conversas na mesma rodada ele pode reclamar da insistência. */
@@ -204,22 +272,27 @@ export function periodoDoDia(hora: number): keyof typeof CUMPRIMENTOS {
 
 /**
  * Uma rodada de conversa. `nome`: o primeiro nome de quem olha (ou `null`);
- * `hora`: a hora do dia, para o cumprimento.
+ * `hora`: a hora do dia, para o cumprimento. `fofoca`: o Grinch invadiu o
+ * chalé há pouco — a segunda conversa da rodada é sobre isso.
  */
-export function criarRodada(nome: string | null, hora: number, sorte: () => number = Math.random) {
+export function criarRodada(nome: string | null, hora: number, sorte: () => number = Math.random, fofoca = false) {
   const cabe = (c: Conversa) => nome !== null || !c.some(f => f.includes('{nome}'));
   const preencher = (c: Conversa): string[] => c.map(f => (nome ? f.split('{nome}').join(nome) : f));
   const baralho = (lista: Conversa[]) => criarBaralho(lista.filter(cabe), sorte);
 
   const cumprimentos = baralho([...CUMPRIMENTOS[periodoDoDia(hora)], ...QUALQUER_HORA]);
-  const pescando = baralho(PESCANDO);
+  const pescando = baralho([...PESCANDO, ...DUENDES_E_GRINCH]);
+  const fofocas = baralho(FOFOCA_DO_GRINCH);
+  const cansou = baralho(CANSOU);
+  const cansouIglu = baralho(CANSOU_IGLU);
+  let cliques = 0;
   const fisgou = baralho(FISGOU);
   const insistencia = baralho(INSISTENCIA);
   const iglu = baralho(IGLU);
   const trem = baralho(TREM);
   let conversas = 0;
 
-  return {
+  const rodada = {
     /** A próxima conversa, para o momento do urso. */
     proxima(momento: MomentoDoUrso): string[] {
       if (momento === 'iglu') return preencher(iglu.tirar());
@@ -228,11 +301,26 @@ export function criarRodada(nome: string | null, hora: number, sorte: () => numb
       conversas++;
       if (momento === 'fisgou') return preencher(fisgou.tirar());
       if (conversas === 1) return preencher(cumprimentos.tirar());
+      if (conversas === 2 && fofoca) return preencher(fofocas.tirar());
       if (conversas > INSISTENTE_DEPOIS && sorte() < CHANCE_DE_INSISTENCIA) return preencher(insistencia.tirar());
       return preencher(pescando.tirar());
     },
+    /**
+     * A conversa puxada por CLIQUE, com o limite: as primeiras
+     * `LIMITE_DE_CONVERSAS` saem normalmente; a seguinte é a despedida; depois,
+     * `null` — ele não responde mais nesta rodada.
+     */
+    conversar(momento: Exclude<MomentoDoUrso, 'trem'>): string[] | null {
+      cliques++;
+      if (cliques <= LIMITE_DE_CONVERSAS) return rodada.proxima(momento);
+      if (cliques === LIMITE_DE_CONVERSAS + 1) return preencher((momento === 'iglu' ? cansouIglu : cansou).tirar());
+      return null;
+    },
+    /** Já se despediu nesta rodada. */
+    get calado() { return cliques > LIMITE_DE_CONVERSAS; },
   };
+  return rodada;
 }
 
 /** Só para os testes: o tamanho dos baralhos. */
-export const REPERTORIO = { PESCANDO, FISGOU, INSISTENCIA, IGLU, TREM, CUMPRIMENTOS, QUALQUER_HORA };
+export const REPERTORIO = { PESCANDO, FISGOU, INSISTENCIA, IGLU, TREM, CUMPRIMENTOS, QUALQUER_HORA, DUENDES_E_GRINCH, FOFOCA_DO_GRINCH, CANSOU, CANSOU_IGLU };

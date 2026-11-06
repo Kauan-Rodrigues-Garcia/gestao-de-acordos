@@ -151,3 +151,123 @@
   0%, 100% { opacity: 0; transform: scale(0.3) rotate(0deg); }
   50%      { opacity: 1; transform: scale(1) rotate(45deg); }
 }
+
+/* ══ Espiar pela janela (`DentroDoIglu.tsx`, 06/11/2026) ═══════════════════ */
+
+/* A janelinha do iglu: com o urso em casa, ela chama o mouse. */
+.nt-iglu-janela-clique { fill: transparent; cursor: zoom-in; pointer-events: all; }
+.nt-iglu-janela-clique.fechada { cursor: not-allowed; }
+.nt-iglu-janela-mira { fill: none; stroke: #FFD98A; stroke-width: 1.4; opacity: 0; transition: opacity .2s; pointer-events: none; }
+.nt-iglu:has(.nt-iglu-janela-clique:not(.fechada):hover) .nt-iglu-janela-mira { opacity: .9; animation: nt-iglu-mira 1.2s ease-in-out infinite; }
+@keyframes nt-iglu-mira { 50% { stroke-width: 2.4; } }
+/* A cortina fechada na janelinha, depois de ele pegar alguém espiando. */
+.nt-iglu-cortina path { fill: #A9282F; }
+.nt-iglu-cortina .dobra { fill: none; stroke: #7E1F25; stroke-width: .8; }
+
+/* O fundo escurece de leve; clicar nele fecha a espiada. */
+.nt-espiada-raiz { position: fixed; inset: 0; z-index: 70; }
+.nt-espiada-fundo { position: absolute; inset: 0; background: rgb(8 15 30 / .32); animation: nt-espiada-fundo .4s ease-out both; }
+.nt-espiada-raiz.saindo .nt-espiada-fundo { animation: nt-espiada-fundo-sai .45s ease-in both; }
+@keyframes nt-espiada-fundo { from { opacity: 0; } }
+@keyframes nt-espiada-fundo-sai { to { opacity: 0; } }
+
+/*
+ * O cartão: a mesma janela redonda, de perto. Nasce do tamanho da janelinha,
+ * no lugar dela (`--dx`, `--dy`, `--s0`), e cresce; ao sair, faz o caminho de
+ * volta.
+ */
+.nt-espiada { position: absolute; border-radius: 50%; overflow: visible; will-change: transform;
+  animation: nt-espiada-abre .48s cubic-bezier(.2, .9, .3, 1.05) both; }
+.nt-espiada > svg { display: block; border-radius: 50%; overflow: hidden; }
+.nt-espiada.fase-saindo { animation: nt-espiada-fecha .48s cubic-bezier(.6, 0, .8, .4) both; }
+@keyframes nt-espiada-abre {
+  from { transform: translate(var(--dx), var(--dy)) scale(var(--s0)); opacity: .4; }
+  to { transform: none; opacity: 1; }
+}
+@keyframes nt-espiada-fecha {
+  from { transform: none; opacity: 1; }
+  to { transform: translate(var(--dx), var(--dy)) scale(var(--s0)); opacity: .3; }
+}
+/* O vidro e a moldura de gelo, por cima do desenho. */
+.nt-espiada-vidro { position: absolute; inset: -12px; border-radius: 50%; pointer-events: none;
+  border: 12px solid #E4EEF6;
+  box-shadow: 0 0 0 1.5px #B9CCDC, inset 0 0 0 1.5px #B9CCDC, inset 0 0 26px rgb(120 160 200 / .45), 0 18px 40px rgb(8 15 30 / .35);
+  background: linear-gradient(135deg, rgb(255 255 255 / .22) 0%, rgb(255 255 255 / 0) 34%, rgb(255 255 255 / 0) 70%, rgb(255 255 255 / .08) 100%); }
+.nt-espiada-vidro::before { content: ''; position: absolute; left: 14%; top: 10%; width: 22%; height: 10%; border-radius: 50%;
+  background: rgb(255 255 255 / .35); transform: rotate(-32deg); }
+/* A neve em cima da moldura. */
+.nt-espiada-vidro::after { content: ''; position: absolute; left: 18%; right: 18%; top: -16px; height: 14px; border-radius: 14px 14px 6px 6px; background: #FFFFFF;
+  box-shadow: 0 2px 0 rgb(185 204 220 / .8); }
+.nt-espiada-legenda { position: absolute; left: 50%; bottom: -46px; transform: translateX(-50%); white-space: nowrap; margin: 0;
+  padding: 5px 12px; border-radius: 999px; font: 600 12px/1.2 system-ui, -apple-system, 'Segoe UI', sans-serif;
+  background: var(--card); color: var(--foreground); border: 1px solid var(--border);
+  box-shadow: 0 6px 16px rgb(8 15 30 / .18); animation: nt-espiada-legenda .4s .35s ease-out both; }
+@keyframes nt-espiada-legenda { from { opacity: 0; transform: translate(-50%, -6px); } }
+.nt-espiada-fechar { position: absolute; right: -4px; top: -4px; width: 30px; height: 30px; border-radius: 50%;
+  border: 1px solid var(--border); background: var(--card); color: var(--foreground); font: 600 18px/1 system-ui, sans-serif;
+  display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 4px 10px rgb(8 15 30 / .2); }
+.nt-espiada-fechar:hover { background: var(--accent); }
+/* A bronca: um balão vermelho, tremendo. */
+.nt-espiada-bronca { position: absolute; left: 50%; top: 12%; transform: translateX(-50%); max-width: 78%; text-align: center;
+  padding: 7px 12px; border-radius: 14px; background: #FFFFFF; color: #B71C1C; border: 2px solid #2A2530;
+  font: 800 13px/1.25 system-ui, -apple-system, 'Segoe UI', sans-serif; box-shadow: 0 6px 14px rgb(8 15 30 / .25);
+  animation: nt-espiada-bronca .35s cubic-bezier(.3, 1.7, .5, 1) both, nt-espiada-treme .12s linear .35s 6 alternate; }
+.nt-espiada-bronca::after { content: ''; position: absolute; left: 34%; bottom: -9px; width: 14px; height: 14px; background: #FFFFFF;
+  border-right: 2px solid #2A2530; border-bottom: 2px solid #2A2530; transform: rotate(45deg); }
+@keyframes nt-espiada-bronca { from { opacity: 0; transform: translateX(-50%) scale(.3); } }
+@keyframes nt-espiada-treme { from { margin-left: -2px; } to { margin-left: 2px; } }
+
+/* A cortina corre das duas bordas até o meio. */
+.nt-espiada-cortina .esq, .nt-espiada-cortina .dir { transition: transform .85s cubic-bezier(.5, 0, .3, 1); }
+.nt-espiada-cortina .esq { transform: translateX(-130px); }
+.nt-espiada-cortina .dir { transform: translateX(130px); }
+.nt-espiada-cortina.fechada .esq, .nt-espiada-cortina.fechada .dir { transform: translateX(0); }
+
+/* ── Lá dentro ─────────────────────────────────────────────────────────── */
+.nt-dentro-lampiao-luz { animation: nt-dentro-lampiao 2.6s ease-in-out infinite; }
+@keyframes nt-dentro-lampiao { 0%, 100% { opacity: .9; } 40% { opacity: 1; } 70% { opacity: .78; } }
+.nt-dentro-chama { transform-box: fill-box; transform-origin: 50% 100%; animation: nt-dentro-chama .7s ease-in-out infinite alternate; }
+@keyframes nt-dentro-chama { from { transform: scale(.9, .94) skewX(-4deg); } to { transform: scale(1.05, 1.08) skewX(4deg); } }
+.nt-dentro-luzinha { animation: nt-dentro-luzinha 1.6s ease-in-out infinite; }
+@keyframes nt-dentro-luzinha { 50% { opacity: .35; } }
+.nt-dentro-peixinho { transform-box: fill-box; transform-origin: center; animation: nt-dentro-peixinho 3s ease-in-out infinite; }
+@keyframes nt-dentro-peixinho { 0%, 100% { transform: translateX(-2.4px); } 50% { transform: translateX(2.4px) scaleX(-1); } }
+
+/* Dormindo: a manta sobe e desce, os «z» sobem. Acordou: a cabeça levanta. */
+.nt-dentro-respira { transform-box: fill-box; transform-origin: 50% 100%; animation: nt-dentro-respira 3.4s ease-in-out infinite; }
+@keyframes nt-dentro-respira { 50% { transform: scaleY(1.07); } }
+.nt-dentro-zzz text { font: 800 11px/1 system-ui, sans-serif; fill: #7C93AD; opacity: 0; animation: nt-dentro-zzz 2.7s ease-out infinite; }
+@keyframes nt-dentro-zzz { 0% { opacity: 0; transform: translate(0, 0); } 25% { opacity: 1; } 100% { opacity: 0; transform: translate(-8px, -14px); } }
+.nt-dentro-cabeca-cama { transform-box: fill-box; transform-origin: 80% 80%; transition: transform .35s cubic-bezier(.3, 1.6, .5, 1); }
+.acordou .nt-dentro-cabeca-cama { transform: rotate(-14deg) translate(-2px, -6px); }
+.acordou .nt-dentro-respira { animation: none; }
+
+/* Sentado: cada atividade mexe o seu. */
+.nt-dentro-urso { transform-box: fill-box; transform-origin: 50% 100%; }
+.faz-comendo .nt-dentro-urso .nt-urso-cabeca { animation: nt-dentro-mastiga .32s ease-in-out infinite alternate; }
+@keyframes nt-dentro-mastiga { from { transform: rotate(0); } to { transform: rotate(-4deg) translateY(.6px); } }
+.faz-chocolate .nt-dentro-urso .nt-urso-cabeca { animation: nt-dentro-gole 3.2s ease-in-out infinite; }
+@keyframes nt-dentro-gole { 0%, 60%, 100% { transform: rotate(0); } 72%, 86% { transform: rotate(-9deg); } }
+.nt-dentro-vapor path { fill: none; stroke: #FFFFFF; stroke-width: 1; stroke-linecap: round; opacity: 0; animation: nt-dentro-vapor 2.2s ease-out infinite; }
+@keyframes nt-dentro-vapor { 0% { opacity: 0; transform: translateY(2px); } 30% { opacity: .9; } 100% { opacity: 0; transform: translateY(-8px); } }
+.nt-dentro-pagina { transform-box: fill-box; transform-origin: 0% 50%; animation: nt-dentro-pagina 3.6s ease-in-out infinite; }
+@keyframes nt-dentro-pagina { 0%, 70% { transform: scaleX(1); } 85% { transform: scaleX(-1); } 100% { transform: scaleX(-1); opacity: 0; } }
+.faz-lendo .nt-dentro-urso .nt-urso-cabeca { animation: nt-dentro-le 3.6s ease-in-out infinite; }
+@keyframes nt-dentro-le { 0%, 100% { transform: rotate(4deg); } 50% { transform: rotate(9deg); } }
+.nt-dentro-agulhas { transform-box: fill-box; transform-origin: center; animation: nt-dentro-tricota .3s ease-in-out infinite alternate; }
+@keyframes nt-dentro-tricota { from { transform: rotate(-8deg); } to { transform: rotate(8deg); } }
+.nt-dentro-cachecol { transform-box: fill-box; transform-origin: 50% 0%; animation: nt-dentro-cresce 6s ease-in-out infinite; }
+@keyframes nt-dentro-cresce { 0% { transform: scaleY(.5); } 100% { transform: scaleY(1.2); } }
+.nt-dentro-novelo { transform-box: fill-box; transform-origin: center; animation: nt-dentro-novelo 1.2s linear infinite; }
+@keyframes nt-dentro-novelo { to { transform: rotate(-360deg); } }
+.nt-dentro-celula { opacity: 0; animation: nt-dentro-celula 3s steps(1) infinite; }
+@keyframes nt-dentro-celula { 0% { opacity: 0; } 8%, 100% { opacity: 1; } }
+.faz-planilha .nt-dentro-urso .nt-urso-cabeca { animation: nt-dentro-confere 2.4s ease-in-out infinite; }
+@keyframes nt-dentro-confere { 0%, 100% { transform: rotate(8deg); } 50% { transform: rotate(12deg) translateY(.6px); } }
+
+/* Bravo: a veia pulsa e ele bate o pé. */
+.nt-urso-veia { transform-box: fill-box; transform-origin: center; animation: nt-urso-veia .4s ease-in-out infinite alternate; }
+@keyframes nt-urso-veia { from { transform: scale(.85); } to { transform: scale(1.2); } }
+.fase-percebeu .nt-dentro-urso { animation: nt-dentro-bate-pe .18s linear infinite alternate; }
+@keyframes nt-dentro-bate-pe { from { transform: translateY(0); } to { transform: translateY(-1.4px); } }
+
