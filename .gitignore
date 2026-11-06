@@ -120,9 +120,10 @@ scripts/robo59/.env
 
 
 # Vídeo não entra no git, só o código (decisão do Cleber, 06/11/2026). Os
-# arquivos ficam no computador; o app toca public/video/natal/abertura.mp4,
-# que precisa ser copiado à mão para onde o sistema for publicado.
+# arquivos ficam no computador. Exceção: a abertura do presente de Natal, que
+# o app toca (src/components/Natal/presente/AberturaNatal.tsx).
 *.mp4
 *.webm
 *.mov
 *.mkv
+!public/video/natal/abertura.mp4
