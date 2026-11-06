@@ -1,0 +1,46 @@
+/*
+ * Sincelos (`Sincelos.tsx`): gelo azulado de desenho, como a referência — claro
+ * em cima, mais azul nas pontas, contorno azul e reflexos brancos. No tema
+ * escuro o gelo acende um pouco, para não virar mancha.
+ */
+.nt-sincelos { position: absolute; overflow: visible; pointer-events: none; z-index: 6;
+  filter: drop-shadow(0 2px 2px oklch(0.35 0.06 250 / .18)); }
+.nt-sincelos .gelo-1 { stop-color: #F4FAFF; }
+.nt-sincelos .gelo-2 { stop-color: #D3E6FA; }
+.nt-sincelos .gelo-3 { stop-color: #9DBFEA; }
+.nt-sincelos .contorno { fill: none; stroke: #7C9FD6; stroke-width: 1.6; stroke-linejoin: round; }
+.nt-sincelos .recheio { stroke: none; }
+.nt-sincelos .mancha { fill: #FFFFFF; opacity: .9; }
+.nt-sincelos .sombra { fill: #A8C4EE; opacity: .55; }
+.nt-sincelos .risco { fill: none; stroke: #FFFFFF; stroke-width: 1.4; stroke-linecap: round; opacity: .85; }
+:is(.dark, .dark-grey, .deep-blue) .nt-sincelos { filter: drop-shadow(0 0 4px oklch(0.85 0.06 240 / .25)); }
+:is(.dark, .dark-grey, .deep-blue) .nt-sincelos .contorno { stroke: #A9C6F0; }
+
+/* As estrelinhas cintilam em turnos; cada gelo começa num ponto diferente. */
+.nt-sincelos .brilho { fill: #FFFFFF; transform-box: fill-box; transform-origin: center;
+  animation: nt-sincelo-brilho 4s ease-in-out infinite; }
+@keyframes nt-sincelo-brilho {
+  0%, 60%, 100% { opacity: 0; }
+  70% { opacity: 1; }
+  80% { opacity: .2; }
+  88% { opacity: .9; }
+}
+/* A gota: incha na ponta, cai e some. Uma vez a cada sete segundos. */
+.nt-sincelos .gota { transform-box: fill-box; transform-origin: 50% 0; fill: #BCD7F5; stroke: #7C9FD6; stroke-width: .4; opacity: 0;
+  animation: nt-sincelo-gota 7s ease-in infinite; }
+@keyframes nt-sincelo-gota {
+  0%, 70% { opacity: 0; transform: translateY(0) scale(.4); }
+  76% { opacity: 1; transform: translateY(0) scale(1); }
+  84% { opacity: 1; transform: translateY(1px) scale(1); }
+  96% { opacity: 0; transform: translateY(16px) scale(.9); }
+  100% { opacity: 0; transform: translateY(16px); }
+}
+
+/* ── Onde moram ─────────────────────────────────────────────────────────── */
+/* Barra do topo: pendurados da borda de baixo, nas duas pontas. */
+.nt-sincelos.no-topo-esq { top: 100%; left: 56px; margin-top: -1px; }
+.nt-sincelos.no-topo-dir { top: 100%; right: 18px; margin-top: -1px; }
+/* Menu lateral: debaixo da marca. */
+.nt-sincelos.na-marca { top: 100%; left: 10px; margin-top: -1px; }
+/* Card Pendente do Pix: da borda de baixo, do lado esquerdo (o Kevin fica no direito). */
+.nt-sincelos.no-card { top: 100%; left: 14px; margin-top: -2px; z-index: 3; }

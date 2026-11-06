@@ -33,6 +33,8 @@ import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { SubAbaPix } from './subAbasPix';
 import './pixSubAbas.css';
+import { useTemaNatal } from '@/components/Natal/tema';
+import { Azevinho } from '@/components/Natal/pix/PixNatal';
 
 export interface OpcaoSubAbaPix {
   key: SubAbaPix;
@@ -53,6 +55,7 @@ interface Props {
 }
 
 export function PixSubAbas({ abas, ativa, onTrocar }: Props) {
+  const natal = useTemaNatal();
   // As colunas contam pela largura do BLOCO (`@container`), não da tela: com
   // zoom de 125% a tela ainda é «larga» (lg), mas o conteúdo tem ~690 px, e as
   // quatro abas lado a lado viravam «NRs diverge…» (19/10/2026).
@@ -131,6 +134,8 @@ export function PixSubAbas({ abas, ativa, onTrocar }: Props) {
             {ativo && (
               <span className="absolute inset-x-4 -bottom-px h-0.5 rounded-full bg-primary" />
             )}
+            {/* Natal: o raminho de azevinho marca a sub-aba aberta. */}
+            {ativo && natal && <Azevinho />}
           </button>
         );
       })}

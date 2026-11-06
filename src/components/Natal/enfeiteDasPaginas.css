@@ -1,0 +1,48 @@
+/*
+ * O enfeite do título das telas que não têm Natal próprio (06/11/2026, pedido
+ * do Kauan: «páginas que não têm nada: coisas simples, um gorrinho, um
+ * enfeite pequeno, só para a maioria lembrar o Natal»).
+ *
+ * Só CSS, sem mexer em tela nenhuma: o `Layout` marca o <main> com
+ * `data-natal-enfeite` quando o Natal está ligado e a tela não tem enfeite
+ * próprio (Dashboard, Acordos e Analítico têm a cena e o trem; o Pix tem o
+ * dele). Aí o título da página (<h1>) ganha:
+ *
+ *   - o gorro do Papai Noel caído sobre a primeira letra — ou sobre o ícone,
+ *     quando o título começa com ele (o mesmo gorro das fotos do chat);
+ *   - um raminho de azevinho logo depois do texto.
+ *
+ * Quando a tela tem o quadradinho de ícone AO LADO do título (Lixeira,
+ * Painel do Líder, Vendas), o gorro vai para o quadradinho.
+ *
+ * Tudo em `em`: acompanha o tamanho de cada título (text-lg a text-2xl).
+ * Não recebe clique.
+ */
+main[data-natal-enfeite] { --nt-gorro: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 80'%3E%3Cpath d='M16 62 C20 38 38 14 64 11 C80 9.5 90 18 93 31 C86 27 78 27 73 31 C71 42 75 53 84 62 Z' fill='%23D7322F'/%3E%3Cpath d='M64 11 C80 9.5 90 18 93 31 C86 27 78 27 73 31 C71 42 75 53 84 62 L72 62 C66 50 64 36 66 24 C66 18 65 14 64 11 Z' fill='%23A8201E'/%3E%3Cpath d='M26 58 C30 40 42 24 58 18' fill='none' stroke='%23FFFFFF' stroke-opacity='.22' stroke-width='3' stroke-linecap='round'/%3E%3Ccircle cx='91' cy='33' r='8.5' fill='%23FAFAFA'/%3E%3Ccircle cx='93' cy='35' r='5.5' fill='%23E4E9EE'/%3E%3Crect x='6' y='56' width='88' height='17' rx='8.5' fill='%23FAFAFA'/%3E%3Cpath d='M8 66 Q50 74 92 66 L92 64.5 A8.5 8.5 0 0 1 85.5 73 H14.5 A8.5 8.5 0 0 1 8 64.5 Z' fill='%23E1E6EC'/%3E%3C/svg%3E"); }
+main[data-natal-enfeite] h1 { position: relative; }
+
+main[data-natal-enfeite] h1::before {
+  content: ""; position: absolute; z-index: 1; pointer-events: none;
+  left: -.4em; top: -.6em; width: 1.12em; height: .9em;
+  background: var(--nt-gorro) no-repeat center / contain;
+  transform: rotate(-20deg); transform-origin: 70% 90%;
+  filter: drop-shadow(0 1px 1px rgb(0 0 0 / .2));
+}
+
+main[data-natal-enfeite] h1::after {
+  content: ""; display: inline-block; flex: none; pointer-events: none;
+  width: 1em; height: .67em; margin-left: .35em; vertical-align: .02em;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 20'%3E%3Cpath d='M15 11 C12 6 6 3 1 4 C3 5 3 7 2 8 C4 8 5 10 4 12 C6 11 8 12 8 14 C10 12 13 12 15 11 Z' fill='%232E8C55' stroke='%231B5E37' stroke-width='.5'/%3E%3Cpath d='M15 11 C18 6 24 3 29 4 C27 5 27 7 28 8 C26 8 25 10 26 12 C24 11 22 12 22 14 C20 12 17 12 15 11 Z' fill='%2324744A' stroke='%231B5E37' stroke-width='.5'/%3E%3Cpath d='M15 11 C11 8 6 6 2.5 5.5 M15 11 C19 8 24 6 27.5 5.5' fill='none' stroke='%236BC48F' stroke-width='.5' opacity='.7'/%3E%3Ccircle cx='13' cy='13' r='2.6' fill='%23D62828' stroke='%238E1414' stroke-width='.4'/%3E%3Ccircle cx='17.4' cy='13.4' r='2.6' fill='%23D62828' stroke='%238E1414' stroke-width='.4'/%3E%3Ccircle cx='15.2' cy='9.6' r='2.6' fill='%23D62828' stroke='%238E1414' stroke-width='.4'/%3E%3Ccircle cx='12.2' cy='12.1' r='.8' fill='%23FFFFFF' opacity='.75'/%3E%3Ccircle cx='16.6' cy='12.5' r='.8' fill='%23FFFFFF' opacity='.75'/%3E%3Ccircle cx='14.4' cy='8.7' r='.8' fill='%23FFFFFF' opacity='.75'/%3E%3C/svg%3E") no-repeat center / contain;
+  transform: rotate(-8deg);
+}
+
+/* O quadradinho de ícone ao lado do título: o gorro mora nele, não na letra. */
+main[data-natal-enfeite] div:has(> svg:only-child):has(+ div > h1:first-child) { position: relative; }
+main[data-natal-enfeite] div:has(> svg:only-child):has(+ div > h1:first-child)::before {
+  content: ""; position: absolute; z-index: 1; pointer-events: none;
+  left: -9px; top: -13px; width: 26px; height: 21px;
+  background: var(--nt-gorro) no-repeat center / contain;
+  transform: rotate(-20deg); transform-origin: 70% 90%;
+  filter: drop-shadow(0 1px 1px rgb(0 0 0 / .2));
+}
+main[data-natal-enfeite] div:has(> svg:only-child) + div > h1:first-child::before { content: none; }

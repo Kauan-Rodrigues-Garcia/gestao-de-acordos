@@ -1,0 +1,87 @@
+/*
+ * Natal do Pix Automático (`PixNatal.tsx`). Mesmos tons do varal do Dashboard
+ * (`natal.css`), com prefixo próprio: este arquivo não depende da cena.
+ */
+
+/* ── Pisca-pisca dos cards ───────────────────────────────────────────────── */
+/* Pregos na borda de baixo dos cards: o bloco tem `pb-8` (32 px) e o prego fica 4 px abaixo do alto do desenho. */
+.ntp-varal { position: absolute; top: calc(100% - 36px); left: 0; z-index: 10; overflow: visible; pointer-events: none; }
+.ntp-fio { fill: none; stroke: oklch(0.3 0.04 150); stroke-width: 1.3; }
+.ntp-soquete { fill: oklch(0.32 0.05 150); }
+
+/*
+ * O pisca vem do controlador (`Natal/piscaPisca.ts`): a função muda sozinha.
+ * Aqui só o quanto cada parte «apaga» — o halo some, a lâmpada fica no tom da
+ * cor, como lâmpada fria.
+ */
+.ntp-halo { --min: 0; }
+.ntp-bulbo { --min: .45; }
+
+/* Festão de pinheiro (estilo detalhado): três traços tracejados fazem as agulhas. */
+.ntp-festao path { fill: none; stroke-linecap: round; }
+.ntp-festao .g1 { stroke: oklch(0.36 0.08 150); stroke-width: 9; }
+.ntp-festao .g2 { stroke: oklch(0.48 0.12 148); stroke-width: 11; stroke-dasharray: 1.4 2.6; }
+.ntp-festao .g3 { stroke: oklch(0.58 0.13 145); stroke-width: 6; stroke-dasharray: 1 3.4; stroke-dashoffset: 1.6; }
+.ntp-festao .baga { fill: #D62828; }
+.ntp-festao .baga-ouro { fill: #E8B93A; }
+
+.ntp-laco path { fill: #D32F2F; stroke: #9A1B1B; stroke-width: .5; }
+.ntp-laco .no { fill: #B71C1C; }
+
+/* ── Rena de neon ────────────────────────────────────────────────────────── */
+/* Claro: tubo dourado aceso. Escuro: o branco frio da plaquinha de vitrine. */
+.ntp-rena { overflow: visible; flex: none; --tubo: #D9971A; --brilho: #FFCF5A; }
+:is(.dark, .dark-grey, .deep-blue) .ntp-rena { --tubo: #FFFFFF; --brilho: #9CCBFF; }
+.ntp-rena .tubo {
+  fill: none; stroke: var(--tubo); stroke-width: 15; stroke-linecap: round; stroke-linejoin: round;
+  filter: drop-shadow(0 0 1.5px var(--brilho)) drop-shadow(0 0 5px var(--brilho));
+  --min: .3;
+}
+/* Na função «corre», o tubo fica fraco e um trecho aceso percorre a mangueira. */
+.ntp-rena .tubo-corre {
+  fill: none; stroke: var(--tubo); stroke-width: 17; stroke-linecap: round; stroke-linejoin: round;
+  stroke-dasharray: 16 84; opacity: 0;
+  filter: drop-shadow(0 0 2px var(--brilho)) drop-shadow(0 0 7px var(--brilho));
+}
+.ntp-rena[data-pisca="corre"] .tubo { animation: none; opacity: .3; }
+.ntp-rena[data-pisca="corre"] .tubo-corre { opacity: 1; animation: ntp-corre-tubo 2.2s linear infinite; }
+@keyframes ntp-corre-tubo { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
+.ntp-rena .arame { fill: none; stroke: currentColor; stroke-width: 3; opacity: .3; }
+.ntp-rena .tomada { fill: none; stroke: currentColor; stroke-width: 5; stroke-linecap: round; opacity: .45; }
+.ntp-rena .tomada-plugue { fill: currentColor; opacity: .55; }
+.ntp-rena .nariz { fill: #FF3B3B; --min: .45; }
+.ntp-rena .nariz-halo { fill: #FF3B3B; filter: blur(5px); --min: 0; }
+/* O halo é mais fraco que o nariz: aceso, fica em .5. */
+.ntp-rena .nariz-halo { fill-opacity: .55; }
+
+/* ── «Esqueceram de mim» ─────────────────────────────────────────────────── */
+/* No canto de baixo do card, dentro dele: o rodapé do Pendente abre espaço. */
+.ntp-kevin {
+  position: absolute; right: 10px; bottom: 8px; z-index: 2; width: 40px; height: auto;
+  cursor: default; user-select: none;
+  filter: drop-shadow(0 2px 3px oklch(0.2 0.02 250 / .3));
+  transform: rotate(7deg) scale(.4); opacity: 0;
+  transition: transform .45s cubic-bezier(.34, 1.56, .64, 1), opacity .25s ease-out;
+}
+.ntp-kevin.entrou { transform: rotate(7deg) scale(1); opacity: 1; }
+.ntp-kevin.entrou:hover { animation: ntp-grito .5s ease-in-out; }
+@keyframes ntp-grito {
+  0%, 100% { transform: rotate(7deg) scale(1); }
+  20% { transform: rotate(1deg) scale(1.16); }
+  40% { transform: rotate(12deg) scale(1.16); }
+  60% { transform: rotate(2deg) scale(1.14); }
+  80% { transform: rotate(10deg) scale(1.06); }
+}
+
+/* ── Neve no alto dos cards ──────────────────────────────────────────────── */
+.ntp-neve { position: absolute; top: -6px; left: 6px; right: 6px; width: calc(100% - 12px); height: 13px; z-index: 1; pointer-events: none; overflow: visible; }
+.ntp-neve path { fill: #FFFFFF; filter: drop-shadow(0 1px 1px oklch(0.55 0.05 235 / .35)); }
+:is(.dark, .dark-grey, .deep-blue) .ntp-neve path { fill: oklch(0.96 0.012 230); filter: drop-shadow(0 1px 2px oklch(0 0 0 / .5)); }
+
+/* ── Azevinho da sub-aba aberta ──────────────────────────────────────────── */
+.ntp-azevinho { position: absolute; top: -8px; left: -6px; width: 26px; height: auto; z-index: 2; pointer-events: none; transform: rotate(-14deg); overflow: visible; }
+.ntp-azevinho .folha { fill: #2E8C55; stroke: #1B5E37; stroke-width: .5; }
+.ntp-azevinho .folha.escura { fill: #24744A; }
+.ntp-azevinho .nervura { fill: none; stroke: #6BC48F; stroke-width: .5; opacity: .7; }
+.ntp-azevinho .baga { fill: #D62828; stroke: #8E1414; stroke-width: .4; }
+.ntp-azevinho .brilho { fill: #FFFFFF; opacity: .75; }

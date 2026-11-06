@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTheme } from 'next-themes';
 import { ehTemaEscuro } from '@/lib/temas';
 import { cn } from '@/lib/utils';
+import { usePiscaPisca, varsDaLampada } from './piscaPisca';
 import { EVENTO_ACORDO_SALVO, EVENTO_FESTA, EVENTO_TRENO, type CenaNatal } from './tema';
 import { Chale } from './chale/Chale';
 import { VAO, naCurva } from './varal';
@@ -151,18 +152,24 @@ const inclinacao = (t: number) => Math.atan((40 * (1 - 2 * t)) / VAO) * 180 / Ma
  * (o halo atrás e o miolo na frente), só opacidade — fica na placa de vídeo e
  * não redesenha a página.
  */
+/*
+ * O pisca vem do controlador (`piscaPisca.ts`, 06/11/2026): a função muda
+ * sozinha — alterna, onda, corre, frenético, estrelas… — como a caixinha do
+ * pisca-pisca de loja. Antes era um piscar suave, sempre igual.
+ */
 function Varal({ guirlanda, bolas }: { guirlanda: boolean; bolas: boolean }) {
   const largura = useLargura();
   const vaos = Math.ceil(largura / VAO) + 1;
+  const modo = usePiscaPisca();
   return (
-    <div className={cn('nt-varal', guirlanda && 'com-guirlanda')}>
+    <div className={cn('nt-varal', guirlanda && 'com-guirlanda')} data-pisca={modo}>
       {Array.from({ length: vaos }, (_, v) => (
         <div key={v} className="nt-vao" style={{ width: VAO }}>
           {LAMPADAS.map((t, i) => {
             const { x, y } = naCurva(t), n = v * LAMPADAS.length + i, cor = CORES_LUZ[n % CORES_LUZ.length];
-            const atraso = `${-((n * 0.73) % 3.4).toFixed(2)}s`;
             return (
-              <span key={i} className="nt-halo" style={{ left: x - 15, top: y + (guirlanda ? 16 : 12) - 15, ['--cor' as string]: cor, ['--d' as string]: atraso }} />
+              <span key={i} className={cn('nt-halo pp-luz', n % 2 ? 'pp-b' : 'pp-a')}
+                style={{ left: x - 15, top: y + (guirlanda ? 16 : 12) - 15, ['--cor' as string]: cor, ...varsDaLampada(n) }} />
             );
           })}
           <svg viewBox={`0 0 ${VAO} 44`} width={VAO} height={44}>
@@ -170,14 +177,13 @@ function Varal({ guirlanda, bolas }: { guirlanda: boolean; bolas: boolean }) {
             <path d={`M0 4 Q${VAO / 2} 24 ${VAO} 4`} className="fio" />
             {LAMPADAS.map((t, i) => {
               const { x, y } = naCurva(t), n = v * LAMPADAS.length + i;
-              return <Lampada key={i} x={x} y={guirlanda ? y + 4 : y} giro={inclinacao(t)} cor={CORES_LUZ[n % CORES_LUZ.length]} />;
+              return <Lampada key={i} x={x} y={guirlanda ? y + 4 : y} giro={inclinacao(t)} cor={CORES_LUZ[n % CORES_LUZ.length]} n={n} />;
             })}
             {guirlanda && <Laco />}
           </svg>
           {LAMPADAS.map((t, i) => {
             const { x, y } = naCurva(t), n = v * LAMPADAS.length + i;
-            const atraso = `${-((n * 0.73) % 3.4).toFixed(2)}s`;
-            return <span key={i} className="nt-miolo" style={{ left: x - 3, top: y + (guirlanda ? 16 : 12) - 4, ['--d' as string]: atraso }} />;
+            return <span key={i} className={cn('nt-miolo pp-luz', n % 2 ? 'pp-b' : 'pp-a')} style={{ left: x - 3, top: y + (guirlanda ? 16 : 12) - 4, ...varsDaLampada(n) }} />;
           })}
           {bolas && v % 2 === 1 && <Bola indice={v} />}
         </div>
@@ -186,12 +192,15 @@ function Varal({ guirlanda, bolas }: { guirlanda: boolean; bolas: boolean }) {
   );
 }
 
-function Lampada({ x, y, giro, cor }: { x: number; y: number; giro: number; cor: string }) {
+/** `n` liga o vidro ao controlador do pisca: apagada, a lâmpada fica no tom da cor. */
+function Lampada({ x, y, giro, cor, n }: { x: number; y: number; giro: number; cor: string; n?: number }) {
   return (
     <g transform={`translate(${x} ${y}) rotate(${giro.toFixed(1)})`}>
       <rect x="-2.3" y="0" width="4.6" height="4.4" rx=".9" className="soquete" />
-      <path d="M0 3.6 C4.6 4.6 5.6 10 4.1 14 C3.1 17 1.6 19 0 19.6 C-1.6 19 -3.1 17 -4.1 14 C-5.6 10 -4.6 4.6 0 3.6 Z" fill={cor} />
-      <ellipse cx="-1.7" cy="9.5" rx=".9" ry="2.7" fill="#FFFFFF" opacity=".55" />
+      <g className={n == null ? undefined : cn('nt-vidro pp-luz', n % 2 ? 'pp-b' : 'pp-a')} style={n == null ? undefined : varsDaLampada(n)}>
+        <path d="M0 3.6 C4.6 4.6 5.6 10 4.1 14 C3.1 17 1.6 19 0 19.6 C-1.6 19 -3.1 17 -4.1 14 C-5.6 10 -4.6 4.6 0 3.6 Z" fill={cor} />
+        <ellipse cx="-1.7" cy="9.5" rx=".9" ry="2.7" fill="#FFFFFF" opacity=".55" />
+      </g>
     </g>
   );
 }

@@ -20,6 +20,9 @@ import { fmtPct, STATUS_INFO } from './pixTelaComum';
 import { PixHistoricoDialog } from './PixHistoricoDialog';
 import { PixLixeiraDialog } from './PixLixeiraDialog';
 import type { PixTela } from './usePixAutomatico';
+import { useTemaNatal } from '@/components/Natal/tema';
+import { RenaNeon } from '@/components/Natal/pix/PixNatal';
+import { GorroNoel } from '@/components/Natal/Desenhos';
 
 export function PixCabecalho({ pix }: { pix: PixTela }) {
   const {
@@ -27,6 +30,7 @@ export function PixCabecalho({ pix }: { pix: PixTela }) {
     operadores, podeVerDeOutros, podeAgirSobreOutros, noMesAtual, diaNovo, fechamento,
     meusDesaprovados, quemExclui,
   } = pix;
+  const natal = useTemaNatal();
   // Lixeira: 3 dias de retenção, restaurar é líder+
   const [lixeiraAberta, setLixeiraAberta] = useState(false);
   const [lixeira, setLixeira] = useState<PixLixeiraItem[]>([]);
@@ -217,8 +221,10 @@ export function PixCabecalho({ pix }: { pix: PixTela }) {
       {/* ── Cabeçalho da aba ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
+          <div className="relative w-11 h-11 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
             <Zap className="w-5 h-5 text-primary" />
+            {/* Natal: o gorro do Papai Noel, o mesmo das fotos do chat. */}
+            {natal && <GorroNoel chave="pix" className="pointer-events-none absolute -top-[18px] -left-[10px] w-9 -rotate-[16deg]" />}
           </div>
           <div>
             {/* Título da TELA desde 16/10/2026 — antes era o de uma aba de Acordos. */}
@@ -234,6 +240,8 @@ export function PixCabecalho({ pix }: { pix: PixTela }) {
               <SeletorMes mes={mes} onChange={setMes} desabilitado={loading} />
             </div>
           </div>
+          {/* Natal: a rena de neon ao lado do título (`Natal/pix/PixNatal.tsx`). */}
+          {natal && <RenaNeon className="ml-2 hidden h-[76px] w-[57px] text-muted-foreground md:block" />}
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={carregar} disabled={loading}

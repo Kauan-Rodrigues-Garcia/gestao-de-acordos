@@ -31,9 +31,11 @@
 
 .nt-halo, .nt-miolo { position: absolute; border-radius: 50%; pointer-events: none; will-change: opacity; }
 .nt-halo { width: 30px; height: 30px; background: radial-gradient(circle, color-mix(in oklch, var(--cor) 70%, transparent) 0%, color-mix(in oklch, var(--cor) 25%, transparent) 40%, transparent 70%);
-  animation: nt-pisca 3.4s ease-in-out var(--d) infinite; }
+  --min: 0; }
+/* O pisca do varal vem do controlador (`piscaPisca.ts` / `piscaPisca.css`). */
 .nt-miolo { width: 6px; height: 8px; background: radial-gradient(circle, #fff 0%, rgb(255 255 255 / .6) 45%, transparent 75%); z-index: 1;
-  animation: nt-pisca 3.4s ease-in-out var(--d) infinite; }
+  --min: .1; }
+.nt-vidro { --min: .5; }
 @keyframes nt-pisca { 0%, 100% { opacity: 1; } 45% { opacity: .25; } 60% { opacity: .9; } }
 
 /* ── Guirlanda ───────────────────────────────────────────────────────────── */

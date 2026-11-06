@@ -1,0 +1,53 @@
+/*
+ * As funções do pisca-pisca (`piscaPisca.ts`). O bloco diz a função
+ * (`data-pisca`); cada lâmpada tem a classe `pp-luz`, o canal (`pp-a`/`pp-b`)
+ * e as variáveis `--i` (posição) e `--r` (o acaso fixo dela). `--min` é o
+ * quanto a luz «apaga»: o halo some (0), a lâmpada fica no tom da cor.
+ *
+ * A troca de função é seca, como a da caixinha de verdade.
+ */
+.pp-luz { --min: .4; will-change: opacity; }
+
+/* Os dois fios se revezam. */
+[data-pisca="alterna"] .pp-luz { animation: pp-liga 1.1s steps(1, end) infinite; }
+[data-pisca="alterna"] .pp-b { animation-delay: -.55s; }
+
+/* Pisca rápido, os dois fios trocando quase em estroboscópio. */
+[data-pisca="frenetico"] .pp-luz { animation: pp-liga .22s steps(1, end) infinite; }
+[data-pisca="frenetico"] .pp-b { animation-delay: -.11s; }
+
+/* Os dois fios acendem e apagam devagar, um no vale do outro. */
+[data-pisca="devagar"] .pp-luz { animation: pp-respira 3.6s ease-in-out infinite; }
+[data-pisca="devagar"] .pp-b { animation-delay: -1.8s; }
+
+/* O brilho passa pelo fio como onda. */
+[data-pisca="onda"] .pp-luz { animation: pp-respira 2.4s ease-in-out infinite; animation-delay: calc(var(--i) * -.16s); }
+
+/* Uma luz acesa correndo o fio (com rastro curto). */
+[data-pisca="corre"] .pp-luz { animation: pp-corre 1.5s linear infinite; animation-delay: calc(var(--i) * -.09s); }
+
+/* Cada lâmpada no seu tempo: quase sempre acesa, com piscadas soltas. */
+[data-pisca="estrelas"] .pp-luz {
+  animation: pp-estrela calc(1.6s + var(--r) * 2.8s) ease-in-out infinite;
+  animation-delay: calc(var(--r) * -4.4s);
+}
+
+/* Cada lâmpada pisca rápido no seu tempo: a bagunça boa do pisca-pisca. */
+[data-pisca="loucura"] .pp-luz {
+  animation: pp-liga calc(.16s + var(--r) * .55s) steps(1, end) infinite;
+  animation-delay: calc(var(--r) * -1.3s);
+}
+
+/* Tudo aceso, parado — a pausa entre uma função e outra. */
+[data-pisca="fixo"] .pp-luz { animation: none; opacity: 1; }
+
+@keyframes pp-liga { 0% { opacity: 1; } 50% { opacity: var(--min); } }
+@keyframes pp-respira { 0%, 100% { opacity: var(--min); } 50% { opacity: 1; } }
+@keyframes pp-corre { 0%, 8% { opacity: 1; } 22%, 100% { opacity: var(--min); } }
+@keyframes pp-estrela {
+  0%, 62%, 100% { opacity: 1; }
+  68% { opacity: var(--min); }
+  74% { opacity: 1; }
+  80% { opacity: calc(var(--min) + .25); }
+  86% { opacity: 1; }
+}

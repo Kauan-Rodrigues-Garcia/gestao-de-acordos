@@ -5,7 +5,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import {
-  AlertTriangle, Banknote, CheckCircle2, Clock, Layers, Lock, Scale, Search, User, X,
+  AlertTriangle, Banknote, CheckCircle2, Clock, Gift, Layers, Lock, Scale, Search, Snowflake, TreePine, User, X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
@@ -30,6 +30,8 @@ import { PixConfigSetor } from './PixConfigSetor';
 import { PixBarraLote } from './PixBarraLote';
 import { PixTabelaRegistros } from './PixTabelaRegistros';
 import type { PixTela } from './usePixAutomatico';
+import { useTemaNatal } from '@/components/Natal/tema';
+import { KevinEsquecido, NeveNoTopo, VaralDosCards } from '@/components/Natal/pix/PixNatal';
 
 export function PixAbaRegistros({ pix }: { pix: PixTela }) {
   const {
@@ -42,6 +44,12 @@ export function PixAbaRegistros({ pix }: { pix: PixTela }) {
     carregar, carregarMetaPix,
   } = pix;
   const [salvandoMetaPix, setSalvandoMetaPix] = useState(false);
+  // Natal (06/11/2026): pisca-pisca por cima dos cards, Pago dourado e o
+  // «Esqueceram de mim» no Pendente. Ver `Natal/pix/PixNatal.tsx`.
+  const natal = useTemaNatal();
+  // Ref de ESTADO: o fio precisa saber quando a grade aparece (ela só monta
+  // depois do carregamento) — ver `useVaos` em `PixNatal.tsx`.
+  const [gradeCards, setGradeCards] = useState<HTMLDivElement | null>(null);
 
   // ── Meta de Pix do setor (líder+) ─────────────────────────────────────────
   // Parâmetros não se chamam `metaValor`: esse nome já é o estado da meta de
@@ -83,27 +91,46 @@ export function PixAbaRegistros({ pix }: { pix: PixTela }) {
     {
       label: 'Pendente', qtd: totais.pendente.qtd,
       valor: totais.pendente.valor, comissao: totais.pendente.comissao,
-      cls: 'from-sky-500/15 to-sky-600/5 border-sky-500/25', icon: <Clock className="w-4 h-4 text-sky-700 dark:text-sky-400" />,
+      cls: 'from-sky-500/15 to-sky-600/5 border-sky-500/25',
+      icon: natal
+        ? <Snowflake className="w-4 h-4 text-sky-700 dark:text-sky-400" />
+        : <Clock className="w-4 h-4 text-sky-700 dark:text-sky-400" />,
       comissaoCls: 'text-sky-700 dark:text-sky-400',
-      rodape: null as string | null,
+      // Pix pendente é o que ficou para trás esperando alguém lembrar dele.
+      rodape: natal && totais.pendente.qtd > 0
+        ? `Esqueceram de mim! ${totais.pendente.qtd} esperando avaliação`
+        : null as string | null,
+      kevin: !!natal && totais.pendente.qtd > 0,
     },
     {
       label: 'Aprovado', qtd: totais.aprovado.qtd,
       valor: totais.aprovado.valor, comissao: totais.aprovado.comissao,
-      cls: 'from-emerald-500/15 to-emerald-600/5 border-emerald-500/25', icon: <CheckCircle2 className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />,
+      cls: 'from-emerald-500/15 to-emerald-600/5 border-emerald-500/25',
+      icon: natal
+        ? <TreePine className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
+        : <CheckCircle2 className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />,
       comissaoCls: 'text-emerald-700 dark:text-emerald-400',
       rodape: null as string | null,
+      kevin: false,
     },
     // Pago é o que SAIU, não o que é devido. Aprovado R$ 105,49 com R$ 50,00
     // pagos são dois fatos verdadeiros ao mesmo tempo — faltava o segundo.
     {
       label: 'Pago', qtd: pagamento.pago.qtd,
       valor: pagamento.pago.valor, comissao: pagamento.pago.comissao,
-      cls: 'from-teal-500/15 to-teal-600/5 border-teal-500/25', icon: <Banknote className="w-4 h-4 text-teal-700 dark:text-teal-400" />,
-      comissaoCls: 'text-teal-700 dark:text-teal-400',
+      // No Natal o Pago fica dourado, presente entregue: o teal se perdia ao
+      // lado do verde do Aprovado debaixo das luzes vermelha, ouro e verde.
+      cls: natal
+        ? 'from-[#E8B93A]/20 to-[#E8B93A]/[0.04] border-[#E8B93A]/45'
+        : 'from-teal-500/15 to-teal-600/5 border-teal-500/25',
+      icon: natal
+        ? <Gift className="w-4 h-4 text-[#A87A0C] dark:text-[#F2C94C]" />
+        : <Banknote className="w-4 h-4 text-teal-700 dark:text-teal-400" />,
+      comissaoCls: natal ? 'text-[#9A6E06] dark:text-[#F2C94C]' : 'text-teal-700 dark:text-teal-400',
       rodape: pagamento.aPagar.comissao > 0
         ? `Ainda a receber: ${formatCurrency(pagamento.aPagar.comissao)}`
         : null,
+      kevin: false,
     },
   ];
 
@@ -126,11 +153,15 @@ export function PixAbaRegistros({ pix }: { pix: PixTela }) {
 
       {/* ── Totais pendente × aprovado ── */}
       {!loading && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className={cn('relative', natal && 'pb-8')}>
+        {/* O pisca-pisca pendura da borda de BAIXO dos cards (pedido de 06/11). */}
+        {natal && <VaralDosCards grade={gradeCards} festao={natal === 'detalhado'} />}
+        <div ref={setGradeCards} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {statsCards.map((s, i) => (
             <motion.div key={s.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.06, duration: 0.3 }}>
-              <div className={cn('rounded-xl border bg-gradient-to-br p-4 h-full', s.cls)}>
+              <div className={cn('relative rounded-xl border bg-gradient-to-br p-4 h-full', s.cls)}>
+                {natal && <NeveNoTopo variante={i} />}
                 {/* Quebra de linha quando o card estreita (zoom de 125%, três
                     cards lado a lado): a comissão desce em vez de vazar pela
                     borda — os valores, em fonte mono, não encolhem (19/10/2026). */}
@@ -154,13 +185,19 @@ export function PixAbaRegistros({ pix }: { pix: PixTela }) {
                   </div>
                 </div>
                 {s.rodape && (
-                  <p className="text-[10.5px] text-muted-foreground mt-2 pt-2 border-t border-border/40">
+                  <p className={cn(
+                    'text-[10.5px] text-muted-foreground mt-2 pt-2 border-t border-border/40',
+                    s.kevin && 'min-h-[2.75rem] pr-14',
+                  )}>
                     {s.rodape}
                   </p>
                 )}
+                {s.kevin && <KevinEsquecido />}
+
               </div>
             </motion.div>
           ))}
+        </div>
         </div>
       )}
 

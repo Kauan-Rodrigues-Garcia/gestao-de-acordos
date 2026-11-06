@@ -72,6 +72,8 @@ import { TemaNatalContext, cenaDaRota as cenaNatalDaRota, soParado as natalSoPar
 import { EVENTO_REINICIAR_ABERTURA, abrirNatal, useNatal } from '@/components/Natal/previa';
 import { MarcaNatal } from '@/components/Natal/MarcaNatal';
 import { PreviaNatal } from '@/components/Natal/PreviaNatal';
+import { SincelosDaMarca, SincelosDoTopo } from '@/components/Natal/Sincelos';
+import '@/components/Natal/enfeiteDasPaginas.css';
 import { abaDoCaminho, ROTA_DO_TREM, useTelaLarga } from '@/components/Natal/trem/rota';
 import { useNotificacoes } from '@/providers/NotificacoesProvider';
 import { useEasterEggCriadores, DURACAO_ESCURECIMENTO_MS } from '@/hooks/useEasterEggCriadores';
@@ -340,6 +342,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   // (`ROTA_DO_TREM`: Dashboard, Acordos e Analítico). Nunca no celular.
   const telaLarga = useTelaLarga();
   const tremNaAba = natal && telaLarga ? abaDoCaminho(pathname) : null;
+  // O gelo debaixo da barra do topo (06/11/2026): só onde o alto da página
+  // está livre. Dashboard tem o varal, Acordos o chalé e o Analítico o trilho
+  // — gelo ali seria enfeite em cima de enfeite.
+  const geloNoTopo = !!natal && !tremNaAba && !(cenaNatal && (cenaNatal.luzes || cenaNatal.guirlanda || cenaNatal.chale));
+  // O gorro e o azevinho no título das telas sem Natal próprio
+  // (`Natal/enfeiteDasPaginas.css`). O Pix tem os dele.
+  const enfeiteNoTitulo = geloNoTopo && pathname !== ROUTE_PATHS.PIX_AUTOMATICO;
   // `valorDoCargo` é o que o editor de ordem usa para desenhar o menu de OUTRO
   // cargo: ele responde «o que este cargo concede», sem aplicar exceção de
   // pessoa nenhuma — que é exatamente a pergunta de uma prévia por cargo.
@@ -535,7 +544,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const sidebarContent = (
     <div className="flex flex-col h-full">
       {/* Logo */}
-      <div className="flex items-center gap-3 px-4 py-5 border-b border-sidebar-border">
+      <div className={cn('flex items-center gap-3 px-4 py-5 border-b border-sidebar-border', natal && 'relative z-[3]')}>
+        {/* Natal: o gelo debaixo da marca, só com o menu aberto. */}
+        {natal && (sidebarOpen || mobileOpen) && <SincelosDaMarca />}
         {/* O logo continua sendo só o logo. O clique não navega, não abre menu
             e não impede nada — só é contado. Quem clicar uma vez sem querer não
             percebe diferença nenhuma (ver `useEasterEggCriadores`). */}
@@ -745,7 +756,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   );
 
   const conteudo = (
-    <main ref={areaConteudo} className={cn('flex-1 overflow-y-auto', natal && 'relative', tremNaAba && 'isolate', cenaNatal && temFundoNatal(cenaNatal) ? 'z-[1] bg-transparent' : 'bg-background')}>
+    <main ref={areaConteudo} data-natal-enfeite={enfeiteNoTitulo ? '' : undefined} className={cn('flex-1 overflow-y-auto', natal && 'relative', tremNaAba && 'isolate', cenaNatal && temFundoNatal(cenaNatal) ? 'z-[1] bg-transparent' : 'bg-background')}>
       {/* As camadas do Natal moram no alto do conteúdo e rolam com a página. */}
       {cenaNatal && <Suspense fallback={null}><CamadaNatal cena={cenaNatal} /></Suspense>}
       {/* O trem corre por trás do conteúdo (`isolate` no <main> segura o z-index dele)
@@ -801,7 +812,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Header */}
-        <header className="relative h-14 border-b border-border bg-card flex items-center px-4 gap-3 flex-shrink-0">
+        <header className={cn('relative h-14 border-b border-border bg-card flex items-center px-4 gap-3 flex-shrink-0', geloNoTopo && 'z-[12]')}>
+          {geloNoTopo && <SincelosDoTopo />}
           <Button variant="ghost" size="icon" className="w-8 h-8 shrink-0"
             onClick={() => {
               if (window.innerWidth >= 768) {

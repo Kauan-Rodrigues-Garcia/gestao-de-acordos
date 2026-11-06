@@ -35,8 +35,12 @@ import {
 import { textoPrazoExpurgo } from './pixAutomaticoView';
 import { fmtPct, SO_MEMORIA, STATUS_INFO } from './pixTelaComum';
 import type { PixTela } from './usePixAutomatico';
+import { useTemaNatal } from '@/components/Natal/tema';
+import { corPixNatal } from '@/components/Natal/pix/corPixNatal';
 
 export function PixTabelaRegistros({ pix }: { pix: PixTela }) {
+  /** Natal: Pago dourado e EXTRA vermelho de fita (`Natal/pix/PixNatal.tsx`). */
+  const natal = useTemaNatal();
   const {
     perfil, temPermissao, podeAprovar, podeVerDeOutros, podeAgirSobreOutros, podeAjustarSaldo,
     fechamento, nrsBloqueados, itens, visiveis, daPagina, paginaAtual, totalPaginas, setPagina,
@@ -331,7 +335,10 @@ export function PixTabelaRegistros({ pix }: { pix: PixTela }) {
                             {item.extra && (
                               <span
                                 title="Marcado como Extra por quem lançou — confira se este Pix não foi lançado também por outro setor"
-                                className="inline-flex shrink-0 items-center gap-0.5 rounded px-1 py-px text-[9px] font-bold uppercase leading-none tracking-wide bg-fuchsia-500/15 text-fuchsia-600 ring-1 ring-fuchsia-500/30 dark:text-fuchsia-400"
+                                className={cn(
+                                  'inline-flex shrink-0 items-center gap-0.5 rounded px-1 py-px text-[9px] font-bold uppercase leading-none tracking-wide',
+                                  natal ? corPixNatal.extra : 'bg-fuchsia-500/15 text-fuchsia-600 ring-1 ring-fuchsia-500/30 dark:text-fuchsia-400',
+                                )}
                               >
                                 <Sparkles className="h-2.5 w-2.5" /> extra
                               </span>
@@ -415,7 +422,7 @@ export function PixTabelaRegistros({ pix }: { pix: PixTela }) {
                       <td className="px-4 py-3">
                         {item.pago ? (
                           <>
-                            <Badge variant="outline" className="text-[10px] font-semibold bg-teal-500/10 text-teal-700 dark:text-teal-400 border-teal-500/30">
+                            <Badge variant="outline" className={cn('text-[10px] font-semibold', natal ? corPixNatal.pagoSelo : 'bg-teal-500/10 text-teal-700 dark:text-teal-400 border-teal-500/30')}>
                               Pago
                             </Badge>
                             {item.pago_por_nome && (
@@ -512,7 +519,7 @@ export function PixTabelaRegistros({ pix }: { pix: PixTela }) {
                                 'h-7 px-2 rounded-lg flex items-center gap-1 text-[11px] font-semibold border disabled:opacity-50',
                                 item.pago
                                   ? 'text-muted-foreground border-border hover:text-foreground hover:bg-accent/60'
-                                  : 'text-teal-700 dark:text-teal-400 border-teal-500/30 bg-teal-500/10 hover:bg-teal-500/20',
+                                  : natal ? corPixNatal.pagar : 'text-teal-700 dark:text-teal-400 border-teal-500/30 bg-teal-500/10 hover:bg-teal-500/20',
                               )}>
                               <Banknote className="w-3 h-3" /> {item.pago ? 'Desfazer' : 'Pagar'}
                             </button>

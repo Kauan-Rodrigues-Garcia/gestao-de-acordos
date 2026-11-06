@@ -82,6 +82,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/index';
+import { useTemaNatal } from '@/components/Natal/tema';
+import { corPixNatal } from '@/components/Natal/pix/corPixNatal';
 import {
   decidirPedidoNr, cancelarPedidoNr, estadoDoPedidoNr, setorDoLadoNr,
   type PixNrPedido, type PixNrAprovacao, type PixNrLado,
@@ -137,6 +139,7 @@ function Lado({
   destaque?: boolean;
   extra?: boolean;
 }) {
+  const natal = useTemaNatal();
   return (
     <div className={cn(
       'min-w-0 rounded-lg border px-3 py-2',
@@ -150,7 +153,10 @@ function Lado({
         {extra && (
           <Badge
             variant="outline"
-            className="h-4 shrink-0 gap-0.5 border-fuchsia-500/40 px-1 text-[9px] font-bold uppercase text-fuchsia-600 dark:text-fuchsia-400"
+            className={cn(
+              'h-4 shrink-0 gap-0.5 px-1 text-[9px] font-bold uppercase',
+              natal ? cn('border-transparent', corPixNatal.extra) : 'border-fuchsia-500/40 text-fuchsia-600 dark:text-fuchsia-400',
+            )}
             title="Marcado como Extra por quem lançou — confira duas vezes"
           >
             <Sparkles className="h-2.5 w-2.5" /> extra

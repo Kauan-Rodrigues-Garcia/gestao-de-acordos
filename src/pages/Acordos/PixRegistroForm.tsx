@@ -31,6 +31,8 @@ import { useEstadoLembrado } from '@/hooks/useEstadoLembrado';
 import { setorDoRegistroPix, sugerirOperadores, type OperadorInfo } from './pixAutomaticoView';
 import type { PixTela } from './usePixAutomatico';
 import { SO_MEMORIA } from './pixTelaComum';
+import { useTemaNatal } from '@/components/Natal/tema';
+import { corPixNatal } from '@/components/Natal/pix/corPixNatal';
 
 export function PixRegistroForm({ pix }: { pix: PixTela }) {
   const {
@@ -38,6 +40,7 @@ export function PixRegistroForm({ pix }: { pix: PixTela }) {
     podeRegistrar, setorFoco, clonesRef, noMesAtual, diaNovo, setDiaNovo, inicioDoMes,
     fimDoMes, pctDoMeuSetor, operadoresFiltro, carregar, nrDeFora, consumirNrDeFora, chaveAba,
   } = pix;
+  const natal = useTemaNatal();
   // O rascunho: ver «O que foi digitado sobrevive a sair da sub-aba», no topo.
   const rascunho = `${chaveAba}|form`;
   const [nrNovo, setNrNovo]       = useEstadoLembrado(`${rascunho}|nr`, '', SO_MEMORIA);
@@ -268,7 +271,7 @@ export function PixRegistroForm({ pix }: { pix: PixTela }) {
             />
             <span className={cn(
               'flex items-center gap-1 font-medium',
-              extraNovo ? 'text-fuchsia-500' : 'text-muted-foreground',
+              extraNovo ? (natal ? corPixNatal.extraTexto : 'text-fuchsia-500') : 'text-muted-foreground',
             )}>
               <Sparkles className="h-3 w-3" /> Marcar como Extra
             </span>
