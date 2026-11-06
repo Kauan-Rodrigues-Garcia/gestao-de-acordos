@@ -24,13 +24,16 @@ multiplicar chamadas de API.
   devolve `{ fonte, geradoEm, cidades: { birigui, marilia } }`, já traduzido
   para o vocabulário do app (`limpo`, `poucas_nuvens`, `nublado`, `neblina`,
   `garoa`, `chuva`, `chuva_forte`, `tempestade`).
-- Cache na CDN: `s-maxage=1800, stale-while-revalidate=3600`. Todos os
-  usuários recebem a mesma resposta; o MET recebe ~2 rodadas por hora. Uma
-  cidade falhando: `s-maxage=300`. As duas: 502 `no-store` (a CDN segue com a
+- Cache na CDN: `s-maxage` = até o `Expires` do MET (o mais cedo das duas
+  cidades, entre 1 e 60 min; sem o cabeçalho, 30), mais
+  `stale-while-revalidate=3600`. Todos os usuários recebem a mesma resposta;
+  o MET recebe uma rodada por janela de validade dele (~2 por hora), nunca
+  antes do que os termos pedem. Uma cidade falhando: no máximo 5 min. As duas: 502 `no-store` (a CDN segue com a
   última boa).
 - Sem banco, sem sessão, sem Realtime, sem migration.
 - Navegador: `useClima(setorId)` — uma busca por aba (`lerComCache`),
-  relê a cada 30 min e na volta à aba se passou disso; falha fica com a última
+  relê a cada 10 min e na volta à aba se passou disso (só vai ao cache da
+  CDN, não ao MET: a previsão nova aparece até 10 min depois de liberada); falha fica com a última
   boa. `lib/cidadeDoSetor.ts` é a leitura da cidade, compartilhada com
   `useMarca`.
 
@@ -82,7 +85,8 @@ Alerta de tempestade, push, previsão hora a hora, outras cidades, banco.
   vezes, noite, cache e falhas da rota.
 - `src/lib/__tests__/clima.test.ts` — cidade, estação, sorteio, textos.
 - `src/hooks/__tests__/useClima.test.tsx` — cidade do setor, busca única,
-  releitura de 30 min, última boa.
+  releitura de 10 min, última boa; a guarda pelo `Expires` em
+  `clima.api.test.ts`.
 - `src/components/Calendario/clima/__tests__/BotaoDoTempo.test.tsx` — abre o
   card, fecha no Esc e no clique fora.
 - Lab: `lab-calendario.html?clima=chuva&noite=1&estacao=inverno&chao=cidade&temp=31&tempo=1&galeria=1`.
