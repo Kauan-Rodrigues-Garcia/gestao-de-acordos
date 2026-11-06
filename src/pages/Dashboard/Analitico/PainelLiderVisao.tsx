@@ -38,6 +38,8 @@ import type { QuartilConfig } from '@/lib/supabase';
 import { detalharEquipe, type DetalheEquipe, type OperadorNaEquipe } from './desempenhoEquipe';
 import { montarMensagemEquipe } from './mensagemEquipe';
 import type { LiderInfo } from './lideresDaEquipe';
+import { rotuloUnidade, type UnidadeValor } from '@/lib/unidadeValor';
+import { SeletorUnidade } from '@/components/PainelMetas/SeletorUnidade';
 
 // ── Contrato com DesempenhoEquipes ───────────────────────────────────────────
 
@@ -55,8 +57,10 @@ export interface AlvoPainel {
   ajusteManual: number;
   meta: number | null;
   metaHO: number | null;
-  /** O card lê em H.O. (mesma decisão do CardEquipe). */
+  /** Lê em H.O.: setor da regra Cofen com a chave em H.O. */
   mostrarHO: boolean;
+  /** Setor da regra Cofen — tem H.O. e bruto, e a chave alterna entre os dois. */
+  cofen?: boolean;
   totalUteis: number;
   decorridos: number;
   quartis: QuartilConfig[];
@@ -65,6 +69,8 @@ export interface AlvoPainel {
 
 export interface GrupoPainel {
   setorId: string;
+  /** Setor da regra Cofen (`setores.regra`): mostra a chave H.O. ⇄ bruto. */
+  cofen?: boolean;
   nomeSetor: string;
   /** `null` com filtro de equipe: o número do setor contradiria o recorte. */
   setor: AlvoPainel | null;
@@ -81,6 +87,9 @@ interface Props {
   rodape: string;
   /** A equipe do líder: abre selecionada. */
   equipePreferida?: string | null;
+  /** H.O. ou bruto — só tem efeito nos setores da regra Cofen. */
+  unidade: UnidadeValor;
+  onUnidade: (u: UnidadeValor) => void;
 }
 
 // ── Leitura de um alvo ───────────────────────────────────────────────────────
@@ -93,6 +102,8 @@ interface Leitura {
   acum: number;
   meta: number | null;
   emHO: boolean;
+  /** 'H.O.' ou 'Bruto' no setor Cofen; `null` onde só existe uma unidade. */
+  rotulo: string | null;
   d: DetalheEquipe;
   esperado: number | null;
   pct: number | null;
@@ -112,7 +123,8 @@ function ler(alvo: AlvoPainel): Leitura {
     ? (meta / alvo.totalUteis) * Math.max(alvo.decorridos, 1)
     : null;
   const pct = d.projecaoPct;
-  return { alvo, acum, meta, emHO, d, esperado, pct, cor: pct !== null ? corProjecao(pct) : 'var(--muted-foreground)' };
+  const rotulo = emHO ? 'H.O.' : alvo.cofen ? 'Bruto' : null;
+  return { alvo, acum, meta, emHO, rotulo, d, esperado, pct, cor: pct !== null ? corProjecao(pct) : 'var(--muted-foreground)' };
 }
 
 const sinal = (v: number) => `${v >= 0 ? '+' : '−'}${formatBRL(Math.abs(v))}`;
@@ -252,22 +264,24 @@ function Linha({ rotulo, valor, cor, dica }: { rotulo: string; valor: string; co
 
 /** Até hoje · Para amanhã · Onde o mês fecha. Iguais no setor e na equipe. */
 function TresRespostas({ l }: { l: Leitura }) {
-  const { d, acum, meta, esperado, emHO, alvo } = l;
+  const { d, acum, meta, esperado, emHO, rotulo, alvo } = l;
   const atual = d.degraus.find(g => g.quartil === d.faixaAtual?.quartil);
   const acima = [...d.degraus].reverse().find(g => !g.alcancado);
   const metaBatida = d.faltaMeta === 0;
-  const rot = emHO ? ' H.O.' : '';
+  const rot = rotulo ? ` ${rotulo.toLowerCase() === 'bruto' ? 'bruta' : rotulo}` : '';
 
   return (
     <div className="grid sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-border/70">
-      <Resposta pergunta="Até hoje" valor={formatBRL(acum)} unidade={emHO ? 'H.O.' : undefined}>
+      <Resposta pergunta="Até hoje" valor={formatBRL(acum)} unidade={rotulo ?? undefined}>
         {esperado !== null && <Linha rotulo="Deveria ter" valor={formatBRL(esperado)} dica="Meta ÷ dias úteis × dias trabalhados" />}
         {esperado !== null && (
           <Linha rotulo={acum >= esperado ? 'À frente do ritmo' : 'Atrás do ritmo'}
             valor={sinal(acum - esperado)} cor={acum >= esperado ? COR_QUARTIL[1] : COR_QUARTIL[4]} />
         )}
         <Linha rotulo={`Meta do mês${rot}`} valor={meta ? formatBRL(meta) : 'sem meta'} />
+        {/* A outra unidade, de apoio: no Cofen as duas leituras interessam. */}
         {emHO && <Linha rotulo="Bruto recebido" valor={formatBRL(alvo.acumulado)} />}
+        {!emHO && alvo.cofen && <Linha rotulo="H.O. recebido" valor={formatBRL(alvo.acumuladoHO)} />}
       </Resposta>
 
       <Resposta
@@ -315,8 +329,8 @@ function BotaoCopiar({ l, mes, ehSetor }: { l: Leitura; mes: string; ehSetor?: b
           montarMensagemEquipe({
             titulo: l.alvo.titulo, ehSetor, mes,
             acumulado: l.acum, meta: l.meta,
-            rotuloUnidade: l.emHO ? 'H.O.' : null,
-            acumuladoHO: null,
+            rotuloUnidade: l.rotulo,
+            acumuladoHO: !l.emHO && l.alvo.cofen ? l.alvo.acumuladoHO : null,
             acumuladoBruto: l.emHO ? l.alvo.acumulado : null,
             detalhe: l.d,
           }),
@@ -381,7 +395,7 @@ function HeroSetor({ l, mes, fonte }: { l: Leitura; mes: string; fonte?: string 
           {!!alvo.ajusteManual && (
             <span className="inline-flex items-center gap-1 text-violet-500" title="Lançado em Ajuste de recebimento. Já está somado.">
               <SlidersHorizontal className="w-3 h-3" />
-              {alvo.ajusteManual > 0 ? 'inclui' : 'desconta'} {formatBRL(Math.abs(alvo.ajusteManual))} de ajuste manual
+              {alvo.ajusteManual > 0 ? 'inclui' : 'desconta'} {formatBRL(Math.abs(alvo.ajusteManual))} de ajuste manual{l.emHO ? ' (no bruto)' : ''}
             </span>
           )}
         </div>
@@ -590,7 +604,7 @@ function lerPessoas(alvo: AlvoPainel): PessoaLida[] {
   });
 }
 
-function Pessoas({ alvo, d, emHO }: { alvo: AlvoPainel; d: DetalheEquipe; emHO: boolean }) {
+function Pessoas({ alvo, d, rotulo }: { alvo: AlvoPainel; d: DetalheEquipe; rotulo: string | null }) {
   const pessoas = useMemo(() => lerPessoas(alvo), [alvo]);
   if (!pessoas.length) return <p className="text-xs text-muted-foreground">Ninguém vinculado a esta equipe no mês.</p>;
   return (
@@ -658,10 +672,11 @@ function Pessoas({ alvo, d, emHO }: { alvo: AlvoPainel; d: DetalheEquipe; emHO: 
           );
         })}
       </ul>
-      {(d.semMeta > 0 || emHO) && (
+      {(d.semMeta > 0 || rotulo) && (
         <p className="mt-2 text-[11px] text-muted-foreground">
           {d.semMeta > 0 && `${d.semMeta} sem meta individual — fora das faixas. `}
-          {emHO && 'Valores das pessoas em bruto, contra a meta individual em bruto.'}
+          {rotulo === 'H.O.' && 'Valores das pessoas em H.O. (coluna HO do relatório), contra a meta individual em H.O. da aba Metas.'}
+          {rotulo === 'Bruto' && 'Valores das pessoas em bruto, contra a meta individual em bruto.'}
         </p>
       )}
     </div>
@@ -703,7 +718,7 @@ function DetalheDaEquipe({ l, mes }: { l: Leitura; mes: string }) {
         </div>
         <div className="p-5 sm:p-6 min-w-0">
           <h4 className="text-sm font-bold mb-3">Pessoas ({d.totalOperadores})</h4>
-          <Pessoas alvo={alvo} d={d} emHO={l.emHO} />
+          <Pessoas alvo={alvo} d={d} rotulo={l.rotulo} />
         </div>
       </div>
     </section>
@@ -754,9 +769,21 @@ function BlocoSetor({ g, mes, equipePreferida, mostrarNome }: {
   );
 }
 
-export function PainelLiderVisao({ grupos, mes, rodape, equipePreferida }: Props) {
+export function PainelLiderVisao({ grupos, mes, rodape, equipePreferida, unidade, onUnidade }: Props) {
+  // A chave aparece só quando há setor da regra Cofen na tela: Nosso produto
+  // não tem H.O., e escolher entre um número e zero não é uma escolha.
+  const temCofen = grupos.some(g => g.cofen);
   return (
     <div className="space-y-10">
+      {temCofen && (
+        <div className="-mb-5 flex flex-wrap items-center justify-end gap-2 text-xs text-muted-foreground">
+          <span>
+            Valores em <strong className="text-foreground">{rotuloUnidade(unidade)}</strong>
+            {grupos.length > 1 ? ' nos setores da regra Cofen' : ''} — setor, equipes e pessoas
+          </span>
+          <SeletorUnidade valor={unidade} onChange={onUnidade} />
+        </div>
+      )}
       {grupos.map(g => (
         <BlocoSetor key={g.setorId} g={g} mes={mes} equipePreferida={equipePreferida} mostrarNome={grupos.length > 1} />
       ))}

@@ -32,7 +32,9 @@ import { supabase } from '@/lib/supabase';
 import type { QuartilConfig } from '@/lib/supabase';
 import { getTodayISO, PERFIS_QUE_CONTAM_NO_RECEBIMENTO } from '@/lib/index';
 import { useHoPercentual } from '@/lib/hoPercentual';
-import { metaNaUnidade } from '@/lib/unidadeValor';
+import { metaNaUnidade, UNIDADE_PADRAO, type UnidadeValor } from '@/lib/unidadeValor';
+import { ehRegraDoSetor, type RegraDoSetor } from '@/lib/regraDoSetor';
+import { tabelaSemTipo } from '@/lib/supabaseSemTipo';
 import { useTenant } from '@/lib/tenant-config';
 import { assinarSinal } from '@/lib/sinais';
 import { reconciliarMapa } from '@/lib/dadosVivos';
@@ -457,6 +459,36 @@ export function DesempenhoEquipes({
     return () => { cancel = true; };
   }, [empresaId, mes]);
 
+  /*
+   * A regra de negócio de cada setor (`setores.regra`, CLAUDE.md «Cofen não é
+   * PaguePlay»): é ela que diz se o setor fala H.O. e ganha a chave H.O. ⇄
+   * bruto no modelo novo. Fetch à parte e tolerante, como o do treinamento:
+   * se falhar, o setor cai em `isPP`, que é a decisão de antes.
+   */
+  const [regraPorSetor, setRegraPorSetor] = useState<Record<string, RegraDoSetor>>({});
+  useEffect(() => {
+    let cancel = false;
+    void tabelaSemTipo<{ id: string; regra: unknown }>('setores')
+      .select('id, regra').eq('empresa_id', empresaId)
+      .then(({ data, error }) => {
+        if (cancel || error || !data) return;
+        const m: Record<string, RegraDoSetor> = {};
+        for (const s of data) if (ehRegraDoSetor(s.regra)) m[s.id] = s.regra;
+        setRegraPorSetor(m);
+      });
+    return () => { cancel = true; };
+  }, [empresaId]);
+  const ehCofen = useCallback(
+    (sid: string) => (regraPorSetor[sid] ? regraPorSetor[sid] === 'cofen' : isPP),
+    [regraPorSetor, isPP],
+  );
+
+  /*
+   * H.O. ou bruto no modelo novo — vale para o setor, as equipes E as pessoas.
+   * Abre sempre em H.O., como a aba Quartis: a meta Cofen é pensada em H.O.
+   */
+  const [unidade, setUnidade] = useState<UnidadeValor>(UNIDADE_PADRAO);
+
   const [anoNum, mesNum] = mes.split('-').map(Number);
 
   // ── Upload das fotos do setor ──────────────────────────────────────────────
@@ -655,12 +687,24 @@ export function DesempenhoEquipes({
     // Recebido e meta POR OPERADOR: as duas fontes que a área expandida cruza
     // para distribuir as pessoas por quartil.
     const recebidoPorOperador: Record<string, number> = {};
-    for (const r of resumos) recebidoPorOperador[r.operador_id] = Number(r.total_recebido) || 0;
+    // H.O. de cada pessoa: a coluna HO do relatório, como veio — a mesma que a
+    // aba Quartis lê (`linhasQuartil`). Não se converte o recebido.
+    const hoPorOperador: Record<string, number> = {};
+    for (const r of resumos) {
+      recebidoPorOperador[r.operador_id] = Number(r.total_recebido) || 0;
+      hoPorOperador[r.operador_id] = Number(r.total_ho) || 0;
+    }
     const metaPorOperador: Record<string, number> = {};
+    // A meta individual em H.O. é a da aba Metas (`metaNaUnidade`), ao centavo.
+    const metaHOPorOperador: Record<string, number> = {};
     for (const m of metas) {
       if (m.tipo !== 'operador') continue;
       const v = Number(m.meta_valor) || 0;
-      if (v > 0) metaPorOperador[m.referencia_id] = v;
+      if (v > 0) {
+        metaPorOperador[m.referencia_id] = v;
+        const ho = metaNaUnidade(v, 'ho');
+        if (ho !== null && ho > 0) metaHOPorOperador[m.referencia_id] = ho;
+      }
     }
 
     // Agrupa por setor. `setoresFoco` vazio = todos os setores; `equipesFoco`
@@ -696,7 +740,7 @@ export function DesempenhoEquipes({
 
     return {
       totalUteis, decorridos, diasDoSetor, porEquipe, porSetor, metaDe, grupos,
-      recebidoPorOperador, metaPorOperador, setorDaEquipe,
+      recebidoPorOperador, metaPorOperador, hoPorOperador, metaHOPorOperador, setorDaEquipe,
     };
   }, [anoNum, mesNum, feriados, contarHoje, diasPorSetor, resumos, operadorEquipeMap, equipesExtrasPorOperador,
       orfaosPorSetor, creditosDeOrigem, equipes, metas, setoresFoco, equipesFoco]);
@@ -713,6 +757,8 @@ export function DesempenhoEquipes({
   const operadoresDoCard = useCallback((alvo:
     | { tipo: 'equipe'; id: string }
     | { tipo: 'setor';  id: string },
+    /** As pessoas em H.O. (recebido HO do relatório × meta em H.O.). */
+    emHO = false,
   ): OperadorNaEquipe[] => {
     // As MESMAS funções que o dashboard e a aba Analítico usam para decidir quem
     // conta onde. A área expandida não pode ter regra própria de participação:
@@ -730,8 +776,8 @@ export function DesempenhoEquipes({
     return enriquecerOperadores({
       ids,
       identidade,
-      recebidoPorOperador: dados.recebidoPorOperador,
-      metaPorOperador:     dados.metaPorOperador,
+      recebidoPorOperador: emHO ? dados.hoPorOperador : dados.recebidoPorOperador,
+      metaPorOperador:     emHO ? dados.metaHOPorOperador : dados.metaPorOperador,
     });
   }, [identidade, dados, operadorEquipeMap, equipesExtrasPorOperador, setoresAlternativos]);
 
@@ -786,6 +832,10 @@ export function DesempenhoEquipes({
    */
   if (visual === 'novo') {
     const gruposNovos: GrupoPainel[] = gruposOrdenados.map(([sid, eqs]) => {
+      // Regra Cofen: a chave H.O. ⇄ bruto vale para TUDO do setor — o setor, as
+      // equipes e as pessoas. Nosso produto não tem H.O. (total_ho zerado).
+      const cofen = sid !== 'sem_setor' ? ehCofen(sid) : isPP;
+      const emHO = cofen && unidade === 'ho';
       const ehAlternativo = setoresAlternativos.has(sid);
       const resumoConciliacao = conciliacao.data?.setorId === sid ? conciliacao.data : undefined;
       const acumuladoSetor = usarConciliacao
@@ -801,6 +851,7 @@ export function DesempenhoEquipes({
         && (conciliacao.isPending || conciliacao.isError || !resumoConciliacao);
       return {
         setorId: sid,
+        cofen,
         nomeSetor: setores[sid] ?? 'Sem setor',
         estadoSetor: esperandoConciliacao
           ? (conciliacao.isPending ? { tipo: 'carregando' as const } : { tipo: 'erro' as const, tentar: () => void conciliacao.refetch() })
@@ -819,11 +870,12 @@ export function DesempenhoEquipes({
           ajusteManual: acumuladoSetor.ajuste,
           meta: metaSetor,
           metaHO: metaNaUnidade(metaSetor, 'ho'),
-          mostrarHO: isPP,
+          mostrarHO: emHO,
+          cofen,
           totalUteis: diasSid.totalUteis,
           decorridos: diasSid.decorridos,
           quartis,
-          operadores: sid === 'sem_setor' ? undefined : operadoresDoCard({ tipo: 'setor', id: sid }),
+          operadores: sid === 'sem_setor' ? undefined : operadoresDoCard({ tipo: 'setor', id: sid }, emHO),
         } : null,
         extra: receptivoCabe && receptivoPreenchido(contrib[sid]) ? (
           <CardContribuicaoReceptivo
@@ -853,17 +905,19 @@ export function DesempenhoEquipes({
             ajusteManual: dados.porEquipe[eq.id]?.ajuste ?? 0,
             meta: metaEquipe,
             metaHO: metaNaUnidade(metaEquipe, 'ho'),
-            mostrarHO: isPP,
+            mostrarHO: emHO,
+            cofen,
             totalUteis: eqUteis,
             decorridos: eqDecorridos,
             quartis,
-            operadores: operadoresDoCard({ tipo: 'equipe', id: eq.id }),
+            operadores: operadoresDoCard({ tipo: 'equipe', id: eq.id }, emHO),
           };
         }),
       };
     });
     return (
-      <PainelLiderVisao grupos={gruposNovos} mes={mes} rodape={rodape} equipePreferida={perfil?.equipe_id ?? null} />
+      <PainelLiderVisao grupos={gruposNovos} mes={mes} rodape={rodape} equipePreferida={perfil?.equipe_id ?? null}
+        unidade={unidade} onUnidade={setUnidade} />
     );
   }
 

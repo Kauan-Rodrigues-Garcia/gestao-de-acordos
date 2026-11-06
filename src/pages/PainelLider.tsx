@@ -186,10 +186,11 @@ export default function PainelLider() {
   // soma-se o mês inteiro (dia_referencia). Antes moravam no Analítico e
   // liam o relatório analítico — na PaguePlay a fonte agora é o diário.
   /*
-   * O modelo novo do painel (06/11/2026) é só do localhost por enquanto: em
-   * produção `import.meta.env.DEV` é falso e a tela segue a de sempre.
+   * O modelo novo do painel (06/11/2026) é o padrão para todos. A versão
+   * anterior segue a um clique («Versão anterior»): é nela que se troca a foto
+   * do setor, que o modelo novo ainda não tem.
    */
-  const [visualNovo, setVisualNovo] = useState<boolean>(import.meta.env.DEV);
+  const [visualNovo, setVisualNovo] = useState<boolean>(true);
   const [abaAtiva, setAbaAtiva] = useState<AbaPainel>('desempenho');
   // Abas já visitadas ficam MONTADAS (escondidas com CSS): trocar de aba não
   // remonta o componente nem refaz os fetches internos (metas, líderes, etc.)
@@ -664,7 +665,7 @@ export default function PainelLider() {
   return (
     <div className="p-4 md:p-6 max-w-[1400px] mx-auto space-y-5">
 
-      {/* ── Modelo novo (06/11/2026, só no localhost) ─────────────────────── */}
+      {/* ── Modelo novo (06/11/2026) ──────────────────────────────────────── */}
       {visualNovo && (
         <header className="space-y-5">
           <div className="flex flex-wrap items-end justify-between gap-4">
@@ -708,8 +709,8 @@ export default function PainelLider() {
                 </Button>
               </div>
               <Button variant="outline" size="sm" className="h-9 rounded-full text-xs" onClick={() => setVisualNovo(false)}
-                title="Só no localhost: volta para a versão que está no ar">
-                Ver versão atual
+                title="Abre a versão anterior do Painel do Líder (é nela que se troca a foto do setor)">
+                Versão anterior
               </Button>
             </div>
           </div>
@@ -777,12 +778,10 @@ export default function PainelLider() {
             disabled={loading} title="Recarregar">
             <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
           </Button>
-          {import.meta.env.DEV && (
-            <Button variant="outline" size="sm" className="h-7 text-xs px-2" onClick={() => setVisualNovo(true)}
-              title="Só no localhost: abre o modelo novo do Painel do Líder">
-              Ver modelo novo
-            </Button>
-          )}
+          <Button variant="outline" size="sm" className="h-7 text-xs px-2" onClick={() => setVisualNovo(true)}
+            title="Volta para o modelo novo do Painel do Líder">
+            Ver modelo novo
+          </Button>
         </div>
       </div>
 
