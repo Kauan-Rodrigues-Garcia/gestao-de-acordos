@@ -11,6 +11,9 @@
  *
  * Quem decide a dupla é o banco: quem está numa dupla recebe a dela em
  * qualquer data; os demais, a dupla do dia (ímpar/par).
+ *
+ * Duas sub-abas (05/11/2026): «Quadro do dia» (a folha) e «Histórico» (todos
+ * os meses desde o início, dia a dia — `HistoricoPlantaoElite`).
  */
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -24,6 +27,7 @@ import {
   type LinhaQuadroElite, type QuadroElite, type RespostaPlantaoElite,
 } from '@/services/plantaoElite/plantaoElite';
 import { usePlantaoElite } from './usePlantaoElite';
+import { HistoricoPlantaoElite } from './HistoricoPlantaoElite';
 
 /** Cor do Gestão com `#` — a folha usa só estas, nunca as variáveis do tema. */
 const cor = (k: keyof typeof COR_GESTAO) => `#${COR_GESTAO[k]}`;
@@ -67,7 +71,47 @@ interface Props {
   empresaId: string;
 }
 
+type SubAba = 'dia' | 'historico';
+const SUB_ABAS: { chave: SubAba; rotulo: string }[] = [
+  { chave: 'dia', rotulo: 'Quadro do dia' },
+  { chave: 'historico', rotulo: 'Histórico' },
+];
+
 export function PlantaoElite({ empresaId }: Props) {
+  const [subAba, setSubAba] = useState<SubAba>('dia');
+  /** O histórico só é lido quando aberto, e fica montado depois disso. */
+  const [viuHistorico, setViuHistorico] = useState(false);
+
+  return (
+    <div className="space-y-4">
+      <div className="inline-flex gap-1 rounded-lg border border-border bg-muted/30 p-1" role="tablist" aria-label="Plantão Elite">
+        {SUB_ABAS.map(a => (
+          <button
+            key={a.chave} type="button" role="tab" aria-selected={subAba === a.chave}
+            onClick={() => { setSubAba(a.chave); if (a.chave === 'historico') setViuHistorico(true); }}
+            className={cn(
+              'rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
+              subAba === a.chave ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {a.rotulo}
+          </button>
+        ))}
+      </div>
+
+      <div className={cn(subAba !== 'dia' && 'hidden')}>
+        <QuadroDoDia empresaId={empresaId} />
+      </div>
+      {viuHistorico && (
+        <div className={cn(subAba !== 'historico' && 'hidden')}>
+          <HistoricoPlantaoElite empresaId={empresaId} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function QuadroDoDia({ empresaId }: Props) {
   const {
     hoje, data, setData, resposta, quadro, carregando, erro, carregar,
     plantaoFixo, anterior, seguinte, diaDeEntrada, foraDoPlantao, nomeArquivo,

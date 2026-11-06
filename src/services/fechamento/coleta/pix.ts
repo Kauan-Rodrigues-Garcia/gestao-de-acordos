@@ -18,7 +18,7 @@
 
 import { supabase } from '@/lib/supabase';
 import {
-  fetchAcordosPix, comissaoDe, metaDobraDoSetor, metasDobraPorSetor,
+  anexarComissaoFixa, fetchAcordosPix, comissaoDe, metaDobraDoSetor, metasDobraPorSetor,
   PIX_AUTO_PCT_PADRAO,
   type PixAutoAcordo, type PixAutoConfig,
 } from '@/services/pix_automatico.service';
@@ -85,7 +85,8 @@ export async function coletarPix(p: ParametrosPix): Promise<BlocoPixFechamento |
       // Mês fechado: o percentual e a dobra DAQUELE mês (retrato, 31/10/2026).
       buscarConfigDoMes(p.empresaId, p.mes).then(cfg => (cfg
         ? { data: cfg.pixConfig as unknown as PixAutoConfig[], error: null as { message: string } | null }
-        : supabase.from('pix_automatico_config').select('*').eq('empresa_id', p.empresaId))),
+        : supabase.from('pix_automatico_config').select('*').eq('empresa_id', p.empresaId)
+            .then(r => ({ data: r.data as unknown as PixAutoConfig[] | null, error: r.error })))),
       // `pix_automatico_metas` guarda mês e ano como smallint separados, e não
       // como 'yyyy-MM'. Passar a string faria o Postgres recusar o filtro.
       supabase.from('pix_automatico_metas')
@@ -105,6 +106,8 @@ export async function coletarPix(p: ParametrosPix): Promise<BlocoPixFechamento |
       const pctCfg = Number((c as unknown as { pct_comissao?: number }).pct_comissao);
       if (setor && Number.isFinite(pctCfg)) pctPorSetor[setor] = pctCfg;
     }
+    // Setor que paga valor fixo por Pix (regra do Jornada, 20261105150000).
+    anexarComissaoFixa(pctPorSetor, configs);
 
     const total = doMes.reduce((s, a) => s + (Number(a.valor) || 0), 0);
     const comissao = doMes.reduce((s, a) => s + comissaoDe(a, pctPorSetor), 0);

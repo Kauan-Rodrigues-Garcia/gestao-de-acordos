@@ -209,7 +209,7 @@ export interface ResumoPixDia {
   /** Aprovados no dia — os únicos que geram comissão. */
   aprovados: number;
   pendentes: number;
-  /** Soma de `valor × pct_comissao` dos aprovados. */
+  /** Soma de `valor × pct_comissao ÷ 100` dos aprovados (ou da comissão fixa). */
   comissao: number;
   /** Soma do `valor` dos aprovados, para o subtítulo. */
   valorAprovado: number;
@@ -234,6 +234,8 @@ export function resumoPixDia(
     status: string | null | undefined;
     valor: number | null | undefined;
     pct_comissao: number | null | undefined;
+    /** Comissão fixa travada na aprovação (regra do Jornada, 20261105150000). */
+    comissao_fixa?: number | null;
   }[],
 ): ResumoPixDia {
   if (!linhas.length) return PIX_VAZIO;
@@ -248,7 +250,13 @@ export function resumoPixDia(
     const pct = Number(l.pct_comissao) || 0;
     aprovados++;
     valorAprovado += valor;
-    comissao += valor * pct;
+    // `pct_comissao` é PERCENTUAL (0,25 = 0,25%), a mesma conta de `comissaoDe`
+    // na tela do Pix, que é onde a comissão é paga. Até 05/11/2026 esta soma
+    // tratava o número como fração e mostrava a comissão 100× maior.
+    // Setor que paga por Pix: o valor fixo travado (R$) vale no lugar do %.
+    comissao += l.comissao_fixa != null
+      ? Number(l.comissao_fixa) || 0
+      : Math.round(valor * pct) / 100;
   }
 
   return { aprovados, pendentes, comissao, valorAprovado };

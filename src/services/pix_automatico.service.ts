@@ -90,6 +90,11 @@ export interface PixAutoAcordo {
   valor: number;
   status: PixAutoStatus;
   pct_comissao: number | null;
+  /**
+   * Comissão FIXA (R$) travada na aprovação, no setor que paga valor fixo por
+   * Pix (migration 20261105150000). `null`/ausente = comissão percentual.
+   */
+  comissao_fixa?: number | null;
   avaliado_por: string | null;
   avaliado_por_nome: string | null;
   avaliado_em: string | null;
@@ -183,6 +188,17 @@ export interface PixAutoConfig {
   meta_acordos_dobra?: number | null;
   /** Interruptor do setor: false = operador só visualiza, não registra. */
   permite_registro_operador: boolean;
+  /**
+   * Regra do Jornada (migration 20261105150000). Ausentes antes dela — vale o
+   * de sempre: meta em valor e comissão em percentual.
+   *
+   *   meta_modo           'valor' (R$) ou 'quantidade' (acordos Pix)
+   *   comissao_modo       'percentual' (valor × %) ou 'fixo' (R$ por Pix)
+   *   comissao_valor_fixo R$ por Pix aprovado, no modo 'fixo'
+   */
+  meta_modo?: MetaModoPix | null;
+  comissao_modo?: ComissaoModoPix | null;
+  comissao_valor_fixo?: number | null;
   atualizado_por: string | null;
   atualizado_por_nome: string | null;
   atualizado_em: string;
@@ -225,11 +241,92 @@ export function pctDaLinha(
   return base + (Number(a.bonus_pct) || 0);
 }
 
-/** Comissão de uma linha: valor × percentual da linha (com bônus) ÷ 100. */
+// ── Comissão em valor fixo (regra do Jornada, 05/11/2026) ──────────────────
+//
+// O mapa `pctPorSetor` (setor → %) atravessa a tela inteira — ranking, meta,
+// premiação, totais. Em vez de mudar a assinatura de todas essas funções, o
+// valor fixo por setor viaja NO MESMO objeto, numa chave Symbol: ela não
+// aparece em `Object.keys/values/entries` nem colide com um id de setor, e
+// quem não sabe dela continua lendo só os percentuais.
+
+export type MetaModoPix = 'valor' | 'quantidade';
+export type ComissaoModoPix = 'percentual' | 'fixo';
+
+const FIXO_POR_SETOR: unique symbol = Symbol('pix-comissao-fixa-por-setor');
+
+/** O mapa de % com o valor fixo dos setores que pagam por Pix. */
+export type PctPorSetor = Record<string, number> & {
+  [FIXO_POR_SETOR]?: Readonly<Record<string, number>>;
+};
+
+/**
+ * Junta os % e os valores fixos num mapa só. `configs` é a configuração do
+ * Pix de cada setor; quem está no modo 'fixo' entra no mapa de fixos.
+ */
+export function regrasDeComissao(
+  configs: readonly Pick<PixAutoConfig, 'setor_id' | 'pct' | 'comissao_modo' | 'comissao_valor_fixo'>[],
+): PctPorSetor {
+  const pct: PctPorSetor = {};
+  const fixo: Record<string, number> = {};
+  for (const c of configs) {
+    pct[c.setor_id] = Number(c.pct);
+    if (c.comissao_modo === 'fixo' && c.comissao_valor_fixo != null) {
+      fixo[c.setor_id] = Number(c.comissao_valor_fixo);
+    }
+  }
+  if (Object.keys(fixo).length) pct[FIXO_POR_SETOR] = fixo;
+  return pct;
+}
+
+/**
+ * Pendura o valor fixo dos setores num mapa de % que já existe (para quem
+ * monta os percentuais do seu jeito, como o fechamento).
+ */
+export function anexarComissaoFixa(
+  pct: Record<string, number>,
+  configs: readonly Pick<PixAutoConfig, 'setor_id' | 'pct' | 'comissao_modo' | 'comissao_valor_fixo'>[],
+): PctPorSetor {
+  const fixo = regrasDeComissao(configs)[FIXO_POR_SETOR];
+  const out = pct as PctPorSetor;
+  if (fixo) out[FIXO_POR_SETOR] = fixo;
+  return out;
+}
+
+/** O valor fixo por Pix do setor, ou `null` quando o setor paga percentual. */
+export function valorFixoDoSetor(
+  pctPorSetor: Record<string, number>, setorId: string | null | undefined,
+): number | null {
+  if (!setorId) return null;
+  const v = (pctPorSetor as PctPorSetor)[FIXO_POR_SETOR]?.[setorId];
+  return v == null ? null : Number(v);
+}
+
+/**
+ * A comissão fixa de uma linha, ou `null` quando ela é percentual.
+ *
+ * Aprovada: o que foi travado na aprovação (`comissao_fixa`) — mudar o valor
+ * do setor depois não mexe nela, igual ao `pct_comissao`. Ainda não aprovada:
+ * o valor de hoje do setor.
+ */
+export function comissaoFixaDaLinha(
+  a: Pick<PixAutoAcordo, 'status' | 'setor_id' | 'comissao_fixa'>,
+  pctPorSetor: Record<string, number>,
+): number | null {
+  if (a.status === 'aprovado') return a.comissao_fixa != null ? Number(a.comissao_fixa) : null;
+  return valorFixoDoSetor(pctPorSetor, a.setor_id);
+}
+
+/**
+ * Comissão de uma linha: valor × percentual da linha (com bônus) ÷ 100 — ou,
+ * no setor que paga por Pix, o valor fixo (o bônus em pontos de % não se
+ * aplica a valor fixo).
+ */
 export function comissaoDe(
-  a: Pick<PixAutoAcordo, 'valor' | 'status' | 'pct_comissao' | 'setor_id' | 'bonus_pct'>,
+  a: Pick<PixAutoAcordo, 'valor' | 'status' | 'pct_comissao' | 'setor_id' | 'bonus_pct' | 'comissao_fixa'>,
   pctPorSetor: Record<string, number>,
 ): number {
+  const fixa = comissaoFixaDaLinha(a, pctPorSetor);
+  if (fixa != null) return Math.round(fixa * 100) / 100;
   return Math.round(Number(a.valor) * pctDaLinha(a, pctPorSetor)) / 100; // 2 casas
 }
 
@@ -246,7 +343,7 @@ export function comissaoDe(
  * Quem paga usa esta; quem mede desempenho usa `comissaoDe`.
  */
 export function valorAPagarDe(
-  a: Pick<PixAutoAcordo, 'valor' | 'status' | 'pct_comissao' | 'setor_id' | 'ajuste_valor' | 'bonus_pct'>,
+  a: Pick<PixAutoAcordo, 'valor' | 'status' | 'pct_comissao' | 'setor_id' | 'ajuste_valor' | 'bonus_pct' | 'comissao_fixa'>,
   pctPorSetor: Record<string, number>,
 ): number {
   const bruto = comissaoDe(a, pctPorSetor) + (Number(a.ajuste_valor) || 0);
@@ -985,6 +1082,12 @@ export async function avaliarAcordoPix(p: {
   id: string;
   aprovar: boolean;
   pctAtual: number;
+  /**
+   * Valor fixo por Pix do setor (regra do Jornada), travado junto na aprovação.
+   * `null`/omitido = comissão percentual, e a coluna nem viaja — assim a tela
+   * funciona igual antes da migration 20261105150000.
+   */
+  fixoAtual?: number | null;
   avaliadorId: string;
   avaliadorNome: string;
 }): Promise<{ ok: boolean; error?: string; jaDecidido?: boolean }> {
@@ -993,10 +1096,11 @@ export async function avaliarAcordoPix(p: {
     .update({
       status:            p.aprovar ? 'aprovado' : 'desaprovado',
       pct_comissao:      p.aprovar ? p.pctAtual : null,
+      ...(p.aprovar && p.fixoAtual != null ? { comissao_fixa: p.fixoAtual } : {}),
       avaliado_por:      p.avaliadorId,
       avaliado_por_nome: p.avaliadorNome,
       avaliado_em:       new Date().toISOString(),
-    })
+    } as never)
     .eq('id', p.id)
     .eq('status', 'pendente')
     .select('id');
@@ -1058,10 +1162,17 @@ export function fraseJaDecidido(
  * por descuido; a mensagem existe porque zero linhas afetadas, sozinho, não
  * explica nada a quem clicou.
  */
-export async function reavaliarAcordoPix(id: string): Promise<{ ok: boolean; error?: string }> {
+export async function reavaliarAcordoPix(
+  id: string,
+  /** A linha tinha comissão fixa travada: ela sai junto com o % (20261105150000). */
+  tinhaComissaoFixa = false,
+): Promise<{ ok: boolean; error?: string }> {
   const { data, error } = await supabase
     .from('pix_automatico_acordos')
-    .update({ status: 'pendente', pct_comissao: null, avaliado_por: null, avaliado_por_nome: null, avaliado_em: null })
+    .update({
+      status: 'pendente', pct_comissao: null, avaliado_por: null, avaliado_por_nome: null, avaliado_em: null,
+      ...(tinhaComissaoFixa ? { comissao_fixa: null } : {}),
+    } as never)
     .eq('id', id)
     .eq('pago', false)
     .select('id');
@@ -1445,6 +1556,10 @@ export async function upsertConfigPix(p: {
   pct: number;
   /** Meta de acordos da dobra. Omitido = não mexe no que já está gravado. */
   metaAcordosDobra?: number;
+  /** Regra do Jornada (20261105150000). Omitidos = não mexe no gravado. */
+  metaModo?: MetaModoPix;
+  comissaoModo?: ComissaoModoPix;
+  comissaoValorFixo?: number | null;
   atualizadoPor: string;
   atualizadoPorNome: string;
 }): Promise<{ ok: boolean; error?: string }> {
@@ -1459,6 +1574,9 @@ export async function upsertConfigPix(p: {
   // Só entra no upsert quando veio: `undefined` no payload viraria NULL na
   // coluna, e a meta do setor sumiria ao alguém salvar só o percentual.
   if (p.metaAcordosDobra != null) payload.meta_acordos_dobra = p.metaAcordosDobra;
+  if (p.metaModo != null) payload.meta_modo = p.metaModo;
+  if (p.comissaoModo != null) payload.comissao_modo = p.comissaoModo;
+  if (p.comissaoValorFixo !== undefined) payload.comissao_valor_fixo = p.comissaoValorFixo;
 
   const { error } = await supabase
     .from('pix_automatico_config')

@@ -197,17 +197,25 @@ describe('resumoPixDia', () => {
     expect(r.aprovados).toBe(2);
     expect(r.pendentes).toBe(1);
     expect(r.valorAprovado).toBe(3000);
-    expect(r.comissao).toBe(750);   // 25% de 3000
+    expect(r.comissao).toBe(7.5);   // 0,25% de 3000
   });
 
   /**
-   * `pct_comissao` é fração no banco (0,2500), não percentual. Tratá-la como
-   * percentual daria R$ 75.000 de comissão sobre R$ 3.000 recebidos — número
-   * absurdo, mas que passa despercebido numa tela cheia de valores.
+   * `pct_comissao` é PERCENTUAL (0,25 = 0,25%), igual à tela do Pix
+   * (`comissaoDe`), que é onde a comissão é paga. Até 05/11/2026 este painel
+   * tratava como fração e mostrava 100× mais (R$ 25 sobre R$ 100 em vez de
+   * R$ 0,25).
    */
-  it('trata pct_comissao como fração, não como percentual', () => {
+  it('trata pct_comissao como percentual, igual à tela do Pix', () => {
     expect(resumoPixDia([{ status: 'aprovado', valor: 100, pct_comissao: 0.25 }]).comissao)
-      .toBe(25);
+      .toBe(0.25);
+  });
+
+  it('comissão fixa (regra do Jornada) entra em reais, sem passar pelo %', () => {
+    expect(resumoPixDia([
+      { status: 'aprovado', valor: 100, pct_comissao: 0.25, comissao_fixa: 3 },
+      { status: 'aprovado', valor: 200, pct_comissao: 0.25 },
+    ]).comissao).toBe(3.5);
   });
 
   it('dia sem Pix devolve tudo zerado', () => {

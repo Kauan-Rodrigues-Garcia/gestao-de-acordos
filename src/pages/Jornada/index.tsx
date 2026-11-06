@@ -33,9 +33,9 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { useJornadaAbas } from '@/hooks/useJornadaAbas';
 import {
-  buscarPainel, excluir, excluirLote, exportar, lancar, lancarLote, salvarMeta, salvarMetasPessoas,
+  buscarPainel, excluir, excluirLote, exportar, lancar, lancarLote, salvarFaixas, salvarMeta, salvarMetasPessoas,
   listarLixeira, restaurar, type ItemImportado, type ItemLixeira, type ResultadoLote,
-  type PainelJornada, type RegistroJornada, type GrupoJornada, type TipoJornada,
+  type PainelJornada, type PessoaPlacar, type RegistroJornada, type GrupoJornada, type TipoJornada,
 } from '@/services/jornada/jornada.service';
 import { DialogMeta, type MetaIndividual } from './DialogMeta';
 import { DialogImportar } from './DialogImportar';
@@ -43,8 +43,8 @@ import { DialogLixeira } from './DialogLixeira';
 import { baixarCsv, paraCsv } from './importar';
 import { gerarPrevia, painelDaPrevia, type EstadoPrevia } from './previa';
 import {
-  TEXTOS, contagem, diaDaSemana, diaPorExtenso, diasDoMesAte,
-  horaSaoPaulo, iniciais, mesPorExtenso, percentual, somarDias,
+  ORDINAIS, TEXTOS, contagem, diaDaSemana, diaPorExtenso, diasDoMesAte,
+  horaSaoPaulo, iniciais, mesPorExtenso, percentual, situacaoMetas, somarDias,
 } from './jornada';
 
 /** «Retenção · Jornada» (equipe) ou «Suporte · Equipe X · Jornada» (subgrupo). */
@@ -135,8 +135,8 @@ export default function PaginaJornada({ tipo }: { tipo: TipoJornada }) {
 interface AcoesJornada {
   lancar: (nr: string, data: string) => Promise<void>;
   excluir: (id: string) => Promise<void>;
-  /** Meta do grupo no mês (`null` tira) e as individuais que mudaram. Só a liderança. */
-  salvarMeta: (meta: number | null, individuais: MetaIndividual[]) => Promise<void>;
+  /** Metas do grupo no mês (vazia tira) e as individuais que mudaram. Só a liderança. */
+  salvarMeta: (metas: number[], individuais: MetaIndividual[]) => Promise<void>;
   /** Importar muitos de uma vez. */
   lancarLote: (itens: ItemImportado[]) => Promise<ResultadoLote>;
   /** Apagar os marcados; devolve quantos saíram. */
@@ -166,10 +166,24 @@ function Painel({ grupo, tipo }: { grupo: GrupoJornada; tipo: TipoJornada }) {
   const acoes: AcoesJornada = {
     lancar: async (nr, data) => { await lancar(grupo.grupo_id, nr, data); void recarregar(); },
     excluir: async id => { await excluir(id); void recarregar(); },
-    salvarMeta: async (meta, individuais) => {
+    salvarMeta: async (metas, individuais) => {
       try {
-        await salvarMeta(grupo.grupo_id, meta);
-        await salvarMetasPessoas(grupo.grupo_id, individuais);
+        // A 1ª meta pelas funções de sempre; a 2ª, 3ª e 4ª depois, por cima dela.
+        await salvarMeta(grupo.grupo_id, metas[0] ?? null);
+        await salvarMetasPessoas(grupo.grupo_id, individuais.map(i => ({
+          perfil_id: i.perfil_id, meta: i.metas?.[0] ?? null,
+        })));
+        const pessoasComFaixa = individuais
+          .filter(i => i.metas && i.metas.length > 0)
+          .map(i => ({ perfil_id: i.perfil_id, extras: (i.metas ?? []).slice(1) }));
+        // Só chama as faixas quando há (ou havia) 2ª meta em algum lugar: quem só
+        // usa a 1ª não depende da migration 20261105140000.
+        const haviaFaixa = (painel?.metas.length ?? 0) > 1
+          || (painel?.pessoas ?? []).some(p => p.meta_propria && p.metas.length > 1);
+        const temFaixa = metas.length > 1 || pessoasComFaixa.some(p => p.extras.length > 0);
+        if (temFaixa || haviaFaixa) {
+          await salvarFaixas(grupo.grupo_id, metas.length ? metas.slice(1) : null, pessoasComFaixa);
+        }
       } finally {
         void recarregar();
       }
@@ -288,13 +302,13 @@ function PainelPrevia({ tipo }: { tipo: TipoJornada }) {
       .filter(r => r.data >= ini && r.data <= fim)
       .sort((a, b) => a.data.localeCompare(b.data) || a.criado_em.localeCompare(b.criado_em))
       .map(r => ({ nr: r.nr, data: r.data })),
-    salvarMeta: async (meta, individuais) => setEstado(e => {
+    salvarMeta: async (metas, individuais) => setEstado(e => {
       const metasPessoa = { ...e.metasPessoa };
       for (const i of individuais) {
-        if (i.meta) metasPessoa[i.perfil_id] = i.meta;
+        if (i.metas?.length) metasPessoa[i.perfil_id] = i.metas;
         else delete metasPessoa[i.perfil_id];
       }
-      return { ...e, meta, metasPessoa };
+      return { ...e, metas, metasPessoa };
     }),
   };
 
@@ -400,7 +414,7 @@ function Tela({
           aberto={metaAberta !== false}
           aoFechar={() => setMetaAberta(false)}
           tipo={tipo}
-          metaAtual={painel.meta}
+          metasAtuais={painel.metas}
           pessoas={painel.pessoas.filter(p => p.no_grupo)}
           focoPessoa={typeof metaAberta === 'string' ? metaAberta : null}
           aoSalvar={acoes.salvarMeta}
@@ -516,6 +530,7 @@ function ResumoMeta({
   // Quem tem meta (a própria ou a do grupo) e ainda está no grupo.
   const comMeta = painel.pessoas.filter(p => p.no_grupo && p.meta);
   const minhaMeta = painel.sou_membro ? (eu?.meta ?? painel.meta) : null;
+  const minhasMetas = painel.sou_membro ? (eu?.metas ?? painel.metas) : [];
   const temMeta = painel.sou_membro ? !!minhaMeta : comMeta.length > 0;
 
   const engrenagem = painel.pode_gerir && temMeta ? (
@@ -555,14 +570,28 @@ function ResumoMeta({
   let lado: string;
   if (painel.sou_membro && minhaMeta) {
     const feito = eu?.no_mes ?? 0;
-    pct = percentual(feito, minhaMeta) ?? 0;
+    // Até 4 metas (05/11/2026): a barra mede a PRÓXIMA a bater.
+    const sit = situacaoMetas(feito, minhasMetas.length ? minhasMetas : [minhaMeta]);
+    const alvo = sit.alvo ?? minhaMeta;
+    const varias = minhasMetas.length > 1;
+    pct = percentual(feito, alvo) ?? 0;
     numero = (
       <>
         <span className="text-xl font-bold tabular-nums">{feito}</span>
-        <span className="text-sm text-muted-foreground tabular-nums">/{minhaMeta}</span>
+        <span className="text-sm text-muted-foreground tabular-nums">/{alvo}</span>
       </>
     );
-    lado = pct >= 100 ? `Meta batida! ${pct}%` : `${pct}% · faltam ${minhaMeta - feito}`;
+    if (!varias) {
+      lado = pct >= 100 ? `Meta batida! ${pct}%` : `${pct}% · faltam ${alvo - feito}`;
+    } else if (sit.todas) {
+      lado = `Bateu as ${minhasMetas.length} metas!`;
+    } else {
+      lado = sit.batidas > 0
+        ? `${ORDINAIS[sit.batidas - 1]} batida · faltam ${sit.faltam} p/ ${ORDINAIS[sit.indiceAlvo]}`
+        : `${pct}% · faltam ${sit.faltam} p/ 1ª`;
+      // A barra só fica verde ao bater TODAS; até lá ela mede a próxima.
+      pct = Math.min(pct, 99);
+    }
   } else {
     const bateram = comMeta.filter(p => p.no_mes >= (p.meta ?? 0)).length;
     pct = Math.floor((bateram / comMeta.length) * 100);
@@ -999,6 +1028,8 @@ function CardEquipe({
   const { perfil } = useAuth();
   const pessoas = [...painel.pessoas].sort((a, b) => b.no_mes - a.no_mes || a.nome.localeCompare(b.nome));
   const maior = Math.max(1, ...pessoas.map(p => Math.max(p.no_mes, p.meta ?? 0)));
+  /** A próxima meta de cada um (até 4 no mês) — é contra ela que a barra mede. */
+  const situacao = (p: PessoaPlacar) => situacaoMetas(p.no_mes, p.metas.length ? p.metas : (p.meta ? [p.meta] : []));
   const total = pessoas.reduce((s, p) => s + p.no_mes, 0);
 
   return (
@@ -1021,7 +1052,9 @@ function CardEquipe({
         <ul className="p-1.5 max-h-[380px] overflow-y-auto">
           {pessoas.map((p, i) => {
             const feito = p.no_mes;
+            const sit = situacao(p);
             const bateu = !!p.meta && feito >= p.meta;
+            const alvo = sit.alvo ?? p.meta;
             const souEu = p.id === perfil?.id;
             const podeClicar = !!aoAbrirMeta && p.no_grupo;
             const conteudo = (
@@ -1040,21 +1073,32 @@ function CardEquipe({
                 <span className="w-12 h-1.5 rounded-full bg-muted overflow-hidden shrink-0">
                   <span
                     className={cn('block h-full rounded-full', bateu ? 'bg-success' : 'bg-primary')}
-                    style={{ width: `${Math.min(100, (feito / (p.meta ?? maior)) * 100)}%` }}
+                    style={{ width: `${Math.min(100, (feito / (alvo ?? maior)) * 100)}%` }}
                   />
                 </span>
+                {p.metas.length > 1 && sit.batidas > 0 && (
+                  <span
+                    className="text-[10px] font-semibold text-success shrink-0"
+                    title={`Bateu ${sit.batidas} de ${p.metas.length} metas`}
+                  >
+                    {ORDINAIS[sit.batidas - 1]}✓
+                  </span>
+                )}
                 <span className={cn('w-16 text-right text-sm font-semibold tabular-nums shrink-0', bateu && 'text-success')}>
                   {feito}
-                  {p.meta ? (
+                  {alvo ? (
                     <span className={cn('text-[11px] font-normal', p.meta_propria ? 'text-primary' : 'text-muted-foreground')}>
-                      /{p.meta}{p.meta_propria ? '*' : ''}
+                      /{alvo}{p.meta_propria ? '*' : ''}
                     </span>
                   ) : null}
                 </span>
               </>
             );
             const dica = `${p.nome} · ${contagem(feito, tipo)} no mês, ${contagem(p.no_dia, tipo)} no dia aberto`
-              + (p.meta ? ` · meta ${p.meta}${p.meta_propria ? ' (individual)' : ' (do grupo)'}` : '');
+              + (p.meta
+                ? ` · ${p.metas.length > 1 ? `metas ${p.metas.join(' / ')}` : `meta ${p.meta}`}`
+                  + (p.meta_propria ? ' (individual)' : ' (do grupo)')
+                : '');
             const classe = cn(
               'w-full flex items-center gap-2 rounded-md px-1.5 h-8',
               souEu && 'bg-primary/5',

@@ -25,7 +25,7 @@
  */
 
 import { useMemo, useState } from 'react';
-import { Building2, Check, ChevronDown, Layers, X } from 'lucide-react';
+import { Building2, Check, ChevronDown, Layers, Split, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
@@ -48,6 +48,12 @@ interface FiltrosEscopoProps {
   onEquipes: (equipeIds: string[]) => void;
   /** Rótulo do setor travado, para quem não pode filtrar. */
   nomeSetorTravado?: string | null;
+  /**
+   * Divisões do setor em foco (05/11/2026 — Receptivo «0800» / «Time a
+   * vencer»). Atalho: escolher uma marca as equipes dela, e as três abas
+   * seguem o recorte de equipes que já existe.
+   */
+  divisoes?: readonly { id: string; nome: string; equipes: readonly string[] }[];
   className?: string;
 }
 
@@ -179,9 +185,19 @@ export function SeletorMultiplo({
 }
 
 export function FiltrosEscopo({
-  escopo, setores, onSetores, onEquipes, nomeSetorTravado, className,
+  escopo, setores, onSetores, onEquipes, nomeSetorTravado, divisoes = [], className,
 }: FiltrosEscopoProps) {
   const { podeFiltrarSetor, setorIds, equipeIds, equipesDisponiveis } = escopo;
+
+  // As equipes de cada divisão que o painel pode mostrar. Divisão sem equipe
+  // ao alcance não vira atalho: marcaria zero equipes, que é «todas».
+  const disponiveis = new Set(equipesDisponiveis.map(e => e.id));
+  const atalhos = divisoes
+    .map(d => ({ ...d, alcance: d.equipes.filter(e => disponiveis.has(e)) }))
+    .filter(d => d.alcance.length > 0);
+  const marcadas = new Set(equipeIds);
+  const divisaoMarcada = atalhos.find(d =>
+    d.alcance.length === marcadas.size && d.alcance.every(e => marcadas.has(e)))?.id ?? null;
 
   // Quem não pode filtrar setor nem tem equipe para escolher não tem barra
   // nenhuma: um seletor com uma opção só é ruído, e uma barra vazia com borda é
@@ -227,6 +243,31 @@ export function FiltrosEscopo({
           {nomeSetorTravado}
         </span>
       ) : null}
+
+      {atalhos.length > 0 && (
+        <div className="flex items-center gap-1" role="group" aria-label="Divisão do setor">
+          <Split className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+          {atalhos.map(d => (
+            <button
+              key={d.id}
+              type="button"
+              aria-pressed={divisaoMarcada === d.id}
+              title={divisaoMarcada === d.id
+                ? `Sair da divisão ${d.nome}`
+                : `Ver só as equipes da divisão ${d.nome}`}
+              onClick={() => onEquipes(divisaoMarcada === d.id ? [] : [...d.alcance])}
+              className={cn(
+                'h-8 px-3 rounded-full text-xs font-medium border transition-colors',
+                divisaoMarcada === d.id
+                  ? 'bg-primary text-primary-foreground border-primary'
+                  : 'bg-background text-muted-foreground border-border hover:border-primary/50 hover:text-foreground',
+              )}
+            >
+              {d.nome}
+            </button>
+          ))}
+        </div>
+      )}
 
       {equipesDisponiveis.length > 0 && (
         <SeletorMultiplo

@@ -566,6 +566,8 @@ export interface MetasConfigSetorMes {
 export interface AnaliticoDashboardLinha {
   dia: string;               // 'yyyy-MM-dd'
   operador_id: string | null;
+  /** Login da linha sem conta (órfã), minúsculo. Migration 20261105130000. */
+  operador_usuario?: string | null;
   /**
    * Setor carimbado na importação (migration 20260802a), já com o fallback no
    * setor de quem importou. É o que permite ao dashboard somar o setor pela

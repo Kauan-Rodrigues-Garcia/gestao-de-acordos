@@ -22,6 +22,10 @@ import {
 import { buscarExclusoesSetor } from '@/services/analitico/exclusoesSetor.service';
 import { chaveDeCache, gravarInstantaneo, valorInstantaneo } from '@/lib/cacheInstantaneo';
 import type { OrigemKey } from '@/services/analitico/composicaoAcumulado';
+import { useDivisoes } from '@/hooks/useDivisoes';
+import {
+  divisoesDoSetor, escopoDaDivisao, escopoSemDivisao, type DivisaoDoSetor,
+} from '@/services/setores/divisoes';
 
 export interface ParametrosEscopo {
   /** false = o tenant não usa analítico; o escopo sai pronto como empresa. */
@@ -31,6 +35,11 @@ export interface ParametrosEscopo {
   setorId?: string | null;
   equipeId?: string | null;
   operadorId?: string | null;
+  /**
+   * Divisão do setor em foco (05/11/2026). Só vale com o setor escolhido e
+   * sem equipe nem pessoa — é um recorte do setor, não de outra coisa.
+   */
+  divisaoId?: string | null;
   /**
    * Mês em foco ('yyyy-MM'). Mês fechado usa o retrato congelado da composição
    * (migration 20260803c) em vez das equipes de hoje — sem isso, mover alguém
@@ -63,10 +72,22 @@ export interface ResultadoEscopo {
    * ainda que por meio segundo — num painel de dinheiro.
    */
   pendente: boolean;
+  /** As divisões do setor em foco (vazio = setor sem divisão). */
+  divisoesDoSetor: DivisaoDoSetor[];
+  /**
+   * «Sem divisão» do setor em foco: o que é do setor e não cabe em nenhuma
+   * divisão. `null` quando o setor não tem divisão ou o recorte não é o setor.
+   */
+  escopoSemDivisao: EscopoAnalitico | null;
 }
 
 export function useEscopoAnalitico(params: ParametrosEscopo): ResultadoEscopo {
-  const { ativo, empresaId, isPaguePlay, setorId, equipeId, operadorId, mes, linhas } = params;
+  const { ativo, empresaId, isPaguePlay, setorId, equipeId, operadorId, divisaoId, mes, linhas } = params;
+  const { divisoes: todasDivisoes, perfilPorUsuario } = useDivisoes();
+  const divisoesDoSetorEmFoco = useMemo(
+    () => divisoesDoSetor(todasDivisoes, setorId),
+    [todasDivisoes, setorId],
+  );
 
   /*
    * As fontes do escopo reabrem do instantâneo.
@@ -198,7 +219,7 @@ export function useEscopoAnalitico(params: ParametrosEscopo): ResultadoEscopo {
         creditos:    regraDoMes?.creditosPorEquipe[equipeId],
       };
     }
-    return escopoDeSetor({
+    const doSetor = escopoDeSetor({
       setorId: setorId!,
       alternativo: setorSomaPorUsuarios({
         isPaguePlay,
@@ -209,8 +230,29 @@ export function useEscopoAnalitico(params: ParametrosEscopo): ResultadoEscopo {
       origensExcluidas: exclusoes[setorId!],
       setorDoOperador,
     });
+    // Divisão escolhida: recorte do setor por quem soma nela.
+    const divisao = divisaoId ? divisoesDoSetorEmFoco.find(d => d.id === divisaoId) : null;
+    if (divisao && doSetor.tipo === 'setor') {
+      return escopoDaDivisao(doSetor, divisao, divisoesDoSetorEmFoco, fontes, perfilPorUsuario);
+    }
+    return doSetor;
   }, [ativo, operadorId, equipeId, setorId, fontes, isPaguePlay, carimboDisponivel,
-      exclusoes, setorDoOperador, precisaRegra, temLinhas, regraDoMes]);
+      exclusoes, setorDoOperador, precisaRegra, temLinhas, regraDoMes,
+      divisaoId, divisoesDoSetorEmFoco, perfilPorUsuario]);
 
-  return { escopo, fontes, carimboDisponivel, exclusoes, setorDoOperador, pendente: escopo === null };
+  /** «Sem divisão»: só existe no recorte de setor (ou de divisão) com divisões. */
+  const escopoResto = useMemo<EscopoAnalitico | null>(() => {
+    if (!escopo || !fontes || divisoesDoSetorEmFoco.length === 0) return null;
+    const doSetor = escopo.tipo === 'setor' ? escopo
+      : escopo.tipo === 'divisao' ? escopo.setor
+      : null;
+    if (!doSetor) return null;
+    return escopoSemDivisao(doSetor, divisoesDoSetorEmFoco, fontes, perfilPorUsuario);
+  }, [escopo, fontes, divisoesDoSetorEmFoco, perfilPorUsuario]);
+
+  return {
+    escopo, fontes, carimboDisponivel, exclusoes, setorDoOperador, pendente: escopo === null,
+    divisoesDoSetor: divisoesDoSetorEmFoco,
+    escopoSemDivisao: escopoResto,
+  };
 }

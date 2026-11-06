@@ -55,6 +55,8 @@ import AjusteRecebimento from '@/pages/Dashboard/Analitico/AjusteRecebimento';
 import { PlantaoElite } from '@/pages/Dashboard/Analitico/PlantaoElite';
 import { FiltrosEscopo } from '@/pages/Dashboard/Analitico/FiltrosEscopo';
 import { resolverEscopoPainel } from '@/pages/Dashboard/Analitico/escopoDoPainel';
+import { useDivisoes } from '@/hooks/useDivisoes';
+import { divisoesDoSetor } from '@/services/setores/divisoes';
 import { escopoEfetivo, niveisLiberados } from '@/lib/permissoes-escopo';
 import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import {
@@ -261,6 +263,13 @@ export default function PainelLider() {
 
   /** Setores em foco. Lista vazia = todos. É este valor que as abas recebem. */
   const setoresAbas = escopoAbas.setorIds;
+
+  // Divisões do setor em foco (05/11/2026): só com UM setor no recorte.
+  const { divisoes: todasDivisoes } = useDivisoes();
+  const divisoesDoFiltro = useMemo(
+    () => divisoesDoSetor(todasDivisoes, setoresAbas.length === 1 ? setoresAbas[0] : null),
+    [todasDivisoes, setoresAbas],
+  );
 
   /**
    * As pessoas que o seletor do Ajuste de recebimento oferece.
@@ -723,6 +732,7 @@ export default function PainelLider() {
           onSetores={mudarFiltroSetores}
           onEquipes={setFiltroEquipes}
           nomeSetorTravado={nomeSetorTravado}
+          divisoes={divisoesDoFiltro}
         />
       )}
 

@@ -3152,6 +3152,86 @@ export type Database = {
           },
         ]
       }
+      // Divisões do setor — migration 20261105120500 (escrito à mão até a
+      // próxima regeneração dos tipos).
+      setor_divisoes: {
+        Row: {
+          ativo: boolean
+          criado_em: string
+          criado_por: string | null
+          empresa_id: string
+          id: string
+          nome: string
+          ordem: number
+          setor_id: string
+        }
+        Insert: {
+          ativo?: boolean
+          criado_em?: string
+          criado_por?: string | null
+          empresa_id: string
+          id?: string
+          nome: string
+          ordem?: number
+          setor_id: string
+        }
+        Update: {
+          ativo?: boolean
+          criado_em?: string
+          criado_por?: string | null
+          empresa_id?: string
+          id?: string
+          nome?: string
+          ordem?: number
+          setor_id?: string
+        }
+        Relationships: []
+      }
+      setor_divisao_equipes: {
+        Row: {
+          criado_em: string
+          divisao_id: string
+          empresa_id: string
+          equipe_id: string
+        }
+        Insert: {
+          criado_em?: string
+          divisao_id: string
+          empresa_id: string
+          equipe_id: string
+        }
+        Update: {
+          criado_em?: string
+          divisao_id?: string
+          empresa_id?: string
+          equipe_id?: string
+        }
+        Relationships: []
+      }
+      setor_divisao_recebedores: {
+        Row: {
+          criado_em: string
+          divisao_id: string
+          empresa_id: string
+          setor_id: string
+          usuario: string
+        }
+        Insert: {
+          criado_em?: string
+          divisao_id: string
+          empresa_id: string
+          setor_id: string
+          usuario: string
+        }
+        Update: {
+          criado_em?: string
+          divisao_id?: string
+          empresa_id?: string
+          setor_id?: string
+          usuario?: string
+        }
+        Relationships: []
+      }
       equipes: {
         Row: {
           created_at: string | null

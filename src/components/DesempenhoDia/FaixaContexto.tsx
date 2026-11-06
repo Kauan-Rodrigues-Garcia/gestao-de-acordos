@@ -1,8 +1,10 @@
 /**
  * FaixaContexto — os blocos que só aparecem quando têm o que dizer.
  *
- * Três blocos, nenhum obrigatório:
+ * Quatro blocos, nenhum obrigatório:
  *
+ *   Jornada          Acessos e Retenções lançados — só o setor Jornada tem
+ *                    (05/11/2026); o banco devolve nada para os outros
  *   Direto / Extra   PaguePlay, e só nos setores com a lógica ativa
  *   Pix Automático   BookPlay
  *   Tags             qualquer operação, quando houver acordo com tag no dia
@@ -15,9 +17,10 @@
 
 import { motion } from 'framer-motion';
 import { useMovimentoPreferido } from '@/hooks/useMovimentoPreferido';
-import { Zap, Tag, Link2 } from 'lucide-react';
+import { Zap, Tag, Link2, KeyRound, ShieldCheck, Route } from 'lucide-react';
 import { formatCurrency } from '@/lib/index';
 import type { FatiaTag, ResumoPixDia } from '@/lib/desempenhoDia';
+import type { ContagemJornadaDia } from '@/services/desempenhoDia/desempenhoDia.service';
 
 import { corTexto } from '@/lib/temas';
 interface FaixaContextoProps {
@@ -26,23 +29,72 @@ interface FaixaContextoProps {
   /** `null` na PaguePlay, onde o módulo não existe. */
   pix: ResumoPixDia | null;
   tags: FatiaTag[];
+  /** `null` fora do setor Jornada — e então o bloco não existe. */
+  jornada?: ContagemJornadaDia | null;
 }
 
-export function FaixaContexto({ diretoExtra, pix, tags }: FaixaContextoProps) {
+export function FaixaContexto({ diretoExtra, pix, tags, jornada = null }: FaixaContextoProps) {
   const { semMovimento } = useMovimentoPreferido();
 
   const temDiretoExtra = diretoExtra !== null && (diretoExtra.direto > 0 || diretoExtra.extra > 0);
   const temPix = pix !== null && (pix.aprovados > 0 || pix.pendentes > 0);
   const temTags = tags.length > 0;
+  const temJornada = jornada !== null;
 
-  if (!temDiretoExtra && !temPix && !temTags) return null;
+  if (!temJornada && !temDiretoExtra && !temPix && !temTags) return null;
 
   return (
     <div className="space-y-3">
+      {temJornada && <BlocoJornada c={jornada!} />}
       {temDiretoExtra && <BlocoDiretoExtra {...diretoExtra!} semMovimento={!!semMovimento} />}
       {temPix && <BlocoPix pix={pix!} />}
       {temTags && <BlocoTags tags={tags} semMovimento={!!semMovimento} />}
     </div>
+  );
+}
+
+// ─── Jornada: Acessos e Retenções ────────────────────────────────────────────
+
+/**
+ * Quantos NRs foram lançados nas abas Acesso e Retenção. Contagem, não
+ * dinheiro: por isso fica num bloco próprio, com o mês ao lado para dar a
+ * escala. Só a aba que o recorte tem aparece — a equipe Suporte não ganha uma
+ * linha «0 retenções».
+ */
+function BlocoJornada({ c }: { c: ContagemJornadaDia }) {
+  const itens = [
+    (c.temAcesso || c.acessoMes > 0) && {
+      chave: 'acesso', rotulo: c.acesso === 1 ? 'Acesso' : 'Acessos', Icone: KeyRound, dia: c.acesso, mes: c.acessoMes,
+    },
+    (c.temRetencao || c.retencaoMes > 0) && {
+      chave: 'retencao', rotulo: c.retencao === 1 ? 'Retenção' : 'Retenções', Icone: ShieldCheck, dia: c.retencao, mes: c.retencaoMes,
+    },
+  ].filter(Boolean) as { chave: string; rotulo: string; Icone: typeof KeyRound; dia: number; mes: number }[];
+
+  return (
+    <section className="space-y-1.5">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <Route className="mr-1 inline h-3 w-3" />
+        Jornada
+        <span className="ml-1 font-normal normal-case opacity-70">· lançados no dia</span>
+      </p>
+      <div className={itens.length > 1 ? 'grid grid-cols-2 gap-2' : 'grid grid-cols-1'}>
+        {itens.map(({ chave, rotulo, Icone, dia, mes }) => (
+          <div key={chave} className="flex items-center gap-2.5 rounded-lg bg-muted/40 px-2.5 py-2">
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
+              <Icone className="h-3.5 w-3.5" />
+            </span>
+            <div className="min-w-0">
+              <p className="flex items-baseline gap-1.5 leading-none">
+                <span className="font-mono text-lg font-bold tabular-nums">{dia}</span>
+                <span className="text-[11px] text-muted-foreground">{rotulo}</span>
+              </p>
+              <p className="mt-1 text-[10px] leading-none text-muted-foreground tabular-nums">{mes} no mês</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 

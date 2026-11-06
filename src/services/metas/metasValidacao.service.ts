@@ -77,7 +77,7 @@ export async function excluirMetas(p: {
   empresaId: string;
   mes: number;
   ano: number;
-  tipo: 'setor' | 'equipe' | 'operador';
+  tipo: 'setor' | 'divisao' | 'equipe' | 'operador';
   referenciaIds: string[];
 }): Promise<{ excluidas: string[]; error: string | null }> {
   if (p.referenciaIds.length === 0) return { excluidas: [], error: null };

@@ -66,7 +66,7 @@
  */
 
 import { lazy, Suspense } from 'react';
-import { Building2, Layers, User } from 'lucide-react';
+import { Building2, Layers, Split, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { comNovaTentativa } from '@/lib/sobDemanda';
 import { useTemaNatal } from '@/components/Natal/tema';
@@ -104,7 +104,25 @@ interface Props {
    * cadastro existe, e para ela o degrau não teria para onde apontar.
    */
   equipeDoPerfil: string | null;
+  /**
+   * Divisões do setor em foco (05/11/2026 — Receptivo «0800» / «Time a
+   * vencer»). Vazio ou omitido = setor sem divisão, e a linha não aparece.
+   */
+  divisoes?: readonly DivisaoResumo[];
+  /** Divisão escolhida. `null` = o setor inteiro. */
+  divisao?: string | null;
+  onDivisao?: (id: string | null) => void;
 }
+
+/** O que a linha de divisão precisa de cada divisão. */
+export interface DivisaoResumo {
+  id: string;
+  nome: string;
+  /** Equipes da divisão — a linha de equipe passa a mostrar só estas. */
+  equipes: readonly string[];
+}
+
+const SEM_DIVISOES: readonly DivisaoResumo[] = [];
 
 // Tema de Natal: a neve e o boneco no alto do card só descem com ele ligado.
 const TopoNevado = lazy(() => comNovaTentativa(() => import('@/components/Natal/BonecoDeNeve'))()
@@ -113,6 +131,7 @@ const TopoNevado = lazy(() => comNovaTentativa(() => import('@/components/Natal/
 export function FiltroEscopo({
   niveis, setores, setorFiltro, onSetor, equipes, podeTodasEquipes,
   visao, onVisao, setorDoPerfil, equipeDoPerfil,
+  divisoes = SEM_DIVISOES, divisao = null, onDivisao,
 }: Props) {
   const natal = useTemaNatal();
   const podeEscolherSetor = niveis.includes('todos_setores');
@@ -211,8 +230,21 @@ export function FiltroEscopo({
 
   const mostrarEquipes = !soOsMeus && podeVerEquipes && !linhaEquipeRepetiria;
 
+  /*
+   * Divisões: um degrau entre o setor e a equipe. Só com alcance de setor —
+   * a divisão é um recorte do SETOR, e oferecê-la a quem só vê a própria
+   * equipe daria num clique mais do que o painel liberou.
+   */
+  const mostrarDivisoes = !soOsMeus && meuSetorDisponivel && setorEmFoco !== null
+    && divisoes.length > 0 && !!onDivisao;
+  const divisaoAtiva = mostrarDivisoes ? divisoes.find(d => d.id === divisao) ?? null : null;
+  // Com uma divisão escolhida, a linha de equipe mostra só as dela.
+  const equipesVisiveis = divisaoAtiva
+    ? equipes.filter(e => divisaoAtiva.equipes.includes(e.id))
+    : equipes;
+
   // Nada a oferecer: o controle inteiro some em vez de virar moldura vazia.
-  if (!podeEscolherSetor && !podeVerEquipes && !mostrarRegua) return null;
+  if (!podeEscolherSetor && !podeVerEquipes && !mostrarRegua && !mostrarDivisoes) return null;
 
   const equipeAtiva = visao.startsWith('equipe:') ? visao.slice('equipe:'.length) : null;
 
@@ -231,7 +263,7 @@ export function FiltroEscopo({
         <div className={cn(
           'flex items-center gap-2 flex-wrap',
           // A divisória só faz sentido quando há algo embaixo para separar.
-          (mostrarSetores || mostrarEquipes) && 'border-b border-border pb-2',
+          (mostrarSetores || mostrarEquipes || mostrarDivisoes) && 'border-b border-border pb-2',
         )}>
           <div
             className="flex items-center gap-1 border border-border rounded-lg p-0.5 bg-muted/30"
@@ -289,18 +321,44 @@ export function FiltroEscopo({
         </Linha>
       )}
 
-      {mostrarEquipes && (
+      {mostrarDivisoes && (
+        <Linha icone={<Split className="w-4 h-4 text-muted-foreground shrink-0" />} rotulo="Divisão">
+          <Chip
+            ativo={!divisaoAtiva}
+            onClick={() => { onDivisao?.(null); onVisao('setor'); }}
+            titulo="Ver o setor inteiro, com as divisões somadas"
+          >
+            Setor inteiro
+          </Chip>
+          {divisoes.map(d => (
+            <Chip
+              key={d.id}
+              ativo={divisaoAtiva?.id === d.id}
+              onClick={() => { onDivisao?.(divisaoAtiva?.id === d.id ? null : d.id); onVisao('setor'); }}
+              titulo={divisaoAtiva?.id === d.id
+                ? `Sair da divisão ${d.nome} e voltar ao setor inteiro`
+                : `Ver dados da divisão ${d.nome}`}
+            >
+              {d.nome}
+            </Chip>
+          ))}
+        </Linha>
+      )}
+
+      {mostrarEquipes && equipesVisiveis.length > 0 && (
         <Linha icone={<Layers className="w-4 h-4 text-muted-foreground shrink-0" />} rotulo="Equipe">
           {mostrarTodasEquipes && (
             <Chip
               ativo={visao === 'setor'}
               onClick={() => onVisao('setor')}
-              titulo="Ver o setor inteiro, sem recorte por equipe"
+              titulo={divisaoAtiva
+                ? `Ver a divisão ${divisaoAtiva.nome} inteira, sem recorte por equipe`
+                : 'Ver o setor inteiro, sem recorte por equipe'}
             >
-              Todas as equipes
+              {divisaoAtiva ? `Toda a ${divisaoAtiva.nome}` : 'Todas as equipes'}
             </Chip>
           )}
-          {equipes.map(eq => (
+          {equipesVisiveis.map(eq => (
             <Chip
               key={eq.id}
               ativo={equipeAtiva === eq.id}

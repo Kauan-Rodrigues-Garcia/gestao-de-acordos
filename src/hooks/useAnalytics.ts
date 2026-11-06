@@ -72,9 +72,15 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+/** Divisão do setor escolhida no Dashboard — ver `services/setores/divisoes.ts`. */
+export interface FiltroDivisao {
+  id: string;
+  operadores: readonly string[];
+}
+
 export interface MetaInfo {
   id?: string;
-  tipo: 'setor' | 'equipe' | 'operador';
+  tipo: 'setor' | 'divisao' | 'equipe' | 'operador';
   referencia_id: string;
   meta_valor: number;
   meta_acordos: number;
@@ -149,6 +155,14 @@ export interface AnalyticsData {
   // Filtro por operador (Elite em visão individual)
   operadorFiltro: string | null;
   setOperadorFiltro: (id: string | null) => void;
+
+  /**
+   * Divisão do setor em foco (05/11/2026): a divisão e QUEM soma nela — o
+   * conjunto já resolvido pelo escopo do analítico, para os acordos baterem
+   * com o recebido da mesma tela.
+   */
+  divisaoFiltro: FiltroDivisao | null;
+  setDivisaoFiltro: (d: FiltroDivisao | null) => void;
 
   /** Só a PRIMEIRA carga e a troca de recorte. Nunca uma releitura. */
   loading: boolean;
@@ -266,6 +280,11 @@ export function useAnalytics(
   const [setorFiltro, setSetorFiltro] = useState<string | null>(null);
   const [equipeFiltro, setEquipeFiltro] = useState<string | null>(null);
   const [operadorFiltro, setOperadorFiltro] = useState<string | null>(null);
+  const [divisaoFiltro, setDivisaoFiltro] = useState<FiltroDivisao | null>(null);
+  /** Identidade da divisão escolhida: o id e quem soma nela. */
+  const divisaoChave = divisaoFiltro
+    ? `${divisaoFiltro.id}:${[...divisaoFiltro.operadores].sort().join(',')}`
+    : null;
   const [setores, setSetores] = useState<{ id: string; nome: string }[]>([]);
   const [equipesDoSetor, setEquipesDoSetor] = useState<{ id: string; nome: string }[]>([]);
   const [meta, setMeta] = useState<MetaInfo | null>(null);
@@ -302,13 +321,13 @@ export function useAnalytics(
    */
   const chaveCache = useMemo(() => chaveDeCache(
     'analytics', empresa?.id, perfil?.id, perfil?.perfil, perfil?.setor_id,
-    mes, ano, setorFiltro, equipeFiltro, operadorFiltro,
+    mes, ano, setorFiltro, equipeFiltro, operadorFiltro, divisaoChave,
     podeTodosSetores ? 'T' : '-', podeSetor ? 'S' : '-', podeEquipe ? 'E' : '-',
     podeTodasEquipes ? 'Q' : '-',
     isBookplay ? 'bp' : 'pp',
   ), [
     empresa?.id, perfil?.id, perfil?.perfil, perfil?.setor_id, mes, ano,
-    setorFiltro, equipeFiltro, operadorFiltro,
+    setorFiltro, equipeFiltro, operadorFiltro, divisaoChave,
     podeTodosSetores, podeSetor, podeEquipe, podeTodasEquipes, isBookplay,
   ]);
 
@@ -453,6 +472,17 @@ export function useAnalytics(
          */
         operadoresDaEquipe = [...operadoresDaEquipeDe(equipeFiltro, fontes)];
       }
+      /*
+       * Divisão do setor (05/11/2026): quem soma nela, já resolvido pelo
+       * escopo do analítico. Entra como uma equipe grande — o mesmo `IN` —, e
+       * só quando nem equipe nem pessoa foram escolhidas.
+       */
+      const operadoresDaDivisao = divisaoFiltro && !equipeFiltro && !operadorFiltro
+        ? [...divisaoFiltro.operadores]
+        : null;
+      if (operadoresDaDivisao && operadoresDaEquipe === null) {
+        operadoresDaEquipe = operadoresDaDivisao;
+      }
 
       /*
        * Alcance de EQUIPE sem alcance de setor, e sem equipe escolhida.
@@ -556,6 +586,12 @@ export function useAnalytics(
          */
         if (podeTodosSetores) {
           if (setorFiltro) q = q.eq('setor_id', setorFiltro);
+          // Divisão escolhida: só quem soma nela, dentro do setor filtrado.
+          if (setorFiltro && operadoresDaDivisao) {
+            q = operadoresDaDivisao.length === 0
+              ? q.eq('operador_id', '00000000-0000-0000-0000-000000000000')
+              : q.in('operador_id', operadoresDaDivisao);
+          }
         } else if (podeSetor && perfil.setor_id) {
           // 1. visão individual → filtra pelo próprio operador_id
           // 2. visão de equipe  → filtra por operador_id IN (membros da equipe)
@@ -632,7 +668,7 @@ export function useAnalytics(
       //   3. Padrão Líder/Elite                  → meta do setor
       //   4. Operador comum                      → meta do próprio operador
       //   5. Admin                               → sem meta principal
-      let tipoMeta: 'setor' | 'equipe' | 'operador' | null = null;
+      let tipoMeta: 'setor' | 'divisao' | 'equipe' | 'operador' | null = null;
       let refId: string | null = null;
 
       if (!semMetaPrincipal) {
@@ -642,6 +678,10 @@ export function useAnalytics(
         } else if (equipeFiltro && veDeOutros) {
           tipoMeta = 'equipe';
           refId    = equipeFiltro;
+        } else if (divisaoFiltro && veDeOutros) {
+          // A divisão tem meta própria, digitada na aba Metas.
+          tipoMeta = 'divisao';
+          refId    = divisaoFiltro.id;
         } else if (veDeOutros && podeTodosSetores && setorFiltro) {
           // Alcance de empresa com um setor filtrado → meta do setor filtrado
           tipoMeta = 'setor';
@@ -793,7 +833,7 @@ export function useAnalytics(
       }
     }
   }, [perfil, empresa, mes, ano, mesRef, mesAnalise, inicio, fim, setorFiltro, equipeFiltro, operadorFiltro,
-      podeTodosSetores, podeSetor, podeEquipe, podeTodasEquipes, isBookplay, chaveCache,
+      divisaoFiltro, podeTodosSetores, podeSetor, podeEquipe, podeTodasEquipes, isBookplay, chaveCache,
       equipesDaPessoa]);
 
   /*
@@ -1056,5 +1096,7 @@ export function useAnalytics(
     equipesDoSetor,
     operadorFiltro,
     setOperadorFiltro,
+    divisaoFiltro,
+    setDivisaoFiltro,
   };
 }

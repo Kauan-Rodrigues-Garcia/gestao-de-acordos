@@ -169,6 +169,7 @@ export function PixAbaRegistros({ pix }: { pix: PixTela }) {
           recebimento pelo analítico, e somar de novo contaria duas vezes. */}
       {!loading && podeVerDeOutros && blocosMetaPix.map(b => (
         <PixMetaPainel
+          metaModo={b.metaModo}
           key={b.setorId}
           consolidado={b.consolidado}
           nomeSetor={b.nome}

@@ -90,6 +90,8 @@ export interface ParametrosPainelMetas {
   setorId?: string | null;
   equipeId?: string | null;
   operadorId?: string | null;
+  /** Divisão do setor em foco (05/11/2026). Só vale no modo setor. */
+  divisaoId?: string | null;
   /** O setor do usuário tem a lógica Direto/Extra ativa? */
   temLogicaDiretoExtra?: boolean;
   /**
@@ -327,6 +329,8 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
     : (podeVerOutros && setorId) ? 'setor'
     : 'eu';
 
+  /** Divisão escolhida: só no modo setor — equipe e pessoa já são recortes menores. */
+  const divisaoEmFoco = modo === 'setor' ? (params.divisaoId ?? null) : null;
   const equipeSelecionada = equipesConhecidas.find(e => e.id === equipeSelecionadaId) ?? null;
   /** A equipe do próprio usuário — dá o início de treinamento no escopo pessoal. */
   const minhaEquipe = equipesConhecidas.find(e => e.id === perfilEquipeId) ?? null;
@@ -359,7 +363,9 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
   // ── Analítico + escopo — a MESMA base do AnalyticsPanel ────────────────────
   const analitico = useAnaliticoDashboard(ativo, mes);
 
-  const { escopo, pendente: escopoPendente } = useEscopoAnalitico({
+  const {
+    escopo, pendente: escopoPendente, divisoesDoSetor: divisoesDoSetorEmFoco,
+  } = useEscopoAnalitico({
     ativo,
     empresaId:   empresa?.id,
     isPaguePlay: tenant.isPaguePlay,
@@ -369,6 +375,7 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
     setorId,
     equipeId:    equipeSelecionadaId,
     operadorId:  operadorEfetivo,
+    divisaoId:   modo === 'setor' ? divisaoEmFoco : null,
     mes,
     linhas:      analitico.linhas,
   });
@@ -385,6 +392,7 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
       case 'operador': return [escopo.operadorId];
       case 'equipe':   return [...escopo.operadores];
       case 'setor':    return [...escopo.operadores];
+      case 'divisao':  return [...escopo.operadores];
       case 'empresa':  return null;
     }
   }, [escopo]);
@@ -461,8 +469,11 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
 
         // Escopo agregado: a meta própria do grupo manda, quando existir.
         // 'setor' procura meta de setor; equipe procura meta de equipe.
+        // Divisão escolhida: a meta DELA (aba Metas), nunca a do setor inteiro.
         const alvo = modo === 'setor'
-          ? { tipo: 'setor',  id: setorId ?? '' }
+          ? (divisaoEmFoco
+              ? { tipo: 'divisao', id: divisaoEmFoco }
+              : { tipo: 'setor',  id: setorId ?? '' })
           : { tipo: 'equipe', id: equipeSelecionadaId ?? '' };
 
         if (alvo.id) {
@@ -514,7 +525,7 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
     void carregar();
     return () => { cancelado = true; };
   }, [empresa?.id, perfil?.id, operadorEfetivo, equipeSelecionadaId, setorId, modo,
-      mesNum, ano, membrosChave]);
+      mesNum, ano, membrosChave, divisaoEmFoco]);
 
   // ── Direto/Extra (tabulação) ───────────────────────────────────────────────
   // Só busca quando o setor tem a lógica — sem ela os cards nem aparecem, e a
@@ -801,7 +812,9 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
   // equipe escolhidos o operador vence (mesma ordem do `useEscopoAnalitico`), e
   // rotular de "da equipe X" contaria uma história diferente da do número.
   const escopoRotulo =
-    modo === 'setor'  ? 'do setor'
+    modo === 'setor' && divisaoEmFoco
+      ? `da divisão ${divisoesDoSetorEmFoco.find(d => d.id === divisaoEmFoco)?.nome ?? ''}`.trim()
+    : modo === 'setor'  ? 'do setor'
     : modo === 'equipe' && equipeSelecionada ? `da equipe ${equipeSelecionada.nome}`
     : 'individual';
 

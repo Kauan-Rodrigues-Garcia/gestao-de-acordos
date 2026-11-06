@@ -10,6 +10,7 @@
  *   fn_jornada_meta_pessoas_salvar — metas individuais (migration 20261104210000).
  *   fn_jornada_lancar_lote / excluir_lote / exportar — importar, apagar vários, baixar (idem).
  *   fn_jornada_lixeira / restaurar — apagar vai para a lixeira e volta de lá (idem).
+ *   fn_jornada_faixas / faixas_salvar — a 2ª, 3ª e 4ª metas (migration 20261105140000).
  *
  * As tabelas não têm acesso direto: tudo passa pelas funções. As funções ainda
  * não estão nos tipos gerados: daí `rpcSemTipo`.
@@ -45,6 +46,11 @@ export interface PessoaPlacar {
   meta: number | null;
   /** A liderança deu a ela uma meta só dela. */
   meta_propria: boolean;
+  /**
+   * Todas as metas do mês dela, em ordem (05/11/2026): a 1ª (`meta`) e as
+   * faixas acima, até a 4ª. Vazia sem meta. As dela, ou as do grupo.
+   */
+  metas: number[];
 }
 
 export interface RegistroJornada {
@@ -63,6 +69,8 @@ export interface PainelJornada {
   sou_membro: boolean;
   /** Meta de cada operador NO MÊS (04/11/2026: a meta é sempre mensal). */
   meta: number | null;
+  /** As metas do grupo, em ordem: a 1ª (`meta`) e as faixas, até a 4ª. */
+  metas: number[];
   pessoas: PessoaPlacar[];
   dias: { dia: string; total: number }[];
   registros: RegistroJornada[];
@@ -81,22 +89,43 @@ export async function listarMinhasAbas(empresaId: string): Promise<GrupoJornada[
   return (data ?? []).filter(s => s.tipo === 'acesso' || s.tipo === 'retencao');
 }
 
+interface FaixasDoBanco {
+  grupo: number[];
+  pessoas: { perfil_id: string; extras: number[] }[];
+}
+
+/** A 2ª, 3ª e 4ª metas. Sem a migration 20261105140000, nenhuma (só a 1ª vale). */
+async function buscarFaixas(grupoId: string): Promise<FaixasDoBanco> {
+  const { data, error } = await rpcSemTipo<FaixasDoBanco>('fn_jornada_faixas', { p_grupo_id: grupoId });
+  if (error || !data) return { grupo: [], pessoas: [] };
+  return { grupo: data.grupo ?? [], pessoas: data.pessoas ?? [] };
+}
+
 export async function buscarPainel(grupoId: string, dia: string): Promise<PainelJornada> {
-  const { data, error } = await rpcSemTipo<PainelJornada>('fn_jornada_painel', {
-    p_grupo_id: grupoId,
-    p_dia: dia,
-  });
+  const [{ data, error }, faixas] = await Promise.all([
+    rpcSemTipo<PainelJornada>('fn_jornada_painel', { p_grupo_id: grupoId, p_dia: dia }),
+    buscarFaixas(grupoId),
+  ]);
   if (error) throw new Error(error.message);
   if (!data) throw new Error('O banco não devolveu o painel.');
+  const metaGrupo = data.meta ?? null;
+  const metasGrupo = metaGrupo ? [metaGrupo, ...faixas.grupo] : [];
+  const extrasDe = new Map(faixas.pessoas.map(p => [p.perfil_id, p.extras ?? []]));
   return {
     ...data,
-    meta: data.meta ?? null,
+    meta: metaGrupo,
+    metas: metasGrupo,
     // Sem a 20261104210000 o banco não manda a meta por pessoa: vale a do grupo.
-    pessoas: (data.pessoas ?? []).map(p => ({
-      ...p,
-      meta: p.meta === undefined ? (data.meta ?? null) : p.meta,
-      meta_propria: p.meta_propria ?? false,
-    })),
+    pessoas: (data.pessoas ?? []).map(p => {
+      const meta = p.meta === undefined ? metaGrupo : p.meta;
+      const propria = p.meta_propria ?? false;
+      return {
+        ...p,
+        meta,
+        meta_propria: propria,
+        metas: !meta ? [] : propria ? [meta, ...(extrasDe.get(p.id) ?? [])] : metasGrupo,
+      };
+    }),
     dias: data.dias ?? [],
     registros: data.registros ?? [],
   };
@@ -158,6 +187,34 @@ export async function salvarMetasPessoas(
       throw new Error('Falta aplicar a migration 20261104210000_jornada_meta_individual.sql para a meta individual.');
     }
     throw new Error(mensagemDoBanco(error.message));
+  }
+}
+
+/**
+ * A 2ª, 3ª e 4ª metas (migration 20261105140000). `grupo: null` não mexe no
+ * grupo; cada pessoa da lista recebe as faixas dela (vazia = só a 1ª). Grave a
+ * 1ª antes — o banco recusa faixa sem a 1ª. Só a liderança.
+ */
+export async function salvarFaixas(
+  grupoId: string,
+  grupo: number[] | null,
+  pessoas: { perfil_id: string; extras: number[] }[],
+): Promise<void> {
+  if (grupo === null && pessoas.length === 0) return;
+  const { error } = await rpcSemTipo('fn_jornada_faixas_salvar', {
+    p_grupo_id: grupoId,
+    p_grupo: grupo,
+    p_pessoas: pessoas,
+  });
+  if (error) {
+    if (/fn_jornada_faixas_salvar|schema cache/i.test(error.message)) {
+      throw new Error('Falta aplicar a migration 20261105140000_jornada_quatro_metas.sql para a 2ª, 3ª e 4ª metas.');
+    }
+    throw new Error(mensagemDoBanco(error.message)
+      .replace('Defina a 1a meta do grupo antes das outras', 'Defina a 1ª meta do grupo antes das outras')
+      .replace('Defina a 1a meta individual antes das outras', 'Defina a 1ª meta individual antes das outras')
+      .replace('Metas invalidas: ate 4 metas, de 1 a 100000', 'Metas inválidas: até 4 metas, de 1 a 100000')
+      .replace('Cada meta tem de ser maior que a anterior', 'Cada meta tem de ser maior que a anterior'));
   }
 }
 

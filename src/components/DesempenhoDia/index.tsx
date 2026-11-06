@@ -332,6 +332,7 @@ export function DesempenhoDia({ aberto, onClose }: DesempenhoDiaProps) {
                     diretoExtra={dados.diretoExtra}
                     pix={dados.pix}
                     tags={dados.tags}
+                    jornada={dados.jornada}
                   />
                 </div>
               )}

@@ -1,5 +1,5 @@
 import { useMarca } from '@/hooks/useMarca';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { FormaSaudacao } from '@/components/FormaSaudacao';
 import { BolaDaSaudacao } from '@/components/Natal/BolaDaSaudacao';
@@ -16,6 +16,8 @@ import { AnalyticsPanel } from '@/components/AnalyticsPanel';
 import { useSetoresEquipes } from '@/hooks/useSetoresEquipes';
 import { useLideroEquipe } from '@/hooks/useLideroEquipe';
 import { FiltroEscopo } from './FiltroEscopo';
+import { useDivisoes } from '@/hooks/useDivisoes';
+import { divisoesDoSetor } from '@/services/setores/divisoes';
 import { type VisaoFiltro, saudacao } from './helpers';
 
 export default function Dashboard() {
@@ -233,6 +235,24 @@ export default function Dashboard() {
     ? visaoFiltro.replace('equipe:', '')
     : null;
 
+  /*
+   * Divisões do setor (05/11/2026): um degrau entre o setor e a equipe. Vale
+   * só na visão de setor — equipe e pessoa já são recortes menores. Trocar de
+   * setor zera a escolha: divisão de um setor não existe no outro.
+   */
+  const { divisoes: todasDivisoes } = useDivisoes();
+  const setorDaDivisao = niveis.includes('todos_setores') ? setorFiltroAtivo : lugar.setorId;
+  const divisoesEmFoco = useMemo(
+    () => divisoesDoSetor(todasDivisoes, setorDaDivisao),
+    [todasDivisoes, setorDaDivisao],
+  );
+  const [divisaoFiltro, setDivisaoFiltro] = useState<string | null>(null);
+  useEffect(() => { setDivisaoFiltro(null); }, [setorDaDivisao]);
+  const divisaoFiltroAtivo = !soOsMeus && visaoFiltro === 'setor'
+    && divisaoFiltro && divisoesEmFoco.some(d => d.id === divisaoFiltro)
+    ? divisaoFiltro
+    : null;
+
   // Mês fechado: o Direto/Extra que valia NAQUELE mês (retrato) — o painel de indicadores separa por ele.
   const { isAtivoParaUsuario } = useDiretoExtraConfig(mesFiltro);
   const usuarioTemLogicaDiretoExtra = isAtivoParaUsuario(
@@ -298,11 +318,15 @@ export default function Dashboard() {
           onVisao={setVisaoFiltro}
           setorDoPerfil={lugar.setorId}
           equipeDoPerfil={equipeDoPerfil}
+          divisoes={divisoesEmFoco}
+          divisao={divisaoFiltro}
+          onDivisao={setDivisaoFiltro}
         />
         <AnalyticsPanel
           setorFiltro={setorFiltroAtivo}
           equipeFiltroExterno={equipeFiltroAtivo}
           operadorFiltroExterno={operadorFiltroAtivo}
+          divisaoFiltroExterno={divisaoFiltroAtivo}
           temLogicaDiretoExtra={usuarioTemLogicaDiretoExtra}
         />
       </div>
