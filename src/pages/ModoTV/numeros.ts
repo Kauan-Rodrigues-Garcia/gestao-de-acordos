@@ -41,7 +41,16 @@ export interface VisaoTv {
   /** Quanto precisa entrar por dia útil que sobra. */
   ritmo: number;
   projecao: number;
-  ranking: { id: string; nome: string; foto: string | null; valor: number }[];
+  /**
+   * Todas as pessoas com recebimento no mês (antes de 20261106120000, só o top
+   * 10). `meta`: a individual, já na unidade; `null` = sem meta.
+   */
+  ranking: { id: string; nome: string; foto: string | null; valor: number; meta: number | null }[];
+  /**
+   * O pacote traz a meta de cada pessoa (20261106120000)? Sem ela a projeção
+   * por pessoa não tem régua, e a tela avisa.
+   */
+  rankingComMeta: boolean;
   diasNoMes: number;
   hojeDia: number;
   /** Recebido acumulado por dia, do dia 0 (zero) até hoje. */
@@ -95,12 +104,18 @@ export function montarVisao(
     ? alvoDiarioManual
     : diasUteis > 0 ? centavos(meta / diasUteis) : 0;
 
-  const pessoas = (lista: PessoaRanking[] | null | undefined) => (Array.isArray(lista) ? lista : []).map(p => ({
-    id: p.id,
-    nome: p.nome ?? '',
-    foto: p.foto ?? null,
-    valor: num(emHo ? p.valor_ho : p.valor),
-  })).sort((a, b) => b.valor - a.valor);
+  // A meta da pessoa é gravada em bruto, como a do setor: em H.O., converte.
+  const pessoas = (lista: PessoaRanking[] | null | undefined) => (Array.isArray(lista) ? lista : []).map(p => {
+    const metaBruta = num(p.meta);
+    return {
+      id: p.id,
+      nome: p.nome ?? '',
+      foto: p.foto ?? null,
+      valor: num(emHo ? p.valor_ho : p.valor),
+      meta: metaBruta > 0 ? (emHo ? centavos(metaBruta * pct) : metaBruta) : null,
+    };
+  }).sort((a, b) => b.valor - a.valor);
+  const listaRanking = Array.isArray(n.ranking) ? n.ranking : [];
 
   return {
     unidade,
@@ -121,8 +136,11 @@ export function montarVisao(
     diasRestantes,
     // No último dia útil, tudo o que falta é para hoje.
     ritmo: falta > 0 ? centavos(falta / Math.max(1, diasRestantes)) : 0,
-    projecao: diasDecorridos > 0 ? centavos(recebido / diasDecorridos * diasUteis) : 0,
+    // Sem dia trabalhado, o próprio recebido (como `ritmoDoPeriodo`), e não zero.
+    projecao: diasDecorridos > 0 ? centavos(recebido / diasDecorridos * diasUteis) : recebido,
     ranking: pessoas(n.ranking),
+    // Ranking vazio não tem o que conferir: vale como «tem».
+    rankingComMeta: !listaRanking.length || listaRanking.some(p => p && typeof p === 'object' && 'meta' in p),
     diasNoMes: diasDoMes(n.mes),
     hojeDia: diaDe(n.hoje) ?? diasDoMes(n.mes),
     serie: serieAcumulada(n, unidade),
@@ -173,12 +191,35 @@ export interface RankingNaTela {
 }
 
 /**
+ * Ordem da projeção: o maior % da meta primeiro; quem não tem meta vai para o
+ * fim, pelo valor (como `ordenarLinhas` da aba Quartis). Empate no %, valor.
+ */
+export function porPercentualDaMeta<T extends { valor: number; meta: number | null; nome: string }>(itens: T[]): T[] {
+  const pct = (x: T) => (x.meta && x.meta > 0 ? x.valor / x.meta : null);
+  return [...itens].sort((a, b) => {
+    const pa = pct(a), pb = pct(b);
+    if (pa == null && pb == null) return b.valor - a.valor || a.nome.localeCompare(b.nome, 'pt-BR');
+    if (pa == null) return 1;
+    if (pb == null) return -1;
+    return pb - pa || b.valor - a.valor || a.nome.localeCompare(b.nome, 'pt-BR');
+  });
+}
+
+/**
  * O ranking de uma tela de Pódio ou Lista, pelas opções dela.
  *
- * A projeção é o recebido no ritmo atual até o fim do mês: × dias úteis ÷
- * decorridos. Entre pessoas o fator é o mesmo para todos — a ordem não muda,
- * muda o número. Entre equipes com meta, o percentual da meta é que lê
- * diferente. Antes do primeiro dia útil, a projeção é o próprio recebido.
+ * ## Projeção (corrigida em 06/11/2026)
+ *
+ * É a conta da aba Quartis (`calcularProjecao`): a projeção de cada um é sobre
+ * a META DELE — recebido ÷ esperado até hoje, que é o mesmo que o fechamento
+ * projetado ÷ meta. A ordem é por esse %, e quem não tem meta vai para o fim.
+ *
+ * Antes, a TV só multiplicava o recebido de todos pelo mesmo fator (dias
+ * úteis ÷ decorridos): a ordem ficava igual à do recebido e o valor saltava —
+ * no começo do mês, ×5 — sem régua nenhuma na tela.
+ *
+ * O valor mostrado continua sendo o fechamento projetado (recebido no ritmo
+ * atual até o fim do mês), agora com o «% da meta» ao lado.
  */
 export function rankingDaTela(v: VisaoTv, tela: Pick<TelaDoPainel, 'template' | 'opcoes'>): RankingNaTela {
   const projecao = opcao<string>(tela, 'valor') === 'projecao';
@@ -189,13 +230,17 @@ export function rankingDaTela(v: VisaoTv, tela: Pick<TelaDoPainel, 'template' | 
 
   if (fonte === 'equipes') {
     if (!v.equipesRanking) return vazio(AGUARDANDO_ATUALIZACAO, true);
-    const itens = v.equipesRanking
+    const base = v.equipesRanking
       .filter(e => e.valor > 0 || e.meta > 0)
       .map((e): ItemDoRanking => ({ id: e.id, nome: e.nome, foto: null, valor: projetar(e.valor), meta: e.meta > 0 ? e.meta : null }));
+    const itens = projecao ? porPercentualDaMeta(base) : base;
     return itens.length
       ? { itens, motivo: '', deEquipes: true, projecao }
       : vazio('Nenhuma equipe do setor recebeu neste mês ainda.', true);
   }
+
+  // Sem a meta de cada pessoa no pacote, a projeção não tem régua: avisa.
+  if (projecao && !v.rankingComMeta) return vazio(AGUARDANDO_ATUALIZACAO);
 
   let pessoas = v.ranking;
   if (fonte === 'equipe') {
@@ -209,8 +254,12 @@ export function rankingDaTela(v: VisaoTv, tela: Pick<TelaDoPainel, 'template' | 
     }
   }
   if (!pessoas.length) return vazio('Ainda não há recebimento neste mês.');
+  if (!projecao) {
+    // Pelo recebido, como sempre: sem a meta ao lado.
+    return { itens: pessoas.map((p): ItemDoRanking => ({ ...p, meta: null })), motivo: '', deEquipes: false, projecao };
+  }
   return {
-    itens: pessoas.map((p): ItemDoRanking => ({ ...p, valor: projetar(p.valor), meta: null })),
+    itens: porPercentualDaMeta(pessoas.map((p): ItemDoRanking => ({ ...p, valor: projetar(p.valor) }))),
     motivo: '', deEquipes: false, projecao,
   };
 }
@@ -257,12 +306,14 @@ export interface EquipesNaTela {
  *   Escolhidas à mão, aparecem mesmo zeradas: o líder pediu aquelas.
  * • Ordem pelo % da meta: quem não tem meta vai para o fim, pelo valor.
  * • Projeção: o recebido × dias úteis ÷ decorridos, como em `rankingDaTela`.
- *   O % da meta passa a ser o da projeção.
+ *   O % da meta passa a ser o da projeção, e a ordem é por ele.
  */
 export function equipesDaTela(v: VisaoTv, tela: Pick<TelaDoPainel, 'template' | 'opcoes'>): EquipesNaTela {
   const ordem = opcao<string>(tela, 'ordem');
   const projecao = ordem === 'projecao';
-  const porMeta = ordem === 'meta';
+  // A projeção ordena pelo % da meta projetado: multiplicar todas pelo mesmo
+  // fator e ordenar pelo valor daria a ordem do recebido (ver `rankingDaTela`).
+  const porMeta = ordem === 'meta' || projecao;
   const vazio = (motivo: string): EquipesNaTela => ({ itens: [], motivo, projecao, porMeta, fora: 0 });
   if (!v.equipesRanking) return vazio(AGUARDANDO_ATUALIZACAO);
 

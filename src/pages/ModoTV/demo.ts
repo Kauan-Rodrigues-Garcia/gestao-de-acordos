@@ -34,6 +34,7 @@ export function numerosDemo(): NumerosTv {
     ].map(([nome, valor], i) => ({
       id: `demo-${i}`, nome: nome as string, foto: null as string | null,
       valor: valor as number, valor_ho: Math.round((valor as number) * 22.6) / 100,
+      meta: META_DEMO[nome as string] ?? 0,
     })),
     serie: serieDemo(hoje),
     destaques: destaquesDemo(serieDemo(hoje)),
@@ -53,6 +54,7 @@ export function numerosDemo(): NumerosTv {
       equipe_id: EQUIPES_DEMO[k][0],
       pessoas: pessoas.map(([nome, valor], i) => ({
         id: `demo-e${k}-${i}`, nome, foto: null as string | null, valor, valor_ho: Math.round(valor * 22.6) / 100,
+        meta: META_DEMO[nome] ?? 0,
       })),
     })),
     quitacao: {
@@ -71,6 +73,16 @@ export function numerosDemo(): NumerosTv {
     calculado_em: new Date().toISOString(),
   };
 }
+
+/**
+ * A meta individual de cada pessoa (20261106120000). Diferentes de propósito:
+ * pelo % da meta a ordem não é a do recebido. Bruno não tem meta.
+ */
+const META_DEMO: Record<string, number> = {
+  'Ana Beatriz Lima': 60_000, 'Carlos Eduardo Rocha': 35_000, 'Juliana Prado': 50_000,
+  'Marcos Vinícius Teixeira': 25_000, 'Patrícia Gomes': 40_000, 'Rafael Souza': 30_000,
+  'Luana Martins Costa': 20_000, 'Diego Almeida': 30_000, 'Fernanda Ribeiro': 18_000,
+};
 
 /** id, nome, recebido no mês, meta. */
 const EQUIPES_DEMO: [string, string, number, number][] = [
