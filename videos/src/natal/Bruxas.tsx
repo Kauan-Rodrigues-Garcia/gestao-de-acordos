@@ -64,8 +64,8 @@ export type RoteiroBruxas = ReturnType<typeof roteiroDasBruxas>;
 // ── As bruxas de vassoura ───────────────────────────────────────────────────
 
 /** As duas da cena (índice em `BRUXAS`): a Feiosa leva o headshot, a Vampira (com o morcego) o tiro no corpo. */
-const FEIOSA = 1;
-const VAMPIRA = 3;
+export const FEIOSA = 1;
+export const VAMPIRA = 3;
 
 type PalcoAberto = {
   vivas: { voo: { lado: number }; bruxa: Bruxa; semChapeu: boolean; quadro: number }[];
@@ -80,7 +80,7 @@ type PalcoAberto = {
  * O palco converte o clique pela escala dele, sem saber que o vídeo amplia a
  * réplica — então o ponto vai na conta dele, não na da tela.
  */
-function atirarNa(palco: PalcoBruxas, parte: 'cabeca' | 'tronco') {
+export function atirarNa(palco: PalcoBruxas, parte: 'cabeca' | 'tronco') {
   const p = palco as unknown as PalcoAberto;
   const v = p.vivas[0];
   if (!v) return;
@@ -114,10 +114,10 @@ export const BruxasNoConteudo: React.FC<{ r: RoteiroBruxas }> = ({ r }) => {
 
 // ── A Bruxa do Pântano ──────────────────────────────────────────────────────
 
-type ChefonaAberta = { proximoFeitico: number; proximoForte: number; leve: boolean; raiz: HTMLElement };
+export type ChefonaAberta = { proximoFeitico: number; proximoForte: number; leve: boolean; raiz: HTMLElement };
 
 /** Só o roteiro joga poção: a dela, sozinha, fica para depois do vídeo. */
-function semPocaoSozinha(p: PalcoChefona) {
+export function semPocaoSozinha(p: PalcoChefona) {
   const a = p as unknown as ChefonaAberta;
   a.proximoFeitico = 1e9;
   a.proximoForte = 1e9;
@@ -165,7 +165,7 @@ export const BruxaDoPantano: React.FC<{ r: RoteiroBruxas; app: () => HTMLElement
  * garrafa voa, como luz desligando — não aparece o efeito da poção antes. No
  * vidro quebrando já é preto, e é de lá que a montagem nasce.
  */
-export const PretoDaPocao: React.FC<{ r: RoteiroBruxas; f: number }> = ({ r, f }) => {
+export const PretoDaPocao: React.FC<{ r: Pick<RoteiroBruxas, 'apaga' | 'preto' | 'fim'>; f: number }> = ({ r, f }) => {
   const de = r.apaga;
   // Depois do fim a montagem já cobre a tela (ela nasce do preto).
   if (f < de || f >= r.fim) return null;

@@ -13,4 +13,18 @@
 .nt-caca .zb-furo,
 .nt-caca .zb-recado,
 .nt-caca .zb-zumbi-sprite { animation: none !important; }
+/*
+ * O Rei do Pop (06/11): as animações do CSS dele (o letreiro, o sangue, o
+ * painel, a subida da terra, o holofote) rodavam no relógio do navegador e não
+ * no do vídeo — saíam fora de compasso. Quem anima tudo isso é o quadro
+ * (`Chefao.tsx`).
+ */
+.nt-caca .zb-chefao-texto,
+.nt-caca .zb-chefao-gota,
+.nt-caca .zb-chefao-hud,
+.nt-caca .zb-chefao-sprite,
+.nt-caca .zb-chefao-chao,
+.nt-caca .zb-chefao-chao::before { animation: none !important; }
+.nt-caca .zb-chefao-vida-barra { transition: none !important; }
+
 .nt-caca .zb-faixa-trilho { position: absolute; inset: 0 auto 0 0; display: flex; width: max-content; }

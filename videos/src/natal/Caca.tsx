@@ -281,13 +281,15 @@ export const Mira: React.FC<{ cacadas: Cacada[]; entra: number; sai: number }> =
 
 const som = (nome: string) => staticFile(`natal/caca/${nome}.wav`);
 
-export const SonsDaCaca: React.FC<{ c: Cacada }> = ({ c }) => {
+/** `enxuto`: só os baques fortes e espaçados (a Arena, 06/11: «muito efeito sonoro»). */
+export const SonsDaCaca: React.FC<{ c: Cacada; enxuto?: boolean }> = ({ c, enxuto = false }) => {
   const { eventos } = useMemo(() => simular(c, Math.ceil(DURACAO_S * FPS)), [c]);
   // Vinte peças batendo juntas não viram metralhadora (o app espera 70 ms).
   let ultimo = -1;
   const efeitos = eventos.filter(({ t, e }) => {
-    if (e.tipo !== 'baque') return true;
-    if (t - ultimo < 0.07) return false;
+    if (e.tipo !== 'baque') return !enxuto;
+    if (enxuto && e.forca < 0.6) return false;
+    if (t - ultimo < (enxuto ? 0.25 : 0.07)) return false;
     ultimo = t;
     return true;
   });

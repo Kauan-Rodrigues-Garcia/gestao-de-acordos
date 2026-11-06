@@ -39,6 +39,8 @@ const L = LARGURA * ESCALA;
 const A = ALTURA * ESCALA;
 const CAIXA = { largura: L, altura: A };
 const ENTRADA_MS = 1_200;
+/** O mesmo `RITMO_POR_ESTAGIO` de `chefaoMovimento.ts` (lá não é exportado): machucado, dança mais devagar. */
+const RITMO_DO_ESTAGIO = [1, 1, 1.08, 1.18] as const;
 /** A luta grande de verdade: 10.840 de vida, 62 pessoas. */
 const VIDA_MAX = REI_DO_POP.vidaMax;
 /** Quanto cada tiro de todo mundo tira da barra: a luta do vídeo leva uns 70% da vida. */
@@ -69,7 +71,11 @@ type Som = { f: number; arquivo: string; volume: number };
  */
 type Tiro = { f: number; tipo: 'corpo' | 'cabeca' | 'esquiva'; meu: boolean };
 
-export function roteiroDoChefao(E: number) {
+/**
+ * `area`: a faixa da tela onde ele anda (no sistema, o conteúdo inteiro; na
+ * Arena, só o chão do cemitério). `dura`: até quando a cena vai (padrão 11,5 s).
+ */
+export function roteiroDoChefao(E: number, o: { area?: { top: number; altura: number; largura?: number }; dura?: number; onde?: { x: number; y: number } } = {}) {
   const rnd = sorteio(91);
   const tiros: Tiro[] = [];
   // 2,4 s depois de chegar começa a chuva de tiros, por 4,4 s.
@@ -80,7 +86,7 @@ export function roteiroDoChefao(E: number) {
       tiros.push({ f: E + t + k * 2, tipo: r < 0.05 ? 'esquiva' : r < 0.3 ? 'cabeca' : 'corpo', meu: rnd() < 0.35 });
     }
   }
-  return { entra: E, tiros, foge: E + s(7.2), sai: E + s(11.5) };
+  return { entra: E, tiros, foge: E + s(7.2), sai: E + s(o.dura ?? 11.5), area: { largura: APP_L, ...(o.area ?? { top: 0, altura: ALTURA_NATAL }) }, onde: o.onde ?? { x: 1080, y: 470 } };
 }
 export type RoteiroChefao = ReturnType<typeof roteiroDoChefao>;
 
@@ -93,11 +99,11 @@ type Estado = {
 /** A cena inteira até `ate`, quadro a quadro. Determinística. */
 function simular(r: RoteiroChefao, ate: number): Estado {
   const rnd = sorteio(7);
-  const largura = APP_L, altura = ALTURA_NATAL;
+  const largura = r.area.largura, altura = r.area.altura;
   const t0 = (r.entra / FPS) * 1000;
   const m = criarMovimento(largura, altura, CAIXA, t0, ENTRADA_MS, rnd);
   // Entra do lado direito do meio: a fuga de moonwalk sai pela direita.
-  m.x = 1080; m.y = 470;
+  m.x = r.onde.x; m.y = r.onde.y;
   const e: Estado = { m, vida: VIDA_MAX, estagio: 0, levouAte: -1, textos: [], gotas: [], pedacos: [], manchas: [], sons: [], poeira: [] };
   const respingo = (f: number, x: number, y: number, forca: number) => {
     const n = Math.round(4 + forca * 6);
@@ -213,8 +219,30 @@ export const ReiDoPop: React.FC<{ r: RoteiroChefao }> = ({ r }) => {
   if (!e) return null;
   const agora = (f / FPS) * 1000;
   const { m } = e;
-  const { qd, t, achata } = quadroAtual(m, agora);
+  const { qd, t: t0, achata: achata0 } = quadroAtual(m, agora);
   const quadro = imagemParaPixels(montarQuadro(zumbiDaPose(qd, e.estagio, false), qd.quadro), true);
+  /*
+   * A dança do app troca de pose a cada 80–240 ms (4 a 12 quadros por
+   * segundo): na tela grande do vídeo isso parecia travar (Cleber, 06/11). O
+   * desenho continua o do app, mas entre uma pose e a próxima o corpo vai
+   * girando e subindo aos poucos, a cada quadro do vídeo, e cada troca de
+   * pose dá um tranco de leve (amassa e volta) — o passo marca o ritmo.
+   */
+  let t = t0;
+  let achata = achata0;
+  if (!m.acao && !m.fugindo) {
+    const lista = m.passo.quadros;
+    const prox = lista[(m.qi + 1) % lista.length].transforma;
+    const dur = m.passo.msPorQuadro * RITMO_DO_ESTAGIO[e.estagio];
+    const u = Math.min(1, m.acc / dur);
+    // Segura a pose na primeira metade e vai para a próxima na segunda.
+    const k = u < 0.45 ? 0 : (() => { const v = (u - 0.45) / 0.55; return v * v * (3 - 2 * v); })();
+    if (prox.vira === t0.vira) t = { ...t0, gira: t0.gira + (prox.gira - t0.gira) * k, sobe: t0.sobe + (prox.sobe - t0.sobe) * k };
+    achata = Math.max(achata0, 0.35 * Math.max(0, 1 - m.acc / 110));
+  }
+  // O balanço contínuo do corpo (respira no ritmo), para nunca ficar parado entre as poses.
+  const balanco = Math.sin((agora / 1000) * Math.PI * 2 * 1.6) * 1.4;
+  const holofote = 0.78 + 0.22 * Math.abs(Math.sin((agora / 1000) * Math.PI * 1.25));
   const entrando = f < r.entra + ms(ENTRADA_MS);
   const sobe = entrando ? Math.floor(Math.min(1, (f - r.entra) / ms(1000)) * 20) / 20 : 1;
   const levou = f < e.levouAte;
@@ -245,6 +273,7 @@ export const ReiDoPop: React.FC<{ r: RoteiroChefao }> = ({ r }) => {
           ))}
         </ol>
       </div>
+      <div style={{ position: 'absolute', left: 0, right: 0, top: r.area.top, height: r.area.altura }}>
       {/* As manchas no chão e os pedaços que caíram */}
       {e.manchas.map((mc, i) => (
         <div key={`m${i}`} style={{ position: 'absolute', left: mc.x - 14 * mc.tam - 4, top: mc.y - 3, width: 28 * mc.tam + 8, height: 6 + 6 * mc.tam, background: '#6e0a12', opacity: 0.55, imageRendering: 'pixelated', boxShadow: `${6 * mc.tam}px 3px 0 -1px #c8202a` }} />
@@ -264,9 +293,9 @@ export const ReiDoPop: React.FC<{ r: RoteiroChefao }> = ({ r }) => {
         return <Sprite key={`p${i}`} pixels={p.pixels} style={{ position: 'absolute', left: 0, top: 0, width: p.pixels.width * ESCALA, height: p.pixels.height * ESCALA, imageRendering: 'pixelated', transform: `translate(${Math.round(x)}px, ${Math.round(y)}px) rotate(${Math.round(rot / 15) * 15}deg)${p.espelho ? ' scaleX(-1)' : ''}` }} />;
       })}
       {/* O holofote no chão e ele */}
-      <div className="zb-chefao-chao" style={{ width: L, height: A, transform: `translate(${naTela(m.x)}px, ${naTela(m.y)}px) scale(${(1 - Math.min(0.5, m.ar / 240)).toFixed(2)})` }} />
+      <div className="zb-chefao-chao" style={{ width: L, height: A, opacity: holofote, transform: `translate(${naTela(m.x)}px, ${naTela(m.y)}px) scale(${(1 - Math.min(0.5, m.ar / 240)).toFixed(2)})` }} />
       <div className={entrando ? 'zb-chefao entrando' : 'zb-chefao'} style={{ width: L, height: A, transform: `translate(${naTela(m.x)}px, ${naTela(m.y - m.ar)}px)` }}>
-        <span className={levou ? 'zb-chefao-corpo levou' : 'zb-chefao-corpo'} style={{ transform: cssDaTransforma(t, m.lado, ESCALA, achata) }}>
+        <span className={levou ? 'zb-chefao-corpo levou' : 'zb-chefao-corpo'} style={{ transform: `translateY(${balanco}px) ${cssDaTransforma(t, m.lado, ESCALA, achata)}` }}>
           <Sprite pixels={quadro} className="zb-chefao-sprite" style={{ transform: `translateY(${(1 - sobe) * 100}%)` }} />
         </span>
       </div>
@@ -286,20 +315,33 @@ export const ReiDoPop: React.FC<{ r: RoteiroChefao }> = ({ r }) => {
         const st = estiloDoTexto(tx, f);
         return st && <div key={`t${i}`} className={`zb-chefao-texto ${tx.tipo}`} style={st}>{tx.texto}</div>;
       })}
+      </div>
     </div>
   );
 };
 
 /** Os sons da luta (os do app, gravados de `sons.ts`) e a trilha de 8 bits dele. */
-export const SonsDoChefao: React.FC<{ r: RoteiroChefao }> = ({ r }) => {
-  const { sons } = useMemo(() => simular(r, r.sai), [r]);
+/** `trilha`: a trilha de 8 bits dele (na Arena fica só a música do Halloween). `volume`: o quanto dos efeitos. */
+export const SonsDoChefao: React.FC<{ r: RoteiroChefao; trilha?: boolean; volume?: number; enxuto?: boolean }> = ({ r, trilha = true, volume = 1, enxuto = false }) => {
+  const { sons: todos } = useMemo(() => simular(r, r.sai), [r]);
+  // Enxuto (a Arena, 06/11): os acertos espaçados, sem o pé do moonwalk.
+  let ultimoAcerto = -Infinity;
+  const sons = !enxuto ? todos : todos.filter(sm => {
+    if (sm.arquivo === 'chefao/moonwalk') return false;
+    if (!sm.arquivo.startsWith('chefao/acerto')) return true;
+    if (sm.f - ultimoAcerto < ms(220)) return false;
+    ultimoAcerto = sm.f;
+    return true;
+  });
   return (
     <>
-      <Sequence from={r.entra} durationInFrames={r.sai - r.entra}>
-        <Audio src={staticFile('natal/chefao/trilha.wav')} volume={0.4} />
-      </Sequence>
+      {trilha && (
+        <Sequence from={r.entra} durationInFrames={r.sai - r.entra}>
+          <Audio src={staticFile('natal/chefao/trilha.wav')} volume={0.4} />
+        </Sequence>
+      )}
       {sons.map((sm, i) => (
-        <Sequence key={i} from={sm.f} durationInFrames={s(3)}><Audio src={staticFile(`natal/${sm.arquivo}.wav`)} volume={sm.volume} /></Sequence>
+        <Sequence key={i} from={sm.f} durationInFrames={s(3)}><Audio src={staticFile(`natal/${sm.arquivo}.wav`)} volume={sm.volume * volume} /></Sequence>
       ))}
     </>
   );
