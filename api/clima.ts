@@ -4,12 +4,19 @@
  *
  * ## Uma consulta para todo mundo
  *
- * A resposta sai com `Cache-Control: s-maxage=1800, stale-while-revalidate`:
- * quem guarda é a CDN da Vercel, não cada navegador. Todo mundo do sistema que
- * abre o calendário recebe a MESMA resposta guardada, e o provedor é chamado
- * no máximo umas duas vezes por hora, com as duas cidades na mesma rodada. Se
- * o provedor cair, a CDN continua entregando a última resposta boa (o `stale`)
- * enquanto tenta de novo.
+ * A resposta sai com `Cache-Control: s-maxage=…, stale-while-revalidate`:
+ * quem guarda é a CDN da Vercel, não cada navegador. Todo mundo do sistema
+ * recebe a MESMA resposta guardada, e o provedor é chamado uma vez por janela
+ * de validade, com as duas cidades na mesma rodada. Se o provedor cair, a CDN
+ * continua entregando a última resposta boa (o `stale`) enquanto tenta de novo.
+ *
+ * ## Quanto tempo guarda: o que o MET manda (06/11/2026)
+ *
+ * Cada resposta do MET diz até quando vale (`Expires`, hoje uns 30 min), e os
+ * termos pedem para não pedir de novo antes disso — é também quando a previsão
+ * dele muda. A CDN guarda exatamente até esse horário (o mais cedo das duas
+ * cidades), entre 1 e 60 minutos; sem o cabeçalho, 30. Assim a previsão nova
+ * entra assim que o MET a libera, e nunca antes do permitido.
  *
  * Não lê banco nem sessão: a previsão é pública, e conferir login aqui faria
  * cada pessoa ter a sua própria resposta e acabaria com o cache compartilhado.
@@ -235,13 +242,33 @@ export function previsaoDoMet(met: RespostaMet, agoraMs: number): Previsao | nul
   return { agora, dias };
 }
 
-async function buscarCidade(cidade: CidadeClima): Promise<RespostaMet> {
+/** Sem `Expires` do MET, a CDN guarda isto. */
+const GUARDA_PADRAO_S = 1800;
+/** Nunca menos (o MET pode mandar um `Expires` já vencido) nem mais que isto. */
+const GUARDA_MIN_S = 60;
+const GUARDA_MAX_S = 3600;
+/** Uma cidade falhou: tenta de novo logo. */
+const GUARDA_FALHA_S = 300;
+
+/**
+ * Quantos segundos a CDN guarda: até o `Expires` mais cedo das cidades lidas,
+ * entre 1 e 60 minutos. Nenhum `Expires` legível: 30 minutos.
+ */
+export function segundosDeGuarda(expiraEm: readonly (number | null)[], agoraMs: number): number {
+  const validos = expiraEm.filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+  if (validos.length === 0) return GUARDA_PADRAO_S;
+  const s = Math.floor((Math.min(...validos) - agoraMs) / 1000);
+  return Math.min(GUARDA_MAX_S, Math.max(GUARDA_MIN_S, s));
+}
+
+async function buscarCidade(cidade: CidadeClima): Promise<{ met: RespostaMet; expiraEm: number | null }> {
   const { lat, lon } = COORDENADAS[cidade];
   const r = await fetch(`${URL_MET}?lat=${lat}&lon=${lon}`, {
     headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
   });
   if (!r.ok) throw new Error(`MET ${r.status}`);
-  return (await r.json()) as RespostaMet;
+  const expira = Date.parse(r.headers.get('expires') ?? '');
+  return { met: (await r.json()) as RespostaMet, expiraEm: Number.isFinite(expira) ? expira : null };
 }
 
 export default async function handler(req: ReqLike, res: ResLike): Promise<void> {
@@ -255,9 +282,11 @@ export default async function handler(req: ReqLike, res: ResLike): Promise<void>
   const cidades: CidadeClima[] = ['birigui', 'marilia'];
   const lidas = await Promise.allSettled(cidades.map(buscarCidade));
   const resultado = {} as Record<CidadeClima, Previsao | null>;
+  const expiracoes: (number | null)[] = [];
   cidades.forEach((c, i) => {
     const l = lidas[i];
-    resultado[c] = l.status === 'fulfilled' ? previsaoDoMet(l.value, agoraMs) : null;
+    resultado[c] = l.status === 'fulfilled' ? previsaoDoMet(l.value.met, agoraMs) : null;
+    if (l.status === 'fulfilled') expiracoes.push(l.value.expiraEm);
   });
 
   if (!resultado.birigui && !resultado.marilia) {
@@ -267,13 +296,12 @@ export default async function handler(req: ReqLike, res: ResLike): Promise<void>
     return;
   }
 
-  // Uma cidade falhou: guarda pouco, para tentar de novo logo.
+  // Até o MET liberar a próxima; uma cidade falhou, guarda pouco para tentar de novo logo.
   const completa = Boolean(resultado.birigui && resultado.marilia);
+  const guarda = segundosDeGuarda(expiracoes, agoraMs);
   res.setHeader(
     'Cache-Control',
-    completa
-      ? 'public, max-age=0, s-maxage=1800, stale-while-revalidate=3600'
-      : 'public, max-age=0, s-maxage=300, stale-while-revalidate=3600',
+    `public, max-age=0, s-maxage=${completa ? guarda : Math.min(guarda, GUARDA_FALHA_S)}, stale-while-revalidate=3600`,
   );
   const corpo: RespostaClima = { fonte: 'MET Norway', geradoEm: new Date(agoraMs).toISOString(), cidades: resultado };
   res.status(200).json(corpo);

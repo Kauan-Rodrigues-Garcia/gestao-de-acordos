@@ -1,4 +1,4 @@
-import handler, { condicaoDoSimbolo, previsaoDoMet, type RespostaMet } from '../../api/clima';
+import handler, { condicaoDoSimbolo, previsaoDoMet, segundosDeGuarda, type RespostaMet } from '../../api/clima';
 
 function respostaFake() {
   const state = { statusCode: 200, body: null as unknown, headers: {} as Record<string, string> };
@@ -123,6 +123,21 @@ describe('previsaoDoMet', () => {
   });
 });
 
+describe('segundosDeGuarda', () => {
+  const MIN = 60 * 1000;
+  it('guarda até o Expires mais cedo das cidades', () => {
+    expect(segundosDeGuarda([AGORA + 31 * MIN, AGORA + 12 * MIN], AGORA)).toBe(12 * 60);
+  });
+  it('sem Expires: 30 minutos', () => {
+    expect(segundosDeGuarda([], AGORA)).toBe(1800);
+    expect(segundosDeGuarda([null], AGORA)).toBe(1800);
+  });
+  it('Expires vencido: 1 minuto; muito longe: 60 minutos', () => {
+    expect(segundosDeGuarda([AGORA - 5 * MIN], AGORA)).toBe(60);
+    expect(segundosDeGuarda([AGORA + 5 * 60 * MIN], AGORA)).toBe(3600);
+  });
+});
+
 describe('/api/clima', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -151,6 +166,20 @@ describe('/api/clima', () => {
       fonte: 'MET Norway',
       cidades: { birigui: { agora: { temp: 32 } }, marilia: { agora: { temp: 32 } } },
     });
+  });
+
+  it('a CDN guarda até o MET liberar a próxima (Expires)', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(AGORA);
+    const expira = new Date(AGORA + 17 * 60 * 1000).toUTCString();
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(
+      new Response(JSON.stringify(metDeExemplo()), { status: 200, headers: { Expires: expira } }),
+    )));
+    const { state, res } = respostaFake();
+
+    await handler({ method: 'GET' }, res);
+
+    expect(state.headers['Cache-Control']).toBe('public, max-age=0, s-maxage=1020, stale-while-revalidate=3600');
   });
 
   it('uma cidade falhando: a outra sai, e a CDN guarda pouco', async () => {

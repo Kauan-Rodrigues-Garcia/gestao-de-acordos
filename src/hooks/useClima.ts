@@ -1,22 +1,27 @@
 /**
- * useClima — a previsão do tempo da cidade de um setor, para o botão do topo
- * e a caixa do tempo do Calendário (06/11/2026).
+ * useClima — a previsão do tempo da cidade de um setor, para o botão do tempo
+ * no topo e o card dele (06/11/2026).
  *
- * Uma busca por aba: o botão e o calendário pedem ao mesmo tempo e recebem a
- * mesma resposta (`lerComCache`). Do outro lado, `/api/clima` é uma resposta
+ * Uma busca por aba: quem pede ao mesmo tempo recebe a mesma resposta
+ * (`lerComCache`). Do outro lado, `/api/clima` é uma resposta
  * guardada na CDN para todo mundo, então mil abas abertas não viram mil
  * consultas ao provedor.
  *
- * Relê a cada 30 minutos com a aba aberta, e na volta à aba se já passou disso.
+ * Relê a cada 10 minutos com a aba aberta, e na volta à aba se já passou disso
+ * (06/11/2026). Reler custa só uma ida ao cache da CDN: o provedor continua
+ * sendo chamado uma vez por janela de validade dele, qualquer que seja o
+ * número de abas. Assim a previsão nova aparece até 10 minutos depois de o
+ * MET liberá-la.
+ *
  * Se a leitura falha, fica com a última boa; sem nenhuma, `previsao` é `null`
- * e quem desenha não mostra o tempo (o botão continua só com o mês).
+ * e o botão do tempo não aparece.
  */
 import { useEffect, useState } from 'react';
 import { lerComCache } from '@/lib/cacheCurto';
 import { lerCidadeDoSetor } from '@/lib/cidadeDoSetor';
 import { cidadeDoClima, type CidadeClima, type Previsao, type RespostaClima } from '@/lib/clima';
 
-export const RELER_CLIMA_MS = 30 * 60 * 1000;
+export const RELER_CLIMA_MS = 10 * 60 * 1000;
 const CHAVE = 'clima:resposta';
 
 async function buscarClima(): Promise<RespostaClima> {
@@ -25,7 +30,7 @@ async function buscarClima(): Promise<RespostaClima> {
   return (await r.json()) as RespostaClima;
 }
 
-/** A resposta de `/api/clima`, uma vez por aba a cada 30 minutos. */
+/** A resposta de `/api/clima`, uma vez por aba a cada 10 minutos. */
 export function lerClima(): Promise<RespostaClima> {
   return lerComCache(CHAVE, RELER_CLIMA_MS, buscarClima);
 }
@@ -64,7 +69,7 @@ export function useClima(setorId: string | null | undefined, ativo = true): Esta
     return () => { vivo = false; };
   }, [setor, ativo]);
 
-  // A previsão: agora, a cada 30 min, e na volta à aba se passou disso.
+  // A previsão: agora, a cada 10 min, e na volta à aba se passou disso.
   useEffect(() => {
     if (!ativo) return;
     let vivo = true;
