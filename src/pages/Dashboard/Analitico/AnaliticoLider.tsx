@@ -10,17 +10,22 @@
  */
 
 import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
-import { lazy, Suspense, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { lazy, Suspense, useState, useEffect, useCallback, useMemo, useRef, type ReactNode } from 'react';
 import { assinarSinal } from '@/lib/sinais';
 import {
   Upload, Users, Trophy, AlertCircle,
-  Trash2, Loader2, Star, CalendarDays, X, Filter, Copy,
-  TrendingUp, CreditCard, Calendar, BarChart3, ArrowRightLeft, Wallet,
+  Trash2, Loader2, Star, X, Filter, Copy,
+  ArrowRightLeft, Wallet, MoreHorizontal,
   SlidersHorizontal, CalendarRange,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -98,10 +103,11 @@ import { LABEL_CRITERIO, estadoBotaoConfigRanking } from './rankingCriterio';
 import { idsOcultosRankingQuartil } from '@/services/situacaoUsuario.service';
 import type { SituacaoUsuario } from '@/lib/supabase';
 import { useAnaliticoImport } from '@/hooks/useAnaliticoImport';
-import { KpiTile } from '@/components/KpiTile';
 import { AbasSegmentadas, type AbaSegmentada } from '@/components/AbasSegmentadas';
-import { DatePickerField } from '@/components/DatePickerField';
 import { ListaOperadores, type GrupoOperadores } from '@/pages/Analitico/ListaOperadores';
+import { HeroRecebimentos } from '@/pages/Analitico/HeroRecebimentos';
+import { PainelConferencia, type ResumoConferencia, type SecaoConferencia } from '@/pages/Analitico/PainelConferencia';
+import { CalendarioDestaques } from '@/pages/Analitico/CalendarioDestaques';
 import { ExtratoRecebimentos, SeloVinculo } from '@/pages/Analitico/Extrato/ExtratoRecebimentos';
 import { vinculoDaLinha } from '@/pages/Analitico/Extrato/extrato';
 import {
@@ -153,9 +159,8 @@ const FormasPagamento = lazy(() =>
 );
 
 const ORFAOS_PAGE = 100;
-const DIAS_PT     = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-const MESES_PT    = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
-                     'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+/** O `Select` do shadcn recusa `value=""`; «todas as equipes» precisa de um valor. */
+const TODAS_EQUIPES = '__todas__';
 
 /*
  * As chaves das abas de dentro, nomeadas uma vez.
@@ -164,7 +169,7 @@ const MESES_PT    = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
  * alargaria a chave para `string`, e aí `setAbaAtiva` não encaixaria em
  * `onTrocar`. Com o tipo declarado, a instanciação explícita fecha a conta.
  */
-type AbaInterna = 'operadores' | 'formas' | 'ranking' | 'destaques' | 'orfaos';
+type AbaInterna = 'operadores' | 'formas' | 'ranking' | 'destaques';
 
 /**
  * Os dois formatos da MESMA lista de operadores.
@@ -207,12 +212,17 @@ interface AnaliticoLiderProps {
   onRefetch: () => void;
   /** Avisa a página qual aba interna está aberta (o Ranking não usa Dia/Período). */
   onAbaMudou?: (aba: AbaInterna | null) => void;
+  /**
+   * O que a página quer dentro da Conferência do relatório — hoje, a validação
+   * do setor, que mora na página porque também serve a quem não tem esta visão.
+   */
+  conferenciaExtra?: ReactNode;
 }
 
 export function AnaliticoLider({
   empresaId, recorte, setorId, podeVerTodosSetores = true,
   temPermissaoImportar,
-  onAbrirNovoAcordo, onVerAcordo, onRefetch, onAbaMudou,
+  onAbrirNovoAcordo, onVerAcordo, onRefetch, onAbaMudou, conferenciaExtra,
 }: AnaliticoLiderProps) {
   const importHook = useAnaliticoImport();
   const { perfil } = useAuth();
@@ -273,15 +283,17 @@ export function AnaliticoLider({
    */
   const abasInternas = useMemo(() => ([
     { key: 'operadores', label: 'Por operador',        Icon: Users,       permissao: 'analitico_sub_por_operador' },
+    { key: 'ranking',    label: 'Ranking',             Icon: Trophy,      permissao: 'analitico_sub_ranking' },
+    { key: 'destaques',  label: 'Destaques do dia',    Icon: Star,        permissao: 'analitico_sub_destaques_dia' },
     // Por onde o dinheiro entrou (Pix, Boleto, Cartão…), com período, equipe e
     // operador — a leitura que antes só existia no ERP.
     { key: 'formas',     label: 'Formas de pagamento', Icon: Wallet,      permissao: 'analitico_sub_formas_pagamento' },
-    { key: 'ranking',    label: 'Ranking',             Icon: Trophy,      permissao: 'analitico_sub_ranking' },
-    { key: 'destaques',  label: 'Destaques do dia',    Icon: Star,        permissao: 'analitico_sub_destaques_dia' },
     // Desempenho Equipes / Quartis / Gráfico mudaram para o Painel Líder nos
-    // dois tenants (BookPlay 2026-07). Aqui ficam só as de conferência.
-    { key: 'orfaos',     label: 'Sem operador',        Icon: AlertCircle, permissao: 'analitico_sub_sem_operador' },
+    // dois tenants (BookPlay 2026-07). «Sem operador» deixou de ser aba em
+    // 25/10/2026: é conferência, e mora na Conferência do relatório — a mesma
+    // chave `analitico_sub_sem_operador` decide se ela aparece lá.
   ] as const).filter(a => temPermissao(a.permissao)), [temPermissao]);
+  const podeVerOrfaos = temPermissao('analitico_sub_sem_operador');
 
   const abaVisivel = abasInternas.some(a => a.key === abaAtiva)
     ? abaAtiva
@@ -349,19 +361,14 @@ export function AnaliticoLider({
   const [confirmandoLimpeza, setConfirmandoLimpeza] = useState(false);
   const [limpando,           setLimpando]           = useState(false);
 
-  /*
-   * A régua de cima, já tipada — ver o comentário de `ABAS_VISAO`.
-   *
-   * Mora AQUI, e não junto de `abaVisivel`, porque lê `orfaos`: declarada antes
-   * do `useState` dela, a constante caía na zona morta temporal e a tela
-   * quebrava com "Cannot access 'orfaos' before initialization". O teste
-   * `AnaliticoLider.montagem.test.tsx` guarda isso.
-   */
+  // A busca da lista de linhas sem operador, separada da busca dos operadores:
+  // as duas ficam visíveis ao mesmo tempo desde que a lista foi para a
+  // Conferência do relatório, e uma não pode filtrar a outra.
+  const [buscaOrfaos, setBuscaOrfaos] = useState('');
+
+  /** A régua de cima, já tipada — ver o comentário de `ABAS_VISAO`. */
   const abasDaRegua: AbaSegmentada<AbaInterna>[] = abasInternas.map(
-    ({ key, label, Icon }) => ({
-      key, label, Icon,
-      badge: key === 'orfaos' ? orfaos.length : undefined,
-    }),
+    ({ key, label, Icon }) => ({ key, label, Icon }),
   );
 
   // ── Destaques ─────────────────────────────────────────────────────────────
@@ -605,10 +612,16 @@ export function AnaliticoLider({
   }, [resumos]);
 
   useEffect(() => {
-    if (abaVisivel === 'orfaos')    void carregarOrfaos();
     if (abaVisivel === 'destaques') void carregarDestaques(filtroEquipeId, setorId);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [abaVisivel]);
+
+  // As linhas sem operador carregam junto com a tela (e não ao abrir uma aba,
+  // como era): o cabeçalho da Conferência diz quantas são, e um número que só
+  // aparece depois de clicar não avisa ninguém.
+  useEffect(() => {
+    if (podeVerOrfaos) void carregarOrfaos();
+  }, [podeVerOrfaos, carregarOrfaos]);
 
   useEffect(() => {
     // Passa o mês: fechado usa o retrato congelado da composição, senão mover
@@ -718,10 +731,10 @@ export function AnaliticoLider({
   // Órfão já está todo em memória: a busca filtra aqui mesmo, e também pelo
   // login da cobradora, que é o que a linha sem operador tem de nome.
   const orfaosDaBusca = useMemo(
-    () => (busca.trim()
-      ? orfaosVisiveisSetor.filter(o => recebimentoCasaBusca(o, busca) || operadorCasaBusca({ nome: null, usuario: o.operador_usuario }, busca))
+    () => (buscaOrfaos.trim()
+      ? orfaosVisiveisSetor.filter(o => recebimentoCasaBusca(o, buscaOrfaos) || operadorCasaBusca({ nome: null, usuario: o.operador_usuario }, buscaOrfaos))
       : orfaosVisiveisSetor),
-    [orfaosVisiveisSetor, busca],
+    [orfaosVisiveisSetor, buscaOrfaos],
   );
 
   // ── Filtro de equipe ──────────────────────────────────────────────────────
@@ -785,19 +798,6 @@ export function AnaliticoLider({
       pulsoDoDia.vivas.filter(r => r.operador_id === opId),
       pulsoDoDia.importacao,
     );
-  }
-
-  function setFiltroData(opId: string, campo: 'inicio' | 'fim', valor: string) {
-    setFiltrosDatas(prev => {
-      const next  = new Map(prev);
-      const atual = next.get(opId) ?? { inicio: '', fim: '' };
-      next.set(opId, { ...atual, [campo]: valor });
-      return next;
-    });
-  }
-
-  function limparFiltroData(opId: string) {
-    setFiltrosDatas(prev => { const next = new Map(prev); next.delete(opId); return next; });
   }
 
   // ── Órfãos ────────────────────────────────────────────────────────────────
@@ -895,7 +895,7 @@ export function AnaliticoLider({
       setConfirmandoLimpeza(false);
       void carregarResumos();
       void carregarSnapshot();
-      if (abaVisivel === 'orfaos')    void carregarOrfaos();
+      if (podeVerOrfaos)              void carregarOrfaos();
       if (abaVisivel === 'destaques') void carregarDestaques(filtroEquipeId, setorId);
       onRefetch();
     }
@@ -907,7 +907,7 @@ export function AnaliticoLider({
     if (importHook.estado === 'done') {
       void carregarResumos();
       void carregarSnapshot();
-      if (abaVisivel === 'orfaos')    void carregarOrfaos();
+      if (podeVerOrfaos)              void carregarOrfaos();
       if (abaVisivel === 'destaques') void carregarDestaques(filtroEquipeId, setorId);
       onRefetch();
     }
@@ -1674,11 +1674,15 @@ export function AnaliticoLider({
     );
   }
 
-  /** O conteúdo de dentro do operador aberto: filtro de data e a lista. */
+  /**
+   * O conteúdo de dentro do operador aberto: a lista e o «Copiar».
+   *
+   * O filtro de datas que existia aqui saiu em 25/10/2026: repetia a lente
+   * Período do topo, que já recorta o card aberto (`janelaDoDetalhe`).
+   */
   function detalheDoOperador(l: LinhaOperadorPainel) {
     // No recorte Dia a fonte é o diário, e ele tem tabela própria. Nada aqui
-    // embaixo se aplica: as linhas já estão em memória (não há busca a esperar)
-    // e o filtro de datas não existe numa janela de um dia.
+    // embaixo se aplica: as linhas já estão em memória (não há busca a esperar).
     if (recorte.modo === 'dia') return detalheDoDia(l);
 
     const carregando  = loadingLinhas.has(l.operador_id);
@@ -1688,9 +1692,7 @@ export function AnaliticoLider({
     const linhas      = busca.trim() && !operadorCasaBusca(l, busca)
       ? doPeriodo.filter(r => recebimentoCasaBusca(r, busca))
       : doPeriodo;
-    const todasLinhas = linhasMap.get(l.operador_id) ?? [];
-    const filtro      = filtrosDatas.get(l.operador_id);
-    const temFiltro   = !!(filtro?.inicio || filtro?.fim);
+    const temFiltro   = recorte.modo === 'periodo' || linhas.length !== doPeriodo.length;
 
     if (carregando) {
       return (
@@ -1702,33 +1704,10 @@ export function AnaliticoLider({
     return (
       <>
         <div className="flex flex-wrap items-center gap-1.5 border-b border-border bg-muted/20 px-3 py-2">
-          <CalendarDays className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-          <span className="text-xs text-muted-foreground">Filtrar:</span>
-          <DatePickerField
-            value={filtro?.inicio ?? ''}
-            onChange={v => setFiltroData(l.operador_id, 'inicio', v)}
-            placeholder="Início" triggerClassName="w-28 rounded-lg"
-            minDate={pisoDoRecorte} maxDate={filtro?.fim || tetoDoRecorte}
-          />
-          <span className="text-xs text-muted-foreground">até</span>
-          <DatePickerField
-            value={filtro?.fim ?? ''}
-            onChange={v => setFiltroData(l.operador_id, 'fim', v)}
-            placeholder="Fim" triggerClassName="w-28 rounded-lg"
-            minDate={filtro?.inicio || pisoDoRecorte} maxDate={tetoDoRecorte}
-          />
-          {temFiltro && (
-            <>
-              <Button size="sm" variant="ghost"
-                className="h-8 gap-1 rounded-lg px-2 text-xs text-muted-foreground"
-                onClick={() => limparFiltroData(l.operador_id)}>
-                <X className="h-3 w-3" /> Limpar
-              </Button>
-              <span className="text-xs text-muted-foreground">
-                {linhas.length}/{todasLinhas.length}
-              </span>
-            </>
-          )}
+          <span className="text-xs text-muted-foreground">
+            {linhas.length} {linhas.length === 1 ? 'recebimento' : 'recebimentos'}
+            {recorte.modo === 'periodo' && ' no período'}
+          </span>
           <Button size="sm" variant="outline"
             className="ml-auto h-8 gap-1 rounded-lg px-2 text-xs"
             disabled={linhas.length === 0}
@@ -1775,23 +1754,295 @@ export function AnaliticoLider({
 
   // ── Seletor de equipe reutilizável ────────────────────────────────────────
   const seletorEquipe = equipesFiltradas.length > 0 && (
-    <div className="flex items-center gap-2">
-      <Filter className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-      <select
-        value={filtroEquipeId ?? ''}
-        onChange={e => mudarFiltroEquipe(e.target.value || null)}
-        className="h-7 px-2 text-xs border border-border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+    <div className="flex items-center gap-1.5">
+      <Filter className="w-3.5 h-3.5 text-muted-foreground shrink-0" aria-hidden="true" />
+      <Select
+        value={filtroEquipeId ?? TODAS_EQUIPES}
+        onValueChange={v => mudarFiltroEquipe(v === TODAS_EQUIPES ? null : v)}
       >
-        <option value="">Todas as equipes</option>
-        {equipesFiltradas.map(eq => (
-          <option key={eq.id} value={eq.id}>{eq.nome}</option>
-        ))}
-      </select>
+        <SelectTrigger className="h-8 w-48 rounded-lg text-xs" aria-label="Equipe">
+          <SelectValue placeholder="Todas as equipes" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={TODAS_EQUIPES}>Todas as equipes</SelectItem>
+          {equipesFiltradas.map(eq => (
+            <SelectItem key={eq.id} value={eq.id}>{eq.nome}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
       {filtroEquipeId && (
-        <Button size="sm" variant="ghost" className="h-7 px-2 gap-1 text-xs text-muted-foreground"
+        <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground"
+          aria-label="Mostrar todas as equipes"
           onClick={() => mudarFiltroEquipe(null)}>
-          <X className="w-3 h-3" /> Limpar
+          <X className="w-3.5 h-3.5" />
         </Button>
+      )}
+    </div>
+  );
+
+  /**
+   * As linhas sem operador — a antiga aba «Sem operador», hoje dentro da
+   * Conferência do relatório.
+   */
+  function conteudoOrfaos() {
+    return (
+        <div className="space-y-3">
+          {/*
+           * Esta aba não segue a lente, e diz isso em voz alta.
+           *
+           * Ela é do ANALÍTICO e do MÊS inteiro: as duas ações da tela —
+           * remover a linha e remover todas — apagam de `analitico_recebimentos`
+           * pelo mês. No recorte Dia a lista de operadores lê do diário, outra
+           * tabela, com outras colunas (`cliente_codigo`/`acordo_codigo` no
+           * lugar de `codigo`, forma de pagamento em texto bruto, data que pode
+           * ser nula) e outros ids. Trocar a fonte aqui deixaria o botão de
+           * remover apontando para a tabela errada — o "Remover todos" varreria
+           * o mês do analítico enquanto a tela mostra um dia do diário.
+           *
+           * Enquanto os órfãos do diário não tiverem ação própria, a aba fica
+           * mensal e avisa. Vale para Dia e para Período: os dois carregam o mês
+           * do recorte.
+           */}
+          {recorte.modo !== 'mes' && (
+            <div className="flex items-start gap-2.5 rounded-xl border border-amber-300/70 dark:border-amber-700/50 bg-amber-50/70 dark:bg-amber-950/20 px-3 py-2.5">
+              <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-500 shrink-0 mt-0.5" />
+              <p className="text-xs text-muted-foreground">
+                Esta lista é sempre do <strong className="text-foreground">mês inteiro</strong>
+                {' '}({mesLabelDoRecorte}), não do recorte escolhido na lente — resolver
+                linha sem operador mexe no analítico do mês.
+              </p>
+            </div>
+          )}
+          {loadingOrfaos && (
+            <div className="space-y-2 animate-pulse">
+              {Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-10 bg-muted rounded-lg" />)}
+            </div>
+          )}
+          {!loadingOrfaos && orfaosVisiveisSetor.length === 0 && (
+            <p className="text-sm text-muted-foreground">
+              Todo recebimento do mês tem operador vinculado.
+            </p>
+          )}
+          {!loadingOrfaos && orfaosVisiveisSetor.length > 0 && (
+            <>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-3">
+                  <CampoBuscaAnalitico
+                    valor={buscaOrfaos} onMudar={setBuscaOrfaos}
+                    placeholder={isPP ? 'Buscar código ou cobradora...' : 'Buscar NR, cliente ou cobradora...'}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {buscaOrfaos.trim() ? `${orfaosDaBusca.length} de ` : ''}
+                    {orfaosVisiveisSetor.length} linha{orfaosVisiveisSetor.length !== 1 ? 's' : ''} não vinculada{orfaosVisiveisSetor.length !== 1 ? 's' : ''}.
+                  </p>
+                </div>
+                {/* Some durante a busca: «todos» apaga a lista INTEIRA, e com
+                    ela filtrada o botão pareceria apagar só o que está na tela. */}
+                {!buscaOrfaos.trim() && (
+                  <Button size="sm" variant="destructive" className="gap-1.5 h-7 text-xs"
+                    onClick={() => void removerTodosOrfaos()} disabled={removendoTodos}>
+                    {removendoTodos
+                      ? <Loader2 className="w-3 h-3 animate-spin" />
+                      : <Trash2 className="w-3 h-3" />}
+                    Remover todos
+                  </Button>
+                )}
+              </div>
+              <div className="overflow-x-auto rounded-lg border border-border">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/30">
+                        <th className="text-left px-3 py-2 font-semibold text-muted-foreground">COBRADORA</th>
+                        <th className="text-left px-3 py-2 font-semibold text-muted-foreground">CÓDIGO</th>
+                        <th className="text-left px-3 py-2 font-semibold text-muted-foreground">FORMA</th>
+                        <th className="text-right px-3 py-2 font-semibold text-muted-foreground">RECEBIDO</th>
+                        <th className="text-left px-3 py-2 font-semibold text-muted-foreground">DATA</th>
+                        <th className="text-right px-3 py-2 font-semibold text-muted-foreground">REMOVER</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {orfaosDaBusca.length === 0 && (
+                        <tr>
+                          <td colSpan={6} className="px-3 py-6 text-center text-muted-foreground">
+                            Nenhuma linha com «{buscaOrfaos.trim()}».
+                          </td>
+                        </tr>
+                      )}
+                      {orfaosDaBusca.slice(0, orfaosVisiveis).map(linha => (
+                        <tr key={linha.id} className="hover:bg-muted/20">
+                          <td className="px-3 py-2 font-mono text-amber-600">{linha.operador_usuario}</td>
+                          <td className="px-3 py-2 font-semibold">{linha.codigo}</td>
+                          <td className="px-3 py-2">
+                            <Badge variant="outline" className={
+                              linha.forma_pagamento === 'cartao'
+                                ? 'text-xs border-purple-300 dark:border-purple-800/60 text-purple-700 dark:text-purple-300'
+                                : 'text-xs border-blue-300 dark:border-blue-800/60 text-blue-700 dark:text-blue-300'
+                            }>
+                              {linha.forma_pagamento === 'cartao' ? 'Cartão' : 'Boleto/Pix'}
+                            </Badge>
+                          </td>
+                          <td className="px-3 py-2 text-right font-mono">{formatBRL(linha.valor_recebido)}</td>
+                          <td className="px-3 py-2 tabular-nums">
+                            {new Date(linha.data_pagamento + 'T12:00:00').toLocaleDateString('pt-BR')}
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            <Button size="sm" variant="ghost"
+                              className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10"
+                              onClick={() => void removerOrfao(linha.id)}
+                              disabled={removendoId === linha.id}>
+                              {removendoId === linha.id
+                                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                : <Trash2 className="w-3.5 h-3.5" />}
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+              </div>
+              {orfaosVisiveis < orfaosDaBusca.length && (
+                <div className="flex justify-center pt-1">
+                  <Button variant="outline" size="sm" className="gap-1.5 text-xs"
+                    onClick={() => setOrfaosVisiveis(prev => prev + ORFAOS_PAGE)}>
+                    Carregar mais ({orfaosDaBusca.length - orfaosVisiveis} restantes)
+                  </Button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+    );
+  }
+
+  // ── O topo: total, rótulo e rodapé do recorte ─────────────────────────────
+  const fmtDiaMes = (iso: string) =>
+    new Date(iso + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+  const totalDoHero = recorte.modo === 'dia' ? (pulsoDoDia?.total ?? 0) : (metricas?.totalRecebido ?? 0);
+  const rotuloDoHero = recorte.modo === 'dia'
+    ? `Recebido em ${new Date(recorte.dia + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' })}`
+    : recorte.modo === 'periodo'
+      ? 'Recebido no período'
+      : `Recebido em ${mesLabelDoRecorte}`;
+  // No período o rodapé não pode dizer "Relatório mensal": o número não é o do
+  // mês, e as pontas são as escolhidas na lente, não as do relatório.
+  const rodapeDoHero = recorte.modo === 'dia'
+    ? 'Recebimento vivo · relatório diário'
+    : recorte.modo === 'periodo'
+      ? `Somente de ${fmtDiaMes(pisoDoRecorte)} a ${fmtDiaMes(tetoDoRecorte)}`
+      : metricas?.periodoInicio && metricas?.periodoFim
+        ? `Relatório mensal · pagamentos de ${fmtDiaMes(metricas.periodoInicio)} a ${fmtDiaMes(metricas.periodoFim)}`
+        : 'Relatório mensal';
+  const fatiasDeEquipe = gruposDoPainel.map(g => ({
+    id:    g.equipeId ?? '__sem__',
+    nome:  g.equipeNome,
+    valor: g.itens.reduce((s, l) => s + Math.max(0, l.valor), 0),
+  }));
+
+  // ── A Conferência do relatório ────────────────────────────────────────────
+  const resumosConferencia: ResumoConferencia[] = [];
+  const secoesConferencia: SecaoConferencia[] = [];
+  if (podeVerOrfaos) {
+    const n = orfaosVisiveisSetor.length;
+    if (!loadingOrfaos) {
+      resumosConferencia.push(n > 0
+        ? { texto: `${n} ${n === 1 ? 'linha' : 'linhas'} sem operador`, tom: 'alerta' }
+        : { texto: 'Nenhuma linha sem operador', tom: 'neutro' });
+    }
+    secoesConferencia.push({ chave: 'orfaos', titulo: 'Linhas sem operador', conteudo: conteudoOrfaos() });
+  }
+  // Só com um setor em foco: sem filtro o número é o da empresa, e a empresa
+  // soma tudo por definição — não há origem a tirar.
+  const origensDoSetor = setorId ? (totalPorSetor[setorId]?.origens ?? []) : [];
+  if (setorId && exclusoesAtivas && !loadingResumos && origensDoSetor.length >= 2) {
+    const fora = origensDoSetor.filter(o => o.excluida).reduce((s, o) => s + o.total, 0);
+    resumosConferencia.push({
+      texto: fora > 0 ? `${formatBRL(fora)} fora do acumulado` : `${origensDoSetor.length} origens no acumulado`,
+      tom: 'neutro',
+    });
+    secoesConferencia.push({
+      chave: 'composicao',
+      titulo: 'Composição do acumulado',
+      conteudo: (
+        <ComposicaoAcumulado
+          semRecolher
+          origens={origensDoSetor}
+          nomeDoSetor={id => nomeDoSetor.get(id)}
+          podeEditar={podeEditarComposicao}
+          salvando={salvandoComposicao}
+          onSalvar={excluidas => { void salvarComposicao(excluidas); }}
+        />
+      ),
+    });
+  }
+  if (conferenciaExtra) {
+    secoesConferencia.push({ chave: 'validacao', titulo: 'Validação do relatório', conteudo: conferenciaExtra });
+  }
+
+  /*
+   * Importar fica à vista; limpar mora no menu «⋯». Até 25/10/2026 o «Limpar
+   * mês» vermelho ficava colado nas abas, do mesmo tamanho do Importar — a ação
+   * mais destrutiva da tela tinha o mesmo peso da mais comum.
+   *
+   * Limpar e importar o DIA mexem no dia INTEIRO da empresa — não existe versão
+   * "só do meu setor". Quem enxerga um setor só não apaga o dos outros, ainda
+   * que tenha a permissão de importar.
+   */
+  const acoesDoMes = temPermissaoImportar && recorte.modo !== 'dia';
+  const acoesDoDia = podeImportarDiario && recorte.modo === 'dia' && !setorEscopoDia;
+  const itensDeLimpeza: { rotulo: string; acao: () => void }[] = [];
+  if (acoesDoMes) itensDeLimpeza.push({ rotulo: 'Limpar mês', acao: () => setConfirmandoLimpeza(true) });
+  if (acoesDoDia && pulsoDoDia) itensDeLimpeza.push({ rotulo: 'Limpar dia', acao: () => setConfirmandoLimpezaDia(true) });
+  // "Limpar mês" no recorte Dia, só na regra Cofen: lá o diário é um relatório
+  // PRÓPRIO (o 945). Na regra Nosso produto o Limpar mês da lente Mês já
+  // derruba os dois, porque saem do mesmo arquivo.
+  if (acoesDoDia && temRegraCofen) itensDeLimpeza.push({ rotulo: 'Limpar mês do diário', acao: () => setConfirmandoLimpezaMesDiario(true) });
+  // Na regra Nosso produto o diário sai do relatório mensal (o mesmo arquivo
+  // atualiza os dois); por isso não há importar o dia lá.
+  const importarDiario = acoesDoDia && temRegraCofen;
+  // O 994 é a Retenção do Jornada: o 58 a descarta, e ela entra pelo relatório
+  // próprio — prévia do 59, como o 58. Mesmo modal, outro parser — cada botão
+  // recusa o arquivo do outro. Chave própria: o relatório é de um setor só.
+  const importar994 = acoesDoMes && temPermissao('importar_analitico_retencao');
+
+  const acoesDoRelatorio = (acoesDoMes || importarDiario || itensDeLimpeza.length > 0) && (
+    <div className="flex items-center gap-1.5">
+      {importar994 && (
+        <Button size="sm" variant="outline" className="gap-1.5 rounded-lg"
+          onClick={() => { importHook.setRelatorio('994'); setModalImportar(true); }}
+          title="Relatório 994 — recebimento da Retenção do Jornada (Nr. Doc., Valor Pagto, Sub Grupo)">
+          <Upload className="h-4 w-4" /> Importar 994 · Retenção
+        </Button>
+      )}
+      {acoesDoMes && (
+        <Button size="sm" className="gap-1.5 rounded-lg"
+          onClick={() => { importHook.setRelatorio('58'); setModalImportar(true); }}
+          title="Relatório 58 — pagamento mensal (Cobradora, TpDoc, DtPgto, Recebido)">
+          <Upload className="h-4 w-4" /> Importar 58 · pagamento mensal
+        </Button>
+      )}
+      {importarDiario && (
+        <Button size="sm" className="gap-1.5 rounded-lg"
+          onClick={() => setModalImportarDiario(true)}
+          title="Relatório 945 — recebimento diário (Id.Baixa, UF Coren, Split). Atualiza também o Relatório de pagamento da diretoria.">
+          <Upload className="h-4 w-4" /> Importar 945 · recebimento diário
+        </Button>
+      )}
+      {itensDeLimpeza.length > 0 && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size="icon" variant="outline" className="h-8 w-8 rounded-lg" aria-label="Mais ações do relatório">
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {itensDeLimpeza.map(i => (
+              <DropdownMenuItem key={i.rotulo} onSelect={i.acao}
+                className="gap-2 text-destructive focus:text-destructive">
+                <Trash2 className="h-4 w-4" /> {i.rotulo}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       )}
     </div>
   );
@@ -1805,160 +2056,41 @@ export function AnaliticoLider({
         <FaixaCobertura945 cobertura={imp945.cobertura} erro={imp945.erroCobertura} />
       )}
 
-      {/* ── Cards de resumo do recorte ─────────────────────────────────────── */}
-      <div className={cn('grid grid-cols-2 gap-3 sm:grid-cols-3', mostrarTileHO ? 'lg:grid-cols-5' : 'lg:grid-cols-4')}>
-        {carregandoTiles ? (
-          Array.from({ length: mostrarTileHO ? 5 : 4 }).map((_, i) => (
-            <div key={i} className="h-[88px] animate-pulse rounded-xl bg-muted" />
-          ))
-        ) : temTiles ? (
-          <>
-            <KpiTile
-              rotulo={recorte.modo === 'dia' ? 'Total do dia' : 'Total recebido'}
-              Icon={TrendingUp} tom="primario"
-              valor={formatBRL(recorte.modo === 'dia' ? (pulsoDoDia?.total ?? 0) : metricas.totalRecebido)}
-              valorNumerico={recorte.modo === 'dia' ? (pulsoDoDia?.total ?? 0) : metricas.totalRecebido}
-              formatar={formatBRL}
-              sub={recorte.modo === 'dia'
-                ? 'Recebimento vivo'
-                // No recorte de período o rodapé não pode dizer "Relatório
-                // mensal": o número não é o do mês, e a data ao lado é a ponta
-                // escolhida na tela, não a do relatório importado.
-                : recorte.modo === 'periodo'
-                  ? 'Somente o período selecionado'
-                  : `Relatório mensal · ${metricas.periodoFim
-                      ? new Date(metricas.periodoFim + 'T12:00:00').toLocaleDateString('pt-BR')
-                      : '—'}`}
-            />
-            {/* O diário não tem a coluna de HO: no dia o tile some, em vez de
-                dizer R$ 0,00 e passar por "não houve HO". */}
-            {mostrarTileHO && (
-              <KpiTile rotulo="Total HO" Icon={CreditCard} tom="neutro"
-                valor={formatBRL(metricas.totalHo)}
-                valorNumerico={metricas.totalHo} formatar={formatBRL}
-                // O H.O. vem pronto do relatório; este é o percentual que o
-                // ERP praticou no recorte (Total HO ÷ Recebido).
-                sub={(() => {
-                  const pct = percentualImplicito(metricas.totalRecebido, metricas.totalHo);
-                  return pct !== null ? `${rotuloHoPercentual(pct)} do recebido (relatório)` : undefined;
-                })()} />
-            )}
-            <KpiTile rotulo="Operadores" Icon={Users} tom="neutro"
-              valor={recorte.modo === 'dia'
-                ? (pulsoDoDia?.resumos.length ?? 0)
-                : metricas.totalOperadores} />
-            <KpiTile
-              rotulo={recorte.modo === 'dia' ? 'Pagamentos' : 'Acordos pagos'}
-              Icon={BarChart3} tom="neutro"
-              valor={(recorte.modo === 'dia'
-                ? (pulsoDoDia?.pagamentos ?? 0)
-                : metricas.totalPagamentos).toLocaleString('pt-BR')} />
-            <KpiTile
-              rotulo={recorte.modo === 'dia' ? 'Dia' : 'Período'}
-              Icon={Calendar} tom="neutro"
-              valor={
-                recorte.modo === 'dia'
-                  ? new Date(recorte.dia + 'T12:00:00').toLocaleDateString('pt-BR')
-                  : metricas.periodoInicio && metricas.periodoFim
-                    ? `${new Date(metricas.periodoInicio + 'T12:00:00').toLocaleDateString('pt-BR')}`
-                      + ` – ${new Date(metricas.periodoFim + 'T12:00:00').toLocaleDateString('pt-BR')}`
-                    : '—'
-              }
-              className="[&_p:nth-child(2)]:text-sm" />
-          </>
-        ) : (
-          <div className="col-span-full py-4 text-center text-xs text-muted-foreground">
-            {recorte.modo === 'dia'
-              ? 'Nenhum relatório importado para este dia.'
-              : 'Nenhum dado importado para este mês.'}
-          </div>
-        )}
-      </div>
+      {/* ── O resumo do recorte ─────────────────────────────────────────────
+          Um número grande (o total), três pequenos ao lado e a divisão entre
+          equipes. Substituiu os cinco tiles do mesmo tamanho em 25/10/2026. */}
+      <HeroRecebimentos
+        rotulo={rotuloDoHero}
+        total={totalDoHero}
+        rodape={rodapeDoHero}
+        ho={mostrarTileHO && metricas ? {
+          valor: metricas.totalHo,
+          pct: (() => {
+            const pct = percentualImplicito(metricas.totalRecebido, metricas.totalHo);
+            return pct !== null ? `${rotuloHoPercentual(pct)} do recebido` : null;
+          })(),
+        } : null}
+        pagamentos={recorte.modo === 'dia' ? (pulsoDoDia?.pagamentos ?? 0) : (metricas?.totalPagamentos ?? 0)}
+        operadores={recorte.modo === 'dia' ? (pulsoDoDia?.resumos.length ?? 0) : (metricas?.totalOperadores ?? 0)}
+        equipes={fatiasDeEquipe}
+        carregando={carregandoTiles}
+        vazio={temTiles ? null : recorte.modo === 'dia'
+          ? 'Nenhum relatório importado para este dia.'
+          : 'Nenhum dado importado para este mês.'}
+      />
 
-      {/* Composição do acumulado — de onde vieram os reais do card acima.
-          Só com um setor em foco: sem filtro, o número é o da empresa, e a
-          empresa soma tudo por definição — não há origem a tirar. */}
-      {setorId && exclusoesAtivas && !loadingResumos && (
-        <ComposicaoAcumulado
-          origens={totalPorSetor[setorId]?.origens ?? []}
-          nomeDoSetor={id => nomeDoSetor.get(id)}
-          podeEditar={podeEditarComposicao}
-          salvando={salvandoComposicao}
-          onSalvar={excluidas => { void salvarComposicao(excluidas); }}
-        />
-      )}
+      {/* ── Conferência do relatório: validação, composição, sem operador ── */}
+      <PainelConferencia resumos={resumosConferencia} secoes={secoesConferencia} />
 
-      {/* Tabs + botão importar */}
-      <div className="flex items-center justify-between gap-2 flex-wrap">
+      {/* ── Detalhamento + ações do relatório ─────────────────────────────── */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <AbasSegmentadas
           abas={abasDaRegua}
           ativa={abaVisivel}
           onTrocar={(k: AbaInterna) => setAbaAtiva(k)}
           rotulo="Detalhamento do Analítico"
         />
-        {temPermissaoImportar && recorte.modo !== 'dia' && (
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm" variant="outline"
-              className="gap-1.5 rounded-lg text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
-              onClick={() => setConfirmandoLimpeza(true)}
-            >
-              <Trash2 className="w-4 h-4" /> Limpar mês
-            </Button>
-            {/* O 994 é a Retenção do Jornada: o 58 a descarta, e ela entra pelo
-                relatório próprio — prévia do 59, como o 58. Mesmo modal, outro
-                parser — cada botão recusa o arquivo do outro. Chave própria:
-                o relatório é de um setor só. */}
-            {temPermissao('importar_analitico_retencao') && (
-              <Button size="sm" variant="outline" className="gap-1.5 rounded-lg"
-                onClick={() => { importHook.setRelatorio('994'); setModalImportar(true); }}
-                title="Relatório 994 — recebimento da Retenção do Jornada (Nr. Doc., Valor Pagto, Sub Grupo)">
-                <Upload className="w-4 h-4" /> Importar 994 · Retenção
-              </Button>
-            )}
-            <Button size="sm" className="gap-1.5 rounded-lg"
-              onClick={() => { importHook.setRelatorio('58'); setModalImportar(true); }}
-              title="Relatório 58 — pagamento mensal (Cobradora, TpDoc, DtPgto, Recebido)">
-              <Upload className="w-4 h-4" /> Importar 58 · pagamento mensal
-            </Button>
-          </div>
-        )}
-        {/* Limpar e importar mexem no dia INTEIRO da empresa — não existe
-            versão "só do meu setor". Quem enxerga um setor só não pode apagar
-            o recebimento dos outros, ainda que tenha a permissão de importar. */}
-        {podeImportarDiario && recorte.modo === 'dia' && !setorEscopoDia && (
-          <div className="flex items-center gap-2">
-            {pulsoDoDia && (
-              <Button size="sm" variant="outline"
-                className="gap-1.5 rounded-lg border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                onClick={() => setConfirmandoLimpezaDia(true)}>
-                <Trash2 className="h-4 w-4" /> Limpar dia
-              </Button>
-            )}
-            {/* "Limpar mês" volta ao recorte Dia, só na regra Cofen.
-                Lá o recebimento diário é um relatório PRÓPRIO (o 945), e
-                quem precisa refazer o mês inteiro está justamente aqui — não
-                na lente Mês, que limpa o analítico. Na regra Nosso produto o
-                botão da lente Mês já derruba os dois, porque saem do mesmo arquivo. */}
-            {temRegraCofen && (
-              <Button size="sm" variant="outline"
-                className="gap-1.5 rounded-lg border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                onClick={() => setConfirmandoLimpezaMesDiario(true)}>
-                <Trash2 className="h-4 w-4" /> Limpar mês
-              </Button>
-            )}
-            {/* Na regra Nosso produto o diário sai do relatório mensal (o
-                mesmo arquivo atualiza os dois); por isso não há botão de
-                importar o dia lá. */}
-            {temRegraCofen && (
-              <Button size="sm" className="gap-1.5 rounded-lg"
-                title="Relatório 945 — recebimento diário (Id.Baixa, UF Coren, Split). Atualiza também o Relatório de pagamento da diretoria."
-                onClick={() => setModalImportarDiario(true)}>
-                <Upload className="h-4 w-4" /> Importar 945 · recebimento diário
-              </Button>
-            )}
-          </div>
-        )}
+        {acoesDoRelatorio}
       </div>
 
       {/* Cinco abas desligadas: os cards de resumo acima continuam valendo, e
@@ -2225,250 +2357,36 @@ export function AnaliticoLider({
         }}
       />
 
-      {/* ── Aba: Destaques do dia ─────────────────────────────────────────── */}
+      {/* ── Aba: Destaques do dia — o mês em calendário ──────────────────── */}
       {abaVisivel === 'destaques' && (
         <div className="space-y-3">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <div>
-              <p className="text-sm font-semibold">{MESES_PT[Number(mesNumStr) - 1]} de {mesAnoStr}</p>
-              <p className="text-xs text-muted-foreground">
-                {temDestaquePorGrupo
-                  ? 'Maior recebimento de cada equipe/subgrupo, por dia'
-                  : 'Destaque de recebimento por dia'}
-              </p>
-            </div>
-            {equipesFiltradas.length > 0 && seletorEquipe}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm text-muted-foreground">
+              {temDestaquePorGrupo
+                ? 'O maior recebimento de cada equipe, dia a dia. Clique num dia para ver todos.'
+                : 'O maior recebimento de cada dia. Clique num dia para ver o detalhe.'}
+            </p>
+            {seletorEquipe}
           </div>
 
           {loadingDestaques ? (
-            <div className="space-y-2 animate-pulse">
-              {Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-14 bg-muted rounded-lg" />)}
-            </div>
+            <div className="h-[420px] animate-pulse rounded-xl bg-muted" />
           ) : (
-            <div className="space-y-2">
-              {Array.from({ length: diasNoMes }, (_, i) => {
-                const d      = i + 1;
-                const diaStr = `${mes}-${String(d).padStart(2, '0')}`;
-                // Só a lente Dia destaca, e destaca o dia escolhido. No Mês,
-                // hoje pintado parecia um filtro de dia aplicado.
-                const isDestacado = diaStr === diaDestacado(recorte);
-                const isFut  = diaStr > hojeISO;
-
-                /*
-                 * Um destaque por equipe/subgrupo quando há divisão; o destaque
-                 * único quando não há.
-                 *
-                 * O caminho antigo continua vivo, e não por gentileza com o
-                 * código velho: enquanto a RPC nova não estiver no banco,
-                 * `destaquesGrupoMap` vem vazio e é ELE que segura a aba de pé.
-                 */
-                const doDia = temDestaquePorGrupo ? (destaquesGrupoMap.get(diaStr) ?? []) : [];
-                const unico = destaquesMap.get(diaStr);
-                const temAlgo = doDia.length > 0 || !!unico;
-
-                return (
-                  <div key={diaStr} className={cn(
-                    'flex gap-3 rounded-lg border px-4 py-3',
-                    doDia.length > 1 ? 'items-start' : 'items-center',
-                    isDestacado   && 'border-primary/40 bg-primary/5',
-                    !isDestacado && !isFut && temAlgo && 'border-border bg-card',
-                    isFut    && 'border-border/50 bg-muted/20 opacity-50',
-                    !temAlgo && !isFut && 'border-border/50 bg-muted/10',
-                  )}>
-                    <div className={cn('text-center shrink-0 w-10', doDia.length > 1 && 'pt-0.5')}>
-                      <p className={cn('text-lg font-bold leading-none', isDestacado ? 'text-primary' : 'text-foreground')}>
-                        {String(d).padStart(2, '0')}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {DIAS_PT[new Date(diaStr + 'T12:00:00').getDay()]}
-                      </p>
-                    </div>
-                    <div className={cn('w-px self-stretch', isDestacado ? 'bg-primary/30' : 'bg-border')} />
-
-                    {doDia.length > 0 ? (
-                      <div className="flex-1 min-w-0 space-y-1.5">
-                        {doDia.map(g => (
-                          <div key={`${g.grupo_id ?? 'sem'}-${g.operador_id}`} className="flex items-center gap-2">
-                            <Star className="w-3.5 h-3.5 text-amber-700 dark:text-amber-500 shrink-0 fill-amber-400" />
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm font-semibold truncate">
-                                {g.operador_nome ?? g.operador_usuario}
-                              </p>
-                              <p className="text-xs text-muted-foreground truncate">
-                                {g.grupo_nome ?? 'sem equipe'}
-                              </p>
-                            </div>
-                            <div className="text-right shrink-0">
-                              <p className="text-sm font-bold text-primary font-mono">{formatBRL(g.total_recebido)}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {g.total_pagamentos} pgto{g.total_pagamentos !== 1 ? 's' : ''}.
-                              </p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : unico ? (
-                      <>
-                        <div className="flex items-center gap-2 min-w-0 flex-1">
-                          <Star className="w-3.5 h-3.5 text-amber-700 dark:text-amber-500 shrink-0 fill-amber-400" />
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold truncate">{unico.operador_nome ?? unico.operador_usuario}</p>
-                            <p className="text-xs text-muted-foreground">destaque do dia</p>
-                          </div>
-                        </div>
-                        <div className="text-right shrink-0">
-                          <p className="text-sm font-bold text-primary font-mono">{formatBRL(unico.total_recebido)}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {unico.total_pagamentos} pgto{unico.total_pagamentos !== 1 ? 's' : ''}.
-                          </p>
-                        </div>
-                      </>
-                    ) : (
-                      <p className="text-xs text-muted-foreground italic flex-1">
-                        {isFut ? '—' : 'Sem recebimentos'}
-                      </p>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+            <CalendarioDestaques
+              mes={mes}
+              diasNoMes={diasNoMes}
+              hojeISO={hojeISO}
+              diaDaLente={diaDestacado(recorte)}
+              porGrupo={destaquesGrupoMap}
+              unico={destaquesMap}
+              usarGrupos={temDestaquePorGrupo}
+            />
           )}
         </div>
       )}
 
       {/* Desempenho Equipes / Quartis / Gráfico recebimento agora moram no
           Painel Líder (os dois tenants — mudança de caminho). */}
-
-      {/* ── Aba: Sem operador ─────────────────────────────────────────────── */}
-      {abaVisivel === 'orfaos' && (
-        <div className="space-y-3">
-          {/*
-           * Esta aba não segue a lente, e diz isso em voz alta.
-           *
-           * Ela é do ANALÍTICO e do MÊS inteiro: as duas ações da tela —
-           * remover a linha e remover todas — apagam de `analitico_recebimentos`
-           * pelo mês. No recorte Dia a lista de operadores lê do diário, outra
-           * tabela, com outras colunas (`cliente_codigo`/`acordo_codigo` no
-           * lugar de `codigo`, forma de pagamento em texto bruto, data que pode
-           * ser nula) e outros ids. Trocar a fonte aqui deixaria o botão de
-           * remover apontando para a tabela errada — o "Remover todos" varreria
-           * o mês do analítico enquanto a tela mostra um dia do diário.
-           *
-           * Enquanto os órfãos do diário não tiverem ação própria, a aba fica
-           * mensal e avisa. Vale para Dia e para Período: os dois carregam o mês
-           * do recorte.
-           */}
-          {recorte.modo !== 'mes' && (
-            <div className="flex items-start gap-2.5 rounded-xl border border-amber-300/70 dark:border-amber-700/50 bg-amber-50/70 dark:bg-amber-950/20 px-3 py-2.5">
-              <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-500 shrink-0 mt-0.5" />
-              <p className="text-xs text-muted-foreground">
-                Esta lista é sempre do <strong className="text-foreground">mês inteiro</strong>
-                {' '}({mesLabelDoRecorte}), não do recorte escolhido na lente — resolver
-                linha sem operador mexe no analítico do mês.
-              </p>
-            </div>
-          )}
-          {loadingOrfaos && (
-            <div className="space-y-2 animate-pulse">
-              {Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-10 bg-muted rounded-lg" />)}
-            </div>
-          )}
-          {!loadingOrfaos && orfaosVisiveisSetor.length === 0 && (
-            <div className="text-center py-12 text-muted-foreground">
-              <p className="text-sm">Nenhuma linha sem operador. ✓</p>
-            </div>
-          )}
-          {!loadingOrfaos && orfaosVisiveisSetor.length > 0 && (
-            <>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex flex-wrap items-center gap-3">
-                  <CampoBuscaAnalitico
-                    valor={busca} onMudar={setBusca}
-                    placeholder={isPP ? 'Buscar código ou cobradora...' : 'Buscar NR, cliente ou cobradora...'}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    {busca.trim() ? `${orfaosDaBusca.length} de ` : ''}
-                    {orfaosVisiveisSetor.length} linha{orfaosVisiveisSetor.length !== 1 ? 's' : ''} não vinculada{orfaosVisiveisSetor.length !== 1 ? 's' : ''}.
-                  </p>
-                </div>
-                {/* Some durante a busca: «todos» apaga a lista INTEIRA, e com
-                    ela filtrada o botão pareceria apagar só o que está na tela. */}
-                {!busca.trim() && (
-                  <Button size="sm" variant="destructive" className="gap-1.5 h-7 text-xs"
-                    onClick={() => void removerTodosOrfaos()} disabled={removendoTodos}>
-                    {removendoTodos
-                      ? <Loader2 className="w-3 h-3 animate-spin" />
-                      : <Trash2 className="w-3 h-3" />}
-                    Remover todos
-                  </Button>
-                )}
-              </div>
-              <Card className="border-border">
-                <CardContent className="p-0">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="border-b border-border bg-muted/30">
-                        <th className="text-left px-3 py-2 font-semibold text-muted-foreground">COBRADORA</th>
-                        <th className="text-left px-3 py-2 font-semibold text-muted-foreground">CÓDIGO</th>
-                        <th className="text-left px-3 py-2 font-semibold text-muted-foreground">FORMA</th>
-                        <th className="text-right px-3 py-2 font-semibold text-muted-foreground">RECEBIDO</th>
-                        <th className="text-left px-3 py-2 font-semibold text-muted-foreground">DATA</th>
-                        <th className="text-right px-3 py-2 font-semibold text-muted-foreground">REMOVER</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border">
-                      {orfaosDaBusca.length === 0 && (
-                        <tr>
-                          <td colSpan={6} className="px-3 py-6 text-center text-muted-foreground">
-                            Nenhuma linha com «{busca.trim()}».
-                          </td>
-                        </tr>
-                      )}
-                      {orfaosDaBusca.slice(0, orfaosVisiveis).map(linha => (
-                        <tr key={linha.id} className="hover:bg-muted/20">
-                          <td className="px-3 py-2 font-mono text-amber-600">{linha.operador_usuario}</td>
-                          <td className="px-3 py-2 font-semibold">{linha.codigo}</td>
-                          <td className="px-3 py-2">
-                            <Badge variant="outline" className={
-                              linha.forma_pagamento === 'cartao'
-                                ? 'text-xs border-purple-300 dark:border-purple-800/60 text-purple-700 dark:text-purple-300'
-                                : 'text-xs border-blue-300 dark:border-blue-800/60 text-blue-700 dark:text-blue-300'
-                            }>
-                              {linha.forma_pagamento === 'cartao' ? 'Cartão' : 'Boleto/Pix'}
-                            </Badge>
-                          </td>
-                          <td className="px-3 py-2 text-right font-mono">{formatBRL(linha.valor_recebido)}</td>
-                          <td className="px-3 py-2 tabular-nums">
-                            {new Date(linha.data_pagamento + 'T12:00:00').toLocaleDateString('pt-BR')}
-                          </td>
-                          <td className="px-3 py-2 text-right">
-                            <Button size="sm" variant="ghost"
-                              className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10"
-                              onClick={() => void removerOrfao(linha.id)}
-                              disabled={removendoId === linha.id}>
-                              {removendoId === linha.id
-                                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                : <Trash2 className="w-3.5 h-3.5" />}
-                            </Button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </CardContent>
-              </Card>
-              {orfaosVisiveis < orfaosDaBusca.length && (
-                <div className="flex justify-center pt-1">
-                  <Button variant="outline" size="sm" className="gap-1.5 text-xs"
-                    onClick={() => setOrfaosVisiveis(prev => prev + ORFAOS_PAGE)}>
-                    Carregar mais ({orfaosDaBusca.length - orfaosVisiveis} restantes)
-                  </Button>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      )}
 
       <AlertDialog open={confirmandoLimpeza} onOpenChange={setConfirmandoLimpeza}>
         <AlertDialogContent>
