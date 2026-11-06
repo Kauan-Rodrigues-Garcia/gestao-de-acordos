@@ -36,6 +36,11 @@ export type CampoOpcao = Condicao & (
   | { chave: string; rotulo: string; tipo: 'midia'; padrao: string; aceita: 'imagem' | 'video' }
   /** Uma equipe do setor do painel (o id); a lista vem do pacote de números. */
   | { chave: string; rotulo: string; tipo: 'equipe'; padrao: string }
+  /**
+   * Várias equipes do setor (os ids). Lista vazia = todas, inclusive as que
+   * forem criadas depois (06/11/2026, «Ranking de equipes»).
+   */
+  | { chave: string; rotulo: string; tipo: 'equipes'; padrao: string[] }
   /** Um dia, «YYYY-MM-DD». */
   | { chave: string; rotulo: string; tipo: 'data'; padrao: string }
   /** A cena livre inteira (`livre/cena.ts`), montada no estúdio. */
@@ -149,15 +154,36 @@ export const TEMPLATES: Template[] = [
     ],
   },
   {
+    // 06/11/2026: a cena própria de equipe contra equipe, com as equipes que
+    // participam escolhidas pelo líder. Os números já vinham no pacote
+    // (`equipes_ranking` e `ranking_por_equipe`, 20261030170000).
+    id: 'equipes', categoria: 'ranking',
+    nome: 'Ranking de equipes',
+    descricao: 'Equipe contra equipe, com a barra da meta de cada uma. Você escolhe quais equipes participam e o que aparece.',
+    campos: [
+      TITULO('Ranking de equipes'),
+      { chave: 'equipes', rotulo: 'Equipes que participam', tipo: 'equipes', padrao: [] },
+      { chave: 'ordem', rotulo: 'Ordenar por', tipo: 'escolha', padrao: 'valor',
+        escolhas: [
+          { valor: 'valor', rotulo: 'Recebido' }, { valor: 'meta', rotulo: '% da meta' }, { valor: 'projecao', rotulo: 'Projeção' },
+        ] },
+      { chave: 'mostrar_valor', rotulo: 'Mostrar o valor de cada equipe', tipo: 'liga', padrao: true },
+      { chave: 'mostrar_meta', rotulo: 'Mostrar o % da meta de cada equipe', tipo: 'liga', padrao: true },
+      { chave: 'mostrar_destaque', rotulo: 'Mostrar o 1º de cada equipe', tipo: 'liga', padrao: true },
+    ],
+  },
+  {
     // 29/10/2026: o destaque com a foto grande, em vários estilos (`destaque/`).
     id: 'destaque', categoria: 'ranking',
     nome: 'Destaque do dia',
-    descricao: 'Quem mais recebeu no dia ou no mês, com a foto bem grande. Estilos: gibi, sério, fofo, pixel art, neon e jornal.',
+    descricao: 'Quem mais recebeu no dia ou no mês, com a foto bem grande. Estilos: gibi, sério, fofo, pixel art, neon, jornal e Natal.',
     campos: [
       { chave: 'estilo', rotulo: 'Estilo', tipo: 'escolha', padrao: 'gibi',
         escolhas: [
           { valor: 'gibi', rotulo: 'Gibi' }, { valor: 'serio', rotulo: 'Sério' }, { valor: 'fofo', rotulo: 'Fofo' },
           { valor: 'pixel', rotulo: 'Pixel art' }, { valor: 'neon', rotulo: 'Neon' }, { valor: 'jornal', rotulo: 'Jornal' },
+          // 06/11/2026. Fica fora do sorteio da «Surpresa»: é de época.
+          { valor: 'natal', rotulo: 'Natal' },
           { valor: 'surpresa', rotulo: 'Surpresa (sorteia a cada vez)' },
         ] },
       { chave: 'titulo', rotulo: 'Título (vazio = automático)', tipo: 'texto', padrao: '', max: 28 },
@@ -232,7 +258,7 @@ export function templateDe(id: string): Template | null {
  * O valor de uma opção, já no tipo do campo. O que veio do banco e não
  * confere com o campo (texto onde é número, chave que sumiu) cai no padrão.
  */
-export function opcao<T extends string | number | boolean | null>(
+export function opcao<T extends string | number | boolean | null | string[]>(
   tela: Pick<TelaDoPainel, 'template' | 'opcoes'>,
   chave: string,
 ): T {
@@ -253,6 +279,11 @@ export function opcao<T extends string | number | boolean | null>(
       return (campo.escolhas.some(e => e.valor === bruto) ? bruto : campo.padrao) as T;
     case 'equipe':
       return (typeof bruto === 'string' && /^[0-9a-f-]{36}$/i.test(bruto) ? bruto : campo.padrao) as T;
+    case 'equipes':
+      // Só ids de verdade, sem repetir; o resto (texto solto, lista quebrada) sai.
+      return (Array.isArray(bruto)
+        ? [...new Set(bruto.filter((x): x is string => typeof x === 'string' && /^[0-9a-f-]{36}$/i.test(x)))]
+        : campo.padrao) as T;
     case 'data':
       return (typeof bruto === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(bruto) ? bruto : campo.padrao) as T;
     case 'cena':

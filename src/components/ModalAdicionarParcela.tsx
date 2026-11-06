@@ -9,6 +9,16 @@
  *
  * Mostra o acordo existente + parcelas do grupo e deixa o operador revisar
  * vencimento, valor, forma e status antes de confirmar.
+ *
+ * Parcela em aberto (06/11/2026): o grupo só tem uma parcela em aberto por
+ * vez, e a nova não vira registro enquanto a atual não for quitada. Antes isso
+ * acontecia calado — o valor, a data e a forma digitados se perdiam. Agora o
+ * modal avisa e a pessoa escolhe: marcar a atual como paga e registrar a nova,
+ * ou (Nosso produto) só aumentar o total de parcelas.
+ *
+ * Regra Cofen (`isPaguePlay`): uma parcela por vez, que sempre vira registro e
+ * soma no valor total do acordo. Por isso a atual precisa estar paga e o plano
+ * já declarado precisa estar todo registrado.
  */
 import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Layers, Plus } from 'lucide-react';
@@ -23,7 +33,7 @@ import {
 } from '@/components/ui/select';
 import { DatePickerField } from '@/components/DatePickerField';
 import { supabase, type Acordo } from '@/lib/supabase';
-import type { NovaParcelaInput } from '@/services/parcelas.service';
+import type { NovaParcelaInput, QuitarAntes } from '@/services/parcelas.service';
 import {
   planejarParcelas, validarPlano, MAX_PARCELAS_LOTE, type AjustePersonalizado,
 } from '@/services/parcelasLote';
@@ -47,10 +57,17 @@ export interface ModalAdicionarParcelaProps {
   /** Texto de contexto no topo (porta A explica o bloqueio do NR). */
   descricao?:  string;
   salvando:    boolean;
-  /** Recebe SEMPRE uma lista — com quantidade 1 ela tem um item só. */
-  onConfirm:   (inputs: NovaParcelaInput[]) => void | Promise<void>;
+  /**
+   * Recebe SEMPRE uma lista — com quantidade 1 ela tem um item só. `quitar`
+   * vem preenchido quando a pessoa escolheu marcar a parcela em aberto como
+   * paga antes da inclusão.
+   */
+  onConfirm:   (inputs: NovaParcelaInput[], opcoes: { quitar: QuitarAntes | null }) => void | Promise<void>;
   onClose:     () => void;
 }
+
+/** O que fazer com a parcela em aberto do grupo. */
+type EscolhaAberta = 'quitar' | 'so_total' | null;
 
 /** No form PaguePlay boleto/pix são exibidos como a opção única 'boleto_pix'. */
 function tipoParaOpcao(tipo: string | undefined, isPP: boolean): string {
@@ -59,7 +76,7 @@ function tipoParaOpcao(tipo: string | undefined, isPP: boolean): string {
   return tipo;
 }
 
-type ParcelaResumo = Pick<Acordo, 'id' | 'numero_parcela' | 'vencimento' | 'valor' | 'status'>;
+type ParcelaResumo = Pick<Acordo, 'id' | 'numero_parcela' | 'vencimento' | 'valor' | 'status' | 'parcelas'>;
 
 export function ModalAdicionarParcela({
   aberto, acordo, isPaguePlay, inicial, descricao, salvando, onConfirm, onClose,
@@ -88,9 +105,15 @@ export function ModalAdicionarParcela({
   const [loadingParcelas, setLoadingParcelas] = useState(false);
 
   // Quantas parcelas adicionar de uma vez. Padrão 1: quem só quer uma parcela
-  // não percebe que o campo existe.
+  // não percebe que o campo existe. Na regra Cofen é sempre uma: cada parcela
+  // entra com o próprio valor e soma no total.
   const [qtdStr, setQtdStr] = useState('1');
-  const quantidade = Math.min(Math.max(1, parseInt(qtdStr) || 1), MAX_PARCELAS_LOTE);
+  const quantidade = isPaguePlay ? 1 : Math.min(Math.max(1, parseInt(qtdStr) || 1), MAX_PARCELAS_LOTE);
+
+  // Parcela em aberto no grupo: o que a pessoa escolheu fazer com ela, e a
+  // data do pagamento quando for marcá-la como paga (vazio = o vencimento dela).
+  const [escolhaAberta, setEscolhaAberta] = useState<EscolhaAberta>(null);
+  const [dataQuitar, setDataQuitar] = useState('');
 
   // Personalização por parcela. `Record` por índice, e não array, para uma
   // linha em branco continuar em branco quando a quantidade muda.
@@ -142,6 +165,8 @@ export function ModalAdicionarParcela({
     setQtdStr('1');
     setPersonalizar(false);
     setAjustes({});
+    setEscolhaAberta(null);
+    setDataQuitar('');
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aberto, acordo?.id]);
 
@@ -178,7 +203,7 @@ export function ModalAdicionarParcela({
     setLoadingParcelas(true);
     supabase
       .from('acordos')
-      .select('id, numero_parcela, vencimento, valor, status')
+      .select('id, numero_parcela, vencimento, valor, status, parcelas')
       .eq('acordo_grupo_id', acordo.acordo_grupo_id)
       .order('numero_parcela', { ascending: true })
       .then(({ data }) => {
@@ -189,17 +214,49 @@ export function ModalAdicionarParcela({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aberto, acordo?.id, acordo?.acordo_grupo_id]);
 
+  // ── Situação do grupo ──────────────────────────────────────────────────────
+  // `verificar_pendente` é o único status em aberto (ver `temParcelaEmAberto`).
+  const abertas = parcelas.filter(p => p.status === 'verificar_pendente');
+  // Marcar como paga só é oferecido com UMA em aberto: com mais de uma, quitar
+  // uma não libera a inclusão, e escolher qual é coisa do detalhe do acordo.
+  const parcelaAberta = abertas.length === 1 ? abertas[0] : null;
+  const maiorNumero    = Math.max(0, ...parcelas.map(p => p.numero_parcela ?? 1));
+  const totalDeclarado = Math.max(acordo?.parcelas ?? 1, ...parcelas.map(p => p.parcelas ?? 1));
+  // Cofen com parcela prevista que ainda não é registro: a próxima vem pelo
+  // reagendamento, que já sabe o valor dela pela divisão do total.
+  const planoIncompletoCofen = isPaguePlay && maiorNumero < totalDeclarado;
+  const dataQuitarEfetiva = dataQuitar || parcelaAberta?.vencimento || '';
+  const soAumentaTotal = abertas.length > 0 && escolhaAberta === 'so_total';
+
+  // Cofen: o total de antes e o de depois, para a pessoa ver a soma.
+  const totalAntesCofen = acordo?.valor_total != null
+    ? Number(acordo.valor_total)
+    : Math.round(parcelas.reduce((s, p) => s + Math.round(Number(p.valor ?? 0) * 100), 0)) / 100;
+  const totalDepoisCofen = Math.round((totalAntesCofen + parseCurrencyInput(valorStr)) * 100) / 100;
+
   function confirmar() {
+    if (loadingParcelas) return;
+    if (planoIncompletoCofen) {
+      toast.error(
+        `Este acordo já prevê ${totalDeclarado} parcelas e só ${maiorNumero} estão registradas. `
+        + 'Lance a próxima pelo reagendamento da parcela paga, no detalhe do acordo.',
+        { duration: 8000 },
+      );
+      return;
+    }
     // A conferência roda sobre o PLANO, não sobre os campos soltos: é o plano
     // que vai para o banco, e é nele que uma linha personalizada em branco
     // apareceria.
     const erro = validarPlano(plano);
     if (erro) { toast.error(erro); return; }
+
     /*
      * Acordo recorrente não tem reparcelamento (22/09/2026).
      *
      * O botão já some do detalhe desse acordo; esta linha é para a porta A
-     * (NR já tabulado) e para qualquer caminho novo que abra o modal.
+     * (NR já tabulado) e para qualquer caminho novo que abra o modal. Vem
+     * antes da parcela em aberto: não adianta escolher o que fazer com ela
+     * num acordo que não recebe parcela nenhuma.
      */
     if (!isPaguePlay && acordo && ehFormaRecorrente(acordo.tipo)) {
       toast.error(
@@ -208,6 +265,38 @@ export function ModalAdicionarParcela({
         { duration: 8000 },
       );
       return;
+    }
+
+    // Parcela em aberto: a pessoa precisa dizer o que fazer com ela.
+    let quitar: QuitarAntes | null = null;
+    if (abertas.length > 0) {
+      if (!parcelaAberta && (isPaguePlay || escolhaAberta !== 'so_total')) {
+        toast.error(
+          'Este acordo tem mais de uma parcela em aberto. Resolva as parcelas no detalhe do acordo antes de lançar outra.',
+          { duration: 8000 },
+        );
+        return;
+      }
+      if (isPaguePlay && escolhaAberta !== 'quitar') {
+        toast.error(
+          `A parcela #${parcelaAberta?.numero_parcela ?? 1} ainda está em aberto. `
+          + 'Marque-a como paga para lançar a próxima neste acordo.',
+          { duration: 8000 },
+        );
+        return;
+      }
+      if (escolhaAberta === null) {
+        toast.error('A parcela atual está em aberto: escolha o que fazer com ela antes de continuar.');
+        return;
+      }
+      if (escolhaAberta === 'quitar' && parcelaAberta) {
+        if (!dataQuitarEfetiva) { toast.error('Informe a data do pagamento da parcela em aberto.'); return; }
+        if (dataQuitarEfetiva > getTodayISO()) {
+          toast.error('A data do pagamento da parcela em aberto não pode ser no futuro.');
+          return;
+        }
+        quitar = { parcelaId: parcelaAberta.id, dataPagamento: dataQuitarEfetiva };
+      }
     }
     /*
      * PIX Automático e Cartão Recorrente como parcela (liberado em 08/10/2026).
@@ -223,6 +312,16 @@ export function ModalAdicionarParcela({
     const recorrente = !isPaguePlay && plano.parcelas.find(p => ehFormaRecorrente(p.tipo));
     if (recorrente) {
       const nome = nomeDaFormaRecorrente(recorrente.tipo);
+      // Sem virar registro agora, o NR iria para a aba Pix sem a linha de
+      // acordo correspondente.
+      if (soAumentaTotal) {
+        toast.error(
+          `${nome} só entra como próxima parcela depois que a atual for paga. `
+          + 'Marque a parcela em aberto como paga ou escolha outra forma.',
+          { duration: 8000 },
+        );
+        return;
+      }
       if (plano.parcelas.length > 1) {
         toast.error(
           `${nome} entra como UMA parcela só, com o valor total — quem parcela é a recorrência. `
@@ -246,7 +345,7 @@ export function ModalAdicionarParcela({
       valor:      p.valor,
       tipo:       p.tipo,
       status:     p.status,
-    })));
+    })), { quitar });
   }
 
   if (!acordo) return null;
@@ -320,6 +419,85 @@ export function ModalAdicionarParcela({
             )}
           </div>
 
+          {/* Cofen com plano declarado ainda não registrado: a próxima vem pelo
+              reagendamento, não por aqui. */}
+          {!loadingParcelas && planoIncompletoCofen && (
+            <div role="alert" className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs space-y-1">
+              <p className="flex items-start gap-2 font-semibold text-destructive">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-px" />
+                Este acordo já tem parcelas previstas
+              </p>
+              <p className="text-foreground/80">
+                Ele prevê {totalDeclarado} parcelas e só {maiorNumero} estão registradas. A próxima é lançada
+                pelo <strong>reagendamento</strong> da parcela paga, no detalhe do acordo — o valor dela já
+                vem da divisão do total.
+              </p>
+            </div>
+          )}
+
+          {/* Parcela em aberto: a nova não vira registro enquanto ela não for
+              quitada. Antes o modal seguia calado e os dados digitados se
+              perdiam; agora a pessoa escolhe. */}
+          {!loadingParcelas && !planoIncompletoCofen && abertas.length > 0 && (
+            <div role="alert" className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 space-y-2 text-xs">
+              <p className="flex items-start gap-2 font-semibold text-amber-900 dark:text-amber-300">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-px" />
+                {parcelaAberta
+                  ? `A parcela #${parcelaAberta.numero_parcela ?? 1} (${formatCurrency(parcelaAberta.valor)}, vence ${formatDate(parcelaAberta.vencimento)}) ainda está em aberto`
+                  : `Este acordo tem ${abertas.length} parcelas em aberto`}
+              </p>
+              <p className="text-amber-900/90 dark:text-amber-200/90">
+                {isPaguePlay
+                  ? 'A parcela nova entra com o valor dela no total do acordo, e só pode ser lançada com a atual paga.'
+                  : 'O acordo tem uma parcela em aberto por vez: a nova só vira registro depois que a atual for quitada.'}
+              </p>
+              <div className="space-y-2 pt-1" role="radiogroup" aria-label="O que fazer com a parcela em aberto">
+                {parcelaAberta && (
+                  <label className="flex items-start gap-2 cursor-pointer select-none font-medium text-foreground">
+                    <input
+                      type="radio" name="escolha-parcela-aberta"
+                      checked={escolhaAberta === 'quitar'}
+                      onChange={() => setEscolhaAberta('quitar')}
+                      className="h-3.5 w-3.5 mt-0.5 accent-primary cursor-pointer"
+                    />
+                    <span>
+                      A #{parcelaAberta.numero_parcela ?? 1} já foi paga — marcar como paga e registrar esta parcela
+                    </span>
+                  </label>
+                )}
+                {escolhaAberta === 'quitar' && parcelaAberta && (
+                  <div className="pl-6 max-w-[12rem]">
+                    <DatePickerField
+                      label="Data do pagamento" required
+                      value={dataQuitarEfetiva}
+                      onChange={setDataQuitar}
+                    />
+                  </div>
+                )}
+                {!isPaguePlay && (
+                  <label className="flex items-start gap-2 cursor-pointer select-none font-medium text-foreground">
+                    <input
+                      type="radio" name="escolha-parcela-aberta"
+                      checked={escolhaAberta === 'so_total'}
+                      onChange={() => setEscolhaAberta('so_total')}
+                      className="h-3.5 w-3.5 mt-0.5 accent-primary cursor-pointer"
+                    />
+                    <span>
+                      Ainda não foi paga — só aumentar o total de parcelas
+                      <span className="block font-normal text-muted-foreground">
+                        O valor, a data e a forma digitados aqui <strong>não ficam guardados</strong>: a próxima
+                        parcela é lançada no reagendamento, quando a atual for quitada.
+                      </span>
+                    </span>
+                  </label>
+                )}
+                {isPaguePlay && !parcelaAberta && (
+                  <p className="text-foreground/80">Resolva as parcelas em aberto no detalhe do acordo antes de lançar outra.</p>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Nova parcela */}
           <div className="space-y-3 border-t border-border pt-3">
             <p className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px]">
@@ -358,7 +536,7 @@ export function ModalAdicionarParcela({
                   </SelectContent>
                 </Select>
               </div>
-              {!recorrenteSel && (
+              {!recorrenteSel && !isPaguePlay && (
               <div className="space-y-1">
                 <Label className="text-xs">Quantidade de parcelas</Label>
                 <Input
@@ -463,6 +641,15 @@ export function ModalAdicionarParcela({
               </div>
             )}
 
+            {/* Cofen: a parcela soma no valor total do acordo. */}
+            {isPaguePlay && !planoIncompletoCofen && (
+              <p className="text-[11px] text-muted-foreground">
+                Valor total do acordo: {formatCurrency(totalAntesCofen)} →{' '}
+                <strong className="text-foreground">{formatCurrency(totalDepoisCofen)}</strong>
+                {' '}({maiorNumero + 1} parcelas).
+              </p>
+            )}
+
             {/* Resumo: o operador confere o total antes de confirmar. */}
             {quantidade > 1 && (
               <p className="text-[11px] text-muted-foreground">
@@ -479,9 +666,12 @@ export function ModalAdicionarParcela({
           <Button variant="outline" size="sm" onClick={onClose} disabled={salvando}>
             Cancelar
           </Button>
-          <Button size="sm" className="gap-1.5" onClick={confirmar} disabled={salvando}>
+          <Button
+            size="sm" className="gap-1.5" onClick={confirmar}
+            disabled={salvando || loadingParcelas || planoIncompletoCofen}
+          >
             <Plus className="w-3.5 h-3.5" />
-            {salvando ? 'Adicionando...' : 'Adicionar parcela'}
+            {salvando ? 'Adicionando...' : soAumentaTotal ? 'Aumentar total de parcelas' : 'Adicionar parcela'}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -727,16 +727,47 @@ describe('AcordoNovoInline — fluxo salvar() (mesmo operador)', () => {
     expect(okMsgs.some(m => /adicionada/i.test(m))).toBe(true);
   });
 
-  it('PaguePlay: mantém o bloqueio original (toast, sem modal de parcela)', async () => {
+  // Até 06/11/2026 a regra Cofen bloqueava aqui. Agora o Código próprio abre o
+  // mesmo modal, e a parcela soma no valor total do acordo.
+  it('regra Cofen: Código meu abre o modal de parcela, sem inserir', async () => {
     const onSaved = vi.fn();
     verificarNrRegistroMock.mockResolvedValue({
       registroId: 'r1', acordoId: 'a-meu', operadorId: 'me-1', operadorNome: 'Eu Operador',
     });
-    // Mesmo com o acordo carregável, PP não deve abrir o modal.
     routes.acordosMaybeSingle = {
-      data: { id: 'a-meu', instituicao: '1', operador_id: 'me-1', empresa_id: 'emp-1' } as Acordo,
+      data: {
+        id: 'a-meu', instituicao: '1', operador_id: 'me-1', empresa_id: 'emp-1',
+        tipo: 'boleto', status: 'pago', valor: 300, vencimento: '2026-10-10',
+        parcelas: 1, numero_parcela: 1, acordo_grupo_id: null,
+      } as Acordo,
       error: null,
     };
+
+    semearEstadoPP();
+    renderInline({ onSaved, isPaguePlay: true });
+    const nomeCampo = screen.getByPlaceholderText(/Nome do profissional/i);
+    fireEvent.change(nomeCampo, { target: { value: 'Profissional X' } });
+    const codigo = screen.getByPlaceholderText(/^Código$/);
+    fireEvent.change(codigo, { target: { value: '1' } });
+    fireEvent.click(screen.getByTestId('pick-date'));
+    fireEvent.change(screen.getByPlaceholderText('0,00'), { target: { value: '100' } });
+
+    clickSalvarAcordo();
+
+    await waitFor(() => {
+      expect(screen.getByText(/Adicionar parcela ao acordo/i)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/soma no valor total do acordo/i)).toBeInTheDocument();
+    expect(onSaved).not.toHaveBeenCalled();
+    expect(supabaseCalls.find(c => c.table === 'acordos' && c.op === 'insert')).toBeUndefined();
+  });
+
+  it('regra Cofen: Código meu sem acordo carregável mantém o bloqueio', async () => {
+    const onSaved = vi.fn();
+    verificarNrRegistroMock.mockResolvedValue({
+      registroId: 'r1', acordoId: 'a-meu', operadorId: 'me-1', operadorNome: 'Eu Operador',
+    });
+    routes.acordosMaybeSingle = { data: null, error: null };
 
     semearEstadoPP();
     renderInline({ onSaved, isPaguePlay: true });

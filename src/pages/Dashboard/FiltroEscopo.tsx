@@ -112,6 +112,12 @@ interface Props {
   /** Divisão escolhida. `null` = o setor inteiro. */
   divisao?: string | null;
   onDivisao?: (id: string | null) => void;
+  /**
+   * Os controles do painel — mês e, na regra Cofen, H.O./Bruto — à direita
+   * da régua. Com eles o card sempre aparece, mesmo sem régua: o mês é
+   * pergunta de todo mundo.
+   */
+  controles?: React.ReactNode;
 }
 
 /** O que a linha de divisão precisa de cada divisão. */
@@ -130,7 +136,7 @@ const TopoNevado = lazy(() => comNovaTentativa(() => import('@/components/Natal/
 
 export function FiltroEscopo({
   niveis, setores, setorFiltro, onSetor, equipes, podeTodasEquipes,
-  visao, onVisao, setorDoPerfil, equipeDoPerfil,
+  visao, onVisao, setorDoPerfil, equipeDoPerfil, controles,
   divisoes = SEM_DIVISOES, divisao = null, onDivisao,
 }: Props) {
   const natal = useTemaNatal();
@@ -244,7 +250,7 @@ export function FiltroEscopo({
     : equipes;
 
   // Nada a oferecer: o controle inteiro some em vez de virar moldura vazia.
-  if (!podeEscolherSetor && !podeVerEquipes && !mostrarRegua && !mostrarDivisoes) return null;
+  if (!podeEscolherSetor && !podeVerEquipes && !mostrarRegua && !mostrarDivisoes && !controles) return null;
 
   const equipeAtiva = visao.startsWith('equipe:') ? visao.slice('equipe:'.length) : null;
 
@@ -259,40 +265,44 @@ export function FiltroEscopo({
         linhas existem, e um controle que governa os de baixo lendo-se depois
         deles obrigaria a percorrer a caixa duas vezes para entender.
       */}
-      {mostrarRegua && (
+      {(mostrarRegua || controles) && (
         <div className={cn(
           'flex items-center gap-2 flex-wrap',
           // A divisória só faz sentido quando há algo embaixo para separar.
           (mostrarSetores || mostrarEquipes || mostrarDivisoes) && 'border-b border-border pb-2',
         )}>
-          <div
-            className="flex items-center gap-1 border border-border rounded-lg p-0.5 bg-muted/30"
-            role="group"
-            aria-label="Nível de visualização"
-          >
-            {degraus.map(({ key, rotulo, titulo, Icone, alvo, ativo }) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => onVisao(alvo)}
-                title={titulo}
-                aria-pressed={ativo}
-                className={cn(
-                  'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors',
-                  ativo
-                    ? 'bg-background shadow-sm text-foreground'
-                    : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                <Icone className="w-3.5 h-3.5 shrink-0" /> {rotulo}
-              </button>
-            ))}
-          </div>
-          {soOsMeus && (mostrarSetores || mostrarEquipes || podeEscolherSetor) && (
+          {mostrarRegua && (
+            <div
+              className="flex items-center gap-1 border border-border rounded-lg p-0.5 bg-muted/30"
+              role="group"
+              aria-label="Nível de visualização"
+            >
+              {degraus.map(({ key, rotulo, titulo, Icone, alvo, ativo }) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => onVisao(alvo)}
+                  title={titulo}
+                  aria-pressed={ativo}
+                  className={cn(
+                    'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors',
+                    ativo
+                      ? 'bg-background shadow-sm text-foreground'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  <Icone className="w-3.5 h-3.5 shrink-0" /> {rotulo}
+                </button>
+              ))}
+            </div>
+          )}
+          {mostrarRegua && soOsMeus && (mostrarSetores || mostrarEquipes || podeEscolherSetor) && (
             <span className="text-[11px] text-muted-foreground">
               Setor e equipe não se aplicam a uma pessoa só.
             </span>
           )}
+          {/* Mês e H.O./Bruto: recortam tudo o que vem abaixo, como a régua. */}
+          {controles && <div className="ml-auto">{controles}</div>}
         </div>
       )}
 

@@ -862,6 +862,38 @@ function CampoDaTela({ campo, tela, painelId, aoMudar, aoEnviarVideo, equipes = 
         </div>
       );
     }
+    case 'equipes': {
+      // Vazio = todas (inclusive as criadas depois). Em «Todas», clicar numa
+      // equipe começa a escolha por ela. A última marcada não sai: sem nenhuma,
+      // seria «Todas» sem o líder ter pedido. Marcou todas = «Todas».
+      const v = opcao<string[]>(tela, campo.chave);
+      const todas = v.length === 0;
+      const alternar = (id: string) => {
+        const novas = v.includes(id) ? v.filter(x => x !== id) : [...v, id];
+        if (!novas.length) return;
+        aoMudar(equipes.length > 1 && equipes.every(e => novas.includes(e.id)) ? [] : novas);
+      };
+      const chip = (ativo: boolean) =>
+        `h-8 rounded-full border px-3 text-sm ${ativo ? 'bg-primary text-primary-foreground border-primary' : 'hover:bg-accent'}`;
+      return (
+        <div className="space-y-1.5">
+          <Label>{campo.rotulo}</Label>
+          <div className="flex flex-wrap gap-1.5">
+            <button type="button" className={chip(todas)} onClick={() => aoMudar([])}>Todas</button>
+            {equipes.map(e => (
+              <button key={e.id} type="button" className={chip(v.includes(e.id))} onClick={() => alternar(e.id)}>
+                {e.nome}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {!equipes.length ? 'Carregando as equipes do setor…'
+              : todas ? 'Todas as equipes do setor que receberam ou têm meta no mês. Clique nas equipes para escolher à mão.'
+              : `${v.length} de ${equipes.length} equipes. As escolhidas aparecem mesmo sem recebimento.`}
+          </p>
+        </div>
+      );
+    }
     case 'data': {
       const v = opcao<string>(tela, campo.chave);
       return (

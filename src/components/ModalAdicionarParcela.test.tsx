@@ -30,6 +30,8 @@ vi.mock('@/lib/supabase', () => ({
 
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
+// Base PAGA: os testes da lista e do recorrente não são sobre parcela em
+// aberto — essa tem o bloco dela lá embaixo.
 const acordo = {
   id: 'a1',
   acordo_grupo_id: null,
@@ -37,7 +39,7 @@ const acordo = {
   instituicao: 'COREN-PI',
   nome_cliente: 'Cliente Teste',
   tipo: 'boleto',
-  status: 'verificar_pendente',
+  status: 'pago',
   valor: 400,
   vencimento: '2026-09-10',
   parcelas: 1,
@@ -115,17 +117,113 @@ describe('ModalAdicionarParcela — parcelas personalizadas', () => {
     expect(onConfirm.mock.calls[0][0][0].valor).toBe(400);
   });
 
-  it('PaguePlay: a forma da parcela oferece a opção que vai para o banco', async () => {
+  // A lista personalizada saiu da regra Cofen (06/11/2026: lá entra uma parcela
+  // por vez). O que o teste antigo guardava — 'boleto' gravado precisa ter
+  // uma opção que o mostre — continua valendo para o select da forma.
+  it('regra Cofen: a forma da parcela oferece a opção que vai para o banco', async () => {
+    abrir({ isPaguePlay: true, inicial: { vencimento: '2026-09-10', valor: 400, tipo: 'boleto' } });
+    const forma = screen.getAllByRole('combobox')[0];
+    expect(forma.textContent).toMatch(/Boleto \/ PIX/);
+  });
+});
+
+/*
+ * Parcela em aberto (06/11/2026). A nova não vira registro enquanto a atual
+ * estiver em aberto, e o modal seguia calado — o valor, a data e a forma
+ * digitados se perdiam. Agora ele avisa e a pessoa escolhe.
+ */
+describe('ModalAdicionarParcela — parcela atual em aberto', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+  const aberto = { ...acordo, status: 'verificar_pendente' } as Acordo;
+
+  it('Nosso produto: avisa e não confirma sem a pessoa escolher', async () => {
+    const { toast } = await import('sonner');
+    const { onConfirm } = abrir({ acordo: aberto });
+
+    expect(screen.getByText(/A parcela #1 .* ainda está em aberto/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Adicionar parcela/i }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/escolha o que fazer/)));
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  it('marcar a atual como paga manda a quitação junto, com o vencimento dela', async () => {
+    const { onConfirm } = abrir({ acordo: aberto });
+    fireEvent.click(screen.getByLabelText(/A #1 já foi paga/));
+    fireEvent.click(screen.getByRole('button', { name: /Adicionar parcela/i }));
+
+    await waitFor(() => expect(onConfirm).toHaveBeenCalled());
+    expect(onConfirm.mock.calls[0][1]).toEqual({
+      quitar: { parcelaId: 'a1', dataPagamento: '2026-09-10' },
+    });
+  });
+
+  it('«só aumentar o total» diz que os dados não ficam e não quita nada', async () => {
+    const { onConfirm } = abrir({ acordo: aberto });
+    fireEvent.click(screen.getByLabelText(/só aumentar o total/));
+    expect(screen.getByText(/não ficam guardados/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /Aumentar total de parcelas/i }));
+    await waitFor(() => expect(onConfirm).toHaveBeenCalled());
+    expect(onConfirm.mock.calls[0][1]).toEqual({ quitar: null });
+  });
+
+  it('PIX Automático não entra só aumentando o total — não teria linha de acordo', async () => {
+    const { toast } = await import('sonner');
+    const hoje = getTodayISO();
+    const { onConfirm } = abrir({
+      acordo: aberto, inicial: { vencimento: hoje, valor: 900, tipo: 'pix_automatico' },
+    });
+    fireEvent.click(screen.getByLabelText(/só aumentar o total/));
+    fireEvent.click(screen.getByLabelText(/Confirmo que o valor é o TOTAL/));
+    fireEvent.click(screen.getByRole('button', { name: /Aumentar total de parcelas/i }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(
+      expect.stringMatching(/depois que a atual for paga/), expect.anything(),
+    ));
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+});
+
+/*
+ * Regra Cofen (06/11/2026): quem tabulou só o valor da parcela lança a próxima
+ * no mesmo acordo, e ela soma no valor total. Uma por vez, sempre registro.
+ */
+describe('ModalAdicionarParcela — regra Cofen', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it('uma parcela por vez e o total do acordo somado na tela', () => {
     abrir({ isPaguePlay: true });
-    await ligarPersonalizacao('2');
+    expect(screen.queryByText(/Quantidade de parcelas/)).toBeNull();
+    expect(screen.getByText(/Valor total do acordo:/).textContent).toMatch(/400,00.*800,00/);
+  });
 
-    // Antes: as opções eram filtradas para tirar 'boleto_pix' e sobrava só
-    // 'cartao' — o select não tinha como exibir o 'boleto' que seria gravado.
-    const selects = screen.getAllByRole('combobox');
-    const daParcela = selects[selects.length - 1];
-    fireEvent.keyDown(daParcela, { key: 'Enter' });
+  it('parcela em aberto: só existe a opção de marcá-la como paga', async () => {
+    const { toast } = await import('sonner');
+    const { onConfirm } = abrir({
+      isPaguePlay: true, acordo: { ...acordo, status: 'verificar_pendente' } as Acordo,
+    });
+    expect(screen.queryByLabelText(/só aumentar o total/)).toBeNull();
 
-    expect(await screen.findByRole('option', { name: 'Boleto / PIX' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Adicionar parcela/i }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(
+      expect.stringMatching(/Marque-a como paga/), expect.anything(),
+    ));
+    expect(onConfirm).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByLabelText(/A #1 já foi paga/));
+    fireEvent.click(screen.getByRole('button', { name: /Adicionar parcela/i }));
+    await waitFor(() => expect(onConfirm).toHaveBeenCalled());
+    expect(onConfirm.mock.calls[0][1].quitar).toMatchObject({ parcelaId: 'a1' });
+  });
+
+  it('acordo com parcelas previstas ainda não registradas: manda para o reagendamento', () => {
+    abrir({
+      isPaguePlay: true,
+      acordo: { ...acordo, parcelas: 3, valor_total: 1200 } as Acordo,
+    });
+    expect(screen.getByText(/já tem parcelas previstas/)).toBeTruthy();
+    expect((screen.getByRole('button', { name: /Adicionar parcela/i }) as HTMLButtonElement).disabled).toBe(true);
   });
 });
 

@@ -307,27 +307,33 @@ export default function Dashboard() {
 
       {/* Analytics + setor filter */}
       <div className="mb-6 space-y-2" data-tour="metricas">
-        <FiltroEscopo
-          niveis={niveis}
-          setores={setoresList}
-          setorFiltro={setorFiltro}
-          onSetor={setSetorFiltro}
-          equipes={equipesDoSetor}
-          podeTodasEquipes={podeTodasEquipes}
-          visao={visaoFiltro}
-          onVisao={setVisaoFiltro}
-          setorDoPerfil={lugar.setorId}
-          equipeDoPerfil={equipeDoPerfil}
-          divisoes={divisoesEmFoco}
-          divisao={divisaoFiltro}
-          onDivisao={setDivisaoFiltro}
-        />
+        {/* O mês e o H.O./Bruto moram no painel (é ele que os usa) e são
+            desenhados dentro do card do recorte — desde 05/11/2026 não há
+            mais a faixa «Dados Analíticos» entre os dois. */}
         <AnalyticsPanel
           setorFiltro={setorFiltroAtivo}
           equipeFiltroExterno={equipeFiltroAtivo}
           operadorFiltroExterno={operadorFiltroAtivo}
           divisaoFiltroExterno={divisaoFiltroAtivo}
           temLogicaDiretoExtra={usuarioTemLogicaDiretoExtra}
+          renderFiltro={controles => (
+            <FiltroEscopo
+              niveis={niveis}
+              setores={setoresList}
+              setorFiltro={setorFiltro}
+              onSetor={setSetorFiltro}
+              equipes={equipesDoSetor}
+              podeTodasEquipes={podeTodasEquipes}
+              visao={visaoFiltro}
+              onVisao={setVisaoFiltro}
+              setorDoPerfil={lugar.setorId}
+              equipeDoPerfil={equipeDoPerfil}
+              divisoes={divisoesEmFoco}
+              divisao={divisaoFiltro}
+              onDivisao={setDivisaoFiltro}
+              controles={controles}
+            />
+          )}
         />
       </div>
 

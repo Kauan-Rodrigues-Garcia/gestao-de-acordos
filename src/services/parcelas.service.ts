@@ -13,10 +13,15 @@
  * Usado pelas duas portas:
  *  • Porta A — tabulação bloqueada por NR próprio (AcordoNovoInline);
  *  • Porta B — botão "Adicionar parcela" no detalhe (AcordoDetalheInline).
+ *
+ * Vale nas duas regras desde 06/11/2026. Na regra Cofen a parcela nova soma
+ * no `valor_total` (ver `OpcoesAdicionarParcelas.somarNoTotal`): quem tabulou
+ * só o valor da parcela lança a próxima no mesmo acordo.
  */
 import { supabase, type Acordo } from '@/lib/supabase';
 import { rpcSemTipo } from '@/lib/supabaseSemTipo';
 import { getTodayISO } from '@/lib/index';
+import { ehFormaRecorrente } from '@/lib/formasRecorrentes';
 
 export interface NovaParcelaInput {
   /** yyyy-MM-dd */
@@ -31,8 +36,93 @@ export type AdicionarParcelaResultado =
   | { ok: false; erro: string };
 
 export type AdicionarLoteResultado =
-  | { ok: true; novasParcelas: Acordo[]; novoTotal: number }
+  | {
+      ok: true;
+      novasParcelas: Acordo[];
+      novoTotal: number;
+      /** Só com `somarNoTotal`: o `valor_total` que o grupo passou a ter. */
+      novoValorTotal?: number;
+      /** A parcela que foi marcada como paga antes da inclusão, quando houve. */
+      quitada?: { id: string; dataPagamento: string };
+    }
   | { ok: false; erro: string };
+
+/**
+ * A parcela em aberto que precisa ser quitada antes da nova entrar.
+ *
+ * O grupo só tem uma parcela em aberto por vez (ver `adicionarParcelasAoGrupo`).
+ * Quando o operador está lançando a próxima e a atual já foi paga, mas ainda
+ * não foi marcada, o modal oferece marcar as duas coisas de uma vez.
+ */
+export interface QuitarAntes {
+  parcelaId:     string;
+  /** yyyy-MM-dd — vira também o vencimento (recebimento conta no vencimento). */
+  dataPagamento: string;
+}
+
+export interface OpcoesAdicionarParcelas {
+  isPaguePlay: boolean;
+  /**
+   * Regra Cofen (06/11/2026): a parcela nova SOMA no `valor_total` do acordo.
+   *
+   * Na Cofen o valor das parcelas sai de `valor_total` dividido pelas
+   * `parcelas` (`calcularParcelas`). Quem tabulou só o valor da parcela e
+   * agora lança a próxima precisa que o total cresça com ela — senão o acordo
+   * diz «2 parcelas» e um total que é o de uma.
+   *
+   * Para o total continuar sendo a soma das parcelas, a inclusão só acontece
+   * com o plano inteiro registrado (sem parcela prevista que ainda não virou
+   * registro), sem parcela em aberto e com UMA parcela por vez — ela sempre
+   * vira registro, com o valor digitado.
+   */
+  somarNoTotal?: boolean;
+  /** Marca esta parcela como paga antes de incluir a nova. */
+  quitarAntes?: QuitarAntes | null;
+}
+
+/**
+ * Marca uma parcela como paga, do mesmo jeito que o botão de pago da lista:
+ * `status`, `data_pagamento` e o vencimento na data do pagamento (recebimento
+ * é atribuído ao vencimento). Banco antigo sem `data_pagamento` cai no par
+ * status + vencimento, como na lista.
+ */
+export async function quitarParcela(
+  parcelaId: string, dataPagamento: string,
+): Promise<{ erro: string } | null> {
+  let { error } = await supabase
+    .from('acordos')
+    .update({ status: 'pago', data_pagamento: dataPagamento, vencimento: dataPagamento } as never)
+    .eq('id', parcelaId);
+  if (error && (String(error.code) === '42703' || String(error.code) === '400'
+      || error.message?.toLowerCase().includes('column'))) {
+    ({ error } = await supabase
+      .from('acordos')
+      .update({ status: 'pago', vencimento: dataPagamento } as never)
+      .eq('id', parcelaId));
+  }
+  return error ? { erro: error.message } : null;
+}
+
+/**
+ * A frase de sucesso das duas portas (cadastro e detalhe). Fica aqui para as
+ * duas dizerem a mesma coisa — o cadastro chegou a anunciar «0 parcelas
+ * adicionadas» quando nada virava registro.
+ */
+export function mensagemDaInclusao(
+  r: Extract<AdicionarLoteResultado, { ok: true }>,
+  pedidas: number,
+): string {
+  const novas = r.novasParcelas;
+  const quitou = r.quitada ? 'Parcela anterior marcada como paga. ' : '';
+  if (novas.length === 0) {
+    return `Acordo passou a ${r.novoTotal} parcelas. A próxima será registrada quando a atual for quitada.`;
+  }
+  const n = novas[0].numero_parcela ?? r.novoTotal;
+  if (pedidas > 1) {
+    return `${quitou}Parcela ${n}/${r.novoTotal} registrada. As demais entram conforme forem reagendadas.`;
+  }
+  return `${quitou}Parcela ${n}/${r.novoTotal} adicionada ao acordo!`;
+}
 
 /** Monta o payload da nova parcela copiando a identidade do acordo base. */
 function payloadNovaParcela(
@@ -201,7 +291,7 @@ export async function adicionarParcelaAoGrupo(
 export async function adicionarParcelasAoGrupo(
   acordoBase: Acordo,
   inputs: readonly NovaParcelaInput[],
-  _opts: { isPaguePlay: boolean },
+  opts: OpcoesAdicionarParcelas,
 ): Promise<AdicionarLoteResultado> {
   if (!acordoBase?.id)        return { ok: false, erro: 'Acordo base não informado' };
   if (!acordoBase.empresa_id) return { ok: false, erro: 'Acordo sem empresa vinculada' };
@@ -210,21 +300,38 @@ export async function adicionarParcelasAoGrupo(
     if (!p.vencimento)  return { ok: false, erro: `Parcela ${i + 1}: informe o vencimento` };
     if (!(p.valor > 0)) return { ok: false, erro: `Parcela ${i + 1}: informe um valor válido` };
   }
+  const somarNoTotal = !!opts.somarNoTotal;
+  if (somarNoTotal && inputs.length > 1) {
+    return { ok: false, erro: 'Neste acordo a parcela entra uma de cada vez.' };
+  }
 
-  const grupo = await garantirGrupo(acordoBase);
-  if ('erro' in grupo) return { ok: false, erro: grupo.erro };
+  // Quitar primeiro: é o que libera a parcela nova para virar registro. Se a
+  // inclusão falhar depois, a parcela continua paga — e o erro diz isso.
+  const quitar = opts.quitarAntes ?? null;
+  if (quitar) {
+    if (!quitar.dataPagamento) return { ok: false, erro: 'Informe a data do pagamento da parcela em aberto' };
+    const e = await quitarParcela(quitar.parcelaId, quitar.dataPagamento);
+    if (e) return { ok: false, erro: `Erro ao marcar a parcela em aberto como paga: ${e.erro}` };
+  }
+  const posQuitar = (quitar ? '(A parcela anterior já foi marcada como paga.) ' : '');
+  const base: Acordo = quitar?.parcelaId === acordoBase.id
+    ? { ...acordoBase, status: 'pago', data_pagamento: quitar.dataPagamento, vencimento: quitar.dataPagamento }
+    : acordoBase;
+
+  const grupo = await garantirGrupo(base);
+  if ('erro' in grupo) return { ok: false, erro: posQuitar + grupo.erro };
   const { grupoId } = grupo;
 
   const { data: linhasGrupo, error: errSel } = await supabase
     .from('acordos')
-    .select('id, numero_parcela, parcelas, status')
-    .eq('empresa_id', acordoBase.empresa_id)
+    .select('id, numero_parcela, parcelas, status, valor')
+    .eq('empresa_id', base.empresa_id)
     .eq('acordo_grupo_id', grupoId);
-  if (errSel) return { ok: false, erro: `Erro ao consultar parcelas do acordo: ${errSel.message}` };
+  if (errSel) return { ok: false, erro: `${posQuitar}Erro ao consultar parcelas do acordo: ${errSel.message}` };
 
-  const linhas = (linhasGrupo ?? []) as Pick<Acordo, 'numero_parcela' | 'parcelas' | 'status'>[];
+  const linhas = (linhasGrupo ?? []) as Pick<Acordo, 'id' | 'numero_parcela' | 'parcelas' | 'status' | 'valor'>[];
 
-  const { novoNumero, totalAtual } = medirGrupo(linhas, acordoBase);
+  const { novoNumero, totalAtual } = medirGrupo(linhas, base);
   // O total declara o lote INTEIRO, mesmo quando nenhuma linha é materializada:
   // é ele que faz as parcelas que faltam aparecerem como virtuais no detalhe.
   const novoTotal = Math.max(novoNumero + inputs.length - 1, totalAtual);
@@ -236,22 +343,67 @@ export async function adicionarParcelasAoGrupo(
   //
   // O grupo pode ainda não ter linha nenhuma no banco (acordo de uma parcela
   // só, sem `acordo_grupo_id` até agora), então o status da base entra na
-  // conta junto com o das linhas lidas.
-  const aInserir = temParcelaEmAberto([...linhas, acordoBase])
-    ? []
-    : inputs.slice(0, 1);
+  // conta junto com o das linhas lidas. A base que acabou de ser quitada entra
+  // já como paga.
+  const linhasComBase = linhas.some(l => l.id === base.id)
+    ? linhas.map(l => (l.id === base.id ? { ...l, status: base.status } : l))
+    : [...linhas, base];
+  const emAberto = temParcelaEmAberto(linhasComBase);
+
+  // Regra Cofen: a parcela nova soma no total, então ela PRECISA virar
+  // registro — parcela virtual na Cofen tem o valor da divisão do total, não o
+  // digitado. E o total só é a soma das parcelas se todas forem registros.
+  let novoValorTotal: number | undefined;
+  if (somarNoTotal) {
+    if (emAberto) {
+      return {
+        ok: false,
+        erro: `${posQuitar}A parcela atual deste acordo ainda está em aberto. `
+          + 'Marque-a como paga para lançar a próxima.',
+      };
+    }
+    if (novoNumero - 1 < totalAtual) {
+      return {
+        ok: false,
+        erro: `${posQuitar}Este acordo já prevê ${totalAtual} parcelas e só ${novoNumero - 1} estão registradas. `
+          + 'Lance a próxima pelo reagendamento da parcela paga, no detalhe do acordo.',
+      };
+    }
+    // O total de antes: o declarado, quando existe (o acordo vindo do analítico
+    // no meio do plano tem parcelas anteriores pagas que não são registro);
+    // sem ele — quem tabulou só o valor da parcela —, a soma dos registros.
+    const antesCentavos = base.valor_total != null
+      ? Math.round(Number(base.valor_total) * 100)
+      : linhasComBase.reduce((s, l) => s + Math.round(Number(l.valor ?? 0) * 100), 0);
+    novoValorTotal = (antesCentavos + Math.round(inputs[0].valor * 100)) / 100;
+  }
+
+  // Sem virar registro agora, a forma recorrente não tem onde morar: o Pix
+  // Automático seria registrado na aba Pix sem a linha de acordo
+  // correspondente. Quem chega aqui pelo modal já foi barrado lá.
+  if (emAberto && inputs.some(p => ehFormaRecorrente(p.tipo))) {
+    return {
+      ok: false,
+      erro: 'PIX Automático / Cartão Recorrente só entra como próxima parcela depois que a atual for paga.',
+    };
+  }
+
+  const aInserir = emAberto ? [] : inputs.slice(0, 1);
 
   let novas: Acordo[] = [];
   if (aInserir.length > 0) {
-    const payloads = aInserir.map((input, i) =>
-      payloadNovaParcela(acordoBase, input, grupoId, novoNumero + i, novoTotal),
-    );
+    const payloads = aInserir.map((input, i) => ({
+      ...payloadNovaParcela(base, input, grupoId, novoNumero + i, novoTotal),
+      // A linha nova já nasce com o total novo: o espelho do par Direto/Extra
+      // copia o `valor_total` dela.
+      ...(novoValorTotal !== undefined ? { valor_total: novoValorTotal } : {}),
+    }));
 
     const { data: inseridas, error: errIns } = await supabase
       .from('acordos')
       .insert(payloads as never)
       .select('*, perfis(id, nome, email, perfil, setor_id)');
-    if (errIns) return { ok: false, erro: `Erro ao adicionar parcelas: ${errIns.message}` };
+    if (errIns) return { ok: false, erro: `${posQuitar}Erro ao adicionar parcelas: ${errIns.message}` };
 
     // Um insert de várias linhas devolve array, mas o de UMA pode voltar como
     // objeto. Normalizar aqui evita que o caminho de uma parcela — o mais comum —
@@ -266,11 +418,16 @@ export async function adicionarParcelasAoGrupo(
   // Atualiza o grupo INTEIRO, sem excluir as recém-inseridas: elas já nasceram
   // com `novoTotal`, então regravar o mesmo valor não muda nada. Excluí-las
   // exigiria filtrar por uma lista de ids — mais código para o mesmo efeito.
-  if (novoTotal !== totalAtual) {
+  // Na regra Cofen o `valor_total` do grupo vai junto, no mesmo UPDATE — o
+  // gatilho do par Direto/Extra leva os dois para a outra metade.
+  if (novoTotal !== totalAtual || novoValorTotal !== undefined) {
     const { error: errTotal } = await supabase
       .from('acordos')
-      .update({ parcelas: novoTotal })
-      .eq('empresa_id', acordoBase.empresa_id)
+      .update({
+        parcelas: novoTotal,
+        ...(novoValorTotal !== undefined ? { valor_total: novoValorTotal } : {}),
+      } as never)
+      .eq('empresa_id', base.empresa_id)
       .eq('acordo_grupo_id', grupoId);
     if (errTotal) {
       // Quando nada foi materializado, este UPDATE é o ÚNICO efeito da ação:
@@ -286,11 +443,17 @@ export async function adicionarParcelasAoGrupo(
 
   // Espelha no par Direto↔Extra somente a parcela que de fato entrou. A falha
   // de um espelho não desfaz a inclusão.
-  if (acordoBase.vinculo_operador_id) {
+  if (base.vinculo_operador_id) {
     for (const nova of novas) await espelharParcelaNoVinculo(nova.id);
   }
 
-  return { ok: true, novasParcelas: novas, novoTotal };
+  return {
+    ok: true,
+    novasParcelas: novas,
+    novoTotal,
+    ...(novoValorTotal !== undefined ? { novoValorTotal } : {}),
+    ...(quitar ? { quitada: { id: quitar.parcelaId, dataPagamento: quitar.dataPagamento } } : {}),
+  };
 }
 
 /**

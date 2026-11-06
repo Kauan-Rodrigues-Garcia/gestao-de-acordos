@@ -14,6 +14,7 @@ import { DestaqueFofo } from './Fofo';
 import { DestaquePixel } from './Pixel';
 import { DestaqueNeon } from './Neon';
 import { DestaqueJornal } from './Jornal';
+import { DestaqueNatal } from './Natal';
 
 const ESTILOS = {
   gibi: DestaqueGibi,
@@ -22,14 +23,18 @@ const ESTILOS = {
   pixel: DestaquePixel,
   neon: DestaqueNeon,
   jornal: DestaqueJornal,
+  natal: DestaqueNatal,
 } as const;
 
 type Estilo = keyof typeof ESTILOS;
-const NOMES = Object.keys(ESTILOS) as Estilo[];
+
+/** Os de época (Natal) só aparecem quando escolhidos: a «Surpresa» não sorteia Natal em julho. */
+const DE_EPOCA: readonly Estilo[] = ['natal'];
+const ESTILOS_DO_SORTEIO = (Object.keys(ESTILOS) as Estilo[]).filter(e => !DE_EPOCA.includes(e));
 
 export function Destaque(props: PropsEstilo) {
   const escolhido = opcao<string>(props.tela, 'estilo');
-  const [sorteado] = useState<Estilo>(() => NOMES[Math.floor(Math.random() * NOMES.length)]);
+  const [sorteado] = useState<Estilo>(() => ESTILOS_DO_SORTEIO[Math.floor(Math.random() * ESTILOS_DO_SORTEIO.length)]);
   const estilo: Estilo = escolhido === 'surpresa' ? sorteado : (escolhido in ESTILOS ? escolhido as Estilo : 'gibi');
   const Desenho = ESTILOS[estilo];
   return <Desenho {...props} />;
