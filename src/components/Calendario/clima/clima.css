@@ -42,8 +42,10 @@
   position: absolute; top: -9px; left: 20px; width: 16px; height: 16px; transform: rotate(45deg); z-index: 1;
   background: var(--surf); border-left: 3px solid var(--ol); border-top: 3px solid var(--ol);
 }
-.cl-pop p, .cl-pop h4, .cl-pop ol, .cl-pop dl, .cl-pop dd { margin: 0; }
-.cl-pop ol { padding: 0; list-style: none; }
+/* O zerado vai em `:where`, sem peso: com `.cl-pop dl` ele ganhava do
+   `margin-top` de `.cl-dados` e dos dias, e os cards ficavam colados. */
+:where(.cl-pop) :is(p, h4, ol, dl, dd) { margin: 0; }
+:where(.cl-pop) ol { padding: 0; list-style: none; }
 .cl-pop .gb-box { box-shadow: 6px 6px 0 var(--ol); }
 
 /* No celular o card, preso ao botão, passaria da borda: ele se mede pela barra
@@ -88,7 +90,7 @@
 }
 
 /* Um respiro entre o desenho, os dados e os dias (06/11/2026: «tá muito colado»). A sombra dura do desenho come 3 px. */
-.cl-dados { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 16px; }
+.cl-dados { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 18px; }
 .cl-dados div {
   display: flex; flex-direction: column; min-width: 0; padding: 4px 8px;
   background: var(--soft); border: 2px solid var(--ol); border-radius: 8px;
@@ -96,7 +98,7 @@
 .cl-dados dt { font-size: 10px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
 .cl-dados dd { font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; }
 
-.cl-dias { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; margin-top: 14px; }
+.cl-dias { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin-top: 16px; }
 .cl-dias li {
   display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 0; padding: 4px 0 5px;
   border: 2px solid var(--ol); border-radius: 8px; background: var(--surf);
@@ -105,7 +107,7 @@
 .cl-dias svg { width: 34px; height: 34px; display: block; }
 .cl-dias b { font-size: 13px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .cl-dias small { font-size: 11px; font-weight: 700; color: var(--muted); line-height: 1.1; font-variant-numeric: tabular-nums; }
-.cl-rodape { margin-top: 10px; font-size: 10.5px; color: var(--muted); }
+.cl-rodape { margin-top: 12px; font-size: 10.5px; color: var(--muted); }
 
 /* ── Movimento (com ou sem «reduzir animações» do sistema) ──────────────── */
 .cl-raios   { transform-box: fill-box; transform-origin: center; animation: cl-gira 40s linear infinite; }
