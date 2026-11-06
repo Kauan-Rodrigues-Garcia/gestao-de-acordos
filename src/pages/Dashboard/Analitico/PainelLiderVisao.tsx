@@ -425,13 +425,18 @@ function BarraDoMes({ l }: { l: Leitura }) {
         <div className="relative h-0">
           <div className="absolute -top-[17px] w-0.5 h-[22px] rounded-full bg-foreground/75" style={{ left: `calc(${pE}% - 1px)` }} />
           <span className="absolute top-1.5 -translate-x-1/2 text-[10px] font-medium text-foreground/70 whitespace-nowrap"
-            style={{ left: `${Math.min(Math.max(pE, 8), 92)}%` }}>
-            hoje deveria ter
+            style={{ left: `${Math.min(Math.max(pE, 16), 84)}%` }}>
+            hoje deveria ter {formatBRL(l.esperado ?? 0)}
           </span>
         </div>
       )}
-      <div className="mt-6 flex justify-between text-[11px] text-muted-foreground font-mono tabular-nums">
-        <span>R$ 0</span>
+      {/* Embaixo da barra, o que ela mede: o recebido. Aqui havia «R$ 0» (o
+          começo da escala), que se lia como recebimento zerado. */}
+      <div className="mt-6 flex justify-between gap-3 text-[11px] text-muted-foreground font-mono tabular-nums">
+        <span>
+          recebido{l.rotulo ? ` ${l.rotulo}` : ''}{' '}
+          <strong className="font-semibold" style={{ color: corTexto(l.cor) }}>{formatBRL(l.acum)}</strong>
+        </span>
         <span>{l.meta ? `meta ${formatBRL(l.meta)}` : 'sem meta'}</span>
       </div>
     </div>
