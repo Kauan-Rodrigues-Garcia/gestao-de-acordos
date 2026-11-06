@@ -87,3 +87,18 @@ describe('a conversa do urso', () => {
     expect(REPERTORIO.IGLU.length).toBeGreaterThanOrEqual(10);
   });
 });
+
+describe('o urso e o trem', () => {
+  it('o tchauzinho tem repertório próprio, sem repetir, e não gasta o cumprimento', () => {
+    const r = criarRodada('Ana', 10, sorteador(5));
+    const vistas = new Set<string>();
+    for (let i = 0; i < REPERTORIO.TREM.length; i++) vistas.add(r.proxima('trem').join('|'));
+    expect(vistas.size).toBe(REPERTORIO.TREM.length);
+    // Depois do trem, a primeira conversa ainda é um cumprimento.
+    const manha = criarRodada('Ana', 10, sorteador(5));
+    manha.proxima('trem');
+    const c = manha.proxima('pescando').join('|');
+    const daManha = [...REPERTORIO.CUMPRIMENTOS.manha, ...REPERTORIO.QUALQUER_HORA].map(x => x.map(f => f.split('{nome}').join('Ana')).join('|'));
+    expect(daManha).toContain(c);
+  });
+});

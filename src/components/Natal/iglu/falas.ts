@@ -17,7 +17,7 @@
  */
 
 export type Conversa = readonly string[];
-export type MomentoDoUrso = 'pescando' | 'fisgou' | 'iglu';
+export type MomentoDoUrso = 'pescando' | 'fisgou' | 'iglu' | 'trem';
 
 const QUALQUER_HORA: Conversa[] = [
   ['Ei! Oi! Você me assustou…'],
@@ -121,6 +121,25 @@ const FISGOU: Conversa[] = [
   ['Viu? Paciência funciona.', 'De vez em quando.'],
 ];
 
+/**
+ * O trem passando pelo iglu com ele pescando (Cleber, 05/11/2026): ele dá
+ * tchauzinho e fala sozinho, sem ninguém clicar — uma por passagem.
+ */
+const TREM: Conversa[] = [
+  ['Piuí! 👋', 'Boa viagem, pessoal!'],
+  ['Ei, maquinista! Buzina pra mim! 📣'],
+  ['Lá vai o trenzinho! 🚂', 'Um dia eu ainda pego carona.'],
+  ['Tchau, tchau! 👋', 'Manda um cartão-postal da estação!'],
+  ['Olha o trem!', 'Shhh… vai espantar meus peixes. 🐟'],
+  ['Quem foi sorteado hoje? 🎟️', 'Sortudos!'],
+  ['Piuííí! 🎄', 'Esse trem passa mais que peixe na minha vara.'],
+  ['Ô de bordo! 👋', 'Guarda um lugar pra mim na próxima!'],
+  ['Devagar aí, maquinista!', 'Tem urso pescando aqui.'],
+  ['Tchauzinho! 👋', 'Leva um peixe pra estação? Não? Tá bom.'],
+  ['Oi, {nome}! Você tá no trem? 👀', 'Não? Ah, então tchau pro trem.'],
+  ['Feliz viagem! 🎁', 'Eu fico aqui cuidando do lago.'],
+];
+
 const INSISTENCIA: Conversa[] = [
   ['Você gosta mesmo de conversar, hein?'],
   ['Tá, tá… mais uma história e depois silêncio, combinado?'],
@@ -197,12 +216,15 @@ export function criarRodada(nome: string | null, hora: number, sorte: () => numb
   const fisgou = baralho(FISGOU);
   const insistencia = baralho(INSISTENCIA);
   const iglu = baralho(IGLU);
+  const trem = baralho(TREM);
   let conversas = 0;
 
   return {
     /** A próxima conversa, para o momento do urso. */
     proxima(momento: MomentoDoUrso): string[] {
       if (momento === 'iglu') return preencher(iglu.tirar());
+      // O tchauzinho para o trem não conta como conversa (nem como cumprimento).
+      if (momento === 'trem') return preencher(trem.tirar());
       conversas++;
       if (momento === 'fisgou') return preencher(fisgou.tirar());
       if (conversas === 1) return preencher(cumprimentos.tirar());
@@ -213,4 +235,4 @@ export function criarRodada(nome: string | null, hora: number, sorte: () => numb
 }
 
 /** Só para os testes: o tamanho dos baralhos. */
-export const REPERTORIO = { PESCANDO, FISGOU, INSISTENCIA, IGLU, CUMPRIMENTOS, QUALQUER_HORA };
+export const REPERTORIO = { PESCANDO, FISGOU, INSISTENCIA, IGLU, TREM, CUMPRIMENTOS, QUALQUER_HORA };

@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { Bell, BellOff } from 'lucide-react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { AvatarChat } from '@/components/Chat/comum';
@@ -7,17 +6,25 @@ import {
   ALTURA_ESTACAO, ALTURA_FAIXA, ALTURA_FAIXA_DO_IGLU, COMPRIMENTO_TREM_PX, RECUO_DA_PARADA, TRILHO_NA_FAIXA, useRelogioDoTrem,
 } from './comum';
 import {
-  PARADA_ESTACAO_S, ROTULO_ABA, chaveDoSorteio, chegaNaAbaEm, etapaDoSorteio, ondeEsta, quantosABordo,
+  PARADA_ESTACAO_S, chaveDoSorteio, chegaNaAbaEm, etapaDoSorteio, ondeEsta, quantosABordo,
   relogioCurto, segundosAteAEstacao, type AbaDoTrem, type TremFechado,
 } from './horario';
 import { PRIMEIROS_DA_FILA, agendaAgora, horaDe, useAgendaDoTrem, type AgendaDoTrem } from './agenda';
 import { MuralDaEstacao } from './MuralDaEstacao';
 import { useInscricao, usePassageiros } from './passageiros';
-import { PISTAS_DA_ABA, abasDaRegra } from './rota';
-import { ouvirRegraDaSessao, regraDaSessaoAtual } from '@/lib/regraDoSetor';
+import { PISTAS_DA_ABA } from './rota';
 import { IgluDoUrso } from '../iglu/IgluDoUrso';
-import { buzina, ligarSonsDoTrem, useSonsDoTrem } from './sons';
+import { buzina } from './sons';
 import { adiantarRelogioNatalParaTeste, relogioNatal } from '../musica';
+import { comNovaTentativa } from '@/lib/sobDemanda';
+import { LARGURA_PLAQUINHA, Plaquinha } from './Plaquinha';
+
+/**
+ * O cubo de gelo do Teteu (Cleber, 05/11/2026: «dar uma escondida nele»):
+ * saiu do cabeçalho do Analítico e mora no pé da página, perto do fim da
+ * linha, meio enterrado num monte de neve. Só desce quando a faixa aparece.
+ */
+const BlocoDeGelo = lazy(comNovaTentativa(() => import('../gelo/BlocoDeGelo')));
 
 /*
  * As faixas do trem: espaços de verdade que o `Layout` abre nas abas por onde
@@ -25,29 +32,18 @@ import { adiantarRelogioNatalParaTeste, relogioNatal } from '../musica';
  *
  *   pé do Dashboard    — a estação: o prédio (clicável: o mural da fila), o
  *                        sorteio de surpresa, um de cada vez, e a parada;
- *   pé de Acordos e Pix — a pista e o aviso de onde o trem está e quando chega;
- *   alto do Analítico  — a pista de ida, o aviso e o iglu do urso;
- *   pé do Analítico    — a pista de volta e o fim da linha, com o para-choque.
+ *   pé de Acordos      — a pista e a plaquinha de quando o trem passa;
+ *   alto do Analítico  — a pista de ida, a plaquinha e o iglu do urso;
+ *   pé do Analítico    — a pista de volta, o fim da linha com o para-choque e,
+ *                        escondido na neve, o cubo de gelo.
+ *
+ * Nada de card flutuando (Cleber, 05/11/2026): o que o trem tem a dizer está
+ * na plaquinha fincada ao lado do trilho (`Plaquinha.tsx`).
  *
  * O trilho e o trem não moram aqui: são da camada (`CamadaDoTrem.tsx`), que
  * acha as faixas por `data-faixa-trem` e a parada por `data-trem-parada` /
  * `data-trem-fim-da-linha`.
  */
-
-function BotaoSons() {
-  const ligados = useSonsDoTrem();
-  return (
-    <button
-      type="button"
-      onClick={() => ligarSonsDoTrem(!ligados)}
-      className="nt-trem-botao-som"
-      title={ligados ? 'Desligar os sons do trem' : 'Ligar os sons do trem'}
-      aria-label={ligados ? 'Desligar os sons do trem' : 'Ligar os sons do trem'}
-    >
-      {ligados ? <Bell className="h-3.5 w-3.5" /> : <BellOff className="h-3.5 w-3.5" />}
-    </button>
-  );
-}
 
 /** Só no `npm run dev`: toca a buzina na hora, para ajustar o volume sem esperar a viagem dela. */
 function BotaoTestarBuzina() {
@@ -99,26 +95,33 @@ function textoDoFechado(f: TremFechado, agenda: AgendaDoTrem | null, agoraMs: nu
   }
 }
 
-function Aviso({ aba, rota }: { aba: AbaDoTrem; rota: readonly AbaDoTrem[] }) {
+/** O trem parado na estação, em duas linhas de plaquinha. */
+function plaquinhaDoFechado(f: TremFechado, agenda: AgendaDoTrem | null, agoraMs: number): [string, string] {
+  switch (f.motivo) {
+    case 'carregando': return ['Conferindo', 'o horário…'];
+    case 'desligado': return ['O trenzinho está', 'em manutenção'];
+    case 'esperando': {
+      const faltam = Math.max(1, PRIMEIROS_DA_FILA - (agenda?.inscritos ?? 0));
+      return ['1ª viagem: esperando a fila', faltam === 1 ? 'falta 1' : `faltam ${faltam}`];
+    }
+    case 'fechado': return ['Estação fechada · abre', f.abreEmMs !== null ? quandoAbre(f.abreEmMs, agoraMs) : 'logo mais'];
+  }
+}
+
+/** A plaquinha das abas do caminho: só quando o trem passa por aqui. */
+function PlaquinhaDaAba({ aba, rota }: { aba: AbaDoTrem; rota: readonly AbaDoTrem[] }) {
   const agora = useRelogioDoTrem(1000);
   const agenda = useAgendaDoTrem();
   const pos = ondeEsta(agora, rota, agenda);
-  const aqui = pos.aba === aba;
-  const falta = aqui ? 0 : chegaNaAbaEm(agora, rota, aba, agenda);
-  // Quem é da regra Cofen não tem o Pix: ali o trem está «a caminho», sem nome de aba.
-  const visiveis = abasDaRegra(useSyncExternalStore(ouvirRegraDaSessao, regraDaSessaoAtual));
-  const ondeVe = visiveis.includes(pos.aba);
+  const aqui = !pos.fechado && pos.aba === aba;
+  const falta = aqui || pos.fechado ? null : chegaNaAbaEm(agora, rota, aba, agenda);
+  const [linha, grande] = pos.fechado ? plaquinhaDoFechado(pos.fechado, agenda, agora)
+    : aqui ? (pos.fase === 'fim' ? ['Fim da linha!', 'já vai voltar'] : ['Olha o trem!', 'passando agora'])
+    : falta !== null ? ['O trem passa aqui em', relogioCurto(falta)]
+    : ['O trem está', 'a caminho'];
   return (
-    <div className="nt-trem-aviso">
-      <span aria-hidden="true">{pos.fechado?.motivo === 'desligado' ? '🔧' : '🚂'}</span>
-      {pos.fechado
-        ? <span>{aba === rota[0] ? textoDoFechado(pos.fechado, agenda, agora) : <>O trem está na estação, no <b>{ROTULO_ABA[rota[0]]}</b> · {textoDoFechado(pos.fechado, agenda, agora)}</>}</span>
-        : aqui
-        ? <span>{pos.fase === 'fim' ? 'Fim da linha! O trem já vai voltar.' : 'O trem está passando por aqui!'}</span>
-        : <span>{ondeVe ? <>O trem está em <b>{ROTULO_ABA[pos.aba]}</b></> : 'O trem está a caminho'}{falta !== null && <> · chega aqui em <b>{relogioCurto(falta)}</b></>}</span>}
-      <BotaoSons />
-      <BotaoTestarBuzina />
-    </div>
+    <Plaquinha linha={linha} grande={grande} aqui={aqui} perto={falta !== null && falta <= 15}
+      className="left-6" style={{ bottom: TRILHO_NA_FAIXA }} />
   );
 }
 
@@ -256,17 +259,16 @@ function Estacao({ rota, meuId }: { rota: readonly AbaDoTrem[]; meuId: string | 
   }, [souEu, pos.partidaMs]);
 
   const proximaVolta = segundosAteAEstacao(agora, rota, agenda);
-  const naFila = inscricao && (inscricao.inscrito ? <> · seu ticket está na fila ✓</> : <> · <b>clique na estação</b> e insira seu ticket</>);
-  const status = pos.fechado
-    ? <>{textoDoFechado(pos.fechado, agenda, agora)}{naFila}</>
-    : naEstacao
-    ? (sorteados === undefined ? <>Preparando o sorteio…</>
-      : n === 0 ? <>Ninguém na fila hoje · <b>clique na estação</b> e insira seu ticket!</>
-      : aBordo < n ? <><b>Sorteando os passageiros…</b> {aBordo}/{n} a bordo</>
-      : <><b>Todos a bordo!</b> · sai em <b>{relogioCurto(PARADA_ESTACAO_S - pos.noTrecho)}</b></>)
+  // A plaquinha da estação (fechado, quem fala é a placa-cancela na frente do trem).
+  const [linha, grande] = naEstacao
+    ? (sorteados === undefined ? ['Na estação', 'preparando…']
+      : n === 0 ? ['Ninguém na fila hoje', 'insira o ticket!']
+      : aBordo < n ? ['Sorteando os passageiros', `${aBordo}/${n} a bordo`]
+      : ['Todos a bordo! Sai em', relogioCurto(PARADA_ESTACAO_S - pos.noTrecho)])
     : proximaVolta !== null && proximaVolta < 3600
-    ? <>Próxima saída em <b>{relogioCurto(proximaVolta + PARADA_ESTACAO_S)}</b>{naFila}</>
-    : <>Esta é a <b>última viagem de hoje</b>{naFila}</>;
+    ? ['Próxima saída em', relogioCurto(proximaVolta + PARADA_ESTACAO_S)]
+    : ['Última viagem', 'de hoje'];
+  const xDoLadoDoTrem = RECUO_DA_PARADA + COMPRIMENTO_TREM_PX + 24;
   // A mesma frase no mural da estação.
   const saida = pos.fechado ? textoDoFechado(pos.fechado, agenda, agora)
     : naEstacao ? <>Sai em <b>{relogioCurto(PARADA_ESTACAO_S - pos.noTrecho)}</b></>
@@ -294,14 +296,12 @@ function Estacao({ rota, meuId }: { rota: readonly AbaDoTrem[]; meuId: string | 
             <PlacaDaEstacao fechado={pos.fechado} agenda={agenda} agora={agora} />
           </div>
         )}
-        <div className="absolute flex flex-col items-start gap-2" style={{ left: RECUO_DA_PARADA + COMPRIMENTO_TREM_PX + 32, top: 14 }}>
-          <div className="nt-trem-aviso">
-            <span aria-hidden="true">🎁</span>
-            <span>{status}</span>
-            <BotaoSons />
-            <BotaoTestarBuzina />
-            <BotaoVerSorteio rota={rota} />
-          </div>
+        {!pos.fechado && (
+          <Plaquinha linha={linha} grande={grande} aqui={naEstacao} perto={!naEstacao && proximaVolta !== null && proximaVolta <= 15}
+            style={{ left: xDoLadoDoTrem, bottom: TRILHO_NA_FAIXA }} />
+        )}
+        {import.meta.env.DEV && <div className="nt-trem-dev"><BotaoTestarBuzina /><BotaoVerSorteio rota={rota} /></div>}
+        <div className="absolute flex flex-col items-start gap-2" style={{ left: xDoLadoDoTrem + LARGURA_PLAQUINHA + 12, top: 14 }}>
           {/* O sorteio: o presente treme, abre, e a pessoa aparece — e embarca. */}
           {etapa && (
             <div key={`${pos.partidaMs}-${etapa.indice}-${etapa.etapa}`} className={cn('nt-trem-bilhete', souEu && 'nt-trem-bilhete-eu')}>
@@ -337,13 +337,25 @@ function Estacao({ rota, meuId }: { rota: readonly AbaDoTrem[]; meuId: string | 
   );
 }
 
+/** O monte de neve na frente do cubo de gelo: cobre a base dele (o mouse atravessa). */
+function MonteDeNeve() {
+  return (
+    <svg className="nt-gelo-monte" viewBox="0 0 150 40" width={150} height={40} aria-hidden="true">
+      <path d="M0 40 C6 26 18 22 30 26 C38 14 56 10 68 20 C78 12 96 12 104 24 C114 18 132 20 140 30 C146 32 150 36 150 40 Z" fill="#EEF5FB" stroke="#C9DCEB" strokeWidth={1.5} />
+      <path d="M22 30 C36 24 50 22 62 27 M84 24 C100 22 116 26 128 33" fill="none" stroke="#FFFFFF" strokeWidth={3} strokeLinecap="round" opacity={0.9} />
+      {[[40, 30], [92, 30], [118, 34], [60, 35]].map(([x, y], i) => <circle key={i} cx={x} cy={y} r={1.3} fill="#FFFFFF" />)}
+    </svg>
+  );
+}
+
 /** A faixa do alto: só nas abas com pista no alto (o Analítico). */
 export function FaixaDoTremTopo({ aba, rota }: { aba: AbaDoTrem; rota: readonly AbaDoTrem[] }) {
   if (!PISTAS_DA_ABA[aba].includes('topo')) return null;
   return (
     <div data-faixa-trem="topo" data-trilho={TRILHO_NA_FAIXA} className="nt-faixa-trem" style={{ height: ALTURA_FAIXA_DO_IGLU }}>
-      <div className="relative mx-auto h-full max-w-[1400px] px-6 pt-3">
-        <Aviso aba={aba} rota={rota} />
+      <div className="relative mx-auto h-full max-w-[1400px] px-6">
+        <PlaquinhaDaAba aba={aba} rota={rota} />
+        {import.meta.env.DEV && <div className="nt-trem-dev" style={{ right: 'auto', left: 230 }}><BotaoTestarBuzina /></div>}
         {/* O iglu do urso, à direita: o urso sai para pescar de vez em quando. */}
         <div data-trem-reserva className="absolute right-6" style={{ bottom: TRILHO_NA_FAIXA + 11 }}><IgluDoUrso /></div>
       </div>
@@ -355,17 +367,25 @@ export function FaixaDoTremTopo({ aba, rota }: { aba: AbaDoTrem; rota: readonly 
 export function FaixaDoTremFim({ aba, rota, meuId }: { aba: AbaDoTrem; rota: readonly AbaDoTrem[]; meuId: string | null }) {
   if (aba === rota[0]) return <Estacao rota={rota} meuId={meuId} />;
   const ultima = aba === rota[rota.length - 1];
-  // Sem faixa no alto, o aviso de onde o trem está mora aqui.
-  const aviso = !PISTAS_DA_ABA[aba].includes('topo');
+  // Sem faixa no alto, a plaquinha mora aqui.
+  const plaquinha = !PISTAS_DA_ABA[aba].includes('topo');
   return (
     <div data-faixa-trem="fim" className="nt-faixa-trem" style={{ height: ALTURA_FAIXA }}>
-      <div className={cn('relative mx-auto h-full max-w-[1400px] px-6', aviso && 'pt-3')}>
-        {aviso && <Aviso aba={aba} rota={rota} />}
+      <div className="relative mx-auto h-full max-w-[1400px] px-6">
+        {plaquinha && <PlaquinhaDaAba aba={aba} rota={rota} />}
+        {plaquinha && import.meta.env.DEV && <div className="nt-trem-dev"><BotaoTestarBuzina /></div>}
         {ultima && (
           <>
             <div className="absolute left-3" style={{ bottom: TRILHO_NA_FAIXA - 8 }}><ParaChoque /></div>
             <div data-trem-fim-da-linha className="absolute" style={{ left: 64, width: COMPRIMENTO_TREM_PX, bottom: 0, height: 1 }} />
           </>
+        )}
+        {/* O cubo de gelo, escondido: no pé do Analítico, meio enterrado num monte de neve. */}
+        {aba === 'analitico' && (
+          <div className="nt-gelo-esconderijo" style={{ bottom: TRILHO_NA_FAIXA + 2 }}>
+            <Suspense fallback={null}><BlocoDeGelo /></Suspense>
+            <MonteDeNeve />
+          </div>
         )}
       </div>
     </div>

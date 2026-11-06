@@ -24,7 +24,7 @@ import { cn } from '@/lib/utils';
 import { VAO, naCurva } from './varal';
 import { Cesta } from './cesta/Cesta';
 import {
-  ajudarNaMira, baterNaPonta, frearNaRede, largouDeLonge, passouPeloAro, posicaoDoAro, subiuPeloAro,
+  ajudarNaMira, baterNaPonta, distanciaDaCesta, frearNaRede, largouDeLonge, passouPeloAro, posicaoDoAro, subiuPeloAro,
   velocidadeDoArremesso, type Amostra,
 } from './cesta/fisica';
 import { mirar, sortearErro, T_PEGA, T_SOLTA, type Lado } from './cesta/arremesso';
@@ -337,6 +337,10 @@ function BolaSolta({ de, pega, casa, aoChegando, aoTerminar }: {
   const [acertos, setAcertos] = useState(0);
   const [acertosBoneco, setAcertosBoneco] = useState(0);
   const [ultima, setUltima] = useState<QuemArremessou | null>(null);
+  // A distância da cesta: de onde a bola saiu da mão (de quem jogou ou do boneco).
+  const lancouDe = useRef<Ponto | null>(null);
+  const [distancia, setDistancia] = useState<number | null>(null);
+  const [maisLonge, setMaisLonge] = useState<{ metros: number; quem: QuemArremessou } | null>(null);
   const [festas, setFestas] = useState<{ id: number; origem: Ponto }[]>([]);
   /*
    * O boneco de neve (`cesta/boneco.ts`): se a bola está perto dele (ele
@@ -378,10 +382,13 @@ function BolaSolta({ de, pega, casa, aoChegando, aoTerminar }: {
       setAro(aroAtual.current);
     };
     window.addEventListener('resize', remedir);
-    let placar = 0, placarBoneco = 0;
+    let placar = 0, placarBoneco = 0, recorde = 0;
     const relogios: number[] = [];
     const comemorar = (fez: QuemArremessou) => {
       const k = aroAtual.current;
+      const metros = lancouDe.current ? distanciaDaCesta(lancouDe.current, k) : null;
+      setDistancia(metros);
+      if (metros !== null && metros > recorde) { recorde = metros; setMaisLonge({ metros, quem: fez }); }
       if (fez === 'boneco') {
         setAcertosBoneco(++placarBoneco);
         bonecoDaCesta()?.resultado(true);
@@ -450,6 +457,7 @@ function BolaSolta({ de, pega, casa, aoChegando, aoTerminar }: {
           const v = mirar({ x: c.x, y: c.y }, { x: k.x + sortearErro(), y: k.y }, folga, p.cima + R_SOLTA + 24, VOO, dt || 1 / 60);
           c.vx = v.vx;
           c.vy = v.vy;
+          lancouDe.current = { x: c.x, y: c.y };
           comBoneco.current = null;
           quem.current = 'boneco';
           arremessoVale.current = true;
@@ -588,6 +596,7 @@ function BolaSolta({ de, pega, casa, aoChegando, aoTerminar }: {
       if (esperando.current) entregarAgora.current = true;
       // Vale cesta se não foi largada colada em cima do aro.
       arremessoVale.current = largouDeLonge(c.x, c.y, aroAtual.current);
+      lancouDe.current = { x: c.x, y: c.y };
     };
     window.addEventListener('pointermove', mover);
     window.addEventListener('pointerup', soltar);
@@ -667,7 +676,7 @@ function BolaSolta({ de, pega, casa, aoChegando, aoTerminar }: {
 
   return createPortal(
     <>
-    <Cesta aro={aro} acertos={acertos} acertosBoneco={acertosBoneco} ultima={ultima} fase={fase} />
+    <Cesta aro={aro} acertos={acertos} acertosBoneco={acertosBoneco} ultima={ultima} fase={fase} distancia={distancia} maisLonge={maisLonge} />
     {festas.map(f => (
       <Confete key={f.id} origem={f.origem} quantidade={90} forca={0.55} className="nt-cesta-confete" />
     ))}

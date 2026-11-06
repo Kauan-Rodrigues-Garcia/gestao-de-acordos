@@ -783,7 +783,8 @@ function AcordosNossoProduto() {
       <div className="max-w-[1400px] mx-auto">
 
         {/* Header */}
-        <div className="flex items-center justify-between mb-5">
+        {/* `data-natal-cabecalho`: o chalé de Natal (`Natal/chale`) mede o vão livre entre o título e os botões. */}
+        <div data-natal-cabecalho className="flex items-center justify-between mb-5">
           <div>
             <h1 className="text-xl font-bold text-foreground">Acordos</h1>
             {!isPP && (

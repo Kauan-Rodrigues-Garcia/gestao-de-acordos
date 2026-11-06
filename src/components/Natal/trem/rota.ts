@@ -4,46 +4,37 @@
  */
 import { useSyncExternalStore } from 'react';
 import { ROUTE_PATHS } from '@/lib';
-import type { RegraDoSetor } from '@/lib/regraDoSetor';
 
-export type AbaDoTrem = 'dashboard' | 'acordos' | 'pix' | 'analitico';
+export type AbaDoTrem = 'dashboard' | 'acordos' | 'analitico';
 
 export const ROTULO_ABA: Readonly<Record<AbaDoTrem, string>> = {
   dashboard: 'Dashboard',
   acordos: 'Acordos',
-  pix: 'Pix Automático',
   analitico: 'Analítico',
 };
 
 /**
  * O percurso do trem — UM SÓ, para todo mundo (Cleber, 05/11/2026: «tem que
- * ser o mesmo tempo e o mesmo sorteio para todos»): Dashboard, Acordos, Pix
- * Automático e Analítico, ida e volta. É ele que dá o relógio (`horario.ts`):
- * o trem está no mesmo lugar, na mesma hora, para todas as empresas e regras.
+ * ser o mesmo tempo e o mesmo sorteio para todos»): Dashboard, Acordos e
+ * Analítico, ida e volta. É ele que dá o relógio (`horario.ts`): o trem está
+ * no mesmo lugar, na mesma hora, para todas as empresas e as duas regras.
+ *
+ * Também são as abas em que cada um VÊ o trem, igual para Nosso produto e
+ * Cofen: desde 05/11/2026 as duas regras têm Dashboard e Acordos com a mesma
+ * estrutura. O Pix Automático saiu da rota no mesmo dia (Cleber): o Natal
+ * mora no Dashboard, em Acordos e no Analítico, como o Halloween.
  */
-export const ROTA_DO_TREM: readonly AbaDoTrem[] = ['dashboard', 'acordos', 'pix', 'analitico'];
-
-/**
- * As abas em que cada um VÊ o trem: Nosso produto, todas; a regra Cofen,
- * Dashboard, Acordos e Analítico — Acordos desde 05/11/2026, quando a mesa dela
- * saiu do Dashboard (CLAUDE.md, «Cofen não é PaguePlay»: decide a regra
- * do setor, nunca a empresa). Enquanto o trem passa pelo Pix, para
- * quem é da regra Cofen ele está «no túnel» — fora da tela, no mesmo relógio.
- */
-export function abasDaRegra(regra: RegraDoSetor | null): readonly AbaDoTrem[] {
-  return regra === 'cofen' ? ['dashboard', 'acordos', 'analitico'] : ROTA_DO_TREM;
-}
+export const ROTA_DO_TREM: readonly AbaDoTrem[] = ['dashboard', 'acordos', 'analitico'];
 
 /**
  * As pistas de cada aba (Cleber, 04/11/2026): uma só, no pé da página, no
- * Dashboard (com a estação), em Acordos e no Pix; no Analítico, uma no alto e
- * outra no pé (com o fim da linha).
+ * Dashboard (com a estação) e em Acordos; no Analítico, uma no alto e outra
+ * no pé (com o fim da linha).
  */
 export type PistaDoTrem = 'topo' | 'fim';
 export const PISTAS_DA_ABA: Readonly<Record<AbaDoTrem, readonly PistaDoTrem[]>> = {
   dashboard: ['fim'],
   acordos: ['fim'],
-  pix: ['fim'],
   analitico: ['topo', 'fim'],
 };
 
@@ -51,14 +42,12 @@ export const PISTAS_DA_ABA: Readonly<Record<AbaDoTrem, readonly PistaDoTrem[]>> 
 export const CAMINHO_DA_ABA: Readonly<Record<AbaDoTrem, string>> = {
   dashboard: ROUTE_PATHS.DASHBOARD,
   acordos: ROUTE_PATHS.ACORDOS,
-  pix: ROUTE_PATHS.PIX_AUTOMATICO,
   analitico: ROUTE_PATHS.ANALITICO,
 };
 
 export function abaDoCaminho(caminho: string): AbaDoTrem | null {
   if (caminho === ROUTE_PATHS.DASHBOARD) return 'dashboard';
   if (caminho === ROUTE_PATHS.ACORDOS) return 'acordos';
-  if (caminho === ROUTE_PATHS.PIX_AUTOMATICO) return 'pix';
   if (caminho === ROUTE_PATHS.ANALITICO || caminho.startsWith(`${ROUTE_PATHS.ANALITICO}/`)) return 'analitico';
   return null;
 }

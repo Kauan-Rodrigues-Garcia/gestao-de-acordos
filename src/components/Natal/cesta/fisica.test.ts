@@ -1,10 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import {
-  ajudarNaMira, baterNaPonta, frearNaRede, largouDeLonge, passouPeloAro, posicaoDoAro, subiuPeloAro, velocidadeDoArremesso,
-  MEIA_ABERTURA, RAIO_DA_PONTA, type Aro, type Corpo,
+  ajudarNaMira, baterNaPonta, distanciaDaCesta, emMetros, frearNaRede, largouDeLonge, passouPeloAro, posicaoDoAro, subiuPeloAro,
+  velocidadeDoArremesso, ARO_DE_VERDADE_M, MEIA_ABERTURA, RAIO_DA_PONTA, type Aro, type Corpo,
 } from './fisica';
 
 const aro: Aro = { x: 500, y: 300, meia: MEIA_ABERTURA, ponta: RAIO_DA_PONTA };
+
+describe('a distância da cesta', () => {
+  it('a régua é o aro: a abertura dele vale 45 cm', () => {
+    expect(distanciaDaCesta({ x: aro.x - 2 * MEIA_ABERTURA, y: aro.y }, aro)).toBeCloseTo(ARO_DE_VERDADE_M);
+  });
+  it('conta em linha reta, do ponto onde a bola saiu até o centro do aro', () => {
+    // 3-4-5: 528 × 704 px = 880 px = 10 aberturas = 4,5 m.
+    expect(distanciaDaCesta({ x: aro.x - 528, y: aro.y + 704 }, aro)).toBeCloseTo(4.5);
+  });
+  it('escreve com vírgula e uma casa', () => {
+    expect(emMetros(4.5)).toBe('4,5 m');
+    expect(emMetros(6.749)).toBe('6,7 m');
+  });
+});
 
 describe('a cesta de Natal', () => {
   it('conta a bola que desce pelo meio do aro', () => {

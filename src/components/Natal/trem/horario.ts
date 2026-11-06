@@ -17,10 +17,8 @@
  * devolve a estação com `fechado` dizendo o porquê.
  *
  * O percurso é UM SÓ para todo mundo (`ROTA_DO_TREM`, Cleber, 05/11/2026:
- * mesmo tempo e mesmo sorteio para todos): quem chama estas funções passa
- * sempre ele. A regra do setor só decide em que abas cada um VÊ o trem
- * (`abasDaRegra`): quem é Cofen não vê Acordos nem Pix — nesse trecho o trem
- * está «no túnel» para ele, no mesmo relógio.
+ * mesmo tempo, mesmo sorteio e mesmas abas para as duas regras): quem chama
+ * estas funções passa sempre ele.
  *
  * O tempo é fixo em segundos, e não em pixels: cada pista da aba leva
  * `SEGUNDOS_POR_PISTA`, em qualquer tela — o trem entra e sai das abas no
@@ -30,7 +28,7 @@
 import { AGENDA_LIVRE, type AgendaDoTrem } from './agenda';
 import { PISTAS_DA_ABA, type AbaDoTrem } from './rota';
 
-export { ROTULO_ABA, ROTA_DO_TREM, abasDaRegra, type AbaDoTrem } from './rota';
+export { ROTULO_ABA, ROTA_DO_TREM, type AbaDoTrem } from './rota';
 
 /**
  * O botão de velocidade: 1 é o ritmo de partida; 1,5 deixa tudo uma vez e
@@ -38,8 +36,13 @@ export { ROTULO_ABA, ROTA_DO_TREM, abasDaRegra, type AbaDoTrem } from './rota';
  */
 export const VELOCIDADE = 1;
 
-/** Quanto o trem leva para cruzar uma pista, de fora a fora da tela (≈ 65 px/s numa tela de 1.200 px). */
-export const SEGUNDOS_POR_PISTA = 24 / VELOCIDADE;
+/**
+ * Quanto o trem leva para cruzar uma pista, de fora a fora da tela (≈ 55 px/s
+ * numa tela de 1.200 px). Era 24 s; com o Pix fora da rota a volta caiu para
+ * 4 min 26 s, e o Cleber quer NO MÍNIMO 5 minutos (05/11/2026): com 28,5 s a
+ * volta dá 5 min 2 s (`duracaoDaVolta`).
+ */
+export const SEGUNDOS_POR_PISTA = 28.5 / VELOCIDADE;
 /** Fora da tela, entre uma aba e a outra (e o tempo das rampas de saída e chegada). */
 const FOLGA_ENTRE_ABAS_S = 4 / VELOCIDADE;
 /** Parado na estação: o sorteio, um passageiro de cada vez (`EMBARQUES`). */

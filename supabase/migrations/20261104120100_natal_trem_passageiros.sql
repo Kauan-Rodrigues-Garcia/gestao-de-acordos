@@ -15,8 +15,8 @@
 -- juntas. Uma fila, um sorteio por viagem, os mesmos cinco na tela de todo
 -- mundo. Nome, foto e nome do setor dos sorteados aparecem para qualquer
 -- pessoa do sistema, de qualquer empresa (o Cleber escolheu isso sabendo).
--- A regra do setor só muda em que abas cada um VÊ o trem
--- (`src/components/Natal/trem/rota.ts`), nunca o horário nem o sorteio.
+-- As abas também são as mesmas para as duas regras: Dashboard, Acordos e
+-- Analítico (`src/components/Natal/trem/rota.ts`; o Pix saiu em 05/11/2026).
 --
 -- ## Por que no banco
 --

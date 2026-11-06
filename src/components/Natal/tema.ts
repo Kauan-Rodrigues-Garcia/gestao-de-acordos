@@ -26,23 +26,31 @@ export interface CenaNatal {
   enfeites: boolean;
   neve: 'leve' | 'cheia' | null;
   montes: boolean;
-  treno: boolean;
   /** Estrelas e presentes caindo de vez em quando, ao salvar acordo. */
   festa: boolean;
+  /** O chalé no alto de Acordos: lareira, poltrona, árvore e presentes (`chale/Chale.tsx`). */
+  chale: boolean;
 }
 
-const VAZIA: CenaNatal = { luzes: false, guirlanda: false, enfeites: false, neve: null, montes: false, treno: false, festa: false };
+const VAZIA: CenaNatal = { luzes: false, guirlanda: false, enfeites: false, neve: null, montes: false, festa: false, chale: false };
 
-/** Por enquanto só o Dashboard está desenhado; as outras abas vêm depois. */
+/**
+ * O que cada aba ganha. Dashboard: a cena inteira. Acordos (as duas regras,
+ * desde 05/11/2026): o chalé no alto e a festa do acordo salvo — é lá que o
+ * acordo nasce, então a festa mora lá também (antes só o Dashboard escutava,
+ * e com a mesa fora dele ela nunca tocava). O Analítico tem os enfeites dele
+ * (gelo, iglu) fora da cena.
+ */
 export function cenaDaRota(caminho: string, estilo: EstiloNatal): CenaNatal {
+  if (caminho === ROUTE_PATHS.ACORDOS) return estilo === 'simples' ? { ...VAZIA, festa: true } : { ...VAZIA, festa: true, chale: true };
   if (caminho !== ROUTE_PATHS.DASHBOARD) return VAZIA;
   return estilo === 'simples'
     ? { ...VAZIA, luzes: true, neve: 'leve', festa: true }
-    : { luzes: true, guirlanda: true, enfeites: true, neve: 'cheia', montes: true, treno: true, festa: true };
+    : { luzes: true, guirlanda: true, enfeites: true, neve: 'cheia', montes: true, festa: true, chale: false };
 }
 
-/** Só o que é parado — para o modo leve. */
-export const soParado = (c: CenaNatal): CenaNatal => ({ ...VAZIA, luzes: c.luzes, guirlanda: c.guirlanda, enfeites: c.enfeites, montes: c.montes });
+/** Só o que é parado — para o modo leve (o chalé fica, sem se mexer). */
+export const soParado = (c: CenaNatal): CenaNatal => ({ ...VAZIA, luzes: c.luzes, guirlanda: c.guirlanda, enfeites: c.enfeites, montes: c.montes, chale: c.chale });
 
 export const temFundo = (c: CenaNatal) => c.neve !== null || c.montes;
 

@@ -1,27 +1,31 @@
 /**
- * BlocoDeGelo — no cabeçalho do Analítico, ao lado do título, só no Natal
- * (Cleber, 05/11/2026): um cantor congelado num bloco de gelo que derrete com
- * os dias (`degelo.ts`). O rosto vai saindo por cima do gelo; o que ainda está
- * dentro aparece através do gelo, azulado, entre os veios das rachaduras.
+ * BlocoDeGelo — escondido no pé do Analítico, perto do fim da linha do trem,
+ * meio enterrado num monte de neve (`trem/Faixas.tsx`), só no Natal
+ * (Cleber, 05/11/2026): um cantor congelado num CUBO de gelo em 3D, bem
+ * transparente, que gira devagar para um lado e para o outro e derrete com os
+ * dias (`degelo.ts`): o cubo vai baixando e o rosto sai por cima.
  *
- * SÓ O MOUSE PARADO EM CIMA faz alguma coisa (Cleber, 05/11/2026: «clique não
- * faz nada»): por um segundo o gelo racha a partir do centro (`rachaduras.ts`)
- * e estala — lascas voam e a música dele entra, abafada e com eco (`som.ts`),
- * cada vez menos abafada conforme os dias passam. Tocando, o bloco pulsa no
- * grave, sobem notinhas e vapor gelado. Tirou o mouse, a música some aos poucos.
+ * SÓ O MOUSE PARADO EM CIMA faz alguma coisa (clique não faz nada): durante
+ * um segundo uma rachadura pequena cresce aos poucos do meio da face da
+ * frente (`rachaduras.ts`) e o cubo treme; aí estala — lascas voam e a música
+ * dele entra, abafada e com um pouco de eco (`som.ts`), cada vez menos abafada
+ * conforme os dias passam. Tocando, o cubo pulsa no grave e sobem notinhas e
+ * vapor gelado. Tirou o mouse, a música some aos poucos.
  *
- * Quem recebe o mouse é uma caixa FIXA (`.nt-gelo`); o que pulsa e balança
- * fica dentro dela, sem receber mouse (`.nt-gelo-corpo`). Antes a própria
- * caixa pulsava: a borda andava sob o ponteiro, o navegador via «saiu e
- * entrou» e a animação recomeçava.
+ * As animações valem também com a «redução de animações» do Windows ligada
+ * (Cleber, 05/11/2026: no PC dele a rachadura aparecia de uma vez). Quem quer
+ * menos movimento usa o modo leve do sistema: aí o cubo fica parado de lado,
+ * e só a rachadura e a música continuam.
  *
- * O componente não ocupa lugar no cabeçalho além de uma caixa da altura do
- * título: o bloco sobe por cima do espaço vazio (`gelo.css`).
+ * Quem recebe o mouse é uma caixa FIXA (`.nt-gelo`); o que gira, pulsa e
+ * balança fica dentro dela, sem receber mouse. Se a borda andasse sob o
+ * ponteiro, o navegador veria «saiu e entrou» e a animação recomeçaria.
  */
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { cn } from '@/lib/utils';
+import { useModoLeve } from '@/lib/modoLeve';
 import { relogioNatal } from '../musica';
-import { diasParaDescongelar, formaDoGelo, quantoDerreteu, somDoGelo } from './degelo';
+import { ALTURA_CHEIA, diasParaDescongelar, formaDoGelo, quantoDerreteu, somDoGelo } from './degelo';
 import { fratura, QUADRO, texturaDoGelo } from './rachaduras';
 import { graveAgora, pararDoGelo, tocarDoGelo } from './som';
 import foto from './teteu.webp';
@@ -29,16 +33,26 @@ import './gelo.css';
 
 /** Quanto tempo o mouse tem de ficar em cima. */
 const ESPERA_MS = 1000;
-/** O busto: 200 × 226 na imagem, desenhado com esta largura. */
-const LARG_FOTO = 58;
+/** O busto: 200 × 226 na imagem, desenhado com esta largura (no plano do meio do cubo). */
+const LARG_FOTO = 46;
 const ALT_FOTO = Math.round((LARG_FOTO * 226) / 200);
-/** A foto encosta no fundo do gelo com essa folga. */
-const BASE_FOTO = 4;
-const BASE_GELO = 2;
+/** A foto encosta no fundo do cubo com essa folga. */
+const BASE_FOTO = 3;
 const NOTAS = ['♪', '♫', '♬', '♩'];
 const CORES = ['#ff5a5f', '#ffd166', '#5ad17a', '#9ad8ff', '#ffffff'];
 
 type Estado = 'parado' | 'rachando' | 'tocando' | 'bloqueado';
+
+/** Os veios de sempre, numa face (o quadro é o do cubo cheio, preso ao fundo). */
+function Veios({ textura, espelhar }: { textura: { finas: string; fortes: string }; espelhar?: boolean }) {
+  return (
+    <svg className="nt-gelo-veios" viewBox={`0 0 ${QUADRO} ${QUADRO}`} preserveAspectRatio="none" aria-hidden="true"
+      style={espelhar ? { transform: 'scaleX(-1)' } : undefined}>
+      <path className="fina" d={textura.finas} />
+      <path className="forte" d={textura.fortes} />
+    </svg>
+  );
+}
 
 export default function BlocoDeGelo({ derreteuNoTeste }: {
   /** Só no laboratório: quanto derreteu, no lugar do relógio. */
@@ -47,6 +61,7 @@ export default function BlocoDeGelo({ derreteuNoTeste }: {
   const derreteu = derreteuNoTeste ?? quantoDerreteu(relogioNatal());
   const forma = formaDoGelo(derreteu);
   const descongelou = derreteu >= 1;
+  const leve = useModoLeve();
   const [estado, setEstado] = useState<Estado>('parado');
   const [estalo, setEstalo] = useState(0);
   const [notas, setNotas] = useState<{ id: number; x: number; nota: string; cor: string; giro: number }[]>([]);
@@ -56,7 +71,9 @@ export default function BlocoDeGelo({ derreteuNoTeste }: {
 
   // Os veios de sempre e a fratura, que nasce no meio do que sobrou do gelo.
   const textura = useMemo(() => texturaDoGelo(), []);
-  const trincas = useMemo(() => fratura(QUADRO / 2, QUADRO - forma.altura * 0.55), [forma.altura]);
+  const texturaDoLado = useMemo(() => texturaDoGelo(19), []);
+  // O quadro (80) cobre o cubo cheio (`ALTURA_CHEIA` px): o impacto fica no meio do que sobrou.
+  const trincas = useMemo(() => fratura(QUADRO / 2, QUADRO * (1 - (forma.altura * 0.55) / ALTURA_CHEIA)), [forma.altura]);
 
   const entrar = () => {
     dentroDoGelo.current = true;
@@ -81,7 +98,7 @@ export default function BlocoDeGelo({ derreteuNoTeste }: {
   // Saiu da aba tocando: para a música.
   useEffect(() => () => { window.clearTimeout(espera.current); pararDoGelo(); }, []);
 
-  // Tocando: o bloco pulsa no grave, e os picos soltam notinhas.
+  // Tocando: o cubo pulsa no grave, e os picos soltam notinhas.
   useEffect(() => {
     if (estado !== 'tocando') {
       corpo.current?.style.setProperty('--batida', '0');
@@ -108,52 +125,64 @@ export default function BlocoDeGelo({ derreteuNoTeste }: {
     return () => cancelAnimationFrame(quadro);
   }, [estado]);
 
-  // A parte da foto que está DENTRO do gelo (de baixo até a linha do gelo).
-  const dentro = Math.min(ALT_FOTO, Math.max(0, BASE_GELO + forma.altura - BASE_FOTO));
+  // A parte da foto que está DENTRO do gelo (de baixo até o topo do cubo).
+  const dentro = Math.min(ALT_FOTO, Math.max(0, forma.altura - BASE_FOTO));
   const balao = estado === 'bloqueado' ? '🔇 O navegador ainda não liberou o som'
     : estado === 'tocando' ? (descongelou ? '🎄 Descongelou!' : '🎶 tá chegando…')
     : null;
+  const estiloFoto = { width: LARG_FOTO, left: `calc(50% - ${LARG_FOTO / 2}px)`, bottom: BASE_FOTO };
 
   return (
     <div className="nt-gelo-lugar">
       <div
-        className={cn('nt-gelo', `nt-gelo-${estado}`, descongelou && 'descongelou')}
-        style={{ '--altura': `${forma.altura}px`, '--raio': `${forma.raio}px`, '--poca': `${forma.poca}px` } as CSSProperties}
+        className={cn('nt-gelo', `nt-gelo-${estado}`, descongelou && 'descongelou', leve && 'leve')}
+        style={{ '--altura': `${forma.altura}px`, '--raio': `${Math.round(forma.raio * 0.45)}px`, '--poca': `${forma.poca}px` } as CSSProperties}
         role="img"
         aria-label={descongelou ? 'O cantor descongelou! Pare o mouse em cima para ouvir.' : `Tem alguém congelado aqui… faltam ${diasParaDescongelar(relogioNatal())} dias para descongelar.`}
         onPointerEnter={entrar}
         onPointerLeave={sair}
       >
         <div ref={corpo} className="nt-gelo-corpo">
-          {/* A poça, que cresce com os dias, e a gota que pinga nela. */}
+          {/* No chão: a sombra do cubo, a poça (que cresce com os dias) e a gota que pinga nela. */}
+          <div className="nt-gelo-sombra" />
           <div className="nt-gelo-poca"><span className="nt-gelo-ondinha" /></div>
           <span className="nt-gelo-pingo" />
 
-          {/* O rosto fora do gelo: nítido, molhadinho. */}
-          <img className="nt-gelo-foto nt-gelo-fora" src={foto} alt="" draggable={false}
-            style={{ width: LARG_FOTO, bottom: BASE_FOTO, clipPath: `inset(0 0 ${dentro}px 0)` }} />
+          {/* O cubo: cena com perspectiva → flutua → treme/embala → gira → as seis faces e o busto no meio. */}
+          <div className="nt-gelo-cena">
+            <div className="nt-gelo-flutua">
+              <div className="nt-gelo-treme">
+                <div className="nt-gelo-cubo">
+                  <div className="nt-gelo-face tras" />
+                  <div className="nt-gelo-face esq"><Veios textura={texturaDoLado} espelhar /></div>
+                  <div className="nt-gelo-face base" />
 
-          {/* O bloco: a foto dentro, através do gelo, e o gelo por cima. */}
-          <div className="nt-gelo-bloco" style={{ bottom: BASE_GELO }}>
-            <img className="nt-gelo-foto nt-gelo-dentro" src={foto} alt="" draggable={false}
-              style={{ width: LARG_FOTO, bottom: BASE_FOTO - BASE_GELO, filter: `blur(${forma.embacado}px) saturate(.8) brightness(1.04)` }} />
-            <div className="nt-gelo-tinta" />
-            <div className="nt-gelo-geada" style={{ opacity: forma.geada }} />
-            <div className="nt-gelo-reflexo" />
-            <div className="nt-gelo-bolhas">{[0, 1, 2, 3, 4].map(i => <span key={i} />)}</div>
-            {/* Os veios do gelo e a fratura, presos ao fundo: derretendo, o alto some e eles ficam. */}
-            <svg className="nt-gelo-veios" viewBox={`0 0 ${QUADRO} ${QUADRO}`} preserveAspectRatio="none" aria-hidden="true">
-              <path className="fina" d={textura.finas} />
-              <path className="forte" d={textura.fortes} />
-              {trincas.map((t, i) => (
-                <path key={i} className={cn('trinca', t.fina && 'fina')} d={t.d} pathLength={1}
-                  style={{ '--atraso': `${t.atraso}s` } as CSSProperties} />
-              ))}
-            </svg>
-            {/* As gotas escorrendo pelos lados: mais, conforme derrete. */}
-            {Array.from({ length: forma.gotas }, (_, i) => (
-              <span key={i} className="nt-gelo-gota" style={{ left: `${12 + ((i * 37) % 60)}%`, animationDelay: `${-i * 1.3}s` }} />
-            ))}
+                  {/* O busto, no plano do meio: o que está dentro, embaçado e azulado; o que já saiu, nítido. */}
+                  <img className="nt-gelo-foto dentro" src={foto} alt="" draggable={false}
+                    style={{ ...estiloFoto, clipPath: `inset(${ALT_FOTO - dentro}px 0 0 0)`, filter: `blur(${forma.embacado * 0.7}px) saturate(.75) brightness(1.06) hue-rotate(-8deg)` }} />
+                  <img className="nt-gelo-foto fora" src={foto} alt="" draggable={false}
+                    style={{ ...estiloFoto, clipPath: `inset(0 0 ${dentro}px 0)` }} />
+
+                  <div className="nt-gelo-face dir"><Veios textura={texturaDoLado} /></div>
+                  <div className="nt-gelo-face topo" />
+                  <div className="nt-gelo-face frente">
+                    <Veios textura={textura} />
+                    <div className="nt-gelo-bolhas">{[0, 1, 2, 3, 4].map(i => <span key={i} />)}</div>
+                    {/* A rachadura do mouse parado em cima: cresce do meio, risco por risco. */}
+                    <svg className="nt-gelo-trincas" viewBox={`0 0 ${QUADRO} ${QUADRO}`} preserveAspectRatio="none" aria-hidden="true">
+                      {trincas.map((t, i) => (
+                        <path key={i} className={cn('trinca', t.fina && 'fina')} d={t.d} pathLength={1}
+                          style={{ '--atraso': `${t.atraso}s` } as CSSProperties} />
+                      ))}
+                    </svg>
+                    {/* As gotas escorrendo: mais, conforme derrete. */}
+                    {Array.from({ length: forma.gotas }, (_, i) => (
+                      <span key={i} className="nt-gelo-gota" style={{ left: `${14 + ((i * 37) % 62)}%`, animationDelay: `${-i * 1.3}s` }} />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
           <span className="nt-gelo-brilho um" />
           <span className="nt-gelo-brilho dois" />

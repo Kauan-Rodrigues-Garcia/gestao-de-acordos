@@ -1,14 +1,13 @@
 /**
  * O trilho de uma aba — a geometria, sem desenho nem DOM.
  *
- * Pistas retas, sem curva (Cleber, 04/11/2026). Dashboard, Acordos e Pix têm
+ * Pistas retas, sem curva (Cleber, 04/11/2026). Dashboard e Acordos têm
  * uma pista só, no pé da página — no Dashboard, saindo da estação; o
  * Analítico tem uma no alto e outra no pé, que acaba no para-choque do fim da
  * linha (`PISTAS_DA_ABA`, em `rota.ts`):
  *
  *   Dashboard  (pé)    [estação] ───────────────────────▶ sai pela direita
  *   Acordos    (pé)    entra ───────────────────────────▶ sai
- *   Pix        (pé)    entra ───────────────────────────▶ sai
  *   Analítico  (alto)  entra ───────────────────────────▶ sai pela direita
  *              (pé)    [para-choque] ◀───────────────── entra pela direita
  *
@@ -123,14 +122,16 @@ export function montarTrilho(m: MedidasDoTrilho, segundosPorPista: number): Tril
   const reservado = (x: number, y: number, folga: number) =>
     (m.reservas ?? []).some(r => Math.abs(r.y - y) < 90 && x > r.x0 - folga && x < r.x1 + folga);
   const livre = (parada?: number, depois = 70, y?: number) => {
-    const a = parada !== undefined ? parada + m.comprimentoTrem / 2 + depois : 120;
-    // Com o iglu na pista, ela acaba onde ele começa.
-    const reservas = (m.reservas ?? []).filter(r => y !== undefined && Math.abs(r.y - y) < 90).map(r => r.x0 - 40);
-    const b = Math.min(W - 120, ...reservas);
+    let a = parada !== undefined ? parada + m.comprimentoTrem / 2 + depois : 120;
+    const naPista = (m.reservas ?? []).filter(r => y !== undefined && Math.abs(r.y - y) < 90);
+    // Com a plaquinha na ponta esquerda (Cleber, 05/11/2026: «não fique nada na
+    // frente da placa»), a pista começa depois dela; com o iglu na direita, acaba onde ele começa.
+    for (const r of naPista) if (r.x1 < W / 2) a = Math.max(a, r.x1 + 40);
+    const b = Math.min(W - 120, ...naPista.filter(r => r.x1 >= W / 2).map(r => r.x0 - 40));
     return { a, b, L: b - a };
   };
   // Na estação, o aviso e o bilhete do sorteio ficam logo depois do trem parado: as atrações vão além deles.
-  const pe = m.xEstacao !== undefined ? livre(m.xEstacao, DEPOIS_DO_AVISO) : livre(m.xFimDaLinha);
+  const pe = m.xEstacao !== undefined ? livre(m.xEstacao, DEPOIS_DO_AVISO, m.yFim) : livre(m.xFimDaLinha, 70, m.yFim);
   if (m.yTopo !== undefined) {
     const alto = livre(undefined, 70, m.yTopo);
     if (alto.L > LARGURA_ATRACAO * 2) pos('sinal', m.yTopo, alto.a + alto.L * 0.5);

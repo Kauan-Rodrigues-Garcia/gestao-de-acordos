@@ -154,6 +154,12 @@ const EXCECOES: Record<string, Excecao> = {
       + 'banco), pedida em 04/11/2026 para ver a aba antes de existir o grupo. Não concede dado: o painel real '
       + 'só abre pelo que fn_jornada_minhas_abas devolve.',
   },
+  'components/Natal/previa.ts': {
+    linhas: 1, familia: 'chave-mestra',
+    motivo: 'o tema de Natal ainda é PRÉVIA: só o super_admin (e o `npm run dev`) vê enfeite, trem e presente, '
+      + 'para validar o visual antes de liberar. Não concede dado nem tela — é decoração por cima das abas que '
+      + 'o painel já liberou. Na liberação para todos, a prévia sai e esta linha vai junto.',
+  },
   'pages/PainelDiretoria/index.tsx': {
     linhas: 1, familia: 'chave-mestra',
     motivo:

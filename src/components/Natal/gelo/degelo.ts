@@ -50,9 +50,9 @@ export interface FormaDoGelo {
   geada: number;
 }
 
-/** O bloco cheio cobre o busto inteiro com folga; no fim, só os ombros. */
-export const ALTURA_CHEIA = 78;
-export const ALTURA_FINAL = 26;
+/** O cubo cheio é quase um cubo (62 de altura, 60 de lado — Cleber, 05/11/2026: «mais quadradinho»); no fim, só os ombros. */
+export const ALTURA_CHEIA = 62;
+export const ALTURA_FINAL = 22;
 
 export function formaDoGelo(derreteu: number): FormaDoGelo {
   const k = acelera(Math.min(1, Math.max(0, derreteu)));
@@ -78,11 +78,12 @@ export interface SomDoGelo {
 export function somDoGelo(derreteu: number): SomDoGelo {
   const k = Math.min(1, Math.max(0, derreteu));
   // Descongelou: a música limpa, só um restinho de eco de festa.
-  if (k >= 1) return { corte: 18_000, eco: 0.08, repeticao: 0.15 };
+  if (k >= 1) return { corte: 18_000, eco: 0.05, repeticao: 0.1 };
   return {
     // De 420 Hz (bem abafado) a 4,8 kHz (quase limpo), subindo em escala de ouvido.
     corte: Math.round(420 * Math.pow(4800 / 420, k)),
-    eco: Number(lerp(0.5, 0.18, k).toFixed(2)),
-    repeticao: Number(lerp(0.45, 0.25, k).toFixed(2)),
+    // «Um pouquinho menos de eco» (Cleber, 05/11/2026): era de 0,5 a 0,18, repetindo 0,45 a 0,25.
+    eco: Number(lerp(0.32, 0.1, k).toFixed(2)),
+    repeticao: Number(lerp(0.3, 0.15, k).toFixed(2)),
   };
 }

@@ -127,6 +127,24 @@ export function velocidadeDoArremesso(amostras: readonly Amostra[], agora: numbe
   return { vx, vy };
 }
 
+/*
+ * A distância da cesta (Cleber, 05/11/2026: «a distância que a pessoa faz a
+ * cesta»), em metros de quadra: a régua é o próprio aro — a abertura dele
+ * (2 × `MEIA_ABERTURA` px) vale os 45 cm de um aro de verdade. Conta do ponto
+ * onde a bola saiu da mão (de quem jogou, ou do boneco) até o centro do aro.
+ */
+export const ARO_DE_VERDADE_M = 0.45;
+/** A linha de três da quadra oficial. */
+export const LINHA_DE_TRES_M = 6.75;
+
+export function distanciaDaCesta(de: { x: number; y: number }, aro: Aro): number {
+  const px = Math.hypot(aro.x - de.x, aro.y - de.y);
+  return (px * ARO_DE_VERDADE_M) / (2 * aro.meia);
+}
+
+/** «4,2 m», com uma casa (vírgula, como se fala aqui). */
+export const emMetros = (m: number) => `${m.toFixed(1).replace('.', ',')} m`;
+
 /** Soltou longe do aro (ou abaixo dele)? Se soltou colado em cima, não vale. */
 export function largouDeLonge(x: number, y: number, aro: Aro): boolean {
   const emCima = Math.abs(x - aro.x) < ZONA_DE_LARGAR.lado && y < aro.y && y > aro.y - ZONA_DE_LARGAR.altura;

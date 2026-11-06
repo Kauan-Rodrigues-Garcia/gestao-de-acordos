@@ -6,6 +6,8 @@ import { pedirFotoDoPerfil } from '@/lib/fotoDoPerfil';
 import { cn } from '@/lib/utils';
 import { carregarFonteDoNatal } from '../fonteDoNatal';
 import { SemFotoDePerfil, type Inscricao } from './passageiros';
+import { MapaDoTicket } from './MapaDoTicket';
+import { ROTA_DO_TREM } from './rota';
 
 /** O ticket entra na validadora e volta carimbado: o tempo da animação. */
 const VALIDANDO_MS = 900;
@@ -69,11 +71,14 @@ export function MuralDaEstacao({ aberto, aoFechar, inscricao, mudando, mudar, sa
         clique no aviso (toast) também não fecha.
       */}
       <DialogContent
-        className="nt-ticket-dialogo max-w-[30rem] border-0 bg-transparent p-0 shadow-none"
+        className="nt-ticket-dialogo max-w-[52rem] border-0 bg-transparent p-0 shadow-none"
         onFocusOutside={e => e.preventDefault()}
         onInteractOutside={e => { if ((e.target as HTMLElement | null)?.closest?.('[data-sonner-toaster]')) e.preventDefault(); }}
         onCloseAutoFocus={e => { if (indoParaFoto.current) { e.preventDefault(); indoParaFoto.current = false; } }}
       >
+        {/* O ticket à esquerda e, ao lado, o mapa da linha (por onde o trem passa). */}
+        <div className="nt-ticket-com-mapa">
+        <div className="nt-ticket-coluna">
         <div className={cn('nt-ticket', validando && 'validando', inscrito && !validando && 'valido', semFoto && 'sem-foto')}>
           <div className="nt-ticket-corpo">
             <div className="nt-ticket-topo">
@@ -133,6 +138,9 @@ export function MuralDaEstacao({ aberto, aoFechar, inscricao, mudando, mudar, sa
               {validando ? 'Validando…' : '🎟️ Inserir meu ticket'}
             </button>
           )}
+        </div>
+        </div>
+        <MapaDoTicket rota={ROTA_DO_TREM} />
         </div>
       </DialogContent>
     </Dialog>

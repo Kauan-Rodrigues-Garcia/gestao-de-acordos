@@ -12,7 +12,7 @@
  */
 import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
-import { FUNDO_DA_REDE, MEIA_ABERTURA, type Aro } from './fisica';
+import { emMetros, FUNDO_DA_REDE, LINHA_DE_TRES_M, MEIA_ABERTURA, type Aro } from './fisica';
 import './cesta.css';
 
 const CAIXA = { esq: 80, cima: 130, largura: 160, altura: 215 };
@@ -75,6 +75,10 @@ interface Props {
   ultima: 'pessoa' | 'boneco' | null;
   /** A fase da bola: congelou, a cesta mostra o placar final; voltando, ela vai embora. */
   fase: 'solta' | 'congelando' | 'voltando';
+  /** De quantos metros saiu a última cesta (`distanciaDaCesta`). */
+  distancia: number | null;
+  /** A cesta mais longe da brincadeira, e de quem foi. */
+  maisLonge: { metros: number; quem: 'pessoa' | 'boneco' } | null;
 }
 
 const cestas = (n: number) => `${n} ${n === 1 ? 'cesta' : 'cestas'}`;
@@ -90,7 +94,7 @@ function textoDoPlacar(n: number, b: number, final: boolean): string {
   return `🎄 ${cestas(n)}${b > 0 ? ` · ⛄ ${b}` : ''}`;
 }
 
-export function Cesta({ aro, acertos, acertosBoneco, ultima, fase }: Props) {
+export function Cesta({ aro, acertos, acertosBoneco, ultima, fase, distancia, maisLonge }: Props) {
   const caixa = {
     left: aro.x - CAIXA.esq, top: aro.y - CAIXA.cima, width: CAIXA.largura, height: CAIXA.altura,
   } as const;
@@ -166,9 +170,22 @@ export function Cesta({ aro, acertos, acertosBoneco, ultima, fase }: Props) {
         role="status"
       >
         {placar}
+        {/* A cesta mais longe até agora (no fim, a da brincadeira). */}
+        {maisLonge && (
+          <span className="nt-cesta-recorde">
+            {final ? '🏅 a mais longe: ' : '📏 mais longe: '}<b>{emMetros(maisLonge.metros)}</b>{maisLonge.quem === 'boneco' && ' ⛄'}
+          </span>
+        )}
       </div>
       {total > 0 && !final && (
-        <div key={`mais-${total}`} className={cn('nt-cesta-mais', ultima === 'boneco' && 'do-boneco')} style={{ left: aro.x, top: aro.y + 20 }} aria-hidden="true">{ultima === 'boneco' ? '⛄+1' : '+1'}</div>
+        <div key={`mais-${total}`} className={cn('nt-cesta-mais', ultima === 'boneco' && 'do-boneco')} style={{ left: aro.x, top: aro.y + 20 }} aria-hidden="true">
+          {ultima === 'boneco' ? '⛄+1' : '+1'}
+          {distancia !== null && (
+            <span className="nt-cesta-distancia">
+              {emMetros(distancia)}{distancia >= LINHA_DE_TRES_M && ' · lá de longe! 🔥'}
+            </span>
+          )}
+        </div>
       )}
     </>,
     document.body,

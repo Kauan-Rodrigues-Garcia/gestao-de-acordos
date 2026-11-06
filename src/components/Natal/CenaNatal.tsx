@@ -3,6 +3,7 @@ import { useTheme } from 'next-themes';
 import { ehTemaEscuro } from '@/lib/temas';
 import { cn } from '@/lib/utils';
 import { EVENTO_ACORDO_SALVO, EVENTO_FESTA, EVENTO_TRENO, type CenaNatal } from './tema';
+import { Chale } from './chale/Chale';
 import { VAO, naCurva } from './varal';
 import './natal.css';
 
@@ -15,7 +16,8 @@ import './natal.css';
  *   CamadaNatal      — dentro do `<main>`, no alto do conteúdo, e rola junto:
  *                      o varal de luzinhas, a guirlanda e as bolas penduradas.
  *   SobreposicaoNatal — parada por cima do conteúdo: a festa do acordo salvo.
- *   RevoadaNatal     — a tela toda: o trenó do Papai Noel cruzando o céu.
+ *   RevoadaNatal     — a tela toda: o trenó do Papai Noel cruzando o céu, de
+ *                      vez em quando, em QUALQUER aba (não depende da cena).
  *
  * Tudo com `pointer-events: none`, menos as bolas (clicar balança). Nenhuma
  * camada lê nem grava dado.
@@ -132,6 +134,7 @@ export function CamadaNatal({ cena }: { cena: CenaNatal }) {
     <>
       <div className="nt-camada" aria-hidden="true">
         {cena.luzes && <Varal guirlanda={cena.guirlanda} bolas={cena.enfeites} />}
+        {cena.chale && <Chale />}
       </div>
       {respiro > 0 && <div aria-hidden="true" style={{ height: respiro }} />}
     </>
@@ -403,11 +406,18 @@ function criarBrilho(cor: string): HTMLCanvasElement {
 /** O próximo voo: exponencial em torno de 3 min, nunca antes de 40 s nem depois de 7 min. */
 const proximoVooEm = () => Math.min(420_000, Math.max(40_000, -Math.log(1 - Math.random()) * 180_000));
 
-export function RevoadaNatal({ cena }: { cena: CenaNatal }) {
+/**
+ * O trenó é um evento à parte, como os morcegos do Halloween (Cleber,
+ * 05/11/2026: «independente da aba que a pessoa estiver»): o `Layout` monta a
+ * revoada uma vez, fora da cena da rota, e o relógio do próximo voo continua
+ * correndo quando a pessoa troca de aba. `ativo`: estilo detalhado, fora do
+ * modo leve.
+ */
+export function RevoadaNatal({ ativo }: { ativo: boolean }) {
   const [voo, setVoo] = useState<Voo | null>(null);
   const caixa = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!cena.treno) return;
+    if (!ativo) return;
     let t: number | undefined;
     const voar = () => {
       setVoo(sortearVoo(caixa.current?.clientWidth ?? window.innerWidth));
@@ -417,7 +427,7 @@ export function RevoadaNatal({ cena }: { cena: CenaNatal }) {
     t = window.setTimeout(voar, acaso(6_000, 50_000));
     window.addEventListener(EVENTO_TRENO, voar);
     return () => { window.clearTimeout(t); window.removeEventListener(EVENTO_TRENO, voar); };
-  }, [cena.treno]);
+  }, [ativo]);
   // O rastro: faíscas que saem da traseira do trenó e ficam no céu onde nasceram.
   const rastro = useRef<HTMLCanvasElement>(null);
   const vira = useRef<HTMLDivElement>(null);
@@ -472,7 +482,7 @@ export function RevoadaNatal({ cena }: { cena: CenaNatal }) {
     return () => { cancelAnimationFrame(quadro); ctx.clearRect(0, 0, cv.width, cv.height); };
   }, [voo]);
 
-  if (!cena.treno) return null;
+  if (!ativo) return null;
   const fora = 340;
   return (
     <div ref={caixa} className="nt-revoada" aria-hidden="true">

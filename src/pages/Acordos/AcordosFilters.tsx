@@ -77,7 +77,8 @@ export function AcordosFilters({
   return (
     <>
       {/* Tabs */}
-      <div className="flex items-center gap-1 mb-4 border-b border-border">
+      {/* `data-natal-chao`: a linha das abas é o chão do chalé de Natal (`Natal/chale`). */}
+      <div data-natal-chao className="flex items-center gap-1 mb-4 border-b border-border">
         {([
           { key: 'todos',     label: 'Todos' },
           { key: 'analitico', label: 'Verificar' },

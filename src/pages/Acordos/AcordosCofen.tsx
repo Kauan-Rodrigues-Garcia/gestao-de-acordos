@@ -537,7 +537,8 @@ export function AcordosCofen() {
       <div className="max-w-[1400px] mx-auto space-y-6">
         <div>
           {/* Cabeçalho */}
-          <div className="flex items-center justify-between mb-4">
+          {/* O chalé de Natal (`Natal/chale`): o vão livre do cabeçalho, e o chão é o pé dele. */}
+          <div data-natal-cabecalho data-natal-chao className="flex items-center justify-between mb-4">
             <div>
               <h1 className="text-xl font-bold text-foreground">Acordos</h1>
               <p className="text-sm text-muted-foreground mt-0.5">

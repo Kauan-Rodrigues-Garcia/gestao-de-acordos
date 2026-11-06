@@ -9,19 +9,21 @@
  * escuta). A análise dá o grave a cada quadro, para o bloco pulsar.
  *
  * O arquivo é um trecho da música que já começa nos 19 s dela (`public/audio/
- * natal/dingo-bell.mp3`, 75 s). Como o resto da mídia do Natal, ele fica FORA
- * do git — precisa ir para o deploy à parte.
+ * natal/dingo-bell.mp3`): 28 s, com o fim sumindo nos últimos 2,5 s (Cleber,
+ * 05/11/2026: «só vai tocar uns 20 ou 30 segundos, corta pra ficar mais leve
+ * para todos» — eram 75 s e 1 MB; agora 450 KB). Está no git, com o resto da mídia
+ * do Natal (desde aa17a5f3).
  */
 import { abaixarRadio } from '../musica';
 import type { SomDoGelo } from './degelo';
 
 const ARQUIVO = '/audio/natal/dingo-bell.mp3';
-/** O volume da música (o gelo já tira um tanto, abafando). */
-const VOLUME = 0.42;
+/** O volume da música (o gelo já tira um tanto, abafando). Era 0,42 («a música um pouco maior», Cleber, 05/11/2026). */
+const VOLUME = 0.6;
 const ENTRA_S = 0.9;
 const SAI_S = 0.7;
 /** Em quantos segundos o filtro abre enquanto toca, e até quanto. */
-const ABRE_EM_S = 28;
+const ABRE_EM_S = 22;
 const ABRE_ATE = 1.9;
 
 interface Motor {

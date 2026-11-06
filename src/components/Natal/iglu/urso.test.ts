@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { EPOCA } from '../musica';
 import {
-  DURACAO_VISITA_S, FISGOU_S, JANELA_MS, PESCANDO_S, SAINDO_S, VISITA_A_CADA, oUrsoAgora, visitaDaJanela,
+  BELISCADA_S, CICLO_BELISCADA_S, DURACAO_VISITA_S, FISGOU_S, JANELA_MS, PESCANDO_S, SAINDO_S, VISITA_A_CADA,
+  beliscada, oUrsoAgora, tremPassaPeloIglu, visitaDaJanela,
 } from './urso';
 
 describe('as visitas do urso', () => {
@@ -37,5 +38,42 @@ describe('as visitas do urso', () => {
   it('é igual para todo mundo (o mesmo instante dá a mesma fase)', () => {
     const t = EPOCA + 123_456_789;
     expect(oUrsoAgora(t)).toEqual(oUrsoAgora(t));
+  });
+});
+
+describe('o urso pescando', () => {
+  it('sai mais vezes: uma por hora, em média (umas nove no expediente)', () => {
+    expect(JANELA_MS * VISITA_A_CADA).toBe(60 * 60_000);
+  });
+
+  it('de tempos em tempos um peixe belisca: dois ciclos em cada três, e cabe no ciclo', () => {
+    let com = 0;
+    const ciclos = 300;
+    for (let k = 0; k < ciclos; k++) {
+      let achou = false;
+      for (let t = k * CICLO_BELISCADA_S; t < (k + 1) * CICLO_BELISCADA_S; t += 0.1) if (beliscada(t) !== null) achou = true;
+      if (achou) com++;
+    }
+    expect(com / ciclos).toBeGreaterThan(0.55);
+    expect(com / ciclos).toBeLessThan(0.78);
+  });
+
+  it('a beliscada vai de 0 a 1 e dura BELISCADA_S', () => {
+    let t = 0;
+    while (beliscada(t) === null) t += 0.05;
+    const inicio = t;
+    while (beliscada(t) !== null) { expect(beliscada(t)).toBeGreaterThanOrEqual(0); expect(beliscada(t)).toBeLessThan(1); t += 0.05; }
+    expect(t - inicio).toBeCloseTo(BELISCADA_S, 0);
+  });
+
+  it('acena para o trem só quando ele passa pela ponta direita da pista do alto do Analítico', () => {
+    const base = { fechado: null, aba: 'analitico', fase: 'ida', progresso: 0.4 };
+    expect(tremPassaPeloIglu(base)).toBe(true);
+    expect(tremPassaPeloIglu({ ...base, fase: 'volta' })).toBe(true);
+    expect(tremPassaPeloIglu({ ...base, progresso: 0.1 })).toBe(false);
+    expect(tremPassaPeloIglu({ ...base, progresso: 0.8 })).toBe(false);
+    expect(tremPassaPeloIglu({ ...base, aba: 'acordos' })).toBe(false);
+    expect(tremPassaPeloIglu({ ...base, fase: 'fim' })).toBe(false);
+    expect(tremPassaPeloIglu({ ...base, fechado: { motivo: 'fechado' } })).toBe(false);
   });
 });

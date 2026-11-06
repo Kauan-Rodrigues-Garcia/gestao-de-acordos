@@ -1,9 +1,13 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useAuthOpcional } from '@/hooks/useAuth';
+import { useModoLeve } from '@/lib/modoLeve';
 import { useRelogioDoTrem } from '../trem/comum';
+import { ondeEsta } from '../trem/horario';
+import { agendaAgora } from '../trem/agenda';
+import { ROTA_DO_TREM } from '../trem/rota';
 import { relogioNatal } from '../musica';
-import { ENTRANDO_S, SAINDO_S, chamarUrsoParaTeste, oUrsoAgora } from './urso';
+import { ENTRANDO_S, SAINDO_S, beliscada, chamarUrsoParaTeste, oUrsoAgora, tremPassaPeloIglu } from './urso';
 import { criarRodada, type MomentoDoUrso } from './falas';
 import './iglu.css';
 
@@ -12,7 +16,28 @@ const MS_POR_LETRA = 26;
 /** Depois de escrita, a fala fica o tempo de ler: mais longa, mais tempo. */
 const tempoDeLer = (letras: number) => Math.min(5500, Math.max(2000, 1400 + 45 * letras));
 const primeiroNome = (nome: string | null | undefined) => (nome ?? '').trim().split(/\s+/)[0] || null;
-const semMovimento = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+/**
+ * O relógio quadro a quadro, só com o urso fora do iglu (Cleber, 05/11/2026:
+ * «como se ele tivesse no mesmo frame a cada segundo»). Antes a posição vinha
+ * de um relógio de 200 ms alisado por CSS — e com a redução de animações do
+ * Windows a transição sumia e ele andava aos pulos. Aqui são ~30 quadros por
+ * segundo, e só enquanto ele está fora.
+ */
+function useRelogioFino(ativo: boolean): number {
+  const [agora, setAgora] = useState(relogioNatal);
+  useEffect(() => {
+    if (!ativo) return;
+    let quadro = 0, antes = 0;
+    const passo = (t: number) => {
+      if (t - antes >= 33) { antes = t; setAgora(relogioNatal()); }
+      quadro = requestAnimationFrame(passo);
+    };
+    quadro = requestAnimationFrame(passo);
+    return () => cancelAnimationFrame(quadro);
+  }, [ativo]);
+  return agora;
+}
 
 /*
  * O iglu do urso, no alto do Analítico (pedido do Cleber, 04/11/2026).
@@ -53,30 +78,61 @@ const ESTRELINHA = 'M0 -3.2 L0.8 -0.8 L3.2 0 L0.8 0.8 L0 3.2 L-0.8 0.8 L-3.2 0 L
 const limitar = (v: number) => Math.max(0, Math.min(1, v));
 const suave = (t: number) => t * t * (3 - 2 * t);
 
-const Urso = memo(function Urso({ feliz, vara, peixe, fisgando }: { feliz: boolean; vara: boolean; peixe: 'nao' | 'pulando' | 'na-pata'; fisgando: boolean }) {
+const Urso = memo(function Urso({ feliz, vara, peixe, fisgando, atento, acenando, pulando }: {
+  feliz: boolean; vara: boolean; peixe: 'nao' | 'pulando' | 'na-pata'; fisgando: boolean;
+  /** Uma beliscada na isca (0 a 1 dela), ou `null`: a boia afunda, a vara verga, ele se inclina. */
+  atento: number | null;
+  /** O trem passando: o braço livre acena. */
+  acenando: boolean;
+  /** Fisgou: dá dois pulinhos de alegria. */
+  pulando: boolean;
+}) {
   // Coordenadas do urso: (0, 0) é o chão embaixo do bloco onde ele senta.
   const boia = { x: BURACO.x - X_SENTADO, y: BURACO.y - CHAO };
+  // A beliscada: um puxão que vai e volta (seno), com uma tremidinha no meio.
+  const puxao = atento === null ? 0 : Math.sin(Math.PI * atento) * (0.85 + 0.15 * Math.sin(atento * 40));
+  const afunda = puxao * 2.6;
+  const verga = puxao * 7;
+  const inclina = atento === null ? 0 : -5 * Math.sin(Math.PI * Math.min(1, atento * 1.4));
   return (
     <g>
       {vara && (
         <>
           {/* a linha, da ponta da vara até a boia no buraco */}
-          <path className={cn('nt-urso-linha', fisgando && 'esticada')} d={`M-46 -50 Q-40 -26 ${boia.x} ${boia.y - 1.5}`} />
-          <g className="nt-urso-boia" transform={`translate(${boia.x} ${boia.y - 1.5})`}>
-            <circle r={1.9} fill="#FFFFFF" />
-            <path d="M-1.9 0 A1.9 1.9 0 0 1 1.9 0 Z" fill="#D6403A" />
+          <path className={cn('nt-urso-linha', (fisgando || atento !== null) && 'esticada')}
+            d={`M-46 ${-50 + verga * 0.6} Q-40 -26 ${boia.x} ${boia.y - 1.5 + afunda}`} />
+          <g transform={`translate(${boia.x} ${(boia.y - 1.5 + afunda).toFixed(2)})`}>
+            <g className="nt-urso-boia">
+              <circle r={1.9} fill="#FFFFFF" />
+              <path d="M-1.9 0 A1.9 1.9 0 0 1 1.9 0 Z" fill="#D6403A" />
+            </g>
           </g>
         </>
       )}
-      <g className="nt-urso-corpo">
-        {/* o pé de trás, o corpo, a sombra e a barriga */}
-        <ellipse cx={4} cy={-2.8} rx={5.6} ry={3.2} fill="#ECEFF2" />
+      <g transform={`rotate(${inclina.toFixed(2)} 0 0)`}>
+      <g className={cn('nt-urso-corpo', pulando && 'pulando')}>
+        {/* o pé de trás, o corpo (que respira), a sombra e a barriga */}
+        <ellipse className="nt-urso-pe tras" cx={4} cy={-2.8} rx={5.6} ry={3.2} fill="#ECEFF2" />
+        <g className="nt-urso-respira">
         <ellipse cx={1} cy={-19} rx={13} ry={14} fill="#F7F5F0" />
         <path d="M6 -32 Q15 -24 13 -12 Q11 -5 4 -5 Q10 -16 6 -32 Z" fill="#E3E9EF" />
         <ellipse cx={-4} cy={-15.5} rx={7} ry={9} fill="#FFFFFF" />
+        </g>
         {/* o pé da frente, com a almofadinha */}
-        <ellipse cx={-8} cy={-3.2} rx={6.2} ry={3.5} fill="#F7F5F0" />
-        <ellipse cx={-12.4} cy={-3.2} rx={1.7} ry={2.2} fill="#CDB9A8" />
+        <g className="nt-urso-pe frente">
+          <ellipse cx={-8} cy={-3.2} rx={6.2} ry={3.5} fill="#F7F5F0" />
+          <ellipse cx={-12.4} cy={-3.2} rx={1.7} ry={2.2} fill="#CDB9A8" />
+        </g>
+        {/* o braço livre, acenando para o trem */}
+        {acenando && (
+          <g transform="translate(7 -27)">
+            <g className="nt-urso-tchau">
+              <ellipse cx={3.4} cy={-7} rx={3.6} ry={7.4} fill="#F7F5F0" transform="rotate(24 3.4 -7)" />
+              <circle cx={6.6} cy={-13.4} r={3.6} fill="#FFFFFF" />
+              <ellipse cx={6.4} cy={-12.6} rx={1.5} ry={1.2} fill="#CDB9A8" />
+            </g>
+          </g>
+        )}
         {/* o cachecol, com a ponta voando */}
         <path d="M-10 -29.5 Q0 -25.5 9 -29.5 L9 -25 Q0 -21 -10 -25 Z" fill="#D6403A" />
         <path d="M-6 -28 L-6 -23.5 M0 -27 L0 -22.5 M6 -28 L6 -23.5" stroke="#FFFFFF" strokeWidth={1.2} opacity={0.85} />
@@ -88,9 +144,11 @@ const Urso = memo(function Urso({ feliz, vara, peixe, fisgando }: { feliz: boole
         <ellipse cx={-9} cy={-21.5} rx={4.4} ry={6.4} fill="#F7F5F0" transform="rotate(-48 -9 -21.5)" />
         <circle cx={-13.2} cy={-25.2} r={3.3} fill="#FFFFFF" />
         {vara && (
-          <g className={cn('nt-urso-vara', fisgando && 'puxando')}>
-            <path d="M-11 -23 L-46 -50" stroke="#7A5236" strokeWidth={1.8} strokeLinecap="round" />
-            <circle cx={-14} cy={-25.6} r={2.1} fill="#3A2F3B" />
+          <g transform={`rotate(${(-verga).toFixed(2)} -11 -23)`}>
+            <g className={cn('nt-urso-vara', fisgando && 'puxando')}>
+              <path d={`M-11 -23 Q-30 ${(-40 + verga * 0.8).toFixed(1)} -46 ${(-50 + verga).toFixed(1)}`} stroke="#7A5236" strokeWidth={1.8} strokeLinecap="round" fill="none" />
+              <circle cx={-14} cy={-25.6} r={2.1} fill="#3A2F3B" />
+            </g>
           </g>
         )}
         {/* a cabeça: orelhas, gorro com pompom, focinho, olho e bochecha */}
@@ -116,7 +174,12 @@ const Urso = memo(function Urso({ feliz, vara, peixe, fisgando }: { feliz: boole
               </g>
             )}
           <ellipse cx={-8.8} cy={-34.4} rx={2.1} ry={1.25} fill="#FF94AA" opacity={0.6} />
+          {/* boquinha aberta: comemorando ou falando com o trem */}
+          {(feliz || acenando) && <ellipse cx={-14.4} cy={-31.2} rx={1.5} ry={1.1} fill="#7A2E3A" />}
         </g>
+        {/* a beliscada: um «!» em cima da cabeça */}
+        {atento !== null && <text className="nt-urso-alerta" x={-4} y={-60} textAnchor="middle">!</text>}
+      </g>
       </g>
       {peixe !== 'nao' && (
         <g className={cn('nt-urso-peixe', peixe === 'pulando' ? 'pulando' : 'na-pata')}
@@ -261,11 +324,17 @@ const CenaDoIglu = memo(function CenaDoIglu({ porta, acesa, ondinha }: { porta: 
 });
 
 export function IgluDoUrso() {
-  // Com o urso lá dentro nada se mexe: o relógio anda devagar. Com ele fora, rápido.
-  const [rapido, setRapido] = useState(false);
-  const agora = useRelogioDoTrem(rapido ? 200 : 1000);
+  // Com o urso lá dentro nada se mexe: o relógio anda de segundo em segundo. Com ele fora, quadro a quadro.
+  const leve = useModoLeve();
+  const lento = useRelogioDoTrem(1000);
+  const fora = oUrsoAgora(lento).fase !== 'dentro';
+  const fino = useRelogioFino(fora);
+  const agora = fora ? Math.max(fino, lento) : lento;
   const { fase, t } = oUrsoAgora(agora);
-  useEffect(() => { setRapido(fase !== 'dentro'); }, [fase]);
+  // O trem passando pelo iglu, com ele pescando: tchauzinho (e uma fala, uma vez por passagem).
+  const posDoTrem = ondeEsta(lento, ROTA_DO_TREM, agendaAgora());
+  const acenando = fase === 'pescando' && tremPassaPeloIglu(posDoTrem);
+  const atento = fase === 'pescando' && !acenando ? beliscada(t) : null;
   const nome = primeiroNome(useAuthOpcional()?.perfil?.nome);
   /** A conversa em andamento: as falas dela, qual está no balão, e quem fala. */
   const [fala, setFala] = useState<{ linhas: string[]; i: number; doUrso: boolean; id: number } | null>(null);
@@ -278,7 +347,7 @@ export function IgluDoUrso() {
   useEffect(() => {
     if (!fala) return;
     const total = Array.from(fala.linhas[fala.i]).length;
-    const instantaneo = semMovimento();
+    const instantaneo = leve;
     let n = instantaneo ? total : 0;
     setLetras(n);
     const escreve = instantaneo ? 0 : window.setInterval(() => {
@@ -290,7 +359,7 @@ export function IgluDoUrso() {
       setFala(f => (f && f.id === fala.id && f.i === fala.i ? (f.i + 1 < f.linhas.length ? { ...f, i: f.i + 1 } : null) : f));
     }, (instantaneo ? 0 : total * MS_POR_LETRA) + tempoDeLer(total));
     return () => { window.clearInterval(escreve); window.clearTimeout(fim); };
-  }, [fala]);
+  }, [fala, leve]);
 
   // Onde o urso está, se aparece, e a porta.
   let x = X_SENTADO, opacidade = 1, andando = false, porta = false;
@@ -313,6 +382,16 @@ export function IgluDoUrso() {
   // Uma rodada nova cada vez que ele aparece (e cada vez que ele entra, para o iglu).
   useEffect(() => { rodada.current = null; }, [visivel]);
 
+  // O tchauzinho para o trem: uma fala por passagem (a viagem e o sentido dizem qual).
+  const passagem = acenando ? `${posDoTrem.partidaMs}-${posDoTrem.fase}` : null;
+  const ultimaPassagem = useRef<string | null>(null);
+  useEffect(() => {
+    if (!passagem || ultimaPassagem.current === passagem) return;
+    ultimaPassagem.current = passagem;
+    rodada.current ??= criarRodada(nome, new Date().getHours());
+    setFala({ linhas: rodada.current.proxima('trem'), i: 0, doUrso: true, id: Date.now() });
+  }, [passagem, nome]);
+
   const clicar = () => {
     const doUrso = visivel;
     // No meio de uma conversa: adianta para a próxima fala dela.
@@ -327,17 +406,21 @@ export function IgluDoUrso() {
   const texto = fala ? Array.from(fala.linhas[fala.i]) : [];
 
   return (
-    <div className="nt-iglu" onClick={clicar} role="button" tabIndex={0} aria-label="O iglu do urso"
+    <div className={cn('nt-iglu', leve && 'leve')} onClick={clicar} role="button" tabIndex={0} aria-label="O iglu do urso"
       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); clicar(); } }}>
       <svg viewBox={`0 0 ${LARGURA} ${ALTURA}`} width={LARGURA} height={ALTURA} overflow="visible">
         <CenaDoIglu porta={porta} acesa={acesa} ondinha={fase === 'pescando' || fase === 'fisgou'} />
+        {/* Voltando para casa, ele vira para a porta (o desenho olha para a esquerda). */}
         <g className={cn('nt-urso', andando && 'andando')}
-          style={{ transform: `translate(${x.toFixed(1)}px, ${CHAO}px)`, opacity: opacidade }}>
+          style={{ transform: `translate(${x.toFixed(2)}px, ${CHAO}px)${fase === 'entrando' ? ' scaleX(-1)' : ''}`, opacity: opacidade }}>
           <Urso
             feliz={fase === 'fisgou' || fase === 'entrando'}
             vara={fase === 'pescando' || fase === 'fisgou'}
             fisgando={fase === 'fisgou' && t < 1.6}
             peixe={fase === 'fisgou' ? (t < 1.4 ? 'pulando' : 'na-pata') : fase === 'entrando' ? 'na-pata' : 'nao'}
+            atento={atento}
+            acenando={acenando}
+            pulando={fase === 'fisgou' && t > 1.4 && t < 3.2}
           />
         </g>
       </svg>

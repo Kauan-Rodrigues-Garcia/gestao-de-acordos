@@ -4,8 +4,8 @@
 .nt-iglu:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 4px; border-radius: 12px; }
 .nt-iglu svg { display: block; overflow: visible; }
 
-/* O urso anda entre a porta e a beira do lago; a posição vem em passos, a transição alisa. */
-.nt-urso { transition: transform 0.2s linear, opacity 0.35s ease; }
+/* O urso anda entre a porta e a beira do lago: a posição vem quadro a quadro (`useRelogioFino`). */
+.nt-urso { transition: opacity 0.35s ease; }
 .nt-urso-corpo,
 .nt-urso-cabeca,
 .nt-urso-cachecol,
@@ -13,12 +13,36 @@
 .nt-urso-olho,
 .nt-urso-vara,
 .nt-urso-ondinha,
-.nt-urso-boia { transform-box: fill-box; }
+.nt-urso-boia,
+.nt-urso-pe,
+.nt-urso-respira,
+.nt-urso-tchau,
+.nt-urso-alerta { transform-box: fill-box; }
 
-/* Andando: gingado de urso. */
+/* Andando: gingado de urso, com os pés pisando um de cada vez. */
 .nt-urso-corpo { transform-origin: 50% 100%; }
 .nt-urso.andando .nt-urso-corpo { animation: nt-urso-ginga 0.34s ease-in-out infinite alternate; }
-@keyframes nt-urso-ginga { from { transform: rotate(-6deg) translateY(0); } to { transform: rotate(6deg) translateY(-1.5px); } }
+@keyframes nt-urso-ginga { from { transform: rotate(-5deg) translateY(0); } to { transform: rotate(5deg) translateY(-1.8px); } }
+.nt-urso-pe { transform-origin: 50% 100%; }
+.nt-urso.andando .nt-urso-pe.frente { animation: nt-urso-passo 0.34s ease-in-out infinite alternate; }
+.nt-urso.andando .nt-urso-pe.tras { animation: nt-urso-passo 0.34s ease-in-out infinite alternate-reverse; }
+@keyframes nt-urso-passo { from { transform: translate(-1.6px, 0); } to { transform: translate(1.6px, -1.6px); } }
+
+/* Sentado: respira devagar (a barriga sobe e desce). */
+.nt-urso-respira { transform-origin: 50% 100%; animation: nt-urso-respira 3.2s ease-in-out infinite; }
+@keyframes nt-urso-respira { 0%, 100% { transform: scale(1, 1); } 50% { transform: scale(1.025, 1.04); } }
+
+/* Fisgou: dois pulinhos de alegria. */
+.nt-urso-corpo.pulando { animation: nt-urso-pulinho 0.45s cubic-bezier(.3, .7, .4, 1) 2; }
+@keyframes nt-urso-pulinho { 0%, 100% { transform: translateY(0) scale(1, 1); } 15% { transform: translateY(0) scale(1.06, 0.92); } 50% { transform: translateY(-7px) scale(0.96, 1.05); } 85% { transform: translateY(0) scale(1.05, 0.94); } }
+
+/* O tchauzinho para o trem: o braço sobe e abana. */
+.nt-urso-tchau { transform-origin: 10% 95%; animation: nt-urso-tchau 0.42s ease-in-out infinite alternate; }
+@keyframes nt-urso-tchau { from { transform: rotate(-18deg); } to { transform: rotate(22deg); } }
+
+/* A beliscada: o «!» pula em cima da cabeça. */
+.nt-urso-alerta { font: 900 11px/1 system-ui, sans-serif; fill: #D6403A; stroke: #FFFFFF; stroke-width: 2.4px; paint-order: stroke; transform-origin: 50% 100%; animation: nt-urso-alerta 0.4s cubic-bezier(.34, 1.8, .5, 1) both; }
+@keyframes nt-urso-alerta { from { transform: scale(0.2) translateY(4px); opacity: 0; } }
 
 /* Parado: olha em volta devagar, pisca, o pompom e o cachecol balançam no vento. */
 .nt-urso-cabeca { transform-origin: 70% 90%; animation: nt-urso-olha 7s ease-in-out infinite; }
@@ -107,9 +131,12 @@
 
 .nt-iglu-teste { position: absolute; right: 0; top: -14px; }
 
-@media (prefers-reduced-motion: reduce) {
-  .nt-iglu * { animation: none !important; transition: none !important; }
-}
+/*
+ * Sem prefers-reduced-motion de propósito (Cleber, 05/11/2026): com a
+ * redução de animações do Windows o urso ficava duro, «no mesmo frame». Quem
+ * quer menos movimento tem o modo leve: aí só ele andando entre a porta e o lago.
+ */
+.nt-iglu.leve * { animation: none !important; }
 
 /* Com o urso em casa: luz quente pelas frestas da porta e o reflexo da janela na neve. */
 .nt-iglu-fresta { opacity: 0; transition: opacity 0.8s ease; }

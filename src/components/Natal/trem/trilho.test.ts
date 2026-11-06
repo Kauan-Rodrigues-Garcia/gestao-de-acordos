@@ -6,7 +6,7 @@ const PE = { largura: 1200, yFim: 900, comprimentoTrem: 320 };
 const IDA = { volta: false, partindo: false, chegando: false };
 
 describe('montarTrilho', () => {
-  it('com uma pista só (Dashboard, Acordos, Pix): uma reta no pé, de fora a fora da tela, para a direita', () => {
+  it('com uma pista só (Dashboard, Acordos): uma reta no pé, de fora a fora da tela, para a direita', () => {
     const t = montarTrilho(PE, SEG);
     expect(t.linhas).toEqual([900]);
     expect(t.d).not.toMatch(/[AQCV]/);       // nenhuma curva nem descida no desenho

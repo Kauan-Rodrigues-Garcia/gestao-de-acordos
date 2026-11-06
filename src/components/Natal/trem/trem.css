@@ -501,7 +501,7 @@
 .nt-camada-quieta * { animation-play-state: paused !important; }
 
 /* A placa da plataforma com o trem parado (`PlacaDaEstacao`, em `Faixas.tsx`):
-   madeira num poste, a palavra grande e a hora embaixo. Balança de leve. */
+   madeira num poste, a palavra grande e a hora embaixo. Reta, sem balançar: inclinada, a letra embaça. */
 .nt-trem-placa {
   position: relative;
   display: grid;
@@ -514,8 +514,6 @@
   color: #fff6e6;
   font-family: system-ui, sans-serif;
   text-align: center;
-  transform-origin: 50% -16px;
-  animation: nt-trem-placa 4s ease-in-out infinite;
 }
 .nt-trem-placa::before {
   /* o poste */
@@ -548,4 +546,147 @@
 .nt-trem-placa-desligado .nt-trem-placa-titulo,
 .nt-trem-placa-desligado .nt-trem-placa-linha { background: rgba(58, 47, 59, .85); padding: 0 5px; border-radius: 3px; }
 .nt-trem-placa-esperando .nt-trem-placa-titulo { color: #ffe9a6; }
-@keyframes nt-trem-placa { 0%, 100% { transform: rotate(-1.5deg); } 50% { transform: rotate(1.5deg); } }
+
+
+/* ── A plaquinha do trilho (`Plaquinha.tsx`) ─────────────────────────────────
+   No lugar do card de aviso: poste com braço e lampião, a tábua verde
+   pendurada por duas correntinhas. 184 × 92, com o pé no trilho. */
+.nt-plaquinha {
+  position: absolute;
+  width: 184px;
+  height: 92px;
+  pointer-events: none;
+  font-family: system-ui, sans-serif;
+}
+.nt-plaquinha-poste { position: absolute; left: 0; top: 0; overflow: visible; }
+.nt-plaquinha-luz { opacity: 0.28; transition: opacity 0.4s; }
+.nt-plaquinha.perto .nt-plaquinha-luz { animation: nt-plaquinha-pisca 0.9s ease-in-out infinite alternate; }
+.nt-plaquinha.aqui .nt-plaquinha-luz { opacity: 0.75; filter: drop-shadow(0 0 4px #FFD98A); }
+@keyframes nt-plaquinha-pisca { from { opacity: 0.2; } to { opacity: 0.85; } }
+
+/* A tábua fica RETA (Cleber, 05/11/2026: inclinada, a letra embaça): quem balança é o lampião. */
+.nt-plaquinha-pendurada {
+  position: absolute;
+  left: 25px;
+  top: 13px;
+  width: 140px;
+}
+/* O trem passando: a tábua pula de leve, sem inclinar (de pixel inteiro, para a letra seguir nítida). */
+.nt-plaquinha.aqui .nt-plaquinha-pendurada { animation: nt-plaquinha-treme 0.3s steps(1, end) infinite alternate; }
+@keyframes nt-plaquinha-treme { from { transform: translateY(0); } to { transform: translateY(-1px); } }
+.nt-plaquinha-lampiao { transform-box: fill-box; transform-origin: 50% 0; animation: nt-plaquinha-lampiao 3.4s ease-in-out infinite; }
+@keyframes nt-plaquinha-lampiao { 0%, 100% { transform: rotate(-7deg); } 50% { transform: rotate(7deg); } }
+.nt-plaquinha-corrente {
+  position: absolute;
+  top: 0;
+  width: 2px;
+  height: 8px;
+  background: repeating-linear-gradient(180deg, #8C8F96 0 2px, transparent 2px 3px);
+}
+.nt-plaquinha-corrente.esq { left: 12px; }
+.nt-plaquinha-corrente.dir { right: 12px; }
+.nt-plaquinha-tabua {
+  position: relative;
+  margin-top: 7px;
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+  padding: 5px 6px 4px;
+  border-radius: 7px;
+  color: #F6F0E7;
+  background:
+    repeating-linear-gradient(90deg, rgb(0 0 0 / 0.05) 0 1px, transparent 1px 11px),
+    linear-gradient(180deg, #46A564, #2E7A47);
+  box-shadow:
+    inset 0 0 0 1.5px #24603A,
+    inset 0 0 0 3.5px rgb(246 240 231 / 0.85),
+    inset 0 0 0 4.5px #24603A,
+    0 5px 8px -5px rgb(30 20 10 / 0.6);
+  text-align: center;
+}
+/* A neve em cima da tábua. */
+.nt-plaquinha-tabua::before {
+  content: '';
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  top: -3px;
+  height: 6px;
+  border-radius: 6px 6px 3px 3px;
+  background: #FFFFFF;
+  box-shadow: 0 1px 0 rgb(180 200 215 / 0.6);
+}
+.nt-plaquinha-azevinho { position: absolute; right: -6px; top: -7px; }
+.nt-plaquinha-linha {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  color: #FBF2DF;
+}
+.nt-plaquinha-grande {
+  font-size: 15px;
+  line-height: 1.05;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  color: #FFD98A;
+  text-shadow: 0 1px 0 #1F5533;
+  white-space: nowrap;
+}
+/* O sininho, pendurado no canto de baixo da tábua. */
+.nt-plaquinha-sino {
+  position: absolute;
+  left: 6px;
+  bottom: -11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background: #F2B544;
+  color: #5E3D26;
+  box-shadow: inset 0 0 0 1.2px #B8862B, 0 2px 3px -1px rgb(0 0 0 / 0.35);
+  pointer-events: auto;
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+.nt-plaquinha-sino:hover { transform: rotate(-14deg) scale(1.1); }
+.nt-plaquinha-sino.mudo { background: #D8CFC0; color: #7A6A58; box-shadow: inset 0 0 0 1.2px #A89A86; }
+
+/* Botões que só existem no `npm run dev`, no canto da faixa. */
+.nt-trem-dev { position: absolute; right: 1.5rem; top: 6px; display: flex; gap: 6px; z-index: 5; }
+
+/* ── O mapa da linha ao lado do ticket (`MapaDoTicket.tsx`) ─────────────── */
+.nt-ticket-com-mapa { display: flex; align-items: flex-start; gap: 18px; }
+.nt-ticket-coluna { flex: 1 1 30rem; min-width: 0; max-width: 30rem; }
+@media (max-width: 760px) { .nt-ticket-com-mapa { flex-direction: column; align-items: center; } }
+.nt-mapat {
+  flex: none;
+  width: 260px;
+  padding: 10px 12px 12px;
+  border-radius: 12px;
+  color: #3B2418;
+  background:
+    radial-gradient(circle at 80% 8%, rgb(255 255 255 / 0.7), transparent 45%),
+    repeating-linear-gradient(45deg, rgb(201 162 74 / 0.07) 0 2px, transparent 2px 10px),
+    #FBF2DF;
+  box-shadow: inset 0 0 0 1.5px #E4D2AE, inset 0 0 0 5px #FBF2DF, inset 0 0 0 6px rgb(201 162 74 / 0.45), 0 22px 34px -12px rgb(40 16 8 / 0.45);
+  animation: nt-mapat-chega 0.6s cubic-bezier(0.2, 1.3, 0.4, 1) 0.12s both;
+}
+@keyframes nt-mapat-chega { from { opacity: 0; transform: translateX(-26px) rotate(-4deg) scale(0.92); } }
+.nt-mapat svg { display: block; margin: 0 auto; overflow: visible; }
+.nt-mapat-titulo { font-family: 'Fraunces', Georgia, serif; font-style: italic; font-weight: 600; font-size: 17px; fill: #7A2433; }
+.nt-mapat-telinha { cursor: default; transition: transform 0.25s cubic-bezier(0.3, 1.6, 0.5, 1), filter 0.25s; }
+.nt-mapat-telinha.ativa { transform: scale(1.05); filter: drop-shadow(0 4px 6px rgb(90 59 38 / 0.28)); }
+.nt-mapat-pulso { fill: #D6403A; opacity: 0; }
+.nt-mapat-estacao.aqui .nt-mapat-pulso { animation: nt-mapat-pulso 1.6s ease-out infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes nt-mapat-pulso { 0% { opacity: 0.45; transform: scale(0.6); } 100% { opacity: 0; transform: scale(1.8); } }
+.nt-mapat-trem { animation: nt-mapat-trem 1.2s ease-in-out infinite alternate; }
+@keyframes nt-mapat-trem { from { translate: -4px 0; } to { translate: 4px 0; } }
+.nt-mapat-legenda { min-height: 3.2em; margin: 4px 2px 0; font-size: 12px; line-height: 1.35; }
+.nt-mapat-agora { display: block; margin-top: 2px; font-size: 11px; opacity: 0.8; }
+.nt-mapat-rodape { margin: 6px 2px 0; font-size: 10.5px; font-style: italic; opacity: 0.7; }

@@ -1,0 +1,74 @@
+/*
+ * O chalé de Natal no alto de Acordos (`Chale.tsx`). Fica na camada do Natal
+ * (`.nt-camada`, que tem altura 0 e deixa passar o clique): a caixa vai do
+ * alto do `<main>` até o chão (a linha das abas). Só a lareira pega o mouse.
+ */
+.nt-chale { position: absolute; top: 0; pointer-events: none; }
+.nt-chale svg { display: block; overflow: visible; }
+
+/* A parede de tábuas: clara no tema claro, escura no escuro — sempre por baixo, discreta. */
+.nt-ch-parede { fill: #EAD4B5; opacity: 0.55; }
+.nt-ch-tabua { stroke: #C9A97F; stroke-width: 1.2; opacity: 0.55; }
+.nt-ch-no { fill: #B8915F; opacity: 0.45; }
+.nt-ch-rodape { fill: #B8915F; opacity: 0.6; }
+.dark .nt-ch-parede { fill: #3B2617; opacity: 0.6; }
+.dark .nt-ch-tabua { stroke: #24160D; opacity: 0.7; }
+.dark .nt-ch-no { fill: #24160D; opacity: 0.6; }
+.dark .nt-ch-rodape { fill: #2A1A10; opacity: 0.8; }
+
+/* A neve lá fora. */
+.nt-ch-floco { fill: #FFFFFF; animation: nt-ch-cai 4.5s linear infinite; }
+@keyframes nt-ch-cai { from { transform: translate(0, 0); } to { transform: translate(-6px, 74px); } }
+
+/* A poltrona balança para frente e para trás, apoiada no meio dos balanços. */
+.nt-ch-poltrona { transform-origin: 124px 176px; animation: nt-ch-balanca 3.6s ease-in-out infinite; }
+@keyframes nt-ch-balanca { 0%, 100% { transform: rotate(-4deg); } 50% { transform: rotate(4deg); } }
+
+/* O gato: respira e mexe o rabo; o «z» sobe e some. */
+.nt-ch-gato-respira { transform-box: fill-box; transform-origin: 50% 100%; animation: nt-ch-respira 3s ease-in-out infinite; }
+@keyframes nt-ch-respira { 50% { transform: scale(1.03, 1.08); } }
+.nt-ch-gato-rabo { transform-box: fill-box; transform-origin: 0% 60%; animation: nt-ch-rabo 5s ease-in-out infinite; }
+@keyframes nt-ch-rabo { 0%, 70%, 100% { transform: rotate(0deg); } 78% { transform: rotate(-14deg); } 86% { transform: rotate(6deg); } }
+.nt-ch-zzz { font: 800 8px/1 system-ui, sans-serif; fill: #9AA3B5; animation: nt-ch-zzz 3.2s ease-out infinite; }
+@keyframes nt-ch-zzz { 0% { opacity: 0; transform: translate(0, 0); } 30% { opacity: 1; } 100% { opacity: 0; transform: translate(6px, -12px); } }
+
+/* O fogo: as chamas tremem (cada uma no seu ritmo), o calor pulsa, as brasas sobem. */
+.nt-ch-lareira { pointer-events: none; }
+.nt-ch-fogo { pointer-events: auto; cursor: default; }
+.nt-ch-chamas { transform-origin: 300px 166px; transition: transform 0.6s cubic-bezier(.3, 1.4, .5, 1); }
+.nt-ch-fogo:hover .nt-ch-chamas { transform: scale(1.12, 1.22); }
+.nt-ch-chama { transform-origin: 300px 166px; }
+.nt-ch-chama.c1 { animation: nt-ch-chama1 0.9s ease-in-out infinite alternate; }
+.nt-ch-chama.c2 { animation: nt-ch-chama2 0.7s ease-in-out infinite alternate; }
+.nt-ch-chama.c3 { animation: nt-ch-chama3 0.55s ease-in-out infinite alternate; }
+@keyframes nt-ch-chama1 { from { transform: scale(1, 0.94) skewX(-3deg); } to { transform: scale(1.04, 1.06) skewX(3deg); } }
+@keyframes nt-ch-chama2 { from { transform: scale(1.02, 1.05) skewX(4deg); } to { transform: scale(0.97, 0.92) skewX(-4deg); } }
+@keyframes nt-ch-chama3 { from { transform: scale(0.95, 0.9) skewX(-5deg); } to { transform: scale(1.05, 1.1) skewX(5deg); } }
+.nt-ch-calor { transform-box: fill-box; transform-origin: center; animation: nt-ch-calor 2.2s ease-in-out infinite; opacity: 0.85; }
+.nt-ch-fogo:hover .nt-ch-calor { opacity: 1; }
+@keyframes nt-ch-calor { 0%, 100% { transform: scale(1); } 40% { transform: scale(1.08); } 70% { transform: scale(0.96); } }
+.nt-ch-brasa { fill: #FFC14D; animation: nt-ch-brasa 2.4s ease-out infinite; }
+@keyframes nt-ch-brasa { 0% { opacity: 0; transform: translate(0, 0); } 15% { opacity: 1; } 100% { opacity: 0; transform: translate(6px, -54px); } }
+.nt-ch-brasas-chao { animation: nt-ch-brasas 1.6s ease-in-out infinite alternate; }
+@keyframes nt-ch-brasas { from { opacity: 0.55; } to { opacity: 1; } }
+.nt-ch-reflexo { opacity: 0.22; animation: nt-ch-reflexo 2.2s ease-in-out infinite; }
+@keyframes nt-ch-reflexo { 50% { opacity: 0.36; } }
+
+/* As velas. */
+.nt-ch-vela { transform-box: fill-box; transform-origin: 50% 100%; animation: nt-ch-vela 0.8s ease-in-out infinite alternate; }
+@keyframes nt-ch-vela { from { transform: scale(0.9, 0.95) skewX(-4deg); } to { transform: scale(1.05, 1.08) skewX(4deg); } }
+.nt-ch-vela-brilho { opacity: 0.3; animation: nt-ch-vela-brilho 1.6s ease-in-out infinite; }
+@keyframes nt-ch-vela-brilho { 50% { opacity: 0.5; } }
+
+/* As luzinhas da cornija e da árvore, e a estrela. */
+.nt-ch-luz { animation: nt-ch-pisca 1.8s ease-in-out infinite; }
+@keyframes nt-ch-pisca { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+.nt-ch-estrela path { transform-box: fill-box; transform-origin: center; animation: nt-ch-estrela 3s ease-in-out infinite; }
+@keyframes nt-ch-estrela { 50% { transform: scale(1.12) rotate(8deg); filter: drop-shadow(0 0 3px #FFE07A); } }
+
+/* Do teto: a bola e a estrela balançando. */
+.nt-ch-pendurado { animation: nt-ch-pendulo 4s ease-in-out infinite; }
+@keyframes nt-ch-pendulo { 0%, 100% { transform: rotate(-5deg); } 50% { transform: rotate(5deg); } }
+
+/* Modo leve: o chalé fica, parado. */
+.nt-chale.leve * { animation: none !important; transition: none !important; }

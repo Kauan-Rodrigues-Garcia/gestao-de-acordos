@@ -5,7 +5,7 @@
  * para olhar o tema claro e o escuro, o estilo simples e o detalhado, e o
  * globo de neve com e sem mensagem. `?estilo=simples|detalhado&tema=dark`.
  */
-/* eslint-disable react-refresh/only-export-components -- entrada de página avulsa (como o index.html), não um módulo de componentes. */
+ 
 import { StrictMode, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ThemeProvider } from 'next-themes';
@@ -110,7 +110,7 @@ function Lab() {
             </div>
           </main>
           <SobreposicaoNatal cena={cena} />
-          <RevoadaNatal cena={cena} />
+          <RevoadaNatal ativo={estilo === 'detalhado'} />
         </div>
         <button className="group fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-2xl" aria-label="chat">
           <GloboDeNeve nevando={mensagem} />

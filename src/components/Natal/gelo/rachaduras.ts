@@ -83,30 +83,40 @@ export interface Trinca {
   fina: boolean;
 }
 
-/** A fratura do impacto em (cx, cy): raios tortos com galhos, cada um com o seu atraso. */
+/** Quantos raios a fratura tem, e até onde (no quadro de 80) o mais comprido vai. */
+export const RAIOS_DA_FRATURA = 8;
+export const ALCANCE_DA_FRATURA = 17;
+
+/**
+ * A fratura do impacto em (cx, cy): raios curtos e tortos com galhinhos
+ * (Cleber, 05/11/2026: «uma rachadura um pouco menor», que «apareça aos poucos
+ * com animação»). Os raios saem um depois do outro; cada galho racha depois
+ * do raio dele, mais tarde quanto mais longe do centro. Tudo termina antes do
+ * segundo em que a música entra.
+ */
 export function fratura(cx: number, cy: number, semente = 3): Trinca[] {
   const sorte = sorteador(semente);
   const trincas: Trinca[] = [];
-  const RAIOS = 11;
-  for (let r = 0; r < RAIOS; r++) {
-    const ang = (r / RAIOS) * Math.PI * 2 + (sorte() - 0.5) * 0.5;
-    const raio = veio(sorte, [cx, cy], ang, 16 + sorte() * 24, 3.4, 0.32);
-    trincas.push({ d: caminho(raio), atraso: Number((sorte() * 0.12).toFixed(2)), fina: false });
-    // Galhos: quanto mais longe do centro, mais tarde racham.
-    for (let k = 2; k < raio.length; k++) {
-      if (sorte() > 0.3) continue;
-      const lado = sorte() < 0.5 ? -1 : 1;
-      const galho = veio(sorte, raio[k], ang + lado * (0.5 + sorte() * 0.7), 4 + sorte() * 9, 2.2, 0.45);
-      trincas.push({ d: caminho(galho), atraso: Number((0.15 + (k / raio.length) * 0.55).toFixed(2)), fina: true });
-    }
-  }
-  // Um anel quebrado em volta do impacto, como vidro.
-  for (let s = 0; s < 6; s++) {
-    const a0 = (s / 6) * Math.PI * 2 + sorte() * 0.4, a1 = a0 + 0.5 + sorte() * 0.35, rr = 4.5 + sorte() * 2.5;
+  // Um anel quebrado bem pequeno em volta do impacto, como vidro: é o primeiro a aparecer.
+  for (let s = 0; s < 5; s++) {
+    const a0 = (s / 5) * Math.PI * 2 + sorte() * 0.5, a1 = a0 + 0.55 + sorte() * 0.4, rr = 2.4 + sorte() * 1.2;
     trincas.push({
-      d: `M${f(cx + Math.cos(a0) * rr)} ${f(cy + Math.sin(a0) * rr)}L${f(cx + Math.cos(a1) * (rr + 1))} ${f(cy + Math.sin(a1) * (rr + 1))}`,
-      atraso: 0.1, fina: true,
+      d: `M${f(cx + Math.cos(a0) * rr)} ${f(cy + Math.sin(a0) * rr)}L${f(cx + Math.cos(a1) * (rr + 0.6))} ${f(cy + Math.sin(a1) * (rr + 0.6))}`,
+      atraso: Number((0.02 + s * 0.03).toFixed(2)), fina: true,
     });
+  }
+  for (let r = 0; r < RAIOS_DA_FRATURA; r++) {
+    const ang = (r / RAIOS_DA_FRATURA) * Math.PI * 2 + (sorte() - 0.5) * 0.6;
+    const raio = veio(sorte, [cx, cy], ang, 7 + sorte() * (ALCANCE_DA_FRATURA - 9), 2.1, 0.34);
+    // Um depois do outro (o passo, 0,0375 s, é maior que o sorteio, então a ordem não troca).
+    const atraso = 0.1 + (r / RAIOS_DA_FRATURA) * 0.3 + sorte() * 0.03;
+    trincas.push({ d: caminho(raio), atraso: Number(atraso.toFixed(2)), fina: false });
+    for (let k = 2; k < raio.length; k++) {
+      if (sorte() > 0.35) continue;
+      const lado = sorte() < 0.5 ? -1 : 1;
+      const galho = veio(sorte, raio[k], ang + lado * (0.5 + sorte() * 0.7), 2.5 + sorte() * 4, 1.4, 0.45);
+      trincas.push({ d: caminho(galho), atraso: Number((atraso + 0.18 + (k / raio.length) * 0.2).toFixed(2)), fina: true });
+    }
   }
   return trincas;
 }

@@ -85,3 +85,20 @@
 
 /* O «+1» do boneco de neve: azul de gelo. */
 .nt-cesta-mais.do-boneco { color: #BFE6FF; font-size: 1.2rem; }
+
+/* De quantos metros saiu a cesta, embaixo do «+1». */
+.nt-cesta-distancia {
+  display: block;
+  width: max-content;
+  margin: 2px auto 0;
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 900;
+  -webkit-text-stroke: 1.2px #2A2530;
+}
+.nt-cesta-mais.do-boneco .nt-cesta-distancia { color: #E6F6FF; }
+
+/* A cesta mais longe, numa linha menor dentro do placar. */
+.nt-cesta-recorde { display: block; margin-top: 1px; text-align: center; font-size: 0.7rem; font-weight: 700; opacity: 0.85; }
+.nt-cesta-recorde b { font-weight: 900; }
+.nt-cesta-placar.final .nt-cesta-recorde { font-size: 0.78rem; opacity: 1; }
