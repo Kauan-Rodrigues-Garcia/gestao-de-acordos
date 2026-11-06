@@ -66,7 +66,7 @@ vi.mock('@/lib/supabase', () => {
 });
 
 import {
-  adicionarParcelaAoGrupo, adicionarParcelasAoGrupo, temParcelaEmAberto,
+  adicionarParcelaAoGrupo, adicionarParcelasAoGrupo, temParcelaEmAberto, mensagemDaInclusao,
 } from './parcelas.service';
 
 function makeAcordo(overrides: Partial<Acordo> = {}): Acordo {
@@ -327,5 +327,130 @@ describe('adicionarParcelasAoGrupo — materialização incremental', () => {
 
     const inserts = supabaseCalls.filter(c => c.table === 'acordos' && c.op === 'insert');
     expect(Array.isArray(inserts[0].payload) ? inserts[0].payload.length : 1).toBe(1);
+  });
+});
+
+/*
+ * Parcela em aberto + «marcar como paga e registrar» (06/11/2026). A quitação
+ * vai ANTES da inclusão — é ela que libera a nova para virar registro.
+ */
+describe('adicionarParcelasAoGrupo — quitar a parcela em aberto antes', () => {
+  it('marca a atual como paga (vencimento na data do pagamento) e registra a nova', async () => {
+    routes.selectGrupo = { data: [{ id: 'a-entrada', numero_parcela: 1, parcelas: 1, status: 'verificar_pendente', valor: 400 }], error: null };
+    const r = await adicionarParcelasAoGrupo(
+      makeAcordo({ status: 'verificar_pendente' }), [inputBoleto],
+      { isPaguePlay: false, quitarAntes: { parcelaId: 'a-entrada', dataPagamento: '2026-07-10' } },
+    );
+    if ('erro' in r) throw new Error(r.erro);
+
+    const ops = supabaseCalls.filter(c => c.table === 'acordos').map(c => c.op);
+    // A quitação é a primeira escrita.
+    expect(ops[0]).toBe('update');
+    expect(supabaseCalls[0].payload).toMatchObject({
+      status: 'pago', data_pagamento: '2026-07-10', vencimento: '2026-07-10',
+    });
+    expect(supabaseCalls[0].filters).toContainEqual(['id', 'a-entrada']);
+    expect(supabaseCalls.filter(c => c.op === 'insert')).toHaveLength(1);
+    expect(r.quitada).toEqual({ id: 'a-entrada', dataPagamento: '2026-07-10' });
+  });
+
+  it('falha ao quitar não grava nada e diz o motivo', async () => {
+    routes.updateAcordo = { data: null, error: { message: 'mes fechado' } };
+    const r = await adicionarParcelasAoGrupo(
+      makeAcordo({ status: 'verificar_pendente' }), [inputBoleto],
+      { isPaguePlay: false, quitarAntes: { parcelaId: 'a-entrada', dataPagamento: '2026-07-10' } },
+    );
+    expect('erro' in r && r.erro).toMatch(/marcar a parcela em aberto como paga: mes fechado/);
+    expect(supabaseCalls.some(c => c.op === 'insert')).toBe(false);
+  });
+
+  it('recorrente com a atual em aberto é recusado — não teria linha de acordo', async () => {
+    routes.selectGrupo = { data: [{ id: 'a-entrada', numero_parcela: 1, parcelas: 1, status: 'verificar_pendente' }], error: null };
+    const r = await adicionarParcelasAoGrupo(
+      makeAcordo({ status: 'verificar_pendente' }),
+      [{ ...inputBoleto, tipo: 'pix_automatico' }],
+      { isPaguePlay: false },
+    );
+    expect('erro' in r && r.erro).toMatch(/depois que a atual for paga/);
+    expect(supabaseCalls.some(c => c.op === 'insert' || c.op === 'update')).toBe(false);
+  });
+});
+
+/*
+ * Regra Cofen (06/11/2026): a parcela nova SOMA no valor total do acordo.
+ */
+describe('adicionarParcelasAoGrupo — regra Cofen soma no total', () => {
+  const cofen = { isPaguePlay: true, somarNoTotal: true };
+
+  it('acordo tabulado só com o valor da parcela: total = soma das parcelas', async () => {
+    routes.selectGrupo = { data: [{ id: 'a-entrada', numero_parcela: 1, parcelas: 1, status: 'pago', valor: 400 }], error: null };
+    const r = await adicionarParcelasAoGrupo(makeAcordo({ valor_total: null }), [inputBoleto], cofen);
+    if ('erro' in r) throw new Error(r.erro);
+
+    expect(r.novoTotal).toBe(2);
+    expect(r.novoValorTotal).toBe(1000);
+    const insert = supabaseCalls.find(c => c.op === 'insert');
+    expect((insert?.payload as Record<string, unknown>[])[0]).toMatchObject({
+      valor: 600, valor_total: 1000, numero_parcela: 2, parcelas: 2,
+    });
+    // O grupo inteiro recebe o total novo, junto com o «de N».
+    const upd = supabaseCalls.find(c => c.op === 'update');
+    expect(upd?.payload).toEqual({ parcelas: 2, valor_total: 1000 });
+    expect(upd?.filters).toContainEqual(['acordo_grupo_id', 'grp-1']);
+  });
+
+  it('com valor_total declarado, soma nele (parcelas anteriores podem não ser registro)', async () => {
+    routes.selectGrupo = { data: [{ id: 'a-entrada', numero_parcela: 3, parcelas: 3, status: 'pago', valor: 400 }], error: null };
+    const r = await adicionarParcelasAoGrupo(
+      makeAcordo({ numero_parcela: 3, parcelas: 3, valor_total: 1200 }), [inputBoleto], cofen,
+    );
+    if ('erro' in r) throw new Error(r.erro);
+    expect(r.novoValorTotal).toBe(1800);
+    expect(r.novoTotal).toBe(4);
+  });
+
+  it('com parcela em aberto recusa — a nova precisa virar registro', async () => {
+    routes.selectGrupo = { data: [{ id: 'a-entrada', numero_parcela: 1, parcelas: 1, status: 'verificar_pendente', valor: 400 }], error: null };
+    const r = await adicionarParcelasAoGrupo(makeAcordo({ status: 'verificar_pendente' }), [inputBoleto], cofen);
+    expect('erro' in r && r.erro).toMatch(/ainda está em aberto/);
+    expect(supabaseCalls.some(c => c.op === 'insert' || c.op === 'update')).toBe(false);
+  });
+
+  it('plano declarado sem todas as parcelas registradas manda para o reagendamento', async () => {
+    routes.selectGrupo = { data: [{ id: 'a-entrada', numero_parcela: 1, parcelas: 3, status: 'pago', valor: 400 }], error: null };
+    const r = await adicionarParcelasAoGrupo(
+      makeAcordo({ parcelas: 3, valor_total: 1200 }), [inputBoleto], cofen,
+    );
+    expect('erro' in r && r.erro).toMatch(/reagendamento/);
+    expect(supabaseCalls.some(c => c.op === 'insert')).toBe(false);
+  });
+
+  it('mais de uma parcela de uma vez é recusada', async () => {
+    const r = await adicionarParcelasAoGrupo(makeAcordo(), [inputBoleto, inputBoleto], cofen);
+    expect('erro' in r && r.erro).toMatch(/uma de cada vez/);
+  });
+
+  it('quitar + somar: a parcela quitada conta no total', async () => {
+    routes.selectGrupo = { data: [{ id: 'a-entrada', numero_parcela: 1, parcelas: 1, status: 'verificar_pendente', valor: 400 }], error: null };
+    const r = await adicionarParcelasAoGrupo(
+      makeAcordo({ status: 'verificar_pendente', valor_total: null }), [inputBoleto],
+      { ...cofen, quitarAntes: { parcelaId: 'a-entrada', dataPagamento: '2026-07-10' } },
+    );
+    if ('erro' in r) throw new Error(r.erro);
+    expect(r.novoValorTotal).toBe(1000);
+    expect(r.novasParcelas).toHaveLength(1);
+  });
+});
+
+describe('mensagemDaInclusao', () => {
+  it('nada registrado não vira «0 parcelas adicionadas»', () => {
+    expect(mensagemDaInclusao({ ok: true, novasParcelas: [], novoTotal: 3 }, 2))
+      .toMatch(/^Acordo passou a 3 parcelas/);
+  });
+  it('avisa quando a anterior foi marcada como paga', () => {
+    const nova = { id: 'n', numero_parcela: 2 } as Acordo;
+    expect(mensagemDaInclusao(
+      { ok: true, novasParcelas: [nova], novoTotal: 2, quitada: { id: 'a', dataPagamento: '2026-07-10' } }, 1,
+    )).toBe('Parcela anterior marcada como paga. Parcela 2/2 adicionada ao acordo!');
   });
 });

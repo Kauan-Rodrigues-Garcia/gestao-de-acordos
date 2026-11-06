@@ -38,7 +38,9 @@ import { converterParaExtra, vincularExtraAoDireto } from '@/services/diretoExtr
 import { useEmpresaTags }           from '@/hooks/useEmpresaTags';
 import { useProfissional }          from '@/hooks/useProfissional';
 import { ModalAdicionarParcela }    from '@/components/ModalAdicionarParcela';
-import { adicionarParcelasAoGrupo, type NovaParcelaInput } from '@/services/parcelas.service';
+import {
+  adicionarParcelasAoGrupo, mensagemDaInclusao, type NovaParcelaInput, type QuitarAntes,
+} from '@/services/parcelas.service';
 import {
   ehFormaRecorrente, erroVencimentoRecorrente, nomeDaFormaRecorrente, recorrenteSeguraONr,
 } from '@/lib/formasRecorrentes';
@@ -526,8 +528,9 @@ export function AcordoNovoInline({
         // — removido em 13/10/2026.
         const conflitoFinal = await verificarNrRegistro(nrParaVerificar, empresa.id, campoCampo);
 
-        // O acordo que segura o NR, quando ele é MEU (só na BookPlay).
-        const { data: acordoMeu } = conflitoFinal && !isPaguePlay && conflitoFinal.operadorId === perfil.id
+        // O acordo que segura o NR/Código, quando ele é MEU — nas duas regras
+        // desde 06/11/2026 (na Cofen a parcela nova soma no valor total).
+        const { data: acordoMeu } = conflitoFinal && conflitoFinal.operadorId === perfil.id
           ? await supabase
               .from('acordos')
               .select('*, perfis(id, nome, email, perfil, setor_id)')
@@ -537,16 +540,17 @@ export function AcordoNovoInline({
         // Recorrente meu, pago ou de mês anterior, não segura mais o NR
         // (28/10/2026): o acordo novo segue a gravação normal, e a trava do NR
         // passa para ele. Ver `recorrenteSeguraONr`.
-        const nrLiberadoPeloRecorrente = !!acordoMeu
+        const nrLiberadoPeloRecorrente = !isPaguePlay && !!acordoMeu
           && ehFormaRecorrente((acordoMeu as Acordo).tipo)
           && !recorrenteSeguraONr(acordoMeu as Acordo, getTodayISO());
 
         if (conflitoFinal && !nrLiberadoPeloRecorrente) {
           if (conflitoFinal.operadorId === perfil.id) {
-            // BookPlay: NR do próprio operador abre a oferta de adicionar os
+            // NR/Código do próprio operador abre a oferta de adicionar os
             // dados preenchidos como nova parcela do acordo existente
-            // (ex.: entrada no Pix + boleto do restante).
-            // PaguePlay mantém o bloqueio original.
+            // (ex.: entrada no Pix + boleto do restante). Na regra Cofen
+            // (06/11/2026) é a próxima parcela de quem tabulou só o valor da
+            // parcela, e ela soma no valor total do acordo.
             if (!isPaguePlay) {
               /*
                * Recorrente como PRÓXIMA parcela do acordo existente — liberado
@@ -569,10 +573,10 @@ export function AcordoNovoInline({
                 );
                 return;
               }
-              if (acordoMeu) {
-                setAcordoParaParcela(acordoMeu as Acordo);
-                return;
-              }
+            }
+            if (acordoMeu) {
+              setAcordoParaParcela(acordoMeu as Acordo);
+              return;
             }
             toast.error(`${label} "${nrParaVerificar}" já existe na sua lista de acordos ativos.`);
             return;
@@ -856,25 +860,32 @@ export function AcordoNovoInline({
   function cancelarAvisoDiretoExtra() { setAvisoDiretoExtra(null); }
 
   // ── Adicionar parcela ao acordo existente (NR do próprio operador) ────────
-  async function confirmarAdicionarParcela(inputs: NovaParcelaInput[]) {
+  async function confirmarAdicionarParcela(
+    inputs: NovaParcelaInput[],
+    opcoes: { quitar: QuitarAntes | null },
+  ) {
     if (!acordoParaParcela) return;
     setSalvandoParcela(true);
     try {
-      const r = await adicionarParcelasAoGrupo(acordoParaParcela, inputs, { isPaguePlay });
+      const r = await adicionarParcelasAoGrupo(acordoParaParcela, inputs, {
+        isPaguePlay,
+        // Regra Cofen: a parcela nova soma no valor total do acordo.
+        somarNoTotal: isPaguePlay,
+        quitarAntes:  opcoes.quitar,
+      });
       // `'erro' in r`, e não `!r.ok`: o tsconfig roda com `strict: false` e o
       // TypeScript não estreita união por discriminante booleano.
-      if ('erro' in r) { toast.error(r.erro); return; }
+      if ('erro' in r) { toast.error(r.erro, { duration: 8000 }); return; }
       const novas = r.novasParcelas;
       limparDraft();
       setAcordoParaParcela(null);
       // A tela de acordos recebe a PRIMEIRA: é a que o operador acabou de
-      // tabular; as demais aparecem ao abrir o detalhe do grupo.
+      // tabular; as demais aparecem ao abrir o detalhe do grupo. Sem nenhuma
+      // registrada (só aumentou o total), o formulário fecha do mesmo jeito —
+      // antes ele ficava aberto, com o aviso de «0 parcelas adicionadas».
       if (novas[0]) onSaved(novas[0]);
-      toast.success(
-        novas.length === 1
-          ? `Parcela ${novas[0]?.numero_parcela ?? r.novoTotal}/${r.novoTotal} adicionada ao acordo existente!`
-          : `${novas.length} parcelas adicionadas ao acordo existente (total ${r.novoTotal}).`,
-      );
+      else onCancel();
+      toast.success(mensagemDaInclusao(r, inputs.length), { duration: 6000 });
       // Parcela de PIX Automático / Cartão Recorrente: o NR vai para a aba Pix.
       const pix = parcelaRecorrenteParaPix(acordoParaParcela, inputs, novas);
       if (pix) await registrarPixAoPagar(pix);
@@ -951,6 +962,13 @@ export function AcordoNovoInline({
 
   const labelCampoNr = isPaguePlay ? 'Código' : 'NR';
   const valorCampoNr = isPaguePlay ? instituicao.trim() : nrCliente.trim();
+  // Cofen parcelado: o valor digitado é o TOTAL. A parcela que entra no acordo
+  // existente é uma só, então o modal abre com o valor da primeira.
+  const valorDigitado = parseCurrencyInput(valorStr);
+  const cofenDigitouTotal = isPaguePlay && temParcelas && parcelas > 1;
+  const valorInicialParcela = cofenDigitouTotal
+    ? (calcularParcelas(valorDigitado, parcelas, quarentaPct && parcelas > 2)[0] ?? valorDigitado)
+    : valorDigitado;
 
   return (
     <>
@@ -961,11 +979,15 @@ export function AcordoNovoInline({
         isPaguePlay={isPaguePlay}
         inicial={{
           vencimento,
-          valor:  parseCurrencyInput(valorStr),
+          valor:  valorInicialParcela,
           tipo:   tipo === 'boleto_pix' ? 'boleto' : tipo,
           status,
         }}
-        descricao={`O ${labelCampoNr} "${valorCampoNr}" já está tabulado por você. Revise os dados abaixo para adicioná-los como nova parcela do acordo existente.`}
+        descricao={
+          `O ${labelCampoNr} "${valorCampoNr}" já está tabulado por você. Revise os dados abaixo para adicioná-los como nova parcela do acordo existente.`
+          + (isPaguePlay ? ' O valor dela soma no valor total do acordo.' : '')
+          + (cofenDigitouTotal ? ` O valor abaixo é o de UMA parcela (o total digitado dividido em ${parcelas}) — confira.` : '')
+        }
         salvando={salvandoParcela}
         onConfirm={confirmarAdicionarParcela}
         onClose={() => setAcordoParaParcela(null)}

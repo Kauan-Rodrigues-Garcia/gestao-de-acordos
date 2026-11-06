@@ -16,7 +16,9 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { ModalReagendar, type ReagendarParams } from '@/components/ModalReagendar';
 import { ModalConfirmarPagamento } from '@/components/ModalConfirmarPagamento';
 import { ModalAdicionarParcela } from '@/components/ModalAdicionarParcela';
-import { adicionarParcelasAoGrupo, type NovaParcelaInput } from '@/services/parcelas.service';
+import {
+  adicionarParcelasAoGrupo, mensagemDaInclusao, type NovaParcelaInput, type QuitarAntes,
+} from '@/services/parcelas.service';
 import { parcelaRecorrenteParaPix } from '@/services/pixAutomaticoDoAcordo.service';
 import { useRegistrarPixAoPagar } from '@/hooks/useRegistrarPixAoPagar';
 import { temVisaoAmpla, type AcordoComVinculo } from '@/lib/deduplicarVinculados';
@@ -115,11 +117,14 @@ export function AcordoDetalheInline({
   // BookPlay: independe da forma de pagamento — parcelas adicionadas
   // manualmente podem misturar formas (ex.: entrada no Pix + boleto do
   // restante). PaguePlay mantém a regra original por tipo parcelado.
+  // Cofen: um acordo de cartão (à vista) que recebeu a próxima parcela pelo
+  // "Adicionar parcela" também mostra a lista — senão a parcela some da tela.
   const deveExibirParcelas = isPaguePlay
-    ? isTipoParcelado(acordoLocal.tipo, true) && totalParcelas > 1
+    ? totalParcelas > 1 && (isTipoParcelado(acordoLocal.tipo, true) || !!acordoLocal.acordo_grupo_id)
     : totalParcelas > 1 && !recorrente;
-  // Adicionar parcela manual é recurso BookPlay (dono ou visão ampla).
-  const podeAdicionarParcela = !isPaguePlay && !recorrente &&
+  // Adicionar parcela manual: dono ou visão ampla, nas duas regras desde
+  // 06/11/2026 — na Cofen a parcela soma no valor total do acordo.
+  const podeAdicionarParcela = !recorrente &&
     (perfil?.id === acordoLocal.operador_id || temVisaoAmpla(perfil?.perfil));
 
   // Reagendar a próxima parcela vale nos dois tenants, com a mesma régua de
@@ -232,20 +237,37 @@ export function AcordoDetalheInline({
   // ── Adicionar parcela manualmente (mesmo NR, formas podem variar) ─────────
   // Recebe SEMPRE uma lista: o modal passou a aceitar uma quantidade, e o caso
   // de uma parcela é só a lista de um item.
-  async function confirmarAdicionarParcela(inputs: NovaParcelaInput[]) {
+  async function confirmarAdicionarParcela(
+    inputs: NovaParcelaInput[],
+    opcoes: { quitar: QuitarAntes | null },
+  ) {
     setSalvandoAddParcela(true);
     try {
-      const r = await adicionarParcelasAoGrupo(acordoLocal, inputs, { isPaguePlay });
+      const r = await adicionarParcelasAoGrupo(acordoLocal, inputs, {
+        isPaguePlay,
+        // Regra Cofen: a parcela nova soma no valor total do acordo.
+        somarNoTotal: isPaguePlay,
+        quitarAntes:  opcoes.quitar,
+      });
       // `'erro' in r`, e não `!r.ok`: o tsconfig roda com `strict: false` e o
       // TypeScript não estreita união por discriminante booleano.
-      if ('erro' in r) { toast.error(r.erro); return; }
+      if ('erro' in r) { toast.error(r.erro, { duration: 8000 }); return; }
 
       const novas   = r.novasParcelas;
       const novosIds = new Set(novas.map(p => p.id));
       const grupoId = novas[0]?.acordo_grupo_id ?? acordoLocal.acordo_grupo_id ?? null;
+      // A parcela quitada antes da inclusão, como ficou no banco.
+      const q = r.quitada;
+      const quitada = (p: Acordo): Acordo => (q && p.id === q.id
+        ? { ...p, status: 'pago', data_pagamento: q.dataPagamento, vencimento: q.dataPagamento }
+        : p);
+      const totais = {
+        parcelas: r.novoTotal,
+        ...(r.novoValorTotal !== undefined ? { valor_total: r.novoValorTotal } : {}),
+      };
       const baseAtualizado: Acordo = {
-        ...acordoLocal,
-        parcelas:        r.novoTotal,
+        ...quitada(acordoLocal),
+        ...totais,
         acordo_grupo_id: grupoId,
         numero_parcela:  acordoLocal.numero_parcela ?? 1,
       };
@@ -253,7 +275,7 @@ export function AcordoDetalheInline({
       setRegistrosReais(prev => {
         const antigas = prev
           .filter(p => !novosIds.has(p.id))
-          .map(p => ({ ...p, parcelas: r.novoTotal }));
+          .map(p => ({ ...quitada(p), ...totais }));
         const comBase = antigas.some(p => p.id === baseAtualizado.id)
           ? antigas
           : [baseAtualizado, ...antigas];
@@ -268,15 +290,7 @@ export function AcordoDetalheInline({
       // O acordo passa a DECLARAR as parcelas pedidas, mas materializa no
       // máximo a próxima. Sem dizer isso, o operador que pediu 10 e viu uma
       // linha (ou nenhuma) acha que o botão falhou.
-      const pedidas = inputs.length;
-      toast.success(
-        novas.length === 0
-          ? `Acordo passou a ${r.novoTotal} parcelas. A próxima será registrada quando a atual for quitada.`
-          : pedidas > 1
-            ? `Parcela ${novas[0].numero_parcela ?? r.novoTotal}/${r.novoTotal} registrada. As demais entram conforme forem reagendadas.`
-            : `Parcela ${novas[0].numero_parcela ?? r.novoTotal}/${r.novoTotal} adicionada!`,
-        { duration: 6000 },
-      );
+      toast.success(mensagemDaInclusao(r, inputs.length), { duration: 6000 });
     } finally {
       setSalvandoAddParcela(false);
     }
