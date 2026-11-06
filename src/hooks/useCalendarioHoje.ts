@@ -22,6 +22,8 @@ import {
 export interface CalendarioHoje {
   /** A pessoa alcança algum setor. Sem setor, o botão não aparece. */
   temSetor: boolean;
+  /** O setor cujo dia o botão mostra (o próprio, senão o primeiro alcançado): o tempo é o da cidade dele. */
+  setorId: string | null;
   eventosHoje: EventoCalendario[];
   /** O mês corrente está em rascunho e esta pessoa monta o calendário. */
   rascunhoParaPublicar: boolean;
@@ -29,7 +31,7 @@ export interface CalendarioHoje {
   tema: string | null;
 }
 
-const NADA: CalendarioHoje = { temSetor: false, eventosHoje: [], rascunhoParaPublicar: false, tema: null };
+const NADA: CalendarioHoje = { temSetor: false, setorId: null, eventosHoje: [], rascunhoParaPublicar: false, tema: null };
 
 /** Na volta à aba, só relê se a última leitura passou disto (ou se virou o dia). */
 const RELER_NO_FOCO_MS = 10 * 60 * 1000;
@@ -71,6 +73,7 @@ export function useCalendarioHoje(
       if (!vivo) return;
       setEstado({
         temSetor: true,
+        setorId: setor.id,
         eventosHoje: mes.publicado || setor.pode_editar ? mes.eventos.filter(e => e.dia === hoje) : [],
         rascunhoParaPublicar: setor.pode_editar && mes.temPublicacao && !mes.publicado && mes.eventos.length > 0,
         tema: mes.capa?.tema ?? null,

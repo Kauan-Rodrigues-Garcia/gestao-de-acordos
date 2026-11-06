@@ -19,6 +19,13 @@
  * O botão veste o tema do mês, como o calendário: a cor do acento, o desenho
  * do tema e o nome do mês em letra de gibi, com a contagem do dia num selo.
  *
+ * ## O tempo (06/11/2026)
+ *
+ * Depois do mês, o personagem do tempo de agora e a temperatura, da cidade do
+ * setor (Birigui ou Marília; sem cidade, Birigui). A previsão é a mesma
+ * leitura da caixa do tempo do painel (`useClima`), e o personagem entra com um
+ * pulinho e fica parado — só se mexe com o mouse em cima.
+ *
  * Para quem monta o calendário, um ponto âmbar avisa que o mês corrente está
  * em rascunho, com coisa lançada, esperando ir para a operação.
  *
@@ -33,7 +40,10 @@ import { temaEfetivo } from '@/lib/calendarioSetor';
 import { paletaGibi } from '@/lib/calendarioGibi';
 import { lembreteVisto, marcarLembreteVisto } from '@/lib/calendarioLembrete';
 import { useCalendarioHoje } from '@/hooks/useCalendarioHoje';
-import { BotaoDoMes } from './gibi/BotaoDoMes';
+import { useClima } from '@/hooks/useClima';
+import { estacaoDoDia, resumoDoClima, varianteDoDia } from '@/lib/clima';
+import { VARIACOES_DO_SOL } from './clima/personagens';
+import { BotaoDoMes, type ClimaDoBotao } from './gibi/BotaoDoMes';
 import { carregarFontesGibi } from './gibi/fontes';
 
 interface Props {
@@ -46,7 +56,7 @@ interface Props {
 }
 
 export function BotaoCalendario({ empresaId, perfilId, meuSetorId, ativo, onAbrir }: Props) {
-  const { temSetor, eventosHoje, rascunhoParaPublicar, tema: temaDaCapa } = useCalendarioHoje(empresaId, meuSetorId, ativo);
+  const { temSetor, setorId, eventosHoje, rascunhoParaPublicar, tema: temaDaCapa } = useCalendarioHoje(empresaId, meuSetorId, ativo);
   const { resolvedTheme } = useTheme();
   const escuro = ehTemaEscuro(resolvedTheme);
   const hojeISO = getTodayISO();
@@ -59,6 +69,20 @@ export function BotaoCalendario({ empresaId, perfilId, meuSetorId, ativo, onAbri
   const paleta = useMemo(() => paletaGibi(tema, escuro), [tema, escuro]);
 
   const mostrar = ativo && temSetor;
+
+  // O tempo da cidade do setor do botão (06/11/2026). A mesma leitura serve a caixa do tempo do painel.
+  const { cidade, previsao } = useClima(setorId, mostrar);
+  const clima = useMemo<ClimaDoBotao | null>(() => {
+    if (!cidade || !previsao) return null;
+    return {
+      condicao: previsao.agora.condicao,
+      noite: previsao.agora.noite,
+      temp: previsao.agora.temp,
+      estacao: estacaoDoDia(hojeISO),
+      variante: varianteDoDia(hojeISO, `sol-${cidade}`, VARIACOES_DO_SOL),
+      resumo: resumoDoClima(cidade, previsao),
+    };
+  }, [cidade, previsao, hojeISO]);
   useEffect(() => { if (mostrar) carregarFontesGibi(); }, [mostrar]);
 
   if (!mostrar) return null;
@@ -76,6 +100,7 @@ export function BotaoCalendario({ empresaId, perfilId, meuSetorId, ativo, onAbri
       eventosHoje={eventosHoje}
       chamando={eventosHoje.length > 0 && !jaViu}
       rascunhoParaPublicar={rascunhoParaPublicar}
+      clima={clima}
       onAbrir={() => { marcarVisto(); onAbrir(); }}
       onDispensar={marcarVisto}
     />

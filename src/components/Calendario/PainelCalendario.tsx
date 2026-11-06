@@ -72,6 +72,7 @@ import { DialogoDia } from './DialogoDia';
 import { DialogoLote } from './DialogoLote';
 import { DialogoCapa } from './DialogoCapa';
 import { CalendarioGibi } from './gibi/CalendarioGibi';
+import { TempoDoSetor } from './clima/TempoDoSetor';
 import './calendario.css';
 
 interface Props {
@@ -362,6 +363,7 @@ function ConteudoCalendario() {
         hojeISO={hojeISO}
         podeEditar={podeEditar}
         onAbrirDia={setDiaAberto}
+        tempo={<TempoDoSetor setorId={setorId} paleta={paleta} hojeISO={hojeISO} />}
         cartaoRef={cartaoRef}
       />
 
