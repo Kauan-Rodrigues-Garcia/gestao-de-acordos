@@ -54,6 +54,7 @@ import {
 } from '@/services/analitico/acumuladoDoSetor';
 import { aplicarOrdemSetores } from '@/lib/setores-ordem';
 import { CardEquipe, type LiderInfo } from './CardEquipe';
+import { PainelLiderVisao, type GrupoPainel } from './PainelLiderVisao';
 import type { CreditoDeOrigem } from '@/services/analitico/fantasmaTransferencia';
 import { enriquecerOperadores, type OperadorNaEquipe } from './desempenhoEquipe';
 import { somarPorEquipe, diasDaEquipe } from './acumuladoDaEquipe';
@@ -106,6 +107,11 @@ interface DesempenhoEquipesProps {
   loading: boolean;
   /** Nome da fonte no rodapé (padrão: "relatório analítico"). */
   fonteLabel?: string;
+  /**
+   * 'novo' = o Painel do Líder redesenhado (`PainelLiderVisao`, modelo de
+   * 06/11/2026). Os MESMOS números; só a apresentação muda.
+   */
+  visual?: 'classico' | 'novo';
 }
 
 interface MetaRow { tipo: string; referencia_id: string; meta_valor: number }
@@ -306,6 +312,7 @@ export function DesempenhoEquipes({
   totalPorSetor = {}, setoresAlternativos = new Set(), setorSomaMembros = false, setorConciliacao = false, loading,
   fonteLabel = 'relatório analítico',
   conciliacaoVersao = 0,
+  visual = 'classico',
 }: DesempenhoEquipesProps) {
   // A meta em H.O. é bruto × percentual da aba Metas; o hook re-renderiza
   // quando ele muda lá.
@@ -762,6 +769,101 @@ export function DesempenhoEquipes({
         Nenhuma equipe encontrada{setoresFoco.size
           ? (setorUnico ? ' neste setor' : ' nos setores escolhidos') : ''}.
       </p>
+    );
+  }
+
+  const rodape = `${usarConciliacao
+    ? `O acumulado do setor vem da conciliação; as equipes vêm do ${fonteLabel}`
+    : `Acumulado e diário vêm do ${fonteLabel}`} · meta, dias úteis e feriados vêm da aba Metas (${
+    (setorUnico ? dados.diasDoSetor(setorUnico) : dados).decorridos} de ${
+    (setorUnico ? dados.diasDoSetor(setorUnico) : dados).totalUteis} dias úteis trabalhados).`;
+
+  /*
+   * O modelo novo (06/11/2026): os mesmos números que os cards abaixo recebem,
+   * montados como dados. Qualquer mudança de regra aqui precisa ir também para
+   * o ramo clássico — os dois leem `dados`, `acumuladoDoSetor` e
+   * `operadoresDoCard`, e é isso que os mantém iguais.
+   */
+  if (visual === 'novo') {
+    const gruposNovos: GrupoPainel[] = gruposOrdenados.map(([sid, eqs]) => {
+      const ehAlternativo = setoresAlternativos.has(sid);
+      const resumoConciliacao = conciliacao.data?.setorId === sid ? conciliacao.data : undefined;
+      const acumuladoSetor = usarConciliacao
+        ? { bruto: resumoConciliacao?.bruto ?? 0, ho: resumoConciliacao?.ho ?? 0, ajuste: 0 }
+        : acumuladoDoSetor({
+          setorId: sid, isPaguePlay: setorSomaMembros, alternativo: ehAlternativo,
+          somaPorSetor: dados.porSetor, totalPorSetor, receptivoPorSetor: contrib,
+        });
+      const metaSetor = dados.metaDe('setor', sid);
+      const diasSid = dados.diasDoSetor(sid);
+      const receptivoCabe = !isPP && setorInteiro && sid !== 'sem_setor';
+      const esperandoConciliacao = setorInteiro && usarConciliacao
+        && (conciliacao.isPending || conciliacao.isError || !resumoConciliacao);
+      return {
+        setorId: sid,
+        nomeSetor: setores[sid] ?? 'Sem setor',
+        estadoSetor: esperandoConciliacao
+          ? (conciliacao.isPending ? { tipo: 'carregando' as const } : { tipo: 'erro' as const, tentar: () => void conciliacao.refetch() })
+          : undefined,
+        setor: setorInteiro ? {
+          id: sid,
+          titulo: setores[sid] ?? 'Setor',
+          subtitulo: usarConciliacao
+            ? `Conciliação do mês${resumoConciliacao?.quantidade === 0 ? ' · sem dados importados' : ''}`
+            : ehAlternativo ? 'Setor alternativo · soma dos usuários'
+            : setorSomaMembros ? 'Soma dos operadores' : 'Total do relatório',
+          lideres: [] as LiderInfo[],
+          foto: setorFotos[sid] ?? null,
+          acumulado: acumuladoSetor.bruto,
+          acumuladoHO: acumuladoSetor.ho,
+          ajusteManual: acumuladoSetor.ajuste,
+          meta: metaSetor,
+          metaHO: metaNaUnidade(metaSetor, 'ho'),
+          mostrarHO: isPP,
+          totalUteis: diasSid.totalUteis,
+          decorridos: diasSid.decorridos,
+          quartis,
+          operadores: sid === 'sem_setor' ? undefined : operadoresDoCard({ tipo: 'setor', id: sid }),
+        } : null,
+        extra: receptivoCabe && receptivoPreenchido(contrib[sid]) ? (
+          <CardContribuicaoReceptivo
+            dados={contrib[sid]} totalUteis={diasSid.totalUteis} decorridos={diasSid.decorridos}
+            quartis={quartis} podeEditar={podeEditarContrib} salvando={salvandoContrib === sid}
+            do59={contrib[sid]?.origem === 'relatorio_59'}
+            onSalvarMeta={meta => { void salvarMetaContrib(sid, meta); }}
+            foto={receptivoFotos[sid] ?? null}
+          />
+        ) : undefined,
+        equipes: eqs.map(eq => {
+          const inicioTreino = treinoMap[eq.id] ?? undefined;
+          const { totalUteis: eqUteis, decorridos: eqDecorridos } = inicioTreino
+            ? diasDaEquipe({
+                ano: anoNum, mes: mesNum, feriados: diasSid.feriados, hojeISO: getTodayISO(),
+                contarHoje: diasSid.contarHoje, inicioTreino,
+              })
+            : { totalUteis: diasSid.totalUteis, decorridos: diasSid.decorridos };
+          const metaEquipe = dados.metaDe('equipe', eq.id);
+          return {
+            id: eq.id,
+            titulo: eq.nome,
+            lideres: lideres[eq.id] ?? [],
+            treino: !!inicioTreino,
+            acumulado: dados.porEquipe[eq.id]?.bruto ?? 0,
+            acumuladoHO: dados.porEquipe[eq.id]?.ho ?? 0,
+            ajusteManual: dados.porEquipe[eq.id]?.ajuste ?? 0,
+            meta: metaEquipe,
+            metaHO: metaNaUnidade(metaEquipe, 'ho'),
+            mostrarHO: isPP,
+            totalUteis: eqUteis,
+            decorridos: eqDecorridos,
+            quartis,
+            operadores: operadoresDoCard({ tipo: 'equipe', id: eq.id }),
+          };
+        }),
+      };
+    });
+    return (
+      <PainelLiderVisao grupos={gruposNovos} mes={mes} rodape={rodape} equipePreferida={perfil?.equipe_id ?? null} />
     );
   }
 

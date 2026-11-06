@@ -185,6 +185,11 @@ export default function PainelLider() {
   // Alimentadas pelo relatório de RECEBIMENTO DIÁRIO (diario_recebimentos):
   // soma-se o mês inteiro (dia_referencia). Antes moravam no Analítico e
   // liam o relatório analítico — na PaguePlay a fonte agora é o diário.
+  /*
+   * O modelo novo do painel (06/11/2026) é só do localhost por enquanto: em
+   * produção `import.meta.env.DEV` é falso e a tela segue a de sempre.
+   */
+  const [visualNovo, setVisualNovo] = useState<boolean>(import.meta.env.DEV);
   const [abaAtiva, setAbaAtiva] = useState<AbaPainel>('desempenho');
   // Abas já visitadas ficam MONTADAS (escondidas com CSS): trocar de aba não
   // remonta o componente nem refaz os fetches internos (metas, líderes, etc.)
@@ -659,6 +664,78 @@ export default function PainelLider() {
   return (
     <div className="p-4 md:p-6 max-w-[1400px] mx-auto space-y-5">
 
+      {/* ── Modelo novo (06/11/2026, só no localhost) ─────────────────────── */}
+      {visualNovo && (
+        <header className="space-y-5">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div className="min-w-0">
+              <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                Painel do Líder
+                <span className="inline-flex items-center gap-1 normal-case tracking-normal font-medium text-success">
+                  <span className="relative flex w-1.5 h-1.5">
+                    <span className="absolute inset-0 rounded-full bg-success motion-safe:animate-ping opacity-60" />
+                    <span className="relative w-1.5 h-1.5 rounded-full bg-success" />
+                  </span>
+                  ao vivo
+                </span>
+              </p>
+              <h1 className="mt-1 text-3xl sm:text-4xl font-extrabold tracking-tight truncate">
+                {rotuloDoEscopo ?? nomeSetorTravado ?? 'Todos os setores'}
+              </h1>
+              <p className="text-sm text-muted-foreground mt-1">
+                {periodo.label} · {operadores.length} pessoa{operadores.length !== 1 ? 's' : ''} no alcance
+              </p>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1 rounded-full border border-border bg-card px-1.5 py-1 shadow-sm">
+                <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={() => irMes(-1)} title="Mês anterior">
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+                <span className="text-sm font-semibold min-w-[118px] text-center">{periodo.label}</span>
+                <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={() => irMes(1)} title="Próximo mês">
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+                {!noMesAtual && (
+                  <Button variant="ghost" size="sm" className="h-8 rounded-full text-xs px-3 text-primary"
+                    onClick={() => setMesRef(mesAtual())}>
+                    Mês atual
+                  </Button>
+                )}
+                <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full"
+                  onClick={() => { void carregarTudo(); if (mostrarAbasAnaliticas) setDiarioReloadKey(k => k + 1); }}
+                  disabled={loading} title="Recarregar">
+                  <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
+                </Button>
+              </div>
+              <Button variant="outline" size="sm" className="h-9 rounded-full text-xs" onClick={() => setVisualNovo(false)}
+                title="Só no localhost: volta para a versão que está no ar">
+                Ver versão atual
+              </Button>
+            </div>
+          </div>
+
+          {mostrarAbasAnaliticas && (
+            <nav className="flex items-center gap-1 overflow-x-auto rounded-full bg-muted/70 p-1 w-fit max-w-full">
+              {abasInternas.map(({ key, label, Icon }) => (
+                <button key={key} type="button" onClick={() => mudarAba(key)}
+                  aria-current={abaVisivel === key ? 'page' : undefined}
+                  className={cn(
+                    'flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium whitespace-nowrap transition-colors',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                    abaVisivel === key
+                      ? 'bg-card text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  <Icon className="w-3.5 h-3.5" /> {key === 'desempenho' ? 'Visão do setor' : label}
+                </button>
+              ))}
+            </nav>
+          )}
+        </header>
+      )}
+
+      {!visualNovo && (<>
       {/* ── Cabeçalho + navegador de mês ─────────────────────────────────── */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-3">
@@ -700,6 +777,12 @@ export default function PainelLider() {
             disabled={loading} title="Recarregar">
             <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
           </Button>
+          {import.meta.env.DEV && (
+            <Button variant="outline" size="sm" className="h-7 text-xs px-2" onClick={() => setVisualNovo(true)}
+              title="Só no localhost: abre o modelo novo do Painel do Líder">
+              Ver modelo novo
+            </Button>
+          )}
         </div>
       </div>
 
@@ -720,6 +803,7 @@ export default function PainelLider() {
           ))}
         </div>
       )}
+      </>)}
 
       {/* Recorte de setor/equipe: um só, valendo para as três abas analíticas.
           Fica fora do conteúdo das abas de propósito — trocar de aba não deve
@@ -771,6 +855,7 @@ export default function PainelLider() {
             conciliacaoVersao={diarioReloadKey}
             loading={loadingAnalitico}
             fonteLabel="relatório analítico"
+            visual={visualNovo ? 'novo' : 'classico'}
           />
         </div>
       )}
