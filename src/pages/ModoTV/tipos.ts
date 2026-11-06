@@ -12,7 +12,7 @@ export type Unidade = 'ho' | 'bruto';
 
 export type TemplateId =
   | 'contagem' | 'barra' | 'anel' | 'hoje' | 'ritmo' | 'placar' | 'grafico'
-  | 'podio' | 'lista' | 'destaque' | 'quitacao'
+  | 'podio' | 'lista' | 'equipes' | 'destaque' | 'quitacao'
   | 'imagem' | 'video' | 'recado' | 'livre';
 
 /** Uma tela do rodízio. `opcoes` é o que o líder ajustou; o resto é padrão. */

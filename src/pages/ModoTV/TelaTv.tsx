@@ -20,8 +20,8 @@ import type { TelaDoPainel, TemaId } from './tipos';
 import { CORES, type Cores } from './cores';
 import { alvoDoDiaProprio, opcao } from './templates';
 import {
-  iniciais, moedaTv, nomeCurto, nomeDoItem, percentualTv, quitacaoDaTela, rankingDaTela, tamanhoQueCabe,
-  type ItemDoRanking, type QuitacaoLinha, type RankingNaTela, type VisaoTv,
+  MAX_EQUIPES_NA_TELA, equipesDaTela, iniciais, moedaTv, nomeCurto, nomeDoItem, percentualTv, quitacaoDaTela, rankingDaTela, tamanhoQueCabe,
+  type EquipesNaTela, type ItemDoRanking, type QuitacaoLinha, type RankingNaTela, type VisaoTv,
 } from './numeros';
 import { Destaque } from './destaque/Destaque';
 import { CenaLivre } from './livre/CenaLivre';
@@ -718,6 +718,130 @@ function ListaViva({ pessoas, r, tela, c }: { pessoas: ItemDoRanking[]; r: Ranki
   );
 }
 
+// ── Ranking de equipes (06/11/2026) ──────────────────────────────────────────
+
+/**
+ * Equipe contra equipe, uma linha por equipe. A barra é o % da meta quando ele
+ * aparece; desligado (ou sem meta), é a distância para a equipe da frente.
+ *
+ * «Mostrar o valor» desligado esconde todo R$ da tela — o recebido E a meta:
+ * com a meta e o %, o recebido sai numa conta (mesma regra de MOSTRAR_META).
+ */
+function RankingEquipes({ v, tela, c }: { v: VisaoTv; tela: TelaDoPainel; c: Cores }) {
+  const r = equipesDaTela(v, tela);
+  if (!r.itens.length) return <Aviso texto={r.motivo} c={c} />;
+  return <RankingEquipesVivo r={r} tela={tela} c={c} />;
+}
+
+function RankingEquipesVivo({ r, tela, c }: { r: EquipesNaTela; tela: TelaDoPainel; c: Cores }) {
+  const caixa = useDeslizar(r.itens.map(e => e.id).join(','));
+  const mostrarValor = opcao<boolean>(tela, 'mostrar_valor');
+  const mostrarMeta = opcao<boolean>(tela, 'mostrar_meta');
+  const mostrarPrimeiro = opcao<boolean>(tela, 'mostrar_destaque');
+  const titulo = opcao<string>(tela, 'titulo');
+
+  const n = r.itens.length;
+  const gap = n > 5 ? 12 : 20;
+  // A altura que sobra embaixo do título, dividida pelas equipes (com teto:
+  // duas equipes não viram duas faixas de 300 px).
+  const linha = Math.min(170, Math.floor((640 - (n - 1) * gap) / n));
+  const compacta = linha < 110;
+  const maior = Math.max(1, ...r.itens.map(e => e.valor));
+  const subtitulo = [
+    r.projecao && !titulo.toLowerCase().includes('proje') ? 'Projeção de fechamento no ritmo atual' : '',
+    r.porMeta ? 'Pelo % da meta' : '',
+  ].filter(Boolean).join(' · ');
+
+  return (
+    <div style={{ ...centro, top: 140, justifyContent: 'flex-start' }}>
+      <Titulo texto={titulo} c={c} />
+      {subtitulo && <div style={{ fontSize: 32, color: c.suave, marginTop: -12, marginBottom: 20, textAlign: 'center' }}>{subtitulo}</div>}
+      <div ref={caixa} style={{ display: 'flex', flexDirection: 'column', gap, width: '100%' }}>
+        {r.itens.map((e, i) => {
+          const comMeta = mostrarMeta && e.fracao != null;
+          const fracaoBarra = comMeta ? (e.fracao as number) : e.valor / maior;
+          const batida = comMeta && (e.fracao as number) >= 1;
+          return (
+            <div key={e.id} data-flip={e.id} style={{
+              height: linha, flexShrink: 0, display: 'flex', alignItems: 'center',
+              gap: compacta ? 24 : 36, padding: compacta ? '0 28px' : '0 44px', borderRadius: compacta ? 24 : 32,
+              background: i === 0 ? c.linha : 'transparent',
+              border: `2px solid ${i < 3 ? `${MEDALHA[i]}66` : c.linha}`,
+              transition: 'background 900ms ease',
+            }}>
+              <div style={{
+                width: compacta ? 64 : 96, height: compacta ? 64 : 96, borderRadius: '50%', flexShrink: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: compacta ? 38 : 56, fontWeight: 800,
+                color: i < 3 ? '#0b1220' : c.suave, background: i < 3 ? MEDALHA[i] : c.trilho,
+              }}>
+                {i + 1}
+              </div>
+
+              {/* O nome manda na linha de cima: o % encosta à direita e nunca o espreme. */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 20 }}>
+                  <span style={{
+                    flex: 1, minWidth: 0, fontSize: compacta ? 34 : 48, fontWeight: 700, lineHeight: 1.2,
+                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                  }}>
+                    {e.nome}
+                  </span>
+                  {mostrarMeta && (
+                    <span style={{ fontSize: compacta ? 26 : 30, color: c.suave, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                      {e.fracao == null ? 'sem meta'
+                        : <><b style={{ color: batida ? c.ok : c.destaque }}><Percentual fracao={e.fracao} /></b> da meta</>}
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 18, marginTop: compacta ? 6 : 16 }}>
+                  <div style={{ flex: 1 }}>
+                    <Barra fracao={fracaoBarra} c={c} altura={compacta ? 12 : 22} cor={batida ? c.ok : undefined} />
+                  </div>
+                  {/* Na linha compacta não cabe: fica só o %. */}
+                  {!compacta && mostrarMeta && mostrarValor && e.meta != null && (
+                    <span style={{ fontSize: 26, color: c.suave, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                      meta {moedaTv(e.meta)}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* As colunas da direita têm largura fixa: as barras de todas as linhas começam e terminam juntas. */}
+              {mostrarPrimeiro && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16, width: compacta ? 290 : 370, flexShrink: 0 }}>
+                  {e.primeiro && (
+                    <>
+                      <Foto nome={e.primeiro.nome} foto={e.primeiro.foto} tamanho={compacta ? 52 : 76} c={c} />
+                      <div style={{ minWidth: 0 }}>
+                        {!compacta && <div style={{ fontSize: 26, color: c.suave }}>1º da equipe</div>}
+                        <div style={{ fontSize: compacta ? 30 : 32, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {nomeCurto(e.primeiro.nome)}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {mostrarValor && (
+                <div style={{ width: compacta ? 330 : 340, flexShrink: 0, textAlign: 'right' }}>
+                  <Moeda v={e.valor} caber={compacta ? 330 : 340} style={{ fontSize: compacta ? 44 : 54, fontWeight: 800 }} />
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {r.fora > 0 && (
+        <div style={{ fontSize: 26, color: c.suave, marginTop: 14 }}>
+          + {r.fora} {r.fora === 1 ? 'equipe' : 'equipes'} fora da tela — no máximo {MAX_EQUIPES_NA_TELA} por tela
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Ranking de quitação (30/10/2026) ─────────────────────────────────────────
 
 const quitacoesTexto = (n: number) => `${n} ${n === 1 ? 'quitação' : 'quitações'}`;
@@ -942,7 +1066,7 @@ export function TelaTv({ tela, tema, visao, midiaUrl, posicao, atualizadoEm, mes
     corpo = {
       contagem: <Contagem {...P} />, barra: <MetaBarra {...P} />, anel: <Anel {...P} />,
       hoje: <Hoje {...P} />, ritmo: <Ritmo {...P} />, placar: <Placar {...P} />, grafico: <Grafico {...P} />,
-      podio: <Podio {...P} />, lista: <Lista {...P} />, destaque: <Destaque v={visao} tela={tela} />,
+      podio: <Podio {...P} />, lista: <Lista {...P} />, equipes: <RankingEquipes {...P} />, destaque: <Destaque v={visao} tela={tela} />,
       quitacao: <Quitacao {...P} />,
     }[tela.template as 'contagem'] ?? <Aviso texto="Template desconhecido." c={c} />;
   }

@@ -220,6 +220,86 @@ export function nomeDoItem(item: Pick<ItemDoRanking, 'nome'>, deEquipes: boolean
   return deEquipes ? rotuloDaEquipe(item.nome) : nomeCurto(item.nome);
 }
 
+// ── A cena «Ranking de equipes» (06/11/2026) ─────────────────────────────────
+
+/** Quantas equipes cabem na parede sem a letra ficar pequena demais do fundo da sala. */
+export const MAX_EQUIPES_NA_TELA = 8;
+
+export interface EquipeNaTela {
+  id: string;
+  /** «Equipe Rosa». */
+  nome: string;
+  /** O recebido, ou a projeção quando a tela compara a projeção. */
+  valor: number;
+  /** `null`: a equipe não tem meta cadastrada no mês. */
+  meta: number | null;
+  /** valor ÷ meta, sem corte em cima; `null` sem meta. */
+  fracao: number | null;
+  /** Quem mais recebeu na equipe no mês. */
+  primeiro: { nome: string; foto: string | null } | null;
+}
+
+export interface EquipesNaTela {
+  itens: EquipeNaTela[];
+  /** Vazio quando há o que mostrar; senão, a frase para a parede. */
+  motivo: string;
+  projecao: boolean;
+  porMeta: boolean;
+  /** Quantas equipes escolhidas ficaram fora da tela (acima de `MAX_EQUIPES_NA_TELA`). */
+  fora: number;
+}
+
+/**
+ * As equipes da cena, pelas opções dela.
+ *
+ * • «Equipes que participam» vazio = todas as do setor que receberam ou têm
+ *   meta no mês (a mesma regra do «Ranking de: Equipes» do Pódio e da Lista).
+ *   Escolhidas à mão, aparecem mesmo zeradas: o líder pediu aquelas.
+ * • Ordem pelo % da meta: quem não tem meta vai para o fim, pelo valor.
+ * • Projeção: o recebido × dias úteis ÷ decorridos, como em `rankingDaTela`.
+ *   O % da meta passa a ser o da projeção.
+ */
+export function equipesDaTela(v: VisaoTv, tela: Pick<TelaDoPainel, 'template' | 'opcoes'>): EquipesNaTela {
+  const ordem = opcao<string>(tela, 'ordem');
+  const projecao = ordem === 'projecao';
+  const porMeta = ordem === 'meta';
+  const vazio = (motivo: string): EquipesNaTela => ({ itens: [], motivo, projecao, porMeta, fora: 0 });
+  if (!v.equipesRanking) return vazio(AGUARDANDO_ATUALIZACAO);
+
+  const escolhidas = opcao<string[]>(tela, 'equipes');
+  let base = v.equipesRanking;
+  if (escolhidas.length) {
+    const pedidas = new Set(escolhidas);
+    base = base.filter(e => pedidas.has(e.id));
+    if (!base.length) return vazio('As equipes escolhidas não estão mais no setor. Escolha de novo nas opções da tela.');
+  } else {
+    base = base.filter(e => e.valor > 0 || e.meta > 0);
+    if (!base.length) return vazio('Nenhuma equipe do setor recebeu neste mês ainda.');
+  }
+
+  const fator = projecao && v.diasDecorridos > 0 ? v.diasUteis / v.diasDecorridos : 1;
+  const itens = base.map((e): EquipeNaTela => {
+    const valor = centavos(e.valor * fator);
+    const meta = e.meta > 0 ? e.meta : null;
+    const top = v.rankingPorEquipe?.find(r => r.equipeId === e.id)?.pessoas.find(p => p.valor > 0);
+    return {
+      id: e.id, nome: rotuloDaEquipe(e.nome), valor, meta,
+      fracao: meta ? valor / meta : null,
+      primeiro: top ? { nome: top.nome, foto: top.foto } : null,
+    };
+  });
+  itens.sort((a, b) => {
+    if (porMeta && (a.fracao != null) !== (b.fracao != null)) return a.fracao != null ? -1 : 1;
+    if (porMeta && a.fracao != null && b.fracao != null && a.fracao !== b.fracao) return b.fracao - a.fracao;
+    return b.valor - a.valor || a.nome.localeCompare(b.nome, 'pt-BR');
+  });
+  return {
+    itens: itens.slice(0, MAX_EQUIPES_NA_TELA),
+    motivo: '', projecao, porMeta,
+    fora: Math.max(0, itens.length - MAX_EQUIPES_NA_TELA),
+  };
+}
+
 export interface QuitacaoNaTela {
   /** Vazio quando há o que mostrar. */
   motivo: string;

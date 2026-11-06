@@ -43,11 +43,18 @@ export function numerosDemo(): NumerosTv {
     equipes_ranking: EQUIPES_DEMO.map(([id, nome, valor, meta]) => ({
       id, nome, valor, valor_ho: Math.round(valor * 22.6) / 100, meta,
     })),
-    ranking_por_equipe: [{
-      equipe_id: EQUIPES_DEMO[0][0],
-      pessoas: [['Ana Beatriz Lima', 41_220.1], ['Juliana Prado', 35_310], ['Rafael Souza', 24_480], ['Bruno Carvalho', 15_220.6]]
-        .map(([nome, valor], i) => ({ id: `demo-e${i}`, nome: nome as string, foto: null as string | null, valor: valor as number, valor_ho: Math.round((valor as number) * 22.6) / 100 })),
-    }],
+    // Cada equipe com as pessoas dela (a cena «Ranking de equipes» mostra o 1º de cada uma).
+    ranking_por_equipe: ([
+      [['Ana Beatriz Lima', 41_220.1], ['Juliana Prado', 35_310], ['Rafael Souza', 24_480], ['Bruno Carvalho', 15_220.6]],
+      [['Carlos Eduardo Rocha', 38_904.55], ['Patrícia Gomes', 27_115.9]],
+      [['Marcos Vinícius Teixeira', 29_877.4], ['Luana Martins Costa', 21_960.3]],
+      [['Diego Almeida', 19_005.75], ['Fernanda Ribeiro', 17_430]],
+    ] as [string, number][][]).map((pessoas, k) => ({
+      equipe_id: EQUIPES_DEMO[k][0],
+      pessoas: pessoas.map(([nome, valor], i) => ({
+        id: `demo-e${k}-${i}`, nome, foto: null as string | null, valor, valor_ho: Math.round(valor * 22.6) / 100,
+      })),
+    })),
     quitacao: {
       habilitado: true,
       premios: [500, 300, 200, 150, 100, 50],
@@ -129,6 +136,10 @@ export function painelDemo(tema: string | null): Painel {
       { id: 'd19', template: 'quitacao', opcoes: {} },
       { id: 'd20', template: 'livre', opcoes: { cena: cenaDoModelo('meta') } },
       { id: 'd21', template: 'livre', opcoes: { cena: cenaDoModelo('campanha') }, sob_demanda: true },
+      // 06/11/2026: `/#/tv?demo=1&tela=22` a `24`.
+      { id: 'd22', template: 'equipes', opcoes: {} },
+      { id: 'd23', template: 'equipes', opcoes: { ordem: 'meta', mostrar_valor: false, titulo: 'Quem está mais perto da meta' } },
+      { id: 'd24', template: 'destaque', opcoes: { dia: 'mes', estilo: 'natal' } },
     ],
   };
 }
