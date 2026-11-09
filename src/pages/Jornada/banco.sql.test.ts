@@ -267,3 +267,66 @@ describe('20261105170000 — acessos e retenções no Desempenho do Dia', () => 
     expect(await contar(LID_REC, { setor: JOR })).toBeNull();
   });
 });
+
+describe('cada operador só vê os NRs dele; a liderança vê todos com o nome', () => {
+  const LU = '00000000-0000-4000-8000-0000000000c4';     // 2ª operadora do Suporte (Jornada)
+  const LIDER = '00000000-0000-4000-8000-0000000000d1'; // líder do Jornada (criado acima)
+  const DIA = '2026-11-06';
+  type Painel = {
+    pessoas: { id: string }[];
+    dias: { dia: string; total: number }[];
+    registros: { nr: string; perfil_id: string; nome: string | null }[];
+  };
+  const painel = (uid: string) => como<Painel>(uid, 'select public.fn_jornada_painel($1, $2) v', [EQ_SUP, DIA]);
+  const nrs = (p: Painel) => p.registros.map(r => r.nr).sort();
+  let doLu: string;
+
+  beforeAll(async () => {
+    await db.exec(`
+      insert into public.perfis (id, nome, perfil, empresa_id, setor_id, equipe_id)
+        values ('${LU}', 'Lu', 'operador', '${EMP}', '${JOR}', '${EQ_SUP}') on conflict do nothing;
+      insert into public.perfis (id, nome, perfil, empresa_id, setor_id)
+        values ('${LIDER}', 'Lider', 'lider', '${EMP}', '${JOR}') on conflict do nothing;
+      delete from public.jornada_registros;
+      insert into public.jornada_registros (empresa_id, tipo, equipe_id, perfil_id, nr, data, apagado_em) values
+        ('${EMP}', 'acesso', '${EQ_SUP}', '${ANA}', '100', '${DIA}', null),
+        ('${EMP}', 'acesso', '${EQ_SUP}', '${ANA}', '101', '${DIA}', null),
+        ('${EMP}', 'acesso', '${EQ_SUP}', '${LU}',  '200', '${DIA}', null),
+        ('${EMP}', 'acesso', '${EQ_SUP}', '${LU}',  '201', '${DIA}', now());`);
+    doLu = (await db.query<{ id: string }>(`select id from public.jornada_registros where nr = '200'`)).rows[0].id;
+  });
+
+  it('o painel do operador: só os NRs, o placar e o total do dia dele', async () => {
+    const ana = await painel(ANA);
+    expect(nrs(ana)).toEqual(['100', '101']);
+    expect(ana.pessoas.map(p => p.id)).toEqual([ANA]);
+    expect(ana.dias.map(d => Number(d.total))).toEqual([2]);
+    const lu = await painel(LU);
+    expect(nrs(lu)).toEqual(['200']);
+    expect(lu.pessoas.map(p => p.id)).toEqual([LU]);
+  });
+
+  it('a liderança recebe todos os NRs do dia, cada um com quem lançou', async () => {
+    const l = await painel(LIDER);
+    expect(nrs(l)).toEqual(['100', '101', '200']);
+    expect(l.registros.find(r => r.nr === '200')).toMatchObject({ perfil_id: LU, nome: 'Lu' });
+    expect(l.pessoas.map(p => p.id).sort()).toEqual([ANA, LU].sort());
+  });
+
+  it('baixar e lixeira: o operador só recebe os dele', async () => {
+    const baixar = (uid: string) => como<string[]>(uid,
+      `select coalesce(jsonb_agg(nr order by nr), '[]') v from public.fn_jornada_exportar($1, $2, $2)`, [EQ_SUP, DIA]);
+    expect(await baixar(ANA)).toEqual(['100', '101']);
+    expect(await baixar(LIDER)).toEqual(['100', '101', '200']);
+    const lixeira = (uid: string) => como<string[]>(uid,
+      `select coalesce(jsonb_agg(nr order by nr), '[]') v from public.fn_jornada_lixeira($1)`, [EQ_SUP]);
+    expect(await lixeira(ANA)).toEqual([]);
+    expect(await lixeira(LU)).toEqual(['201']);
+  });
+
+  it('o operador não apaga o NR de outra pessoa', async () => {
+    await expect(como(ANA, 'select public.fn_jornada_excluir($1) v', [doLu])).rejects.toThrow(/Sem permissao/);
+    expect(await como<number>(ANA, 'select public.fn_jornada_excluir_lote($1::uuid[]) v', [`{${doLu}}`])).toBe(0);
+    expect(nrs(await painel(LU))).toEqual(['200']);
+  });
+});

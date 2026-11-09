@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { getTodayISO } from '@/lib/index';
 import { propsSoNumeros } from '@/lib/soNumeros';
 import { cn } from '@/lib/utils';
@@ -44,7 +45,7 @@ import { baixarCsv, paraCsv } from './importar';
 import { gerarPrevia, painelDaPrevia, type EstadoPrevia } from './previa';
 import {
   ORDINAIS, TEXTOS, contagem, diaDaSemana, diaPorExtenso, diasDoMesAte,
-  horaSaoPaulo, iniciais, mesPorExtenso, percentual, situacaoMetas, somarDias,
+  horaSaoPaulo, iniciais, mesPorExtenso, nomesCurtos, percentual, situacaoMetas, somarDias,
 } from './jornada';
 
 /** «Retenção · Jornada» (equipe) ou «Suporte · Equipe X · Jornada» (subgrupo). */
@@ -441,6 +442,9 @@ function Rotulo({
   );
 }
 
+/** O valor de «Todos os operadores» no filtro (o Select não aceita valor vazio). */
+const TODOS = '__todos__';
+
 /** «novembro», do dia aberto. */
 function nomeDoMes(dia: string): string {
   return mesPorExtenso(dia).split(' de ')[0];
@@ -642,6 +646,8 @@ function CardDia({
   acoes: AcoesJornada;
 }) {
   const [busca, setBusca] = useState('');
+  // Filtro de operador (só a liderança): '' = todos. Fica ao trocar de dia.
+  const [operador, setOperador] = useState('');
   const [selecao, setSelecao] = useState<Set<string>>(() => new Set());
   const [confirmarApagar, setConfirmarApagar] = useState(false);
   const [ocupado, setOcupado] = useState(false);
@@ -671,7 +677,31 @@ function CardDia({
     return () => window.clearTimeout(t);
   }, [confirmarApagar]);
 
-  const registros = busca ? painel.registros.filter(r => r.nr.includes(busca)) : painel.registros;
+  /**
+   * Quem pode aparecer no filtro e na tag: o grupo (do placar) e quem lançou
+   * no dia sem estar mais nele. O operador só recebe os dele — não há filtro.
+   */
+  const verDeQuem = painel.pode_gerir;
+  const operadores = useMemo(() => {
+    if (!verDeQuem) return [];
+    const doDia = new Map<string, { id: string; nome: string; no_dia: number }>();
+    for (const p of painel.pessoas) doDia.set(p.id, { id: p.id, nome: p.nome, no_dia: 0 });
+    for (const r of painel.registros) {
+      const o = doDia.get(r.perfil_id) ?? { id: r.perfil_id, nome: r.nome ?? 'Sem nome', no_dia: 0 };
+      o.no_dia += 1;
+      doDia.set(r.perfil_id, o);
+    }
+    return [...doDia.values()].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  }, [verDeQuem, painel.pessoas, painel.registros]);
+  const curtos = useMemo(() => nomesCurtos(operadores), [operadores]);
+  const filtroOperador = verDeQuem && operador && operadores.some(o => o.id === operador) ? operador : '';
+  const nomeFiltrado = operadores.find(o => o.id === filtroOperador)?.nome ?? null;
+
+  // Trocar de operador desmarca: não copiar/apagar NR que saiu da vista.
+  useEffect(() => { setSelecao(new Set()); ultimoClicado.current = null; }, [filtroOperador]);
+
+  const doOperador = filtroOperador ? painel.registros.filter(r => r.perfil_id === filtroOperador) : painel.registros;
+  const registros = busca ? doOperador.filter(r => r.nr.includes(busca)) : doOperador;
   const selecionados = painel.registros.filter(r => selecao.has(r.id));
   const todosMarcados = registros.length > 0 && registros.every(r => selecao.has(r.id));
 
@@ -704,6 +734,18 @@ function CardDia({
         if (r.repetidos) toast.warning('Não voltou: o NR já foi lançado de novo neste mês.');
       })
       .catch(e => toast.error((e as Error).message));
+  }
+
+  /** Clique no nome: marca os NRs da pessoa (os à vista); se já estão todos marcados, desmarca só eles. */
+  function alternarPessoa(perfilId: string) {
+    const dela = registros.filter(r => r.perfil_id === perfilId).map(r => r.id);
+    setSelecao(atual => {
+      const nova = new Set(atual);
+      const todos = dela.every(id => atual.has(id));
+      for (const id of dela) if (todos) nova.delete(id); else nova.add(id);
+      return nova;
+    });
+    ultimoClicado.current = null;
   }
 
   function marcarTodos() {
@@ -757,7 +799,11 @@ function CardDia({
       <div className="flex flex-wrap items-center gap-x-2 gap-y-2 px-3 py-2.5 border-b">
         <CalendarDays className="h-4 w-4 text-primary shrink-0" />
         <h2 className="text-sm font-semibold capitalize">{diaPorExtenso(dia)}</h2>
-        <span className="text-xs text-muted-foreground">· {contagem(painel.registros.length, tipo)}</span>
+        <span className="text-xs text-muted-foreground">
+          · {filtroOperador
+            ? `${contagem(doOperador.length, tipo)} de ${nomeFiltrado} (de ${painel.registros.length})`
+            : contagem(painel.registros.length, tipo)}
+        </span>
         {(atualizando || ocupado) && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
         <div className="ml-auto flex items-center gap-1">
           {painel.registros.length > 5 && (
@@ -779,8 +825,13 @@ function CardDia({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => baixar(painel.registros, `${arquivo}-${dia}.csv`)}>
-                NRs do dia ({painel.registros.length})
+              <DropdownMenuItem
+                onClick={() => baixar(
+                  doOperador,
+                  `${arquivo}-${dia}${nomeFiltrado ? `-${curtos.get(filtroOperador)?.replace(/\W+/g, '') || 'operador'}` : ''}.csv`,
+                )}
+              >
+                NRs do dia{nomeFiltrado ? ` de ${curtos.get(filtroOperador)}` : ''} ({doOperador.length})
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => void baixarMes()}>
                 NRs do mês de <span className="capitalize">{nomeDoMes(dia)}</span>
@@ -819,6 +870,41 @@ function CardDia({
           )}
         </div>
       </div>
+
+      {/* Filtro de operador (só a liderança), numa linha só dele */}
+      {verDeQuem && operadores.length > 0 && (
+        <div className="flex items-center gap-2 px-3 h-11 border-b">
+          <Users className="h-4 w-4 text-muted-foreground shrink-0" />
+          <span className="text-xs font-medium text-muted-foreground shrink-0">Operador</span>
+          <Select value={filtroOperador || TODOS} onValueChange={v => setOperador(v === TODOS ? '' : v)}>
+            <SelectTrigger
+              className={cn(
+                'h-8 w-[240px] max-w-full text-sm',
+                filtroOperador && 'border-primary/50 bg-primary/5 font-medium',
+              )}
+              aria-label="Filtrar por operador"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={TODOS}>Todos os operadores ({painel.registros.length})</SelectItem>
+              {operadores.map(o => (
+                <SelectItem key={o.id} value={o.id}>
+                  {o.nome} <span className="text-muted-foreground tabular-nums">({o.no_dia})</span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {filtroOperador && (
+            <Button
+              variant="ghost" size="sm" className="h-8 px-2 text-xs text-muted-foreground"
+              onClick={() => setOperador('')}
+            >
+              <X className="h-3.5 w-3.5" /> Limpar
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* Tira do mês: dia e total; a linha embaixo cresce com o total */}
       <div className="px-3 pt-2 pb-2 border-b">
@@ -906,7 +992,9 @@ function CardDia({
       {/* Lançamentos do dia: só o NR, em colunas para não esticar a página */}
       {registros.length === 0 ? (
         <p className="px-3 py-6 text-sm text-muted-foreground text-center">
-          {busca ? 'Nada com essa busca.' : 'Nenhum lançamento neste dia.'}
+          {busca
+            ? 'Nada com essa busca.'
+            : nomeFiltrado ? `${nomeFiltrado} não lançou neste dia.` : 'Nenhum lançamento neste dia.'}
         </p>
       ) : (
         <ul className="grid sm:grid-cols-2 xl:grid-cols-3 gap-x-2 p-1.5 max-h-[340px] overflow-y-auto select-none">
@@ -915,6 +1003,11 @@ function CardDia({
               key={r.id}
               registro={r}
               ordem={registros.length - i}
+              dono={verDeQuem ? {
+                curto: curtos.get(r.perfil_id) ?? r.nome ?? '?',
+                nome: r.nome ?? 'Sem nome',
+                aoClicar: () => alternarPessoa(r.perfil_id),
+              } : null}
               marcado={selecao.has(r.id)}
               aoMarcar={shift => alternar(i, shift)}
               aoExcluir={acoes.excluir}
@@ -935,10 +1028,12 @@ function CardDia({
 }
 
 function LinhaRegistro({
-  registro, ordem, marcado, aoMarcar, aoExcluir, aoDesfazer,
+  registro, ordem, dono, marcado, aoMarcar, aoExcluir, aoDesfazer,
 }: {
   registro: RegistroJornada;
   ordem: number;
+  /** A tag de quem lançou — só para a liderança (o operador só vê os dele). */
+  dono: { curto: string; nome: string; aoClicar: () => void } | null;
   marcado: boolean;
   aoMarcar: (shift: boolean) => void;
   aoExcluir: (id: string) => Promise<void>;
@@ -995,6 +1090,19 @@ function LinhaRegistro({
       >
         {registro.nr}
       </button>
+      {dono && (
+        <button
+          type="button"
+          className="min-w-0 truncate rounded px-1.5 h-5 text-[11px] font-medium bg-primary/10 text-primary hover:bg-primary/20"
+          title={`${dono.nome} — clique para marcar/desmarcar só os NRs desta pessoa`}
+          onClick={e => {
+            e.stopPropagation();
+            dono.aoClicar();
+          }}
+        >
+          {dono.curto}
+        </button>
+      )}
       <span className="ml-auto text-[11px] text-muted-foreground tabular-nums shrink-0">{horaSaoPaulo(registro.criado_em)}</span>
       <Button
         variant={confirmar ? 'destructive' : 'ghost'}

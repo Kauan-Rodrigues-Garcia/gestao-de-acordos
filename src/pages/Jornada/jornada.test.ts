@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  contagem, diaDaSemana, diaPorExtenso, diasDoMesAte, iniciais, lerMetas,
+  contagem, diaDaSemana, diaPorExtenso, diasDoMesAte, iniciais, lerMetas, nomesCurtos,
   percentual, situacaoMetas, somarDias,
 } from './jornada';
 
@@ -55,5 +55,18 @@ describe('jornada — até quatro metas no mês', () => {
     expect(lerMetas(['100', '', '140', '']).erro).toMatch(/sem pular/);
     expect(lerMetas(['100', '90', '', '']).erro).toMatch(/2ª meta tem de ser maior/);
     expect(lerMetas(['0', '', '', '']).erro).toMatch(/de 1 a/);
+  });
+
+  it('tag do NR: primeiro nome; repetido ganha a inicial do sobrenome', () => {
+    const t = nomesCurtos([
+      { id: 'a', nome: 'Maryanne Souza Lima' },
+      { id: 'b', nome: 'Maria Silva' },
+      { id: 'c', nome: 'maria Pereira' },
+      { id: 'd', nome: null },
+    ]);
+    expect(t.get('a')).toBe('Maryanne');
+    expect(t.get('b')).toBe('Maria S.');
+    expect(t.get('c')).toBe('maria P.');
+    expect(t.get('d')).toBe('?');
   });
 });

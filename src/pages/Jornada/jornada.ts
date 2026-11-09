@@ -147,3 +147,24 @@ export function iniciais(nome: string): string {
   const ultima = partes.length > 1 ? partes[partes.length - 1][0] : '';
   return (primeira + ultima).toUpperCase();
 }
+
+/**
+ * O nome curto da tag de cada NR (para a liderança saber de quem é): o
+ * primeiro nome; quando dois têm o mesmo primeiro nome, o sobrenome entra
+ * como inicial — «Maria S.» e «Maria P.». Chave = id da pessoa.
+ */
+export function nomesCurtos(pessoas: { id: string; nome: string | null }[]): Map<string, string> {
+  const partes = new Map(pessoas.map(p => [p.id, (p.nome ?? '').trim().split(/\s+/).filter(Boolean)]));
+  const porPrimeiro = new Map<string, number>();
+  for (const ps of partes.values()) {
+    const k = (ps[0] ?? '').toLocaleLowerCase('pt-BR');
+    porPrimeiro.set(k, (porPrimeiro.get(k) ?? 0) + 1);
+  }
+  const curtos = new Map<string, string>();
+  for (const [id, ps] of partes) {
+    if (ps.length === 0) { curtos.set(id, '?'); continue; }
+    const repetido = (porPrimeiro.get(ps[0].toLocaleLowerCase('pt-BR')) ?? 0) > 1;
+    curtos.set(id, repetido && ps.length > 1 ? `${ps[0]} ${ps[ps.length - 1][0].toUpperCase()}.` : ps[0]);
+  }
+  return curtos;
+}
