@@ -581,7 +581,8 @@ export function useAnaliticoImport() {
      * O setor é sincronizado pelo 59.
      *
      * Desde 19/10/2026 o 58 grava, nesse setor, só o que o 59 ainda não tem —
-     * hoje e ontem, NR+dia novos (`linhasDo58NoMesDo59`). O resto do arquivo é
+     * do dia em que o 59 parou (ou de ontem) em diante, NR+dia novos
+     * (`linhasDo58NoMesDo59`, janela de 09/11/2026). O resto do arquivo é
      * lido, conferido para a remoção dos ausentes, e não regravado. Dizer isso
      * evita a pergunta «importei 4 mil linhas e entraram 30, sumiu o resto?».
      */
@@ -591,7 +592,7 @@ export function useAnaliticoImport() {
         'Este setor é sincronizado pelo relatório 59. '
         + (ignoradas > 0
           ? `${ignoradas} linha${ignoradas !== 1 ? 's' : ''} já ${ignoradas !== 1 ? 'estão' : 'está'} no 59 e não `
-            + `${ignoradas !== 1 ? 'foram regravadas' : 'foi regravada'}; entrou só o que é de hoje e ontem e o 59 ainda não trouxe.`
+            + `${ignoradas !== 1 ? 'foram regravadas' : 'foi regravada'}; entrou o que o 59 ainda não trouxe.`
           : 'Na próxima entrada dele os números são conferidos e ajustados.'),
         { duration: 9000 },
       );
