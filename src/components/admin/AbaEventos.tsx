@@ -62,9 +62,9 @@ export default function AbaEventos({ ehSuperAdmin, podeConfigurarRankingQuitacao
       conteudo: <RankingQuitacaoConfig />,
     },
     {
-      // Por enquanto só demonstração: nada gravado (04/11/2026).
+      // Valendo desde 09/11/2026: liberar, encerrar, apurar e liberar o resultado.
       id: 'votacao_lideres', rotulo: 'Votação da Liderança', icone: Vote, visivel: ehSuperAdmin,
-      descricao: 'Os líderes escolhem o colega de cada categoria: o mais comunicativo, o mais inspirador… (demonstração).',
+      descricao: 'Os líderes escolhem o colega de cada categoria: o mais comunicativo, o mais inspirador…',
       conteudo: <VotacaoLideresConfig />,
     },
   ];

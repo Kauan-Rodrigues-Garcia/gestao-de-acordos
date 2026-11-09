@@ -4,16 +4,27 @@
  *
  *   votar      a votação abriu e a pessoa ainda não votou → «Votar agora»
  *   resultado  a diretoria liberou o resultado → «Ver resultado»
+ *   apurar     (só a diretoria, 09/11/2026) a votação encerrou e falta decidir
+ *              os empates e liberar → «Abrir a apuração»
  *
  * Minimiza numa pílula (fica no canto até votar). O de resultado dá para
  * dispensar. Só apresentação: quem decide quando aparece é `AvisoVotacao`.
  */
 import { AnimatePresence, motion } from 'framer-motion';
-import { ChevronDown, Trophy, Vote, X } from 'lucide-react';
+import { ChevronDown, Scale, Trophy, Vote, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
-export type TipoDoCard = 'votar' | 'resultado';
+export type TipoDoCard = 'votar' | 'resultado' | 'apurar';
+
+const TEXTOS: Record<TipoDoCard, { pilula: string; titulo: string; texto: string; botao: string; emoji: string }> = {
+  votar: { pilula: 'Votação da Liderança', titulo: 'Sua vez de votar!', emoji: '🗳️', botao: 'Votar agora',
+    texto: ': escolha o líder que mais combina com cada categoria. Leva poucos minutos e o voto é secreto.' },
+  resultado: { pilula: 'Saiu o resultado', titulo: 'Saiu o resultado!', emoji: '🏆', botao: 'Ver resultado',
+    texto: ': veja quem levou cada categoria.' },
+  apurar: { pilula: 'Apuração pendente', titulo: 'Falta liberar o resultado', emoji: '⚖️', botao: 'Abrir a apuração',
+    texto: ': a votação encerrou. Decida os empates e libere o resultado para os líderes.' },
+};
 
 interface Props {
   tipo: TipoDoCard;
@@ -31,6 +42,8 @@ interface Props {
 
 export function CardDaVotacao({ tipo, titulo, minimizado, onAbrir, onMinimizar, onExpandir, onDispensar, recuoEsquerda = 16, demo }: Props) {
   const votar = tipo === 'votar';
+  const t = TEXTOS[tipo];
+  const Icone = tipo === 'votar' ? Vote : tipo === 'apurar' ? Scale : Trophy;
   return (
     <div className="fixed bottom-4 left-4 z-[45] print:hidden md:left-[var(--recuo-votacao)]"
       style={{ '--recuo-votacao': `${recuoEsquerda}px` } as React.CSSProperties}>
@@ -40,10 +53,10 @@ export function CardDaVotacao({ tipo, titulo, minimizado, onAbrir, onMinimizar, 
             initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }}
             className="flex items-center gap-2.5 rounded-full border border-primary/40 bg-card py-2.5 pl-3 pr-4 text-[15px] font-semibold shadow-xl hover:border-primary">
             <span className="relative grid h-7 w-7 place-items-center rounded-full bg-primary/15 text-primary">
-              {votar ? <Vote className="h-4 w-4" /> : <Trophy className="h-4 w-4" />}
+              <Icone className="h-4 w-4" />
               <span className="absolute -right-0.5 -top-0.5 h-2 w-2 animate-pulse rounded-full bg-warning" aria-hidden="true" />
             </span>
-            {votar ? 'Votação da Liderança' : 'Saiu o resultado'}
+            {t.pilula}
           </motion.button>
         ) : (
           <motion.section key="card" role="dialog" aria-labelledby="vl-card-titulo"
@@ -51,7 +64,7 @@ export function CardDaVotacao({ tipo, titulo, minimizado, onAbrir, onMinimizar, 
             transition={{ type: 'spring', stiffness: 260, damping: 22 }}
             // Tela estreita: sobra o canto direito para a bolha do chat (bottom-6 right-6, 56 px).
             className="w-[min(calc(100vw-7rem),390px)] overflow-hidden rounded-2xl border bg-card shadow-2xl md:w-[390px]">
-            <div className={cn('h-2', votar ? 'bg-primary' : 'bg-warning')} aria-hidden="true" />
+            <div className={cn('h-2', tipo === 'resultado' ? 'bg-warning' : 'bg-primary')} aria-hidden="true" />
             <div className="relative p-5">
               <div className="absolute right-2.5 top-2.5 flex">
                 <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onMinimizar} aria-label="Minimizar"><ChevronDown className="h-5 w-5" /></Button>
@@ -63,22 +76,22 @@ export function CardDaVotacao({ tipo, titulo, minimizado, onAbrir, onMinimizar, 
                 {/* Pulsa três vezes e para: o card fica em todas as telas enquanto a
                     votação está aberta, e animação infinita pesa no PC fraco (09/11/2026). */}
                 <motion.span animate={{ scale: [1, 1.08, 1] }} transition={{ repeat: 2, duration: 2.4 }}
-                  className={cn('grid h-14 w-14 shrink-0 place-items-center rounded-2xl text-3xl', votar ? 'bg-primary/15' : 'bg-warning/15')} aria-hidden="true">
-                  {votar ? '🗳️' : '🏆'}
+                  className={cn('grid h-14 w-14 shrink-0 place-items-center rounded-2xl text-3xl', tipo === 'resultado' ? 'bg-warning/15' : 'bg-primary/15')} aria-hidden="true">
+                  {t.emoji}
                 </motion.span>
                 <div className="min-w-0">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                     Votação da Liderança{demo ? ' · demonstração' : ''}
                   </p>
-                  <h3 id="vl-card-titulo" className="mt-0.5 text-xl font-bold leading-tight">{votar ? 'Sua vez de votar!' : 'Saiu o resultado!'}</h3>
+                  <h3 id="vl-card-titulo" className="mt-0.5 text-xl font-bold leading-tight">{t.titulo}</h3>
                 </div>
               </div>
               <p className="mt-3 text-[15px] leading-relaxed text-muted-foreground">
                 <strong className="text-foreground">{titulo}</strong>
-                {votar ? ': escolha o líder que mais combina com cada categoria. Leva poucos minutos e o voto é secreto.' : ': veja quem levou cada categoria.'}
+                {t.texto}
               </p>
               <Button size="lg" className="mt-4 h-12 w-full gap-2 text-base" onClick={onAbrir}>
-                {votar ? <><Vote className="h-5 w-5" /> Votar agora</> : <><Trophy className="h-5 w-5" /> Ver resultado</>}
+                <Icone className="h-5 w-5" /> {t.botao}
               </Button>
             </div>
           </motion.section>

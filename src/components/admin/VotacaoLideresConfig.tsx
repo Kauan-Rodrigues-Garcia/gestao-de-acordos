@@ -1,6 +1,12 @@
 /**
  * VotacaoLideresConfig — Configurações › Eventos e gincanas › Votação da
- * Liderança (04/11/2026). POR ENQUANTO SÓ DEMONSTRAÇÃO.
+ * Liderança (04/11/2026).
+ *
+ * VALENDO desde 09/11/2026: «Liberar para os líderes» grava a votação montada
+ * aqui e abre para os participantes (`liberarParaOsLideres`). As votações
+ * gravadas aparecem no topo (`PainelVotacoes`): andamento, Encerrar, apuração
+ * da diretoria com os empates e «Liberar o resultado». O resto da tela
+ * continua sendo o rascunho e a demonstração descritos abaixo.
  *
  * Aqui quem organiza monta a votação:
  *   1. a operação — BookPlay e PaguePlay OU Vendas, nunca misturadas — e os
@@ -13,12 +19,19 @@
  * votando como qualquer um deles; depois a apuração da diretoria (empate é ela
  * quem decide, antes de liberar) e a revelação, com votos sorteados.
  *
- * Nada vai para o banco: só a leitura do cadastro (`lerParticipantes`), com os
- * nomes e fotos como estão lá. O rascunho fica neste navegador. «Liberar para
- * os líderes» fica travado até existirem as tabelas da votação.
+ * O rascunho fica neste navegador (nomes e fotos lidos do cadastro por
+ * `lerParticipantes`); só vai para o banco ao liberar. «Recarregar cadastro»
+ * lê de novo quem mudou de cargo ou de setor com a tela aberta.
  */
-import { useEffect, useMemo, useState } from 'react';
-import { Vote, Loader2, Play, Plus, Trash2, RotateCcw, Lock, Search, UserPlus, X, PanelBottomOpen } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
+import { Vote, Loader2, Play, Plus, Trash2, RotateCcw, Send, Search, UserPlus, X, PanelBottomOpen, RefreshCw } from 'lucide-react';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { liberarParaOsLideres, mensagemDoErro } from '@/components/VotacaoLideres/banco';
+import { PainelVotacoes } from '@/components/VotacaoLideres/PainelVotacoes';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -99,14 +112,25 @@ export default function VotacaoLideresConfig() {
   /** O card do canto como o líder vai ver (demonstração). */
   const [cardDemo, setCardDemo] = useState<{ tipo: TipoDoCard; minimizado: boolean } | null>(null);
   const [resultadoDemo, setResultadoDemo] = useState<number | null>(null);
+  /** Valendo (09/11/2026): o título, a confirmação e a lista que relê depois de liberar. */
+  const [titulo, setTitulo] = useState('Votação da Liderança');
+  const [confirmando, setConfirmando] = useState(false);
+  const [liberando, setLiberando] = useState(false);
+  const [versaoPainel, setVersaoPainel] = useState(0);
+  const [relendo, setRelendo] = useState(false);
 
-  useEffect(() => {
-    let vivo = true;
-    lerParticipantes()
-      .then(d => { if (vivo) setDados(d); })
-      .catch(e => { if (vivo) setErro(e instanceof Error ? e.message : String(e)); });
-    return () => { vivo = false; };
+  const lerCadastro = useCallback(async () => {
+    setRelendo(true);
+    try {
+      setDados(await lerParticipantes());
+      setErro(null);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRelendo(false);
+    }
   }, []);
+  useEffect(() => { void lerCadastro(); }, [lerCadastro]);
 
   useEffect(() => { try { localStorage.setItem(CHAVE, JSON.stringify(r)); } catch { /* sem armazenamento: o rascunho só vive na tela */ } }, [r]);
   const mudar = (parcial: Partial<Rascunho>) => setR(atual => ({ ...atual, ...parcial }));
@@ -181,6 +205,28 @@ export default function VotacaoLideresConfig() {
   if (marcados.size === 0 && incluidos.length === 0) problemas.push('Escolha os setores que participam (ou inclua pessoas à mão).');
   else if (lideres.length < MIN_LIDERES) problemas.push(`Precisa de pelo menos ${MIN_LIDERES} participantes.`);
   if (perguntas.length < MIN_PERGUNTAS) problemas.push(`São ${perguntas.length} perguntas; o mínimo combinado é ${MIN_PERGUNTAS}.`);
+  const tituloLimpo = titulo.trim();
+  const problemasParaLiberar = [...problemas];
+  if (!tituloLimpo) problemasParaLiberar.push('Dê um título para a votação.');
+
+  const liberar = async () => {
+    setLiberando(true);
+    try {
+      await liberarParaOsLideres({
+        titulo: tituloLimpo.slice(0, 120), produto: r.produto, setorIds: [...marcados], cargos: r.cargos,
+        perguntas, participantes: lideres.map(p => p.id),
+      });
+      toast.success('Votação liberada para os líderes', {
+        description: `${lideres.length} participantes já podem votar pelo card no canto da tela.`,
+      });
+      setConfirmando(false);
+      setVersaoPainel(v => v + 1);
+    } catch (e) {
+      toast.error('Não deu para liberar', { description: mensagemDoErro(e) });
+    } finally {
+      setLiberando(false);
+    }
+  };
 
   // Votar como: a própria pessoa, se ela entra na votação; senão o primeiro da lista.
   const eleitor = mapa.has(eleitorId) ? eleitorId : (perfil?.id && mapa.has(perfil.id) ? perfil.id : emOrdem[0] ?? '');
@@ -218,11 +264,13 @@ export default function VotacaoLideresConfig() {
         </div>
         <p className="text-sm text-muted-foreground">
           Os líderes votam uns nos outros em perguntas de personalidade. Em cada pergunta aparecem todos os participantes, e todos
-          votam na mesma votação. Por enquanto é só para ver como fica: nada é gravado e ninguém recebe nada.
+          votam na mesma votação. Monte abaixo, veja como fica na demonstração e use «Liberar para os líderes» para valer.
         </p>
       </CardHeader>
 
       <CardContent className="space-y-6">
+        <PainelVotacoes versao={versaoPainel} />
+
         {erro && <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">Não deu para ler o cadastro: {erro}</p>}
         {!dados && !erro && <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Lendo os líderes do cadastro…</p>}
 
@@ -231,7 +279,14 @@ export default function VotacaoLideresConfig() {
             {/* 1. Operação e setores */}
             <section className="space-y-2.5">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <h3 className="text-sm font-semibold">1. Operação e setores <span className="font-normal text-muted-foreground">· {marcados.size} {marcados.size === 1 ? 'setor marcado' : 'setores marcados'}</span></h3>
+                <h3 className="flex flex-wrap items-center gap-x-2 text-sm font-semibold">
+                  <span>1. Operação e setores <span className="font-normal text-muted-foreground">· {marcados.size} {marcados.size === 1 ? 'setor marcado' : 'setores marcados'}</span></span>
+                  <button type="button" onClick={() => void lerCadastro()} disabled={relendo}
+                    title="Lê de novo o cadastro: quem virou líder ou mudou de setor com esta tela aberta"
+                    className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline disabled:opacity-60">
+                    <RefreshCw className={cn('h-3 w-3', relendo && 'animate-spin')} /> Recarregar cadastro
+                  </button>
+                </h3>
                 <div role="radiogroup" aria-label="Operação" className="flex overflow-hidden rounded-md border text-xs">
                   {produtos.map(([prod, n]) => (
                     <button key={prod} type="button" role="radio" aria-checked={r.produto === prod}
@@ -471,8 +526,14 @@ export default function VotacaoLideresConfig() {
                 <Button type="button" className="gap-2" disabled={problemas.length > 0} onClick={() => setAberta(novaSemente())}>
                   <Play className="h-4 w-4" /> Abrir a demonstração
                 </Button>
-                <Button type="button" variant="outline" className="gap-2" disabled title="Fica para quando for valer: os votos precisam ser gravados no banco.">
-                  <Lock className="h-4 w-4" /> Liberar para os líderes
+              </div>
+              <div className="flex flex-wrap items-end gap-2 rounded-md border border-primary/30 bg-background p-2.5">
+                <div className="grid min-w-[220px] flex-1 gap-1">
+                  <label htmlFor="vl-titulo" className="text-xs text-muted-foreground">Título que os líderes veem</label>
+                  <Input id="vl-titulo" value={titulo} maxLength={120} onChange={e => setTitulo(e.target.value)} className="h-9 text-sm" />
+                </div>
+                <Button type="button" className="gap-2" disabled={problemasParaLiberar.length > 0 || liberando} onClick={() => setConfirmando(true)}>
+                  <Send className="h-4 w-4" /> Liberar para os líderes
                 </Button>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -486,17 +547,42 @@ export default function VotacaoLideresConfig() {
                   <PanelBottomOpen className="h-3.5 w-3.5" /> Ver o card: resultado
                 </Button>
               </div>
-              {problemas.length > 0
-                ? <ul className="space-y-0.5 text-xs text-warning">{problemas.map(p => <li key={p}>• {p}</li>)}</ul>
+              {problemasParaLiberar.length > 0
+                ? <ul className="space-y-0.5 text-xs text-warning">{problemasParaLiberar.map(p => <li key={p}>• {p}</li>)}</ul>
                 : <p className="text-xs text-muted-foreground">
                     A demonstração abre em tela cheia: a votação igual à do líder, depois a apuração que só a diretoria vê (onde ela decide os empates
                     e libera) e, por fim, a revelação. Os votos dos outros são sorteados, com alguns empates de propósito.
-                    «Liberar» fica travado até a votação de verdade ter onde gravar os votos.
+                    «Liberar para os líderes» grava esta votação e abre para os {lideres.length} participantes.
                   </p>}
             </section>
           </>
         )}
       </CardContent>
+
+      <AlertDialog open={confirmando} onOpenChange={o => { if (!liberando) setConfirmando(o); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Liberar «{tituloLimpo}» para os líderes?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>
+                  <strong className="text-foreground">{lideres.length} participantes</strong> · {perguntas.length} perguntas · {NOME_DO_PRODUTO[r.produto]}.
+                  Cada um vê na hora o card «Votar agora» no canto da tela.
+                </p>
+                <p>Depois de liberada, a lista de participantes e as perguntas não mudam. O voto é secreto: ninguém vê em quem cada um votou.</p>
+                {r.formato === 'uma_por_vez' && <p>Os líderes votam com as categorias juntas, numa tela só.</p>}
+                <p className="max-h-28 overflow-y-auto rounded-md bg-muted px-2.5 py-1.5 text-xs">{lideres.map(p => p.nome).join(', ')}</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={liberando}>Voltar</AlertDialogCancel>
+            <AlertDialogAction disabled={liberando} onClick={e => { e.preventDefault(); void liberar(); }} className="gap-2">
+              {liberando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Liberar agora
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {aberta !== null && (
         <TelaVotacao cedula={cedula} pessoas={mapa} eleitorId={eleitor || null} semente={aberta} formato={r.formato} onFechar={() => setAberta(null)} />

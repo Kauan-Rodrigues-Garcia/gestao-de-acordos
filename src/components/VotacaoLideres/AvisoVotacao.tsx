@@ -6,6 +6,10 @@
  *     ainda não votei? → card «Votar agora», que abre a votação de verdade;
  *   - `fn_votacao_lideranca_meus_resultados`: saiu resultado em que participei
  *     e eu ainda não vi? → card «Ver resultado».
+ *   - só para o cargo diretoria (09/11/2026), `fn_votacao_lideranca_listar`:
+ *     votação encerrada esperando a apuração → card «Abrir a apuração», que
+ *     abre `ApuracaoDiretoria` (empates e «Liberar o resultado»). O super_admin
+ *     faz isso por Configurações e não recebe o card.
  *
  * Quem não participa de nada não vê nada. Banco sem a migration: o card não
  * aparece e não pergunta de novo até recarregar a página.
@@ -20,14 +24,15 @@ import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } fro
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import {
-  enviarVotos, faltaMigration, lerMeusResultados, lerMinhasVotacoes, lerResultado, mensagemDoErro,
-  montarDoRetrato, resultadosDoRetrato, type ResultadoLiberado, type RetratoDaVotacao,
+  enviarVotos, faltaMigration, lerMeusResultados, lerMinhasVotacoes, lerResultado, listarVotacoes, mensagemDoErro,
+  montarDoRetrato, resultadosDoRetrato, type ResultadoLiberado, type RetratoDaVotacao, type VotacaoNaLista,
 } from './banco';
 import { CardDaVotacao } from './CardDaVotacao';
 
 // As telas grandes só carregam quando alguém clica: o card está em toda tela.
 const TelaVotacao = lazy(() => import('./TelaVotacao').then(m => ({ default: m.TelaVotacao })));
 const TelaResultado = lazy(() => import('./TelaResultado').then(m => ({ default: m.TelaResultado })));
+const ApuracaoDiretoria = lazy(() => import('./ApuracaoDiretoria').then(m => ({ default: m.ApuracaoDiretoria })));
 
 const INTERVALO_MS = 5 * 60_000;
 const FOLGA_MS = 60_000;
@@ -43,12 +48,16 @@ const chaveMinimizado = (id: string) => `votacao-lideres:minimizado:${id}`;
 export function AvisoVotacao({ recuoEsquerda }: { recuoEsquerda: number }) {
   const { perfil } = useAuth();
   const eu = perfil?.id ?? null;
+  const ehDiretoria = perfil?.perfil === 'diretoria';
   const [abertas, setAbertas] = useState<RetratoDaVotacao[]>([]);
   const [resultados, setResultados] = useState<ResultadoLiberado[]>([]);
   const [vistos, setVistos] = useState<Set<string>>(new Set());
   const [minimizados, setMinimizados] = useState<Set<string>>(new Set());
   const [votando, setVotando] = useState<RetratoDaVotacao | null>(null);
   const [vendo, setVendo] = useState<{ titulo: string; retrato: RetratoDaVotacao } | null>(null);
+  /** Só a diretoria: votações encerradas esperando a apuração. */
+  const [aApurar, setAApurar] = useState<VotacaoNaLista[]>([]);
+  const [apurando, setApurando] = useState<VotacaoNaLista | null>(null);
   const semMigration = useRef(false);
   const ultimaLeitura = useRef(0);
 
@@ -58,13 +67,16 @@ export function AvisoVotacao({ recuoEsquerda }: { recuoEsquerda: number }) {
     if (!forcar && Date.now() - ultimaLeitura.current < RECENTE_MS) return;
     ultimaLeitura.current = Date.now();
     try {
-      const [a, r] = await Promise.all([lerMinhasVotacoes(), lerMeusResultados()]);
+      const [a, r, l] = await Promise.all([
+        lerMinhasVotacoes(), lerMeusResultados(), ehDiretoria ? listarVotacoes() : Promise.resolve([] as VotacaoNaLista[]),
+      ]);
       setAbertas(a ?? []);
       setResultados(r ?? []);
+      setAApurar((l ?? []).filter(v => v.estado === 'encerrada'));
     } catch (e) {
       if (faltaMigration(e)) semMigration.current = true;
     }
-  }, [eu]);
+  }, [eu, ehDiretoria]);
 
   useEffect(() => {
     if (!eu) return;
@@ -91,7 +103,9 @@ export function AvisoVotacao({ recuoEsquerda }: { recuoEsquerda: number }) {
   // O que mostrar: primeiro votar (se ainda não votou), depois resultado não visto.
   const aVotar = abertas.find(v => !v.enviado_em) ?? null;
   const aVer = resultados.find(r => !vistos.has(r.id) && ler(chaveVisto(r.id)) !== '1') ?? null;
+  const apurar = aApurar[0] ?? null;
   const alvo = aVotar ? { tipo: 'votar' as const, id: aVotar.votacao.id, titulo: aVotar.votacao.titulo }
+    : apurar ? { tipo: 'apurar' as const, id: apurar.id, titulo: apurar.titulo }
     : aVer ? { tipo: 'resultado' as const, id: aVer.id, titulo: aVer.titulo } : null;
   const minimizado = !!alvo && (minimizados.has(alvo.id) || ler(chaveMinimizado(alvo.id)) === '1');
 
@@ -105,6 +119,7 @@ export function AvisoVotacao({ recuoEsquerda }: { recuoEsquerda: number }) {
   const abrir = async () => {
     if (!alvo) return;
     if (alvo.tipo === 'votar' && aVotar) { setVotando(aVotar); return; }
+    if (alvo.tipo === 'apurar' && apurar) { setApurando(apurar); return; }
     try {
       const retrato = await lerResultado(alvo.id);
       setVendo({ titulo: alvo.titulo, retrato });
@@ -124,7 +139,7 @@ export function AvisoVotacao({ recuoEsquerda }: { recuoEsquerda: number }) {
   if (!eu) return null;
   return (
     <Suspense fallback={null}>
-      {alvo && !votando && !vendo && (
+      {alvo && !votando && !vendo && !apurando && (
         <CardDaVotacao tipo={alvo.tipo} titulo={alvo.titulo} minimizado={minimizado} recuoEsquerda={recuoEsquerda}
           onAbrir={() => { void abrir(); }} onMinimizar={() => minimizar(true)} onExpandir={() => minimizar(false)}
           onDispensar={alvo.tipo === 'resultado' ? () => marcarVisto(alvo.id) : undefined} />
@@ -138,6 +153,11 @@ export function AvisoVotacao({ recuoEsquerda }: { recuoEsquerda: number }) {
             setAbertas(a => a.map(v => (v.votacao.id === votando.votacao.id ? { ...v, enviado_em: new Date().toISOString() } : v)));
           }}
           onFechar={() => { setVotando(null); void carregar(true); }} />
+      )}
+      {apurando && (
+        <ApuracaoDiretoria votacaoId={apurando.id} titulo={apurando.titulo}
+          onFechar={() => { setApurando(null); void carregar(true); }}
+          onLiberado={() => { setApurando(null); void carregar(true); }} />
       )}
       {vendo && resultado && (
         <TelaResultado titulo={vendo.titulo} cedula={resultado.cedula} resultados={resultado.resultados} pessoas={resultado.pessoas}

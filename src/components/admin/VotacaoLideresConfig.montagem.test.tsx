@@ -63,6 +63,15 @@ vi.mock('@/components/VotacaoLideres/participantes', async importOriginal => ({
   lerParticipantes: () => Promise.resolve({ pessoas: PESSOAS, grupos: GRUPOS }),
 }));
 
+// Valendo (09/11/2026): o painel das votações gravadas e o «Liberar» com o banco simulado.
+const banco = vi.hoisted(() => ({ listar: vi.fn(), liberar: vi.fn() }));
+vi.mock('@/components/VotacaoLideres/banco', async importOriginal => ({
+  ...(await importOriginal<typeof import('@/components/VotacaoLideres/banco')>()),
+  listarVotacoes: banco.listar,
+  liberarParaOsLideres: banco.liberar,
+}));
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+
 // O jsdom não tem ResizeObserver nem tamanho de tela: a grade mede 1280×700.
 class RO { observe() {} disconnect() {} unobserve() {} }
 Object.defineProperty(globalThis, 'ResizeObserver', { value: RO, configurable: true });
@@ -74,7 +83,11 @@ const { default: VotacaoLideresConfig } = await import('./VotacaoLideresConfig')
 const entra = () => screen.getByText(/^2\. Quem entra/).closest('section')!;
 
 describe('VotacaoLideresConfig', () => {
-  beforeEach(() => localStorage.clear());
+  beforeEach(() => {
+    localStorage.clear();
+    banco.listar.mockReset().mockResolvedValue([]);
+    banco.liberar.mockReset().mockResolvedValue('nova');
+  });
 
   it('abre sem setor marcado, e a demonstração travada', async () => {
     render(<VotacaoLideresConfig />);
@@ -170,6 +183,37 @@ describe('VotacaoLideresConfig', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Votação da Liderança/ }));
     fireEvent.click(await screen.findByRole('button', { name: /Votar agora/ }));
     expect(await screen.findByRole('button', { name: /Começar/ })).toBeTruthy();
+  });
+
+  it('«Liberar para os líderes» grava com os participantes, setores e perguntas montados', async () => {
+    render(<VotacaoLideresConfig />);
+    expect(await screen.findByText(/Nenhuma votação aberta agora/)).toBeTruthy();
+    const liberar = () => screen.getByRole('button', { name: /Liberar para os líderes/ }) as HTMLButtonElement;
+    expect(liberar().disabled).toBe(true); // sem setor marcado
+
+    const grupo = screen.getByText('BookPlay · Birigui').parentElement!;
+    fireEvent.click(within(grupo).getByRole('button', { name: 'Marcar todos' }));
+    fireEvent.change(screen.getByLabelText('Título que os líderes veem'), { target: { value: '  Votação de novembro ' } });
+    expect(liberar().disabled).toBe(false);
+    fireEvent.click(liberar());
+
+    const confirma = await screen.findByRole('alertdialog');
+    expect(within(confirma).getByText(/3 participantes/)).toBeTruthy();
+    expect(within(confirma).getByText('Ana Souza, Bruno Lima, Carla Mendes')).toBeTruthy();
+    expect(banco.liberar).not.toHaveBeenCalled();
+    banco.listar.mockClear();
+    fireEvent.click(within(confirma).getByRole('button', { name: /Liberar agora/ }));
+
+    await waitFor(() => expect(banco.liberar).toHaveBeenCalledTimes(1));
+    const enviado = banco.liberar.mock.calls[0][0];
+    expect(enviado.titulo).toBe('Votação de novembro');
+    expect(enviado.produto).toBe('cobranca');
+    expect([...enviado.setorIds].sort()).toEqual(['s1', 's2']);
+    expect(enviado.cargos).toEqual(['lider']);
+    expect([...enviado.participantes].sort()).toEqual(['a', 'b', 'c']); // sem a conta «Suporte Play 2»
+    expect(enviado.perguntas).toHaveLength(24);
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    expect(banco.listar).toHaveBeenCalled(); // o painel lê de novo
   });
 
   it('tirar o incluído à mão devolve a contagem', async () => {
