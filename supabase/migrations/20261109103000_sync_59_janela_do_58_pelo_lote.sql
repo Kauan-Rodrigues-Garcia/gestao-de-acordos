@@ -65,7 +65,7 @@ begin
     'public.fn_mestre_sincronizar_analitico_aplicar(uuid, date, uuid)'::regprocedure);
 
   if position('v_desde_58' in v_def) > 0 then
-    raise notice '20261109120000 já aplicada: a função já tem v_desde_58. Nada a fazer.';
+    raise notice '20261109103000 já aplicada: a função já tem v_desde_58. Nada a fazer.';
     return;
   end if;
 
@@ -85,12 +85,12 @@ begin
 
   v_novo := replace(v_def, v_decl,
     v_decl || E'\n'
-    || E'  -- Janela do 58 (20261109120000): de ontem, ou do último dia que este\n'
+    || E'  -- Janela do 58 (20261109103000): de ontem, ou do último dia que este\n'
     || E'  -- lote traz, se ele estiver atrás. Calculada antes do passo 1.\n'
     || E'  v_desde_58      date;');
 
   v_novo := replace(v_novo, v_passo1,
-       E'-- A janela do 58 (20261109120000). O 59 atrasado não apaga o 58 dos\n'
+       E'-- A janela do 58 (20261109103000). O 59 atrasado não apaga o 58 dos\n'
     || E'  -- dias que ele não cobre: com o robô parado em 06/11/2026, «ontem»\n'
     || E'  -- deixou a tarde de 06/11 e o dia 07/11 sem fonte nenhuma.\n'
     || E'  v_desde_58 := least(v_hoje - 1,\n'
@@ -111,13 +111,13 @@ begin
     raise exception 'O remendo não ficou como esperado. Transação desfeita.';
   end if;
 
-  raise notice '20261109120000 aplicada: a janela do 58 agora segue o lote.';
+  raise notice '20261109103000 aplicada: a janela do 58 agora segue o lote.';
 end;
 $remendo$;
 
 comment on function public.fn_mestre_sincronizar_analitico_aplicar(uuid, date, uuid) is
   'Sincroniza o analitico pelo lote vigente do 59. O 58/994 que o 59 ainda nao trouxe '
-  '(mesmo NR e data) fica a partir de least(ontem, ultimo dia do lote) — 20261109120000; '
+  '(mesmo NR e data) fica a partir de least(ontem, ultimo dia do lote) — 20261109103000; '
   'antes era so hoje e ontem (20260928200000). Dono do 994: 20261028150000.';
 
 commit;

@@ -451,7 +451,7 @@ export function inicioDaJanelaDo58(ontem: string, ultimoDiaDo59: string | null, 
  * Mês do 58: tudo, como sempre. Mês do 59: só a linha da janela
  * (`inicioDaJanelaDo58`) cujo NR+dia o 59 ainda não tem — a mesma regra com
  * que a sincronização do 59 decide qual linha do 58 sobrevive (20260928200000,
- * e 20261109120000 para a janela). Qualquer outra seria apagada ou reescrita
+ * e 20261109103000 para a janela). Qualquer outra seria apagada ou reescrita
  * por ela na entrada seguinte.
  *
  * `desde`: um dia para todos os meses, ou o dia de cada mês do 59. Mês do 59
@@ -756,7 +756,7 @@ async function importarLoteAnaliticoNoBanco(
    * Com o robô do 59 parado, «hoje e ontem» deixava dias inteiros sem fonte
    * nenhuma. A janela agora começa no último dia que o 59 trouxe, quando ele
    * está atrás de ontem (`inicioDaJanelaDo58`); a sincronização no banco usa a
-   * mesma janela (20261109120000), para que o 59 atrasado não apague o que só o
+   * mesma janela (20261109103000), para que o 59 atrasado não apague o que só o
    * 58 sabe.
    */
   const mesesDoArquivo = [...new Set(todasAsLinhas.map(r => r.mes_referencia))];
