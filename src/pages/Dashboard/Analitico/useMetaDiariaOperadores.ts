@@ -28,7 +28,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
-import { diasUteisDoSetor, type DiasUteisPorSetor } from '@/lib/diasUteisDoSetor';
+import { diasUteisDoSetor, type DiasUteisPorPessoa, type DiasUteisPorSetor } from '@/lib/diasUteisDoSetor';
 import { buscarTreinamentoDasEquipes } from '@/services/fechamento/configDoMes';
 
 export interface MetasDiariasDoMes {
@@ -39,6 +39,8 @@ export interface MetasDiariasDoMes {
   /** Do setor pedido, quando ele tem dias úteis próprios; senão os gerais. */
   feriados: string[];
   contarHoje: boolean;
+  /** Quem tem dias úteis próprios no mês (meta proporcional) — por cima de `feriados`. */
+  porPessoa: DiasUteisPorPessoa;
   /** Os dados acima são da empresa e do mês pedidos? */
   carregado: boolean;
 }
@@ -52,6 +54,7 @@ interface Lido extends Omit<MetasDiariasDoMes, 'carregado'> {
 
 const NADA_LIDO: Lido = {
   chave: '', metaPorOperador: {}, treinoPorEquipe: {}, feriados: [], contarHoje: false, porSetor: {},
+  porPessoa: {},
 };
 
 export function useMetaDiariaOperadores(params: {
@@ -107,6 +110,7 @@ export function useMetaDiariaOperadores(params: {
           feriados:   cfg.data?.feriados ?? [],
           contarHoje: cfg.data?.contar_dia_atual === true,
           porSetor:   cfg.porSetor ?? {},
+          porPessoa:  cfg.porPessoa ?? {},
         };
       } catch { /* sem régua — ninguém ganha estrela, a lista segue igual */ }
       if (vivo) setLido(lidoAgora);
@@ -126,6 +130,7 @@ export function useMetaDiariaOperadores(params: {
       treinoPorEquipe: lido.treinoPorEquipe,
       feriados:        regua.feriados,
       contarHoje:      regua.contarDiaAtual,
+      porPessoa:       lido.porPessoa,
       carregado,
     };
   }, [lido, carregado, setorId]);

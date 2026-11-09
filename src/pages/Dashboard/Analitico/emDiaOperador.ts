@@ -42,6 +42,7 @@
  * Sem React, sem fetch.
  */
 import { diasUteisDoMes } from '@/lib/diasUteis';
+import { reguaComDiasDaPessoa, type DiasUteisPorPessoa } from '@/lib/diasUteisDoSetor';
 
 export interface EntradaEmDia {
   /** Recebido no DIA escolhido no recorte. */
@@ -124,9 +125,11 @@ export function operadoresEmDia(params: {
   /** A equipe de ORIGEM do operador — é ela que diz se há treinamento. */
   equipeDoOperador: (operadorId: string) => string | null | undefined;
   calendario: CalendarioDoMes;
+  /** Quem tem dias úteis próprios no mês (meta proporcional, 09/11/2026). */
+  diasPorPessoa?: DiasUteisPorPessoa;
 }): Map<string, AvaliacaoEmDia> {
   const {
-    linhas, metaPorOperador, treinoPorEquipe, equipeDoOperador, calendario,
+    linhas, metaPorOperador, treinoPorEquipe, equipeDoOperador, calendario, diasPorPessoa,
   } = params;
 
   const emDia = new Map<string, AvaliacaoEmDia>();
@@ -141,8 +144,15 @@ export function operadoresEmDia(params: {
 
     const equipe = equipeDoOperador(l.operador_id);
     const inicio = (equipe && treinoPorEquipe[equipe]) || '';
-    let dias = diasPorInicio.get(inicio);
-    if (!dias) {
+    // Dias próprios: a conta é dela, fora do cache por início.
+    const proprio = diasPorPessoa?.[l.operador_id];
+    let dias = proprio ? undefined : diasPorInicio.get(inicio);
+    if (proprio) {
+      const feriados = reguaComDiasDaPessoa(
+        { feriados: calendario.feriados, contarDiaAtual: false, doSetor: false, daPessoa: false }, proprio,
+      ).feriados;
+      dias = diasDoOperador({ ...calendario, feriados }, inicio || null);
+    } else if (!dias) {
       dias = diasDoOperador(calendario, inicio || null);
       diasPorInicio.set(inicio, dias);
     }

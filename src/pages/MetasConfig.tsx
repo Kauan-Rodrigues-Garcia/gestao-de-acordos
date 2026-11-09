@@ -49,7 +49,7 @@ import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   Target, Check, ChevronLeft, ChevronRight, Building2, Users, User, ArrowLeft,
-  TriangleAlert, Trash2,
+  TriangleAlert, Trash2, CalendarDays,
   Loader2, Plus, Layers, Lock, LockOpen, ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -67,8 +67,13 @@ import { getTodayISO, ROUTE_PATHS } from "@/lib/index";
 import { getHoPercentual, useHoPercentual, rotuloHoPercentual } from "@/lib/hoPercentual";
 import { CardPercentualHO } from "@/components/PainelMetas/CardPercentualHO";
 import { diasUteisDoMes, diasUteisDecorridos, ordenarQuartis, QUARTIS_PADRAO } from "@/lib/diasUteis";
-import { getMetasConfig, upsertMetasConfig } from "@/services/metas/metasConfig.service";
-import { diasUteisDoSetor, type DiasUteisPorSetor, type DiasUteisSetor } from "@/lib/diasUteisDoSetor";
+import {
+  getMetasConfig, removerDiasUteisPessoa, upsertDiasUteisPessoa, upsertMetasConfig,
+} from "@/services/metas/metasConfig.service";
+import {
+  diasUteisDoSetor, type DiasUteisPorPessoa, type DiasUteisPorSetor, type DiasUteisSetor,
+} from "@/lib/diasUteisDoSetor";
+import { DialogDiasDaPessoa } from "@/components/PainelMetas/DialogDiasDaPessoa";
 import { CardDiasUteisSetor } from "@/components/PainelMetas/CardDiasUteisSetor";
 import { CardDiasUteisGeral } from "@/components/PainelMetas/CardDiasUteisGeral";
 import { CardQuartis } from "@/components/PainelMetas/CardQuartis";
@@ -368,6 +373,11 @@ interface MetaRowProps {
   proporcional: boolean;
   onChangeProporcional: (v: boolean) => void;
   /**
+   * Os dias úteis da pessoa (09/11/2026), só na linha do operador e com a
+   * meta proporcional marcada: segue o setor ou dias personalizados.
+   */
+  diasUteis?: { rotulo: string; personalizado: boolean; onAbrir: () => void };
+  /**
    * Oferece a opção "Meta direta e indireta" `[PP]`.
    *
    * Só é `true` para operador com a lógica Direto/Extra ativa: sem ela não há
@@ -387,7 +397,7 @@ interface MetaRowProps {
 function MetaRow({
   label, sublabel, icon, aviso, input, onChangeValor, mostrarHO, onChangeHO,
   numExtras = 0, onChangeExtra, onChangeExtraHO, disabled, proporcional, onChangeProporcional,
-  permiteIndireta, onChangeIndiretaAtiva, onChangeIndireta, onChangeIndiretaHO,
+  diasUteis, permiteIndireta, onChangeIndiretaAtiva, onChangeIndireta, onChangeIndiretaHO,
   onGravar, estado, selecao, onExcluir,
 }: MetaRowProps) {
   // O percentual é configurável (card «Percentual de H.O.»): o rótulo acompanha.
@@ -496,6 +506,15 @@ function MetaRow({
             <span className="text-xs text-muted-foreground whitespace-nowrap">Meta proporcional</span>
           </label>
         </div>
+        {proporcional && diasUteis && (
+          <div className="flex flex-col gap-1 shrink-0">
+            <Label className="text-xs text-muted-foreground">Dias úteis</Label>
+            <Button type="button" variant="outline" size="sm" onClick={diasUteis.onAbrir}
+              className={cn("h-8 gap-1.5 text-xs", diasUteis.personalizado && "border-primary text-primary")}>
+              <CalendarDays className="h-3.5 w-3.5" /> {diasUteis.rotulo}
+            </Button>
+          </div>
+        )}
         {/* Só aparece para quem tem Direto/Extra ativo — ver `permiteIndireta`. */}
         {permiteIndireta && (
           <div className="flex flex-col gap-1 shrink-0">
@@ -670,6 +689,10 @@ export default function MetasConfig() {
   const [diasPorSetor, setDiasPorSetor] = useState<DiasUteisPorSetor>({});
   // A tabela das exceções existe? Sem ela, todo mundo fica no cartão geral.
   const [diasPorSetorAtiva, setDiasPorSetorAtiva] = useState(false);
+  // Dias úteis próprios de quem tem meta proporcional (09/11/2026).
+  const [diasPorPessoa, setDiasPorPessoa] = useState<DiasUteisPorPessoa>({});
+  const [diasPorPessoaAtiva, setDiasPorPessoaAtiva] = useState(false);
+  const [editandoDias, setEditandoDias] = useState<Operador | null>(null);
   const [configLida, setConfigLida] = useState("");
   const [versaoConfig, setVersaoConfig] = useState(0);
   /*
@@ -1012,7 +1035,7 @@ export default function MetasConfig() {
   // Config mensal (feriados + quartis) — PP
   const fetchConfig = useCallback(async () => {
     if (!empresa?.id || !temConfigMes) { setConfigCarregada(true); return; }
-    const { data, dbAtiva, porSetor, porSetorAtiva } = await getMetasConfig(empresa.id, mes, ano);
+    const { data, dbAtiva, porSetor, porSetorAtiva, porPessoa, porPessoaAtiva } = await getMetasConfig(empresa.id, mes, ano);
     const doBanco = {
       feriados:       data?.feriados ?? [],
       quartis:        data?.quartis ?? QUARTIS_PADRAO,
@@ -1021,6 +1044,8 @@ export default function MetasConfig() {
     setConfigDbAtiva(dbAtiva);
     setDiasPorSetor(porSetor ?? {});
     setDiasPorSetorAtiva(porSetorAtiva);
+    setDiasPorPessoa(porPessoa ?? {});
+    setDiasPorPessoaAtiva(porPessoaAtiva === true);
     setConfigLida(`${empresa.id}|${mes}|${ano}`);
     setVersaoConfig(v => v + 1);
     setFeriados(doBanco.feriados);
@@ -1522,6 +1547,59 @@ export default function MetasConfig() {
   /** Alguma linha ainda no ar? É o que o rodapé anuncia. */
   const gravando = salvandoTudo
     || Object.values(estadoLinhas).some(e => e === "salvando");
+  // ── Dias úteis da pessoa (meta proporcional, 09/11/2026) ──────────────────
+  // A régua do setor DE ORIGEM da pessoa: é dela que os dias personalizados
+  // saem (a pessoa só tira dias, nunca põe).
+  const mesChave = `${ano}-${String(mes).padStart(2, "0")}`;
+  const feriadosDoSetorDe = (op: Operador) => diasUteisDoSetor(
+    { data: { feriados, contar_dia_atual: contarDiaAtual }, porSetor: diasPorSetor },
+    op.setor_id ?? (setorSelecionado || null),
+  ).feriados;
+  const podeEditarDiasDaPessoa = podeGerenciarMetas && !metaTravada && diasPorPessoaAtiva;
+
+  async function salvarDiasDaPessoa(op: Operador, dias: string[] | null): Promise<boolean> {
+    if (!empresa?.id || !perfil?.id) return false;
+    if (dias === null) {
+      if (!diasPorPessoa[op.id]) return true;
+      const { excluiu, error } = await removerDiasUteisPessoa({ perfilId: op.id, mes, ano });
+      if (error || !excluiu) {
+        toast.error("Não foi possível voltar aos dias do setor", { description: error ?? "Sem permissão para editar metas." });
+        return false;
+      }
+      setDiasPorPessoa(atual => { const n = { ...atual }; delete n[op.id]; return n; });
+      toast.success(`${op.nome} volta a seguir os dias úteis do setor.`);
+      return true;
+    }
+    const { error } = await upsertDiasUteisPessoa({
+      empresaId: empresa.id, perfilId: op.id, mes, ano, dias, atualizadoPor: perfil.id,
+    });
+    if (error) {
+      toast.error("Não foi possível gravar os dias úteis", { description: error });
+      return false;
+    }
+    setDiasPorPessoa(atual => ({ ...atual, [op.id]: { mes: mesChave, dias } }));
+    toast.success(`Dias úteis de ${op.nome}: ${dias.length} no mês.`);
+    return true;
+  }
+
+  /** Marcar a proporcional abre a escolha dos dias; desmarcar volta ao setor. */
+  function aoMudarProporcionalDoOperador(op: Operador, v: boolean) {
+    onChangeProporcional(op.id, v);
+    if (!diasPorPessoaAtiva) return;
+    if (v && podeEditarDiasDaPessoa) setEditandoDias(op);
+    if (!v && diasPorPessoa[op.id]) void salvarDiasDaPessoa(op, null);
+  }
+
+  function diasUteisDaLinha(op: Operador) {
+    if (!diasPorPessoaAtiva) return undefined;
+    const proprio = diasPorPessoa[op.id];
+    return {
+      personalizado: !!proprio,
+      rotulo: proprio ? `${proprio.dias.length} dias (personalizado)` : "Segue o setor",
+      onAbrir: () => setEditandoDias(op),
+    };
+  }
+
   const operadoresVisiveis = operadores
     .filter(op => typeof op?.id === "string" && op.id.length > 0)
     .filter(op => !equipeFiltroOp || op.equipe_id === equipeFiltroOp);
@@ -1975,7 +2053,8 @@ export default function MetasConfig() {
                     onChangeValor={v => onChangeValor(op.id, v)}
                     onChangeHO={v => onChangeHO(op.id, v)}
                     proporcional={getInput(op.id).proporcional}
-                    onChangeProporcional={v => onChangeProporcional(op.id, v)}
+                    onChangeProporcional={v => aoMudarProporcionalDoOperador(op, v)}
+                    diasUteis={diasUteisDaLinha(op)}
                     permiteIndireta={comDiretoExtra.has(op.id)}
                     onChangeIndiretaAtiva={v => onChangeIndiretaAtiva(op.id, v)}
                     onChangeIndireta={v => onChangeIndireta(op.id, v)}
@@ -2043,6 +2122,16 @@ export default function MetasConfig() {
           </TabsContent>
         )}
       </Tabs>
+
+      <DialogDiasDaPessoa
+        aberto={editandoDias !== null}
+        nome={editandoDias?.nome ?? ""}
+        mes={mesChave}
+        feriadosDoSetor={editandoDias ? feriadosDoSetorDe(editandoDias) : []}
+        diasAtuais={editandoDias ? diasPorPessoa[editandoDias.id]?.dias ?? null : null}
+        somenteLeitura={!podeEditarDiasDaPessoa}
+        onSalvar={dias => (editandoDias ? salvarDiasDaPessoa(editandoDias, dias) : Promise.resolve(false))}
+        onFechar={() => setEditandoDias(null)} />
 
       <AlertDialog open={excluindo !== null} onOpenChange={aberto => { if (!aberto && !excluindoAgora) setExcluindo(null); }}>
         <AlertDialogContent>

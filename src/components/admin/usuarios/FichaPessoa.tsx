@@ -59,7 +59,8 @@ async function lerMes(u: Perfil, meta: number, cofen: boolean): Promise<MesDaPes
   const recebido = linhas.reduce((a, l) => a + (Number(cofen ? l.total_ho : l.valor_recebido) || 0), 0);
   const metaUnid = cofen ? metaNaUnidade(meta, 'ho') ?? meta : meta;
   // Os dias úteis do setor DELA: a exceção do setor, se houver; senão a geral.
-  const regua = diasUteisDoSetor(cfg, u.setor_id);
+  // E os dela, quando a meta proporcional tem dias personalizados.
+  const regua = diasUteisDoSetor(cfg, u.setor_id, u.id);
   const feriados = regua.feriados;
   const quartis = cfg.data?.quartis?.length ? cfg.data.quartis : QUARTIS_PADRAO;
   const p = calcularProjecao({

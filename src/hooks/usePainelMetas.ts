@@ -46,7 +46,7 @@ import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { veAlemDeSi } from '@/lib/permissoes-escopo';
 import { ESCOPO_EMPRESA } from '@/services/analitico/escopoAnalitico';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
-import { diasUteisDoSetor, type DiasUteisPorSetor } from '@/lib/diasUteisDoSetor';
+import { diasUteisDoSetor, type DiasUteisPorPessoa, type DiasUteisPorSetor } from '@/lib/diasUteisDoSetor';
 import {
   buscarDiretoExtraDoMes, buscarAgendadoPorDia, buscarExtraTabuladoDoMes,
   type TotaisDiretoExtra, type PontoAgendadoDia, type ExtraTabulado,
@@ -401,15 +401,18 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
   const [config, setConfig] = useState<MetasConfigMes | null>(null);
   /** Exceções de dias úteis por setor — ver `lib/diasUteisDoSetor`. */
   const [porSetor, setPorSetor] = useState<DiasUteisPorSetor>({});
+  /** Dias úteis próprios de quem tem meta proporcional (09/11/2026). */
+  const [porPessoa, setPorPessoa] = useState<DiasUteisPorPessoa>({});
   const [configCarregada, setConfigCarregada] = useState(false);
   useEffect(() => {
     let cancelado = false;
     if (!empresa?.id) { setConfigCarregada(true); return; }
     setConfigCarregada(false);
-    void getMetasConfig(empresa.id, mesNum, ano).then(({ data, porSetor: excecoes }) => {
+    void getMetasConfig(empresa.id, mesNum, ano).then(({ data, porSetor: excecoes, porPessoa: dasPessoas }) => {
       if (cancelado) return;
       setConfig(data);
       setPorSetor(excecoes ?? {});
+      setPorPessoa(dasPessoas ?? {});
       setConfigCarregada(true);
     });
     return () => { cancelado = true; };
@@ -623,9 +626,12 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
   // `useMemo` de dias úteis logo abaixo, que dependem dele, recalculariam em
   // toda renderização.
   const setorDaRegua = setorId ?? perfil?.setor_id ?? null;
+  // No modo "eu", a pessoa em foco pode ter dias úteis próprios (meta
+  // proporcional com dias personalizados, 09/11/2026).
+  const pessoaDaRegua = modo === 'eu' ? (operadorEfetivo ?? perfil?.id ?? null) : null;
   const regua = useMemo(
-    () => diasUteisDoSetor({ data: config, porSetor }, setorDaRegua),
-    [config, porSetor, setorDaRegua],
+    () => diasUteisDoSetor({ data: config, porSetor, porPessoa }, setorDaRegua, pessoaDaRegua),
+    [config, porSetor, porPessoa, setorDaRegua, pessoaDaRegua],
   );
   const feriados = regua.feriados;
   const contarDiaAtual = regua.contarDiaAtual;

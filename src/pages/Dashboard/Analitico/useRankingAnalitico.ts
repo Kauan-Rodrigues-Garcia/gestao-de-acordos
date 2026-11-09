@@ -28,7 +28,9 @@ import type { QuartilConfig } from '@/lib/supabase';
 import { diasUteisDoMes, diasUteisDecorridos, QUARTIS_PADRAO } from '@/lib/diasUteis';
 import { calcularProjecao } from '@/lib/projecaoMetas';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
-import { diasUteisDoSetor, type DiasUteisPorSetor } from '@/lib/diasUteisDoSetor';
+import {
+  diasUteisDoSetor, reguaComDiasDaPessoa, type DiasUteisPorPessoa, type DiasUteisPorSetor,
+} from '@/lib/diasUteisDoSetor';
 import { buscarPessoasDoRetrato } from '@/services/analitico/pessoasDoMes';
 import { getTodayISO } from '@/lib/index';
 import { cargoForaDoRanking } from '@/services/situacaoUsuario.service';
@@ -104,6 +106,8 @@ export function useRankingAnalitico({
   const [quartis,   setQuartis]   = useState<QuartilConfig[]>(QUARTIS_PADRAO);
   const [contarHoje, setContarHoje] = useState(false);
   const [diasPorSetor, setDiasPorSetor] = useState<DiasUteisPorSetor>({});
+  // Quem tem dias úteis próprios (meta proporcional, 09/11/2026).
+  const [diasPorPessoa, setDiasPorPessoa] = useState<DiasUteisPorPessoa>({});
   const [treinoMap, setTreinoMap] = useState<Record<string, string | null>>({});
 
   const [config, setConfig] = useState<RankingConfig>(CONFIG_RANKING_PADRAO);
@@ -183,6 +187,7 @@ export function useRankingAnalitico({
       setQuartis(cfgMetas.data?.quartis ?? QUARTIS_PADRAO);
       setContarHoje(cfgMetas.data?.contar_dia_atual === true);
       setDiasPorSetor(cfgMetas.porSetor ?? {});
+      setDiasPorPessoa(cfgMetas.porPessoa ?? {});
 
       const treinos: Record<string, string | null> = {};
       for (const e of (equipesTreino.data as
@@ -289,13 +294,16 @@ export function useRankingAnalitico({
   const diasDaPessoa = useCallback((operadorId: string) => {
     const equipeId = perfilPorId.get(operadorId)?.equipe_id ?? null;
     const inicio   = (equipeId ? treinoMap[equipeId] : null) ?? undefined;
+    // Dias próprios (meta proporcional) por cima da régua do setor.
+    const proprio = diasPorPessoa[operadorId];
+    const r = proprio ? reguaComDiasDaPessoa(regua, proprio) : regua;
     return {
-      totalUteis: diasUteisDoMes(anoNum, mesNum, regua.feriados, inicio),
+      totalUteis: diasUteisDoMes(anoNum, mesNum, r.feriados, inicio),
       decorridos: Math.max(
-        diasUteisDecorridos(anoNum, mesNum, regua.feriados, getTodayISO(), inicio, regua.contarDiaAtual), 1,
+        diasUteisDecorridos(anoNum, mesNum, r.feriados, getTodayISO(), inicio, r.contarDiaAtual), 1,
       ),
     };
-  }, [anoNum, mesNum, regua, perfilPorId, treinoMap]);
+  }, [anoNum, mesNum, regua, diasPorPessoa, perfilPorId, treinoMap]);
 
   /** Os resumos virados em linhas de ranking, com grupo e percentual. */
   const linhasBrutas = useMemo<LinhaRanking[]>(() => resumos

@@ -16,7 +16,7 @@
  */
 import { metaNaUnidade } from '@/lib/unidadeValor';
 import { QUARTIS_PADRAO } from '@/lib/diasUteis';
-import { diasUteisDoSetor, type DiasUteisPorSetor } from '@/lib/diasUteisDoSetor';
+import { diasUteisDoSetor, type DiasUteisPorPessoa, type DiasUteisPorSetor } from '@/lib/diasUteisDoSetor';
 import { alvoDoDia, type AlvoDoDia } from '@/lib/mobile/alvoDoDia';
 import type { QuartilConfig } from '@/lib/supabase';
 import {
@@ -58,6 +58,8 @@ export interface FontesEquipe {
   contarHoje: boolean;
   /** Setores com dias úteis próprios (`lib/diasUteisDoSetor`). */
   diasPorSetor?: DiasUteisPorSetor;
+  /** Quem tem dias úteis próprios no mês (meta proporcional). */
+  diasPorPessoa?: DiasUteisPorPessoa;
   quartis: QuartilConfig[];
   /** equipe_id → início do treinamento. */
   treinoMap: Record<string, string | null>;
@@ -157,6 +159,7 @@ export function montarEquipe(fontes: FontesEquipe, equipeId: string): EquipeNaTe
   const { porSetor, semMeta } = montarLinhasQuartil({
     anoNum: ano, mesNum, mes: fontes.mes, hojeISO: fontes.hojeISO,
     feriados: fontes.feriados, contarHoje: fontes.contarHoje, diasPorSetor: fontes.diasPorSetor,
+    diasPorPessoa: fontes.diasPorPessoa,
     quartis, resumos: fontes.resumos, operadores: fontes.operadores,
     metasOp: fontes.metasOperador, metasIndiretas: fontes.metasIndiretas,
     indiretoMap: fontes.indiretoMap, emHO: fontes.emHO, ho: fontes.ho,

@@ -1322,6 +1322,7 @@ export function AnaliticoLider({
         mes: Number(mesNumStr),
         feriados: metasDoMes.feriados,
       },
+      diasPorPessoa: metasDoMes.porPessoa,
     });
   }, [noRecorteDia, metasDoMes, gruposDoPainel, operadorEquipeMap, mesAnoStr, mesNumStr]);
   /** O que o parabéns data: o dia do recorte, que é o único que tem estrela. */

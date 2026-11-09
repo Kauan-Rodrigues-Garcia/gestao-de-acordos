@@ -8,7 +8,7 @@
  * vieram junto.
  */
 import { diasUteisDecorridos, diasUteisDoMes } from '@/lib/diasUteis';
-import { diasUteisDoSetor, type DiasUteisPorSetor } from '@/lib/diasUteisDoSetor';
+import { diasUteisDoSetor, type DiasUteisPorPessoa, type DiasUteisPorSetor } from '@/lib/diasUteisDoSetor';
 import { calcularProjecao } from '@/lib/projecaoMetas';
 import { metaNaUnidade } from '@/lib/unidadeValor';
 import type { QuartilConfig } from '@/lib/supabase';
@@ -82,6 +82,8 @@ export interface EntradaLinhasQuartil {
    * deles é medido pelos dias do setor dele; ausente = todos pela geral.
    */
   diasPorSetor?: DiasUteisPorSetor;
+  /** Quem tem dias úteis próprios no mês (meta proporcional, 09/11/2026). */
+  diasPorPessoa?: DiasUteisPorPessoa;
   quartis: QuartilConfig[];
   resumos: ReadonlyArray<ResumoOperadorAnalitico>;
   operadores: ReadonlyArray<PerfilOp>;
@@ -115,11 +117,11 @@ export interface LinhasQuartil {
 
 export function montarLinhasQuartil(entrada: EntradaLinhasQuartil): LinhasQuartil {
   const {
-    anoNum, mesNum, mes, hojeISO, feriados, contarHoje, diasPorSetor, quartis, resumos, operadores,
+    anoNum, mesNum, mes, hojeISO, feriados, contarHoje, diasPorSetor, diasPorPessoa, quartis, resumos, operadores,
     metasOp, metasIndiretas, indiretoMap, emHO, ho, setorIds, equipeIds,
     operadorEquipeMap, equipesExtrasPorOperador, setorDaEquipe, nomeDaEquipe, treinoMap,
   } = entrada;
-  const geral = { data: { feriados, contar_dia_atual: contarHoje }, porSetor: diasPorSetor };
+  const geral = { data: { feriados, contar_dia_atual: contarHoje }, porSetor: diasPorSetor, porPessoa: diasPorPessoa };
   const setoresFoco = new Set(setorIds);
   const equipesFoco = new Set(equipeIds);
 
@@ -154,8 +156,8 @@ export function montarLinhasQuartil(entrada: EntradaLinhasQuartil): LinhasQuarti
   // trabalha no calendário do setor dele.
   const diasDoOperador = (op: PerfilOp): { totalUteis: number; decorridos: number } => {
     const inicio = (op.equipe_id ? treinoMap[op.equipe_id] : null) ?? undefined;
-    const regua = diasUteisDoSetor(geral, op.setor_id);
-    if (!inicio && !regua.doSetor) return { totalUteis, decorridos };
+    const regua = diasUteisDoSetor(geral, op.setor_id, op.id);
+    if (!inicio && !regua.doSetor && !regua.daPessoa) return { totalUteis, decorridos };
     return {
       totalUteis: diasUteisDoMes(anoNum, mesNum, regua.feriados, inicio),
       decorridos: Math.max(

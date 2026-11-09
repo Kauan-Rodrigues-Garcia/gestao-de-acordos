@@ -376,8 +376,10 @@ export async function montarFechamento(
   // o do escopo no relatório de setor e de operador, o de cada um nas páginas
   // individuais. A empresa inteira fica na configuração geral.
   const noMesAtual = ehMesAtual(mes);
-  const contarDias = (setorId: string | null | undefined) => {
-    const regua = diasUteisDoSetor({ data: config, porSetor: cfg.porSetor }, setorId);
+  // Quem tem dias úteis próprios (meta proporcional, 09/11/2026) conta os
+  // dele no relatório de operador e na página individual.
+  const contarDias = (setorId: string | null | undefined, perfilId?: string | null) => {
+    const regua = diasUteisDoSetor({ data: config, porSetor: cfg.porSetor, porPessoa: cfg.porPessoa }, setorId, perfilId);
     const total = diasUteisDoMes(ano, mesNum, regua.feriados);
     const decorridos = noMesAtual
       ? diasUteisDecorridos(ano, mesNum, regua.feriados, getTodayISO(), undefined, regua.contarDiaAtual)
@@ -389,7 +391,9 @@ export async function montarFechamento(
     : params.nivel === 'operador' && params.operadorId
       ? setorDoOperador(params.operadorId) ?? perfilPorId.get(params.operadorId)?.setor_id ?? null
       : null;
-  const { total: diasUteisTotal, decorridos: diasUteisDecorridosMes } = contarDias(setorDoEscopo);
+  const { total: diasUteisTotal, decorridos: diasUteisDecorridosMes } = contarDias(
+    setorDoEscopo, params.nivel === 'operador' ? params.operadorId : null,
+  );
 
   // ── 3. O escopo principal do relatório ─────────────────────────────────────
   let escopo: EscopoAnalitico;
@@ -557,7 +561,7 @@ export async function montarFechamento(
     const metasExtras = doBanco?.extras ?? [];
     const bruto = Number(r.total_recebido) || 0;
     const info = fontes.operadorEquipeMap[r.operador_id];
-    const dias = contarDias(info?.setor_id ?? p?.setor_id ?? null);
+    const dias = contarDias(info?.setor_id ?? p?.setor_id ?? null, r.operador_id);
     const proj = calcularProjecao({
       meta, recebido: bruto,
       totalUteis: dias.total, decorridos: dias.decorridos,

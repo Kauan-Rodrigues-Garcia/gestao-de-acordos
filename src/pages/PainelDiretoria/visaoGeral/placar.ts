@@ -163,6 +163,7 @@ export function pessoasDaEmpresa(
   return montarLinhasQuartil({
     anoNum, mesNum, mes: fontes.mes, hojeISO: cal.hojeISO,
     feriados: fontes.feriados, contarHoje: fontes.contarHoje, diasPorSetor: fontes.diasPorSetor,
+    diasPorPessoa: fontes.diasPorPessoa,
     quartis: fontes.quartis, resumos: fontes.resumos, operadores: fontes.operadores,
     metasOp: fontes.metasOperador, metasIndiretas: fontes.metasIndiretas, indiretoMap,
     emHO, ho, setorIds: [], equipeIds: [],

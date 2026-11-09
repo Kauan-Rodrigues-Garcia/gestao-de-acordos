@@ -135,3 +135,23 @@ describe('operadoresEmDia', () => {
     expect(m.has('ana')).toBe(false);
   });
 });
+
+describe('estrela com dias úteis da pessoa (meta proporcional)', () => {
+  it('quem começou no dia 16 é medido pela meta ÷ os dias dele', () => {
+    // Novembro/2026 sem feriado: 21 dias úteis. Ana trabalha 11 (16 a 30).
+    const dias = ['16', '17', '18', '19', '20', '23', '24', '25', '26', '27', '30'].map(d => `2026-11-${d}`);
+    const params = {
+      linhas: [{ operador_id: 'ana', valor: 1000 }, { operador_id: 'bia', valor: 1000 }],
+      metaPorOperador: { ana: 11000, bia: 11000 },
+      treinoPorEquipe: {},
+      equipeDoOperador: () => null,
+      calendario: { ano: 2026, mes: 11, feriados: [] },
+    };
+    const comDias = operadoresEmDia({ ...params, diasPorPessoa: { ana: { mes: '2026-11', dias } } });
+    // Ana: 11.000 ÷ 11 = 1.000 → em dia. Bia: 11.000 ÷ 21 ≈ 523,81 → em dia também.
+    expect(comDias.get('ana')?.metaDiaria).toBeCloseTo(1000);
+    expect(comDias.get('bia')?.metaDiaria).toBeCloseTo(11000 / 21);
+    // Sem os dias dela, a meta diária da Ana seria a do mês cheio.
+    expect(operadoresEmDia(params).get('ana')?.metaDiaria).toBeCloseTo(11000 / 21);
+  });
+});

@@ -127,6 +127,7 @@ export async function carregarFontes(empresaId: string, mes: string): Promise<Br
     feriados: cfg.data?.feriados ?? [],
     contarHoje: cfg.data?.contar_dia_atual === true,
     diasPorSetor: cfg.porSetor ?? {},
+    diasPorPessoa: cfg.porPessoa ?? {},
     quartis: cfg.data?.quartis ?? QUARTIS_PADRAO,
     treinoMap,
     operadores: pessoasDoMes((opsRes.data as unknown as PerfilOp[] | null) ?? [], retratoPessoas, {
