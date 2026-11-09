@@ -15,7 +15,7 @@
  * há duas empresas para distinguir, e buscar abre os setores recolhidos.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import type { Perfil } from '@/lib/supabase';
 import { ListaPessoas, type GrupoDeSetor } from './ListaPessoas';
 
@@ -141,5 +141,32 @@ describe('ListaPessoas monta', () => {
       // DOCUMENT_POSITION_FOLLOWING: o seguinte vem depois do anterior na tela.
       expect(ordem[i - 1].compareDocumentPosition(ordem[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     }
+  });
+});
+
+describe('a chave do reset de senha na linha (09/11/2026)', () => {
+  it('sem `pedidoSenha`, não há chave', () => {
+    render(<ListaPessoas {...BASE} />);
+    expect(screen.queryByRole('button', { name: /Solicitar reset de senha/ })).toBeNull();
+  });
+
+  it('a chave pede o reset da pessoa; o clone não tem chave', () => {
+    const onPedir = vi.fn();
+    render(<ListaPessoas {...BASE} pedidoSenha={{ pode: () => true, pedido: () => false, onPedir }} />);
+    const chaves = screen.getAllByRole('button', { name: /Solicitar reset de senha/ });
+    expect(chaves).toHaveLength(1);
+    fireEvent.click(chaves[0]);
+    expect(onPedir).toHaveBeenCalledWith(expect.objectContaining({ id: 'p1' }));
+  });
+
+  it('com pedido aberto, a chave vira «aguardando» e não pede de novo', () => {
+    render(<ListaPessoas {...BASE} pedidoSenha={{ pode: () => true, pedido: () => true, onPedir: vi.fn() }} />);
+    expect(screen.queryByRole('button', { name: /Solicitar reset de senha/ })).toBeNull();
+    expect(screen.getByRole('img', { name: /aguardando aprovação/ })).toBeInTheDocument();
+  });
+
+  it('quem não pode ser pedido (ex.: super admin) fica sem chave', () => {
+    render(<ListaPessoas {...BASE} pedidoSenha={{ pode: u => u.id !== 'p1', pedido: () => false, onPedir: vi.fn() }} />);
+    expect(screen.queryByRole('button', { name: /Solicitar reset de senha/ })).toBeNull();
   });
 });

@@ -1747,6 +1747,11 @@ export default function AdminUsuarios() {
               }}
               onEntrarComo={entrarComo}
               onVerFoto={setFotoExpandida}
+              pedidoSenha={podePedirSenha ? {
+                pode: u => podePedirSenhaDe(u),
+                pedido: u => senhasPedidas.has(u.id),
+                onPedir: u => setPedindoSenha(u),
+              } : undefined}
             />
           )}
 

@@ -56,12 +56,12 @@ export function DialogPedirResetSenha({ alvo, onFechar, onPedido }: {
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <KeyRound className="h-5 w-5 text-primary" /> Solicitar reset de senha
+            <KeyRound className="h-5 w-5 text-primary" /> Solicitar reset de senha?
           </DialogTitle>
           <DialogDescription>
-            O pedido vai para o super admin. Aprovado, o sistema gera uma senha provisória
-            para <strong>{alvo?.nome}</strong>
-            {alvo?.usuario ? <> (login <span className="font-mono">{alvo.usuario}</span>)</> : null} e
+            Tem certeza de que quer pedir uma senha nova para <strong>{alvo?.nome}</strong>
+            {alvo?.usuario ? <> (login <span className="font-mono">{alvo.usuario}</span>)</> : null}?
+            O pedido vai para o super admin. Aprovado, o sistema gera uma senha provisória e
             ela aparece no seu chat, no canal «Senhas». Ao entrar com ela, a pessoa é obrigada
             a criar uma senha nova.
           </DialogDescription>
@@ -81,7 +81,7 @@ export function DialogPedirResetSenha({ alvo, onFechar, onPedido }: {
           <Button variant="ghost" disabled={enviando} onClick={onFechar}>Cancelar</Button>
           <Button disabled={enviando} onClick={() => void pedir()} className="gap-1.5">
             {enviando ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
-            {enviando ? 'Enviando…' : 'Enviar pedido'}
+            {enviando ? 'Enviando…' : 'Sim, enviar pedido'}
           </Button>
         </DialogFooter>
       </DialogContent>

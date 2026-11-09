@@ -26,7 +26,7 @@
  */
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Building2, ChevronDown, Edit, LogIn, Loader2, Shield, ArrowRightLeft,
+  Building2, ChevronDown, Clock, Edit, KeyRound, LogIn, Loader2, Shield, ArrowRightLeft,
   Users2, UserCircle2,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -112,6 +112,16 @@ interface Props {
   onVerFoto: (f: { url: string; nome: string }) => void;
   /** «Atestado até 05/11» de quem tem afastamento em curso ou marcado. */
   rotuloAfastamento?: (u: Perfil) => string | null;
+  /**
+   * Pedir reset de senha ao super admin direto da linha (09/11/2026) — o
+   * botão da chave, sem passar pelo «Editar». Ausente = sem o botão.
+   */
+  pedidoSenha?: {
+    pode: (u: PerfilComClone) => boolean;
+    /** Já tem pedido aberto para esta pessoa? */
+    pedido: (u: Perfil) => boolean;
+    onPedir: (u: Perfil) => void;
+  };
 }
 
 export function ListaPessoas({
@@ -121,6 +131,7 @@ export function ListaPessoas({
   podeTransferir, podeGerenciarSituacao, podeImpersonar, podeEditar,
   mostrarEmpresa, nomeEmpresa, nomeEquipe, marcaDe, onAbrir, abertaId,
   onEditar, onTransferir, rotuloTransferir, onSituacao, onEntrarComo, onVerFoto, rotuloAfastamento,
+  pedidoSenha,
 }: Props) {
   return (
     <div className="space-y-3">
@@ -256,6 +267,9 @@ export function ListaPessoas({
                             onEntrarComo={onEntrarComo}
                             onVerFoto={onVerFoto}
                             afastamento={rotuloAfastamento ? rotuloAfastamento(u) : null}
+                            senha={pedidoSenha && pedidoSenha.pode(u)
+                              ? { pedido: pedidoSenha.pedido(u), onPedir: pedidoSenha.onPedir }
+                              : undefined}
                           />
                         ))}
                       </div>
@@ -298,6 +312,8 @@ interface LinhaProps {
   onEntrarComo: (u: Perfil) => void;
   onVerFoto: (f: { url: string; nome: string }) => void;
   afastamento: string | null;
+  /** O botão da chave (pedir reset de senha). Ausente = sem o botão. */
+  senha?: { pedido: boolean; onPedir: (u: Perfil) => void };
 }
 
 /** O seletor de situação: férias e afastamento entram pelo mesmo «Afastar…». */
@@ -312,6 +328,7 @@ function LinhaPessoa({
   podeTransferir, podeGerenciarSituacao, podeImpersonar, podeEditar,
   mostrarEmpresa, nomeEmpresa, nomeEquipe, marca, onAbrir, aberta,
   onAlternarSelecao, onEditar, onTransferir, rotuloTransferir, onSituacao, onEntrarComo, onVerFoto, afastamento,
+  senha,
 }: LinhaProps) {
   const ehClone = !!u._cloneDe;
   const situacao = u.situacao ?? 'ativo';
@@ -537,6 +554,26 @@ function LinhaPessoa({
                 <ArrowRightLeft className="w-3.5 h-3.5" />
               </Button>
             )}
+            {senha && (senha.pedido ? (
+              <span
+                className="inline-flex w-7 h-7 items-center justify-center rounded-md text-warning"
+                title="Reset de senha já pedido — aguardando o super admin aprovar"
+                aria-label="Reset de senha já pedido, aguardando aprovação"
+                role="img"
+              >
+                <Clock className="w-3.5 h-3.5" />
+              </span>
+            ) : (
+              <Button
+                variant="ghost" size="icon"
+                className="w-7 h-7 hover:text-primary hover:bg-primary/10"
+                title="Solicitar reset de senha"
+                aria-label={`Solicitar reset de senha de ${u.nome}`}
+                onClick={() => senha.onPedir(u)}
+              >
+                <KeyRound className="w-3.5 h-3.5" />
+              </Button>
+            ))}
             {podeEditar && (
               <Button
                 variant="ghost" size="icon"
