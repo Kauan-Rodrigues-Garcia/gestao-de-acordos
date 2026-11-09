@@ -14,11 +14,17 @@
  * todo mundo, e é relida a cada `RELEITURA_MS` — o horário em si sai do
  * relógio (`horario.ts`), como sempre.
  *
+ * Só relê com alguém olhando (`lib/atencao.ts`, auditoria de RAM de
+ * 09/11/2026: eram 22 mil leituras por dia, a maioria de abas escondidas ou
+ * de janela atrás do ERP). Quem volta a olhar com a agenda vencida relê na
+ * hora; de lado, a volta forçada de 5 min também põe em dia.
+ *
  * Só no `npm run dev`, sem a função no banco, vale `AGENDA_DO_DEV`: o que o
  * painel de Configurações gravou neste navegador, ou o trem rodando o dia
  * inteiro.
  */
 import { useSyncExternalStore } from 'react';
+import { ninguemOlhando, ouvirVolta } from '@/lib/atencao';
 import { rpcSemTipo } from '@/lib/supabaseSemTipo';
 import { EPOCA } from '../musica';
 
@@ -68,6 +74,9 @@ let doDev = false;
 /** O laboratório mandou: não relê do banco. */
 let fixada = false;
 let relogio = 0;
+let pararVolta: () => void = () => {};
+/** Quando a última leitura começou (a volta não relê o que acabou de chegar). */
+let lidaEm = 0;
 let pedindo: Promise<void> | null = null;
 const ouvintes = new Set<() => void>();
 const avisar = () => { for (const f of ouvintes) f(); };
@@ -78,6 +87,7 @@ interface EstadoDoBanco { ativo: boolean; abre: string; fecha: string; inicio: s
 export function recarregarAgenda(): Promise<void> {
   if (fixada) return Promise.resolve();
   pedindo ??= (async (): Promise<void> => {
+    lidaEm = Date.now();
     try {
       const { data, error } = await rpcSemTipo<EstadoDoBanco>('fn_natal_trem_estado', {});
       if (error) {
@@ -101,15 +111,39 @@ export function recarregarAgenda(): Promise<void> {
   return pedindo;
 }
 
+/** A leitura venceu? Folga de 1 s: o relógio de 60 s não perde a vez por milissegundos. */
+const vencida = () => Date.now() - lidaEm >= RELEITURA_MS - 1_000;
+
+/** A volta do relógio: só com alguém olhando. Ninguém olhando, fica devendo. */
+export function relerNoRelogio(): void {
+  if (ninguemOlhando() || !vencida()) return;
+  void recarregarAgenda();
+}
+
+/**
+ * A volta da pessoa (`ouvirVolta`): paga o que ficou devendo. Sem perguntar
+ * pela atenção de propósito — de lado, a revisita de 5 min chega com ninguém
+ * olhando, e é ela que mantém a tela do monitor do lado em dia.
+ */
+export function relerNaVolta(): void {
+  if (!vencida()) return;
+  void recarregarAgenda();
+}
+
 function assinar(f: () => void) {
   ouvintes.add(f);
   if (ouvintes.size === 1) {
     void recarregarAgenda();
-    relogio = window.setInterval(() => { void recarregarAgenda(); }, RELEITURA_MS);
+    relogio = window.setInterval(relerNoRelogio, RELEITURA_MS);
+    pararVolta = ouvirVolta(relerNaVolta);
   }
   return () => {
     ouvintes.delete(f);
-    if (ouvintes.size === 0) window.clearInterval(relogio);
+    if (ouvintes.size === 0) {
+      window.clearInterval(relogio);
+      pararVolta();
+      pararVolta = () => {};
+    }
   };
 }
 

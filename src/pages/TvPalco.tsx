@@ -22,7 +22,7 @@
  *
  * Publicar, fixar ou soltar chega na hora: o banco avisa pelo tópico público
  * `tv-painel:<id>` (20261027190000) e a TV relê. Como rede de segurança, a
- * cada 3 s ela faz a pergunta curta (`fn_tv_versao`: «o painel mudou?»), uma
+ * cada 10 s ela faz a pergunta curta (`fn_tv_versao`: «o painel mudou?»), uma
  * busca por índice. Os números ela relê a cada 30 s, e o banco os
  * guarda por 1 minuto (`tv_numeros_cache`): dez TVs no mesmo setor custam um
  * cálculo por minuto. O relatório que entra aparece em até ~1 min e meio.
@@ -49,8 +49,13 @@ import { useBingoDemo } from './ModoTV/bingo/demo';
 import type { EstadoBingo, TemaBingoId } from './ModoTV/bingo/tipos';
 
 const CHAVE_TOKEN = 'tv2:token';
-/** «O painel mudou?» — rede de segurança do aviso do banco, que é o que chega na hora. */
-const PERGUNTA_CURTA_MS = 3_000;
+/**
+ * «O painel mudou?» — rede de segurança do aviso do banco, que é o que chega na
+ * hora. Era 3 s (43 mil perguntas por dia na auditoria de RAM de 09/11/2026);
+ * com o aviso funcionando ela quase nunca acha nada, então 10 s bastam: canal
+ * caído, a mudança aparece em até 10 s em vez de 3.
+ */
+const PERGUNTA_CURTA_MS = 10_000;
 /** Os números, mesmo sem mudança no painel. */
 const LEITURA_CONECTADA_MS = 30_000;
 const LEITURA_AGUARDANDO_MS = 4_000;
@@ -222,7 +227,7 @@ function TvPareada() {
    * soltou, excluiu ou desconectou — a TV relê na hora. Tópico PÚBLICO porque
    * a TV não tem sessão; o que trafega é só a versão. `supabase.channel` direto
    * e não `assinarTabela`: o helper do app só fala com canal privado. Se o
-   * canal cair, a pergunta curta de 3 s segura.
+   * canal cair, a pergunta curta de 10 s segura.
    */
   const painelId = estado.tipo === 'painel' ? estado.painel.id : null;
   const { estado: bingo, aoAviso: avisoBingo } = useBingoNaTv(painelId ? lerToken() : null, painelId);

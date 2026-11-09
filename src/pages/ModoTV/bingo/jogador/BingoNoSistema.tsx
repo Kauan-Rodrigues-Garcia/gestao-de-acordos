@@ -8,16 +8,22 @@
  */
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { assinarTabela } from '@/lib/realtime';
+import { ninguemOlhando, ouvirVolta } from '@/lib/atencao';
 import { ESCUTAS_CANAL_PESSOAL, topicoPessoal } from '@/lib/canalPessoal';
 import { minhasPartidas } from '../servico';
 import type { MinhaPartida } from '../tipos';
 
 const CartelasDoJogador = lazy(() => import('./CartelasDoJogador'));
 
-/** A releitura de segurança, com a aba à vista. */
-const RELER_MS = 90_000;
-/** Foco e visibilidade disparam juntos: uma leitura basta. */
-const RELER_MINIMO_MS = 15_000;
+/**
+ * A releitura de segurança, com alguém olhando. O convite chega pelo sinal
+ * `bingo` do canal pessoal e a reconexão relê; isto só cobre o aviso perdido.
+ * Era 90 s e qualquer aba à vista (40 mil leituras por dia na auditoria de RAM
+ * de 09/11/2026); agora 3 min, e janela atrás do ERP não conta.
+ */
+const RELER_MS = 3 * 60_000;
+/** A volta (foco, aba, revisita de 5 min) e o relógio podem cair juntos: uma leitura basta. */
+const RELER_MINIMO_MS = 60_000;
 
 export function BingoNoSistema({ perfilId, somenteVer = false }: {
   perfilId: string | null | undefined;
@@ -44,23 +50,23 @@ export function BingoNoSistema({ perfilId, somenteVer = false }: {
   }, [perfilId, ler]);
 
   // A rede de segurança do convite: se o aviso se perder (canal caído, aba
-  // dormindo), a cartela aparece quando a aba volta à vista ou na volta
-  // seguinte do relógio. Aba escondida não pergunta.
+  // dormindo), a cartela aparece quando a pessoa volta a olhar ou na volta
+  // seguinte do relógio. Ninguém olhando (aba escondida, janela de lado), não pergunta.
   useEffect(() => {
     if (!perfilId) return;
     let ultima = Date.now();
     const talvez = () => {
-      if (document.visibilityState !== 'visible' || Date.now() - ultima < RELER_MINIMO_MS) return;
+      if (Date.now() - ultima < RELER_MINIMO_MS) return;
       ultima = Date.now();
       ler();
     };
-    const t = setInterval(talvez, RELER_MS);
-    document.addEventListener('visibilitychange', talvez);
-    window.addEventListener('focus', talvez);
+    const t = setInterval(() => { if (!ninguemOlhando()) talvez(); }, RELER_MS);
+    // A volta paga sem perguntar pela atenção: de lado, a revisita de 5 min
+    // chega com ninguém olhando (`lib/atencao.ts`).
+    const pararVolta = ouvirVolta(talvez);
     return () => {
       clearInterval(t);
-      document.removeEventListener('visibilitychange', talvez);
-      window.removeEventListener('focus', talvez);
+      pararVolta();
     };
   }, [perfilId, ler]);
 
