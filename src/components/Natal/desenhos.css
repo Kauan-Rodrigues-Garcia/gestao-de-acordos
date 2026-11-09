@@ -6,7 +6,8 @@
  */
 
 /* ── Globo de neve ───────────────────────────────────────────────────────── */
-.nt-globo { width: 60px; height: 67px; overflow: visible; filter: drop-shadow(0 6px 9px oklch(0.25 0.04 210 / .32)); }
+/* (09/11/2026, mais leve) Sem `drop-shadow`: a neve caindo dentro refazia a sombra a cada quadro. */
+.nt-globo { width: 60px; height: 67px; overflow: visible; }
 .nt-globo .globo-mexe { transform-box: view-box; transform-origin: 50px 104px; }
 .group:hover .nt-globo .globo-mexe { animation: nt-inclina .9s ease-in-out; }
 .nt-globo.chacoalha .globo-mexe { animation: nt-chacoalha 1.2s cubic-bezier(.36,.07,.19,.97); }

@@ -16,6 +16,7 @@ import {
 } from './trilho';
 import { AtracaoDoTrilho, EnfeiteDoTrilho, PiscaPiscaDoTrilho } from './Cenario';
 import { buzina, sino } from './sons';
+import { acordarQuandoOlhar, ninguemOlhando } from '@/lib/atencao';
 
 /*
  * O trilho e o trem de uma aba. Mora dentro do `<main>` (a área que rola),
@@ -268,7 +269,10 @@ export function CamadaDoTrem({ aba, rota, raiz, leve }: {
       setSobre(null);
     };
 
+    let dormindo: (() => void) | null = null;
     const passo = (t: number) => {
+      // Ninguém olhando (`lib/atencao.ts`): dorme; o relógio do Natal o põe no lugar certo na volta.
+      if (ninguemOlhando()) { dormindo = acordarQuandoOlhar(() => { dormindo = null; quadro = requestAnimationFrame(passo); }); return; }
       quadro = requestAnimationFrame(passo);
       // Sem o trem nesta aba, nada se mexe: confere de vez em quando.
       const passoMin = estavaAqui === false ? CONFERE_SEM_TREM_MS : leve ? PASSO_MODO_LEVE_MS : PASSO_NORMAL_MS;
@@ -350,6 +354,7 @@ export function CamadaDoTrem({ aba, rota, raiz, leve }: {
     el.addEventListener('mouseleave', aoSair);
     return () => {
       cancelAnimationFrame(quadro);
+      dormindo?.();
       el.removeEventListener('mousemove', aoMover);
       el.removeEventListener('mouseleave', aoSair);
     };

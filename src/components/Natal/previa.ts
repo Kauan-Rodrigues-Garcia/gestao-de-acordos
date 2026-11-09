@@ -1,5 +1,5 @@
 /**
- * previa.ts — quem vê o Natal, e a prévia do super_admin.
+ * previa.ts — quem vê o Natal, e a prévia (só no `npm run dev`).
  *
  * ## Quem vê (09/11/2026)
  *
@@ -9,8 +9,8 @@
  *
  * ## A prévia
  *
- * Só do super_admin e do `npm run dev` — liberar não a mostra a ninguém
- * mais. `?natal=simples`, `?natal=detalhado` ou `?natal=off` no endereço grava
+ * Só no `npm run dev` (09/11/2026: com o Natal liberado, o Cleber não quis
+ * mais o painel de prévia na conta de super_admin). `?natal=simples`, `?natal=detalhado` ou `?natal=off` no endereço grava
  * a escolha neste navegador; o seletor da prévia (`PreviaNatal.tsx`) faz o
  * mesmo sem mexer no endereço. Para todo mundo o estilo é o detalhado (quem
  * quer menos movimento liga o modo leve).
@@ -53,20 +53,24 @@ export function estiloDoNatal(gravado: EstiloNatal | 'off' | null, prevista: boo
 /**
  * O presente está aberto para esta pessoa? Exportada para os testes.
  * `local`: '1' abriu neste navegador; '0' a prévia devolveu o presente (vale
- * mais que o banco, para o super_admin testar de novo); `null` nada aqui.
+ * mais que o banco, para testar de novo); `null` nada aqui.
  */
 export function presenteAberto(local: string | null, noBanco: boolean): boolean {
   return local === '1' || (local !== '0' && noBanco);
 }
 
-/** Quem tem a prévia (e vê o Natal antes da liberação). Exportada para os testes. */
-export function natalEmPrevia(dev: boolean, cargo: string | null | undefined): boolean {
-  return dev || cargo === 'super_admin';
+/** Quem tem a prévia (o seletor e os botões de teste): só o `npm run dev`. Exportada para os testes. */
+export function natalEmPrevia(dev: boolean): boolean {
+  return dev;
 }
 
-/** Quem vê o Natal: a prévia, ou todo mundo depois de liberado. Exportada para os testes. */
+/**
+ * Quem vê o Natal: o `npm run dev`, o super_admin (para validar antes de
+ * liberar, ou com o tema recolhido), e todo mundo depois de liberado.
+ * Exportada para os testes.
+ */
 export function podeVerNatal(p: { dev: boolean; cargo: string | null | undefined; liberado: boolean }): boolean {
-  return natalEmPrevia(p.dev, p.cargo) || p.liberado;
+  return p.dev || p.cargo === 'super_admin' || p.liberado;
 }
 
 function assinar(aviso: () => void) {
@@ -113,7 +117,7 @@ let pessoaAtual: string | null = null;
 //
 // «Como admin, começar quando eu quiser a abertura novamente, fazer aparecer
 // ou sumir o presente para mim.» Ficam na prévia (`PreviaNatal.tsx`), que é
-// só do super_admin e do `npm run dev`.
+// só do `npm run dev` desde 09/11/2026.
 
 /** O `Layout` ouve: desmonta a abertura que estiver na tela e monta outra do zero. */
 export const EVENTO_REINICIAR_ABERTURA = 'natal-abertura-reiniciar';
@@ -167,7 +171,7 @@ function lerDoEndereco() {
 export interface EstadoNatal {
   /** O tema está disponível para esta pessoa (liberado, super_admin ou dev). */
   podeVer: boolean;
-  /** A prévia (seletor e testes): só super_admin e `npm run dev`. */
+  /** A prévia (seletor e testes): só no `npm run dev`. */
   prevista: boolean;
   estilo: EstiloNatal | null;
   pessoa: string;
@@ -184,7 +188,7 @@ export function useNatal(): EstadoNatal {
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
   const liberado = useNatalLiberado(empresa?.id);
-  const prevista = natalEmPrevia(import.meta.env.DEV, perfil?.perfil);
+  const prevista = natalEmPrevia(import.meta.env.DEV);
   const podeVer = podeVerNatal({ dev: import.meta.env.DEV, cargo: perfil?.perfil, liberado });
   const pessoa = perfil?.id ?? 'anonimo';
   pessoaAtual = perfil?.id ?? null;

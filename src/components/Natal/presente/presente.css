@@ -20,23 +20,13 @@
 .np-pd-aberto .np-pd-tampa { transform: translate(-6px, -46px) rotate(-24deg); }
 /* A luz de dentro. */
 .np-pd-luz { opacity: 0; transform-origin: 50% 100%; transform: scaleY(.2); transition: opacity .3s, transform .5s cubic-bezier(.2, 1.2, .4, 1); }
-.np-pd-aberto .np-pd-luz { opacity: 1; transform: scaleY(1); animation: np-pd-luz-pulsa .9s ease-in-out infinite alternate; }
-@keyframes np-pd-luz-pulsa { to { opacity: .78; } }
-/* O pisca-pisca da tampa, fora de compasso. */
-.np-pd-luzinha { animation: np-pd-pisca 1.1s steps(1) infinite; animation-delay: calc(var(--i) * -.37s); }
-@keyframes np-pd-pisca { 0% { opacity: 1; } 50% { opacity: .25; } }
-/* O reflexo correndo pelo papel. */
-.np-pd-reflexo { animation: np-pd-reflexo 2.6s ease-in-out infinite; }
-@keyframes np-pd-reflexo { 0%, 55% { transform: translateX(0); } 100% { transform: translateX(230px); } }
-/* As estrelinhas em volta. */
-.np-pd-estrela { transform-origin: 50% 50%; animation: np-pd-estrela 1.8s ease-in-out infinite; }
-@keyframes np-pd-estrela { 0%, 100% { opacity: 0; transform: scale(.3) rotate(0); } 45% { opacity: 1; transform: scale(1.1) rotate(45deg); } }
-/* As alças do laço respiram. */
-.np-pd-alca { transform-origin: 90% 70%; animation: np-pd-alca 2.4s ease-in-out infinite; }
-.np-pd-alca.dir { transform-origin: 10% 70%; animation-delay: -1.2s; }
-@keyframes np-pd-alca { 50% { transform: scale(1.06) rotate(-3deg); } }
-.np-pd-etiqueta { transform-origin: 0% 0%; animation: np-pd-etiqueta 2.2s ease-in-out infinite; }
-@keyframes np-pd-etiqueta { 50% { transform: rotate(5deg); } }
+.np-pd-aberto .np-pd-luz { opacity: 1; transform: scaleY(1); }
+/* (09/11/2026, a versão mais leve) Nada anima DENTRO do desenho do presente:
+   num SVG, cada animação repinta o desenho a cada quadro, e o presente fica na
+   tela o dia inteiro de quem ainda não abriu. O pisca da tampa, o reflexo, as
+   estrelinhas, as alças e a etiqueta ficaram parados; o que chama atenção é o
+   pulo, o halo e os raios (`.np-espera-*`), que a placa de vídeo anima sozinha. */
+.np-pd-estrela { opacity: .9; }
 
 /* ── 1. A espera: em cima da bolha do chat (56 px, a 24 px do canto) ────── */
 
@@ -97,10 +87,10 @@
   background: repeating-conic-gradient(from 0deg, rgba(255, 236, 160, .55) 0deg 9deg, rgba(255, 236, 160, 0) 9deg 30deg);
   -webkit-mask-image: radial-gradient(closest-side, #000 30%, transparent 100%);
   mask-image: radial-gradient(closest-side, #000 30%, transparent 100%);
-  animation: np-raios 7s linear infinite, np-raios-pisca 1.6s ease-in-out infinite alternate;
+  opacity: .7;
+  animation: np-raios 7s linear infinite;
 }
 @keyframes np-raios { to { transform: rotate(360deg); } }
-@keyframes np-raios-pisca { from { opacity: .35; } to { opacity: .95; } }
 
 /* O balão que sobe de vez em quando. */
 .np-espera-dica {
@@ -251,19 +241,19 @@
 
 /* ── A luz e o vídeo ────────────────────────────────────────────────────── */
 
-/* Sai do presente (`--np-ox/--np-oy`) e cobre a tela: 150% do raio de referência passa do canto oposto. */
+/* A luz toma a tela (09/11/2026: só opacidade — antes um círculo saía do
+   presente recortando a tela inteira a cada quadro, `clip-path`). */
 .np-luz {
   position: fixed;
   inset: 0;
   z-index: 1;
-  clip-path: circle(0 at var(--np-ox) var(--np-oy));
   opacity: 0;
+  pointer-events: none;
 }
 .np-fase-luz .np-luz,
 .np-fase-video .np-luz {
   opacity: 1;
-  clip-path: circle(150% at var(--np-ox) var(--np-oy));
-  transition: clip-path .7s cubic-bezier(.5, 0, .75, .4), opacity .15s;
+  transition: opacity .6s ease-out;
 }
 .np-fase-carta .np-luz { opacity: 0; transition: opacity .5s; }
 
@@ -285,9 +275,8 @@
 /* 6. O mural embrulhado encolhe no meio da tela e vira a carta do Polo Norte. */
 .np-fase-carta .np-video {
   opacity: 0;
-  border-radius: 48px;
   transform: scale(var(--np-escala, .1)) rotate(-8deg);
-  transition: transform .75s cubic-bezier(.55, 0, .7, .25), border-radius .75s, opacity .25s ease .55s;
+  transition: transform .75s cubic-bezier(.55, 0, .7, .25), opacity .25s ease .55s;
 }
 .np-fase-bilhete .np-video,
 .np-fase-nevasca .np-video,
@@ -297,7 +286,7 @@
    pergunta no meio. Sem desfoque (backdrop-filter pesa nos PCs da operação):
    só um véu e o cartão de papel, do mesmo jeito da pergunta do presente. */
 .np-fase-pausa .np-espera { visibility: hidden; }
-.np-fase-pausa .np-luz { opacity: 1; clip-path: circle(150% at var(--np-ox) var(--np-oy)); }
+.np-fase-pausa .np-luz { opacity: 1; }
 .np-fase-pausa .np-video { opacity: 1; }
 .np-pausa-fundo {
   position: fixed;
@@ -397,8 +386,8 @@
   opacity: 0;
   transition: opacity 1.6s ease .6s;
 }
-.np-nevasca-solta .np-nevasca-vinheta { opacity: 1; }
-.np-nevasca-acalma .np-nevasca-vinheta { opacity: 0; transition: opacity .7s ease; }
+.np-nevasca-solta .np-nevasca-veu,
+.np-nevasca-acalma .np-nevasca-veu { opacity: 0; transition: opacity 1.1s ease; animation: none; }
 
 
 .np-nevasca-neve { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }
@@ -570,9 +559,9 @@
   position: absolute;
   background: #fff3c4;
   clip-path: polygon(50% 0, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0 50%, 39% 39%);
-  filter: drop-shadow(0 0 4px rgba(255, 220, 120, .9));
-  animation: np-pd-estrela 1.8s ease-in-out infinite;
+  animation: np-carta-estrela 1.8s ease-in-out infinite;
 }
+@keyframes np-carta-estrela { 0%, 100% { opacity: 0; transform: scale(.3) rotate(0); } 45% { opacity: 1; transform: scale(1.1) rotate(45deg); } }
 /* O envelope flutua, de leve, como se o Papai Noel tivesse acabado de soltar. */
 .np-carta-flutua { position: absolute; inset: 0; animation: np-carta-flutua 2.6s ease-in-out infinite; }
 @keyframes np-carta-flutua { 0%, 100% { transform: translateY(0) rotate(-1.5deg); } 50% { transform: translateY(-10px) rotate(1.5deg); } }
@@ -775,3 +764,13 @@
 /* A carta virou o bilhete: o envelope desce e some. */
 .np-carta-vai { animation: np-carta-vai .7s ease-in forwards; }
 @keyframes np-carta-vai { to { opacity: 0; transform: translateY(80px) scale(.85); } }
+
+/* «Preparando o vídeo…» (09/11/2026): o vídeo só abre inteiro (`baixarVideo.ts`). */
+.np-preparando { display: flex; align-items: center; gap: 9px; }
+.np-preparando em { margin-left: auto; font-style: normal; font-variant-numeric: tabular-nums; color: #6a4a38; font-weight: 700; }
+.np-girando {
+  width: 18px; height: 18px; flex: none; border-radius: 50%;
+  border: 2.5px solid rgba(179, 18, 31, .2); border-top-color: #b3121f;
+  animation: np-gira .8s linear infinite;
+}
+@keyframes np-gira { to { transform: rotate(360deg); } }

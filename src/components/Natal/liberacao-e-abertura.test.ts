@@ -16,10 +16,9 @@ describe('quem vê o Natal (liberação, 09/11/2026)', () => {
       expect(podeVerNatal({ dev: false, cargo, liberado: true })).toBe(true);
     }
   });
-  it('a prévia continua só do super_admin (liberar não a mostra a ninguém)', () => {
-    expect(natalEmPrevia(false, 'operador')).toBe(false);
-    expect(natalEmPrevia(false, 'lider')).toBe(false);
-    expect(natalEmPrevia(false, 'super_admin')).toBe(true);
+  it('a prévia (seletor e botões de teste) é só do npm run dev, nem o super_admin a tem', () => {
+    expect(natalEmPrevia(false)).toBe(false);
+    expect(natalEmPrevia(true)).toBe(true);
   });
 });
 

@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
+import { ouvirAtencao } from '@/lib/atencao';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { ThemeProvider } from 'next-themes';
 import { NOMES_TEMAS } from '@/lib/temas';
@@ -61,6 +62,10 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+// Ninguém olhando (outra janela, outra aba: `lib/atencao.ts`): para o react-query,
+// a página está «sem foco», e as consultas com `refetchInterval` param até a volta.
+focusManager.setEventListener(definirFoco => ouvirAtencao(a => definirFoco(a === 'olhando')));
 
 const Login             = lazy(() => import('@/pages/Login'));
 const Dashboard         = lazy(() => import('@/pages/Dashboard'));

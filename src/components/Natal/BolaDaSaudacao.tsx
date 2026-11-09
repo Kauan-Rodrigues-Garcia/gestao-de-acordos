@@ -31,6 +31,7 @@ import { mirar, sortearErro, T_PEGA, T_SOLTA, type Lado } from './cesta/arremess
 import { bonecoDaCesta, type BonecoNaCesta } from './cesta/boneco';
 import { prepararSomDaCesta, somDaCesta, somDoArremessoDoBoneco, somDoAro, somDoBonecoPegando } from './cesta/som';
 import { Confete } from './presente/Confete';
+import { acordarQuandoOlhar, ninguemOlhando } from '@/lib/atencao';
 import './saudacao.css';
 
 /** A bola tem o diâmetro da linha da saudação (`text-2xl`, 32 px). */
@@ -773,7 +774,13 @@ export function BolaDaSaudacao() {
     cv.height = ALTURA * dpr;
     cx.setTransform(dpr, 0, 0, dpr, 0, 0);
     let antes = performance.now(), quadro = 0, visivel = true;
+    let dormindo: (() => void) | null = null;
     const passo = (agora: number) => {
+      // Ninguém olhando (`lib/atencao.ts`): para de girar até a volta.
+      if (ninguemOlhando()) {
+        dormindo = acordarQuandoOlhar(() => { dormindo = null; cancelAnimationFrame(quadro); antes = performance.now(); if (visivel && !parada) quadro = requestAnimationFrame(passo); });
+        return;
+      }
       // 30 quadros por segundo bastam para um enfeite girando (e pesam metade).
       if (agora - antes < 31) { if (visivel && !parada) quadro = requestAnimationFrame(passo); return; }
       const dt = Math.min(0.1, (agora - antes) / 1000);
@@ -789,10 +796,11 @@ export function BolaDaSaudacao() {
     const obs = new IntersectionObserver(([e]) => {
       visivel = e.isIntersecting;
       cancelAnimationFrame(quadro);
+      dormindo?.(); dormindo = null;
       if (visivel && !parada) { antes = performance.now(); quadro = requestAnimationFrame(passo); }
     });
     obs.observe(cv);
-    return () => { cancelAnimationFrame(quadro); obs.disconnect(); };
+    return () => { cancelAnimationFrame(quadro); dormindo?.(); obs.disconnect(); };
   }, [parada]);
 
   // O fio até o varal.

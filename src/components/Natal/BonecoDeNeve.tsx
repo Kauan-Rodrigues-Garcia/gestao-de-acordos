@@ -5,6 +5,7 @@ import { useModoLeve } from '@/lib/modoLeve';
 import { cn } from '@/lib/utils';
 import { bolaNaPose, COLO, poseDoArremesso, T_FIM, type Lado, type Pose } from './cesta/arremesso';
 import { registrarBoneco } from './cesta/boneco';
+import { acordarQuandoOlhar, ninguemOlhando } from '@/lib/atencao';
 import './boneco.css';
 
 /*
@@ -120,7 +121,8 @@ function geometria(L: number): Geometria {
   baixo.push([-1, borda(-1) + 1.6]);
 
   const faiscas: Geometria['faiscas'] = [];
-  for (let x = 40 + sorte() * 40; x < L - 30; x += 55 + sorte() * 90) {
+  // (09/11/2026, mais leve) Metade das faíscas: uma a cada 110–250 px (eram 55–145).
+  for (let x = 40 + sorte() * 40; x < L - 30; x += 110 + sorte() * 140) {
     faiscas.push({ x, y: topo(x) + 1.8 + sorte() * 2.2, d: -sorte() * 6, s: 0.7 + sorte() * 0.5 });
   }
 
@@ -171,6 +173,9 @@ export function TopoNevado() {
             </defs>
             <path className="massa" d={geo.massa} fill={`url(#${id}-neve)`} />
             <g ref={rastro} />
+          </svg>
+          {/* As faíscas num SVG à parte, sem a sombra do topo (`boneco.css`). */}
+          <svg className="nt-neve-faiscas" width={largura} height={ALTURA} viewBox={`0 0 ${largura} ${ALTURA}`}>
             {geo.faiscas.map(({ x, y, d, s }) => (
               <g key={x} transform={`translate(${f(x)} ${f(y)}) scale(${f(s)})`}>
                 <path className="faisca" style={{ '--d': `${d}s` } as CSSProperties}
@@ -416,12 +421,18 @@ function BonecoDeNeve({ geo, parado, rastro }: {
     let antes = performance.now();
     let ultimoX = Number.NaN;
     let ultimaGeo: unknown = null;
+    let dormindo: (() => void) | null = null;
     let quadro = requestAnimationFrame(function laco(agora) {
       if (cesta.ativo) {
         antes = agora;
         ultimoX = Number.NaN; // a cesta mexe nele por conta própria: na volta, reposiciona
         animarCesta(agora);
         quadro = requestAnimationFrame(laco);
+        return;
+      }
+      // Ninguém olhando (`lib/atencao.ts`): o boneco dorme até a volta.
+      if (ninguemOlhando()) {
+        dormindo = acordarQuandoOlhar(() => { dormindo = null; antes = performance.now(); quadro = requestAnimationFrame(laco); });
         return;
       }
       // Passeando, 30 quadros por segundo bastam (09/11/2026: os PCs da
@@ -462,6 +473,7 @@ function BonecoDeNeve({ geo, parado, rastro }: {
 
     return () => {
       cancelAnimationFrame(quadro);
+      dormindo?.();
       relogios.forEach(t => window.clearTimeout(t));
       desregistrar();
       limparPose();

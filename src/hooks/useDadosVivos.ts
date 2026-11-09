@@ -37,9 +37,10 @@
  * ## Aba em segundo plano não busca
  *
  * Quem deixa o Gestão aberto num monitor lateral e passa o dia noutro sistema
- * mantinha, até aqui, todas as telas relendo o mês inteiro a cada evento. Com a
- * aba oculta o hook anota que ficou devendo e relê UMA vez quando a pessoa
- * volta — que é o único momento em que o resultado será olhado.
+ * mantinha, até aqui, todas as telas relendo o mês inteiro a cada evento. Com
+ * ninguém olhando (aba oculta, ou — desde 09/11/2026 — a janela sem foco há
+ * 10 s, `lib/atencao.ts`) o hook anota que ficou devendo e relê UMA vez quando
+ * a pessoa volta; de lado, num monitor ao lado, também a cada 5 min.
  *
  * ## Corrida entre releituras
  *
@@ -53,6 +54,7 @@ import { gravarInstantaneo, lerInstantaneo } from '@/lib/cacheInstantaneo';
 import { comecouAtualizacao } from '@/lib/estadoAtualizacao';
 import { criarAgrupador, type OpcoesAgrupador } from '@/lib/agrupador';
 import { ESPALHAMENTO_VOLTA_MS, assinarTabela, type Escuta } from '@/lib/realtime';
+import { ninguemOlhando, ouvirVolta } from '@/lib/atencao';
 
 export interface AssinaturaDadosVivos {
   /**
@@ -185,13 +187,13 @@ export function useDadosVivos<T>({
     });
   }, []);
 
-  const buscar = useCallback(async (primeira: boolean) => {
+  // `forcar`: a revisita de quem está de lado (`ouvirVolta`) relê mesmo com ninguém olhando.
+  const buscar = useCallback(async (primeira: boolean, forcar = false) => {
     if (!ativo) return;
 
-    // Aba oculta: anota e sai. A releitura acontece na volta, uma só, por mais
-    // eventos que tenham chegado enquanto ninguém olhava.
-    if (!primeira && pausarOculto
-        && typeof document !== 'undefined' && document.hidden) {
+    // Ninguém olhando: anota e sai. A releitura acontece na volta, uma só, por
+    // mais eventos que tenham chegado enquanto isso.
+    if (!primeira && !forcar && pausarOculto && ninguemOlhando()) {
       devendo.current = true;
       return;
     }
@@ -316,17 +318,17 @@ export function useDadosVivos<T>({
     if (!pausarOculto || typeof document === 'undefined') return;
     let timerVolta: ReturnType<typeof setTimeout> | null = null;
     const aoVoltar = () => {
-      if (document.visibilityState !== 'visible') return;
       if (!devendo.current) return;
       devendo.current = false;
-      timerVolta = setTimeout(() => { timerVolta = null; void recarregar(); }, Math.random() * ESPALHAMENTO_VOLTA_MS);
+      // Forçada: de lado, na revisita, a releitura vale mesmo com ninguém olhando.
+      timerVolta = setTimeout(() => { timerVolta = null; void buscar(!jaCarregou.current, true); }, Math.random() * ESPALHAMENTO_VOLTA_MS);
     };
-    document.addEventListener('visibilitychange', aoVoltar);
+    const pararDeOuvir = ouvirVolta(aoVoltar);
     return () => {
-      document.removeEventListener('visibilitychange', aoVoltar);
+      pararDeOuvir();
       if (timerVolta) clearTimeout(timerVolta);
     };
-  }, [pausarOculto, recarregar]);
+  }, [pausarOculto, buscar]);
 
   return {
     dados, carregando, atualizando, erro, atualizadoEm, doCache,

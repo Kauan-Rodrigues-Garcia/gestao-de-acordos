@@ -46,6 +46,7 @@ import { useAuth }    from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes, type PermissoesMap } from '@/hooks/useCargoPermissoes';
 import { useNaRotaDoCelular } from '@/lib/mobile/rota';
+import { ninguemOlhando, ouvirVolta } from '@/lib/atencao';
 
 // ── Tipos públicos ────────────────────────────────────────────────────────────
 
@@ -167,8 +168,9 @@ export function ouveAEmpresa(cargo: string | null | undefined, permissoesDoCargo
     && NIVEIS_ALEM_DOS_MEUS.some(nivel => permissoesDoCargo[`${aba}_escopo_${nivel}`] === true));
 }
 
+/** Ninguém olhando (aba oculta ou janela sem foco: `lib/atencao.ts`). O nome ficou da época em que era só a aba. */
 function abaEscondida(): boolean {
-  return typeof document !== 'undefined' && document.visibilityState === 'hidden';
+  return ninguemOlhando();
 }
 
 // ── Provider ──────────────────────────────────────────────────────────────────
@@ -223,6 +225,8 @@ export function RealtimeAcordosProvider({ children }: { children: ReactNode }) {
     let timerQueda:   ReturnType<typeof setTimeout> | null = null;
     /** Chegou aviso com a aba escondida: a releitura espera ela voltar. */
     let devendo = false;
+    /** A revisita de quem está de lado relê mesmo com ninguém olhando. */
+    let forcado = false;
 
     const avisar = (event: AcordoRealtimeEvent) => {
       subscribersRef.current.forEach(cb => cb(event));
@@ -236,7 +240,9 @@ export function RealtimeAcordosProvider({ children }: { children: ReactNode }) {
       timerAgrupar = null;
       // Aba escondida não relê: ninguém está olhando. Os avisos ficam juntos em
       // `pendentes` e saem numa releitura só quando a aba volta.
-      if (abaEscondida()) { devendo = true; return; }
+      const forcada = forcado;
+      forcado = false;
+      if (!forcada && abaEscondida()) { devendo = true; return; }
       const p = pendentes;
       pendentes = novosPendentes();
       if (!vivo || !mountedRef.current) return;
@@ -273,12 +279,13 @@ export function RealtimeAcordosProvider({ children }: { children: ReactNode }) {
       agendar();
     };
 
-    const aoTrocarVisibilidade = () => {
-      if (abaEscondida() || !devendo) return;
+    // A volta (ou, de lado, a revisita de 5 min): uma releitura do que ficou junto.
+    const pararDeOuvirVolta = ouvirVolta(() => {
+      if (!devendo) return;
       devendo = false;
+      forcado = true;
       agendar();
-    };
-    document.addEventListener('visibilitychange', aoTrocarVisibilidade);
+    });
 
     // Avisos perdidos durante a queda: relê o que estiver na tela.
     const aoReconectar = () => {
@@ -316,7 +323,7 @@ export function RealtimeAcordosProvider({ children }: { children: ReactNode }) {
       receptorRef.current = null;
       if (timerAgrupar) clearTimeout(timerAgrupar);
       if (timerQueda) clearTimeout(timerQueda);
-      document.removeEventListener('visibilitychange', aoTrocarVisibilidade);
+      pararDeOuvirVolta();
       sairDono();
     };
   }, [empresaId, perfilId, queryClient, naRotaDoCelular]);

@@ -6,6 +6,7 @@ import { usePiscaPisca, varsDaLampada } from './piscaPisca';
 import { EVENTO_ACORDO_SALVO, EVENTO_FESTA, EVENTO_TRENO, type CenaNatal } from './tema';
 import { Chale } from './chale/Chale';
 import { VAO, naCurva } from './varal';
+import { acordarQuandoOlhar, ninguemOlhando } from '@/lib/atencao';
 import './natal.css';
 
 /*
@@ -75,11 +76,24 @@ function NeveLeve() {
 }
 
 const PLANOS_DA_NEVE = 3;
+/**
+ * A neve a 20 quadros por segundo (09/11/2026, eram 30): os PCs da operação
+ * são fracos. O passo de cada floco cresce na mesma conta, então ela cai na
+ * mesma velocidade de antes.
+ */
+const QUADRO_DA_NEVE_MS = 50;
+/** Um floco a cada tantos px² (09/11/2026: eram 11 mil e 16 mil; antes, 9 mil). */
+const AREA_POR_FLOCO = { cheia: 22_000, normal: 30_000 } as const;
 
 /**
- * Neve em canvas, no molde da chuva do Halloween: meia resolução, 30 quadros
+ * Neve em canvas, no molde da chuva do Halloween: meia resolução, 20 quadros
  * por segundo, um preenchimento por plano. Longe = floco menor, mais lento e
  * mais apagado. Cada floco ondula de lado, cada um no seu ritmo.
+ *
+ * A cor só é lida quando o tema troca: `getComputedStyle` num laço obriga o
+ * navegador a recalcular o estilo da página. E o laço segue no
+ * `requestAnimationFrame`, pulando quadros: acordar por `setTimeout` foi
+ * medido mais caro (09/11/2026) — cada acordada abre um quadro do zero.
  */
 function Neve({ cheia }: { cheia: boolean }) {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -87,7 +101,8 @@ function Neve({ cheia }: { cheia: boolean }) {
     const cv = ref.current; if (!cv) return;
     const cx = cv.getContext('2d'); if (!cx) return;
     type Floco = { x: number; y: number; v: number; r: number; fase: number; onda: number; plano: number };
-    let flocos: Floco[] = [], cor = '#fff', quadro = 0, rodando = true, w = 0, h = 0, t = 0;
+    let flocos: Floco[] = [], cor = getComputedStyle(cv).color || '#fff', rodando = true, w = 0, h = 0, t = 0;
+    const passo = QUADRO_DA_NEVE_MS / 33;
     const novo = (qualquerAltura: boolean): Floco => {
       const plano = Math.floor(Math.random() * PLANOS_DA_NEVE), z = (plano + Math.random()) / PLANOS_DA_NEVE;
       return {
@@ -99,20 +114,26 @@ function Neve({ cheia }: { cheia: boolean }) {
       w = cv.clientWidth; h = cv.clientHeight;
       cv.width = Math.max(1, Math.round(w / 2)); cv.height = Math.max(1, Math.round(h / 2));
       cx.setTransform(cv.width / Math.max(1, w), 0, 0, cv.height / Math.max(1, h), 0, 0);
-      // (09/11/2026) Um floco a cada 11 mil px² na cheia (eram 9 mil): os PCs da operação são fracos.
-      flocos = Array.from({ length: Math.round(w * h / (cheia ? 11000 : 16000)) }, () => novo(true));
+      flocos = Array.from({ length: Math.round(w * h / (cheia ? AREA_POR_FLOCO.cheia : AREA_POR_FLOCO.normal)) }, () => novo(true));
     };
-    let ultimo = 0;
+    // A cor vem do tema (`currentColor` do canvas): relida só quando ele troca.
+    const tema = new MutationObserver(() => { cor = getComputedStyle(cv).color || cor; });
+    tema.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'data-theme', 'style'] });
+    let espera = 0, ultimo = 0;
+    // Ninguém olhando (`lib/atencao.ts`): a neve dorme e volta onde estava.
+    let dormindo: (() => void) | null = null;
+    const proximo = () => { if (rodando) espera = requestAnimationFrame(desenhar); };
     const desenhar = (agora: number) => {
       if (!rodando) return;
-      if (agora - ultimo < 32) { requestAnimationFrame(desenhar); return; }
-      ultimo = agora; t += 0.033;
-      if (quadro++ % 15 === 0) cor = getComputedStyle(cv).color;
+      if (ninguemOlhando()) { dormindo = acordarQuandoOlhar(() => { dormindo = null; proximo(); }); return; }
+      if (agora - ultimo < QUADRO_DA_NEVE_MS - 4) { proximo(); return; }
+      ultimo = agora;
+      t += 0.033 * passo;
       cx.clearRect(0, 0, w, h);
       cx.fillStyle = cor;
       for (const f of flocos) {
-        f.y += f.v * 2;
-        f.x += Math.sin(t * f.onda + f.fase) * 0.5;
+        f.y += f.v * 2 * passo;
+        f.x += Math.sin(t * f.onda + f.fase) * 0.5 * passo;
         if (f.y > h + 6) Object.assign(f, novo(false));
       }
       for (let p = 0; p < PLANOS_DA_NEVE; p++) {
@@ -125,12 +146,12 @@ function Neve({ cheia }: { cheia: boolean }) {
         }
         cx.fill();
       }
-      requestAnimationFrame(desenhar);
+      proximo();
     };
     ajustar();
     const obs = new ResizeObserver(ajustar); obs.observe(cv);
     requestAnimationFrame(desenhar);
-    return () => { rodando = false; obs.disconnect(); };
+    return () => { rodando = false; cancelAnimationFrame(espera); dormindo?.(); obs.disconnect(); tema.disconnect(); };
   }, [cheia]);
   return <canvas ref={ref} className="nt-neve" />;
 }
@@ -206,7 +227,7 @@ function Varal({ guirlanda, bolas, leve }: { guirlanda: boolean; bolas: boolean;
           </svg>
           {LAMPADAS.map((t, i) => {
             const { x, y } = naCurva(t), n = v * LAMPADAS.length + i;
-            return <Vidro key={i} x={x} y={guirlanda ? y + 4 : y} giro={inclinacao(t)} cor={CORES_LUZ[n % CORES_LUZ.length]} n={n} />;
+            return <Vidro key={i} x={x} y={guirlanda ? y + 4 : y} giro={inclinacao(t)} cor={CORES_LUZ[n % CORES_LUZ.length]} />;
           })}
           {LAMPADAS.map((t, i) => {
             const { x, y } = naCurva(t), n = v * LAMPADAS.length + i;
@@ -226,15 +247,15 @@ function Soquete({ x, y, giro }: { x: number; y: number; giro: number }) {
 
 /**
  * O vidro da lâmpada, fora do SVG do fio (09/11/2026): cada um num `span`
- * próprio, para o piscar ser só opacidade de um elemento HTML, que a placa de
- * vídeo anima sozinha. Dentro do SVG, as 48 lâmpadas do Dashboard refaziam o
- * estilo e repintavam a página inteira a cada quadro. `n` liga o vidro ao
- * controlador do pisca: apagada, a lâmpada fica no tom da cor.
+ * próprio. Dentro do SVG, as 48 lâmpadas do Dashboard refaziam o estilo e
+ * repintavam a página inteira a cada quadro. Depois (09/11/2026, mais leve) o
+ * vidro parou de piscar: fica aceso na cor dele, e quem pisca é o brilho e o
+ * miolo — 48 animações a menos, e a lâmpada «apagada» continua no tom da cor.
  */
-function Vidro({ x, y, giro, cor, n }: { x: number; y: number; giro: number; cor: string; n: number }) {
+function Vidro({ x, y, giro, cor }: { x: number; y: number; giro: number; cor: string }) {
   return (
-    <span className={cn('nt-vidro pp-luz', n % 2 ? 'pp-b' : 'pp-a')}
-      style={{ left: x, top: y, transform: `rotate(${giro.toFixed(1)}deg)`, ...varsDaLampada(n) }}>
+    <span className="nt-vidro"
+      style={{ left: x, top: y, transform: `rotate(${giro.toFixed(1)}deg)` }}>
       <svg viewBox="-6 3 12 17" width={12} height={17}>
         <path d="M0 3.6 C4.6 4.6 5.6 10 4.1 14 C3.1 17 1.6 19 0 19.6 C-1.6 19 -3.1 17 -4.1 14 C-5.6 10 -4.6 4.6 0 3.6 Z" fill={cor} />
         <ellipse cx="-1.7" cy="9.5" rx=".9" ry="2.7" fill="#FFFFFF" opacity=".55" />

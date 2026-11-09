@@ -222,7 +222,8 @@ export function ArvoreDaMeta({ pct, rotulo }: { pct: number; rotulo: string }) {
         const estilo = { ...atraso(k * PASSO_LUZ), '--t': `${(2.2 + ((k * 7) % 5) * 0.35).toFixed(2)}s` } as CSSProperties;
         return (
           <g key={k} transform={`translate(${l.x.toFixed(2)} ${l.y.toFixed(2)})`}>
-            {acesa && <circle className="av-halo" r="7" fill={u(`halo-${l.cor}`)} style={estilo} />}
+            {/* Uma em cada três pisca; as outras acendem e ficam (09/11/2026, mais leve). */}
+            {acesa && <circle className={cn('av-halo', k % 3 === 0 && 'pisca')} r="7" fill={u(`halo-${l.cor}`)} style={estilo} />}
             <rect x="-1" y="-.6" width="2" height="1.6" rx=".3" fill="#2B3A31" />
             <ellipse cy="2.6" rx="1.9" ry="2.5" className={cn('av-lampada', acesa && 'acesa')}
               fill={acesa ? CORES_LUZ[l.cor] : '#4A5A51'} style={estilo} />

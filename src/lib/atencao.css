@@ -1,0 +1,11 @@
+/*
+ * Ninguém olhando (`atencao.ts`): todas as animações em CSS param onde estão e,
+ * na volta, seguem dali — nada recomeça, nada pisca. `data-nao-pausa` deixa um
+ * pedaço de fora (a abertura do Natal anda junto com timers).
+ * Transições não entram: elas acabam sozinhas.
+ */
+html[data-ninguem-olhando] *:not([data-nao-pausa], [data-nao-pausa] *),
+html[data-ninguem-olhando] *:not([data-nao-pausa], [data-nao-pausa] *)::before,
+html[data-ninguem-olhando] *:not([data-nao-pausa], [data-nao-pausa] *)::after {
+  animation-play-state: paused !important;
+}

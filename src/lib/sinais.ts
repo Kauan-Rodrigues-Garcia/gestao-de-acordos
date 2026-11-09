@@ -49,6 +49,7 @@
  */
 import { assinarTabela } from '@/lib/realtime';
 import { invalidarCache } from '@/lib/cacheCurto';
+import { ninguemOlhando, ouvirVolta } from '@/lib/atencao';
 
 /**
  * Os tópicos que o banco escreve: migration 20260917110000, e `diario`
@@ -154,8 +155,9 @@ function juntar(a: SinalMudou | null, b: SinalMudou): SinalMudou {
   };
 }
 
+/** Ninguém olhando (aba oculta ou janela sem foco: `lib/atencao.ts`). O nome ficou da época em que era só a aba. */
 function abaEscondida(): boolean {
-  return typeof document !== 'undefined' && document.visibilityState === 'hidden';
+  return ninguemOlhando();
 }
 
 /**
@@ -189,10 +191,15 @@ export function assinarSinal(
     return Math.max(0, minimo - (agora - Math.max(ultimaEntrega, assinadoEm)));
   }
 
+  /** A revisita de quem está de lado entrega mesmo com ninguém olhando. */
+  let entregaForcada = false;
+
   function entregar(): void {
     timer = null;
     timerEm = Infinity;
-    if (abaEscondida()) { devendo = true; return; }
+    const forcada = entregaForcada;
+    entregaForcada = false;
+    if (!forcada && abaEscondida()) { devendo = true; return; }
 
     const sinal = pendente;
     const releitura = reconectou;
@@ -206,8 +213,9 @@ export function assinarSinal(
     ouvinte.onMudou?.(sinal ?? { tabela: '', operacao: 'UPDATE', importado_por: [] });
   }
 
-  function agendar(): void {
-    if (abaEscondida()) { devendo = true; return; }
+  function agendar(forcar = false): void {
+    if (forcar) entregaForcada = true;
+    else if (abaEscondida()) { devendo = true; return; }
     const ate = Date.now() + falta();
     // A entrega já marcada sai a tempo (ou antes): ela leva este sinal junto.
     // Só remarca quem esperava pelo prazo longo do «só UPDATE» e agora não precisa.
@@ -217,15 +225,13 @@ export function assinarSinal(
     timer = setTimeout(entregar, timerEm - Date.now());
   }
 
-  function aoTrocarVisibilidade(): void {
-    if (abaEscondida() || !devendo) return;
+  // A volta (ou, de lado, a revisita de 5 min): paga o que ficou devendo.
+  function aoVoltar(): void {
+    if (!devendo) return;
     devendo = false;
-    agendar();
+    agendar(true);
   }
-
-  if (typeof document !== 'undefined') {
-    document.addEventListener('visibilitychange', aoTrocarVisibilidade);
-  }
+  const pararDeOuvirVolta = ouvirVolta(aoVoltar);
 
   const cancelarCanal = assinarTabela(
     { topico: topicoDoSinal(nome, empresaId), escutas: [{ sinal: 'mudou' }] },
@@ -247,9 +253,7 @@ export function assinarSinal(
     if (timer) clearTimeout(timer);
     timer = null;
     timerEm = Infinity;
-    if (typeof document !== 'undefined') {
-      document.removeEventListener('visibilitychange', aoTrocarVisibilidade);
-    }
+    pararDeOuvirVolta();
     cancelarCanal();
   };
 }

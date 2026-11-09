@@ -12,9 +12,12 @@
 .nt-claro .nt-neve-topo { filter: drop-shadow(0 1.5px 2px oklch(0.45 0.07 240 / .28)); }
 .nt-claro .nt-neve-topo .massa { stroke: oklch(0.8 0.04 240); stroke-width: .9; }
 
-.nt-neve-topo .faisca { fill: #FFFFFF; opacity: 0; transform-box: fill-box; transform-origin: center;
+/* (09/11/2026, mais leve) As faíscas moram num SVG próprio, sem sombra: dentro do topo
+   (que tem `drop-shadow`), cada piscada refazia a sombra do card inteiro. */
+.nt-neve-faiscas { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
+.nt-neve-faiscas .faisca { fill: #FFFFFF; opacity: 0; transform-box: fill-box; transform-origin: center;
   animation: nt-faisca 4.2s ease-in-out var(--d) infinite; }
-.nt-claro .nt-neve-topo .faisca { fill: oklch(0.78 0.09 230); }
+.nt-claro .nt-neve-faiscas .faisca { fill: oklch(0.78 0.09 230); }
 @keyframes nt-faisca {
   0%, 72%, 100% { opacity: 0; transform: scale(.3) rotate(0deg); }
   84% { opacity: 1; transform: scale(1) rotate(45deg); }
@@ -26,7 +29,8 @@
 
 /* ── O boneco ────────────────────────────────────────────────────────────── */
 .nt-bn { position: absolute; left: 0; top: 0; width: 54px; height: 57px; pointer-events: auto; cursor: pointer; will-change: transform; }
-.nt-bn svg { display: block; overflow: visible; filter: drop-shadow(0 1.5px 1.5px oklch(0.3 0.04 240 / .2));
+/* (09/11/2026, mais leve) Sem `drop-shadow`: com o corpo animando dentro, a sombra era refeita a cada quadro. */
+.nt-bn svg { display: block; overflow: visible;
   animation: nt-bn-chega .9s cubic-bezier(.3, 1.45, .5, 1) .35s both; }
 @keyframes nt-bn-chega { from { opacity: 0; transform: translateY(-18px) scale(.8); } to { opacity: 1; transform: none; } }
 .nt-bn .sombra { fill: oklch(0.4 0.05 240 / .2); }
@@ -43,7 +47,8 @@
 /* A almofada: estica para trás e achata conforme a velocidade. */
 .nv-nuvem { transform-box: view-box; transform-origin: 40px 72px;
   transform: translateX(calc(var(--vel, 0) * -3.4px)) scale(calc(1 + var(--vel, 0) * .22), calc(1 - var(--vel, 0) * .1)); }
-.nv-tufo { transform-box: fill-box; transform-origin: 50% 80%; animation: nv-respira 3.6s ease-in-out var(--d) infinite alternate; }
+/* (09/11/2026, mais leve) A almofada só se mexe deslizando (parada, respirava sem fim). */
+.nv-tufo { transform-box: fill-box; transform-origin: 50% 80%; }
 @keyframes nv-respira { from { transform: scale(.9); opacity: .85; } to { transform: translateY(-.5px) scale(1.06); opacity: 1; } }
 .deslizando .nv-tufo { animation: nv-revolve 1s ease-in-out var(--d) infinite alternate; }
 @keyframes nv-revolve { from { transform: translateX(.6px) scale(.94); } to { transform: translate(-1.6px, -.9px) scale(1.14); } }
@@ -85,24 +90,25 @@
 .deslizando.dir .bn-inclina { transform: rotate(4deg); }
 .deslizando.esq .bn-inclina { transform: rotate(-4deg); }
 
-/* Parado: respira, pisca, inclina a cabeça, mexe os braços e o cachecol. */
+/* Parado: respira, pisca e balança o pompom. (09/11/2026, mais leve) A cabeça, os braços e as
+   pontas do cachecol só mexem quando ele faz alguma coisa (eram 5 animações sem fim a mais). */
 .bn-corpo { animation: bn-respira 3.2s ease-in-out infinite alternate; }
 @keyframes bn-respira { from { transform: scale(1, 1); } to { transform: scale(1.016, .984); } }
 
-.bn-cabeca { transform-box: view-box; transform-origin: 36px 40px; animation: bn-cabeca 4.6s ease-in-out infinite alternate; }
+.bn-cabeca { transform-box: view-box; transform-origin: 36px 40px; }
 @keyframes bn-cabeca { from { transform: rotate(-3deg); } to { transform: rotate(3.5deg); } }
 
 .bn-olhos { transform-box: fill-box; transform-origin: center; animation: bn-pisca 5.2s infinite; }
 @keyframes bn-pisca { 0%, 91%, 97%, 100% { transform: scaleY(1); } 94% { transform: scaleY(.1); } }
 
-.bn-braco { transform-box: view-box; animation: bn-braco-calmo 3.4s ease-in-out infinite alternate; }
+.bn-braco { transform-box: view-box; }
 .bn-braco-e { transform-origin: 21px 50px; }
 .bn-braco-d { transform-origin: 51px 50px; animation-delay: -1.7s; }
 @keyframes bn-braco-calmo { from { transform: rotate(-4deg); } to { transform: rotate(4deg); } }
 
-.bn-ponta { transform-box: view-box; animation: bn-ponta-e 3s ease-in-out infinite alternate; }
+.bn-ponta { transform-box: view-box; }
 .bn-ponta-e { transform-origin: 28.8px 42.8px; }
-.bn-ponta-d { transform-origin: 43.2px 42.8px; animation-name: bn-ponta-d; }
+.bn-ponta-d { transform-origin: 43.2px 42.8px; }
 @keyframes bn-ponta-e { from { transform: rotate(2deg); } to { transform: rotate(7deg); } }
 @keyframes bn-ponta-d { from { transform: rotate(-2deg); } to { transform: rotate(-7deg); } }
 
