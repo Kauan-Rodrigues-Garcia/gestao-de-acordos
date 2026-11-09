@@ -3,7 +3,8 @@
 // da Erika Eduarda, que ganhou o prêmio das Lendas de Outubro.
 //
 // Um quadro de cortiça como o mural de Derry, só dela: a foto com a garrafa
-// numa polaroide, o retrato em pixel art (o do quadro do Top 3), as cinco
+// numa polaroide grande no centro (a peça principal), o retrato em pixel art
+// (o do quadro do Top 3) ao lado, as cinco
 // insígnias que ela completou caindo uma a uma, os números do mural (1ª do
 // ranking, 630 pontos, golpe final) e o bilhete de parabéns. Confete do
 // começo ao fim. Depois o papel do presente embrulha tudo (`Embrulho`).
@@ -162,19 +163,20 @@ export const CenaErika: React.FC<{ e: RoteiroErika; ate: number }> = ({ e, ate }
         </p>
       </div>
 
-      {/* A polaroide com a foto da garrafa */}
-      <div style={{ position: 'absolute', left: 190, top: 330, width: 430, ...chegada(f, e.foto, -5, -90) }}>
-        <div style={{ background: '#fbf8f0', padding: '18px 18px 70px', boxShadow: '0 30px 50px -10px rgba(0,0,0,.7)' }}>
-          <div style={{ width: '100%', height: 470, overflow: 'hidden', background: '#222' }}>
-            <Img src={staticFile('natal/erika/foto.jpg')} style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: '50% 32%' }} />
+      {/* A polaroide com a foto da garrafa: a peça principal, no centro e maior
+          (09/11: a foto com a garrafa é a principal; o retrato foi para o lado). */}
+      <div style={{ position: 'absolute', left: 695, top: 318, width: 520, ...chegada(f, e.foto, -3, -90) }}>
+        <div style={{ background: '#fbf8f0', padding: '18px 18px 70px', boxShadow: '0 30px 50px -10px rgba(0,0,0,.7), 0 0 50px rgba(255, 196, 64, .3)' }}>
+          <div style={{ width: '100%', height: 482, overflow: 'hidden', background: '#222' }}>
+            <Img src={staticFile('natal/erika/foto.jpg')} style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: '50% 45%' }} />
           </div>
-          <p style={{ position: 'absolute', left: 0, right: 0, bottom: 14, textAlign: 'center', font: `700 40px ${MAO}`, color: '#3a2a1a' }}>A dona da Garrafa! 💛</p>
+          <p style={{ position: 'absolute', left: 0, right: 0, bottom: 12, textAlign: 'center', font: `700 46px ${MAO}`, color: '#3a2a1a' }}>A dona da Garrafa! 💛</p>
         </div>
-        <Fita style={{ left: 150, top: -18, transform: 'rotate(-3deg)' }} />
+        <Fita style={{ left: 195, top: -18, transform: 'rotate(-3deg)' }} />
       </div>
 
-      {/* O retrato em pixel art, com o nome */}
-      <div style={{ position: 'absolute', left: 735, top: 345, width: 450, ...chegada(f, e.retrato, 2.5, -80) }}>
+      {/* O retrato em pixel art, com o nome, ao lado da foto */}
+      <div style={{ position: 'absolute', left: 175, top: 390, width: 450, ...chegada(f, e.retrato, 2.5, -80) }}>
         <div style={{
           borderRadius: 18, padding: 14, background: 'linear-gradient(160deg, #2b1747, #170c2b)',
           border: '5px solid #e8b53a', boxShadow: '0 0 0 3px #6b4a10, 0 28px 50px -10px rgba(0,0,0,.75), 0 0 40px rgba(255, 196, 64, .35)',
@@ -252,8 +254,11 @@ export const ClaraoDoPremio: React.FC<{ e: RoteiroErika }> = ({ e }) => {
   return <AbsoluteFill style={{ background: `radial-gradient(circle at ${CARTAO_GARRAFA.x}px ${CARTAO_GARRAFA.y}px, #fffbe8 0%, #ffe08a ${18 + 50 * sobe}%, rgba(255, 190, 70, ${0.6 * sobe}) 100%)`, opacity: op, pointerEvents: 'none' }} />;
 };
 
-/** Os sons: o brilho subindo, o estouro da festa, um pop por peça e um ding por insígnia; e a música festiva. */
-export const SonsDaErika: React.FC<{ e: RoteiroErika; ate: number }> = ({ e, ate }) => (
+/**
+ * Os sons: o brilho subindo, o estouro da festa, um pop por peça e um ding por insígnia.
+ * Sem música própria (09/11): a «Chill Day» da montagem segue tocando por baixo.
+ */
+export const SonsDaErika: React.FC<{ e: RoteiroErika }> = ({ e }) => (
   <>
     <Sequence from={e.entra} durationInFrames={s(1.5)}><Audio src={staticFile('natal/arena/subida.wav')} volume={0.3} /></Sequence>
     <Sequence from={e.clarao} durationInFrames={s(2)}><Audio src={staticFile('sons/festa.wav')} volume={0.4} /></Sequence>
@@ -264,8 +269,5 @@ export const SonsDaErika: React.FC<{ e: RoteiroErika; ate: number }> = ({ e, ate
     {e.medalhas.map((t, i) => (
       <Sequence key={`m${t}`} from={t} durationInFrames={s(1.4)}><Audio src={staticFile('sons/ding.wav')} volume={0.12 + 0.03 * i} /></Sequence>
     ))}
-    <Sequence from={e.clarao} durationInFrames={ate - e.clarao}>
-      <Audio src={staticFile('natal/festive-lobby.mp3')} volume={(q) => 0.32 * Math.min(1, q / 30) * (1 - Math.max(0, Math.min(1, (q - (ate - e.clarao - s(1.6))) / s(1.6))))} />
-    </Sequence>
   </>
 );

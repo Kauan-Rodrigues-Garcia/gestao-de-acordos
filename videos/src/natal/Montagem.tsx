@@ -1017,7 +1017,8 @@ export const SonsDaMontagem: React.FC<{ r: RoteiroMontagem }> = ({ r }) => {
   const fundo = (q: number) => {
     const f = q + r.inicio;
     const sob = (a: number, b: number) => Math.min(entre(f, a - ms(250), a, 0, 1), 1 - entre(f, b, b + ms(500), 0, 1));
-    const abaixa = Math.max(sob(pl.clique, pl.morre + ms(200)), sob(c.entra, c.sai), sob(r.cavalos.comecaGuerra, r.cavalos.mural), sob(r.erika.clarao, r.fim + s(1)));
+    const abaixa = Math.max(sob(pl.clique, pl.morre + ms(200)), sob(c.entra, c.sai), sob(r.cavalos.comecaGuerra, r.cavalos.mural));
+    // Na Garrafa da Erika ela NÃO abaixa (09/11): sem música de Natal por cima, segue a mesma.
     return (FUNDO - (FUNDO - BAIXO) * abaixa) * entre(f, r.inicio, r.inicio + s(1.2), 0, 1) * (1 - entre(f, r.fim - ms(500), r.fim, 0, 1));
   };
   return (
@@ -1053,8 +1054,8 @@ export const SonsDaMontagem: React.FC<{ r: RoteiroMontagem }> = ({ r }) => {
       <Sequence from={r.cavalos.bomba} durationInFrames={s(1.5)}><Audio src={staticFile('natal/cavalos/sons/assobio.wav')} volume={0.12} /></Sequence>
       <Sequence from={r.cavalos.explosao} durationInFrames={s(3)}><Audio src={staticFile('natal/cavalos/sons/explosao.wav')} volume={0.32} /></Sequence>
       <Sequence from={r.cavalos.explosao + ms(250)} durationInFrames={s(2)}><Audio src={staticFile('natal/cavalos/sons/explosao-media.wav')} volume={0.18} /></Sequence>
-      {/* A Garrafa da Erika: o brilho, a festa, os pops, as insígnias e a música festiva. */}
-      <SonsDaErika e={r.erika} ate={r.fim} />
+      {/* A Garrafa da Erika: o brilho, a festa, os pops e as insígnias (a música é a mesma de antes). */}
+      <SonsDaErika e={r.erika} />
       {/* O embrulho: o papel fechando e o laço pulando. */}
       <Sequence from={r.cavalos.embrulha} durationInFrames={s(1.2)}><Audio src={staticFile('sons/whoosh.wav')} volume={0.3} /></Sequence>
       <Sequence from={r.cavalos.embrulha + ms(1100)} durationInFrames={s(1)}><Audio src={staticFile('sons/pop.wav')} volume={0.3} /></Sequence>
