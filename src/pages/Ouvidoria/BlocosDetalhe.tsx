@@ -45,10 +45,12 @@ function Bloco({ titulo, icone: Icone, children, className, acao }: {
   titulo: string; icone: typeof AlarmClock; children: React.ReactNode; className?: string; acao?: React.ReactNode;
 }) {
   return (
-    <section className={cn('px-5 py-3.5 border-b space-y-2.5', className)}>
-      <div className="flex items-center gap-2">
-        <Icone className="h-3.5 w-3.5 text-muted-foreground" />
-        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground flex-1">{titulo}</h3>
+    <section className={cn('rounded-xl border bg-card p-3.5 space-y-2.5', className)}>
+      <div className="flex items-center gap-2 min-h-7">
+        <span className="h-6 w-6 rounded-md bg-muted flex items-center justify-center shrink-0">
+          <Icone className="h-3.5 w-3.5 text-muted-foreground" />
+        </span>
+        <h3 className="text-xs font-semibold flex-1">{titulo}</h3>
         {acao}
       </div>
       {children}
@@ -88,8 +90,8 @@ export function BlocoRetornoAgendado({ m }: { m: Manifestacao }) {
   const quente = u === 'agora' || u === 'atrasado';
 
   return (
-    <section className={cn('px-5 py-3 border-b', quente ? 'bg-destructive/10' : 'bg-info/5')}>
-      <div className="flex flex-wrap items-center gap-3">
+    <section className={cn('rounded-xl border p-3.5 space-y-3', quente ? 'bg-destructive/10 border-destructive/40' : 'bg-info/5 border-info/30')}>
+      <div className="flex items-start gap-3">
         <span className={cn(
           'h-9 w-9 rounded-lg flex items-center justify-center shrink-0',
           quente ? 'bg-destructive text-destructive-foreground animate-ouvidoria-pisca' : 'bg-info/15 text-info',
@@ -107,8 +109,9 @@ export function BlocoRetornoAgendado({ m }: { m: Manifestacao }) {
               u === 'hoje' || u === 'depois' ? `aviso ${ANTECEDENCIA_MINUTOS} min antes` : null].filter(Boolean).join(' · ')}
           </p>
         </div>
-        <div className="flex items-center gap-1.5">
-          <Button size="sm" className="h-8 text-xs" disabled={!!ocupado}
+      </div>
+      <div className="flex items-center gap-1.5">
+          <Button size="sm" className="h-8 text-xs flex-1" disabled={!!ocupado}
                   onClick={() => void rodar('feito', () => retornoDado(m.id, null), 'Retorno registrado.')}>
             {ocupado === 'feito' ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1" />}
             Retorno feito
@@ -120,7 +123,6 @@ export function BlocoRetornoAgendado({ m }: { m: Manifestacao }) {
                   onClick={() => void rodar('cancelar', () => agendarRetorno(m.id, null, null), 'Agendamento cancelado.')}>
             <X className="h-3.5 w-3.5" />
           </Button>
-        </div>
       </div>
     </section>
   );

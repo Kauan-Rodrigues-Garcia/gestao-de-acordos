@@ -29,6 +29,7 @@ const ler = (n: string) => readFileSync(resolve(__dirname, `../../../supabase/mi
 const SQL = ler('20261106150000_ouvidoria_cofen.sql');
 const SQL_CODIGO = ler('20261106180000_ouvidoria_codigo_cliente.sql');
 const SQL_V2 = ler('20261109120000_ouvidoria_cofen_alertas_tickets_grupos.sql');
+const SQL_V3 = ler('20261109180000_ouvidoria_lixeira_anexos_aviso.sql');
 
 let db: PGlite;
 
@@ -143,6 +144,8 @@ beforeAll(async () => {
   await db.exec(SQL_CODIGO); // reaplicar não quebra
   await db.exec(SQL_V2);
   await db.exec(SQL_V2); // reaplicar não quebra
+  await db.exec(SQL_V3);
+  await db.exec(SQL_V3); // reaplicar não quebra
   await db.exec(`delete from public.ouvidoria_manifestacoes; select setval('public.ouvidoria_manifestacoes_numero_seq', 1, false)`);
 });
 
@@ -431,5 +434,83 @@ describe('Ouvidoria 2 (20261109120000): encaminhamento, retorno agendado, ticket
     expect(await como<number>(LIDER, 'select count(*)::int v from public.fn_ouvidoria_cofen_grupos($1)', [COFEN])).toBe(0);
     // Quem é de outro setor não lê os grupos.
     expect(await erroComo(CAIO, 'select count(*) v from public.fn_ouvidoria_cofen_grupos($1)', [COFEN])).toMatch(/acesso/);
+  });
+});
+
+describe('Ouvidoria 3 (20261109180000): lixeira, anexos e aviso do retorno', () => {
+  type Linha = Record<string, unknown>;
+  const nova = (uid: string, dados: Record<string, unknown> = {}) => como<Linha>(uid,
+    'select to_jsonb(public.fn_ouvidoria_cofen_salvar($1, null, $2::jsonb)) v', [COFEN, JSON.stringify({
+      canal: 'telefone', nome_profissional: 'Beltrano', assunto: 'outros', descricao: 'x', acompanhar: true, ...dados })]);
+  const listados = () => como<string[] | null>(LIDER,
+    'select json_agg(id) v from public.fn_ouvidoria_cofen_listar($1)', [COFEN]).then(r => r ?? []);
+
+  it('excluir manda para a lixeira; quem gerencia vê, restaura e só então apaga de vez', async () => {
+    const m = await nova(ANA);
+    await como(ANA, `select public.fn_ouvidoria_cofen_agendar_retorno($1, now() + interval '3 hours', null) v`, [m.id]);
+    expect(await erroComo(ANA, 'select public.fn_ouvidoria_cofen_excluir($1) v', [m.id])).toMatch(/gerencia/);
+    await como(LIDER, 'select public.fn_ouvidoria_cofen_excluir($1) v', [m.id]);
+    expect(await listados()).not.toContain(m.id);
+    const naLixeira = await como<Linha[]>(LIDER,
+      `select json_agg(json_build_object('id', id, 'por', excluido_por_nome, 'ag', retorno_agendado_em)) v
+         from public.fn_ouvidoria_cofen_lixeira($1)`, [COFEN]);
+    // A primeira (OUV-00001, excluída lá em cima) também está na lixeira agora.
+    expect(naLixeira[0]).toEqual({ id: m.id, por: 'Lia', ag: null });
+    expect(naLixeira).toHaveLength(2);
+    expect(await erroComo(ANA, 'select count(*) v from public.fn_ouvidoria_cofen_lixeira($1)', [COFEN])).toMatch(/gerencia/);
+
+    await como(LIDER, 'select public.fn_ouvidoria_cofen_restaurar($1) v', [m.id]);
+    expect(await listados()).toContain(m.id);
+    expect(await erroComo(LIDER, 'select public.fn_ouvidoria_cofen_apagar_de_vez($1) v', [m.id])).toMatch(/lixeira antes/);
+
+    await como(LIDER, 'select public.fn_ouvidoria_cofen_excluir($1) v', [m.id]);
+    await como(LIDER, 'select public.fn_ouvidoria_cofen_apagar_de_vez($1) v', [m.id]);
+    expect((await db.query('select 1 from public.ouvidoria_manifestacoes where id = $1', [m.id])).rows).toHaveLength(0);
+  });
+
+  it('anexo: só no caminho da própria manifestação; quem anexou ou quem gerencia tira', async () => {
+    const m = await nova(ANA);
+    const caminho = `${COFEN}/${m.id}/print.png`;
+    expect(await erroComo(ANA, 'select public.fn_ouvidoria_cofen_anexo_registrar($1, $2, $3, $4, $5) v',
+      [m.id, `${NOSSO}/${m.id}/x.png`, 'x.png', 'image/png', 10])).toMatch(/não é desta manifestação/);
+    const a = await como<Linha>(ANA, 'select to_jsonb(public.fn_ouvidoria_cofen_anexo_registrar($1, $2, $3, $4, $5)) v',
+      [m.id, caminho, 'print da conversa.png', 'image/png', 1234]);
+    expect(a.criado_por).toBe(ANA);
+    expect(await como<number>(LIDER, 'select count(*)::int v from public.fn_ouvidoria_cofen_anexos($1)', [m.id])).toBe(1);
+
+    // A política do balde: alcança quem atende o setor; outro setor não.
+    expect(await como<boolean>(ANA, 'select public.fn_ouvidoria_anexo_alcanca($1, false) v', [caminho])).toBe(true);
+    expect(await como<boolean>(CAIO, 'select public.fn_ouvidoria_anexo_alcanca($1, false) v', [caminho])).toBe(false);
+    expect(await como<boolean>(ANA, 'select public.fn_ouvidoria_anexo_alcanca($1, false) v', ['lixo/../x'])).toBe(false);
+    expect(await como<boolean>(ANA, 'select public.fn_ouvidoria_anexo_e_meu($1) v', [caminho])).toBe(true);
+    expect(await como<boolean>(LIDER, 'select public.fn_ouvidoria_anexo_e_meu($1) v', [caminho])).toBe(false);
+
+    await como(LIDER, 'select public.fn_ouvidoria_cofen_anexo_excluir($1) v', [a.id]);
+    expect(await como<number>(LIDER, 'select count(*)::int v from public.fn_ouvidoria_cofen_anexos($1)', [m.id])).toBe(0);
+    const tipos = await como<string[]>(LIDER, 'select json_agg(tipo) v from public.fn_ouvidoria_cofen_andamentos($1)', [m.id]);
+    expect(tipos).toEqual(['criada', 'anexo', 'anexo']);
+
+    // Apagar de vez devolve os caminhos para a tela apagar do balde.
+    await como(ANA, 'select public.fn_ouvidoria_cofen_anexo_registrar($1, $2, $3, $4, $5) v', [m.id, caminho, 'p.png', 'image/png', 1]);
+    await como(LIDER, 'select public.fn_ouvidoria_cofen_excluir($1) v', [m.id]);
+    expect(await como<string[]>(LIDER, 'select public.fn_ouvidoria_cofen_apagar_de_vez($1) v', [m.id])).toEqual([caminho]);
+  });
+
+  it('avisa uma vez a próxima hora, para quem agendou e quem registrou; reagendar avisa de novo', async () => {
+    const m = await nova(ANA);
+    await como(LIDER, `select public.fn_ouvidoria_cofen_agendar_retorno($1, now() + interval '30 minutes', 'Ligar') v`, [m.id]);
+    const longe = await nova(ANA);
+    await como(ANA, `select public.fn_ouvidoria_cofen_agendar_retorno($1, now() + interval '5 hours', null) v`, [longe.id]);
+
+    const antes = (await db.query('select count(*)::int n from public.notificacoes')).rows[0] as { n: number };
+    expect((await db.query<{ v: number }>('select public.fn_ouvidoria_avisar_retornos() v')).rows[0].v).toBe(1);
+    const novas = (await db.query<{ usuario_id: string; mensagem: string }>(
+      'select usuario_id, mensagem from public.notificacoes order by criado_em offset $1', [antes.n])).rows;
+    expect(novas.map(n => n.usuario_id).sort()).toEqual([LIDER, ANA].sort());
+    expect(novas[0].mensagem).toMatch(/^Dar retorno a Beltrano \(OUV-\d{5}\) às \d{2}:\d{2} — Ligar\.$/);
+
+    expect((await db.query<{ v: number }>('select public.fn_ouvidoria_avisar_retornos() v')).rows[0].v).toBe(0);
+    await como(LIDER, `select public.fn_ouvidoria_cofen_agendar_retorno($1, now() + interval '45 minutes', null) v`, [m.id]);
+    expect((await db.query<{ v: number }>('select public.fn_ouvidoria_avisar_retornos() v')).rows[0].v).toBe(1);
   });
 });

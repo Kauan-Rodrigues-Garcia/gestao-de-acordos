@@ -24,7 +24,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertTriangle, ArrowRight, CheckCircle2, Clock3, Download, Headset, Inbox, ListChecks, Loader2, Plus, Search,
-  X, type LucideIcon,
+  Trash2, X, type LucideIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -35,7 +35,7 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { useOuvidoriaCofen } from '@/hooks/useOuvidoriaCofen';
 import {
-  listarEtiquetas, listarGrupos, listarManifestacoes, listarPessoas,
+  listarEtiquetas, listarGrupos, listarLixeira, listarManifestacoes, listarPessoas,
 } from '@/services/ouvidoriaCofen.service';
 import { CampoLista } from './campos';
 import { CardAlertas } from './CardAlertas';
@@ -44,13 +44,16 @@ import { OuvidoriaCtx, type ContextoOuvidoria } from './contexto';
 import { DetalheManifestacao } from './DetalheManifestacao';
 import { FormManifestacao } from './FormManifestacao';
 import { DetalheGrupo, PainelGrupos } from './Grupos';
+import { LixeiraOuvidoria } from './LixeiraOuvidoria';
+import { PainelRelatorio } from './PainelRelatorio';
 import { PainelTickets } from './PainelTickets';
 import {
-  ASSUNTOS, CANAIS, DIAS_ALERTA, FILTROS_INICIAIS, STATUS, dataBr, diasEntre, estaAberta, filtrar,
+  ASSUNTOS, CANAIS, DIAS_ALERTA, FILTROS_INICIAIS, STATUS, dataBr, estaAberta, filtrar,
   indicadores, ordenar, paraCsv, paraLinhas, pedeAcao, rotuloAssunto, rotuloConselho,
   type Etiqueta, type Filtros, type Grupo, type Manifestacao, type SetorOuvidoria, type Visao,
 } from './ouvidoria';
 import { COR_FAIXA_STATUS } from './estilo';
+import { diasUteisEntre } from './diasUteis';
 import { AnosColoridos, IconeCanal, SeloEncaminhamento, SeloRetorno, SeloStatus, SelosLinha } from './visual';
 
 export default function PaginaOuvidoria() {
@@ -203,6 +206,14 @@ export function Painel({ setor, meuId, abrirId = null, aoAbrirConsumido }: {
     staleTime: 60_000,
     refetchInterval: RELER_MS,
   });
+  // `null` = sem a migration 20261109180000 (lixeira e anexos).
+  const lixeira = useQuery({
+    queryKey: ['ouvidoria-lixeira', setor.setor_id],
+    queryFn: () => listarLixeira(setor.setor_id),
+    enabled: setor.pode_gerir,
+    staleTime: 60_000,
+  });
+  const [lixeiraAberta, setLixeiraAberta] = useState(false);
 
   // `null` = a migration 20261109120000 ainda não está no banco.
   const v2 = etiquetasQ.data !== null && etiquetasQ.data !== undefined;
@@ -210,12 +221,13 @@ export function Painel({ setor, meuId, abrirId = null, aoAbrirConsumido }: {
   const etiquetas = etiquetasQ.data ?? NENHUMA_ETIQUETA;
   const grupos = gruposQ.data ?? NENHUM_GRUPO;
   const kpi = useMemo(() => indicadores(todas, hoje), [todas, hoje]);
-  const contagem = useMemo(() => ({
+  const contagem: Record<Visao, number | null> = useMemo(() => ({
     acompanhamento: todas.filter(m => m.acompanhar).length,
     historico: todas.filter(m => !m.acompanhar).length,
     todas: todas.length,
     tickets: todas.filter(m => m.ticket_status === 'pendente').length,
     grupos: grupos.filter(g => !g.encerrado_em).length,
+    relatorio: null as number | null,
   }), [todas, grupos]);
 
   // Abrir pela notificação (?m=…) assim que a lista chegar.
@@ -229,7 +241,7 @@ export function Painel({ setor, meuId, abrirId = null, aoAbrirConsumido }: {
     let r = filtrar(todas, filtros, meuId);
     if (atalho === 'abertas') r = r.filter(m => m.acompanhar && estaAberta(m));
     if (atalho === 'sem_retorno') r = r.filter(m => m.acompanhar && !m.data_resposta);
-    if (atalho === 'alerta') r = r.filter(m => m.acompanhar && estaAberta(m) && diasEntre(m.data_manifestacao, hoje) >= DIAS_ALERTA);
+    if (atalho === 'alerta') r = r.filter(m => m.acompanhar && estaAberta(m) && diasUteisEntre(m.data_manifestacao, hoje) >= DIAS_ALERTA);
     return ordenar(r, filtros.visao);
   }, [todas, filtros, meuId, atalho, hoje]);
 
@@ -242,6 +254,8 @@ export function Painel({ setor, meuId, abrirId = null, aoAbrirConsumido }: {
     void qc.invalidateQueries({ queryKey: ['ouvidoria-andamentos'] });
     void qc.invalidateQueries({ queryKey: ['ouvidoria-grupos', setor.setor_id] });
     void qc.invalidateQueries({ queryKey: ['ouvidoria-etiquetas', setor.setor_id] });
+    void qc.invalidateQueries({ queryKey: ['ouvidoria-lixeira', setor.setor_id] });
+    void qc.invalidateQueries({ queryKey: ['ouvidoria-anexos'] });
   };
   const usarAtalho = (a: typeof atalho) => {
     setAtalho(atual => (atual === a ? null : a));
@@ -265,10 +279,11 @@ export function Painel({ setor, meuId, abrirId = null, aoAbrirConsumido }: {
     { id: 'tickets', rotulo: 'Tickets pendentes', so2: true },
     { id: 'grupos', rotulo: 'Grupos', so2: true },
     { id: 'historico', rotulo: 'Só histórico' },
+    { id: 'relatorio', rotulo: 'Relatório' },
     { id: 'todas', rotulo: 'Todas' },
   ];
   const grupoPorId = new Map(grupos.map(g => [g.id, g]));
-  const mostraLista = filtros.visao !== 'grupos';
+  const mostraLista = filtros.visao !== 'grupos' && filtros.visao !== 'relatorio';
 
   return (
     <OuvidoriaCtx.Provider value={ctx}>
@@ -294,7 +309,7 @@ export function Painel({ setor, meuId, abrirId = null, aoAbrirConsumido }: {
                      detalhe="profissional ainda não respondido"
                      ativo={atalho === 'sem_retorno'} onClick={() => usarAtalho('sem_retorno')} />
           <Indicador icone={AlertTriangle} rotulo="Em alerta" valor={kpi.atrasadas} tom="destructive"
-                     detalhe={`abertas há ${DIAS_ALERTA}+ dias`}
+                     detalhe={`abertas há ${DIAS_ALERTA}+ dias úteis`}
                      ativo={atalho === 'alerta'} onClick={() => usarAtalho('alerta')} />
           <Indicador icone={CheckCircle2} rotulo="Concluídas no mês" valor={kpi.concluidasNoMes} tom="success"
                      detalhe="pela data do retorno" />
@@ -319,18 +334,24 @@ export function Painel({ setor, meuId, abrirId = null, aoAbrirConsumido }: {
                             : 'border-transparent text-muted-foreground hover:text-foreground',
                         )}>
                   {v.rotulo}
-                  <span className={cn(
+                  {contagem[v.id] !== null && <span className={cn(
                     'rounded-full px-1.5 text-[10px] tabular-nums',
                     v.id === 'tickets' && contagem.tickets > 0 ? 'bg-orange-500/15 text-orange-700 dark:text-orange-300 font-semibold'
                       : filtros.visao === v.id ? 'bg-primary/10 text-primary' : 'bg-muted',
                   )}>
                     {contagem[v.id]}
-                  </span>
+                  </span>}
                 </button>
               ))}
             </div>
             <div className="flex-1" />
             <div className="flex items-center gap-2 pb-2">
+              {setor.pode_gerir && lixeira.data && (
+                <Button variant="ghost" size="sm" onClick={() => setLixeiraAberta(true)}
+                        className="text-muted-foreground" title="Manifestações excluídas">
+                  <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Lixeira{lixeira.data.length ? ` (${lixeira.data.length})` : ''}
+                </Button>
+              )}
               {mostraLista && (
                 <Button variant="outline" size="sm" onClick={exportar} disabled={!visiveis.length}>
                   <Download className="h-3.5 w-3.5 mr-1.5" /> Exportar
@@ -342,7 +363,9 @@ export function Painel({ setor, meuId, abrirId = null, aoAbrirConsumido }: {
             </div>
           </div>
 
-          {filtros.visao === 'grupos' ? (
+          {filtros.visao === 'relatorio' ? (
+            <PainelRelatorio />
+          ) : filtros.visao === 'grupos' ? (
             <PainelGrupos aoAbrirGrupo={setGrupoId} />
           ) : filtros.visao === 'tickets' ? (
             <PainelTickets pendentes={visiveis} />
@@ -466,6 +489,10 @@ export function Painel({ setor, meuId, abrirId = null, aoAbrirConsumido }: {
         />
 
         <DetalheGrupo grupoId={grupoId} aoFechar={() => setGrupoId(null)} />
+
+        {setor.pode_gerir && (
+          <LixeiraOuvidoria aberta={lixeiraAberta} aoFechar={() => setLixeiraAberta(false)} itens={lixeira.data ?? []} />
+        )}
       </div>
     </OuvidoriaCtx.Provider>
   );
@@ -474,7 +501,7 @@ export function Painel({ setor, meuId, abrirId = null, aoAbrirConsumido }: {
 function LinhaManifestacao({ m, hoje, agora, grupo, etiquetas, onClick }: {
   m: Manifestacao; hoje: string; agora: number; grupo: Grupo | null; etiquetas: readonly Etiqueta[]; onClick: () => void;
 }) {
-  const dias = m.acompanhar && estaAberta(m) ? diasEntre(m.data_manifestacao, hoje) : null;
+  const dias = m.acompanhar && estaAberta(m) ? diasUteisEntre(m.data_manifestacao, hoje) : null;
   const alerta = dias !== null && dias >= DIAS_ALERTA;
   const encaminhada = m.responsavel_id && m.responsavel_id !== m.criado_por;
   return (
@@ -513,7 +540,7 @@ function LinhaManifestacao({ m, hoje, agora, grupo, etiquetas, onClick }: {
           )}
           {alerta && (
             <span className="text-[10px] font-medium text-destructive inline-flex items-center gap-0.5">
-              <AlertTriangle className="h-2.5 w-2.5" /> há {dias} dias
+              <AlertTriangle className="h-2.5 w-2.5" /> há {dias} dias úteis
             </span>
           )}
         </div>

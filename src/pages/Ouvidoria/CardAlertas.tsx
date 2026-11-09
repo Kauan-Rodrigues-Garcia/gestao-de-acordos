@@ -103,7 +103,7 @@ export function CardAlertas() {
           <p className="text-sm font-semibold">Para você agora</p>
           <p className="text-[11px] text-muted-foreground">
             {temUrgente ? 'Tem coisa esperando você.' : 'O que está na sua mão na Ouvidoria.'}
-            {' '}A aba avisa {ANTECEDENCIA_MINUTOS} min antes de cada retorno agendado.
+            {' '}{ANTECEDENCIA_MINUTOS} min antes de cada retorno agendado a aba pisca e o sino do sistema avisa.
           </p>
         </div>
         <span className="text-xs font-bold tabular-nums rounded-full bg-background border px-2 py-0.5">{total}</span>

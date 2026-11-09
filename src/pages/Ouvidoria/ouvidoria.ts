@@ -6,6 +6,7 @@
  * As listas de opções são as mesmas dos CHECK da migration 20261106150000.
  */
 import { apenasDigitos } from '@/lib/cpf';
+import { diasUteisEntre } from './diasUteis';
 
 export interface SetorOuvidoria {
   setor_id: string;
@@ -97,11 +98,27 @@ export interface Manifestacao {
   ticket_numero?: string | null;
   ticket_aberto_em?: string | null;
   ticket_aberto_por_nome?: string | null;
+  // ── 20261109180000 ──
+  excluido_em?: string | null;
+  excluido_por_nome?: string | null;
+}
+
+/** Um arquivo anexado (o arquivo mora no balde privado `ouvidoria`). */
+export interface Anexo {
+  id: string;
+  manifestacao_id: string;
+  caminho: string;
+  nome: string;
+  tipo: string | null;
+  tamanho: number | null;
+  criado_por: string | null;
+  criado_por_nome: string | null;
+  criado_em: string;
 }
 
 export type TipoAndamento =
   | 'criada' | 'status' | 'retorno' | 'responsavel' | 'acompanhamento' | 'edicao' | 'nota'
-  | 'agendamento' | 'ciencia' | 'resposta' | 'ticket' | 'grupo';
+  | 'agendamento' | 'ciencia' | 'resposta' | 'ticket' | 'grupo' | 'anexo' | 'lixeira';
 
 export interface Andamento {
   id: string;
@@ -223,7 +240,7 @@ export function pedeAcao(m: Pick<Manifestacao, 'acompanhar' | 'status' | 'data_r
   return m.acompanhar && (estaAberta(m) || !teveRetorno(m));
 }
 
-/** A partir de quantos dias aberta uma acompanhada fica em alerta. */
+/** A partir de quantos dias ÚTEIS aberta uma acompanhada fica em alerta. */
 export const DIAS_ALERTA = 5;
 
 export interface Indicadores {
@@ -243,7 +260,7 @@ export function indicadores(lista: readonly Manifestacao[], hojeIso: string): In
       acompanhadas += 1;
       if (estaAberta(m)) {
         abertas += 1;
-        if (diasEntre(m.data_manifestacao, hojeIso) >= DIAS_ALERTA) atrasadas += 1;
+        if (diasUteisEntre(m.data_manifestacao, hojeIso) >= DIAS_ALERTA) atrasadas += 1;
       }
       if (!teveRetorno(m)) semRetorno += 1;
     }
@@ -256,7 +273,7 @@ export function indicadores(lista: readonly Manifestacao[], hojeIso: string): In
  * As abas da lista. `tickets` = os que falta abrir no sistema Mundial;
  * `grupos` mostra os grupos (a lista dela é das manifestações em grupo).
  */
-export type Visao = 'acompanhamento' | 'todas' | 'historico' | 'tickets' | 'grupos';
+export type Visao = 'acompanhamento' | 'todas' | 'historico' | 'tickets' | 'grupos' | 'relatorio';
 
 export interface Filtros {
   visao: Visao;

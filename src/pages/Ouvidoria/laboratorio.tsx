@@ -11,7 +11,7 @@ import { Toaster } from 'sonner';
 import '@/index.css';
 import { getTodayISO } from '@/lib/index';
 import { Painel } from './index';
-import type { Andamento, Etiqueta, Grupo, Manifestacao, PessoaOuvidoria, SetorOuvidoria } from './ouvidoria';
+import type { Anexo, Andamento, Etiqueta, Grupo, Manifestacao, PessoaOuvidoria, SetorOuvidoria } from './ouvidoria';
 
 const URL_INICIAL = new URLSearchParams(window.location.search);
 if (URL_INICIAL.get('escuro') === '1') document.documentElement.classList.add('dark');
@@ -115,6 +115,22 @@ qc.setQueryData(['ouvidoria-lista', SETOR.setor_id], LISTA);
 qc.setQueryData(['ouvidoria-pessoas', SETOR.setor_id], PESSOAS);
 qc.setQueryData(['ouvidoria-etiquetas', SETOR.setor_id], ETIQUETAS);
 qc.setQueryData(['ouvidoria-grupos', SETOR.setor_id], GRUPOS);
+qc.setQueryData(['ouvidoria-lixeira', SETOR.setor_id], [
+  mf({ nome_profissional: 'Registro Duplicado Exemplo', assunto: 'outros', descricao: 'Lançada duas vezes por engano.',
+       excluido_em: diasAtras(1) + 'T15:00:00Z', excluido_por_nome: 'Lia Exemplo' }),
+]);
+for (const m of LISTA) {
+  const anexos: Anexo[] = m.nome_profissional === 'Mariana Exemplo' && m.anuidades.length ? [
+    { id: 'a1', manifestacao_id: m.id, caminho: 'lab/x/print.png', nome: 'print-conversa-chatplay.png', tipo: 'image/png',
+      tamanho: 182_400, criado_por: 'p-ana', criado_por_nome: 'Ana Exemplo', criado_em: diasAtras(7) + 'T14:10:00Z' },
+    { id: 'a2', manifestacao_id: m.id, caminho: 'lab/x/comprovante.pdf', nome: 'comprovante-pagamento-2024.pdf', tipo: 'application/pdf',
+      tamanho: 96_000, criado_por: 'p-ana', criado_por_nome: 'Ana Exemplo', criado_em: diasAtras(6) + 'T10:00:00Z' },
+    { id: 'a3', manifestacao_id: m.id, caminho: 'lab/x/ligacao.mp3', nome: 'ligacao-0800.mp3', tipo: 'audio/mpeg',
+      tamanho: 2_400_000, criado_por: 'p-lia', criado_por_nome: 'Lia Exemplo', criado_em: diasAtras(5) + 'T16:30:00Z' },
+  ] : [];
+  qc.setQueryData(['ouvidoria-anexos', m.id, m.atualizado_em], anexos);
+}
+qc.setQueryData(['ouvidoria-miniaturas', 'lab/x/print.png'], {});
 for (const m of LISTA) {
   const linha: Andamento[] = [
     { id: `${m.id}-a`, manifestacao_id: m.id, tipo: 'criada', texto: m.acompanhar ? 'Registrada com acompanhamento' : 'Registrada para histórico',

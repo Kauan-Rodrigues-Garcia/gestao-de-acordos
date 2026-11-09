@@ -22,7 +22,7 @@ const m = (over: Partial<Manifestacao>): Manifestacao => ({ ...base, ...over });
 describe('ouvidoria — a fila', () => {
   it('indicadores: abertas, sem retorno, em alerta e concluídas no mês', () => {
     const lista = [
-      m({ id: 'a', data_manifestacao: '2026-11-01' }),                         // aberta há 5 dias: alerta
+      m({ id: 'a', data_manifestacao: '2026-10-29' }),                         // 5 dias úteis (02/11 é feriado): alerta
       m({ id: 'b', data_manifestacao: '2026-11-05', data_resposta: '2026-11-05' }),
       m({ id: 'c', status: 'concluido', data_resposta: '2026-11-03' }),
       m({ id: 'd', acompanhar: false, status: 'concluido' }),                 // histórico
