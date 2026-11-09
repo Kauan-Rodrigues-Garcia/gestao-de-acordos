@@ -14,6 +14,7 @@
  * pela escolha de setores, só se quem organiza incluir à mão.
  */
 import { supabase } from '@/lib/supabase';
+import { lerTodasAsPaginas } from '@/lib/lerTodasAsPaginas';
 import { marcaDaCidade } from '@/lib/marca';
 import { produtoDaEmpresa, type Produto } from '@/lib/produto';
 import type { Candidato } from './cedula';
@@ -144,17 +145,23 @@ export function montarParticipantes(
   return { pessoas, grupos };
 }
 
-/** Lê o cadastro (o super_admin enxerga as empresas todas). Só leitura. */
+/**
+ * Lê o cadastro (o super_admin enxerga as empresas todas). Só leitura.
+ * Os perfis vêm em páginas (05/11/2026): o PostgREST corta em 1000 linhas sem
+ * avisar, e quem ficasse no fim do alfabeto sumiria da votação.
+ */
 export async function lerParticipantes(): Promise<{ pessoas: Participante[]; grupos: GrupoDaVotacao[] }> {
   const [perfis, setores, empresas, cidades] = await Promise.all([
-    supabase.from('perfis').select('id, nome, foto_url, perfil, ativo, arquivado, situacao, robo, setor_id, empresa_id').eq('ativo', true).order('nome'),
+    lerTodasAsPaginas<LinhaPerfil>((de, ate) => supabase.from('perfis')
+      .select('id, nome, foto_url, perfil, ativo, arquivado, situacao, robo, setor_id, empresa_id')
+      .eq('ativo', true).order('nome').order('id').range(de, ate)),
     supabase.from('setores').select('id, nome, cidade_id, empresa_id, ativo'),
     supabase.from('empresas').select('id, nome, slug, produto'),
     supabase.from('rh_celulas').select('id, nome'),
   ]);
-  for (const r of [perfis, setores, empresas]) if (r.error) throw new Error(r.error.message);
+  for (const r of [setores, empresas]) if (r.error) throw new Error(r.error.message);
   return montarParticipantes(
-    (perfis.data ?? []) as unknown as LinhaPerfil[],
+    perfis,
     (setores.data ?? []) as unknown as LinhaSetor[],
     (empresas.data ?? []) as unknown as LinhaEmpresa[],
     // Sem as cidades, os setores ficam no grupo da empresa: a tela abre mesmo assim.

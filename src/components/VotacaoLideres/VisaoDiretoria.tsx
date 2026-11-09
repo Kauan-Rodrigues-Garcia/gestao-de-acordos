@@ -132,7 +132,7 @@ export function VisaoDiretoria({ resultados, pessoas, desempates, onDesempatar, 
       </ul>
 
       {/* A barra de liberar fica sempre à vista. */}
-      <div className="fixed inset-x-0 bottom-0 z-10 border-t bg-background/95 px-4 py-3 backdrop-blur">
+      <div className="fixed inset-x-0 bottom-0 z-10 border-t bg-background px-4 py-3">
         <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-2">
           <p className={cn('text-sm', pendentes ? 'text-warning' : 'text-success')}>
             {pendentes

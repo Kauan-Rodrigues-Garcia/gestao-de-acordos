@@ -9,16 +9,19 @@
  * `fn_natal_trem_configurar` só aceitam super_admin, e `fn_ranking_quitacao_definir_setor` confere
  * `ranking_quitacao_configurar`. Esconder o botão é só conveniência.
  */
-import { useState, type ReactNode } from 'react';
-import { Flag, Siren, Medal, TrainFront, Vote, type LucideIcon } from 'lucide-react';
+import { Suspense, lazy, useState, type ReactNode } from 'react';
+import { Flag, Siren, Medal, TrainFront, Vote, Loader2, type LucideIcon } from 'lucide-react';
 import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { cn } from '@/lib/utils';
 import { NOME_CORRIDA } from '@/components/Corrida/nome';
-import CorridaConfig from '@/components/admin/CorridaConfig';
-import SireneConfig from '@/components/admin/SireneConfig';
-import RankingQuitacaoConfig from '@/components/admin/RankingQuitacaoConfig';
-import TremNatalConfig from '@/components/admin/TremNatalConfig';
-import VotacaoLideresConfig from '@/components/admin/VotacaoLideresConfig';
+
+// Cada evento só carrega quando é escolhido (05/11/2026): antes, abrir
+// qualquer aba de Configurações baixava Corrida, Sirene, Trem e Votação juntas.
+const CorridaConfig = lazy(() => import('@/components/admin/CorridaConfig'));
+const SireneConfig = lazy(() => import('@/components/admin/SireneConfig'));
+const RankingQuitacaoConfig = lazy(() => import('@/components/admin/RankingQuitacaoConfig'));
+const TremNatalConfig = lazy(() => import('@/components/admin/TremNatalConfig'));
+const VotacaoLideresConfig = lazy(() => import('@/components/admin/VotacaoLideresConfig'));
 
 interface Props {
   ehSuperAdmin: boolean;
@@ -110,7 +113,15 @@ export default function AbaEventos({ ehSuperAdmin, podeConfigurarRankingQuitacao
         })}
       </div>
 
-      <div key={atual.id}>{atual.conteudo}</div>
+      <div key={atual.id}>
+        <Suspense fallback={(
+          <p className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" /> Carregando…
+          </p>
+        )}>
+          {atual.conteudo}
+        </Suspense>
+      </div>
     </div>
   );
 }

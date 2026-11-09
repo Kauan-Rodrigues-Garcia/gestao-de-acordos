@@ -123,6 +123,49 @@ describe('AvisoVotacao', () => {
     expect(localStorage.getItem('votacao-lideres:resultado-visto:v9')).toBe('1');
   });
 
+  it('resultado de verdade: não fala em demonstração', async () => {
+    banco.minhas.mockResolvedValue([]);
+    banco.resultados.mockResolvedValue([{ id: 'v9', titulo: 'Votação de outubro', liberada_em: '2026-11-01T12:00:00Z' }]);
+    banco.resultado.mockResolvedValue({
+      ...aberta(null), votacao: { ...aberta(null).votacao, id: 'v9', estado: 'liberada' },
+      contagem: [{ pergunta_id: 'q1', candidato_id: 'b', votos: 3 }], desempates: [],
+    });
+    render(<AvisoVotacao recuoEsquerda={16} />);
+    fireEvent.click(await screen.findByRole('button', { name: /Ver resultado/ }));
+    expect(await screen.findByText(/Liberado pela diretoria/)).toBeTruthy();
+    expect(screen.queryByText(/demonstração|sorteados/i)).toBeNull();
+  });
+
+  it('aba escondida não pergunta; a volta põe em dia, mas não repete leitura recente', async () => {
+    vi.useFakeTimers();
+    const visibilidade = (v: 'visible' | 'hidden') => {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => v });
+      document.dispatchEvent(new Event('visibilitychange'));
+    };
+    try {
+      banco.minhas.mockResolvedValue([]);
+      render(<AvisoVotacao recuoEsquerda={16} />);
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      expect(banco.minhas).toHaveBeenCalledTimes(1);
+
+      visibilidade('hidden');
+      await act(async () => { await vi.advanceTimersByTimeAsync(13 * 60_000); });
+      expect(banco.minhas).toHaveBeenCalledTimes(1); // 2 voltas do relógio, nenhuma pergunta
+
+      visibilidade('visible');
+      await act(async () => { await vi.advanceTimersByTimeAsync(20_000); });
+      expect(banco.minhas).toHaveBeenCalledTimes(2);
+
+      visibilidade('hidden');
+      visibilidade('visible');
+      await act(async () => { await vi.advanceTimersByTimeAsync(20_000); });
+      expect(banco.minhas).toHaveBeenCalledTimes(2); // leu há menos de 2 min
+    } finally {
+      delete (document as unknown as { visibilityState?: string }).visibilityState;
+      vi.useRealTimers();
+    }
+  });
+
   it('banco sem a migration: nada aparece', async () => {
     banco.minhas.mockRejectedValue(new ErroDoBanco('Could not find the function public.fn_votacao_lideranca_minha', 'PGRST202'));
     render(<AvisoVotacao recuoEsquerda={16} />);

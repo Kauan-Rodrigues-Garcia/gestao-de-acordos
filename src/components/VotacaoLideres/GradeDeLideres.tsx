@@ -77,7 +77,9 @@ export function GradeDeLideres({ ids, pessoas, escolhido, eleitorId, rotulo, onE
                 className={cn(
                   'group relative flex shrink-0 flex-col rounded-2xl border-2 bg-card text-center shadow-sm transition-colors',
                   meu ? 'border-primary bg-primary/10 shadow-lg shadow-primary/20' : 'border-border hover:border-primary/60',
-                  travado && 'cursor-not-allowed grayscale',
+                  // Só a opacidade apaga quem não dá para escolher: `grayscale` é um
+                  // filtro por cartão, caro com dezenas de fotos no PC fraco (09/11/2026).
+                  travado && 'cursor-not-allowed',
                 )}>
                 <span className="relative block aspect-square w-full overflow-hidden rounded-xl bg-muted">
                   <FotoLider lider={p}

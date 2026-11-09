@@ -45,7 +45,7 @@ export function TelaResultado({ titulo, cedula, resultados, pessoas, demo, onFec
         </div>
       </header>
       <main className="min-h-0 flex-1 overflow-y-auto">
-        <ResultadoVotacao cedula={cedula} resultados={resultados} pessoas={pessoas} meus={{}} />
+        <ResultadoVotacao cedula={cedula} resultados={resultados} pessoas={pessoas} meus={{}} demo={demo} />
       </main>
     </div>,
     document.body,

@@ -60,7 +60,9 @@ export function CardDaVotacao({ tipo, titulo, minimizado, onAbrir, onMinimizar, 
                 )}
               </div>
               <div className="flex items-start gap-3.5 pr-14">
-                <motion.span animate={{ scale: [1, 1.08, 1] }} transition={{ repeat: Infinity, duration: 2.4 }}
+                {/* Pulsa três vezes e para: o card fica em todas as telas enquanto a
+                    votação está aberta, e animação infinita pesa no PC fraco (09/11/2026). */}
+                <motion.span animate={{ scale: [1, 1.08, 1] }} transition={{ repeat: 2, duration: 2.4 }}
                   className={cn('grid h-14 w-14 shrink-0 place-items-center rounded-2xl text-3xl', votar ? 'bg-primary/15' : 'bg-warning/15')} aria-hidden="true">
                   {votar ? '🗳️' : '🏆'}
                 </motion.span>

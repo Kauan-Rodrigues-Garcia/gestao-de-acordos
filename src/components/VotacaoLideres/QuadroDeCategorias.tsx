@@ -132,7 +132,7 @@ export function QuadroDeCategorias({ cedula, pessoas, eleitorId, meus, onEscolhe
           const escolhido = meus[pergunta.id] ? pessoas.get(meus[pergunta.id]) : undefined;
           const n = cedula.findIndex(c => c.pergunta.id === pergunta.id) + 1;
           return (
-            <motion.li key={pergunta.id} layout initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(n * 0.02, 0.4) }}
+            <motion.li key={pergunta.id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(n * 0.02, 0.4) }}
               ref={(el: HTMLElement | null) => { if (el) cartoes.current.set(pergunta.id, el); else cartoes.current.delete(pergunta.id); }}>
               <button type="button" onClick={() => abrir(pergunta.id)}
                 aria-label={`${pergunta.texto} ${escolhido ? `— escolhido: ${escolhido.nome}` : '— sem escolha'}`}
@@ -165,7 +165,8 @@ export function QuadroDeCategorias({ cedula, pessoas, eleitorId, meus, onEscolhe
       </ul>
 
       {/* A barra de enviar, sempre à vista. */}
-      <div className="fixed inset-x-0 bottom-0 z-10 border-t bg-background/95 px-4 py-3 backdrop-blur">
+      {/* Sem desfoque de fundo: refazer o blur a cada rolagem pesa no vídeo integrado (09/11/2026). */}
+      <div className="fixed inset-x-0 bottom-0 z-10 border-t bg-background px-4 py-3">
         <div className="mx-auto flex max-w-6xl items-center gap-3">
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium"><span className="tabular-nums">{respondidas}</span> de {exigidas} categorias escolhidas</p>

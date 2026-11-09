@@ -9,7 +9,7 @@
  *
  * Recebe o resultado já apurado e desempatado. Espaço/Enter revela e avança.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronLeft, ChevronRight, Crown, Trophy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -25,13 +25,15 @@ interface Props {
   resultados: ResultadoDaPergunta[];
   pessoas: ReadonlyMap<string, Candidato>;
   meus: MeusVotos;
+  /** Demonstração: avisa que os votos dos outros foram sorteados. No resultado de verdade, não. */
+  demo?: boolean;
 }
 
 const SUSPENSE_MS = 1800;
 /** Quantos aparecem nas barras antes de «Ver todos». */
 const TOPO = 5;
 
-export function ResultadoVotacao({ cedula, resultados, pessoas, meus }: Props) {
+export function ResultadoVotacao({ cedula, resultados, pessoas, meus, demo = false }: Props) {
   const quadro = useMemo(() => quadroDeTitulos(resultados), [resultados]);
 
   const fim = resultados.length; // a última «página» é o quadro de títulos
@@ -52,10 +54,14 @@ export function ResultadoVotacao({ cedula, resultados, pessoas, meus }: Props) {
   }, [apurando, ordemFixa.length]);
   useEffect(() => { setVerTodos(false); }, [idx]);
 
+  // Fechou a tela no meio do suspense: o temporizador não sobra.
+  const suspense = useRef(0);
+  useEffect(() => () => window.clearTimeout(suspense.current), []);
+
   const revelar = useCallback(() => {
     if (apurando || revelados.has(idx) || idx >= fim) return;
     setApurando(true);
-    window.setTimeout(() => {
+    suspense.current = window.setTimeout(() => {
       setRevelados(r => new Set(r).add(idx));
       setApurando(false);
     }, SUSPENSE_MS);
@@ -80,7 +86,9 @@ export function ResultadoVotacao({ cedula, resultados, pessoas, meus }: Props) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-lg font-bold">Resultado</h2>
-          <p className="text-[11px] text-muted-foreground">Liberado pela diretoria. Na demonstração, os votos dos outros foram sorteados; os seus entraram de verdade.</p>
+          <p className="text-[11px] text-muted-foreground">
+            Liberado pela diretoria.{demo ? ' Na demonstração, os votos dos outros foram sorteados; os seus entraram de verdade.' : ''}
+          </p>
         </div>
         <div className="flex flex-wrap gap-1" aria-label="Perguntas">
           {resultados.map((x, n) => (

@@ -12,7 +12,9 @@
  *
  * Cuidado com o banco (a lição da Caça às Bruxas, 15/10/2026): pergunta a cada
  * 5 min com folga sorteada, e na volta à aba espera um tempo sorteado, para as
- * telas não chegarem todas juntas.
+ * telas não chegarem todas juntas. Desde 05/11/2026: aba escondida não
+ * pergunta (a volta à aba põe em dia), e a volta não pergunta de novo se a
+ * última leitura foi há menos de 2 min.
  */
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -30,6 +32,8 @@ const TelaResultado = lazy(() => import('./TelaResultado').then(m => ({ default:
 const INTERVALO_MS = 5 * 60_000;
 const FOLGA_MS = 60_000;
 const VOLTA_MS = 20_000;
+/** Leitura mais recente que isto: a volta à aba não pergunta de novo. */
+const RECENTE_MS = 2 * 60_000;
 
 const ler = (chave: string) => { try { return localStorage.getItem(chave); } catch { return null; } };
 const gravar = (chave: string, v: string) => { try { localStorage.setItem(chave, v); } catch { /* sem armazenamento: só nesta tela */ } };
@@ -46,9 +50,13 @@ export function AvisoVotacao({ recuoEsquerda }: { recuoEsquerda: number }) {
   const [votando, setVotando] = useState<RetratoDaVotacao | null>(null);
   const [vendo, setVendo] = useState<{ titulo: string; retrato: RetratoDaVotacao } | null>(null);
   const semMigration = useRef(false);
+  const ultimaLeitura = useRef(0);
 
-  const carregar = useCallback(async () => {
+  /** `forcar`: lê mesmo que a última leitura seja recente (depois de votar). */
+  const carregar = useCallback(async (forcar = false) => {
     if (!eu || semMigration.current) return;
+    if (!forcar && Date.now() - ultimaLeitura.current < RECENTE_MS) return;
+    ultimaLeitura.current = Date.now();
     try {
       const [a, r] = await Promise.all([lerMinhasVotacoes(), lerMeusResultados()]);
       setAbertas(a ?? []);
@@ -62,7 +70,13 @@ export function AvisoVotacao({ recuoEsquerda }: { recuoEsquerda: number }) {
     if (!eu) return;
     void carregar();
     let timer = 0;
-    const agendar = () => { timer = window.setTimeout(() => { void carregar(); agendar(); }, INTERVALO_MS + Math.random() * FOLGA_MS); };
+    // Aba escondida não pergunta: ninguém está olhando, e a volta à aba põe em dia.
+    const agendar = () => {
+      timer = window.setTimeout(() => {
+        if (document.visibilityState === 'visible') void carregar();
+        agendar();
+      }, INTERVALO_MS + Math.random() * FOLGA_MS);
+    };
     agendar();
     let volta = 0;
     const visivel = () => {
@@ -123,7 +137,7 @@ export function AvisoVotacao({ recuoEsquerda }: { recuoEsquerda: number }) {
             catch (e) { throw new Error(mensagemDoErro(e)); }
             setAbertas(a => a.map(v => (v.votacao.id === votando.votacao.id ? { ...v, enviado_em: new Date().toISOString() } : v)));
           }}
-          onFechar={() => { setVotando(null); void carregar(); }} />
+          onFechar={() => { setVotando(null); void carregar(true); }} />
       )}
       {vendo && resultado && (
         <TelaResultado titulo={vendo.titulo} cedula={resultado.cedula} resultados={resultado.resultados} pessoas={resultado.pessoas}

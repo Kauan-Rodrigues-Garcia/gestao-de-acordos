@@ -153,11 +153,13 @@ export function TelaVotacao({ cedula, pessoas, eleitorId, semente, formato = 'ca
 
   // Entre o clique e a próxima pergunta, um segundo clique não pula pergunta.
   const indo = useRef(false);
+  const proxima = useRef(0);
+  useEffect(() => () => window.clearTimeout(proxima.current), []);
   const votar = useCallback((id: string) => {
     if (!item || id === eleitorId || bloqueados.has(id) || indo.current) return;
     setMeus(m => ({ ...m, [item.pergunta.id]: id }));
     indo.current = true;
-    window.setTimeout(() => { indo.current = false; avancar(); }, 420);
+    proxima.current = window.setTimeout(() => { indo.current = false; avancar(); }, 420);
   }, [item, eleitorId, bloqueados, avancar]);
 
   const voltar = useCallback(() => {
@@ -169,11 +171,11 @@ export function TelaVotacao({ cedula, pessoas, eleitorId, semente, formato = 'ca
     const tecla = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { onFechar(); return; }
       if (etapa !== 'pergunta' || !item) return;
-            if (e.key === 'ArrowLeft') voltar();
+      if (e.key === 'ArrowLeft') voltar();
     };
     window.addEventListener('keydown', tecla);
     return () => window.removeEventListener('keydown', tecla);
-  }, [etapa, item, votar, voltar, onFechar]);
+  }, [etapa, item, voltar, onFechar]);
 
   const progresso = etapa === 'categorias' ? respondidas / Math.max(1, cedula.length) : etapa === 'pergunta' ? (i + (meus[item?.pergunta.id ?? ''] ? 1 : 0)) / cedula.length : etapa === 'abertura' ? 0 : 1;
 
@@ -352,7 +354,7 @@ export function TelaVotacao({ cedula, pessoas, eleitorId, semente, formato = 'ca
 
           {etapa === 'resultado' && (
             <motion.section key="resultado" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-full">
-              <ResultadoVotacao cedula={cedula} resultados={finais} pessoas={pessoas} meus={meus} />
+              <ResultadoVotacao cedula={cedula} resultados={finais} pessoas={pessoas} meus={meus} demo={demo} />
             </motion.section>
           )}
         </AnimatePresence>
