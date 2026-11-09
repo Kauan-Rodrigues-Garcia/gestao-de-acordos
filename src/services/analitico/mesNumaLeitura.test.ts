@@ -42,6 +42,11 @@ vi.mock('@/lib/supabase', () => ({
     from: vi.fn((t: string) => createBuilder(t)),
     rpc:  vi.fn((nome: string, args: Record<string, unknown>) => {
       estado.rpcs.push({ nome, args });
+      // Este arquivo cobre a função de LINHAS: o banco daqui não tem a do mês
+      // já somado (20261109220000), que está em `mesAgregado.test.ts`.
+      if (nome === 'fn_analitico_mes_agregado') {
+        return Promise.resolve({ data: null, error: { message: 'Could not find the function public.fn_analitico_mes_agregado in the schema cache' } });
+      }
       if (nome === 'fn_analitico_mes_linhas') return Promise.resolve(estado.respostaRpc);
       return Promise.resolve({ data: [], error: null });
     }),

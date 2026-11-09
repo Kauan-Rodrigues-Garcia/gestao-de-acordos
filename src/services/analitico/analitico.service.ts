@@ -2157,8 +2157,23 @@ function limitesDoMes(mes: string): { primeiro: string; fim: string } {
  * `null` = use a paginação: a função não existe (banco sem a migration) ou a
  * chamada falhou. Função ausente não é perguntada de novo até recarregar a
  * página, para não somar um 404 a cada leitura.
+ *
+ * ## Já somado (20261109220000)
+ *
+ * Primeiro pergunta `fn_analitico_mes_agregado`: o mesmo mês, já somado por
+ * operador, setor, dia e procedência, com `qtd` = quantas linhas o grupo junta
+ * (outubro da BookPlay: 24.751 linhas, ~8 MB → 5.293 grupos, ~1,7 MB). Quem
+ * consome só soma valor/H.O. e conta pagamentos por `qtd` — `montarOrigens`,
+ * `buscarTotalOrfaosPorSetor` e `hojeDoConjunto` (celular). O
+ * `importado_por_id` só vem nas linhas sem `setor_id`: todo uso dele é a
+ * reserva do setor (`setor_id ?? …`). Sem a função nova (banco antigo), cai na
+ * de linhas; sem as duas, na paginação.
  */
 let funcaoDoMesAusente = false;
+let agregadoDoMesAusente = false;
+
+const ehFuncaoAusente = (msg: string, nome: string) =>
+  new RegExp(`${nome}|does not exist|schema cache|PGRST202`, 'i').test(msg);
 
 async function lerMesPelaFuncao<T>(
   empresaId: string,
@@ -2166,16 +2181,27 @@ async function lerMesPelaFuncao<T>(
   fim: string,
   operadores?: readonly string[],
 ): Promise<T[] | null> {
+  const args = {
+    p_empresa_id: empresaId,
+    p_inicio:     inicio,
+    p_fim:        fim,
+    ...(operadores ? { p_operadores: [...operadores] } : {}),
+  };
+  if (!agregadoDoMesAusente) {
+    try {
+      const { data, error } = await rpcSemTipo<T[]>('fn_analitico_mes_agregado', args);
+      if (!error) return Array.isArray(data) ? data : null;
+      if (!ehFuncaoAusente(error.message, 'fn_analitico_mes_agregado')) return null;
+      agregadoDoMesAusente = true;
+    } catch {
+      return null;
+    }
+  }
   if (funcaoDoMesAusente) return null;
   try {
-    const { data, error } = await rpcSemTipo<T[]>('fn_analitico_mes_linhas', {
-      p_empresa_id: empresaId,
-      p_inicio:     inicio,
-      p_fim:        fim,
-      ...(operadores ? { p_operadores: [...operadores] } : {}),
-    });
+    const { data, error } = await rpcSemTipo<T[]>('fn_analitico_mes_linhas', args);
     if (error) {
-      if (/fn_analitico_mes_linhas|does not exist|schema cache|PGRST202/i.test(error.message)) funcaoDoMesAusente = true;
+      if (ehFuncaoAusente(error.message, 'fn_analitico_mes_linhas')) funcaoDoMesAusente = true;
       return null;
     }
     return Array.isArray(data) ? data : null;
@@ -2494,10 +2520,16 @@ export interface LinhaRecebidaDia {
   ajuste_equipe_id?: string | null;
   /** Espelho do extra da Retenção: conta no setor, não na empresa — `linhaNoEscopo`. */
   espelho_extra?: boolean;
+  /**
+   * Quantos pagamentos esta linha representa. Ausente vale 1. O mês vem já
+   * somado do banco (`fn_analitico_mes_agregado`, 20261109220000): uma linha é
+   * um grupo, e quem conta pagamentos soma `qtd` em vez de contar linhas.
+   */
+  qtd?: number;
 }
 
 /**
- * Linhas cruas do mês, só com as colunas que o gráfico por dia precisa.
+ * Linhas do mês, só com as colunas que o gráfico por dia precisa.
  * Vem da mesma varredura das duas funções acima (ver o bloco no início desta
  * seção) — chamar as três lado a lado custa uma leitura, não três.
  */
@@ -2519,6 +2551,9 @@ export async function buscarRecebidoPorDia(
       contribuicao_de_setor_id: l.contribuicao_de_setor_id ?? null,
       ajuste_equipe_id: l.ajuste_equipe_id ?? null,
       espelho_extra:    l.espelho_extra === true,
+      // O ajuste manual continua contando 1, como quando cada linha era contada
+      // (aqui ele nunca valeu 0 — o `qtd: 0` dele é do ticket médio do setor).
+      qtd:              l.ajuste ? 1 : (l.qtd ?? 1),
     })),
     error: null,
   };
@@ -2548,7 +2583,7 @@ export async function buscarRecebidoPorDiaDosOperadores(
   const fim = `${mes}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
   const ids = [...operadorIds];
 
-  type LinhaDia = { operador_id: string | null; setor_id: string | null; valor_recebido: number; data_pagamento: string };
+  type LinhaDia = { operador_id: string | null; setor_id: string | null; valor_recebido: number; data_pagamento: string; qtd?: number };
   const pelaFuncao = await lerMesPelaFuncao<LinhaDia>(empresaId, inicio, fim, ids);
   const { data, error } = pelaFuncao ? { data: pelaFuncao, error: null } : await paginarParalelo<LinhaDia>(async (de, ate) => {
     const r = await supabase
@@ -2570,6 +2605,7 @@ export async function buscarRecebidoPorDiaDosOperadores(
     importado_por_id: null as string | null,
     valor_recebido: Number(l.valor_recebido) || 0,
     data_pagamento: l.data_pagamento,
+    qtd: l.qtd ?? 1,
   }));
   const doGrupo = new Set(ids);
   const ajustes = (await buscarAjustesComoLinhasDia(empresaId, mes))
