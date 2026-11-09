@@ -71,6 +71,7 @@ import { getImpersonacaoAtiva, sairImpersonacao } from '@/services/impersonacao.
 import { CrachaPendente } from '@/components/CrachaPendente';
 import { TemaNatalContext, cenaDaRota as cenaNatalDaRota, soParado as natalSoParado, temFundo as temFundoNatal } from '@/components/Natal/tema';
 import { EVENTO_REINICIAR_ABERTURA, abrirNatal, useNatal } from '@/components/Natal/previa';
+import { VIDEOS as VIDEOS_NATAL, marcarAbertura } from '@/components/Natal/abertura';
 import { MarcaNatal } from '@/components/Natal/MarcaNatal';
 import { PreviaNatal } from '@/components/Natal/PreviaNatal';
 import { SincelosDaMarca, SincelosDoTopo } from '@/components/Natal/Sincelos';
@@ -321,9 +322,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const { pathname } = useLocation();
   // Modo leve (`lib/modoLeve.ts`): do Natal fica só o que é parado.
   const leve = useModoLeve();
-  // Tema de Natal (novembro) — em prévia, só no navegador de quem pede
-  // (`Natal/previa.ts`).
-  const { podeVer: podeVerNatal, estilo: natal, pessoa: pessoaNatal, aberto: natalAberto, presenteOculto } = useNatal();
+  // Tema de Natal (novembro): só o super_admin até a liberação em Configurações;
+  // depois, todo mundo, a partir do presente (`Natal/previa.ts`).
+  const {
+    podeVer: podeVerNatal, prevista: previaNatal, estilo: natal, pessoa: pessoaNatal, aberto: natalAberto,
+    presenteOculto, pronto: natalPronto, video: videoNatal,
+  } = useNatal();
   // O tema entra no meio da abertura (atrás do bilhete), com ela ainda na tela:
   // a abertura fica montada até avisar que terminou.
   const [aberturaNatalViva, setAberturaNatalViva] = useState(false);
@@ -762,7 +766,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const conteudo = (
     <main ref={areaConteudo} data-natal-enfeite={enfeiteNoTitulo ? '' : undefined} className={cn('flex-1 overflow-y-auto', natal && 'relative', tremNaAba && 'isolate', cenaNatal && temFundoNatal(cenaNatal) ? 'z-[1] bg-transparent' : 'bg-background')}>
       {/* As camadas do Natal moram no alto do conteúdo e rolam com a página. */}
-      {cenaNatal && <Suspense fallback={null}><CamadaNatal cena={cenaNatal} /></Suspense>}
+      {cenaNatal && <Suspense fallback={null}><CamadaNatal cena={cenaNatal} leve={leve} /></Suspense>}
       {/* O trem corre por trás do conteúdo (`isolate` no <main> segura o z-index dele)
           e aparece inteiro nas faixas do alto e do pé. */}
       {tremNaAba && (
@@ -1079,7 +1083,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             Fica sempre, com ou sem Natal: trocar a caixa quando o tema entra
             (atrás do bilhete da abertura) montava a página de novo. */}
         <div className="relative flex-1 min-h-0 flex flex-col bg-background">
-          {cenaNatal && <Suspense fallback={null}>{temFundoNatal(cenaNatal) && <FundoNatal cena={cenaNatal} />}</Suspense>}
+          {cenaNatal && <Suspense fallback={null}>{temFundoNatal(cenaNatal) && <FundoNatal cena={cenaNatal} leve={leve} />}</Suspense>}
           {conteudo}
           {cenaNatal && (
             <Suspense fallback={null}>
@@ -1090,19 +1094,23 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           {natal && <Suspense fallback={null}><RevoadaNatal ativo={natal === 'detalhado' && !leve} /></Suspense>}
         </div>
         {/* A prévia (e os botões de teste da abertura) fica à mão mesmo antes de abrir o presente. */}
-        {podeVerNatal && <PreviaNatal estilo={natal} presenteAberto={natalAberto} presenteOculto={presenteOculto} />}
+        {previaNatal && <PreviaNatal estilo={natal} presenteAberto={natalAberto} presenteOculto={presenteOculto} video={videoNatal} />}
         {/* O presente do Natal: uma vez por pessoa, depois do termo e do tutorial,
-            e nunca na impersonação. `?natal=presente` (ou a prévia) devolve. */}
-        {(aberturaNatalViva || (podeVerNatal && !natalAberto && !termoLoading && !precisaAceitar && tourJaVisto && !getImpersonacaoAtiva())) && (
+            e nunca na impersonação. `?natal=presente` (ou a prévia) devolve.
+            Espera o banco dizer se a pessoa já abriu em outro computador. */}
+        {(aberturaNatalViva || (podeVerNatal && natalPronto && !natalAberto && !termoLoading && !precisaAceitar && tourJaVisto && !getImpersonacaoAtiva())) && (
           <Suspense fallback={null}>
             <AberturaNatal
               key={chaveAbertura}
               oculto={presenteOculto}
               aoPreparar={prepararNatal}
+              // O vídeo da cidade do setor: Marília vê o de Marília; o resto, o de Birigui.
+              video={VIDEOS_NATAL[videoNatal]}
+              aoMarcar={evento => marcarAbertura(evento, videoNatal)}
               // `flushSync`: «a abertura segue viva» entra antes de «o presente
               // foi aberto» (que chega por `useSyncExternalStore`, num render à
               // parte) — senão um render sem as duas desmontava o bilhete.
-              aoTemaEntrar={() => { flushSync(() => setAberturaNatalViva(true)); abrirNatal(pessoaNatal); }}
+              aoTemaEntrar={() => { flushSync(() => setAberturaNatalViva(true)); abrirNatal(pessoaNatal); marcarAbertura('liberou', videoNatal); }}
               aoTerminar={() => setAberturaNatalViva(false)}
             />
           </Suspense>

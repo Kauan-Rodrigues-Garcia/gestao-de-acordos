@@ -489,9 +489,19 @@ function Lareira({ topo, b }: { topo: number; b: Bagunca }) {
         stroke="#245F3D" strokeWidth={6.5} strokeLinecap="round" fill="none" />
       <path d="M202 63 Q217 72 232 63 Q247 72 262 63 Q277 72 292 63 Q307 72 322 63 Q337 72 352 63 Q367 72 382 63 Q392 69 398 63"
         stroke="#4DA373" strokeWidth={4.4} strokeLinecap="round" fill="none" strokeDasharray="1.2 2.4" />
+      {/* Brilho em degradê, sem `filter: blur` (09/11/2026, ver as luzes da árvore). */}
+      <defs>
+        {['#FF3B3B', '#FFC531', '#2FD16B', '#8FD3FF'].map((c, k) => (
+          <radialGradient key={c} id={`nt-ch-festao-brilho-${k}`}>
+            <stop offset="0" stopColor={c} stopOpacity={1} />
+            <stop offset="0.5" stopColor={c} stopOpacity={0.8} />
+            <stop offset="1" stopColor={c} stopOpacity={0} />
+          </radialGradient>
+        ))}
+      </defs>
       {luzes.map((x, i) => (
         <g key={x}>
-          <circle className="nt-ch-luz-halo pp-luz" cx={x} cy={68.5} r={5} fill={['#FF3B3B', '#FFC531', '#2FD16B', '#8FD3FF'][i % 4]}
+          <circle className="nt-ch-luz-halo pp-luz" cx={x} cy={68.5} r={6.6} fill={`url(#nt-ch-festao-brilho-${i % 4})`}
             style={varsDaLampada(i)} />
           <ellipse className="nt-ch-luz pp-luz" cx={x} cy={68.5} rx={1.8} ry={2.5} fill={['#FF3B3B', '#FFC531', '#2FD16B', '#8FD3FF'][i % 4]}
             style={varsDaLampada(i)} />
@@ -633,9 +643,20 @@ function Arvore() {
           <circle cx={x} cy={y} r={4.4} fill={`url(#nt-ch-bola-${cor})`} />
         </g>
       ))}
+      {/* O brilho de cada luz é um degradê, e não `filter: blur` (09/11/2026): o
+          desfoque era refeito a cada piscada, dentro do SVG do chalé inteiro. */}
+      <defs>
+        {['#FFF3B0', '#FF9AD0', '#9AD8FF', '#FFC531'].map((c, k) => (
+          <radialGradient key={c} id={`nt-ch-luz-brilho-${k}`}>
+            <stop offset="0" stopColor={c} stopOpacity={1} />
+            <stop offset="0.5" stopColor={c} stopOpacity={0.8} />
+            <stop offset="1" stopColor={c} stopOpacity={0} />
+          </radialGradient>
+        ))}
+      </defs>
       {luzes.map(([x, y], i) => (
         <g key={`${x}-${y}`}>
-          <circle className="nt-ch-luz-halo pp-luz" cx={x} cy={y} r={4.4} fill={['#FFF3B0', '#FF9AD0', '#9AD8FF', '#FFC531'][i % 4]} style={varsDaLampada(i + 20)} />
+          <circle className="nt-ch-luz-halo pp-luz" cx={x} cy={y} r={6} fill={`url(#nt-ch-luz-brilho-${i % 4})`} style={varsDaLampada(i + 20)} />
           <circle className="nt-ch-luz pp-luz" cx={x} cy={y} r={1.7} fill={['#FFF3B0', '#FF9AD0', '#9AD8FF', '#FFC531'][i % 4]} style={varsDaLampada(i + 20)} />
         </g>
       ))}

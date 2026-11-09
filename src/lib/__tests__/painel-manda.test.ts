@@ -156,9 +156,10 @@ const EXCECOES: Record<string, Excecao> = {
   },
   'components/Natal/previa.ts': {
     linhas: 1, familia: 'chave-mestra',
-    motivo: 'o tema de Natal ainda é PRÉVIA: só o super_admin (e o `npm run dev`) vê enfeite, trem e presente, '
-      + 'para validar o visual antes de liberar. Não concede dado nem tela — é decoração por cima das abas que '
-      + 'o painel já liberou. Na liberação para todos, a prévia sai e esta linha vai junto.',
+    motivo: 'o tema de Natal: antes da liberação (`natal_liberacao`, card de Configurações) só o super_admin '
+      + '(e o `npm run dev`) vê enfeite, trem e presente; depois, todo mundo — e a prévia (seletor de estilo e '
+      + 'testes da abertura) continua só do super_admin. Não concede dado nem tela — é decoração por cima das '
+      + 'abas que o painel já liberou. Quando o Natal acabar, esta linha vai junto.',
   },
   'pages/PainelDiretoria/index.tsx': {
     linhas: 1, familia: 'chave-mestra',

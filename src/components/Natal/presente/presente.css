@@ -293,6 +293,67 @@
 .np-fase-nevasca .np-video,
 .np-fase-assenta .np-video { display: none; }
 
+/* 5b. Fechou no meio (09/11/2026): o vídeo fica parado atrás, escurecido, e a
+   pergunta no meio. Sem desfoque (backdrop-filter pesa nos PCs da operação):
+   só um véu e o cartão de papel, do mesmo jeito da pergunta do presente. */
+.np-fase-pausa .np-espera { visibility: hidden; }
+.np-fase-pausa .np-luz { opacity: 1; clip-path: circle(150% at var(--np-ox) var(--np-oy)); }
+.np-fase-pausa .np-video { opacity: 1; }
+.np-pausa-fundo {
+  position: fixed;
+  inset: 0;
+  z-index: 6;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(12, 8, 18, .58);
+  pointer-events: auto;
+  animation: np-pausa-veu .25s ease-out both;
+}
+.np-pausa {
+  width: min(420px, 100%);
+  display: grid;
+  gap: 8px;
+  padding: 20px 20px 18px;
+  border-radius: 18px;
+  background: linear-gradient(170deg, #fffdf8, #fdf2df);
+  color: #3b2216;
+  font: 13.5px/1.5 Inter, system-ui, sans-serif;
+  box-shadow: 0 26px 60px -20px rgba(0, 0, 0, .7), inset 0 0 0 1px rgba(201, 143, 23, .45);
+  animation: np-pausa-chega .4s cubic-bezier(.2, 1.3, .4, 1) both;
+}
+.np-pausa b { font-size: 17px; font-weight: 800; color: #b3121f; }
+.np-pausa span { color: #6a4a38; }
+.np-pausa-botoes { display: grid; gap: 8px; margin-top: 8px; }
+.np-pausa-botoes button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 14px;
+  border: 1px solid rgba(106, 74, 56, .3);
+  border-radius: 999px;
+  background: transparent;
+  color: #6a4a38;
+  font: 700 13px/1 Inter, system-ui, sans-serif;
+  cursor: pointer;
+  transition: background-color .15s, transform .15s;
+}
+.np-pausa-botoes button:hover { background: rgba(106, 74, 56, .08); }
+.np-pausa-botoes button:active { transform: scale(.98); }
+.np-pausa-botoes button.principal {
+  border-color: transparent;
+  background: linear-gradient(180deg, #e0283a, #a50e1b);
+  color: #fff;
+  box-shadow: 0 8px 18px -8px rgba(165, 14, 27, .8);
+}
+.np-pausa-botoes button.principal:hover { filter: brightness(1.08); }
+.np-pausa-botoes button.pular { border-color: rgba(31, 122, 63, .45); color: #1f7a3f; }
+.np-pausa-botoes button.pular:hover { background: rgba(31, 122, 63, .08); }
+.np-pausa-botoes button:focus-visible { outline: 3px solid #f4c542; outline-offset: 2px; }
+@keyframes np-pausa-veu { from { opacity: 0; } }
+@keyframes np-pausa-chega { from { opacity: 0; transform: translateY(12px) scale(.96); } }
+
 .np-confete { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 5; pointer-events: none; }
 
 /* O clarão da carta virando bilhete: branco no meio, dourado em volta, e some. */

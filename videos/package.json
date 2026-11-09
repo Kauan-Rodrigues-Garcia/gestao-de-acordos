@@ -11,7 +11,9 @@
     "render:autorizacoes": "remotion render src/index.ts Autorizacoes prontos/autorizacoes-no-chat.mp4",
     "transcrever": "node scripts/transcrever.mjs",
     "medir": "node scripts/css-do-app.mjs && node scripts/medir.mjs",
-    "render:natal": "remotion render src/index.ts AberturaNatal prontos/abertura-natal.mp4 --concurrency=1"
+    "render:natal": "remotion render src/index.ts AberturaNatal prontos/abertura-natal.mp4 --concurrency=1",
+    "render:natal:marilia": "remotion render src/index.ts AberturaNatalMarilia prontos/abertura-natal-marilia.mp4 --concurrency=1",
+    "render:natal:marilia:remendo": "remotion render src/index.ts AberturaNatalMariliaRemendo prontos/abertura-natal-marilia.mp4 --crf=20"
   },
   "dependencies": {
     "@fontsource/bricolage-grotesque": "5.2.8",

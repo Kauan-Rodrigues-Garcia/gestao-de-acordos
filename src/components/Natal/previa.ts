@@ -1,36 +1,72 @@
 /**
- * previa.ts — quem vê o Natal enquanto ele está sendo desenhado.
+ * previa.ts — quem vê o Natal, e a prévia do super_admin.
  *
- * Ainda não há temporada nem liberação no banco: o tema só aparece para quem
- * pede, no navegador. `?natal=simples`, `?natal=detalhado` ou `?natal=off` no
- * endereço grava a escolha neste navegador; o seletor da prévia
- * (`PreviaNatal.tsx`) faz o mesmo sem mexer no endereço.
+ * ## Quem vê (09/11/2026)
  *
- * Só no `npm run dev` ou para o super_admin: em produção ninguém mais esbarra
- * nele. Quando for para todos, isto vira o `preferencia.ts` do Halloween
- * (temporada de novembro + liberação + escolha de cada pessoa).
+ * Antes da liberação (`liberacao.ts`, card de Configurações › Geral): só o
+ * super_admin e o `npm run dev`. Depois: todo mundo. Em qualquer caso o Natal
+ * só entra depois que a pessoa abre o presente (`presente/AberturaNatal.tsx`).
+ *
+ * ## A prévia
+ *
+ * Só do super_admin e do `npm run dev` — liberar não a mostra a ninguém
+ * mais. `?natal=simples`, `?natal=detalhado` ou `?natal=off` no endereço grava
+ * a escolha neste navegador; o seletor da prévia (`PreviaNatal.tsx`) faz o
+ * mesmo sem mexer no endereço. Para todo mundo o estilo é o detalhado (quem
+ * quer menos movimento liga o modo leve).
  */
 import { useEffect, useSyncExternalStore } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import { useEmpresa } from '@/hooks/useEmpresa';
 import { ligarMusica } from './musica';
+import { useNatalLiberado } from './liberacao';
+import { EVENTO_VIDEO_PREVIA, lerVideoDaPrevia, useMinhaAbertura, type VideoDaCidade } from './abertura';
 import type { EstiloNatal } from './tema';
 
 const CHAVE = 'natal:previa';
 const EVENTO = 'natal-previa';
 
-function ler(): EstiloNatal | null {
+/** O que a prévia gravou: um estilo, «off», ou nada (= o detalhado). */
+function ler(): EstiloNatal | 'off' | null {
   try {
     const v = localStorage.getItem(CHAVE);
-    return v === 'simples' || v === 'detalhado' ? v : null;
+    return v === 'simples' || v === 'detalhado' || v === 'off' ? v : null;
   } catch { return null; }
 }
 
+/** `null` desliga (grava «off»: sem nada gravado, o padrão é o detalhado). */
 export function escolherPreviaNatal(estilo: EstiloNatal | null) {
-  try {
-    if (estilo) localStorage.setItem(CHAVE, estilo);
-    else localStorage.removeItem(CHAVE);
-  } catch { /* modo privado */ }
+  try { localStorage.setItem(CHAVE, estilo ?? 'off'); } catch { /* modo privado */ }
   window.dispatchEvent(new Event(EVENTO));
+}
+
+/**
+ * O estilo de quem tem o presente aberto. Exportada para os testes: na prévia
+ * vale o que ela gravou; fora dela, sempre o detalhado.
+ */
+export function estiloDoNatal(gravado: EstiloNatal | 'off' | null, prevista: boolean): EstiloNatal | null {
+  if (!prevista) return 'detalhado';
+  if (gravado === 'off') return null;
+  return gravado ?? 'detalhado';
+}
+
+/**
+ * O presente está aberto para esta pessoa? Exportada para os testes.
+ * `local`: '1' abriu neste navegador; '0' a prévia devolveu o presente (vale
+ * mais que o banco, para o super_admin testar de novo); `null` nada aqui.
+ */
+export function presenteAberto(local: string | null, noBanco: boolean): boolean {
+  return local === '1' || (local !== '0' && noBanco);
+}
+
+/** Quem tem a prévia (e vê o Natal antes da liberação). Exportada para os testes. */
+export function natalEmPrevia(dev: boolean, cargo: string | null | undefined): boolean {
+  return dev || cargo === 'super_admin';
+}
+
+/** Quem vê o Natal: a prévia, ou todo mundo depois de liberado. Exportada para os testes. */
+export function podeVerNatal(p: { dev: boolean; cargo: string | null | undefined; liberado: boolean }): boolean {
+  return natalEmPrevia(p.dev, p.cargo) || p.liberado;
 }
 
 function assinar(aviso: () => void) {
@@ -44,29 +80,34 @@ function assinar(aviso: () => void) {
 
 /*
  * O presente da abertura (`presente/AberturaNatal.tsx`): o Natal só entra
- * depois que a pessoa abre o presente, vê o vídeo e clica em «Entrar no
- * Natal». Fica gravado neste navegador, por pessoa (ainda não no banco).
+ * depois que a pessoa abre o presente e clica em «Entrar no Natal» (vendo o
+ * vídeo até o fim ou pulando). Fica gravado neste navegador, por pessoa, e no
+ * banco (`abertura.ts`), que leva para os outros computadores dela.
  * `?natal=presente` no endereço devolve o presente, para testar de novo.
  */
 const chaveAberto = (pessoa: string) => `natal:presente-aberto:${pessoa}`;
 
-function lerAberto(pessoa: string): boolean {
-  try { return localStorage.getItem(chaveAberto(pessoa)) === '1'; } catch { return false; }
+function lerAberto(pessoa: string): string | null {
+  try { return localStorage.getItem(chaveAberto(pessoa)); } catch { return null; }
 }
 
-/** A pessoa abriu o presente: o Natal entra (no estilo da prévia, ou o detalhado). */
+/** A pessoa abriu o presente: o Natal entra. */
 export function abrirNatal(pessoa: string) {
   try { localStorage.setItem(chaveAberto(pessoa), '1'); } catch { /* modo privado: vale até recarregar */ }
-  if (!ler()) escolherPreviaNatal('detalhado');
   window.dispatchEvent(new Event(EVENTO));
 }
 
+/** A prévia devolve o presente: «0», que vale mais que o banco, neste navegador. */
 function devolverPresente() {
   try {
-    for (const k of Object.keys(localStorage)) if (k.startsWith('natal:presente-aberto:')) localStorage.removeItem(k);
+    for (const k of Object.keys(localStorage)) if (k.startsWith('natal:presente-aberto:')) localStorage.setItem(k, '0');
+    const eu = pessoaAtual;
+    if (eu) localStorage.setItem(chaveAberto(eu), '0');
   } catch { /* modo privado */ }
   window.dispatchEvent(new Event(EVENTO));
 }
+/** Quem está logado neste navegador (para devolver o presente dele mesmo sem chave gravada). */
+let pessoaAtual: string | null = null;
 
 // ── Os botões de teste da abertura (Cleber, 04/11/2026) ──────────────────────
 //
@@ -123,14 +164,49 @@ function lerDoEndereco() {
   window.history.replaceState(window.history.state, '', url);
 }
 
-export function useNatal(): { podeVer: boolean; estilo: EstiloNatal | null; pessoa: string; aberto: boolean; presenteOculto: boolean } {
+export interface EstadoNatal {
+  /** O tema está disponível para esta pessoa (liberado, super_admin ou dev). */
+  podeVer: boolean;
+  /** A prévia (seletor e testes): só super_admin e `npm run dev`. */
+  prevista: boolean;
+  estilo: EstiloNatal | null;
+  pessoa: string;
+  /** O presente está aberto neste navegador (o Natal ligado por ele). */
+  aberto: boolean;
+  presenteOculto: boolean;
+  /** Já se sabe se a pessoa abriu em outro computador (o presente espera por isso para não piscar). */
+  pronto: boolean;
+  /** O vídeo da cidade dela (ou o que a prévia escolheu). */
+  video: VideoDaCidade;
+}
+
+export function useNatal(): EstadoNatal {
   const { perfil } = useAuth();
-  const podeVer = import.meta.env.DEV || perfil?.perfil === 'super_admin';
+  const { empresa } = useEmpresa();
+  const liberado = useNatalLiberado(empresa?.id);
+  const prevista = natalEmPrevia(import.meta.env.DEV, perfil?.perfil);
+  const podeVer = podeVerNatal({ dev: import.meta.env.DEV, cargo: perfil?.perfil, liberado });
   const pessoa = perfil?.id ?? 'anonimo';
-  const estilo = useSyncExternalStore(assinar, ler);
-  const aberto = useSyncExternalStore(assinar, () => lerAberto(pessoa));
+  pessoaAtual = perfil?.id ?? null;
+  const gravado = useSyncExternalStore(assinar, ler);
+  const abertoLocal = useSyncExternalStore(assinar, () => lerAberto(pessoa));
   const presenteOculto = useSyncExternalStore(assinar, lerOculto);
-  useEffect(() => { if (podeVer) lerDoEndereco(); }, [podeVer]);
+  const videoDaPrevia = useSyncExternalStore(assinarVideoDaPrevia, lerVideoDaPrevia);
+  useEffect(() => { if (prevista) lerDoEndereco(); }, [prevista]);
+  // O banco só é perguntado com o presente ainda fechado aqui (aberto, não há o que saber).
+  const doBanco = useMinhaAbertura(perfil?.id ?? null, perfil?.setor_id ?? null, podeVer && abertoLocal !== '1');
+  const aberto = presenteAberto(abertoLocal, doBanco.liberou);
   // Sem o presente aberto, nada do Natal aparece (é ele que traz o tema).
-  return { podeVer, estilo: podeVer && aberto ? estilo : null, pessoa, aberto, presenteOculto: podeVer && presenteOculto };
+  return {
+    podeVer, prevista, pessoa, aberto,
+    estilo: podeVer && aberto ? estiloDoNatal(gravado, prevista) : null,
+    presenteOculto: prevista && presenteOculto,
+    pronto: abertoLocal === '1' || doBanco.pronto,
+    video: (prevista && videoDaPrevia) || doBanco.video,
+  };
+}
+
+function assinarVideoDaPrevia(aviso: () => void) {
+  window.addEventListener(EVENTO_VIDEO_PREVIA, aviso);
+  return () => window.removeEventListener(EVENTO_VIDEO_PREVIA, aviso);
 }

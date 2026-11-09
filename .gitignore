@@ -127,3 +127,5 @@ scripts/robo59/.env
 *.mov
 *.mkv
 !public/video/natal/abertura.mp4
+# 09/11/2026: o de Marília (as corridas e o mural foram só de Birigui).
+!public/video/natal/abertura-marilia.mp4

@@ -75,10 +75,11 @@
 
 /* As luzinhas da cornija e da árvore: o pisca vem do controlador (`piscaPisca.ts`). */
 .nt-ch-luz { --min: .45; }
-.nt-ch-luz-halo { --min: 0; opacity: .35; filter: blur(1.6px); }
+.nt-ch-luz-halo { --min: 0; }
 [data-pisca] .nt-ch-luz-halo { --min: 0; }
 .nt-ch-estrela path { transform-box: fill-box; transform-origin: center; animation: nt-ch-estrela 3s ease-in-out infinite; }
-@keyframes nt-ch-estrela { 50% { transform: scale(1.12) rotate(8deg); filter: drop-shadow(0 0 3px #FFE07A); } }
+/* Sem o `drop-shadow` no quadro do meio (09/11/2026): filtro animado refaz o desfoque a cada quadro. */
+@keyframes nt-ch-estrela { 50% { transform: scale(1.12) rotate(8deg); } }
 
 /* Do teto: a bola e a estrela balançando. */
 .nt-ch-pendurado { animation: nt-ch-pendulo 4s ease-in-out infinite; }

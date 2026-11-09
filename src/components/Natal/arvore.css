@@ -8,7 +8,10 @@
 .nt-arvore .av-fio { stroke: #22392B; stroke-width: .8; opacity: .85; }
 
 /* ── Luzinhas ────────────────────────────────────────────────────────────── */
-.av-lampada.acesa, .av-halo { animation: av-acende .5s ease-out var(--a) both, av-pisca var(--t) ease-in-out calc(var(--a) + .5s) infinite; }
+/* (09/11/2026) Só o halo pisca; a lâmpada acende e fica. Dentro do SVG cada
+   animação refaz o estilo e repinta o card a cada quadro: eram 38, ficam 19. */
+.av-lampada.acesa { animation: av-acende .5s ease-out var(--a) both; }
+.av-halo { animation: av-acende .5s ease-out var(--a) both, av-pisca var(--t) ease-in-out calc(var(--a) + .5s) infinite; }
 .av-halo { transform-box: fill-box; transform-origin: center; }
 @keyframes av-acende { from { opacity: 0; } 40% { opacity: 1; filter: brightness(1.6); } to { opacity: 1; } }
 @keyframes av-pisca { 0%, 100% { opacity: 1; } 45% { opacity: .55; } 60% { opacity: .95; } }

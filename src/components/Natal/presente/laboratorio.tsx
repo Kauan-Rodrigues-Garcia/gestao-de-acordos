@@ -6,7 +6,7 @@
  * voo, o estouro, o bilhete e a nevasca. Quando o bilhete entra, o lab liga
  * as camadas de Natal de verdade. Os botões embaixo são os da prévia.
  */
-/* eslint-disable react-refresh/only-export-components -- entrada de página avulsa (como o index.html), não um módulo de componentes. */
+ 
 import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ThemeProvider } from 'next-themes';
@@ -20,6 +20,10 @@ import { ligarMusica } from '../musica';
 import { pularAbertura } from '../previa';
 import { cenaDaRota } from '../tema';
 import { AberturaNatal } from './AberturaNatal';
+import { VIDEOS } from '../abertura';
+
+/** `?video=marilia`: o vídeo de Marília (o padrão é o de Birigui). */
+const VIDEO_DO_LAB = new URLSearchParams(location.search).get('video') === 'marilia' ? VIDEOS.marilia : VIDEOS.birigui;
 
 function Lab() {
   const [natal, setNatal] = useState(false);
@@ -78,6 +82,9 @@ function Lab() {
           aoPreparar={() => new Promise(r => window.setTimeout(r, 300))}
           aoTemaEntrar={() => setNatal(true)}
           aoTerminar={() => setAberta(false)}
+          video={VIDEO_DO_LAB}
+          // O que iria para o card de acompanhamento (no lab, só no console e em `window.__natalMarcas`).
+          aoMarcar={evento => { console.info('[natal] marca', evento); ((window as unknown as { __natalMarcas?: string[] }).__natalMarcas ??= []).push(evento); }}
         />
       )}
       {/* Por cima da abertura (que fica no z-index mais alto do app), como a prévia. */}

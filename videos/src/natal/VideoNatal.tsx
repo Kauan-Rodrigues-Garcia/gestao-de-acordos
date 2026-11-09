@@ -29,6 +29,7 @@ import { Conversa, ALVO_BORA, roteiroDaConversa } from './Conversa';
 import { Ceu } from './Ceu';
 import { Arena, SonsDaArena, roteiroDaArena } from './Arena';
 import { Montagem, SonsDaMontagem, roteiroDaMontagem } from './Montagem';
+import type { Cidade } from './cidade';
 
 /** A pessoa do vídeo, sem nome nem iniciais: só o cargo e o setor. */
 const SEM_NOME: Pessoa = { ...OPERADORA, nome: '', primeiroNome: '', iniciais: '' };
@@ -39,7 +40,7 @@ const CONVERSA = roteiroDaConversa();
 /** A arena começa logo depois do «Bora!». */
 const ARENA = roteiroDaArena(CONVERSA.sai + ms(300));
 /** Do preto da poção, a montagem num cenário só do vídeo (`Montagem.tsx`). */
-const MONTAGEM = roteiroDaMontagem(ARENA.fim);
+export const MONTAGEM = roteiroDaMontagem(ARENA.fim);
 export const TOTAL_NATAL = MONTAGEM.fim;
 
 export const T = {
@@ -85,7 +86,8 @@ const Som: React.FC = () => (
 
 // ── O vídeo ─────────────────────────────────────────────────────────────────
 
-export const VideoNatal: React.FC = () => (
+/** `cidade`: Birigui (padrão) ou Marília, que tem outras legendas das corridas em diante (`cidade.ts`). */
+export const VideoNatal: React.FC<{ cidade?: Cidade }> = ({ cidade = 'birigui' }) => (
   // Sem nome: cada pessoa assiste no próprio sistema, e um nome que não é o
   // dela denunciaria o vídeo (pedido do Cleber, 28/10).
   <PessoaContext.Provider value={SEM_NOME}>
@@ -95,7 +97,7 @@ export const VideoNatal: React.FC = () => (
       <Arena r={ARENA} />
       <Seta pontos={MOUSE_CONVERSA} cliques={[CONVERSA.clique]} tamanho={1.6} />
       <Luz />
-      <Montagem r={MONTAGEM} />
+      <Montagem r={MONTAGEM} cidade={cidade} />
       <Som />
     </AbsoluteFill>
   </PessoaContext.Provider>

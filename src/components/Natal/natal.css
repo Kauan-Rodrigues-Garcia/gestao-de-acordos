@@ -35,7 +35,8 @@
 /* O pisca do varal vem do controlador (`piscaPisca.ts` / `piscaPisca.css`). */
 .nt-miolo { width: 6px; height: 8px; background: radial-gradient(circle, #fff 0%, rgb(255 255 255 / .6) 45%, transparent 75%); z-index: 1;
   --min: .1; }
-.nt-vidro { --min: .5; }
+.nt-vidro { --min: .5; position: absolute; z-index: 1; width: 0; height: 0; transform-origin: 0 0; pointer-events: none; }
+.nt-vidro > svg { position: absolute; left: -6px; top: 3px; overflow: visible; }
 @keyframes nt-pisca { 0%, 100% { opacity: 1; } 45% { opacity: .25; } 60% { opacity: .9; } }
 
 /* ── Guirlanda ───────────────────────────────────────────────────────────── */
@@ -127,3 +128,33 @@
 @keyframes nt-rena-pisca { 0%, 93%, 100% { transform: scaleY(1); } 96% { transform: scaleY(.1); } }
 .nt-treno-svg .nariz { filter: drop-shadow(0 0 3px #FF4040); animation: nt-pisca 1.2s ease-in-out infinite; }
 .nt-treno-svg .nariz-halo { animation: nt-pisca 1.2s ease-in-out infinite; }
+
+/* ── Modo leve: leve, mas bonito (09/11/2026) ──────────────────────────────
+   O modo leve para as animações do app (`index.css`). Do Natal, duas voltam,
+   só com o que a placa de vídeo anima sozinha (opacidade e `transform`, sem
+   variável nos quadros-chave):
+     - o pisca-pisca do varal respira devagar, os dois fios revezando;
+     - 22 flocos de neve de CSS no lugar da neve em canvas (`NeveLeve`). */
+html[data-leve] .nt-varal-leve .pp-luz {
+  animation: pp-leve 4.2s ease-in-out infinite !important;
+  animation-delay: 0s !important;
+}
+html[data-leve] .nt-varal-leve .pp-b { animation-delay: -2.1s !important; }
+@keyframes pp-leve { 0%, 100% { opacity: .5; } 50% { opacity: 1; } }
+
+.nt-neve-leve { position: absolute; inset: 0; overflow: hidden; }
+.nt-neve-leve span {
+  position: absolute;
+  top: -12px;
+  border-radius: 50%;
+  background: radial-gradient(circle, currentColor 0 42%, transparent 72%);
+  will-change: transform;
+  animation-name: nt-neve-leve-a;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+.nt-neve-leve span:nth-child(3n + 1) { animation-name: nt-neve-leve-b; }
+.nt-neve-leve span:nth-child(3n + 2) { animation-name: nt-neve-leve-c; }
+@keyframes nt-neve-leve-a { from { transform: translate3d(0, 0, 0); } 50% { transform: translate3d(18px, 52vh, 0); } to { transform: translate3d(-6px, 104vh, 0); } }
+@keyframes nt-neve-leve-b { from { transform: translate3d(0, 0, 0); } 50% { transform: translate3d(-22px, 52vh, 0); } to { transform: translate3d(8px, 104vh, 0); } }
+@keyframes nt-neve-leve-c { from { transform: translate3d(0, 0, 0); } 50% { transform: translate3d(10px, 52vh, 0); } to { transform: translate3d(26px, 104vh, 0); } }

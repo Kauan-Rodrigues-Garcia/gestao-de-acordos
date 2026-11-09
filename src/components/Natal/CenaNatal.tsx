@@ -43,12 +43,33 @@ function useLargura() {
 
 // ── Fundo ─────────────────────────────────────────────────────────────────────
 
-export function FundoNatal({ cena }: { cena: CenaNatal }) {
+export function FundoNatal({ cena, leve = false }: { cena: CenaNatal; leve?: boolean }) {
   const claro = useClaro();
   return (
     <div className={cn('nt-fundo', claro && 'nt-claro')} aria-hidden="true">
       {cena.montes && <Montes />}
-      {cena.neve && <Neve cheia={cena.neve === 'cheia'} />}
+      {cena.neve && (leve ? <NeveLeve /> : <Neve cheia={cena.neve === 'cheia'} />)}
+    </div>
+  );
+}
+
+/** Os flocos da neve do modo leve: posição, tamanho, tempo e atraso, fixos (iguais em toda tela). */
+const FLOCOS_LEVES = Array.from({ length: 22 }, (_, i) => {
+  const r = (k: number) => ((Math.sin((i + 1) * 12.9898 * k) * 43758.5453) % 1 + 1) % 1;
+  return { x: r(1) * 100, tam: 3 + r(2) * 4, dura: 11 + r(3) * 9, atraso: -r(4) * 20, op: 0.5 + r(6) * 0.45 };
+});
+
+/**
+ * A neve do modo leve (09/11/2026): 22 flocos de CSS, cada um só com
+ * `transform` — a placa de vídeo anima sozinha, sem JavaScript nem pintura
+ * por quadro. `data-anima-sempre`: o modo leve não a para (`index.css`).
+ */
+function NeveLeve() {
+  return (
+    <div className="nt-neve-leve" data-anima-sempre="">
+      {FLOCOS_LEVES.map((f, i) => (
+        <span key={i} style={{ left: `${f.x.toFixed(2)}%`, width: f.tam, height: f.tam, opacity: f.op, animationDuration: `${f.dura.toFixed(1)}s`, animationDelay: `${f.atraso.toFixed(1)}s` }} />
+      ))}
     </div>
   );
 }
@@ -78,7 +99,8 @@ function Neve({ cheia }: { cheia: boolean }) {
       w = cv.clientWidth; h = cv.clientHeight;
       cv.width = Math.max(1, Math.round(w / 2)); cv.height = Math.max(1, Math.round(h / 2));
       cx.setTransform(cv.width / Math.max(1, w), 0, 0, cv.height / Math.max(1, h), 0, 0);
-      flocos = Array.from({ length: Math.round(w * h / (cheia ? 9000 : 16000)) }, () => novo(true));
+      // (09/11/2026) Um floco a cada 11 mil px² na cheia (eram 9 mil): os PCs da operação são fracos.
+      flocos = Array.from({ length: Math.round(w * h / (cheia ? 11000 : 16000)) }, () => novo(true));
     };
     let ultimo = 0;
     const desenhar = (agora: number) => {
@@ -129,12 +151,12 @@ function Montes() {
  * de um espaço a mais que a camada abre — senão as lâmpadas caem em cima do
  * título. O espaço é do tamanho do que pende: lâmpadas, ou lâmpadas e bolas.
  */
-export function CamadaNatal({ cena }: { cena: CenaNatal }) {
+export function CamadaNatal({ cena, leve = false }: { cena: CenaNatal; leve?: boolean }) {
   const respiro = !cena.luzes ? 0 : cena.enfeites ? 28 : cena.guirlanda ? 18 : 14;
   return (
     <>
       <div className="nt-camada" aria-hidden="true">
-        {cena.luzes && <Varal guirlanda={cena.guirlanda} bolas={cena.enfeites} />}
+        {cena.luzes && <Varal guirlanda={cena.guirlanda} bolas={cena.enfeites} leve={leve} />}
         {cena.chale && <Chale />}
       </div>
       {respiro > 0 && <div aria-hidden="true" style={{ height: respiro }} />}
@@ -157,12 +179,13 @@ const inclinacao = (t: number) => Math.atan((40 * (1 - 2 * t)) / VAO) * 180 / Ma
  * sozinha — alterna, onda, corre, frenético, estrelas… — como a caixinha do
  * pisca-pisca de loja. Antes era um piscar suave, sempre igual.
  */
-function Varal({ guirlanda, bolas }: { guirlanda: boolean; bolas: boolean }) {
+function Varal({ guirlanda, bolas, leve }: { guirlanda: boolean; bolas: boolean; leve: boolean }) {
   const largura = useLargura();
   const vaos = Math.ceil(largura / VAO) + 1;
   const modo = usePiscaPisca();
+  // No modo leve, o pisca-pisca respira devagar (só opacidade; ver `natal.css`).
   return (
-    <div className={cn('nt-varal', guirlanda && 'com-guirlanda')} data-pisca={modo}>
+    <div className={cn('nt-varal', guirlanda && 'com-guirlanda', leve && 'nt-varal-leve')} data-pisca={leve ? 'devagar' : modo}>
       {Array.from({ length: vaos }, (_, v) => (
         <div key={v} className="nt-vao" style={{ width: VAO }}>
           {LAMPADAS.map((t, i) => {
@@ -176,11 +199,15 @@ function Varal({ guirlanda, bolas }: { guirlanda: boolean; bolas: boolean }) {
             {guirlanda && <Guirlanda />}
             <path d={`M0 4 Q${VAO / 2} 24 ${VAO} 4`} className="fio" />
             {LAMPADAS.map((t, i) => {
-              const { x, y } = naCurva(t), n = v * LAMPADAS.length + i;
-              return <Lampada key={i} x={x} y={guirlanda ? y + 4 : y} giro={inclinacao(t)} cor={CORES_LUZ[n % CORES_LUZ.length]} n={n} />;
+              const { x, y } = naCurva(t);
+              return <Soquete key={i} x={x} y={guirlanda ? y + 4 : y} giro={inclinacao(t)} />;
             })}
             {guirlanda && <Laco />}
           </svg>
+          {LAMPADAS.map((t, i) => {
+            const { x, y } = naCurva(t), n = v * LAMPADAS.length + i;
+            return <Vidro key={i} x={x} y={guirlanda ? y + 4 : y} giro={inclinacao(t)} cor={CORES_LUZ[n % CORES_LUZ.length]} n={n} />;
+          })}
           {LAMPADAS.map((t, i) => {
             const { x, y } = naCurva(t), n = v * LAMPADAS.length + i;
             return <span key={i} className={cn('nt-miolo pp-luz', n % 2 ? 'pp-b' : 'pp-a')} style={{ left: x - 3, top: y + (guirlanda ? 16 : 12) - 4, ...varsDaLampada(n) }} />;
@@ -192,16 +219,27 @@ function Varal({ guirlanda, bolas }: { guirlanda: boolean; bolas: boolean }) {
   );
 }
 
-/** `n` liga o vidro ao controlador do pisca: apagada, a lâmpada fica no tom da cor. */
-function Lampada({ x, y, giro, cor, n }: { x: number; y: number; giro: number; cor: string; n?: number }) {
+/** O soquete de cada lâmpada, no SVG do fio (parado). */
+function Soquete({ x, y, giro }: { x: number; y: number; giro: number }) {
+  return <rect x="-2.3" y="0" width="4.6" height="4.4" rx=".9" className="soquete" transform={`translate(${x} ${y}) rotate(${giro.toFixed(1)})`} />;
+}
+
+/**
+ * O vidro da lâmpada, fora do SVG do fio (09/11/2026): cada um num `span`
+ * próprio, para o piscar ser só opacidade de um elemento HTML, que a placa de
+ * vídeo anima sozinha. Dentro do SVG, as 48 lâmpadas do Dashboard refaziam o
+ * estilo e repintavam a página inteira a cada quadro. `n` liga o vidro ao
+ * controlador do pisca: apagada, a lâmpada fica no tom da cor.
+ */
+function Vidro({ x, y, giro, cor, n }: { x: number; y: number; giro: number; cor: string; n: number }) {
   return (
-    <g transform={`translate(${x} ${y}) rotate(${giro.toFixed(1)})`}>
-      <rect x="-2.3" y="0" width="4.6" height="4.4" rx=".9" className="soquete" />
-      <g className={n == null ? undefined : cn('nt-vidro pp-luz', n % 2 ? 'pp-b' : 'pp-a')} style={n == null ? undefined : varsDaLampada(n)}>
+    <span className={cn('nt-vidro pp-luz', n % 2 ? 'pp-b' : 'pp-a')}
+      style={{ left: x, top: y, transform: `rotate(${giro.toFixed(1)}deg)`, ...varsDaLampada(n) }}>
+      <svg viewBox="-6 3 12 17" width={12} height={17}>
         <path d="M0 3.6 C4.6 4.6 5.6 10 4.1 14 C3.1 17 1.6 19 0 19.6 C-1.6 19 -3.1 17 -4.1 14 C-5.6 10 -4.6 4.6 0 3.6 Z" fill={cor} />
         <ellipse cx="-1.7" cy="9.5" rx=".9" ry="2.7" fill="#FFFFFF" opacity=".55" />
-      </g>
-    </g>
+      </svg>
+    </span>
   );
 }
 
@@ -338,7 +376,7 @@ function Festa() {
     const soltar = () => {
       const w = cv.clientWidth, h = cv.clientHeight, dpr = devicePixelRatio || 1;
       cv.width = w * dpr; cv.height = h * dpr; cx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      for (let i = 0; i < 46; i++) {
+      for (let i = 0; i < 38; i++) {
         const tipo = (i % 5 === 0 ? 1 : i % 3 === 0 ? 2 : 0) as 0 | 1 | 2;
         pecas.push({ x: acaso(0, w), y: acaso(-h * 0.25, -10), vx: acaso(-0.6, 0.6), vy: acaso(1.6, 3.4), r: acaso(0, 6), vr: acaso(-0.06, 0.06), a: 1, tipo, cor: Math.floor(acaso(0, 4)), tam: tipo === 1 ? acaso(7, 10) : tipo === 0 ? acaso(6, 10) : acaso(4, 7) });
       }

@@ -47,7 +47,15 @@ import { buzina, sino } from './sons';
  * o que acontece na aba aberta.
  */
 
-const PASSO_MODO_LEVE_MS = 90;
+/** No modo leve, ~15 quadros por segundo (era 11, e o trem andava aos trancos). */
+const PASSO_MODO_LEVE_MS = 64;
+/**
+ * Fora do modo leve, 30 quadros por segundo (09/11/2026: os PCs da operação
+ * são fracos). Cada quadro reescreve o `transform` dos carros e das rodas no
+ * SVG, que o navegador repinta; a 60 era o dobro do trabalho sem ganho que se
+ * veja num trem desse tamanho.
+ */
+const PASSO_NORMAL_MS = 32;
 /** De garantia, as medidas da página são relidas de tanto em tanto. */
 const REMEDIR_MS = 2000;
 /** Com o trem em outra aba, o quadro só confere de tanto em tanto (nada se mexe aqui). */
@@ -263,7 +271,7 @@ export function CamadaDoTrem({ aba, rota, raiz, leve }: {
     const passo = (t: number) => {
       quadro = requestAnimationFrame(passo);
       // Sem o trem nesta aba, nada se mexe: confere de vez em quando.
-      const passoMin = estavaAqui === false ? CONFERE_SEM_TREM_MS : leve ? PASSO_MODO_LEVE_MS : 0;
+      const passoMin = estavaAqui === false ? CONFERE_SEM_TREM_MS : leve ? PASSO_MODO_LEVE_MS : PASSO_NORMAL_MS;
       if (t - ultimoQuadro < passoMin) return;
       ultimoQuadro = t;
       const agora = relogioNatal();

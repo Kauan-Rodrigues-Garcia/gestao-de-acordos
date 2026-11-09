@@ -49,8 +49,13 @@ export function cenaDaRota(caminho: string, estilo: EstiloNatal): CenaNatal {
     : { luzes: true, guirlanda: true, enfeites: true, neve: 'cheia', montes: true, festa: true, chale: false };
 }
 
-/** Só o que é parado — para o modo leve (o chalé fica, sem se mexer). */
-export const soParado = (c: CenaNatal): CenaNatal => ({ ...VAZIA, luzes: c.luzes, guirlanda: c.guirlanda, enfeites: c.enfeites, montes: c.montes, chale: c.chale });
+/**
+ * O modo leve: o que é parado, e a neve. Leve, mas bonito (Cleber,
+ * 09/11/2026): a neve vira poucos flocos de CSS que a placa de vídeo anima
+ * sozinha (`NeveLeve` em `CenaNatal.tsx`), e o pisca-pisca acende e apaga
+ * devagar (`natal.css`). A festa do acordo salvo e o trenó ficam de fora.
+ */
+export const soParado = (c: CenaNatal): CenaNatal => ({ ...VAZIA, luzes: c.luzes, guirlanda: c.guirlanda, enfeites: c.enfeites, montes: c.montes, chale: c.chale, neve: c.neve });
 
 export const temFundo = (c: CenaNatal) => c.neve !== null || c.montes;
 

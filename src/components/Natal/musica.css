@@ -5,18 +5,31 @@
 
 /* Três barrinhas nas cores do Natal, fora de compasso. */
 .nt-musica-eq { display: flex; align-items: flex-end; gap: 2px; height: 13px; }
-.nt-musica-eq span { width: 3px; border-radius: 2px; background: oklch(0.6 0.2 27); animation: nt-musica-eq 1s ease-in-out infinite alternate; }
+/* (09/11/2026) A barrinha tem a altura toda e cresce por `scaleY`: animar `height`
+   refazia o layout do topo a cada quadro, a música inteira. */
+.nt-musica-eq span { width: 3px; height: 13px; border-radius: 2px; background: oklch(0.6 0.2 27); transform-origin: 50% 100%; animation: nt-musica-eq 1s ease-in-out infinite alternate; }
 .nt-musica-eq span:nth-child(2) { background: oklch(0.6 0.14 150); animation-duration: .8s; animation-delay: -.3s; }
 .nt-musica-eq span:nth-child(3) { background: oklch(0.78 0.14 85); animation-duration: 1.15s; animation-delay: -.6s; }
-@keyframes nt-musica-eq { from { height: 3px; } to { height: 13px; } }
+@keyframes nt-musica-eq { from { transform: scaleY(.23); } to { transform: scaleY(1); } }
 
 .nt-musica-topo { background: linear-gradient(135deg, oklch(0.6 0.2 27 / .1), oklch(0.6 0.14 150 / .1)); border-bottom: 1px solid var(--border); }
 
 /* O aviso de depois da abertura (`AvisoDaMusica`): aponta para o botão, que pulsa junto. */
-.nt-musica-botao.avisando { animation: nt-musica-chama 1.4s ease-in-out infinite; }
+/* O anel é um ::after que cresce e apaga (só transform e opacidade); antes era
+   `box-shadow` animado, repintado a cada quadro. */
+.nt-musica-botao.avisando { position: relative; }
+.nt-musica-botao.avisando::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 0 0 2px oklch(0.6 0.2 27 / .5);
+  pointer-events: none;
+  animation: nt-musica-chama 1.4s ease-out infinite;
+}
 @keyframes nt-musica-chama {
-  0%, 100% { box-shadow: 0 0 0 0 oklch(0.6 0.2 27 / .45); }
-  50% { box-shadow: 0 0 0 7px oklch(0.6 0.2 27 / 0); }
+  0% { transform: scale(1); opacity: 1; }
+  70%, 100% { transform: scale(1.35); opacity: 0; }
 }
 .nt-musica-aviso {
   position: fixed;

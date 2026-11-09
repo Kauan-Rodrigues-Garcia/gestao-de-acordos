@@ -46,6 +46,7 @@ import { NOME } from './nome';
 import { CenaErika, ClaraoDoPremio, SonsDaErika, cameraNoPremio, roteiroDaErika } from './Erika';
 import { Laco } from '@/components/Natal/presente/arte';
 import { estiloDaFita, estiloDoPapel } from '@/components/Natal/presente/papel';
+import type { Cidade } from './cidade';
 
 fonteNunito('normal', { weights: ['600', '700', '800', '900'], subsets: ['latin', 'latin-ext'] });
 fonteCaveat('normal', { weights: ['700'], subsets: ['latin', 'latin-ext'] });
@@ -951,9 +952,53 @@ const Embrulho: React.FC<{ de: number }> = ({ de }) => {
   );
 };
 
+// ── As legendas ─────────────────────────────────────────────────────────────
+
+/**
+ * As legendas da montagem: a mesma pílula do sistema, no alto. Até o player
+ * são as mesmas nas duas cidades; das corridas em diante, Marília ganha as
+ * dela (`cidade.ts`): as corridas e o mural foram só de Birigui.
+ */
+export function legendasDaMontagem(r: RoteiroMontagem, cidade: Cidade): Recado[] {
+  const { pesquisa: p, player: pl, corrida: c, cavalos: k, erika: e } = r;
+  const comuns: Recado[] = [
+    { de: p.entra + ms(200), ate: p.resultado - ms(100), olho: 'A pesquisa', texto: 'A gente quis saber: como tá sendo usar o Gestão?', icone: '☕', cor: '#f2a66b' },
+    { de: p.resultado + ms(150), ate: p.comentarios - ms(150), texto: '250 votos — e quase todo mundo aprovou.', icone: '📊', cor: '#5cbf73' },
+    { de: p.comentarios + ms(100), ate: p.obrigado - ms(250), texto: 'E chegaram recados que a gente guarda com carinho.', icone: '💬', cor: '#f2a66b' },
+    { de: pl.entra + ms(150), ate: pl.clique - ms(100), olho: 'O player', texto: 'Teve trilha sonora o mês inteiro: funk, rap, sertanejo e terror.', icone: '🎧', cor: '#facc15' },
+    { de: pl.clique + ms(200), ate: pl.morre - ms(100), texto: 'Cada um escolhia a sua e dava o play.', icone: '▶️', cor: '#facc15' },
+    { de: pl.lapide - ms(150), ate: pl.sai, texto: 'Foi bom enquanto durou.', icone: '🪦', cor: '#fb923c' },
+  ];
+  if (cidade === 'birigui') {
+    return [
+      ...comuns,
+      { de: c.entra + ms(200), ate: c.corte - ms(100), olho: 'A Corrida das Almas', texto: 'Bichinhos despencando pela pista, e todo mundo torcendo.', icone: '🏁', cor: '#ffd84d' },
+      { de: c.corte + ms(150), ate: c.sai, texto: 'E na chegada, câmera lenta pra ver quem levou!', icone: '🏆', cor: '#ffd84d' },
+      { de: k.entra + ms(300), ate: k.guerra + ms(600), olho: 'A Corrida de Cavalos', texto: 'E teve corrida de cavalos, com torcida e tudo.', icone: '🐎', cor: '#e2c398' },
+      { de: k.comecaGuerra + ms(100), ate: k.comecaGuerra + s(2.9), olho: 'A Guerra na Corrida', texto: 'No meio da corrida… começou a guerra!', icone: '💣', cor: '#ff7a4a' },
+      { de: k.comecaGuerra + s(3.1), ate: k.telaCheia - ms(100), texto: 'Explosão, fogo e cavalo caindo por todo lado.', icone: '🔥', cor: '#ff7a4a' },
+    ];
+  }
+  // Marília (09/11/2026): as cenas são as mesmas; as falas contam que foi lá
+  // em Birigui, que dessa vez Marília ficou de fora e que vem mais por aí.
+  return [
+    ...comuns,
+    { de: c.entra + ms(200), ate: c.corte - ms(100), olho: 'A Corrida das Almas', texto: 'Em Birigui, teve corrida de bichinhos com todo mundo torcendo.', icone: '🏁', cor: '#ffd84d' },
+    { de: c.corte + ms(150), ate: c.sai, texto: 'Dessa vez Marília não participou… mas vem muito mais por aí!', icone: '✨', cor: '#ffd84d' },
+    { de: k.entra + ms(300), ate: k.guerra + ms(600), olho: 'A Corrida de Cavalos', texto: 'E por lá ainda teve corrida de cavalos, com torcida e tudo.', icone: '🐎', cor: '#e2c398' },
+    { de: k.comecaGuerra + ms(100), ate: k.comecaGuerra + s(2.9), olho: 'A Guerra na Corrida', texto: 'No meio da corrida… começou a guerra!', icone: '💣', cor: '#ff7a4a' },
+    { de: k.comecaGuerra + s(3.1), ate: k.telaCheia - ms(100), texto: 'Explosão, fogo e cavalo caindo por todo lado.', icone: '🔥', cor: '#ff7a4a' },
+    // O mural ocupa a tela toda: a pílula fica bem no alto, sobre o título dele.
+    { de: k.mural + ms(900), ate: e.entra - ms(150), olho: 'O mural de outubro', texto: 'O mural da Coisa também foi só de Birigui.', icone: '🎈', cor: '#ff5a5f', topo: 14 },
+    // Na Garrafa da Erika, no alto, por cima do varal de luzes (o título fica livre).
+    { de: e.foto, ate: e.numeros + ms(500), olho: 'Marília', texto: 'Essas foram de Birigui: dessa vez vocês ficaram de fora.', icone: '📍', cor: '#7cc4ff', topo: 8 },
+    { de: e.numeros + ms(900), ate: k.embrulha - ms(100), olho: 'Marília', texto: 'Mas fica de olho: tem muito mais pela frente!', icone: '🎄', cor: '#5cbf73', topo: 8 },
+  ];
+}
+
 // ── A montagem ──────────────────────────────────────────────────────────────
 
-export const Montagem: React.FC<{ r: RoteiroMontagem }> = ({ r }) => {
+export const Montagem: React.FC<{ r: RoteiroMontagem; cidade?: Cidade }> = ({ r, cidade = 'birigui' }) => {
   const f = useCurrentFrame();
   const rec = useGravacao();
   if (f < r.inicio || f > r.fim) return null;
@@ -970,21 +1015,7 @@ export const Montagem: React.FC<{ r: RoteiroMontagem }> = ({ r }) => {
     { f: r.player.clique - ms(80), x: ALVO_LINHA.x, y: ALVO_LINHA.y, viagemMs: 450 },
     { f: r.player.clique + ms(600), x: ALVO_LINHA.x + 330, y: ALVO_LINHA.y + 120, viagemMs: 600 },
   ];
-  const { pesquisa: p, player: pl, corrida: c, cavalos: k } = r;
-  // As legendas da montagem: a mesma pílula do sistema, no alto.
-  const legendas: Recado[] = [
-    { de: p.entra + ms(200), ate: p.resultado - ms(100), olho: 'A pesquisa', texto: 'A gente quis saber: como tá sendo usar o Gestão?', icone: '☕', cor: '#f2a66b' },
-    { de: p.resultado + ms(150), ate: p.comentarios - ms(150), texto: '250 votos — e quase todo mundo aprovou.', icone: '📊', cor: '#5cbf73' },
-    { de: p.comentarios + ms(100), ate: p.obrigado - ms(250), texto: 'E chegaram recados que a gente guarda com carinho.', icone: '💬', cor: '#f2a66b' },
-    { de: pl.entra + ms(150), ate: pl.clique - ms(100), olho: 'O player', texto: 'Teve trilha sonora o mês inteiro: funk, rap, sertanejo e terror.', icone: '🎧', cor: '#facc15' },
-    { de: pl.clique + ms(200), ate: pl.morre - ms(100), texto: 'Cada um escolhia a sua e dava o play.', icone: '▶️', cor: '#facc15' },
-    { de: pl.lapide - ms(150), ate: pl.sai, texto: 'Foi bom enquanto durou.', icone: '🪦', cor: '#fb923c' },
-    { de: c.entra + ms(200), ate: c.corte - ms(100), olho: 'A Corrida das Almas', texto: 'Bichinhos despencando pela pista, e todo mundo torcendo.', icone: '🏁', cor: '#ffd84d' },
-    { de: c.corte + ms(150), ate: c.sai, texto: 'E na chegada, câmera lenta pra ver quem levou!', icone: '🏆', cor: '#ffd84d' },
-    { de: k.entra + ms(300), ate: k.guerra + ms(600), olho: 'A Corrida de Cavalos', texto: 'E teve corrida de cavalos, com torcida e tudo.', icone: '🐎', cor: '#e2c398' },
-    { de: k.comecaGuerra + ms(100), ate: k.comecaGuerra + s(2.9), olho: 'A Guerra na Corrida', texto: 'No meio da corrida… começou a guerra!', icone: '💣', cor: '#ff7a4a' },
-    { de: k.comecaGuerra + s(3.1), ate: k.telaCheia - ms(100), texto: 'Explosão, fogo e cavalo caindo por todo lado.', icone: '🔥', cor: '#ff7a4a' },
-  ];
+  const legendas = legendasDaMontagem(r, cidade);
   return (
     <AbsoluteFill className="nt-montagem" style={{ overflow: 'hidden' }}>
       <Cenario r={r} />

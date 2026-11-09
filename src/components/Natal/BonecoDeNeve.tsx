@@ -414,14 +414,22 @@ function BonecoDeNeve({ geo, parado, rastro }: {
     };
 
     let antes = performance.now();
+    let ultimoX = Number.NaN;
+    let ultimaGeo: unknown = null;
     let quadro = requestAnimationFrame(function laco(agora) {
-      const dt = Math.min(0.05, (agora - antes) / 1000);
-      antes = agora;
       if (cesta.ativo) {
+        antes = agora;
+        ultimoX = Number.NaN; // a cesta mexe nele por conta própria: na volta, reposiciona
         animarCesta(agora);
         quadro = requestAnimationFrame(laco);
         return;
       }
+      // Passeando, 30 quadros por segundo bastam (09/11/2026: os PCs da
+      // operação são fracos); o corpo e os braços são CSS e seguem lisos. A
+      // cesta, que é jogo, continua a 60.
+      if (agora - antes < 31) { quadro = requestAnimationFrame(laco); return; }
+      const dt = Math.min(0.05, (agora - antes) / 1000);
+      antes = agora;
       const [min, max] = limites();
       e.x = Math.min(max, Math.max(min, e.x));
       if (e.movendo) {
@@ -446,7 +454,9 @@ function BonecoDeNeve({ geo, parado, rastro }: {
         el.style.setProperty('--vel', nevoa.toFixed(3));
       }
       e.nevoa = nevoa;
-      posicionar(e.x);
+      // Parado, não reescreve o mesmo `transform` a cada quadro.
+      // (O card mudando de tamanho troca a geometria: aí reposiciona também.)
+      if (e.x !== ultimoX || geoAtual.current !== ultimaGeo) { ultimoX = e.x; ultimaGeo = geoAtual.current; posicionar(e.x); }
       quadro = requestAnimationFrame(laco);
     });
 

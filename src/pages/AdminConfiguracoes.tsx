@@ -24,6 +24,7 @@ import AdminDiretoExtra from '@/pages/AdminDiretoExtra';
 import AdminTags from '@/components/admin/AdminTags';
 import AcessoMultiempresa from '@/components/admin/AcessoMultiempresa';
 import LiberacaoChat from '@/components/admin/LiberacaoChat';
+import NatalLiberacaoConfig from '@/components/admin/NatalLiberacaoConfig';
 import CrachaPedidoConfig from '@/components/admin/CrachaPedidoConfig';
 import AdminDocumentacoes from '@/pages/AdminDocumentacoes';
 import AdminCargos from '@/components/admin/AdminCargos';
@@ -282,6 +283,11 @@ export default function AdminConfiguracoes() {
               mandar depois que ela abre. Só super_admin vira — a policy
               `chat_config_update` confere de novo no banco. */}
           {ehSuperAdmin && <LiberacaoChat />}
+
+          {/* ── Tema de Natal (09/11/2026): liberar para todos, recolher, e quem já
+              abriu o presente em Birigui e em Marília. Só super_admin — as
+              funções `fn_natal_*` conferem de novo no banco. */}
+          {ehSuperAdmin && <NatalLiberacaoConfig />}
 
           {/* Modelos de mensagem */}
           <Card className="border-border">
