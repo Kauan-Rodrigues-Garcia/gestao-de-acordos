@@ -410,6 +410,11 @@ export interface FeriadoDoDia {
   folga: boolean;
 }
 
+function ehDomingo(iso: string): boolean {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, m - 1, d).getDay() === 0;
+}
+
 export function feriadosDoMes(mes: string, feriadosOficiais: readonly string[]): Map<string, FeriadoDoDia> {
   const ano = Number(mes.slice(0, 4));
   const nacionais = new Map(feriadosNacionais(ano).map(f => [f.dia, f.nome]));
@@ -418,7 +423,8 @@ export function feriadosDoMes(mes: string, feriadosOficiais: readonly string[]):
   for (const iso of diasDoMes(mes)) {
     const nome = nacionais.get(iso);
     if (oficiais.has(iso)) mapa.set(iso, { nome: nome ?? 'Feriado', folga: true });
-    else if (nome) mapa.set(iso, { nome, folga: false });
+    // Feriado no domingo nunca é expediente: domingo já não se trabalha.
+    else if (nome) mapa.set(iso, { nome, folga: ehDomingo(iso) });
   }
   return mapa;
 }

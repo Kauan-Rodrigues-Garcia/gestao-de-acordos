@@ -110,6 +110,11 @@ describe('o feriado vem das Metas', () => {
     expect(f.get('2026-11-03')).toBeUndefined();
   });
 
+  it('feriado nacional no domingo não é expediente', () => {
+    const f = feriadosDoMes('2026-11', []);
+    expect(f.get('2026-11-15')).toEqual({ nome: 'Proclamação da República', folga: true });
+  });
+
   it('o formulário não lança feriado nem tem modelo dele', () => {
     expect(TIPOS_LANCAVEIS).not.toContain('feriado');
     expect(MODELOS.some(m => m.tipo === 'feriado')).toBe(false);
