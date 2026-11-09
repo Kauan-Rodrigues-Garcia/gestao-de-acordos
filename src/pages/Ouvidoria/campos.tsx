@@ -3,7 +3,7 @@
  * desenho do calendário do acordo (popover arredondado, sombra, itens
  * redondos), no lugar do `<select>` nativo do navegador.
  *
- *   CampoLista     lista de opções (canal, situação, status, responsável)
+ *   CampoLista     lista de opções (canal, situação, status, responsável, filtros)
  *   SeletorCoren   os 27 Corens numa grade de estados, como os dias do calendário
  */
 import { useState, type ReactNode } from 'react';
@@ -26,7 +26,7 @@ const CAIXA =
   'p-1.5 rounded-xl shadow-lg border bg-popover';
 
 export function CampoLista({
-  id, valor, opcoes, aoMudar, vazio, invalido, largura,
+  id, valor, opcoes, aoMudar, vazio, invalido, largura, compacto, className, rotulo, desligado,
 }: {
   id?: string;
   valor: string;
@@ -37,6 +37,12 @@ export function CampoLista({
   invalido?: boolean;
   /** Largura da caixa aberta; padrão = a do campo. */
   largura?: string;
+  /** Altura de filtro (h-9) e largura pelo conteúdo, para as barras de filtro. */
+  compacto?: boolean;
+  className?: string;
+  /** Nome do campo para leitor de tela, quando não há Label. */
+  rotulo?: string;
+  desligado?: boolean;
 }) {
   const [aberto, setAberto] = useState(false);
   const atual = opcoes.find(o => o.valor === valor);
@@ -50,7 +56,12 @@ export function CampoLista({
           type="button"
           variant="outline"
           aria-haspopup="listbox"
-          className={cn(GATILHO, !atual && 'text-muted-foreground', invalido && 'border-destructive')}
+          aria-label={rotulo}
+          disabled={desligado}
+          className={cn(
+            GATILHO, compacto && 'h-9 w-auto min-w-[150px] max-w-[240px]',
+            !atual && 'text-muted-foreground', invalido && 'border-destructive', className,
+          )}
         >
           <span className="flex items-center gap-2 min-w-0">
             {atual?.marca}
@@ -61,7 +72,7 @@ export function CampoLista({
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className={cn(CAIXA, 'max-h-72 overflow-y-auto', largura ?? 'w-[var(--radix-popover-trigger-width)]')}
+        className={cn(CAIXA, 'max-h-72 overflow-y-auto', largura ?? (compacto ? 'w-auto min-w-[var(--radix-popover-trigger-width)] max-w-[300px]' : 'w-[var(--radix-popover-trigger-width)]'))}
       >
         <ul role="listbox" className="space-y-0.5">
           {vazio && (

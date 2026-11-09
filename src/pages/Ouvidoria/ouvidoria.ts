@@ -18,6 +18,39 @@ export type Canal = 'telefone' | 'whatsapp' | 'email' | 'ouvidoria' | 'outro';
 export type Assunto = 'operador' | 'chatplay' | 'cobranca_indevida' | 'reclamacao_generica' | 'outros';
 export type SituacaoFinanceira = 'em_aberto' | 'parcelada' | 'quitada' | 'judicializada' | 'outra';
 export type Status = 'aberto' | 'em_andamento' | 'pendente_documentos' | 'encaminhado_coren' | 'concluido';
+export type TicketStatus = 'pendente' | 'aberto';
+export type CorEtiqueta = 'verde' | 'vermelho' | 'amarelo' | 'azul' | 'roxo' | 'laranja' | 'rosa' | 'cinza';
+
+/** Uma cor da legenda das anuidades («verde = alegou ter pago»), do setor. */
+export interface Etiqueta {
+  id: string;
+  setor_id: string;
+  nome: string;
+  cor: CorEtiqueta;
+  criado_por: string | null;
+  criado_em: string;
+}
+
+/** Reclamação repetida do dia: o assunto e o relato padrão de várias manifestações. */
+export interface Grupo {
+  id: string;
+  empresa_id: string;
+  setor_id: string;
+  numero: number;
+  codigo: string;
+  titulo: string;
+  assunto: Assunto;
+  canal: Canal | null;
+  descricao: string;
+  providencia: string | null;
+  responsavel_id: string | null;
+  responsavel_nome: string | null;
+  encerrado_em: string | null;
+  criado_por: string | null;
+  criado_por_nome: string | null;
+  criado_em: string;
+  atualizado_em: string;
+}
 
 export interface Manifestacao {
   id: string;
@@ -47,9 +80,28 @@ export interface Manifestacao {
   criado_em: string;
   atualizado_por_nome: string | null;
   atualizado_em: string;
+  // ── 20261109120000 (opcionais: o laboratório e linha antiga podem não ter) ──
+  grupo_id?: string | null;
+  /** Etiqueta de cada ano: { "2024": "<id da etiqueta>" }. */
+  anuidades_etiquetas?: Record<string, string>;
+  retorno_agendado_em?: string | null;
+  retorno_agendado_nota?: string | null;
+  retorno_agendado_por?: string | null;
+  retorno_agendado_por_nome?: string | null;
+  responsavel_encaminhado_em?: string | null;
+  responsavel_ciente_em?: string | null;
+  responsavel_respondeu_em?: string | null;
+  responsavel_resposta_vista_em?: string | null;
+  ticket_status?: TicketStatus | null;
+  ticket_pedido?: string | null;
+  ticket_numero?: string | null;
+  ticket_aberto_em?: string | null;
+  ticket_aberto_por_nome?: string | null;
 }
 
-export type TipoAndamento = 'criada' | 'status' | 'retorno' | 'responsavel' | 'acompanhamento' | 'edicao' | 'nota';
+export type TipoAndamento =
+  | 'criada' | 'status' | 'retorno' | 'responsavel' | 'acompanhamento' | 'edicao' | 'nota'
+  | 'agendamento' | 'ciencia' | 'resposta' | 'ticket' | 'grupo';
 
 export interface Andamento {
   id: string;
@@ -125,6 +177,18 @@ export const rotuloSituacao = (v: SituacaoFinanceira | null | undefined) => rotu
 export const rotuloStatus = (v: Status | null | undefined) => rotuloDe(STATUS, v);
 export const rotuloConselho = (uf: string | null | undefined) => (uf ? `Coren-${uf}` : '—');
 
+/** As cores da legenda das anuidades (mesma lista do CHECK de 20261109120000). */
+export const CORES_ETIQUETA: readonly { valor: CorEtiqueta; rotulo: string }[] = [
+  { valor: 'verde', rotulo: 'Verde' },
+  { valor: 'vermelho', rotulo: 'Vermelho' },
+  { valor: 'amarelo', rotulo: 'Amarelo' },
+  { valor: 'azul', rotulo: 'Azul' },
+  { valor: 'roxo', rotulo: 'Roxo' },
+  { valor: 'laranja', rotulo: 'Laranja' },
+  { valor: 'rosa', rotulo: 'Rosa' },
+  { valor: 'cinza', rotulo: 'Cinza' },
+];
+
 export const ROTULO_ORIGEM: Record<OrigemAcesso, string> = {
   total: 'Acesso total',
   liberado: 'Liberado na aba',
@@ -188,7 +252,11 @@ export function indicadores(lista: readonly Manifestacao[], hojeIso: string): In
   return { total: lista.length, acompanhadas, abertas, semRetorno, atrasadas, concluidasNoMes };
 }
 
-export type Visao = 'acompanhamento' | 'todas' | 'historico';
+/**
+ * As abas da lista. `tickets` = os que falta abrir no sistema Mundial;
+ * `grupos` mostra os grupos (a lista dela é das manifestações em grupo).
+ */
+export type Visao = 'acompanhamento' | 'todas' | 'historico' | 'tickets' | 'grupos';
 
 export interface Filtros {
   visao: Visao;
@@ -197,13 +265,24 @@ export interface Filtros {
   assunto: Assunto | 'todos';
   canal: Canal | 'todos';
   retorno: 'todos' | 'com' | 'sem';
+  /** `meus` = registrei, foi encaminhada para mim ou agendei o retorno. */
   responsavel: string | 'todos' | 'meus';
+  /** Período pela data da manifestação (ISO, vazio = sem limite). */
+  de: string;
+  ate: string;
 }
 
 export const FILTROS_INICIAIS: Filtros = {
   visao: 'acompanhamento', busca: '', status: 'todos', assunto: 'todos', canal: 'todos',
-  retorno: 'todos', responsavel: 'todos',
+  retorno: 'todos', responsavel: 'todos', de: '', ate: '',
 };
+
+/** Registrei, recebi o encaminhamento ou agendei o retorno. */
+export function ehMinha(
+  m: Pick<Manifestacao, 'criado_por' | 'responsavel_id' | 'retorno_agendado_por'>, meuId: string | null,
+): boolean {
+  return !!meuId && (m.criado_por === meuId || m.responsavel_id === meuId || m.retorno_agendado_por === meuId);
+}
 
 /** Sem acento e em minúsculas, para a busca casar «joao» com «João». */
 export const normalizar = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -214,18 +293,22 @@ export function filtrar(lista: readonly Manifestacao[], f: Filtros, meuId: strin
   return lista.filter(m => {
     if (f.visao === 'acompanhamento' && !m.acompanhar) return false;
     if (f.visao === 'historico' && m.acompanhar) return false;
+    if (f.visao === 'tickets' && m.ticket_status !== 'pendente') return false;
+    if (f.visao === 'grupos' && !m.grupo_id) return false;
+    if (f.de && m.data_manifestacao < f.de) return false;
+    if (f.ate && m.data_manifestacao > f.ate) return false;
     if (f.status === 'abertos' && !estaAberta(m)) return false;
     if (f.status !== 'todos' && f.status !== 'abertos' && m.status !== f.status) return false;
     if (f.assunto !== 'todos' && m.assunto !== f.assunto) return false;
     if (f.canal !== 'todos' && m.canal !== f.canal) return false;
     if (f.retorno === 'com' && !teveRetorno(m)) return false;
     if (f.retorno === 'sem' && teveRetorno(m)) return false;
-    if (f.responsavel === 'meus' && m.responsavel_id !== meuId) return false;
+    if (f.responsavel === 'meus' && !ehMinha(m, meuId)) return false;
     if (f.responsavel !== 'todos' && f.responsavel !== 'meus' && m.responsavel_id !== f.responsavel) return false;
     if (busca) {
       const alvo = normalizar([
         m.codigo, m.nome_profissional, m.descricao, m.providencia ?? '', m.observacoes ?? '',
-        m.responsavel_nome ?? '', m.anuidades.join(' '),
+        m.responsavel_nome ?? '', m.criado_por_nome ?? '', m.anuidades.join(' '), m.ticket_numero ?? '',
       ].join(' '));
       const codigoCasa = buscaDigitos.length >= 3 && (m.codigo_cliente ?? '').includes(buscaDigitos);
       if (!alvo.includes(busca) && !codigoCasa) return false;
@@ -240,7 +323,7 @@ export function filtrar(lista: readonly Manifestacao[], f: Filtros, meuId: strin
  */
 export function ordenar(lista: readonly Manifestacao[], visao: Visao): Manifestacao[] {
   const copia = [...lista];
-  if (visao !== 'acompanhamento') {
+  if (visao !== 'acompanhamento' && visao !== 'tickets') {
     return copia.sort((a, b) => b.data_manifestacao.localeCompare(a.data_manifestacao) || b.numero - a.numero);
   }
   return copia.sort((a, b) =>
@@ -255,18 +338,250 @@ export function anosDeAnuidade(hojeIso: string): number[] {
   return Array.from({ length: atual - 2010 + 1 }, (_, i) => atual - i);
 }
 
+// ── Etiquetas das anuidades ──────────────────────────────────────────────────
+
+export interface AnoComEtiqueta { ano: number; etiqueta: Etiqueta | null }
+
+/** Cada ano da manifestação com a sua etiqueta (ou nenhuma). */
+export function anosComEtiqueta(
+  m: Pick<Manifestacao, 'anuidades' | 'anuidades_etiquetas'>, etiquetas: readonly Etiqueta[],
+): AnoComEtiqueta[] {
+  const porId = new Map(etiquetas.map(e => [e.id, e]));
+  return m.anuidades.map(ano => ({ ano, etiqueta: porId.get(m.anuidades_etiquetas?.[String(ano)] ?? '') ?? null }));
+}
+
+/** «2023, 2024 (alegou ter pago), 2022 (alegou ter cancelado)» — os sem etiqueta primeiro. */
+export function textoAnuidades(m: Pick<Manifestacao, 'anuidades' | 'anuidades_etiquetas'>, etiquetas: readonly Etiqueta[]): string {
+  const anos = anosComEtiqueta(m, etiquetas);
+  if (!anos.length) return '';
+  const partes: string[] = [];
+  const soltos = anos.filter(a => !a.etiqueta).map(a => a.ano);
+  if (soltos.length) partes.push(soltos.join(', '));
+  // As cores na ordem da legenda, como aparecem na tela.
+  for (const e of etiquetas) {
+    const deste = anos.filter(a => a.etiqueta?.id === e.id).map(a => a.ano);
+    if (deste.length) partes.push(`${deste.join(', ')} (${e.nome.toLowerCase()})`);
+  }
+  return partes.join('; ');
+}
+
+/** As etiquetas usadas em uma ou mais manifestações, para a legenda. */
+export function etiquetasUsadas(
+  lista: readonly Pick<Manifestacao, 'anuidades' | 'anuidades_etiquetas'>[], etiquetas: readonly Etiqueta[],
+): Etiqueta[] {
+  const ids = new Set<string>();
+  for (const m of lista) for (const a of anosComEtiqueta(m, etiquetas)) if (a.etiqueta) ids.add(a.etiqueta.id);
+  return etiquetas.filter(e => ids.has(e.id));
+}
+
+// ── Retorno agendado ─────────────────────────────────────────────────────────
+
+/** Quanto antes do horário a aba começa a avisar. */
+export const ANTECEDENCIA_MINUTOS = 60;
+
+/**
+ *   atrasado  o horário passou e o retorno não foi dado
+ *   agora     falta {@link ANTECEDENCIA_MINUTOS} ou menos — o card pisca
+ *   hoje      ainda hoje, mais tarde
+ *   depois    outro dia
+ */
+export type UrgenciaRetorno = 'atrasado' | 'agora' | 'hoje' | 'depois';
+
+const BR = 'America/Sao_Paulo';
+const diaBr = (ms: number) => new Intl.DateTimeFormat('en-CA', { timeZone: BR, year: 'numeric', month: '2-digit', day: '2-digit' }).format(ms);
+
+export function minutosAte(iso: string, agoraMs: number): number {
+  return Math.round((Date.parse(iso) - agoraMs) / 60_000);
+}
+
+export function urgenciaRetorno(iso: string, agoraMs: number): UrgenciaRetorno {
+  const min = (Date.parse(iso) - agoraMs) / 60_000;
+  if (min < 0) return 'atrasado';
+  if (min <= ANTECEDENCIA_MINUTOS) return 'agora';
+  return diaBr(Date.parse(iso)) === diaBr(agoraMs) ? 'hoje' : 'depois';
+}
+
+/** `14:05` no horário de Brasília. */
+export function horaBr(iso: string): string {
+  return new Date(iso).toLocaleTimeString('pt-BR', { timeZone: BR, hour: '2-digit', minute: '2-digit' });
+}
+
+/** «hoje às 14:00», «amanhã às 09:00», «12/11 às 14:00». */
+export function quandoBr(iso: string, agoraMs: number): string {
+  const ms = Date.parse(iso);
+  const dia = diaBr(ms);
+  const hoje = diaBr(agoraMs);
+  const amanha = diaBr(agoraMs + 86_400_000);
+  const ontem = diaBr(agoraMs - 86_400_000);
+  const rotulo = dia === hoje ? 'hoje' : dia === amanha ? 'amanhã' : dia === ontem ? 'ontem' : dataBr(dia).slice(0, 5);
+  return `${rotulo} às ${horaBr(iso)}`;
+}
+
+/** «em 45 min», «em 2 h 10 min», «há 12 min» (atrasado). */
+export function faltaBr(iso: string, agoraMs: number): string {
+  const min = minutosAte(iso, agoraMs);
+  const abs = Math.abs(min);
+  const texto = abs < 60 ? `${abs} min` : `${Math.floor(abs / 60)} h${abs % 60 ? ` ${abs % 60} min` : ''}`;
+  if (min < 0) return `há ${texto}`;
+  return min === 0 ? 'agora' : `em ${texto}`;
+}
+
+/** Dia e hora escolhidos na tela (Brasília, sem horário de verão desde 2019) → ISO. */
+export function isoDeDataHora(dataIso: string, hora: string): string {
+  return `${dataIso}T${hora}:00-03:00`;
+}
+
+/** Retorno agendado ainda valendo (aberta e em acompanhamento). */
+export const temRetornoAgendado = (m: Manifestacao): m is Manifestacao & { retorno_agendado_em: string } =>
+  !!m.retorno_agendado_em && m.acompanhar && estaAberta(m);
+
+// ── Encaminhamento ───────────────────────────────────────────────────────────
+
+/**
+ *   sem          ninguém acima (ou encaminhou para si mesmo)
+ *   aguardando   encaminhada, sem ciência ainda
+ *   ciente       o encaminhado viu e está analisando
+ *   respondida   o encaminhado respondeu
+ */
+export type SituacaoEncaminhamento = 'sem' | 'aguardando' | 'ciente' | 'respondida';
+
+export function situacaoEncaminhamento(m: Manifestacao): SituacaoEncaminhamento {
+  if (!m.responsavel_id || m.responsavel_id === m.criado_por) return 'sem';
+  if (m.responsavel_respondeu_em) return 'respondida';
+  if (m.responsavel_ciente_em) return 'ciente';
+  return 'aguardando';
+}
+
+// ── Os alertas da pessoa ─────────────────────────────────────────────────────
+
+export interface Alertas {
+  /** Retornos agendados que são meus, do mais próximo ao mais longe. */
+  retornos: (Manifestacao & { retorno_agendado_em: string })[];
+  /** Encaminhadas para mim que ainda esperam a minha ciência. */
+  paraCiencia: Manifestacao[];
+  /** Encaminhadas para mim, com ciência, ainda sem resposta minha. */
+  paraResponder: Manifestacao[];
+  /** Registrei, encaminhei, e o responsável respondeu: falta eu ver. */
+  respostas: Manifestacao[];
+}
+
+export function alertasDe(lista: readonly Manifestacao[], meuId: string | null): Alertas {
+  const r: Alertas = { retornos: [], paraCiencia: [], paraResponder: [], respostas: [] };
+  if (!meuId) return r;
+  for (const m of lista) {
+    if (temRetornoAgendado(m) && ehMinha(m, meuId)) r.retornos.push(m);
+    const enc = situacaoEncaminhamento(m);
+    if (m.responsavel_id === meuId && estaAberta(m)) {
+      if (enc === 'aguardando') r.paraCiencia.push(m);
+      else if (enc === 'ciente') r.paraResponder.push(m);
+    }
+    if (m.criado_por === meuId && enc === 'respondida' && !m.responsavel_resposta_vista_em) r.respostas.push(m);
+  }
+  r.retornos.sort((a, b) => a.retorno_agendado_em.localeCompare(b.retorno_agendado_em));
+  return r;
+}
+
+// ── Ticket (sistema Mundial) ─────────────────────────────────────────────────
+
+export interface ContextoTicket {
+  etiquetas: readonly Etiqueta[];
+  setorNome: string;
+  grupo?: Pick<Grupo, 'codigo' | 'titulo'> | null;
+}
+
+const PEDIDO_PADRAO = 'Verificar o caso acima e retornar à Ouvidoria com a solução.';
+
+/**
+ * O texto padrão do ticket, para colar no sistema Mundial. Nunca leva CPF
+ * (a manifestação não guarda): o profissional vai pelo código do cliente.
+ */
+export function textoTicket(m: Manifestacao, ctx: ContextoTicket): string {
+  const linhas: string[] = [];
+  linhas.push(`[OUVIDORIA COFEN] ${m.codigo} — ${rotuloAssunto(m.assunto)}`);
+  linhas.push(`Setor: ${ctx.setorNome} · Manifestação em ${dataBr(m.data_manifestacao)} · Canal: ${rotuloCanal(m.canal)}`);
+  if (ctx.grupo) linhas.push(`Grupo: ${ctx.grupo.codigo} · ${ctx.grupo.titulo}`);
+  linhas.push('');
+  linhas.push('PROFISSIONAL');
+  linhas.push(`Nome: ${m.nome_profissional}`);
+  if (m.codigo_cliente) linhas.push(`Código do cliente: ${m.codigo_cliente}`);
+  if (m.conselho_uf) linhas.push(`Conselho: ${rotuloConselho(m.conselho_uf)}`);
+  const anuidades = textoAnuidades(m, ctx.etiquetas);
+  if (anuidades) linhas.push(`Anuidade(s): ${anuidades}`);
+  if (m.situacao_financeira) linhas.push(`Situação financeira: ${rotuloSituacao(m.situacao_financeira)}`);
+  linhas.push('');
+  linhas.push('RELATO DO PROFISSIONAL');
+  linhas.push(m.descricao.trim());
+  if (m.providencia?.trim()) {
+    linhas.push('');
+    linhas.push('PROVIDÊNCIA JÁ ADOTADA');
+    linhas.push(m.providencia.trim());
+  }
+  linhas.push('');
+  linhas.push('SOLICITAÇÃO');
+  linhas.push(m.ticket_pedido?.trim() || PEDIDO_PADRAO);
+  linhas.push('');
+  linhas.push([
+    `Registrado por: ${m.criado_por_nome ?? '—'}`,
+    m.responsavel_nome && m.responsavel_id !== m.criado_por ? `Responsável pela análise: ${m.responsavel_nome}` : null,
+  ].filter(Boolean).join(' · '));
+  return linhas.join('\n');
+}
+
+/** Um ticket só para o grupo inteiro: a reclamação em comum e a lista de profissionais. */
+export function textoTicketGrupo(g: Grupo, membros: readonly Manifestacao[], ctx: Omit<ContextoTicket, 'grupo'>): string {
+  const linhas: string[] = [];
+  linhas.push(`[OUVIDORIA COFEN] ${g.codigo} — ${g.titulo} (${membros.length} ${membros.length === 1 ? 'profissional' : 'profissionais'})`);
+  linhas.push(`Setor: ${ctx.setorNome} · Assunto: ${rotuloAssunto(g.assunto)}`);
+  linhas.push('');
+  linhas.push('RECLAMAÇÃO EM COMUM');
+  linhas.push(g.descricao.trim());
+  linhas.push('');
+  linhas.push('PROFISSIONAIS');
+  membros.forEach((m, i) => {
+    const anuidades = textoAnuidades(m, ctx.etiquetas);
+    linhas.push(`${i + 1}. ${[
+      m.nome_profissional,
+      m.codigo_cliente ? `Cód. ${m.codigo_cliente}` : null,
+      m.conselho_uf ? rotuloConselho(m.conselho_uf) : null,
+      anuidades ? `Anuidade ${anuidades}` : null,
+      m.codigo,
+    ].filter(Boolean).join(' · ')}`);
+    if (m.observacoes?.trim()) linhas.push(`   Obs.: ${m.observacoes.trim()}`);
+  });
+  if (g.providencia?.trim()) {
+    linhas.push('');
+    linhas.push('PROVIDÊNCIA JÁ ADOTADA');
+    linhas.push(g.providencia.trim());
+  }
+  linhas.push('');
+  linhas.push('SOLICITAÇÃO');
+  linhas.push('Verificar os casos acima e retornar à Ouvidoria com a solução.');
+  return linhas.join('\n');
+}
+
+// ── Exportar ─────────────────────────────────────────────────────────────────
+
 /** Linhas para exportar (CSV). */
-export function paraLinhas(lista: readonly Manifestacao[]): string[][] {
+export function paraLinhas(
+  lista: readonly Manifestacao[],
+  ctx: { etiquetas?: readonly Etiqueta[]; grupos?: readonly Grupo[] } = {},
+): string[][] {
+  const grupos = new Map((ctx.grupos ?? []).map(g => [g.id, g]));
+  const etiquetas = ctx.etiquetas ?? [];
   return [
     ['Código', 'Data da manifestação', 'Canal', 'Profissional', 'Código do cliente', 'Conselho', 'Assunto', 'Descrição',
-      'Anuidade', 'Situação financeira', 'Providência', 'Responsável', 'Data da resposta', 'Status',
-      'Acompanhamento', 'Observações'],
+      'Anuidade', 'Situação financeira', 'Providência', 'Registrado por', 'Encaminhado para', 'Data da resposta', 'Status',
+      'Acompanhamento', 'Grupo', 'Ticket', 'Observações'],
     ...lista.map(m => [
       m.codigo, dataBr(m.data_manifestacao), rotuloCanal(m.canal), m.nome_profissional, m.codigo_cliente ?? '',
       m.conselho_uf ? rotuloConselho(m.conselho_uf) : '', rotuloAssunto(m.assunto), m.descricao,
-      m.anuidades.join(', '), m.situacao_financeira ? rotuloSituacao(m.situacao_financeira) : '',
-      m.providencia ?? '', m.responsavel_nome ?? '', m.data_resposta ? dataBr(m.data_resposta) : '',
-      rotuloStatus(m.status), m.acompanhar ? 'Sim' : 'Não', m.observacoes ?? '',
+      textoAnuidades(m, etiquetas), m.situacao_financeira ? rotuloSituacao(m.situacao_financeira) : '',
+      m.providencia ?? '', m.criado_por_nome ?? '', m.responsavel_nome ?? '',
+      m.data_resposta ? dataBr(m.data_resposta) : '',
+      rotuloStatus(m.status), m.acompanhar ? 'Sim' : 'Não',
+      m.grupo_id ? (grupos.get(m.grupo_id)?.codigo ?? '') : '',
+      m.ticket_status === 'pendente' ? 'Pendente' : m.ticket_status === 'aberto' ? `Aberto${m.ticket_numero ? ` nº ${m.ticket_numero}` : ''}` : '',
+      m.observacoes ?? '',
     ]),
   ];
 }

@@ -1229,3 +1229,18 @@ html.rolagem-arrastando * {
 .fileira-rola[data-mais='os-dois'] { mask-image: linear-gradient(90deg, transparent, #000 32px, #000 calc(100% - 32px), transparent); }
 .fileira-rola[data-arrastando] { cursor: grabbing; }
 .fileira-rola[data-arrastando] > * { pointer-events: none; }
+
+/* ── Ouvidoria: o alerta que pisca (09/11/2026) ─────────────────────────────
+   Retorno agendado para daqui a uma hora ou menos, ou encaminhamento esperando
+   ciência. A borda e o fundo acendem e apagam; com "menos movimento" o pisca
+   para, mas a cor forte fica — aqui a cor é o aviso. */
+@keyframes ouvidoria-pisca {
+  0%, 100% { box-shadow: 0 0 0 0 var(--ouv-pisca, rgb(239 68 68 / .55)); }
+  50%      { box-shadow: 0 0 0 4px var(--ouv-pisca, rgb(239 68 68 / .55)); }
+}
+.animate-ouvidoria-pisca { animation: ouvidoria-pisca 1.1s ease-in-out infinite; }
+.animate-ouvidoria-pisca-ambar { --ouv-pisca: rgb(245 158 11 / .5); animation: ouvidoria-pisca 1.6s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-ouvidoria-pisca, .animate-ouvidoria-pisca-ambar { animation: none; }
+}

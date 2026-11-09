@@ -5,12 +5,21 @@
  * a tratativa. O interruptor «Acompanhar» decide se o caso entra na fila de
  * acompanhamento (com status e retorno) ou fica só como histórico.
  *
+ * Quem registra é o responsável primário, sempre (fica gravado). «Encaminhar
+ * para» é a pessoa acima que vai analisar: ela recebe aviso e dá ciência.
+ *
+ * Com `grupo` (adicionar um profissional a um grupo), o formulário é curto:
+ * assunto, relato, canal e encaminhamento vêm do grupo; o que sobra é o
+ * profissional, as anuidades e a observação. «Mais detalhes» abre o resto.
+ *
  * O código do cliente é o mesmo «Código» do acordo na regra Cofen: só números,
  * e nunca um CPF (o banco também recusa). Texto livre com CPF dentro é
  * recusado, como no resto do sistema.
  */
 import { useMemo, useState } from 'react';
-import { ClipboardList, Loader2, MessageSquareWarning, Plus, UserRound, X } from 'lucide-react';
+import {
+  ChevronDown, ClipboardList, Layers, Loader2, MessageSquareWarning, Palette, Plus, Ticket, UserRound, X,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { AvatarChat } from '@/components/Chat/comum';
 import { DatePickerField } from '@/components/DatePickerField';
@@ -27,13 +36,15 @@ import { getTodayISO } from '@/lib/index';
 import { propsSoNumeros } from '@/lib/soNumeros';
 import { cn } from '@/lib/utils';
 import { salvarManifestacao, type DadosManifestacao } from '@/services/ouvidoriaCofen.service';
+import { useOuvidoria } from './contexto';
 import {
-  ASSUNTOS, CANAIS, SITUACOES, STATUS,
-  type Assunto, type Canal, type Manifestacao, type PessoaOuvidoria, type SituacaoFinanceira, type Status,
+  ASSUNTOS, CANAIS, SITUACOES, STATUS, etiquetasUsadas, rotuloAssunto,
+  type Assunto, type Canal, type Grupo, type Manifestacao, type SituacaoFinanceira, type Status,
 } from './ouvidoria';
 import { CampoLista, SeletorCoren } from './campos';
 import { COR_FAIXA_STATUS } from './estilo';
-import { IconeCanal, TituloSecao } from './visual';
+import { GerenciarEtiquetas, SeletorEtiqueta } from './Etiquetas';
+import { IconeCanal, LegendaEtiquetas, TituloSecao } from './visual';
 
 /** O botão do calendário com a altura e os cantos dos outros campos. */
 const CLASSE_DATA = 'h-10 rounded-lg font-sans text-sm';
@@ -43,10 +54,10 @@ const CANTOS = 'rounded-lg';
 interface Props {
   aberto: boolean;
   aoFechar: () => void;
-  setorId: string;
   /** `null` = nova. */
   manifestacao: Manifestacao | null;
-  atendentes: PessoaOuvidoria[];
+  /** Nova manifestação já dentro deste grupo (formulário curto). */
+  grupo?: Grupo | null;
   aoSalvar: (m: Manifestacao) => void;
 }
 
@@ -59,6 +70,7 @@ interface Estado {
   assunto: Assunto | '';
   descricao: string;
   anuidades: number[];
+  anuidades_etiquetas: Record<string, string>;
   situacao_financeira: SituacaoFinanceira | '';
   providencia: string;
   responsavel_id: string;
@@ -66,23 +78,27 @@ interface Estado {
   status: Status;
   acompanhar: boolean;
   observacoes: string;
+  precisa_ticket: boolean;
+  ticket_pedido: string;
 }
 
-function estadoInicial(m: Manifestacao | null, hoje: string): Estado {
+function estadoInicial(m: Manifestacao | null, g: Grupo | null, hoje: string): Estado {
   if (!m) {
     return {
-      data_manifestacao: hoje, canal: 'telefone', nome_profissional: '', codigo_cliente: '', conselho_uf: '',
-      assunto: '', descricao: '', anuidades: [], situacao_financeira: '', providencia: '',
-      responsavel_id: '', data_resposta: '', status: 'aberto', acompanhar: true, observacoes: '',
+      data_manifestacao: hoje, canal: g?.canal ?? 'telefone', nome_profissional: '', codigo_cliente: '', conselho_uf: '',
+      assunto: g?.assunto ?? '', descricao: g?.descricao ?? '', anuidades: [], anuidades_etiquetas: {},
+      situacao_financeira: '', providencia: g?.providencia ?? '', responsavel_id: g?.responsavel_id ?? '',
+      data_resposta: '', status: 'aberto', acompanhar: true, observacoes: '', precisa_ticket: false, ticket_pedido: '',
     };
   }
   return {
     data_manifestacao: m.data_manifestacao, canal: m.canal, nome_profissional: m.nome_profissional,
     codigo_cliente: m.codigo_cliente ?? '', conselho_uf: m.conselho_uf ?? '', assunto: m.assunto, descricao: m.descricao,
-    anuidades: [...m.anuidades], situacao_financeira: m.situacao_financeira ?? '',
+    anuidades: [...m.anuidades], anuidades_etiquetas: { ...(m.anuidades_etiquetas ?? {}) },
+    situacao_financeira: m.situacao_financeira ?? '',
     providencia: m.providencia ?? '', responsavel_id: m.responsavel_id ?? '',
     data_resposta: m.data_resposta ?? '', status: m.status, acompanhar: m.acompanhar,
-    observacoes: m.observacoes ?? '',
+    observacoes: m.observacoes ?? '', precisa_ticket: !!m.ticket_status, ticket_pedido: m.ticket_pedido ?? '',
   };
 }
 
@@ -91,18 +107,26 @@ const CAMPOS_LIVRES: { campo: keyof Estado; nome: string }[] = [
   { campo: 'descricao', nome: 'descrição' },
   { campo: 'providencia', nome: 'providência' },
   { campo: 'observacoes', nome: 'observações' },
+  { campo: 'ticket_pedido', nome: 'pedido do ticket' },
 ];
 
-export function FormManifestacao({ aberto, aoFechar, setorId, manifestacao, atendentes, aoSalvar }: Props) {
+export function FormManifestacao({ aberto, aoFechar, manifestacao, grupo = null, aoSalvar }: Props) {
+  const { setor, meuId, pessoas, etiquetas, v2 } = useOuvidoria();
   const hoje = getTodayISO();
-  const [e, setE] = useState<Estado>(() => estadoInicial(manifestacao, hoje));
+  const [e, setE] = useState<Estado>(() => estadoInicial(manifestacao, grupo, hoje));
   const [salvando, setSalvando] = useState(false);
   const [tentou, setTentou] = useState(false);
   const [outroAno, setOutroAno] = useState('');
+  const modoGrupo = !!grupo && !manifestacao;
+  const [mais, setMais] = useState(!modoGrupo);
 
   const set = <K extends keyof Estado>(k: K, v: Estado[K]) => setE(s => ({ ...s, [k]: v }));
   const anoAtual = +hoje.slice(0, 4);
   const anosRapidos = useMemo(() => Array.from({ length: 8 }, (_, i) => anoAtual - i), [anoAtual]);
+  const primarioId = manifestacao?.criado_por ?? meuId;
+  const primarioNome = manifestacao ? (manifestacao.criado_por_nome ?? '—')
+    : (pessoas.find(p => p.perfil_id === meuId)?.nome ?? 'Você');
+  const ticketAberto = manifestacao?.ticket_status === 'aberto';
 
   const erros = useMemo(() => {
     const r: Partial<Record<keyof Estado, string>> = {};
@@ -122,10 +146,19 @@ export function FormManifestacao({ aberto, aoFechar, setorId, manifestacao, aten
     return r;
   }, [e, hoje]);
 
-  const alternarAno = (ano: number) =>
-    set('anuidades', e.anuidades.includes(ano)
-      ? e.anuidades.filter(a => a !== ano)
-      : [...e.anuidades, ano].sort((a, b) => a - b));
+  const alternarAno = (ano: number) => setE(s => {
+    if (s.anuidades.includes(ano)) {
+      const { [String(ano)]: _fora, ...resto } = s.anuidades_etiquetas;
+      return { ...s, anuidades: s.anuidades.filter(a => a !== ano), anuidades_etiquetas: resto };
+    }
+    return { ...s, anuidades: [...s.anuidades, ano].sort((a, b) => a - b) };
+  });
+
+  const pintarAno = (ano: number, id: string | null) => setE(s => {
+    const etq = { ...s.anuidades_etiquetas };
+    if (id) etq[String(ano)] = id; else delete etq[String(ano)];
+    return { ...s, anuidades_etiquetas: etq };
+  });
 
   const somarOutroAno = () => {
     const ano = Number(outroAno);
@@ -140,6 +173,9 @@ export function FormManifestacao({ aberto, aoFechar, setorId, manifestacao, aten
   async function salvar() {
     setTentou(true);
     if (Object.keys(erros).length) {
+      // No formulário curto o erro pode estar escondido em «Mais detalhes».
+      if (!mais && (erros.canal || erros.assunto || erros.descricao || erros.data_manifestacao || erros.data_resposta
+                    || erros.providencia || erros.ticket_pedido)) setMais(true);
       toast.error('Confira os campos destacados.');
       return;
     }
@@ -159,11 +195,19 @@ export function FormManifestacao({ aberto, aoFechar, setorId, manifestacao, aten
       status: e.status,
       acompanhar: e.acompanhar,
       observacoes: e.observacoes.trim() || null,
+      ...(v2 ? {
+        anuidades_etiquetas: Object.fromEntries(
+          Object.entries(e.anuidades_etiquetas).filter(([ano]) => e.anuidades.includes(Number(ano)))),
+        precisa_ticket: e.precisa_ticket,
+        ticket_pedido: e.ticket_pedido.trim() || null,
+        ...(modoGrupo ? { grupo_id: grupo!.id } : {}),
+      } : {}),
     };
     setSalvando(true);
     try {
-      const salva = await salvarManifestacao(setorId, manifestacao?.id ?? null, dados);
-      toast.success(manifestacao ? 'Manifestação atualizada.' : `Manifestação ${salva.codigo} registrada.`);
+      const salva = await salvarManifestacao(setor.setor_id, manifestacao?.id ?? null, dados);
+      toast.success(manifestacao ? 'Manifestação atualizada.'
+        : modoGrupo ? `${salva.codigo} entrou no grupo ${grupo!.codigo}.` : `Manifestação ${salva.codigo} registrada.`);
       aoSalvar(salva);
     } catch (err) {
       toast.error((err as Error).message);
@@ -177,53 +221,140 @@ export function FormManifestacao({ aberto, aoFechar, setorId, manifestacao, aten
     erro(k) ? <p className="text-[11px] text-destructive mt-1">{erro(k)}</p> : null;
   const classeErro = (k: keyof Estado) => (erro(k) ? 'border-destructive focus-visible:ring-destructive' : '');
 
-  // O responsável que já estava gravado continua na lista mesmo sem acesso hoje.
+  // Encaminhar para: quem tem acesso, menos o próprio responsável primário. O que
+  // já estava gravado continua na lista mesmo sem acesso hoje.
   const opcoesResponsavel = useMemo(() => {
-    const lista = atendentes.filter(p => p.tem_acesso).map(p => ({ id: p.perfil_id, nome: p.nome, foto: p.foto_url as string | null }));
+    const lista = pessoas
+      .filter(p => p.tem_acesso && p.perfil_id !== primarioId)
+      .map(p => ({ id: p.perfil_id, nome: p.nome, foto: p.foto_url as string | null }));
     if (manifestacao?.responsavel_id && !lista.some(p => p.id === manifestacao.responsavel_id)) {
       lista.push({ id: manifestacao.responsavel_id, nome: manifestacao.responsavel_nome ?? 'Responsável anterior', foto: null });
     }
     return lista.sort((a, b) => a.nome.localeCompare(b.nome));
-  }, [atendentes, manifestacao]);
+  }, [pessoas, manifestacao, primarioId]);
+
+  const usadas = etiquetasUsadas([{ anuidades: e.anuidades, anuidades_etiquetas: e.anuidades_etiquetas }], etiquetas);
+
+  // ── Peças ──────────────────────────────────────────────────────────────────
+
+  const blocoAnuidades = (
+    <div className="sm:col-span-6">
+      <div className="flex items-center justify-between gap-2 mb-1.5">
+        <Label className="block">Anuidade(s) envolvida(s)</Label>
+        {v2 && (
+          <GerenciarEtiquetas>
+            <button type="button" className="text-[11px] text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
+              <Palette className="h-3 w-3" /> Legenda de cores
+            </button>
+          </GerenciarEtiquetas>
+        )}
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5 mt-1">
+        {[...new Set([...anosRapidos, ...e.anuidades])].sort((a, b) => b - a).map(ano => (
+          <button key={ano} type="button" onClick={() => alternarAno(ano)}
+                  className={cn(
+                    'rounded-lg border px-2.5 py-1 text-xs font-mono tabular-nums transition-colors',
+                    e.anuidades.includes(ano)
+                      ? 'border-primary bg-primary/10 text-primary font-semibold'
+                      : 'hover:bg-muted text-muted-foreground',
+                  )}>
+            {ano}
+          </button>
+        ))}
+        <div className="flex items-center gap-1">
+          <Input value={outroAno} onChange={ev => setOutroAno(ev.target.value.replace(/\D/g, '').slice(0, 4))}
+                 onKeyDown={ev => { if (ev.key === 'Enter') { ev.preventDefault(); somarOutroAno(); } }}
+                 placeholder="Outro" inputMode="numeric" className="h-7 w-20 text-xs rounded-md" />
+          <Button type="button" size="icon" variant="ghost" className="h-7 w-7" onClick={somarOutroAno}
+                  disabled={outroAno.length !== 4} aria-label="Somar ano">
+            <Plus className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+        {e.anuidades.length > 0 && (
+          <button type="button" onClick={() => setE(s => ({ ...s, anuidades: [], anuidades_etiquetas: {} }))}
+                  className="text-[11px] text-muted-foreground hover:text-foreground inline-flex items-center gap-0.5">
+            <X className="h-3 w-3" /> limpar
+          </button>
+        )}
+      </div>
+      {v2 && e.anuidades.length > 0 && (
+        <div className="mt-2.5 rounded-lg border border-dashed p-2.5 space-y-2">
+          <p className="text-[11px] text-muted-foreground">Cor de cada anuidade — clique no ano para marcar o que ela é:</p>
+          <div className="flex flex-wrap gap-1.5">
+            {e.anuidades.map(ano => (
+              <SeletorEtiqueta key={ano} ano={ano} valor={e.anuidades_etiquetas[String(ano)] ?? null}
+                               aoMudar={id => pintarAno(ano, id)} />
+            ))}
+          </div>
+          <LegendaEtiquetas etiquetas={usadas} />
+        </div>
+      )}
+    </div>
+  );
+
+  const campoObservacoes = (
+    <div className="sm:col-span-6">
+      <Label htmlFor="ouv-obs" className="mb-1.5 block">Observações</Label>
+      <Textarea id="ouv-obs" rows={2} placeholder={modoGrupo ? 'O que este caso tem de diferente do grupo' : 'Informações complementares'}
+                value={e.observacoes} onChange={ev => set('observacoes', ev.target.value)}
+                className={cn(CANTOS, classeErro('observacoes'))} />
+      {mostrarErro('observacoes')}
+    </div>
+  );
 
   return (
     <Dialog open={aberto} onOpenChange={o => { if (!o && !salvando) aoFechar(); }}>
       <DialogContent className="max-w-3xl max-h-[92vh] overflow-y-auto p-0 gap-0">
         <DialogHeader className="px-6 pt-5 pb-4 border-b sticky top-0 bg-background z-10">
           <DialogTitle className="flex items-center gap-2">
-            {manifestacao ? `Editar ${manifestacao.codigo}` : 'Nova manifestação'}
+            {manifestacao ? `Editar ${manifestacao.codigo}` : modoGrupo ? 'Adicionar profissional ao grupo' : 'Nova manifestação'}
           </DialogTitle>
           <DialogDescription>
             {manifestacao
-              ? `Registrada por ${manifestacao.criado_por_nome ?? '—'}.`
-              : 'O código é gerado ao salvar.'}
+              ? `Registrada por ${manifestacao.criado_por_nome ?? '—'} (responsável primário).`
+              : 'O código é gerado ao salvar. Quem registra fica como responsável primário.'}
           </DialogDescription>
         </DialogHeader>
 
         <div className="px-6 py-5 space-y-6">
-          {/* Acompanhar: a primeira decisão, porque muda o resto do formulário. */}
-          <label className={cn(
-            'flex items-start gap-3 rounded-xl border p-3.5 cursor-pointer transition-colors',
-            e.acompanhar ? 'border-primary/40 bg-primary/5' : 'bg-muted/40',
-          )}>
-            <Switch
-              checked={e.acompanhar}
-              onCheckedChange={v => setE(s => ({
-                ...s, acompanhar: v,
-                // Só histórico nasce concluída; voltar a acompanhar reabre.
-                status: manifestacao ? s.status : (v ? 'aberto' : 'concluido'),
-              }))}
-              className="mt-0.5"
-            />
-            <div className="min-w-0">
-              <p className="text-sm font-semibold">Acompanhar esta manifestação</p>
-              <p className="text-xs text-muted-foreground">
-                {e.acompanhar
-                  ? 'Entra na fila de acompanhamento: status, retorno ao profissional e linha do tempo.'
-                  : 'Fica só no histórico, sem pendência na fila.'}
-              </p>
+          {modoGrupo && (
+            <div className="flex items-start gap-3 rounded-xl border border-violet-500/40 bg-violet-500/5 p-3.5">
+              <Layers className="h-4 w-4 text-violet-600 dark:text-violet-400 mt-0.5 shrink-0" />
+              <div className="min-w-0 text-sm">
+                <p className="font-semibold">{grupo!.codigo} · {grupo!.titulo}</p>
+                <p className="text-xs text-muted-foreground">
+                  {rotuloAssunto(grupo!.assunto)} · o relato{grupo!.responsavel_nome ? ', o encaminhamento' : ''} e o canal vêm do grupo.
+                  Preencha o profissional e o que for diferente.
+                </p>
+              </div>
             </div>
-          </label>
+          )}
+
+          {/* Acompanhar: a primeira decisão, porque muda o resto do formulário. */}
+          {!modoGrupo && (
+            <label className={cn(
+              'flex items-start gap-3 rounded-xl border p-3.5 cursor-pointer transition-colors',
+              e.acompanhar ? 'border-primary/40 bg-primary/5' : 'bg-muted/40',
+            )}>
+              <Switch
+                checked={e.acompanhar}
+                onCheckedChange={v => setE(s => ({
+                  ...s, acompanhar: v,
+                  // Só histórico nasce concluída; voltar a acompanhar reabre.
+                  status: manifestacao ? s.status : (v ? 'aberto' : 'concluido'),
+                }))}
+                className="mt-0.5"
+              />
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">Acompanhar esta manifestação</p>
+                <p className="text-xs text-muted-foreground">
+                  {e.acompanhar
+                    ? 'Entra na fila de acompanhamento: status, retorno ao profissional e linha do tempo.'
+                    : 'Fica só no histórico, sem pendência na fila.'}
+                </p>
+              </div>
+            </label>
+          )}
 
           <section className="space-y-3">
             <TituloSecao icone={UserRound}>Profissional</TituloSecao>
@@ -247,160 +378,184 @@ export function FormManifestacao({ aberto, aoFechar, setorId, manifestacao, aten
                 <Label htmlFor="ouv-coren" className="mb-1.5 block">Conselho Regional</Label>
                 <SeletorCoren id="ouv-coren" valor={e.conselho_uf} aoMudar={uf => set('conselho_uf', uf)} />
               </div>
+              {modoGrupo && blocoAnuidades}
+              {modoGrupo && campoObservacoes}
             </div>
           </section>
 
-          <section className="space-y-3">
-            <TituloSecao icone={MessageSquareWarning}>Manifestação</TituloSecao>
-            <div className="grid grid-cols-1 sm:grid-cols-6 gap-3">
-              <div className="sm:col-span-2">
-                <Label htmlFor="ouv-data" className="mb-1.5 block">Data *</Label>
-                <DatePickerField value={e.data_manifestacao} maxDate={hoje} size="md"
-                                 onChange={v => set('data_manifestacao', v)}
-                                 triggerClassName={cn(CLASSE_DATA, classeErro('data_manifestacao'))} />
-                {mostrarErro('data_manifestacao')}
-              </div>
-              <div className="sm:col-span-2">
-                <Label htmlFor="ouv-canal" className="mb-1.5 block">Canal de atendimento *</Label>
-                <CampoLista id="ouv-canal" valor={e.canal} invalido={!!erro('canal')}
-                            aoMudar={v => set('canal', v as Canal)}
-                            opcoes={CANAIS.map(c => ({ valor: c.valor, rotulo: c.rotulo, marca: <IconeCanal canal={c.valor} /> }))} />
-                {mostrarErro('canal')}
-              </div>
-              <div className="sm:col-span-2">
-                <Label htmlFor="ouv-situacao" className="mb-1.5 block">Situação financeira</Label>
-                <CampoLista id="ouv-situacao" valor={e.situacao_financeira} vazio="Não informada"
-                            aoMudar={v => set('situacao_financeira', v as SituacaoFinanceira)}
-                            opcoes={SITUACOES.map(s => ({ valor: s.valor, rotulo: s.rotulo }))} />
-              </div>
+          {modoGrupo && (
+            <button type="button" onClick={() => setMais(v => !v)}
+                    className="w-full flex items-center gap-2 text-xs font-medium text-muted-foreground hover:text-foreground">
+              <span className="h-px flex-1 bg-border" />
+              <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', mais && 'rotate-180')} />
+              {mais ? 'Menos detalhes' : 'Mais detalhes (data, canal, relato, tratativa)'}
+              <span className="h-px flex-1 bg-border" />
+            </button>
+          )}
 
-              <div className="sm:col-span-6">
-                <Label className="mb-1.5 block">Assunto *</Label>
-                <div className="flex flex-wrap gap-1.5 mt-1">
-                  {ASSUNTOS.map(a => (
-                    <button key={a.valor} type="button" onClick={() => set('assunto', a.valor)}
-                            className={cn(
-                              'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
-                              e.assunto === a.valor
-                                ? 'border-primary bg-primary text-primary-foreground'
-                                : 'hover:bg-muted',
-                              erro('assunto') && e.assunto !== a.valor && 'border-destructive/50',
-                            )}>
-                      {a.rotulo}
-                    </button>
-                  ))}
+          {mais && (
+            <section className="space-y-3">
+              <TituloSecao icone={MessageSquareWarning}>Manifestação</TituloSecao>
+              <div className="grid grid-cols-1 sm:grid-cols-6 gap-3">
+                <div className="sm:col-span-2">
+                  <Label htmlFor="ouv-data" className="mb-1.5 block">Data *</Label>
+                  <DatePickerField value={e.data_manifestacao} maxDate={hoje} size="md"
+                                   onChange={v => set('data_manifestacao', v)}
+                                   triggerClassName={cn(CLASSE_DATA, classeErro('data_manifestacao'))} />
+                  {mostrarErro('data_manifestacao')}
                 </div>
-                {mostrarErro('assunto')}
-              </div>
+                <div className="sm:col-span-2">
+                  <Label htmlFor="ouv-canal" className="mb-1.5 block">Canal de atendimento *</Label>
+                  <CampoLista id="ouv-canal" valor={e.canal} invalido={!!erro('canal')}
+                              aoMudar={v => set('canal', v as Canal)}
+                              opcoes={CANAIS.map(c => ({ valor: c.valor, rotulo: c.rotulo, marca: <IconeCanal canal={c.valor} /> }))} />
+                  {mostrarErro('canal')}
+                </div>
+                <div className="sm:col-span-2">
+                  <Label htmlFor="ouv-situacao" className="mb-1.5 block">Situação financeira</Label>
+                  <CampoLista id="ouv-situacao" valor={e.situacao_financeira} vazio="Não informada"
+                              aoMudar={v => set('situacao_financeira', v as SituacaoFinanceira)}
+                              opcoes={SITUACOES.map(s => ({ valor: s.valor, rotulo: s.rotulo }))} />
+                </div>
 
-              <div className="sm:col-span-6">
-                <Label htmlFor="ouv-descricao" className="mb-1.5 block">Descrição da reclamação *</Label>
-                <Textarea id="ouv-descricao" rows={4} placeholder="Relato resumido do profissional"
-                          value={e.descricao} onChange={ev => set('descricao', ev.target.value)}
-                          className={cn(CANTOS, classeErro('descricao'))} />
-                {mostrarErro('descricao')}
-              </div>
-
-              <div className="sm:col-span-6">
-                <Label className="mb-1.5 block">Anuidade(s) envolvida(s)</Label>
-                <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                  {[...new Set([...anosRapidos, ...e.anuidades])].sort((a, b) => b - a).map(ano => (
-                    <button key={ano} type="button" onClick={() => alternarAno(ano)}
-                            className={cn(
-                              'rounded-lg border px-2.5 py-1 text-xs font-mono tabular-nums transition-colors',
-                              e.anuidades.includes(ano)
-                                ? 'border-primary bg-primary/10 text-primary font-semibold'
-                                : 'hover:bg-muted text-muted-foreground',
-                            )}>
-                      {ano}
-                    </button>
-                  ))}
-                  <div className="flex items-center gap-1">
-                    <Input value={outroAno} onChange={ev => setOutroAno(ev.target.value.replace(/\D/g, '').slice(0, 4))}
-                           onKeyDown={ev => { if (ev.key === 'Enter') { ev.preventDefault(); somarOutroAno(); } }}
-                           placeholder="Outro" inputMode="numeric" className="h-7 w-20 text-xs rounded-md" />
-                    <Button type="button" size="icon" variant="ghost" className="h-7 w-7" onClick={somarOutroAno}
-                            disabled={outroAno.length !== 4} aria-label="Somar ano">
-                      <Plus className="h-3.5 w-3.5" />
-                    </Button>
+                {!modoGrupo && (
+                  <div className="sm:col-span-6">
+                    <Label className="mb-1.5 block">Assunto *</Label>
+                    <div className="flex flex-wrap gap-1.5 mt-1">
+                      {ASSUNTOS.map(a => (
+                        <button key={a.valor} type="button" onClick={() => set('assunto', a.valor)}
+                                className={cn(
+                                  'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+                                  e.assunto === a.valor
+                                    ? 'border-primary bg-primary text-primary-foreground'
+                                    : 'hover:bg-muted',
+                                  erro('assunto') && e.assunto !== a.valor && 'border-destructive/50',
+                                )}>
+                          {a.rotulo}
+                        </button>
+                      ))}
+                    </div>
+                    {mostrarErro('assunto')}
                   </div>
-                  {e.anuidades.length > 0 && (
-                    <button type="button" onClick={() => set('anuidades', [])}
-                            className="text-[11px] text-muted-foreground hover:text-foreground inline-flex items-center gap-0.5">
-                      <X className="h-3 w-3" /> limpar
-                    </button>
+                )}
+
+                <div className="sm:col-span-6">
+                  <Label htmlFor="ouv-descricao" className="mb-1.5 block">
+                    Descrição da reclamação *{modoGrupo && <span className="text-muted-foreground font-normal"> (a do grupo)</span>}
+                  </Label>
+                  <Textarea id="ouv-descricao" rows={4} placeholder="Relato resumido do profissional"
+                            value={e.descricao} onChange={ev => set('descricao', ev.target.value)}
+                            className={cn(CANTOS, classeErro('descricao'))} />
+                  {mostrarErro('descricao')}
+                </div>
+
+                {!modoGrupo && blocoAnuidades}
+              </div>
+            </section>
+          )}
+
+          {mais && (
+            <section className="space-y-3">
+              <TituloSecao icone={ClipboardList}>Tratativa</TituloSecao>
+              <div className="grid grid-cols-1 sm:grid-cols-6 gap-3">
+                <div className="sm:col-span-3">
+                  <Label className="mb-1.5 block">Responsável primário</Label>
+                  <div className="h-10 rounded-lg border bg-muted/40 px-3 flex items-center gap-2 text-sm">
+                    <AvatarChat nome={primarioNome} foto={pessoas.find(p => p.perfil_id === primarioId)?.foto_url ?? null} tamanho={20} />
+                    <span className="truncate">{primarioNome}</span>
+                    <span className="ml-auto text-[10px] text-muted-foreground whitespace-nowrap">quem registrou</span>
+                  </div>
+                </div>
+                <div className="sm:col-span-3">
+                  <Label htmlFor="ouv-resp" className="mb-1.5 block">Encaminhar para (análise)</Label>
+                  <CampoLista id="ouv-resp" valor={e.responsavel_id} vazio="Ninguém — fica comigo"
+                              aoMudar={v => set('responsavel_id', v)}
+                              opcoes={opcoesResponsavel.map(p => ({
+                                valor: p.id, rotulo: p.nome, marca: <AvatarChat nome={p.nome} foto={p.foto} tamanho={20} />,
+                              }))} />
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    {e.responsavel_id ? 'A pessoa recebe aviso e dá ciência; você acompanha a resposta.' : 'Quem vai analisar acima de você.'}
+                  </p>
+                </div>
+                <div className="sm:col-span-3">
+                  <Label htmlFor="ouv-status" className="mb-1.5 block">Status</Label>
+                  <CampoLista id="ouv-status" valor={e.status} aoMudar={v => set('status', v as Status)}
+                              opcoes={STATUS.map(s => ({
+                                valor: s.valor, rotulo: s.rotulo,
+                                marca: <span className={cn('h-2 w-2 rounded-full shrink-0', COR_FAIXA_STATUS[s.valor])} />,
+                              }))} />
+                </div>
+                <div className="sm:col-span-3">
+                  <Label htmlFor="ouv-resposta" className="mb-1.5 block">Data da resposta</Label>
+                  <div className="flex gap-1.5">
+                    <div className="flex-1 min-w-0">
+                      <DatePickerField value={e.data_resposta} minDate={e.data_manifestacao} maxDate={hoje} size="md"
+                                       placeholder="Sem retorno ainda" onChange={v => set('data_resposta', v)}
+                                       triggerClassName={cn(CLASSE_DATA, classeErro('data_resposta'))} />
+                    </div>
+                    {e.data_resposta ? (
+                      <Button type="button" variant="ghost" size="icon" className="h-10 w-10 shrink-0 rounded-lg"
+                              onClick={() => set('data_resposta', '')} aria-label="Tirar a data da resposta">
+                        <X className="h-4 w-4" />
+                      </Button>
+                    ) : (
+                      <Button type="button" variant="outline" size="sm" className="h-10 shrink-0 rounded-lg"
+                              onClick={() => set('data_resposta', hoje)}>
+                        Hoje
+                      </Button>
+                    )}
+                  </div>
+                  {erro('data_resposta') ? mostrarErro('data_resposta') : (
+                    <p className="text-[11px] text-muted-foreground mt-1">Quando o profissional teve retorno.</p>
                   )}
                 </div>
-              </div>
-            </div>
-          </section>
-
-          <section className="space-y-3">
-            <TituloSecao icone={ClipboardList}>Tratativa</TituloSecao>
-            <div className="grid grid-cols-1 sm:grid-cols-6 gap-3">
-              <div className="sm:col-span-2">
-                <Label htmlFor="ouv-status" className="mb-1.5 block">Status</Label>
-                <CampoLista id="ouv-status" valor={e.status} aoMudar={v => set('status', v as Status)}
-                            opcoes={STATUS.map(s => ({
-                              valor: s.valor, rotulo: s.rotulo,
-                              marca: <span className={cn('h-2 w-2 rounded-full shrink-0', COR_FAIXA_STATUS[s.valor])} />,
-                            }))} />
-              </div>
-              <div className="sm:col-span-2">
-                <Label htmlFor="ouv-resp" className="mb-1.5 block">Responsável pela análise</Label>
-                <CampoLista id="ouv-resp" valor={e.responsavel_id} vazio="Ninguém ainda"
-                            aoMudar={v => set('responsavel_id', v)}
-                            opcoes={opcoesResponsavel.map(p => ({
-                              valor: p.id, rotulo: p.nome, marca: <AvatarChat nome={p.nome} foto={p.foto} tamanho={20} />,
-                            }))} />
-              </div>
-              <div className="sm:col-span-2">
-                <Label htmlFor="ouv-resposta" className="mb-1.5 block">Data da resposta</Label>
-                <div className="flex gap-1.5">
-                  <div className="flex-1 min-w-0">
-                    <DatePickerField value={e.data_resposta} minDate={e.data_manifestacao} maxDate={hoje} size="md"
-                                     placeholder="Sem retorno ainda" onChange={v => set('data_resposta', v)}
-                                     triggerClassName={cn(CLASSE_DATA, classeErro('data_resposta'))} />
-                  </div>
-                  {e.data_resposta ? (
-                    <Button type="button" variant="ghost" size="icon" className="h-10 w-10 shrink-0 rounded-lg"
-                            onClick={() => set('data_resposta', '')} aria-label="Tirar a data da resposta">
-                      <X className="h-4 w-4" />
-                    </Button>
-                  ) : (
-                    <Button type="button" variant="outline" size="sm" className="h-10 shrink-0 rounded-lg"
-                            onClick={() => set('data_resposta', hoje)}>
-                      Hoje
-                    </Button>
-                  )}
+                <div className="sm:col-span-6">
+                  <Label htmlFor="ouv-providencia" className="mb-1.5 block">Providência adotada</Label>
+                  <Textarea id="ouv-providencia" rows={3} placeholder="Medidas tomadas para tratar a demanda"
+                            value={e.providencia} onChange={ev => set('providencia', ev.target.value)}
+                            className={cn(CANTOS, classeErro('providencia'))} />
+                  {mostrarErro('providencia')}
                 </div>
-                {erro('data_resposta') ? mostrarErro('data_resposta') : (
-                  <p className="text-[11px] text-muted-foreground mt-1">Quando o profissional teve retorno.</p>
+                {!modoGrupo && campoObservacoes}
+
+                {v2 && (
+                  <div className="sm:col-span-6 rounded-xl border p-3.5 space-y-2.5">
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <Switch checked={e.precisa_ticket} disabled={ticketAberto}
+                              onCheckedChange={v => set('precisa_ticket', v)} className="mt-0.5" />
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold inline-flex items-center gap-1.5">
+                          <Ticket className="h-3.5 w-3.5" /> Precisa abrir ticket no Mundial
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {ticketAberto
+                            ? `Ticket já aberto${manifestacao?.ticket_numero ? ` (nº ${manifestacao.ticket_numero})` : ''}.`
+                            : 'Entra na aba «Tickets pendentes» com o texto pronto para copiar e colar.'}
+                        </p>
+                      </div>
+                    </label>
+                    {e.precisa_ticket && (
+                      <div>
+                        <Label htmlFor="ouv-ticket" className="mb-1.5 block text-xs">O que o ticket deve pedir</Label>
+                        <Textarea id="ouv-ticket" rows={2} value={e.ticket_pedido}
+                                  onChange={ev => set('ticket_pedido', ev.target.value)}
+                                  placeholder="Ex.: dar baixa na anuidade 2024, paga em 10/10 (comprovante com o profissional)"
+                                  className={cn(CANTOS, classeErro('ticket_pedido'))} />
+                        {mostrarErro('ticket_pedido')}
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
-              <div className="sm:col-span-6">
-                <Label htmlFor="ouv-providencia" className="mb-1.5 block">Providência adotada</Label>
-                <Textarea id="ouv-providencia" rows={3} placeholder="Medidas tomadas para tratar a demanda"
-                          value={e.providencia} onChange={ev => set('providencia', ev.target.value)}
-                          className={cn(CANTOS, classeErro('providencia'))} />
-                {mostrarErro('providencia')}
-              </div>
-              <div className="sm:col-span-6">
-                <Label htmlFor="ouv-obs" className="mb-1.5 block">Observações</Label>
-                <Textarea id="ouv-obs" rows={2} placeholder="Informações complementares"
-                          value={e.observacoes} onChange={ev => set('observacoes', ev.target.value)}
-                          className={cn(CANTOS, classeErro('observacoes'))} />
-                {mostrarErro('observacoes')}
-              </div>
-            </div>
-          </section>
+            </section>
+          )}
         </div>
 
         <DialogFooter className="px-6 py-4 border-t sticky bottom-0 bg-background">
           <Button variant="ghost" onClick={aoFechar} disabled={salvando}>Cancelar</Button>
           <Button onClick={() => void salvar()} disabled={salvando}>
             {salvando && <Loader2 className="h-4 w-4 animate-spin mr-1.5" />}
-            {manifestacao ? 'Salvar alterações' : 'Registrar manifestação'}
+            {manifestacao ? 'Salvar alterações' : modoGrupo ? 'Adicionar ao grupo' : 'Registrar manifestação'}
           </Button>
         </DialogFooter>
       </DialogContent>

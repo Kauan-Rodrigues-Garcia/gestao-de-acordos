@@ -3,11 +3,15 @@
  * canal, selo de retorno e o rótulo de seção dos formulários.
  */
 import {
-  CheckCircle2, Clock3, FileWarning, Mail, MessageCircle, Phone, Send, Building2,
-  CircleDot, MoreHorizontal, type LucideIcon,
+  AlarmClock, CheckCircle2, Clock3, FileWarning, Layers, Mail, MessageCircle, Phone, Send, Building2,
+  CircleDot, MoreHorizontal, Ticket, type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { dataBr, rotuloCanal, rotuloStatus, type Canal, type Status } from './ouvidoria';
+import {
+  anosComEtiqueta, dataBr, quandoBr, rotuloCanal, rotuloStatus, situacaoEncaminhamento, temRetornoAgendado,
+  urgenciaRetorno, type Canal, type Etiqueta, type Grupo, type Manifestacao, type SituacaoEncaminhamento, type Status,
+} from './ouvidoria';
+import { COR_ETIQUETA } from './estilo';
 
 const COR_STATUS: Record<Status, string> = {
   aberto: 'bg-info/10 text-info border-info/30',
@@ -64,6 +68,102 @@ export function SeloRetorno({ data, className }: { data: string | null; classNam
   ) : (
     <span className={cn('inline-flex items-center gap-1 text-[11px] font-medium text-warning whitespace-nowrap', className)}>
       <Clock3 className="h-3 w-3" /> Sem retorno
+    </span>
+  );
+}
+
+/** O ano da anuidade, pintado com a cor da etiqueta (ou neutro). */
+export function ChipAno({ ano, etiqueta, className }: { ano: number; etiqueta: Etiqueta | null; className?: string }) {
+  return (
+    <span
+      title={etiqueta ? etiqueta.nome : undefined}
+      className={cn(
+        'inline-flex items-center rounded-md border px-1.5 py-px text-[11px] font-mono font-semibold tabular-nums',
+        etiqueta ? COR_ETIQUETA[etiqueta.cor].chip : 'bg-muted text-muted-foreground border-transparent',
+        className,
+      )}
+    >
+      {ano}
+    </span>
+  );
+}
+
+/** Os anos de uma manifestação, coloridos. */
+export function AnosColoridos({ m, etiquetas, className }: {
+  m: Pick<Manifestacao, 'anuidades' | 'anuidades_etiquetas'>; etiquetas: readonly Etiqueta[]; className?: string;
+}) {
+  const anos = anosComEtiqueta(m, etiquetas);
+  if (!anos.length) return null;
+  return (
+    <span className={cn('inline-flex flex-wrap items-center gap-1', className)}>
+      {anos.map(a => <ChipAno key={a.ano} ano={a.ano} etiqueta={a.etiqueta} />)}
+    </span>
+  );
+}
+
+/** «● Alegou ter pago   ● Alegou ter cancelado» — a legenda das cores em uso. */
+export function LegendaEtiquetas({ etiquetas, className }: { etiquetas: readonly Etiqueta[]; className?: string }) {
+  if (!etiquetas.length) return null;
+  return (
+    <div className={cn('flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground', className)}>
+      {etiquetas.map(e => (
+        <span key={e.id} className="inline-flex items-center gap-1.5">
+          <span className={cn('h-2.5 w-2.5 rounded-full shrink-0', COR_ETIQUETA[e.cor].ponto)} />
+          {e.nome}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+const ROTULO_ENCAMINHAMENTO: Record<Exclude<SituacaoEncaminhamento, 'sem'>, { texto: string; classe: string }> = {
+  aguardando: { texto: 'Aguardando ciência', classe: 'bg-warning/15 text-warning border-warning/40' },
+  ciente: { texto: 'Ciente · analisando', classe: 'bg-info/10 text-info border-info/30' },
+  respondida: { texto: 'Respondeu', classe: 'bg-success/10 text-success border-success/30' },
+};
+
+/** Onde está o encaminhamento: esperando ciência, em análise ou respondido. */
+export function SeloEncaminhamento({ m, className }: { m: Manifestacao; className?: string }) {
+  const s = situacaoEncaminhamento(m);
+  if (s === 'sem') return null;
+  const r = ROTULO_ENCAMINHAMENTO[s];
+  return (
+    <span className={cn('inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap', r.classe, className)}>
+      {r.texto}
+    </span>
+  );
+}
+
+/** Pequenos selos da linha: grupo, ticket, retorno agendado. */
+export function SelosLinha({ m, grupo, agoraMs }: { m: Manifestacao; grupo: Grupo | null; agoraMs: number }) {
+  const agendado = temRetornoAgendado(m) ? m.retorno_agendado_em : null;
+  const urg = agendado ? urgenciaRetorno(agendado, agoraMs) : null;
+  if (!grupo && !m.ticket_status && !agendado) return null;
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1">
+      {grupo && (
+        <span title={grupo.titulo} className="inline-flex items-center gap-0.5 rounded-md bg-violet-500/10 text-violet-700 dark:text-violet-300 px-1.5 py-px text-[10px] font-semibold">
+          <Layers className="h-2.5 w-2.5" /> {grupo.codigo}
+        </span>
+      )}
+      {m.ticket_status === 'pendente' && (
+        <span className="inline-flex items-center gap-0.5 rounded-md bg-orange-500/15 text-orange-700 dark:text-orange-300 px-1.5 py-px text-[10px] font-semibold">
+          <Ticket className="h-2.5 w-2.5" /> Ticket pendente
+        </span>
+      )}
+      {m.ticket_status === 'aberto' && (
+        <span className="inline-flex items-center gap-0.5 rounded-md bg-muted text-muted-foreground px-1.5 py-px text-[10px] font-medium">
+          <Ticket className="h-2.5 w-2.5" /> {m.ticket_numero ? `Ticket ${m.ticket_numero}` : 'Ticket aberto'}
+        </span>
+      )}
+      {agendado && (
+        <span className={cn(
+          'inline-flex items-center gap-0.5 rounded-md px-1.5 py-px text-[10px] font-semibold',
+          urg === 'atrasado' || urg === 'agora' ? 'bg-destructive/15 text-destructive' : 'bg-info/10 text-info',
+        )}>
+          <AlarmClock className="h-2.5 w-2.5" /> {quandoBr(agendado, agoraMs)}
+        </span>
+      )}
     </span>
   );
 }
