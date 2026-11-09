@@ -72,6 +72,7 @@ import { CrachaPendente } from '@/components/CrachaPendente';
 import { TemaNatalContext, cenaDaRota as cenaNatalDaRota, soParado as natalSoParado, temFundo as temFundoNatal } from '@/components/Natal/tema';
 import { EVENTO_REINICIAR_ABERTURA, abrirNatal, useNatal } from '@/components/Natal/previa';
 import { VIDEOS as VIDEOS_NATAL, marcarAbertura } from '@/components/Natal/abertura';
+import { guardarAssistiu } from '@/components/Natal/assistiuAbertura';
 import { MarcaNatal } from '@/components/Natal/MarcaNatal';
 import { PreviaNatal } from '@/components/Natal/PreviaNatal';
 import { SincelosDaMarca, SincelosDoTopo } from '@/components/Natal/Sincelos';
@@ -1098,7 +1099,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         {/* O presente do Natal: uma vez por pessoa, depois do termo e do tutorial,
             e nunca na impersonação. `?natal=presente` (ou a prévia) devolve.
             Espera o banco dizer se a pessoa já abriu em outro computador. */}
-        {(aberturaNatalViva || (podeVerNatal && natalPronto && !natalAberto && !termoLoading && !precisaAceitar && tourJaVisto && !getImpersonacaoAtiva())) && (
+        {/* A troca de senha obrigatória (senha resetada) vem antes: o presente
+            fica na camada mais alta da tela e cobriria o modal (09/11/2026). */}
+        {(aberturaNatalViva || (podeVerNatal && natalPronto && !natalAberto && !termoLoading && !precisaAceitar && tourJaVisto && perfil?.senha_troca_obrigatoria !== true && !getImpersonacaoAtiva())) && (
           <Suspense fallback={null}>
             <AberturaNatal
               key={chaveAbertura}
@@ -1106,7 +1109,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               aoPreparar={prepararNatal}
               // O vídeo da cidade do setor: Marília vê o de Marília; o resto, o de Birigui.
               video={VIDEOS_NATAL[videoNatal]}
-              aoMarcar={evento => marcarAbertura(evento, videoNatal)}
+              aoMarcar={evento => {
+                marcarAbertura(evento, videoNatal);
+                // Viu inteiro: o card da música não avisa (sem esperar o banco).
+                if (evento === 'assistiu') guardarAssistiu(perfil?.id);
+              }}
               // `flushSync`: «a abertura segue viva» entra antes de «o presente
               // foi aberto» (que chega por `useSyncExternalStore`, num render à
               // parte) — senão um render sem as duas desmontava o bilhete.

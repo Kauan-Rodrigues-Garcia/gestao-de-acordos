@@ -71,3 +71,16 @@
 .nt-musica-aviso-acoes button.principal { border-color: transparent; background: oklch(0.55 0.2 27); color: #fff; }
 .nt-musica-aviso-acoes button.principal:hover { filter: brightness(1.08); }
 @keyframes nt-musica-aviso-chega { from { opacity: 0; transform: translateY(-8px) scale(.96); } }
+
+/* Não viu a abertura (09/11/2026): um ponto parado no canto do botão — sem
+   animação, para não pesar no PC fraco. */
+.nt-abertura-ponto {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: var(--warning);
+  box-shadow: 0 0 0 2px var(--background);
+}
