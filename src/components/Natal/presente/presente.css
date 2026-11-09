@@ -376,14 +376,15 @@
 .np-nevasca { position: fixed; inset: 0; z-index: 0; pointer-events: auto; }
 .np-nevasca-acalma { pointer-events: none; }
 
-/* O sistema embaçado e apagado (o Natal monta atrás dele, enquanto a pessoa lê);
-   o buraco (`clip-path`) é a neve abrindo o Natal. */
+/* O sistema apagado (o Natal monta atrás dele, enquanto a pessoa lê);
+   o buraco (`clip-path`) é a neve abrindo o Natal.
+   SEM backdrop-filter (09/11/2026): o desfoque da tela inteira, com o Natal
+   montando e animando atrás e o buraco mudando a cada quadro, travava os PCs
+   da operação na carta e no bilhete. Um véu quase opaco faz o mesmo papel. */
 .np-nevasca-veu {
   position: fixed;
   inset: 0;
-  background: rgba(18, 20, 30, .38);
-  backdrop-filter: blur(12px) grayscale(.8) brightness(.9);
-  -webkit-backdrop-filter: blur(12px) grayscale(.8) brightness(.9);
+  background: rgba(30, 32, 44, .86);
   animation: np-aparece .9s ease both;
 }
 @keyframes np-aparece { from { opacity: 0; } }
@@ -450,7 +451,7 @@
   from { opacity: 0; transform: translate(calc(-50% + var(--np-ox) - 50vw), calc(-50% + var(--np-oy) - 57vh)) scale(.5) rotate(-2deg); }
 }
 .np-fase-nevasca .np-cartao { animation: np-cartao-vai .5s ease-in both; pointer-events: none; }
-@keyframes np-cartao-vai { to { opacity: 0; transform: translate(-50%, -50%) scale(1.12); filter: blur(6px); } }
+@keyframes np-cartao-vai { to { opacity: 0; transform: translate(-50%, -50%) scale(1.12); } }
 
 /* O gorro, enfiado no canto de cima; cai no cartão logo depois que ele chega. */
 .np-gorro {
@@ -499,8 +500,9 @@
 .np-cartao-assinatura { position: relative; display: flex; justify-content: center; align-items: center; gap: 6px; margin: 6px 0 2px; font: italic 500 19px/1.2 Fraunces, Georgia, serif; color: #a2700f; }
 /* O varal de luzinhas, pendurado na neve da borda de cima. */
 .np-cartao-varal { position: absolute; top: 6px; left: 37%; right: 3%; width: auto; height: 34px; overflow: visible; pointer-events: none; }
-.np-cartao-luz { animation: np-cartao-luz 1.4s ease-in-out infinite alternate; filter: drop-shadow(0 0 3px currentColor); }
-@keyframes np-cartao-luz { from { opacity: .45; filter: none; } }
+/* Só a opacidade anima: `filter` num desenho SVG é refeito a cada quadro. */
+.np-cartao-luz { animation: np-cartao-luz 1.4s ease-in-out infinite alternate; }
+@keyframes np-cartao-luz { from { opacity: .45; } }
 @media (prefers-reduced-motion: reduce) { .np-cartao-luz { animation: none; } }
 .np-cartao-botao {
   position: relative;
