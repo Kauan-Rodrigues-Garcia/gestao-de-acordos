@@ -61,17 +61,64 @@ describe('rankingDaTela', () => {
     expect(r.itens[0].valor).toBe(41_220.1);
   });
 
-  it('projeção: × dias úteis ÷ decorridos, mesma ordem', () => {
+  // 06/11/2026: a projeção é sobre a meta de cada um, como na aba Quartis. A
+  // ordem antiga (a do recebido, com o valor × fator) era o defeito relatado.
+  it('projeção: valor × dias úteis ÷ decorridos, ordem pelo % da meta de cada um', () => {
     const v = visao({ dias_uteis: 20, dias_decorridos: 10 });
     const r = rankingDaTela(v, tela('lista', { valor: 'projecao' }));
     expect(r.projecao).toBe(true);
-    expect(r.itens[0].valor).toBe(82_440.2);
-    expect(r.itens.map(i => i.id)).toEqual(v.ranking.map(p => p.id));
+    expect(r.itens.map(i => i.nome)).toEqual([
+      'Marcos Vinícius Teixeira', 'Carlos Eduardo Rocha', 'Luana Martins Costa', 'Fernanda Ribeiro',
+      'Rafael Souza', 'Juliana Prado', 'Ana Beatriz Lima', 'Patrícia Gomes', 'Diego Almeida',
+      // Sem meta: no fim.
+      'Bruno Carvalho',
+    ]);
+    const marcos = r.itens[0];
+    expect(marcos).toMatchObject({ valor: 59_754.8, meta: 25_000 });
+    expect(r.itens[9].meta).toBeNull();
   });
 
   it('projeção antes do 1º dia útil é o próprio recebido', () => {
     const r = rankingDaTela(visao({ dias_decorridos: 0 }), tela('lista', { valor: 'projecao' }));
-    expect(r.itens[0].valor).toBe(41_220.1);
+    expect(r.itens.find(i => i.nome === 'Ana Beatriz Lima')?.valor).toBe(41_220.1);
+  });
+
+  it('pelo recebido, a ordem e o valor de sempre, sem a meta ao lado', () => {
+    const r = rankingDaTela(visao(), tela('lista'));
+    expect(r.itens.map(i => i.valor)).toEqual([...r.itens.map(i => i.valor)].sort((a, b) => b - a));
+    expect(r.itens.every(i => i.meta === null)).toBe(true);
+  });
+
+  it('projeção sem a meta das pessoas no pacote (antes de 20261106120000): avisa', () => {
+    const n = numerosDemo();
+    const semMeta = n.ranking.map(({ meta: _meta, ...p }) => p);
+    const r = rankingDaTela(visao({ ranking: semMeta }), tela('lista', { valor: 'projecao' }));
+    expect(r.motivo).toBe(AGUARDANDO_ATUALIZACAO);
+    // Pelo recebido continua funcionando com o pacote antigo.
+    expect(rankingDaTela(visao({ ranking: semMeta }), tela('lista')).itens.length).toBe(10);
+  });
+
+  it('projeção no Cofen em H.O.: a meta da pessoa convertida pelo percentual', () => {
+    const v = montarVisao({
+      ...numerosDemo(), regra: 'cofen', ho_percentual: 0.25, dias_uteis: 20, dias_decorridos: 10,
+      ranking: [{ id: 'a', nome: 'Ana', foto: null, valor: 1000, valor_ho: 250, meta: 4000 }],
+    }, 'ho');
+    const r = rankingDaTela(v, tela('lista', { valor: 'projecao' }));
+    expect(r.itens[0]).toMatchObject({ valor: 500, meta: 1000 });
+  });
+
+  it('equipes na projeção: pelo % da meta projetado, sem meta no fim', () => {
+    const v = visao({
+      dias_uteis: 20, dias_decorridos: 10,
+      equipes_ranking: [
+        { id: 'a', nome: 'Rosa', valor: 300, valor_ho: 0, meta: 1000 },
+        { id: 'b', nome: 'Azul', valor: 200, valor_ho: 0, meta: 400 },
+        { id: 'c', nome: 'Verde', valor: 900, valor_ho: 0, meta: 0 },
+      ],
+    });
+    expect(rankingDaTela(v, tela('lista', { fonte: 'equipes', valor: 'projecao' })).itens.map(i => i.id)).toEqual(['b', 'a', 'c']);
+    // Pelo recebido, a de sempre.
+    expect(rankingDaTela(v, tela('lista', { fonte: 'equipes' })).itens.map(i => i.id)).toEqual(['c', 'a', 'b']);
   });
 
   it('equipes: soma de cada uma, com a meta; equipe sem nada some', () => {

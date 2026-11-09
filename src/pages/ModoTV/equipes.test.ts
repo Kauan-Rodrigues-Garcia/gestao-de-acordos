@@ -52,12 +52,15 @@ describe('equipesDaTela', () => {
     expect(r.motivo).toMatch(/não estão mais no setor/);
   });
 
-  it('projeção: recebido × dias úteis ÷ decorridos, e o % passa a ser da projeção', () => {
+  it('projeção: recebido × dias úteis ÷ decorridos, o % é o da projeção e a ordem é por ele', () => {
     const r = equipesDaTela(visao(), tela({ ordem: 'projecao' }));
     const rosa = r.itens.find(e => e.id === ROSA)!;
     const esperado = Math.round(128_400.55 * 22 / 17 * 100) / 100;
     expect(rosa.valor).toBe(esperado);
     expect(rosa.fracao).toBeCloseTo(esperado / 150_000, 6);
+    // Não a ordem do recebido (Rosa, Azul…): Azul está mais perto da meta.
+    expect(r.porMeta).toBe(true);
+    expect(r.itens.map(e => e.id)).toEqual([AZUL, ROSA, VERDE, LARANJA]);
   });
 
   it('pacote antigo, sem as equipes: avisa', () => {

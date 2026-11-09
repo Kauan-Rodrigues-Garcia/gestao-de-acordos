@@ -19,6 +19,16 @@
  * O botão veste o tema do mês, como o calendário: a cor do acento, o desenho
  * do tema e o nome do mês em letra de gibi, com a contagem do dia num selo.
  *
+ * ## O botão do tempo, do lado (06/11/2026)
+ *
+ * O tempo é outra coisa, com botão próprio (`clima/BotaoClima`): o personagem
+ * do tempo e a temperatura da cidade do setor, e o clique abre só o card do
+ * tempo. Mora aqui só para nascer colado a este botão, na mesma barra. Ele
+ * aparece para todo mundo que está logado, com ou sem calendário liberado: a
+ * cidade é a do setor deste botão, senão a do cadastro (sem cidade, Birigui).
+ * A cor é a do calendário do mês só quando ele está liberado para a operação
+ * (`temaLiberado`); sem calendário liberado, a do tema padrão do mês.
+ *
  * Para quem monta o calendário, um ponto âmbar avisa que o mês corrente está
  * em rascunho, com coisa lançada, esperando ir para a operação.
  *
@@ -34,6 +44,7 @@ import { paletaGibi } from '@/lib/calendarioGibi';
 import { lembreteVisto, marcarLembreteVisto } from '@/lib/calendarioLembrete';
 import { useCalendarioHoje } from '@/hooks/useCalendarioHoje';
 import { BotaoDoMes } from './gibi/BotaoDoMes';
+import { BotaoClima } from './clima/BotaoClima';
 import { carregarFontesGibi } from './gibi/fontes';
 
 interface Props {
@@ -46,7 +57,7 @@ interface Props {
 }
 
 export function BotaoCalendario({ empresaId, perfilId, meuSetorId, ativo, onAbrir }: Props) {
-  const { temSetor, eventosHoje, rascunhoParaPublicar, tema: temaDaCapa } = useCalendarioHoje(empresaId, meuSetorId, ativo);
+  const { temSetor, setorId, eventosHoje, rascunhoParaPublicar, tema: temaDaCapa, temaLiberado } = useCalendarioHoje(empresaId, meuSetorId, ativo);
   const { resolvedTheme } = useTheme();
   const escuro = ehTemaEscuro(resolvedTheme);
   const hojeISO = getTodayISO();
@@ -57,27 +68,36 @@ export function BotaoCalendario({ empresaId, perfilId, meuSetorId, ativo, onAbri
 
   const tema = temaEfetivo(temaDaCapa, Number(hojeISO.slice(5, 7)));
   const paleta = useMemo(() => paletaGibi(tema, escuro), [tema, escuro]);
+  // O tempo veste o calendário só quando ele está liberado para a operação;
+  // senão, o tema padrão do mês (o «Automático»: Novembro Azul em novembro…).
+  const temaDoTempo = temaEfetivo(temaLiberado, Number(hojeISO.slice(5, 7)));
+  const paletaDoTempo = useMemo(() => paletaGibi(temaDoTempo, escuro), [temaDoTempo, escuro]);
 
   const mostrar = ativo && temSetor;
-  useEffect(() => { if (mostrar) carregarFontesGibi(); }, [mostrar]);
-
-  if (!mostrar) return null;
+  const temClima = Boolean(perfilId);
+  useEffect(() => { if (mostrar || temClima) carregarFontesGibi(); }, [mostrar, temClima]);
 
   const marcarVisto = () => {
     marcarLembreteVisto(perfilId, hojeISO);
     setVisto({ chave, sim: true });
   };
 
+  // Sempre no mesmo lugar da árvore: o botão do tempo não se remonta quando o do mês aparece.
   return (
-    <BotaoDoMes
-      tema={tema}
-      paleta={paleta}
-      hojeISO={hojeISO}
-      eventosHoje={eventosHoje}
-      chamando={eventosHoje.length > 0 && !jaViu}
-      rascunhoParaPublicar={rascunhoParaPublicar}
-      onAbrir={() => { marcarVisto(); onAbrir(); }}
-      onDispensar={marcarVisto}
-    />
+    <>
+      {mostrar && (
+        <BotaoDoMes
+          tema={tema}
+          paleta={paleta}
+          hojeISO={hojeISO}
+          eventosHoje={eventosHoje}
+          chamando={eventosHoje.length > 0 && !jaViu}
+          rascunhoParaPublicar={rascunhoParaPublicar}
+          onAbrir={() => { marcarVisto(); onAbrir(); }}
+          onDispensar={marcarVisto}
+        />
+      )}
+      <BotaoClima setorId={setorId ?? meuSetorId} paleta={paletaDoTempo} hojeISO={hojeISO} ativo={temClima} />
+    </>
   );
 }

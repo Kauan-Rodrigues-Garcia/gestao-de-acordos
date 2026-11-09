@@ -2,6 +2,12 @@
 
 **Arquivada em:** 05/09/2026
 
+> **06/11/2026:** existe de novo uma aba Ouvidoria, mas é OUTRA: a da regra Cofen
+> (`src/pages/Ouvidoria/`, migration `20261106150000_ouvidoria_cofen.sql`), com
+> tabelas (`ouvidoria_manifestacoes`, `ouvidoria_andamentos`) e chaves
+> (`ver_ouvidoria_cofen`, `ouvidoria_cofen_gerenciar`) próprias. Nada daqui foi
+> reaproveitado, e as tabelas e chaves antigas continuam sem uso.
+
 ## O que era
 
 Uma aba exclusiva da PaguePlay para registrar e acompanhar atendimentos de

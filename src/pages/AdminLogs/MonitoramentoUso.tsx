@@ -117,6 +117,8 @@ const TELAS_ADOCAO = [
 const TELAS_EXCLUSIVAS = new Set([
   'campanha-facil', 'dashboard-adm', 'fechamento', 'controle-numeros', 'meus-chips',
   'solicitacoes-whatsapp',
+  // A Ouvidoria (de novo desde 06/11/2026) é só do setor de regra Cofen.
+  'ouvidoria',
   'vendas', 'vendas/indicacoes', 'vendas/painel-lider', 'vendas/painel-diretoria', 'vendas/lixeira',
 ]);
 
@@ -127,11 +129,10 @@ const TELAS_EXCLUSIVAS = new Set([
  * senão o passado vira uma chave crua na tela. O que não pode é aparecerem como
  * tela abandonada: não foram abandonadas, foram removidas ou renomeadas.
  *
- *   ouvidoria ................ aba arquivada em 05/09/2026
  *   lider:time ............... aba Acompanhamento, removida em 31/08/2026
  *   admin/configuracoes:uso .. hoje `admin/configuracoes:logs/uso/…` (29/09/2026)
  */
-const TELAS_APOSENTADAS = new Set(['ouvidoria', 'lider:time', 'admin/configuracoes:uso']);
+const TELAS_APOSENTADAS = new Set(['lider:time', 'admin/configuracoes:uso']);
 
 /** Quantas abas cada tela mostra antes do «e mais». */
 const ABAS_POR_GRUPO = 4;

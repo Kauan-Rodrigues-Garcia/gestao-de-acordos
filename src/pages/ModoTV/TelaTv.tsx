@@ -611,6 +611,8 @@ function Subtitulo({ r, c, titulo }: { r: RankingNaTela; c: Cores; titulo: strin
   const partes = [
     r.deEquipes && !jaDiz('equipe') ? 'Equipe contra equipe' : '',
     r.projecao && !jaDiz('proje') ? 'Projeção de fechamento no ritmo atual' : '',
+    // Desde 06/11/2026 a projeção ordena pelo % da meta de cada um.
+    r.projecao ? 'Pelo % da meta' : '',
   ].filter(Boolean);
   if (!partes.length) return null;
   return <div style={{ fontSize: 32, color: c.suave, marginTop: -12, marginBottom: 20, textAlign: 'center' }}>{partes.join(' · ')}</div>;
@@ -634,7 +636,9 @@ function Podio({ v, tela, c }: { v: VisaoTv; tela: TelaDoPainel; c: Cores }) {
 function PodioVivo({ top, r, tela, c, mostrar }: { top: ItemDoRanking[]; r: RankingNaTela; tela: TelaDoPainel; c: Cores; mostrar: boolean }) {
   const caixa = useDeslizar(top.map(p => p.id).join(','));
   const ordem = [1, 0, 2].filter(i => top[i]);
-  const altura = [280, 200, 150];
+  // Com o «% da meta» (equipes, projeção) cada coluna ganha uma linha: os
+  // degraus baixam, senão o título sobe por cima do cabeçalho.
+  const altura = top.some(p => p.meta != null) ? [200, 140, 100] : [280, 200, 150];
   return (
     <div style={{ ...centro, justifyContent: 'flex-end', paddingBottom: 0 }}>
       <Titulo texto={opcao<string>(tela, 'titulo')} c={c} />
@@ -655,7 +659,7 @@ function PodioVivo({ top, r, tela, c, mostrar }: { top: ItemDoRanking[]; r: Rank
                 transition: `height 1600ms ${CURVA}`,
                 background: `linear-gradient(180deg, ${MEDALHA[i]}55, ${MEDALHA[i]}14)`,
                 display: 'flex', justifyContent: 'center', paddingTop: 20,
-                fontSize: 100, fontWeight: 800, color: MEDALHA[i],
+                fontSize: Math.min(100, altura[i] - 30), lineHeight: 1, fontWeight: 800, color: MEDALHA[i],
               }}>
                 {i + 1}
               </div>

@@ -9,7 +9,7 @@
  * Fixa a regra do recorte e o dia de referência em São Paulo.
  */
 import { describe, expect, it } from 'vitest';
-import { linhasDo58NoMesDo59, diaLocalSP } from './analitico.service';
+import { linhasDo58NoMesDo59, inicioDaJanelaDo58, diaLocalSP } from './analitico.service';
 import { parseRelatorioBookplayRows } from '@/services/bookplay/bookplayRecebimentoParser';
 
 const l = (codigo: string, data: string, mes = '2026-10-01') =>
@@ -69,6 +69,48 @@ describe('linhasDo58NoMesDo59', () => {
 
     const r = linhasDo58NoMesDo59(linhas, OUT, '2026-10-19', new Set(['10812488::2026-10-19']));
     expect(r).toEqual([{ codigo: '10812488', data_pagamento: '2026-10-20', mes_referencia: '2026-10-01', valor: 544 }]);
+  });
+});
+
+/*
+ * O robô do 59 parado (09/11/2026). O último lote vigente era de 06/11 às
+ * 13h30; o 58 de 09/11 só gravava 08 e 09/11, e a tarde de 06/11 e o sábado
+ * 07/11 não tinham fonte nenhuma — R$ 42.288,99 a menos no Play 3.
+ */
+describe('inicioDaJanelaDo58', () => {
+  const NOV = '2026-11-01';
+
+  it('59 em dia: a janela é ontem, como antes', () => {
+    expect(inicioDaJanelaDo58('2026-11-08', '2026-11-09', NOV)).toBe('2026-11-08');
+    expect(inicioDaJanelaDo58('2026-11-08', '2026-11-08', NOV)).toBe('2026-11-08');
+  });
+
+  it('59 parado: a janela começa no dia em que ele parou', () => {
+    expect(inicioDaJanelaDo58('2026-11-08', '2026-11-06', NOV)).toBe('2026-11-06');
+  });
+
+  it('59 sem nada no mês: o 58 grava o mês inteiro', () => {
+    expect(inicioDaJanelaDo58('2026-11-08', null, NOV)).toBe(NOV);
+  });
+});
+
+describe('linhasDo58NoMesDo59 com o 59 parado', () => {
+  const NOVS = new Set(['2026-11-01']);
+  const n = (codigo: string, data: string) => l(codigo, data, '2026-11-01');
+
+  it('entra a tarde do dia em que parou, o sábado e hoje; o que o 59 tem fica de fora', () => {
+    const desde = new Map([['2026-11-01', inicioDaJanelaDo58('2026-11-08', '2026-11-06', '2026-11-01')]]);
+    const r = linhasDo58NoMesDo59(
+      [n('A', '2026-11-05'), n('B', '2026-11-06'), n('C', '2026-11-06'), n('D', '2026-11-07'), n('E', '2026-11-09')],
+      NOVS, desde, new Set(['B::2026-11-06']),
+    );
+    // A (05/11) o 59 cobriu inteiro; B de 06/11 o 59 já trouxe.
+    expect(r.map(x => x.codigo)).toEqual(['C', 'D', 'E']);
+  });
+
+  it('mês do 59 fora do mapa entra inteiro', () => {
+    const r = linhasDo58NoMesDo59([n('A', '2026-11-02')], NOVS, new Map(), new Set());
+    expect(r.map(x => x.codigo)).toEqual(['A']);
   });
 });
 

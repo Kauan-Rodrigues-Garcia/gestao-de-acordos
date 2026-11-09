@@ -393,6 +393,7 @@ const ALVO_LABEL: Record<string, string> = {
   solicitacao_wpp:   'Solicitação de WhatsApp',
   ouvidoria_acesso:  'Acesso à ouvidoria',
   ouvidoria_atend:   'Atendimento de ouvidoria',
+  ouvidoria_manifestacao: 'Manifestação da ouvidoria',
   relatorio_dia:     'Validação do dia',
   composicao_mes:    'Composição do mês',
   campanha_desconto: 'Desconto de campanha',

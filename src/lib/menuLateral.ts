@@ -33,7 +33,7 @@ import {
   LayoutDashboard, FileText, Plus, Users, Settings, Trash2, TrendingUp,
   BarChart3, Upload, Target, BarChart2, Megaphone, MessageSquarePlus,
   Ticket, ClipboardList, ClipboardCheck, Smartphone, MessageCircle, Gauge,
-  ShoppingBag, Handshake, Send, Zap, Tv, KeyRound, ShieldCheck,
+  ShoppingBag, Handshake, Send, Zap, Tv, KeyRound, ShieldCheck, Headset,
 } from 'lucide-react';
 import { CARGOS_MODO_TV, ROUTE_PATHS } from '@/lib/index';
 import { produtoPermite, type Produto } from '@/lib/produto';
@@ -237,6 +237,10 @@ export const NAV_ITEMS: NavItem[] = [
   // liderança do setor dele) — ver `abasJornada` abaixo.
   { label: 'Acesso',           icon: KeyRound,        to: ROUTE_PATHS.JORNADA_ACESSO,      produtos: SO_COBRANCA, permissaoKey: 'ver_jornada_acesso', depoisDe: ROUTE_PATHS.PIX_AUTOMATICO },
   { label: 'Retenção',         icon: ShieldCheck,     to: ROUTE_PATHS.JORNADA_RETENCAO,    produtos: SO_COBRANCA, permissaoKey: 'ver_jornada_retencao', depoisDe: ROUTE_PATHS.JORNADA_ACESSO },
+  // Ouvidoria (06/11/2026): só em setor de regra Cofen (hoje o Conecta Play). A
+  // chave nasce só no líder; o atendente ganha a exceção por pessoa na própria
+  // aba. Por baixo, quem decide é o SETOR da pessoa — ver `ouvidoria` abaixo.
+  { label: 'Ouvidoria',        icon: Headset,         to: ROUTE_PATHS.OUVIDORIA,           produtos: SO_COBRANCA, permissaoKey: 'ver_ouvidoria_cofen', depoisDe: ROUTE_PATHS.ACORDOS },
   { label: 'Painel Líder',     icon: BarChart3,       to: ROUTE_PATHS.PAINEL_LIDER,        produtos: SO_COBRANCA, roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_painel_lider' },
   // Modo TV 2 (27/10/2026). Por CARGO, sem chave: só líder, elite e acima
   // (Cleber, 27/10). É a régua de `fn_tv_alvo_no_meu_alcance` no banco — uma
@@ -294,6 +298,13 @@ export interface ContextoMenu {
    * o super_admin poder posicioná-las.
    */
   abasJornada?: { acesso: boolean; retencao: boolean };
+  /**
+   * A pessoa alcança algum setor de regra Cofen na Ouvidoria
+   * (`fn_ouvidoria_cofen_setores`). Depende de pessoa e do SETOR dela, não de
+   * cargo: na prévia por cargo do editor vem ausente, e a aba aparece para o
+   * super_admin poder posicioná-la.
+   */
+  ouvidoria?: boolean;
 }
 
 /**
@@ -349,6 +360,12 @@ export function abasDoMenu(ctx: ContextoMenu): NavItem[] {
       if (ctx.cargo === 'super_admin') return true;
       const abas = ctx.abasJornada;
       return (item.to === ROUTE_PATHS.JORNADA_ACESSO ? abas?.acesso : abas?.retencao) ?? true;
+    }
+
+    // Ouvidoria: só em setor de regra Cofen, como o banco responde (a chave
+    // ligada num setor Nosso produto não abre nada).
+    if (item.to === ROUTE_PATHS.OUVIDORIA) {
+      return ctx.ouvidoria ?? true;
     }
 
     if (item.permissaoKey) return true;

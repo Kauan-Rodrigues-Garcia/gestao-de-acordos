@@ -295,8 +295,8 @@ export interface ResultadoImportacao {
    */
   sincronizadoPelo59?: boolean;
   /**
-   * Linhas do arquivo que NÃO foram gravadas porque o mês já é do 59: dias
-   * anteriores a ontem, ou NR+dia que o 59 já trouxe. Ver `linhasDo58NoMesDo59`.
+   * Linhas do arquivo que NÃO foram gravadas porque o mês já é do 59: dias que
+   * o 59 já cobriu, ou NR+dia que o 59 já trouxe. Ver `linhasDo58NoMesDo59`.
    */
   ignoradasPelo59?: number;
   /**
@@ -422,24 +422,79 @@ export function diaLocalSP(deslocamento = 0, agora: Date = new Date()): string {
 }
 
 /**
+ * De que dia em diante o 58 grava num mês do 59.
+ *
+ * ## Pelo que o 59 trouxe, não pelo relógio (09/11/2026)
+ *
+ * Até aqui era sempre ONTEM. Isso supunha o 59 no máximo uma hora atrás — e o
+ * robô parou em 06/11 às 13h30. O 58 de 09/11 já não gravava a tarde de 06/11
+ * nem o sábado 07/11, que o 59 também não tinha: o Play 3 ficou R$ 42.288,99
+ * abaixo do relatório (R$ 128.678,23 × R$ 170.967,22), exatamente esses dois
+ * pedaços. A regra da casa é «o 58 entra tudo, o 59 sincroniza».
+ *
+ * Agora a janela começa no ÚLTIMO DIA QUE O 59 TROUXE, quando ele está atrás
+ * de ontem. Com o robô em dia, o último dia é hoje e nada muda. O dia em que o
+ * 59 parou entra também: ele pode ter vindo pela metade, e o NR+dia que o 59
+ * já tem continua de fora.
+ *
+ * `ultimoDiaDo59` nulo (o 59 ainda não escreveu nada no mês, ou a leitura não
+ * respondeu) = o mês todo — o 58 grava tudo e a sincronização acerta depois.
+ */
+export function inicioDaJanelaDo58(ontem: string, ultimoDiaDo59: string | null, mes: string): string {
+  if (!ultimoDiaDo59) return mes;
+  return ultimoDiaDo59 < ontem ? ultimoDiaDo59 : ontem;
+}
+
+/**
  * O que o 58 grava num mês que já é do 59.
  *
- * Mês do 58: tudo, como sempre. Mês do 59: só a linha de ONTEM em diante cujo
- * NR+dia o 59 ainda não tem — a mesma regra com que a sincronização do 59
- * decide qual linha do 58 sobrevive (20260928200000). Qualquer outra seria
- * apagada ou reescrita por ela na entrada seguinte.
+ * Mês do 58: tudo, como sempre. Mês do 59: só a linha da janela
+ * (`inicioDaJanelaDo58`) cujo NR+dia o 59 ainda não tem — a mesma regra com
+ * que a sincronização do 59 decide qual linha do 58 sobrevive (20260928200000,
+ * e 20261109120000 para a janela). Qualquer outra seria apagada ou reescrita
+ * por ela na entrada seguinte.
  *
- * `jaNo59` = chaves `codigo::data_pagamento` presentes no 59 a partir de ontem.
+ * `desde`: um dia para todos os meses, ou o dia de cada mês do 59. Mês do 59
+ * fora do mapa entra inteiro — na dúvida, o 58 grava.
+ *
+ * `jaNo59` = chaves `codigo::data_pagamento` presentes no 59 a partir da janela.
  */
 export function linhasDo58NoMesDo59<T extends { codigo: string; data_pagamento: string; mes_referencia: string }>(
   linhas: readonly T[],
   mesesDo59: ReadonlySet<string>,
-  ontem: string,
+  desde: string | ReadonlyMap<string, string>,
   jaNo59: ReadonlySet<string>,
 ): T[] {
+  const inicio = (mes: string) => (typeof desde === 'string' ? desde : desde.get(mes) ?? mes);
   return linhas.filter(l =>
     !mesesDo59.has(l.mes_referencia)
-    || (l.data_pagamento >= ontem && !jaNo59.has(`${l.codigo}::${l.data_pagamento}`)));
+    || (l.data_pagamento >= inicio(l.mes_referencia) && !jaNo59.has(`${l.codigo}::${l.data_pagamento}`)));
+}
+
+/**
+ * O último dia de pagamento que o 59 escreveu no analítico neste mês.
+ *
+ * É a cobertura do lote vigente vista pelo analítico: o robô sobe o 59 de hora
+ * em hora, e o maior `data_pagamento` dele é até onde o ERP foi. A leitura
+ * respeita o RLS de quem importa — para um líder, o próprio setor —, o que no
+ * máximo adianta a janela (grava mais), nunca a encurta.
+ *
+ * `null` = o 59 não tem linha no mês, ou a leitura falhou.
+ */
+async function ultimoDiaDo59(empresaId: string, mes: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('analitico_recebimentos')
+    .select('data_pagamento')
+    .eq('empresa_id', empresaId)
+    .eq('mes_referencia', mes)
+    .in('procedencia', ['relatorio_59', 'contribuicao_59'])
+    .order('data_pagamento', { ascending: false })
+    .limit(1);
+  if (error) {
+    console.warn('[analitico] último dia do 59 não lido:', error.message);
+    return null;
+  }
+  return (data as { data_pagamento: string }[] | null)?.[0]?.data_pagamento ?? null;
 }
 
 /**
@@ -695,6 +750,14 @@ async function importarLoteAnaliticoNoBanco(
    * NR+dia que o 59 não tem — exatamente o conjunto que a sincronização
    * preserva (`fn_mestre_sincronizar_analitico_aplicar`, 20260928200000). A
    * remoção dos ausentes continua comparando com o ARQUIVO inteiro.
+   *
+   * ## «Ontem» virou «onde o 59 parou» (09/11/2026)
+   *
+   * Com o robô do 59 parado, «hoje e ontem» deixava dias inteiros sem fonte
+   * nenhuma. A janela agora começa no último dia que o 59 trouxe, quando ele
+   * está atrás de ontem (`inicioDaJanelaDo58`); a sincronização no banco usa a
+   * mesma janela (20261109120000), para que o 59 atrasado não apague o que só o
+   * 58 sabe.
    */
   const mesesDoArquivo = [...new Set(todasAsLinhas.map(r => r.mes_referencia))];
   let sincronizadoPelo59 = false;
@@ -718,15 +781,23 @@ async function importarLoteAnaliticoNoBanco(
 
   let rows = todasAsLinhas;
   if (mesesDo59.size > 0) {
+    // A janela de cada mês do 59 começa onde o 59 parou, se ele estiver atrás
+    // de ontem — ver `inicioDaJanelaDo58` e o robô parado de 06/11/2026.
     const ontem = diaLocalSP(-1);
-    const recentes = todasAsLinhas.filter(r => mesesDo59.has(r.mes_referencia) && r.data_pagamento >= ontem);
-    const jaNo59 = await nrDiaJaNo59(empresaId, recentes.map(r => r.codigo), ontem);
+    const desdePorMes = new Map<string, string>();
+    for (const mes of mesesDo59) {
+      desdePorMes.set(mes, inicioDaJanelaDo58(ontem, await ultimoDiaDo59(empresaId, mes), mes));
+    }
+    const desde = [...desdePorMes.values()].sort()[0];
+    const naJanela = todasAsLinhas.filter(r =>
+      mesesDo59.has(r.mes_referencia) && r.data_pagamento >= (desdePorMes.get(r.mes_referencia) ?? r.mes_referencia));
+    const jaNo59 = await nrDiaJaNo59(empresaId, naJanela.map(r => r.codigo), desde);
     if (jaNo59 === null) {
       // Sem saber o que o 59 tem, não dá para recortar com segurança: grava
       // como antes e a sincronização seguinte acerta.
       console.warn('[analitico] linhas do 59 não lidas; o 58 grava o mês inteiro.');
     } else {
-      rows = linhasDo58NoMesDo59(todasAsLinhas, mesesDo59, ontem, jaNo59);
+      rows = linhasDo58NoMesDo59(todasAsLinhas, mesesDo59, desdePorMes, jaNo59);
     }
   }
   const ignoradasPelo59 = todasAsLinhas.length - rows.length;

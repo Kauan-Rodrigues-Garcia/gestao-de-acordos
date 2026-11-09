@@ -28,7 +28,6 @@ import { CalendarDays, X, ListChecks, Trophy, Wallet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ValorAnimado } from '@/components/ValorAnimado';
 import { AbasSegmentadas, type AbaSegmentada } from '@/components/AbasSegmentadas';
-import { DatePickerField } from '@/components/DatePickerField';
 import { toast } from 'sonner';
 import { formatBRL } from '@/lib/money';
 import { getTodayISO } from '@/lib/index';
@@ -52,7 +51,7 @@ import { ehMesAtual } from '@/lib/mesReferencia';
 import { buscarForaDoRanking } from '@/services/situacaoUsuario.service';
 import { posicaoNoRanking } from '@/services/analitico/posicaoNoRanking';
 import {
-  intervaloDoRecorte, janelaDoDetalhe, mesDoRecorte, type Recorte,
+  janelaDoDetalhe, mesDoRecorte, type Recorte,
 } from '@/pages/Analitico/recorte';
 
 /*
@@ -101,7 +100,6 @@ export function AnaliticoOperador({
   const tenant = useTenant();
   const mostrarHO = tenant.isPaguePlay;   // HO só existe no relatório PaguePlay
   const mes = mesDoRecorte(recorte);
-  const { inicio: pisoDoRecorte, fim: tetoDoRecorte } = intervaloDoRecorte(recorte);
   const [, setForceRender] = useState(0);
   const [filtroInicio, setFiltroInicio] = useState('');
   const [filtroFim, setFiltroFim] = useState('');
@@ -387,32 +385,22 @@ export function AnaliticoOperador({
               )}
             </section>
 
-            {/* Período à mão + busca */}
+            {/* Busca, e o dia escolhido na fita. O «Período: início até fim»
+                que morava aqui saiu em 25/10/2026: repetia a lente Período do
+                topo. Para um dia, a fita; para uma janela, a lente. */}
             <div className="flex flex-wrap items-center gap-1.5">
-              <CalendarDays className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              <span className="text-xs font-medium text-muted-foreground">Período:</span>
-              <DatePickerField
-                value={filtroInicio} onChange={setFiltroInicio}
-                placeholder="Data início" triggerClassName="w-32 rounded-lg"
-                minDate={pisoDoRecorte} maxDate={filtroFim || tetoDoRecorte}
-              />
-              <span className="text-xs text-muted-foreground">até</span>
-              <DatePickerField
-                value={filtroFim} onChange={setFiltroFim}
-                placeholder="Data fim" triggerClassName="w-32 rounded-lg"
-                minDate={filtroInicio || pisoDoRecorte} maxDate={tetoDoRecorte}
-              />
               {(filtroInicio || filtroFim) && (
-                <>
-                  <Button size="sm" variant="ghost"
-                    className="h-8 gap-1 rounded-lg px-2 text-xs text-muted-foreground"
-                    onClick={limparFiltro}>
-                    <X className="h-3 w-3" /> Limpar
+                <span className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/[0.06] py-0.5 pl-2.5 pr-1 text-xs text-foreground">
+                  <CalendarDays className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+                  {filtroInicio === filtroFim
+                    ? new Date(filtroInicio + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
+                    : `${filtroInicio || '…'} até ${filtroFim || '…'}`}
+                  <span className="text-muted-foreground">· {dadosFiltrados.length} de {dados.length}</span>
+                  <Button size="icon" variant="ghost" className="h-6 w-6 rounded-full text-muted-foreground"
+                    aria-label="Mostrar o recorte inteiro" onClick={limparFiltro}>
+                    <X className="h-3 w-3" />
                   </Button>
-                  <span className="text-xs text-muted-foreground">
-                    {dadosFiltrados.length} de {dados.length} registros
-                  </span>
-                </>
+                </span>
               )}
               <CampoBuscaAnalitico
                 valor={busca} onMudar={setBusca}

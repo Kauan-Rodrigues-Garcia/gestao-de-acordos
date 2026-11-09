@@ -49,6 +49,11 @@ export interface PessoaRanking {
   foto: string | null;
   valor: number;
   valor_ho: number;
+  /**
+   * A meta individual do mês, em bruto; 0 = sem meta (20261106120000). Falta
+   * no pacote de antes — e aí a projeção por pessoa avisa em vez de mentir.
+   */
+  meta?: number;
 }
 
 /**

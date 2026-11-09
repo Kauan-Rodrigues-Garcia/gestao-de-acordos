@@ -60,6 +60,8 @@ export const ROUTE_PATHS = {
   JORNADA_ACESSO: '/acesso',
   /** Jornada (04/11/2026): aba do subgrupo Retenção — NR + data. */
   JORNADA_RETENCAO: '/retencao',
+  /** Ouvidoria da regra Cofen (06/11/2026): reclamações do 0800 e o acompanhamento delas. */
+  OUVIDORIA: '/ouvidoria',
   /**
    * O fechamento mensal por operador — a planilha de fechamento da gerência.
    * Não confundir com o relatório de fechamento (`BotaoFechamento`), que é um

@@ -36,6 +36,7 @@ import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useCargos } from '@/hooks/useCargos';
 import { useTicketsAcesso } from '@/hooks/useTicketsAcesso';
 import { useJornadaAbas } from '@/hooks/useJornadaAbas';
+import { useOuvidoriaCofen } from '@/hooks/useOuvidoriaCofen';
 import { ROUTE_PATHS, PERFIL_LABELS, PERFIL_COLORS } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -359,6 +360,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const acessoTickets   = useTicketsAcesso();
   // Abas Acesso/Retenção do Jornada: pelo subgrupo da pessoa.
   const jornada         = useJornadaAbas();
+  // Ouvidoria: só quem alcança um setor de regra Cofen (a chave e o setor).
+  const ouvidoria       = useOuvidoriaCofen();
   // Mesmo estado que o painel (ChatNotificacoes) usa — antes o header tinha um
   // canal e um SELECT count próprios, que podiam divergir da lista por instantes.
   const { naoLidas, animarBadge } = useNotificacoes();
@@ -424,9 +427,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     temPermissao: chave => !permLoading && temPermissao(chave),
     acessoTickets: acessoTickets.podeVerAba,
     abasJornada: { acesso: jornada.acesso, retencao: jornada.retencao },
+    ouvidoria: ouvidoria.setores.length > 0,
   }), [
     userRole, produto, isPP, tenant.slug, permLoading, temPermissao,
-    acessoTickets.podeVerAba, jornada.acesso, jornada.retencao,
+    acessoTickets.podeVerAba, jornada.acesso, jornada.retencao, ouvidoria.setores.length,
   ]);
 
   /*
