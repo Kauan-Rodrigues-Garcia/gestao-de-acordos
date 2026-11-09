@@ -26,6 +26,7 @@ import { APP_L } from '../app/layout';
 import { ms, s } from '../movimento';
 import { CabecaZumbi } from './Caca';
 import { REI_DO_POP } from './dados';
+import { NOME } from './nome';
 import { ALTURA_NATAL } from './Detalhes';
 
 const FPS = 60;
@@ -131,6 +132,7 @@ function simular(r: RoteiroChefao, ate: number): Estado {
         const onde = desviar(m, rnd() < 0.5 ? 'passinho' : 'deslize', rnd() < 0.5 ? -1 : 1, agora, largura, altura, CAIXA, rnd);
         e.textos.push({ f, x: de.x + L / 2, y: de.y - 6, texto: 'ESQUIVOU!', tipo: 'esquiva' });
         e.textos.push({ f, x: onde.x + L / 2, y: onde.y - 16, texto: 'HEE-HEE!', tipo: 'passo' });
+        e.sons.push({ f, arquivo: 'chefao/pulo', volume: 0.35 });
         if (f - ultimoHee > s(1.5)) { e.sons.push({ f, arquivo: 'chefao/hee-hee', volume: 0.6 }); ultimoHee = f; }
         continue;
       }
@@ -167,6 +169,8 @@ function simular(r: RoteiroChefao, ate: number): Estado {
           }
           e.manchas.push({ f, x: m.x + L / 2, y: chao, tam: 0.9 });
           e.sons.push({ f, arquivo: 'chefao/arranca', volume: 0.45 });
+          // A fúria do Rei quando perde um pedaço (como no sistema, 08/11/2026).
+          e.sons.push({ f: f + ms(180), arquivo: 'chefao/furia', volume: 0.42 });
           e.textos.push({ f, x: m.x + L / 2, y: m.y - 10, texto: parte === 'bracoTras' ? 'LÁ SE VAI UM BRAÇO!' : 'E O OUTRO!', tipo: 'final' });
         }
         m.trancoAte = agora + 300;
@@ -269,7 +273,7 @@ export const ReiDoPop: React.FC<{ r: RoteiroChefao }> = ({ r }) => {
         {/* O top 3 da luta de verdade (`zb-chefao-top`). */}
         <ol className="zb-chefao-top">
           {REI_DO_POP.top.map((g, i) => (
-            <li key={g.nome}><span className="pos">{i + 1}º</span><span>{g.nome.split(' ').slice(0, 2).join(' ')}</span><span className="dano">{g.dano}</span></li>
+            <li key={g.nome}><span className="pos">{i + 1}º</span><span style={NOME}>{g.nome.split(' ').slice(0, 2).join(' ')}</span><span className="dano">{g.dano}</span></li>
           ))}
         </ol>
       </div>
@@ -322,12 +326,22 @@ export const ReiDoPop: React.FC<{ r: RoteiroChefao }> = ({ r }) => {
 
 /** Os sons da luta (os do app, gravados de `sons.ts`) e a trilha de 8 bits dele. */
 /** `trilha`: a trilha de 8 bits dele (na Arena fica só a música do Halloween). `volume`: o quanto dos efeitos. */
-export const SonsDoChefao: React.FC<{ r: RoteiroChefao; trilha?: boolean; volume?: number; enxuto?: boolean }> = ({ r, trilha = true, volume = 1, enxuto = false }) => {
+/**
+ * `trilha`: `true` toca a trilha de 8 bits a 0,4 do começo ao fim; uma função
+ * dá o volume quadro a quadro (contado de `r.entra`). Na Arena (08/11/2026) a
+ * trilha volta, com o Halloween abaixado por baixo dela.
+ */
+export const SonsDoChefao: React.FC<{ r: RoteiroChefao; trilha?: boolean | ((q: number) => number); volume?: number; enxuto?: boolean }> = ({ r, trilha = true, volume = 1, enxuto = false }) => {
   const { sons: todos } = useMemo(() => simular(r, r.sai), [r]);
-  // Enxuto (a Arena, 06/11): os acertos espaçados, sem o pé do moonwalk.
-  let ultimoAcerto = -Infinity;
+  // Enxuto (a Arena): os acertos espaçados e o pé do moonwalk de vez em quando,
+  // para os efeitos dele aparecerem sem virar barulho.
+  let ultimoAcerto = -Infinity, ultimoPe = -Infinity;
   const sons = !enxuto ? todos : todos.filter(sm => {
-    if (sm.arquivo === 'chefao/moonwalk') return false;
+    if (sm.arquivo === 'chefao/moonwalk') {
+      if (sm.f - ultimoPe < ms(300)) return false;
+      ultimoPe = sm.f;
+      return true;
+    }
     if (!sm.arquivo.startsWith('chefao/acerto')) return true;
     if (sm.f - ultimoAcerto < ms(220)) return false;
     ultimoAcerto = sm.f;
@@ -337,7 +351,7 @@ export const SonsDoChefao: React.FC<{ r: RoteiroChefao; trilha?: boolean; volume
     <>
       {trilha && (
         <Sequence from={r.entra} durationInFrames={r.sai - r.entra}>
-          <Audio src={staticFile('natal/chefao/trilha.wav')} volume={0.4} />
+          <Audio src={staticFile('natal/chefao/trilha.wav')} volume={trilha === true ? 0.4 : trilha} />
         </Sequence>
       )}
       {sons.map((sm, i) => (

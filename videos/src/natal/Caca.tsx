@@ -28,6 +28,7 @@ import {
 } from '../../../arquivo-morto/caca-zumbis-bruxas/src/components/CacaAbobora/fisica';
 import '../../../arquivo-morto/caca-zumbis-bruxas/src/components/CacaAbobora/caca.css';
 import './caca-video.css';
+import { NOME } from './nome';
 import { ACELERA, entre, mola, ms, s, SUAVE, SUAVE_IDA_VOLTA } from '../movimento';
 import { Sprite } from './Sprite';
 
@@ -363,7 +364,7 @@ export const CabecaZumbi: React.FC<{ zumbi: Zumbi; escala?: number; morta?: bool
 const RecadoDaFaixa: React.FC<{ c: Cacada; piscaHs: boolean }> = ({ c, piscaHs }) => (
   <span className="zb-faixa-recado">
     <CabecaZumbi zumbi={ZUMBIS[c.zumbi]} />
-    <span className="zb-faixa-nome">{c.quem}</span>
+    <span className="zb-faixa-nome" style={NOME}>{c.quem}</span>
     {c.jeito === 'cabeca' && (
       <span className="zb-tag zb-tag-hs" style={{ background: piscaHs ? '#e0262b' : '#c8202a' }}><IconePixel nome="mira" />Headshot</span>
     )}

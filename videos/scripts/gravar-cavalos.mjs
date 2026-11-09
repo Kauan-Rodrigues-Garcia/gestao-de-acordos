@@ -38,7 +38,7 @@ await ctx.clock.install({ time: new Date('2026-10-23T15:00:00-03:00') });
 const REAIS = [
   'Gabriel Oliveira', 'Isabele Barros', 'Camila Ribeiro', 'Bianca Santera', 'Laura Playmix', 'Maria E Pereira',
   'Debora Portela', 'Gustavo Nunes', 'Eduardo Melo', 'Pedro Alves', 'Julia Caetano', 'Maria Bernabe', 'Emily Aquino',
-  'Leonardo Keppler', 'Alexia Silva', 'Layra Carini', 'Gabriely Alves', 'Leticia Andrade', 'Igor Rocha', 'Heloisa Lima',
+  'Lucas Nascimento', 'Alexia Silva', 'Layra Carini', 'Gabriely Alves', 'Leticia Andrade', 'Igor Rocha', 'Heloisa Lima',
   'Kauane Azevedo', 'Helton Roldon', 'Nicole Pacheco', 'Caio Shimite', 'Mirian Barbosa', 'Pedro Verdinasse',
   'Erika Eduarda', 'Eduardo Naia', 'Tainara Fernanda', 'Gabriel Martin', 'Ingrid Nascimento', 'Gustavo Melo',
   'Geovanna Raissa', 'Vitoria Grosso', 'Nayara Macedo', 'Rayane Estevan', 'Gabriela Gonçalves', 'Maria Bernabe',

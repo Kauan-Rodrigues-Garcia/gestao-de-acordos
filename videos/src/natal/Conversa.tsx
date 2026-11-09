@@ -4,7 +4,7 @@
 // foi?») e as respostas para escolher. O mouse escolhe «Bora!», e aí o sistema
 // entra voando (`VideoNatal.tsx`) para a demonstração do Halloween.
 
-import { useCurrentFrame } from 'remotion';
+import { Img, staticFile, useCurrentFrame } from 'remotion';
 import { ACELERA, entre, mola, ms, s, SUAVE } from '../movimento';
 
 export function roteiroDaConversa() {
@@ -79,7 +79,10 @@ export const Conversa: React.FC<{ r: RoteiroConversa }> = ({ r }) => {
     <div style={{ position: 'absolute', left: COLUNA.x - COLUNA.largura / 2, width: COLUNA.largura, bottom: 936 - COLUNA.base, opacity: 1 - sai, transform: `translateY(${-90 * sai}px)` }}>
       {/* Quem fala: o Gestão, «online». */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 22, opacity: cabeca, transform: `translateY(${(1 - cabeca) * 12}px)` }}>
-        <span style={{ width: 64, height: 64, borderRadius: 999, display: 'grid', placeItems: 'center', background: 'radial-gradient(circle at 30% 25%, #ffe08a, #f4b400 60%, #c98f17)', boxShadow: '0 0 30px rgba(244,180,0,.45)', font: '900 26px Nunito, sans-serif', color: '#3a2400' }}>GA</span>
+        {/* A logo do Gestão (o aperto de mãos do app), não as iniciais (08/11/2026). */}
+        <span style={{ width: 64, height: 64, flex: 'none', borderRadius: 18, overflow: 'hidden', boxShadow: '0 0 0 2px rgba(126,226,168,.55), 0 0 30px rgba(80,220,160,.45)' }}>
+          <Img src={staticFile('marca/app-512.png')} style={{ width: '100%', height: '100%', display: 'block' }} />
+        </span>
         <span style={{ display: 'grid' }}>
           <b style={{ font: '900 28px Nunito, sans-serif', color: '#fff' }}>Gestão de Acordos</b>
           <span style={{ font: '700 20px Nunito, sans-serif', color: '#7ee2a8' }}>● online</span>

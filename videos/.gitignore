@@ -5,3 +5,8 @@ node_modules/
 
 # Os vídeos prontos ficam só no computador (decisão do Cleber, 16/10/2026).
 prontos/*.mp4
+prontos/*.wav
+
+# A Garrafa da Erika (08/11/2026): a foto dela, o retrato e as medalhas
+# capturadas do mural ficam só no computador — o repositório é público.
+public/natal/erika/

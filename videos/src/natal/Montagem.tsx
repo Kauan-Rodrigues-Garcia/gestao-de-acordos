@@ -17,7 +17,7 @@
 // a lápide, a janela da corrida) vêm com o visual delas.
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { AbsoluteFill, Audio, cancelRender, continueRender, delayRender, Img, OffthreadVideo, Sequence, staticFile, useCurrentFrame } from 'remotion';
+import { AbsoluteFill, Audio, cancelRender, continueRender, delayRender, Freeze, Img, OffthreadVideo, Sequence, staticFile, useCurrentFrame } from 'remotion';
 import { Ghost, Music, Pause, Play, Repeat, SkipBack, SkipForward, Volume2 } from 'lucide-react';
 import { loadFont as fonteNunito } from '@remotion/google-fonts/Nunito';
 import { loadFont as fonteCaveat } from '@remotion/google-fonts/Caveat';
@@ -42,6 +42,8 @@ import { Seta } from './Seta';
 import { A, Ceu, L, sorteio } from './Ceu';
 import { CAVALO_DA_GUERRA, COMENTARIOS, CORRIDAS, PESQUISA } from './dados';
 import './montagem.css';
+import { NOME } from './nome';
+import { CenaErika, ClaraoDoPremio, SonsDaErika, cameraNoPremio, roteiroDaErika } from './Erika';
 import { Laco } from '@/components/Natal/presente/arte';
 import { estiloDaFita, estiloDoPapel } from '@/components/Natal/presente/papel';
 
@@ -77,10 +79,12 @@ export function roteiroDaMontagem(M: number) {
      * O mural é embrulhado no papel do presente (Cleber, 28/10): o vídeo acaba
      * no mural embrulhado, e o app o leva de volta para dentro do presente.
      */
-    // O mural gravado tem 7,2 s (`gravar-mural.mjs`): o papel fecha antes de ele acabar.
-    embrulha: K + s(22.9), fim: K + s(25.1),
+    // Antes do papel, a Garrafa da Erika (08/11/2026): a câmera entra no cartão
+    // do prêmio do mural (o mural gravado tem 7,2 s, até K + 23,7) e sai o mural dela.
+    embrulha: K + s(22.4) + s(7.0), fim: K + s(22.4) + s(9.2),
   };
-  return { inicio: M, pesquisa, player, corrida, cavalos, fim: cavalos.fim };
+  const erika = roteiroDaErika(K + s(22.4));
+  return { inicio: M, pesquisa, player, corrida, cavalos, erika, fim: cavalos.fim };
 }
 export type RoteiroMontagem = ReturnType<typeof roteiroDaMontagem>;
 
@@ -569,7 +573,7 @@ const CenaCorrida: React.FC<{ c: RoteiroMontagem['corrida']; rec: Gravacao | nul
             return (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 14, opacity: Math.min(1, e * 1.5), transform: `translateX(${(1 - e) * 40}px)` }}>
                 <span style={{ width: 40, height: 40, flex: 'none', borderRadius: 999, display: 'grid', placeItems: 'center', background: 'linear-gradient(145deg,#ffd84d,#ff9f1a)', color: '#1b1405', font: '900 18px Nunito, sans-serif' }}>{i + 1}</span>
-                <span style={{ font: '800 27px Nunito, sans-serif', color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nome}</span>
+                <span style={{ font: '800 27px Nunito, sans-serif', ...NOME, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nome}</span>
               </div>
             );
           })}
@@ -694,12 +698,147 @@ const RankingCavalos: React.FC<{ k: RoteiroMontagem['cavalos'] }> = ({ k }) => {
           return (
             <div key={`${guerra}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 16, opacity: Math.min(1, e * 1.5), transform: `translateX(${(1 - e) * 40}px)` }}>
               <span style={{ width: 46, height: 46, flex: 'none', borderRadius: 999, display: 'grid', placeItems: 'center', background: guerra ? (medalha[i] ?? 'rgba(255,255,255,.14)') : 'linear-gradient(145deg,#ffd84d,#ff9f1a)', color: guerra && i > 2 ? '#fff' : '#1b1405', font: '900 20px Nunito, sans-serif' }}>{i + 1}</span>
-              <span style={{ font: '800 30px Nunito, sans-serif', color: '#fff' }}>{nome}</span>
+              <span style={{ font: '800 30px Nunito, sans-serif', ...NOME }}>{nome}</span>
             </div>
           );
         })}
       </div>
     </div>
+  );
+};
+
+// ── A janela quebrando (08/11/2026) ─────────────────────────────────────────
+//
+// Antes, no quadro em que o Cavalo da Guerra entrava, a janela sumia e a
+// gravação do chefe aparecia já com os cacos no ar — sem rachar, sem estouro,
+// quase sem som. Agora a janela racha em três estalos (tremendo cada vez
+// mais), e no estouro os cacos dela — pedaços da própria imagem da corrida,
+// congelada — voam na direção da tela, com clarão e tranco, enquanto a
+// gravação do chefe entra por baixo.
+
+/** Os estalos antes do estouro (quanto antes de `k.chefe`). */
+const ESTALOS = [ms(560), ms(360), ms(170)] as const;
+/** Onde a janela leva o golpe (no meio, um pouco para baixo: onde o chefe surge). */
+const IMPACTO = { x: JANELA_CHEIA.largura * 0.52, y: JANELA_CHEIA.altura * 0.56 };
+
+/** As rachaduras: raios tortos saindo do impacto; cada estalo abre um terço deles. */
+const RAIOS = (() => {
+  const r = sorteio(1188);
+  const n = 13;
+  return Array.from({ length: n }, (_, i) => {
+    const ang0 = (i / n) * Math.PI * 2 + (r() - 0.5) * 0.35;
+    const compr = (0.45 + r() * 0.7) * Math.max(JANELA_CHEIA.largura, JANELA_CHEIA.altura) * 0.62;
+    const pts: [number, number][] = [[IMPACTO.x, IMPACTO.y]];
+    const passos = 6;
+    for (let k = 1; k <= passos; k++) {
+      const d = (compr * k) / passos;
+      const lado = (r() - 0.5) * 36;
+      pts.push([IMPACTO.x + Math.cos(ang0) * d - Math.sin(ang0) * lado, IMPACTO.y + Math.sin(ang0) * d + Math.cos(ang0) * lado]);
+    }
+    return { pts, estalo: i % 3 };
+  });
+})();
+/** A teia em volta do impacto: anéis ligando os raios. */
+const ANEIS = [70, 150, 260].map(raio => RAIOS.map(rr => {
+  const [x1, y1] = rr.pts[rr.pts.length - 1];
+  const dx = x1 - IMPACTO.x, dy = y1 - IMPACTO.y, d = Math.hypot(dx, dy) || 1;
+  const k = Math.min(1, raio / d);
+  return [IMPACTO.x + dx * k, IMPACTO.y + dy * k] as [number, number];
+}).map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ') + ' Z');
+
+type Caco = { pts: [number, number][]; cx: number; cy: number; vx: number; vy: number; vr: number; atraso: number };
+/** Os cacos: a janela cortada em triângulos tortos, cada um com o seu voo (para longe do impacto). */
+const CACOS: Caco[] = (() => {
+  const r = sorteio(2424);
+  const W = JANELA_CHEIA.largura, H = JANELA_CHEIA.altura;
+  const C = 7, R = 5;
+  const p: [number, number][][] = [];
+  for (let j = 0; j <= R; j++) {
+    p.push([]);
+    for (let i = 0; i <= C; i++) {
+      const bordaX = i === 0 || i === C, bordaY = j === 0 || j === R;
+      p[j].push([(i / C) * W + (bordaX ? 0 : (r() - 0.5) * (W / C) * 0.6), (j / R) * H + (bordaY ? 0 : (r() - 0.5) * (H / R) * 0.6)]);
+    }
+  }
+  const tris: Caco[] = [];
+  for (let j = 0; j < R; j++) for (let i = 0; i < C; i++) {
+    const a = p[j][i], b = p[j][i + 1], c = p[j + 1][i + 1], d = p[j + 1][i];
+    const pares: [number, number][][] = r() < 0.5 ? [[a, b, c], [a, c, d]] : [[a, b, d], [b, c, d]];
+    for (const t of pares) {
+      const cx = (t[0][0] + t[1][0] + t[2][0]) / 3, cy = (t[0][1] + t[1][1] + t[2][1]) / 3;
+      const dx = cx - IMPACTO.x, dy = cy - IMPACTO.y, dist = Math.hypot(dx, dy) || 1;
+      const vel = 760 + r() * 760 + dist * 0.9;
+      tris.push({ pts: t, cx, cy, vx: (dx / dist) * vel, vy: (dy / dist) * vel - 160 - r() * 220, vr: (r() - 0.5) * 540, atraso: Math.round((dist / W) * 5) });
+    }
+  }
+  return tris;
+})();
+
+/** As rachaduras por cima da janela, aparecendo nos três estalos. */
+const Rachaduras: React.FC<{ k: RoteiroMontagem['cavalos'] }> = ({ k }) => {
+  const f = useCurrentFrame();
+  if (f < k.chefe - ESTALOS[0] || f >= k.chefe) return null;
+  // O estalo `e` abre os raios do grupo `e` de uma vez (rápido); os seguintes esticam os de antes.
+  const quanto = (grupo: number) => {
+    let v = 0;
+    ESTALOS.forEach((e, i) => { if (i >= grupo) v += entre(f, k.chefe - e, k.chefe - e + ms(70), 0, 1, ACELERA) / (ESTALOS.length - grupo); });
+    return Math.min(1, v);
+  };
+  const aneis = ESTALOS.map(e => entre(f, k.chefe - e, k.chefe - e + ms(60), 0, 1));
+  const flash = Math.max(...ESTALOS.map(e => (f >= k.chefe - e ? 1 - entre(f, k.chefe - e, k.chefe - e + ms(140), 0, 1) : 0)));
+  return (
+    <svg width={JANELA_CHEIA.largura} height={JANELA_CHEIA.altura} viewBox={`0 0 ${JANELA_CHEIA.largura} ${JANELA_CHEIA.altura}`} preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
+      <defs>
+        <radialGradient id="cav-impacto"><stop offset="0" stopColor="#fff" stopOpacity="0.9" /><stop offset="1" stopColor="#fff" stopOpacity="0" /></radialGradient>
+      </defs>
+      <circle cx={IMPACTO.x} cy={IMPACTO.y} r={60 + 90 * flash} fill="url(#cav-impacto)" opacity={0.35 + 0.65 * flash} />
+      {RAIOS.map((rr, i) => {
+        const v = quanto(rr.estalo);
+        if (v <= 0) return null;
+        const d = rr.pts.map(([x, y], n) => `${n ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ');
+        return (
+          <g key={i}>
+            <path d={d} pathLength={1} stroke="rgba(0,0,0,.55)" strokeWidth={5} fill="none" strokeDasharray="1 1" strokeDashoffset={1 - v} strokeLinejoin="round" />
+            <path d={d} pathLength={1} stroke="rgba(255,255,255,.95)" strokeWidth={2.2} fill="none" strokeDasharray="1 1" strokeDashoffset={1 - v} strokeLinejoin="round" />
+          </g>
+        );
+      })}
+      {ANEIS.map((d, i) => aneis[i] > 0 && (
+        <path key={`a${i}`} d={d} stroke="rgba(255,255,255,.8)" strokeWidth={1.6} fill="none" opacity={aneis[i]} />
+      ))}
+    </svg>
+  );
+};
+
+/** Os cacos da janela voando no estouro (a imagem da corrida congelada no último quadro). */
+const Cacos: React.FC<{ k: RoteiroMontagem['cavalos'] }> = ({ k }) => {
+  const f = useCurrentFrame();
+  const DURA = ms(680);
+  if (f < k.chefe || f >= k.chefe + DURA) return null;
+  const J = JANELA_CHEIA;
+  const op = 1 - entre(f, k.chefe + ms(220), k.chefe + DURA, 0, 1);
+  return (
+    <AbsoluteFill style={{ pointerEvents: 'none' }}>
+      {CACOS.map((c, i) => {
+        const t = Math.max(0, f - k.chefe - c.atraso) / 60;
+        const dx = c.vx * t, dy = c.vy * t + 0.5 * 1500 * t * t;
+        const esc = 1 + 1.5 * t;
+        const poli = c.pts.map(([x, y]) => `${x.toFixed(1)}px ${y.toFixed(1)}px`).join(', ');
+        return (
+          <div key={i} style={{ position: 'absolute', left: J.x, top: J.y, width: J.largura, height: J.altura, opacity: op, filter: 'drop-shadow(0 0 1.5px rgba(255,255,255,.95)) drop-shadow(0 8px 10px rgba(0,0,0,.45))', transformOrigin: `${c.cx.toFixed(1)}px ${c.cy.toFixed(1)}px`, transform: `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) rotate(${(c.vr * t).toFixed(1)}deg) scale(${esc.toFixed(3)})` }}>
+            <div style={{ position: 'absolute', inset: 0, clipPath: `polygon(${poli})` }}>
+              <Sequence from={k.guerra} layout="none">
+                <Freeze frame={k.chefe - 1 - k.guerra}>
+                  <OffthreadVideo src={staticFile('natal/cavalos/cav-guerra.mp4')} startFrom={ms(400)} muted style={{ width: '100%', height: '100%' }} />
+                </Freeze>
+              </Sequence>
+              {/* O brilho do vidro em cada caco */}
+              <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(135deg, rgba(255,255,255,.22), rgba(255,255,255,0) 40%, rgba(255,255,255,.12) 70%, rgba(255,255,255,0))' }} />
+            </div>
+          </div>
+        );
+      })}
+    </AbsoluteFill>
   );
 };
 
@@ -710,6 +849,12 @@ const CenaCavalos: React.FC<{ k: RoteiroMontagem['cavalos'] }> = ({ k }) => {
   // Antes de estourar, a janela vai para a tela cheia (como na corrida, quando a guerra pega fogo):
   // assim a janela pequena encaixa onde ela estava na gravação do estouro.
   const cresce = entre(f, k.telaCheia, k.chefe, 0, 1, SUAVE_IDA_VOLTA);
+  // A janela treme a cada estalo, cada vez mais forte; no estouro, a tela inteira dá o tranco.
+  const forca = ESTALOS.reduce((v, e, i) => v + (f >= k.chefe - e ? (1 - entre(f, k.chefe - e, k.chefe - e + ms(200), 0, 1)) * (4 + 5 * i) : 0), 0);
+  const treme = { x: Math.sin(f * 2.7) * forca, y: Math.cos(f * 3.1) * forca * 0.7 };
+  const tranco = f >= k.chefe ? (1 - entre(f, k.chefe, k.chefe + ms(420), 0, 1)) * 16 : 0;
+  const chefeEntra = entre(f, k.chefe, k.chefe + ms(180), 0, 1);
+  const clarao = f >= k.chefe ? 1 - entre(f, k.chefe, k.chefe + ms(260), 0, 1) : 0;
   const j = {
     x: JANELA_PEQUENA.x + (JANELA_CHEIA.x - JANELA_PEQUENA.x) * cresce,
     y: JANELA_PEQUENA.y + (JANELA_CHEIA.y - JANELA_PEQUENA.y) * cresce,
@@ -719,7 +864,7 @@ const CenaCavalos: React.FC<{ k: RoteiroMontagem['cavalos'] }> = ({ k }) => {
   return (
     <>
       {f < k.chefe && (
-        <div style={{ position: 'absolute', left: j.x, top: j.y, width: j.largura, height: j.altura, opacity: entra, transform: `translateY(${(1 - entra) * 40}px)`, borderRadius: 14 + 3 * cresce, overflow: 'hidden', boxShadow: '0 30px 80px rgba(0,0,0,.55)' }}>
+        <div style={{ position: 'absolute', left: j.x, top: j.y, width: j.largura, height: j.altura, opacity: entra, transform: `translate(${treme.x.toFixed(1)}px, ${((1 - entra) * 40 + treme.y).toFixed(1)}px)`, borderRadius: 14 + 3 * cresce, overflow: 'hidden', boxShadow: '0 30px 80px rgba(0,0,0,.55)' }}>
           {f < k.guerra ? (
             <Sequence from={k.entra} layout="none">
               <OffthreadVideo src={staticFile('natal/cavalos/cav-largada.mp4')} startFrom={ms(100)} muted style={{ width: '100%', height: '100%' }} />
@@ -729,17 +874,20 @@ const CenaCavalos: React.FC<{ k: RoteiroMontagem['cavalos'] }> = ({ k }) => {
               <OffthreadVideo src={staticFile('natal/cavalos/cav-guerra.mp4')} startFrom={ms(400)} muted style={{ width: '100%', height: '100%' }} />
             </Sequence>
           )}
+          <Rachaduras k={k} />
         </div>
       )}
       <RankingCavalos k={k} />
       {/* A janela estourando e o chefe na página: a tela inteira, por cima do cenário. */}
       {f >= k.chefe && f < k.cheia && (
         <Sequence from={k.chefe} layout="none">
-          <AbsoluteFill>
+          <AbsoluteFill style={{ opacity: chefeEntra, transform: `translate(${(Math.sin(f * 2.3) * tranco).toFixed(1)}px, ${(Math.cos(f * 2.9) * tranco * 0.7).toFixed(1)}px) scale(${(1.04 - 0.04 * chefeEntra).toFixed(3)})` }}>
             <OffthreadVideo src={staticFile('natal/cavalos/cav-chefe.webm')} transparent muted style={{ width: '100%', height: '100%' }} />
           </AbsoluteFill>
         </Sequence>
       )}
+      <Cacos k={k} />
+      {clarao > 0 && <AbsoluteFill style={{ background: 'radial-gradient(circle at 50% 56%, #ffffff 0%, #fff4d6 40%, rgba(255,226,170,0) 85%)', opacity: 0.9 * clarao, pointerEvents: 'none' }} />}
       <Bomba de={k.bomba} ate={k.explosao} />
       <Explosao de={k.explosao} x={ALVO_BOMBA.x} y={ALVO_BOMBA.y} />
     </>
@@ -747,17 +895,21 @@ const CenaCavalos: React.FC<{ k: RoteiroMontagem['cavalos'] }> = ({ k }) => {
 };
 
 /**
- * O mural de outubro (`feat/portal-outubro`), gravado da página original por
+ * O mural de outubro, gravado da página original por
  * `scripts/gravar-mural.mjs`: só o mural, e só os bichinhos das fotos se
- * mexendo (Cleber, 28/10). Ele sai do fogo da explosão, fica, e no fim sobe
+ * mexendo (Cleber, 28/10). Desde 08/11/2026 a gravação é do mural como foi ao
+ * ar (main 8030860, hoje em `arquivo-morto/halloween/`), não o da branch
+ * `feat/portal-outubro` de 28/10 — as medalhas e o ranking mudaram depois. Ele sai do fogo da explosão, fica, e no fim sobe
  * puxado, mostrando o sistema por baixo.
  */
-const MuralDeOutubro: React.FC<{ k: RoteiroMontagem['cavalos'] }> = ({ k }) => {
+const MuralDeOutubro: React.FC<{ k: RoteiroMontagem['cavalos']; e: RoteiroMontagem['erika'] }> = ({ k, e }) => {
   const f = useCurrentFrame();
-  if (f < k.mural) return null;
+  if (f < k.mural || f > e.clarao + ms(400)) return null;
   const surge = entre(f, k.mural, k.mural + ms(700), 0, 1, SUAVE);
+  // No fim, a câmera mergulha no cartão «A Garrafa» (a cena da Erika sai do brilho dele).
+  const cam = cameraNoPremio(f, e);
   return (
-    <AbsoluteFill style={{ opacity: surge, transform: `scale(${1.06 - 0.06 * surge})` }}>
+    <AbsoluteFill style={{ opacity: surge, transform: `scale(${(1.06 - 0.06 * surge) * cam.escala})`, transformOrigin: cam.origem }}>
       <Sequence from={k.mural} layout="none">
         <OffthreadVideo src={staticFile('natal/mural/mural.mp4')} muted style={{ width: '100%', height: '100%' }} />
       </Sequence>
@@ -840,7 +992,9 @@ export const Montagem: React.FC<{ r: RoteiroMontagem }> = ({ r }) => {
       <CenaPlayer p={r.player} />
       <CenaCorrida c={r.corrida} rec={rec} />
       <CenaCavalos k={r.cavalos} />
-      <MuralDeOutubro k={r.cavalos} />
+      <MuralDeOutubro k={r.cavalos} e={r.erika} />
+      <ClaraoDoPremio e={r.erika} />
+      <CenaErika e={r.erika} ate={r.fim} />
       <Embrulho de={r.cavalos.embrulha} />
       <Seta pontos={naPesquisa} cliques={[r.pesquisa.clique]} tamanho={1.6} />
       <Seta pontos={noPlayer} cliques={[r.player.clique]} tamanho={1.6} />
@@ -863,7 +1017,7 @@ export const SonsDaMontagem: React.FC<{ r: RoteiroMontagem }> = ({ r }) => {
   const fundo = (q: number) => {
     const f = q + r.inicio;
     const sob = (a: number, b: number) => Math.min(entre(f, a - ms(250), a, 0, 1), 1 - entre(f, b, b + ms(500), 0, 1));
-    const abaixa = Math.max(sob(pl.clique, pl.morre + ms(200)), sob(c.entra, c.sai), sob(r.cavalos.comecaGuerra, r.cavalos.mural));
+    const abaixa = Math.max(sob(pl.clique, pl.morre + ms(200)), sob(c.entra, c.sai), sob(r.cavalos.comecaGuerra, r.cavalos.mural), sob(r.erika.clarao, r.fim + s(1)));
     return (FUNDO - (FUNDO - BAIXO) * abaixa) * entre(f, r.inicio, r.inicio + s(1.2), 0, 1) * (1 - entre(f, r.fim - ms(500), r.fim, 0, 1));
   };
   return (
@@ -885,12 +1039,22 @@ export const SonsDaMontagem: React.FC<{ r: RoteiroMontagem }> = ({ r }) => {
       </Sequence>
       {[0, 0.9, 2.1, 3.4, 4.6].map(d => <Sequence key={`raj${d}`} from={r.cavalos.comecaGuerra + s(d)} durationInFrames={s(1)}><Audio src={staticFile('natal/cavalos/sons/rajada.wav')} volume={0.08} /></Sequence>)}
       {[0.5, 2.8].map(d => <Sequence key={`exm${d}`} from={r.cavalos.comecaGuerra + s(d)} durationInFrames={s(2)}><Audio src={staticFile('natal/cavalos/sons/explosao-media.wav')} volume={0.14} /></Sequence>)}
-      <Sequence from={r.cavalos.chefe} durationInFrames={s(1.5)}><Audio src={staticFile('natal/cavalos/sons/vidro.wav')} volume={0.06} /></Sequence>
-      <Sequence from={r.cavalos.chefe + ms(150)} durationInFrames={s(1.5)}><Audio src={staticFile('natal/cavalos/sons/crash.wav')} volume={0.06} /></Sequence>
-      <Sequence from={r.cavalos.chefe + s(1.4)} durationInFrames={s(2)}><Audio src={staticFile('natal/cavalos/sons/relincho.wav')} volume={0.08} /></Sequence>
+      {/* A janela quebrando (08/11/2026): os três estalos do vidro, e no estouro o
+          baque, o vidro espatifando, o crash e o relincho — antes quase mudos (0,06).
+          vidro, crash e relincho são sintetizados, cheios (RMS −1 dB): ~0,08 já
+          os põe no nível dos outros efeitos (~−19 dB RMS). */}
+      {ESTALOS.map((e, i) => <Sequence key={`est${e}`} from={r.cavalos.chefe - e} durationInFrames={s(1)}><Audio src={staticFile('natal/caca/crava.wav')} volume={0.4 + 0.1 * i} /></Sequence>)}
+      {ESTALOS.slice(1).map((e, i) => <Sequence key={`estv${e}`} from={r.cavalos.chefe - e + 2} durationInFrames={s(1.2)}><Audio src={staticFile(`natal/chefona/vidro-${i + 1}.ogg`)} volume={0.35 + 0.15 * i} /></Sequence>)}
+      <Sequence from={r.cavalos.chefe} durationInFrames={s(2)}><Audio src={staticFile('natal/arena/impacto.wav')} volume={0.32} /></Sequence>
+      <Sequence from={r.cavalos.chefe} durationInFrames={s(1.5)}><Audio src={staticFile('natal/cavalos/sons/vidro.wav')} volume={0.08} /></Sequence>
+      <Sequence from={r.cavalos.chefe + ms(40)} durationInFrames={s(1.5)}><Audio src={staticFile('natal/chefona/vidro-3.ogg')} volume={0.7} /></Sequence>
+      <Sequence from={r.cavalos.chefe + ms(150)} durationInFrames={s(1.5)}><Audio src={staticFile('natal/cavalos/sons/crash.wav')} volume={0.065} /></Sequence>
+      <Sequence from={r.cavalos.chefe + ms(500)} durationInFrames={s(2)}><Audio src={staticFile('natal/cavalos/sons/relincho.wav')} volume={0.12} /></Sequence>
       <Sequence from={r.cavalos.bomba} durationInFrames={s(1.5)}><Audio src={staticFile('natal/cavalos/sons/assobio.wav')} volume={0.12} /></Sequence>
       <Sequence from={r.cavalos.explosao} durationInFrames={s(3)}><Audio src={staticFile('natal/cavalos/sons/explosao.wav')} volume={0.32} /></Sequence>
       <Sequence from={r.cavalos.explosao + ms(250)} durationInFrames={s(2)}><Audio src={staticFile('natal/cavalos/sons/explosao-media.wav')} volume={0.18} /></Sequence>
+      {/* A Garrafa da Erika: o brilho, a festa, os pops, as insígnias e a música festiva. */}
+      <SonsDaErika e={r.erika} ate={r.fim} />
       {/* O embrulho: o papel fechando e o laço pulando. */}
       <Sequence from={r.cavalos.embrulha} durationInFrames={s(1.2)}><Audio src={staticFile('sons/whoosh.wav')} volume={0.3} /></Sequence>
       <Sequence from={r.cavalos.embrulha + ms(1100)} durationInFrames={s(1)}><Audio src={staticFile('sons/pop.wav')} volume={0.3} /></Sequence>

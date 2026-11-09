@@ -11,7 +11,7 @@
     "render:autorizacoes": "remotion render src/index.ts Autorizacoes prontos/autorizacoes-no-chat.mp4",
     "transcrever": "node scripts/transcrever.mjs",
     "medir": "node scripts/css-do-app.mjs && node scripts/medir.mjs",
-    "render:natal": "remotion render src/index.ts AberturaNatal prontos/abertura-natal.mp4"
+    "render:natal": "remotion render src/index.ts AberturaNatal prontos/abertura-natal.mp4 --concurrency=1"
   },
   "dependencies": {
     "@fontsource/bricolage-grotesque": "5.2.8",

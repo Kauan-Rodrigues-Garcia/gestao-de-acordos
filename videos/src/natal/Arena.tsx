@@ -43,6 +43,7 @@ import { Seta } from './Seta';
 import { sorteio } from './Ceu';
 import { ACHOU_ABOBORA, BRUXA_DO_PANTANO, MATADORES, PLACAR_BRUXAS, RECORDE_ZUMBIS, REI_DO_POP } from './dados';
 import type { PontoCursor } from '../componentes/Cursor';
+import { NOME, NOME_NA_PEDRA } from './nome';
 
 fonteCreepster('normal', { weights: ['400'], subsets: ['latin'] });
 fonteNunito('normal', { weights: ['700', '800', '900'], subsets: ['latin', 'latin-ext'] });
@@ -353,7 +354,7 @@ const Lapide: React.FC<{ d: DadosLapide }> = ({ d }) => {
           <span style={{ position: 'relative', width: 120, height: 2, background: 'rgba(37,34,47,.45)', margin: '6px 0 4px' }} />
           <span data-alvo-feitico="valor" style={{ position: 'relative', font: `400 46px ${TERROR}`, lineHeight: 1.05, color: '#1c1924', textShadow: '0 1px 0 rgba(255,255,255,.3)' }}>{d.valor}</span>
           <span style={{ position: 'relative', font: `800 14px ${TEXTO}`, textTransform: 'uppercase', letterSpacing: '0.12em', opacity: 0.75 }}>{d.rodape}</span>
-          <span style={{ position: 'relative', font: `900 17px ${TEXTO}`, marginTop: 6, maxWidth: LARG_LAPIDE - 30 }}>{d.nome}</span>
+          <span style={{ position: 'relative', font: `900 17px ${TEXTO}`, marginTop: 6, maxWidth: LARG_LAPIDE - 30, ...NOME_NA_PEDRA }}>{d.nome}</span>
         </div>
       </div>
       <Poeira x={d.x} y={CHAO} em={d.sobe} />
@@ -597,7 +598,7 @@ const PlacarDeAbates: React.FC<{ itens: Abate[]; some: number; esquerda?: boolea
             transform: `translateX(${(1 - Math.min(1, e)) * (esquerda ? -340 : 340)}px) scale(${1 + 0.06 * flash})`, transformOrigin: esquerda ? '0% 50%' : '100% 50%', opacity: Math.min(1, e * 1.5),
           }}>
             <span style={{ display: 'grid', placeItems: 'center', width: 34, height: 34 }}>{a.icone}</span>
-            <span style={{ font: `900 20px ${TEXTO}`, color: '#fff' }}>{a.nome}</span>
+            <span style={{ font: `900 20px ${TEXTO}`, ...NOME }}>{a.nome}</span>
             {a.tag && <span style={{ font: `400 10px ${ARCADE}`, color: '#fff', background: '#c8202a', padding: '5px 7px', borderRadius: 4 }}>{a.tag}</span>}
             <span style={{ font: `700 17px ${TEXTO}`, color: 'rgba(255,255,255,.7)' }}>{a.acao}</span>
             {a.valor && <span style={{ font: `400 14px ${ARCADE}`, color: a.cor }}>{a.valor}</span>}
@@ -875,18 +876,24 @@ const SomDaCartela: React.FC<{ de: number; ate: number; jeito: Jeito; letras: nu
 /**
  * A mixagem (06/11/2026): o tema do Halloween é a cama do começo ao apagão,
  * a ~0,42; quando a briga aperta (a chuva de tiros no Rei do Pop, a luta com
- * a chefona) ele desce para ~0,26 para os efeitos aparecerem. Nada de trilha
- * de chefão por cima — uma música só. Cada cartela tem a subida antes e o
- * impacto grave no tranco; o vidro das poções e o apagão fecham.
+ * a chefona) ele desce para ~0,26 para os efeitos aparecerem. No Rei do Pop
+ * (08/11/2026) ele quase some e toca a trilha de 8 bits do chefão, com o
+ * pulo, o pé do moonwalk e a fúria de quando perde um braço — uma música de
+ * cada vez. Cada cartela tem a subida antes e o impacto grave no tranco; o
+ * vidro das poções e o apagão fecham.
  */
 export const SonsDaArena: React.FC<{ r: RoteiroArena }> = ({ r }) => {
   const fs = fases(r);
   const rc = r.rei.chefe;
   const p = r.pantano;
   const ALTO = 0.42, BAIXO = 0.26;
-  const pontos = [r.inicio, r.abertura.titulo, rc.entra + s(2.2), rc.entra + s(2.6), rc.foge, rc.foge + s(0.8), p.chega, p.chega + s(0.6), p.apaga, p.preto];
-  const valores = [0.12, ALTO, ALTO, BAIXO, BAIXO, ALTO, ALTO, BAIXO, BAIXO, 0];
+  // No Rei do Pop o Halloween quase some e entra a trilha de 8 bits dele (08/11/2026).
+  const SOB_O_REI = 0.04;
+  const pontos = [r.inicio, r.abertura.titulo, r.rei.cartela - ms(300), r.rei.cartela + ms(400), rc.sai - ms(200), rc.sai + ms(800), p.chega, p.chega + s(0.6), p.apaga, p.preto];
+  const valores = [0.12, ALTO, ALTO, SOB_O_REI, SOB_O_REI, ALTO, ALTO, BAIXO, BAIXO, 0];
   const musica = (q: number) => interpolate(q + r.inicio, pontos, valores, { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+  const durRei = rc.sai - rc.entra;
+  const trilhaDoRei = (q: number) => interpolate(q, [0, ms(500), s(2.2), s(2.6), durRei - s(1.2), durRei], [0, 0.38, 0.38, 0.27, 0.27, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
   return (
     <>
       <Sequence from={r.inicio} durationInFrames={p.preto - r.inicio + s(0.3)}>
@@ -914,8 +921,9 @@ export const SonsDaArena: React.FC<{ r: RoteiroArena }> = ({ r }) => {
       {/* 2. Os zumbis: os sons da física do app */}
       {r.zumbis.cacadas.map(c => <SonsDaCaca key={c.zumbi} c={c} enxuto />)}
 
-      {/* 3. O Rei do Pop, sem a trilha de 8 bits */}
-      <SonsDoChefao r={rc} trilha={false} volume={0.8} enxuto />
+      {/* 3. O Rei do Pop com a trilha de 8 bits dele: sobe na entrada, abaixa
+          na chuva de tiros (os acertos, o braço, a fúria aparecem) e some na fuga. */}
+      <SonsDoChefao r={rc} trilha={trilhaDoRei} volume={0.85} enxuto />
 
       {/* 4. As bruxas de vassoura: o puf e a gargalhada; o tiro, o grito e o tombo */}
       {r.bruxas.soltas.map(t => (

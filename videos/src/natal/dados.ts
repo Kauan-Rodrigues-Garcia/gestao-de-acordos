@@ -5,6 +5,11 @@
 // `abobora_rodadas` (abóbora, zumbis e bruxas, só as soltas pelo sorteio),
 // `chefao_*` (o Rei do Pop), `chefona_*` (a Bruxa do Pântano), `corridas` e
 // `corrida_guerra_golpes` (o Cavalo da Guerra). Para mudar, consultar de novo.
+//
+// 08/11/2026: quem saiu da empresa sai do vídeo. No
+// lugar dele entra o próximo de cada lista (consultado no banco em 08/11):
+// nos zumbis a Alexia Silva (1.988 ms, no corpo, 09/10) e no Rei do Pop o
+// Lucas Nascimento (423 de dano).
 
 /** A primeira abóbora achada no sistema (05/10, a mais rápida do dia). */
 export const ACHOU_ABOBORA = { quem: 'Maria Bernabe', tempo: '2,751 s', rapida: true };
@@ -18,13 +23,12 @@ export const PLACAR_ABOBORA = [
 
 /** O placar da Caça aos Zumbis (os cinco primeiros). */
 export const PLACAR_ZUMBIS = [
-  { nome: 'Leonardo Nunes Keppler', setor: '', pegos: '1', headshots: '0' },
   { nome: 'Alexia Silva', setor: '', pegos: '1', headshots: '0' },
   { nome: 'Layra Carini', setor: '', pegos: '1', headshots: '1' },
   { nome: 'Gabriely Alves', setor: '', pegos: '1', headshots: '0' },
   { nome: 'Leticia Andrade', setor: '', pegos: '1', headshots: '1' },
 ];
-export const RECORDE_ZUMBIS = { nome: 'Leonardo Nunes Keppler', tempo: '1,976 s' };
+export const RECORDE_ZUMBIS = { nome: 'Alexia Silva', tempo: '1,988 s' };
 
 /**
  * Quem aparece na faixa matando os três zumbis da cena, na ordem dos tiros
@@ -32,7 +36,7 @@ export const RECORDE_ZUMBIS = { nome: 'Leonardo Nunes Keppler', tempo: '1,976 s'
  */
 export const MATADORES = [
   { quem: 'Layra Carini', setor: '', msTiro: 2454 },
-  { quem: 'Leonardo Nunes Keppler', setor: '', msTiro: 1976 },
+  { quem: 'Alexia Silva', setor: '', msTiro: 1988 },
   { quem: 'Leticia Andrade', setor: '', msTiro: 2656 },
 ];
 
@@ -44,7 +48,7 @@ export const REI_DO_POP = {
   top: [
     { nome: 'Igor Rocha', dano: 516 },
     { nome: 'Heloisa Lima', dano: 434 },
-    { nome: 'Leonardo Nunes Keppler', dano: 426 },
+    { nome: 'Lucas Nascimento', dano: 423 },
   ],
 };
 

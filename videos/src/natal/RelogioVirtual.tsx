@@ -12,6 +12,13 @@
 // Assim o mesmo quadro sai sempre igual, e o que aparece é exatamente o que o
 // app desenhava. Quem comanda (soltar, atirar, jogar poção) é o roteiro, em
 // `comandos`, no tempo de cada um.
+//
+// ATENÇÃO (08/11/2026): «sempre igual» só vale renderizando os quadros EM
+// ORDEM, numa aba só — por isso `npm run render:natal` leva --concurrency=1.
+// Com várias abas, cada aba vê quadros salteados e os palcos chegam ao mesmo
+// quadro por caminhos diferentes: na poção da escuridão a tela piscava entre
+// claro e escuro e a Bruxa do Pântano aparecia em dois lugares. O mesmo vale
+// para renderizar só um trecho (--frames): comece antes da cena do palco.
 
 import { useLayoutEffect, useRef } from 'react';
 import { continueRender, delayRender, useCurrentFrame } from 'remotion';
