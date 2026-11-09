@@ -8,6 +8,8 @@
  *   - O acompanhamento por cidade — Birigui, Marília e quem está sem cidade
  *     (vê o vídeo de Birigui): quem já entrou no Natal (vendo o vídeo inteiro
  *     ou pulando), quem deixou para depois e quem ainda não abriu o presente.
+ *     Dentro da cidade, dá para filtrar por setor: o resumo e a lista seguem
+ *     o setor escolhido.
  *
  * Nasce recolhido, como o card do crachá: o cabeçalho mostra o andamento numa
  * linha. Regras e banco: `Natal/acompanhamento.ts` e a migration 20261109150000.
@@ -27,8 +29,9 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { cn } from '@/lib/utils';
 import { liberarNatal, useNatalLiberado } from '@/components/Natal/liberacao';
 import {
-  ROTULO_GRUPO, ROTULO_SITUACAO, comoEntrou, lerPainelDoNatal, resumirGrupo, separarPorGrupo, situacaoDoNatal,
-  type GrupoDaCidade, type SituacaoDoNatal,
+  FILTROS_DO_NATAL, ROTULO_FILTRO, ROTULO_GRUPO, ROTULO_SITUACAO, chaveDoSetor, comoEntrou, lerPainelDoNatal,
+  passaNoFiltro, resumirGrupo, separarPorGrupo, setoresDasPessoas, situacaoDoNatal,
+  type FiltroDoNatal, type GrupoDaCidade, type SituacaoDoNatal,
 } from '@/components/Natal/acompanhamento';
 
 const FUSO = 'America/Sao_Paulo';
@@ -44,8 +47,8 @@ const COR_PILULA: Record<SituacaoDoNatal, string> = {
 };
 const RELER_MS = 60_000;
 const LISTA_INICIAL = 100;
+const TODOS_SETORES = '';
 
-type Filtro = SituacaoDoNatal | 'todas';
 
 export default function NatalLiberacaoConfig() {
   const { empresa } = useEmpresa();
@@ -53,7 +56,8 @@ export default function NatalLiberacaoConfig() {
   const cliente = useQueryClient();
   const [aberto, setAberto] = useState(false);
   const [grupo, setGrupo] = useState<GrupoDaCidade>('birigui');
-  const [filtro, setFiltro] = useState<Filtro>('todas');
+  const [filtro, setFiltro] = useState<FiltroDoNatal>('todas');
+  const [setor, setSetor] = useState<string>(TODOS_SETORES);
   const [busca, setBusca] = useState('');
   const [limite, setLimite] = useState(LISTA_INICIAL);
   const [confirmar, setConfirmar] = useState<boolean | null>(null);
@@ -74,12 +78,20 @@ export default function NatalLiberacaoConfig() {
   }), [porGrupo]);
   const geral = useMemo(() => resumirGrupo(data?.pessoas ?? []), [data]);
 
+  // Os setores da cidade escolhida; o setor filtra o resumo e a lista.
+  const setores = useMemo(() => setoresDasPessoas(porGrupo[grupo]), [porGrupo, grupo]);
+  const setorEscolhido = setores.find(s => s.chave === setor) ?? null;
+  const doSetor = useMemo(() => (setorEscolhido
+    ? porGrupo[grupo].filter(p => chaveDoSetor(p) === setorEscolhido.chave)
+    : porGrupo[grupo]), [porGrupo, grupo, setorEscolhido]);
+  const resumoDoSetor = useMemo(() => resumirGrupo(doSetor), [doSetor]);
+
   const filtradas = useMemo(() => {
     const termo = busca.trim().toLowerCase();
-    return porGrupo[grupo].filter(p =>
-      (filtro === 'todas' || situacaoDoNatal(p) === filtro)
+    return doSetor.filter(p =>
+      passaNoFiltro(p, filtro)
       && (!termo || `${p.nome ?? ''} ${p.setor_nome ?? ''}`.toLowerCase().includes(termo)));
-  }, [porGrupo, grupo, filtro, busca]);
+  }, [doSetor, filtro, busca]);
 
   async function aplicar(liberar: boolean) {
     setSalvando(true);
@@ -98,7 +110,7 @@ export default function NatalLiberacaoConfig() {
     });
   }
 
-  const r = resumos[grupo];
+  const r = resumoDoSetor;
   const liberadoEm = data?.liberacao?.liberado_em ?? null;
 
   return (
@@ -157,7 +169,7 @@ export default function NatalLiberacaoConfig() {
                 const pct = x.total ? Math.round((x.entrou / x.total) * 100) : 0;
                 return (
                   <button key={g} type="button" role="tab" aria-selected={grupo === g}
-                    onClick={() => { setGrupo(g); setLimite(LISTA_INICIAL); }}
+                    onClick={() => { setGrupo(g); setSetor(TODOS_SETORES); setLimite(LISTA_INICIAL); }}
                     className={cn('rounded-xl border p-3 text-left transition-colors',
                       grupo === g ? 'border-primary bg-primary/5' : 'border-border hover:bg-accent/40')}>
                     <div className="flex items-baseline justify-between gap-2">
@@ -175,28 +187,32 @@ export default function NatalLiberacaoConfig() {
               })}
             </div>
 
-            {/* O resumo da cidade escolhida */}
+            {/* O resumo da cidade escolhida — cada cartão filtra a lista (clicar de novo tira) */}
             <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
               {([
-                ['Assistiram inteiro', r.assistiu, 'e entraram no Natal'],
-                ['Pularam o vídeo', r.pulou, 'e entraram no Natal'],
-                ['Deixaram para depois', r.adiou, 'o presente está esperando'],
-                ['Ainda não abriram', r.pendente, 'o presente está esperando'],
-              ] as const).map(([rotulo, n, sub]) => (
-                <div key={rotulo} className="rounded-xl border border-border p-3">
+                ['assistiu', 'Assistiram inteiro', r.assistiu, 'e entraram no Natal'],
+                ['pulou', 'Pularam o vídeo', r.pulou, 'e entraram no Natal'],
+                ['adiou', 'Deixaram para depois', r.adiou, 'o presente está esperando'],
+                ['pendente', 'Ainda não abriram', r.pendente, 'o presente está esperando'],
+              ] as const).map(([chave, rotulo, n, sub]) => (
+                <button key={chave} type="button" aria-pressed={filtro === chave}
+                  title={filtro === chave ? 'Mostrar todas' : `Mostrar só quem: ${ROTULO_FILTRO[chave].toLowerCase()}`}
+                  onClick={() => { setFiltro(f => (f === chave ? 'todas' : chave)); setLimite(LISTA_INICIAL); }}
+                  className={cn('rounded-xl border p-3 text-left transition-colors',
+                    filtro === chave ? 'border-primary bg-primary/5' : 'border-border hover:bg-accent/40')}>
                   <div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{rotulo}</div>
                   <div className="text-2xl font-bold tabular-nums">{n}</div>
                   <div className="text-xs text-muted-foreground">{sub}</div>
-                </div>
+                </button>
               ))}
             </div>
 
             {/* As pessoas */}
             <div className="space-y-2">
               <div className="flex items-center justify-between text-xs font-semibold">
-                <span>Pessoas de {ROTULO_GRUPO[grupo]}</span>
+                <span>Pessoas de {setorEscolhido ? `${setorEscolhido.rotulo} · ` : ''}{ROTULO_GRUPO[grupo]}</span>
                 <span className="flex items-center gap-2 font-normal text-muted-foreground">
-                  {filtradas.length} de {porGrupo[grupo].length}
+                  {filtradas.length} de {doSetor.length}
                   <button type="button" onClick={() => void refetch()} aria-label="Atualizar" title="Atualizar"
                     className="rounded p-1 hover:bg-accent">
                     <RefreshCw className={cn('h-3.5 w-3.5', isFetching && 'animate-spin')} />
@@ -205,15 +221,21 @@ export default function NatalLiberacaoConfig() {
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <div className="inline-flex flex-wrap rounded-lg bg-muted p-0.5" role="group" aria-label="Filtrar por situação">
-                  {(['todas', 'entrou', 'adiou', 'pendente'] as const).map(v => (
+                  {FILTROS_DO_NATAL.map(v => (
                     <button key={v} type="button" aria-pressed={filtro === v}
                       onClick={() => { setFiltro(v); setLimite(LISTA_INICIAL); }}
                       className={cn('rounded-md px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors',
                         filtro === v && 'bg-background text-foreground shadow-sm')}>
-                      {v === 'todas' ? 'Todas' : ROTULO_SITUACAO[v]}
+                      {ROTULO_FILTRO[v]}
                     </button>
                   ))}
                 </div>
+                <select value={setorEscolhido?.chave ?? TODOS_SETORES} aria-label="Filtrar por setor"
+                  onChange={e => { setSetor(e.target.value); setLimite(LISTA_INICIAL); }}
+                  className="h-8 min-w-[160px] rounded-md border border-input bg-background px-2 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  <option value={TODOS_SETORES}>Todos os setores ({porGrupo[grupo].length})</option>
+                  {setores.map(s => <option key={s.chave} value={s.chave}>{s.rotulo} ({s.total})</option>)}
+                </select>
                 <Input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar pessoa ou setor"
                   aria-label="Buscar pessoa ou setor" className="h-8 min-w-[160px] flex-1 text-xs" />
               </div>

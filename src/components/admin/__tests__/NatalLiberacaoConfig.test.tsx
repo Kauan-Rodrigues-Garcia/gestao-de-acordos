@@ -93,6 +93,59 @@ describe('NatalLiberacaoConfig', () => {
     expect(screen.getByText('Caio')).toBeTruthy();
   });
 
+  it('filtra quem pulou e quem assistiu, pelo filtro e pelos cartões do resumo', async () => {
+    montar();
+    fireEvent.click(await screen.findByRole('button', { name: /Tema de Natal/ }));
+    // Birigui: Ana assistiu inteiro, Bia pulou, Caio deixou para depois.
+    fireEvent.click(screen.getByRole('button', { name: 'Pulou o vídeo' }));
+    expect(screen.getByText('Bia')).toBeTruthy();
+    expect(screen.queryByText('Ana')).toBeNull();
+    expect(screen.queryByText('Caio')).toBeNull();
+
+    const cartao = (rotulo: string) => screen.getByText(rotulo).closest('button') as HTMLButtonElement;
+    fireEvent.click(cartao('Assistiram inteiro'));
+    expect(cartao('Assistiram inteiro').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByText('Ana')).toBeTruthy();
+    expect(screen.queryByText('Bia')).toBeNull();
+
+    fireEvent.click(cartao('Deixaram para depois'));
+    expect(screen.getByText('Caio')).toBeTruthy();
+    expect(screen.queryByText('Ana')).toBeNull();
+
+    // Clicar de novo no mesmo cartão volta para todas.
+    fireEvent.click(cartao('Deixaram para depois'));
+    expect(screen.getByText('Ana')).toBeTruthy();
+    expect(screen.getByText('Bia')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Todas' }).getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('o filtro de setor, dentro da cidade, filtra o resumo e a lista', async () => {
+    rpc.mockResolvedValue({ data: { liberacao: null, pessoas: [
+      pessoa('Ana', 'birigui', { setor_nome: 'Play 2', liberou_em: '2026-11-10T13:00:00Z', assistiu_em: '2026-11-10T12:58:00Z' }),
+      pessoa('Bia', 'birigui', { setor_nome: 'Play 3' }),
+      pessoa('Caio', 'birigui', { setor_nome: 'Play 3', adiou_vezes: 1 }),
+      pessoa('Duda', 'marilia', { setor_nome: 'Receptivo' }),
+    ] }, error: null });
+    montar();
+    fireEvent.click(await screen.findByRole('button', { name: /Tema de Natal/ }));
+    const setor = screen.getByRole('combobox', { name: 'Filtrar por setor' }) as HTMLSelectElement;
+    // Só os setores de Birigui.
+    expect([...setor.options].map(o => o.textContent)).toEqual(['Todos os setores (3)', 'Play 2 (1)', 'Play 3 (2)']);
+
+    fireEvent.change(setor, { target: { value: 'BookPlay|Play 3' } });
+    expect(screen.queryByText('Ana')).toBeNull();
+    expect(screen.getByText('Bia')).toBeTruthy();
+    expect(screen.getByText('Caio')).toBeTruthy();
+    expect(screen.getByText('Pessoas de Play 3 · Birigui')).toBeTruthy();
+    expect(screen.getByText('Deixaram para depois').nextSibling?.textContent).toBe('1');
+    expect(screen.getByText('Assistiram inteiro').nextSibling?.textContent).toBe('0');
+
+    // Trocar de cidade volta para todos os setores.
+    fireEvent.click(screen.getAllByRole('tab')[1]);
+    expect((screen.getByRole('combobox', { name: 'Filtrar por setor' }) as HTMLSelectElement).value).toBe('');
+    expect(screen.getByText('Duda')).toBeTruthy();
+  });
+
   it('liberar pede confirmação e chama o banco', async () => {
     liberar.mockResolvedValue({ erro: null });
     montar();

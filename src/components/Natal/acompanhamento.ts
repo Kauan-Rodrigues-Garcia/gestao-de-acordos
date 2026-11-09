@@ -72,6 +72,24 @@ export function comoEntrou(p: Pick<PessoaDoNatal, 'liberou_em' | 'assistiu_em' |
   return p.pulou_em ? 'pulou' : 'assistiu';
 }
 
+/**
+ * O filtro da lista (09/11/2026): as três situações e, dentro de «entrou»,
+ * COMO entrou — vídeo inteiro ou pulando. Os quatro cartões do resumo
+ * (assistiu, pulou, adiou, pendente) são atalhos para estes filtros.
+ */
+export type FiltroDoNatal = 'todas' | SituacaoDoNatal | 'assistiu' | 'pulou';
+export const FILTROS_DO_NATAL: readonly FiltroDoNatal[] = ['todas', 'entrou', 'assistiu', 'pulou', 'adiou', 'pendente'];
+export const ROTULO_FILTRO: Record<FiltroDoNatal, string> = {
+  todas: 'Todas', entrou: 'Entrou no Natal', assistiu: 'Assistiu inteiro', pulou: 'Pulou o vídeo',
+  adiou: 'Deixou para depois', pendente: 'Ainda não abriu',
+};
+
+export function passaNoFiltro(p: PessoaDoNatal, filtro: FiltroDoNatal): boolean {
+  if (filtro === 'todas') return true;
+  if (filtro === 'assistiu' || filtro === 'pulou') return comoEntrou(p) === filtro;
+  return situacaoDoNatal(p) === filtro;
+}
+
 export interface ResumoDoGrupo {
   total: number;
   entrou: number;
@@ -96,4 +114,49 @@ export function separarPorGrupo(pessoas: readonly PessoaDoNatal[]): Record<Grupo
   const g: Record<GrupoDaCidade, PessoaDoNatal[]> = { birigui: [], marilia: [], sem: [] };
   for (const p of pessoas) g[grupoDaCidade(p.cidade)].push(p);
   return g;
+}
+
+/**
+ * O filtro de setor do card (09/11/2026): o setor da pessoa vira uma chave
+ * «empresa|setor», porque o mesmo nome de setor pode existir em duas empresas.
+ * Quem está sem setor cai em `SEM_SETOR`.
+ */
+export const SEM_SETOR = '__sem_setor__';
+
+export function chaveDoSetor(p: Pick<PessoaDoNatal, 'empresa_nome' | 'setor_nome'>): string {
+  return p.setor_nome ? `${p.empresa_nome ?? ''}|${p.setor_nome}` : SEM_SETOR;
+}
+
+export interface SetorDoNatal {
+  chave: string;
+  rotulo: string;
+  total: number;
+}
+
+/**
+ * Os setores das pessoas, em ordem de nome, com quantas pessoas cada um tem.
+ * Nome repetido em empresas diferentes leva a empresa no rótulo; «Sem setor»
+ * fica por último.
+ */
+export function setoresDasPessoas(pessoas: readonly PessoaDoNatal[]): SetorDoNatal[] {
+  const mapa = new Map<string, { setor: string; empresa: string | null; total: number }>();
+  for (const p of pessoas) {
+    const chave = chaveDoSetor(p);
+    const atual = mapa.get(chave);
+    if (atual) atual.total += 1;
+    else mapa.set(chave, { setor: p.setor_nome ?? 'Sem setor', empresa: p.empresa_nome, total: 1 });
+  }
+  const vezesDoNome = new Map<string, number>();
+  for (const [chave, s] of mapa) if (chave !== SEM_SETOR) vezesDoNome.set(s.setor, (vezesDoNome.get(s.setor) ?? 0) + 1);
+  return [...mapa.entries()]
+    .map(([chave, s]) => ({
+      chave,
+      rotulo: chave !== SEM_SETOR && (vezesDoNome.get(s.setor) ?? 0) > 1 && s.empresa ? `${s.setor} · ${s.empresa}` : s.setor,
+      total: s.total,
+    }))
+    .sort((a, b) => {
+      if (a.chave === SEM_SETOR) return 1;
+      if (b.chave === SEM_SETOR) return -1;
+      return a.rotulo.localeCompare(b.rotulo, 'pt-BR');
+    });
 }

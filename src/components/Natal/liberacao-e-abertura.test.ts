@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { estiloDoNatal, natalEmPrevia, podeVerNatal, presenteAberto } from './previa';
 import { VIDEOS, videoDaCidade } from './abertura';
 import { guardadaVale } from './liberacao';
-import { comoEntrou, grupoDaCidade, resumirGrupo, separarPorGrupo, situacaoDoNatal, type PessoaDoNatal } from './acompanhamento';
+import {
+  SEM_SETOR, chaveDoSetor, comoEntrou, passaNoFiltro, grupoDaCidade, resumirGrupo, separarPorGrupo, setoresDasPessoas, situacaoDoNatal,
+  type PessoaDoNatal,
+} from './acompanhamento';
 
 describe('quem vê o Natal (liberação, 09/11/2026)', () => {
   it('antes da liberação, só o super_admin e o dev', () => {
@@ -113,5 +116,45 @@ describe('o acompanhamento', () => {
     ]);
     expect(r).toEqual({ total: 4, entrou: 2, assistiu: 1, pulou: 1, adiou: 1, pendente: 1 });
     expect(r.entrou + r.adiou + r.pendente).toBe(r.total);
+  });
+});
+
+describe('o filtro de setor do acompanhamento', () => {
+  const p = (empresa_nome: string | null, setor_nome: string | null): PessoaDoNatal => ({
+    usuario_id: Math.random().toString(36), nome: 'X', cargo: null, empresa_nome, setor_nome, cidade: 'birigui',
+    video: null, assistiu_em: null, pulou_em: null, liberou_em: null, adiou_vezes: 0,
+  });
+
+  it('agrupa por setor, em ordem, com «Sem setor» por último', () => {
+    const s = setoresDasPessoas([p('BookPlay', 'Play 3'), p(null, null), p('BookPlay', 'Elite'), p('BookPlay', 'Play 3')]);
+    expect(s).toEqual([
+      { chave: 'BookPlay|Elite', rotulo: 'Elite', total: 1 },
+      { chave: 'BookPlay|Play 3', rotulo: 'Play 3', total: 2 },
+      { chave: SEM_SETOR, rotulo: 'Sem setor', total: 1 },
+    ]);
+  });
+
+  it('o mesmo nome em duas empresas são dois setores, com a empresa no rótulo', () => {
+    const s = setoresDasPessoas([p('BookPlay', 'Receptivo'), p('PaguePlay', 'Receptivo')]);
+    expect(s.map(x => x.rotulo)).toEqual(['Receptivo · BookPlay', 'Receptivo · PaguePlay']);
+    expect(chaveDoSetor(p('BookPlay', 'Receptivo'))).not.toBe(chaveDoSetor(p('PaguePlay', 'Receptivo')));
+  });
+});
+
+describe('o filtro da lista do acompanhamento', () => {
+  const p = (extra: Partial<PessoaDoNatal>): PessoaDoNatal => ({
+    usuario_id: Math.random().toString(36), nome: 'X', cargo: null, empresa_nome: null, setor_nome: null,
+    cidade: 'birigui', video: null, assistiu_em: null, pulou_em: null, liberou_em: null, adiou_vezes: 0, ...extra,
+  });
+  const assistiu = p({ liberou_em: '2026-11-10T13:00:00Z', assistiu_em: '2026-11-10T12:58:00Z' });
+  const pulou = p({ liberou_em: '2026-11-10T13:00:00Z', pulou_em: '2026-11-10T12:59:00Z' });
+  const adiou = p({ adiou_vezes: 1 });
+  const pendente = p({});
+
+  it('«pulou» e «assistiu» separam quem entrou; «entrou» junta os dois', () => {
+    expect([assistiu, pulou, adiou, pendente].map(x => passaNoFiltro(x, 'pulou'))).toEqual([false, true, false, false]);
+    expect([assistiu, pulou, adiou, pendente].map(x => passaNoFiltro(x, 'assistiu'))).toEqual([true, false, false, false]);
+    expect([assistiu, pulou, adiou, pendente].map(x => passaNoFiltro(x, 'entrou'))).toEqual([true, true, false, false]);
+    expect([assistiu, pulou, adiou, pendente].map(x => passaNoFiltro(x, 'todas'))).toEqual([true, true, true, true]);
   });
 });
