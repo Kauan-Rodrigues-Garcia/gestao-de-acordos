@@ -49,6 +49,8 @@
 -- ela ainda abre a API. Por isso há um segundo passo, com prazo: trocar por
 -- senha aleatória a de quem não tiver trocado (script à parte).
 --
+-- A conta do robô do 59 não é marcada (ver a seção 6).
+--
 -- Reexecutável: rodar de novo só marca quem ainda estiver na senha inicial.
 -- ============================================================================
 
@@ -303,6 +305,12 @@ GRANT EXECUTE ON FUNCTION public.fn_senha_inicial_painel() TO authenticated;
 -- Só marca; ninguém é barrado até a liberação. `senha_alterada = FALSE` faz o
 -- botão de chave aparecer desde já, para quem quiser trocar antes.
 -- Um bcrypt por conta (~600): alguns segundos de CPU, uma vez.
+--
+-- A conta do robô do 59 fica de FORA (pedido do Cleber, 10/11/2026): ninguém
+-- senta na frente dela para trocar senha, e o robô não pode parar. Ela é a
+-- conta com a chave nominal `mestre_importar_automatico` em
+-- `perfis_permissoes` (scripts/robo59/README.md §3). Os perfis de IA do
+-- Comercial (`perfis.robo`) também não são gente e ficam de fora.
 
 UPDATE public.perfis p
    SET senha_inicial_pendente = TRUE,
@@ -310,6 +318,11 @@ UPDATE public.perfis p
   FROM auth.users u
  WHERE u.id = p.id
    AND p.senha_inicial_pendente IS DISTINCT FROM TRUE
+   AND p.robo IS NOT TRUE
+   AND NOT EXISTS (
+     SELECT 1 FROM public.perfis_permissoes pp
+      WHERE pp.usuario_id = p.id
+        AND pp.permissoes->>'mestre_importar_automatico' = 'true')
    AND u.encrypted_password = extensions.crypt('123456', u.encrypted_password);
 
 COMMIT;
