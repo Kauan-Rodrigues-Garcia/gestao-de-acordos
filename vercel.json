@@ -6,11 +6,6 @@
       "main": true
     }
   },
-  "functions": {
-    "api/ler-acordo-imagem.ts": {
-      "maxDuration": 30
-    }
-  },
   "headers": [
     {
       "source": "/(.*)",

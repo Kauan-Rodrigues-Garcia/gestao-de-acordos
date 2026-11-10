@@ -86,7 +86,7 @@ VITE_SUPABASE_ANON_KEY=<sua-anon-key>
 
 > A chave `SUPABASE_SERVICE_ROLE_KEY` fica nas **Environment Variables da Vercel**, **sem** o prefixo `VITE_`, e é lida apenas pelas rotas em `api/`. Ela ignora todo o RLS: o que tem `VITE_` é embutido no bundle e vaza para o navegador.
 >
-> O [.env.example](./.env.example) documenta todas as variáveis, incluindo as opcionais (Sentry, IA de visão, CDN de imagens).
+> O [.env.example](./.env.example) documenta todas as variáveis, incluindo as opcionais (Sentry, CDN de imagens).
 
 ---
 
@@ -163,7 +163,7 @@ O deploy é feito na **Vercel**. O frontend Vite e as funções serverless em
 `/#/rota` continuem válidos e os dois tenants compartilhem a mesma estratégia.
 
 Configure na Vercel as variáveis públicas de build (`VITE_*`) e os segredos de
-servidor (`SUPABASE_SERVICE_ROLE_KEY`, `VISION_API_KEY`) separadamente. Consulte
+servidor (`SUPABASE_SERVICE_ROLE_KEY`, `GIPHY_API_KEY`) separadamente. Consulte
 [.env.example](./.env.example) antes do deploy.
 
 ---

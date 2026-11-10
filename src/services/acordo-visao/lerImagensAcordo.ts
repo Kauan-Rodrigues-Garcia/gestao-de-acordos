@@ -1,22 +1,18 @@
 import type { Worker } from 'tesseract.js';
-import { fileParaCanvas, canvasParaDataUrl } from '@/lib/ocr/fileToCanvas';
+import { fileParaCanvas } from '@/lib/ocr/fileToCanvas';
 import { preprocessarParaOcrForte, type ModoPreprocess } from '@/lib/ocr/preprocessImage';
 import { extrairDadosBookplay, mesclarDadosBookplay } from './parserBookplay';
 import { sanitizarDadosAcordo } from './sanitizar';
 import { contarCamposPreenchidos, type DadosExtraidosAcordo } from './types';
-import { obterTokenSessaoVisao, solicitarLeituraIa } from './visionApi';
 
 /**
- * Motor híbrido de leitura de acordo por imagem (BookPlay).
+ * Leitura de acordo por imagem (BookPlay): OCR local (Tesseract), no próprio
+ * navegador. A imagem não sai da máquina.
  *
- *   1. Tenta a IA de visão via `/api/ler-acordo-imagem` (robusta, entende
- *      múltiplos prints de reparcelamento de uma vez).
- *   2. Se a IA não estiver configurada (sem chave), indisponível ou o endpoint
- *      não existir (ex.: `npm run dev` puro, sem `vercel dev`), cai para o
- *      OCR local Tesseract — offline e sem custo.
- *
- * O formulário consome sempre o mesmo `DadosExtraidosAcordo`, sem saber qual
- * motor respondeu (`_fonte` indica a origem).
+ * Até 10/11/2026 havia antes um caminho por IA de visão
+ * (`/api/ler-acordo-imagem`), que mandava o print a um provedor externo.
+ * Removido por decisão do Cleber: não será usado, e tirá-lo encurta a lista de
+ * terceiros que recebem dado pessoal (LGPD).
  */
 
 // ── OCR local (Tesseract) — worker reaproveitado entre leituras ───────────
@@ -59,31 +55,6 @@ export async function encerrarOcrAcordo(): Promise<void> {
   }
 }
 
-// ── Caminho IA ────────────────────────────────────────────────────────────
-async function lerViaIa(files: File[]): Promise<DadosExtraidosAcordo | null> {
-  const accessToken = await obterTokenSessaoVisao();
-  if (!accessToken) return null;
-
-  // Reduz cada imagem antes de enviar (custo + limite de body da Vercel).
-  const imagens = await Promise.all(
-    files.map(async (f) => canvasParaDataUrl(await fileParaCanvas(f))),
-  );
-
-  let dadosBrutos: DadosExtraidosAcordo | null;
-  try {
-    dadosBrutos = await solicitarLeituraIa(imagens, accessToken);
-  } catch {
-    // Sem rede ou endpoint inexistente (vite dev) → deixa o OCR assumir.
-    return null;
-  }
-
-  if (!dadosBrutos) return null;
-
-  const dados = sanitizarDadosAcordo(dadosBrutos);
-  dados._fonte = 'ia';
-  return dados;
-}
-
 // ── Caminho OCR local ───────────────────────────────────────────────────────
 async function lerViaOcr(files: File[]): Promise<DadosExtraidosAcordo> {
   const worker = await obterWorker();
@@ -115,20 +86,11 @@ async function lerViaOcr(files: File[]): Promise<DadosExtraidosAcordo> {
 
 /**
  * Lê 1+ imagens de acordo BookPlay e devolve os campos extraídos.
- * @throws se nenhuma imagem for passada ou ambos os motores falharem.
+ * @throws se nenhuma imagem for passada ou o OCR falhar.
  */
 export async function lerImagensAcordoBP(
   files: File[],
 ): Promise<DadosExtraidosAcordo> {
   if (!files.length) throw new Error('Nenhuma imagem selecionada.');
-
-  try {
-    const viaIa = await lerViaIa(files);
-    if (viaIa) return viaIa;
-  } catch (err) {
-    // IA configurada mas falhou: registra e tenta o OCR local como rede de segurança.
-    console.warn('[acordo-visao] IA indisponível, usando OCR local:', err);
-  }
-
   return lerViaOcr(files);
 }

@@ -546,14 +546,13 @@ Não existe "ver a senha atual": o GoTrue guarda bcrypt, que não é reversível
 Gera um magic link do usuário-alvo para o super_admin assumir a sessão dele.
 Ver `src/services/impersonacao.service.ts` no cliente.
 
-### `api/ler-acordo-imagem.ts`
+### Leitura de acordo por imagem
 
-Leitura de acordo BookPlay por imagem via IA. Exige JWT Supabase válido, perfil
-ativo e uma cota persistente por usuário antes de chamar o provedor. A rota
-aceita somente PNG/JPEG/WebP, no máximo 5 imagens e 3 MB decodificados (para
-respeitar o limite de 4,5 MB do payload Vercel após Base64). A cota
-padrão é 10 leituras por 10 minutos; sem configuração ou em indisponibilidade o
-front cai no OCR local (Tesseract).
+Só OCR local (Tesseract), no navegador: a imagem não sai da máquina. A rota
+`api/ler-acordo-imagem.ts`, que mandava o print a um provedor de IA de visão,
+foi removida em 10/11/2026 (decisão do Cleber; LGPD). A tabela
+`api_rate_limits` e `fn_api_rate_limit_consumir`, que só ela usava, ficaram
+no banco sem uso.
 
 ---
 
@@ -604,10 +603,8 @@ no `.env.local` para o `npm run dev`, via plugin `dev-api`):
 
 | Variável | Usada por |
 |---|---|
-| `SUPABASE_SERVICE_ROLE_KEY` | Rotas administrativas e controle de cota da visão — **ignora todo o RLS** |
-| `SUPABASE_PUBLISHABLE_KEY` | Validação do JWT na API de visão; cai em `VITE_SUPABASE_ANON_KEY` quando omitida |
-| `VISION_PROVIDER` / `VISION_API_KEY` / `VISION_MODEL` | Provedor da leitura por imagem (sem elas, cai no OCR local) |
-| `VISION_RATE_LIMIT_MAX` / `VISION_RATE_LIMIT_WINDOW_SECONDS` | Cota da visão; defaults 10 requisições / 600 segundos |
+| `SUPABASE_SERVICE_ROLE_KEY` | Rotas administrativas — **ignora todo o RLS** |
+| `SUPABASE_PUBLISHABLE_KEY` | Validação do JWT nas rotas de `api/`; cai em `VITE_SUPABASE_ANON_KEY` quando omitida |
 | `SENTRY_AUTH_TOKEN` / `SENTRY_ORG` / `SENTRY_PROJECT` | Upload de source maps no build — segredo de verdade (acesso de escrita ao Sentry) |
 
 O [.env.example](./.env.example) documenta cada uma com o porquê.

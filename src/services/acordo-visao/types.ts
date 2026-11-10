@@ -1,9 +1,10 @@
 /**
  * Tipos compartilhados da leitura de acordo por imagem (BookPlay).
  *
- * Um único formato de saída, produzido tanto pela IA de visão (`_fonte: 'ia'`)
- * quanto pelo OCR local Tesseract (`_fonte: 'ocr'`), para que o formulário
- * consuma o resultado sem saber qual motor foi usado.
+ * Produzido pelo OCR local (Tesseract), que roda no próprio navegador: a imagem
+ * não sai da máquina. A leitura por IA de visão (`api/ler-acordo-imagem`), que
+ * mandava o print para um provedor externo, foi removida em 10/11/2026 por
+ * decisão do Cleber — não será usada.
  */
 
 /** Formas de pagamento aceitas no BookPlay (espelha TIPOS_BOOKPLAY). */
@@ -31,8 +32,8 @@ export interface DadosExtraidosAcordo {
   status?: StatusBookplay;
   instituicao?: string;
 
-  /** Motor que produziu o resultado. */
-  _fonte?: 'ia' | 'ocr';
+  /** Motor que produziu o resultado (só existe o OCR local). */
+  _fonte?: 'ocr';
   /** Texto bruto do OCR — apenas para diagnóstico (admin/console). */
   _textoOcr?: string;
 }
