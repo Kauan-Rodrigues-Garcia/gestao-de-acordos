@@ -1,0 +1,608 @@
+<title>Estudo do Natal do Gestão</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Hanken+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: prancha de direção de arte — coluna única larga; cada bloco é uma mesa de trabalho. */
+:root{
+  --bg:#EDF2F4; --surface:#FFFFFF; --ink:#14302A; --muted:#566E68; --line:#D2DDDF;
+  --acc:#C2362F; --acc2:#1C7A50; --gold:#A97A12; --stage:#E1EAF0; --chip:#E4ECEA;
+  --display:'Bricolage Grotesque','Segoe UI',system-ui,sans-serif;
+  --body:'Hanken Grotesk','Segoe UI',system-ui,sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0D1A1B; --surface:#142526; --ink:#E7F0ED; --muted:#93AAA4; --line:#253A3B;
+  --acc:#F2685F; --acc2:#5CC28E; --gold:#E9B84C; --stage:#1C3236; --chip:#1D3233; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#0D1A1B; --surface:#142526; --ink:#E7F0ED; --muted:#93AAA4; --line:#253A3B;
+  --acc:#F2685F; --acc2:#5CC28E; --gold:#E9B84C; --stage:#1C3236; --chip:#1D3233; color-scheme:dark }
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:400 16px/1.55 var(--body);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 72px}
+.wrap{max-width:1120px;margin:0 auto;display:flex;flex-direction:column;gap:56px}
+h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;line-height:1.1}
+h1{font-size:clamp(2rem,5vw,3.3rem);font-weight:700;letter-spacing:-.02em}
+h2{font-size:clamp(1.5rem,3vw,2.1rem);font-weight:700;letter-spacing:-.015em}
+h3{font-size:1.08rem;font-weight:700}
+p{margin:0;max-width:66ch}
+.olho{font:500 .74rem/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.lead{font-size:1.1rem;color:var(--muted)}
+a{color:var(--acc2)}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,a:focus-visible{outline:2px solid var(--acc2);outline-offset:2px}
+
+header.topo{display:flex;flex-direction:column;gap:16px;padding-top:12px}
+header.topo h1 em{font-style:normal;color:var(--acc)}
+.indice{display:flex;flex-wrap:wrap;gap:8px}
+.indice a{text-decoration:none;font-weight:600;font-size:.92rem;padding:7px 14px;border:1.5px solid var(--line);border-radius:999px;color:var(--ink);background:var(--surface)}
+.indice a b{font-family:var(--mono);font-weight:500;color:var(--acc);margin-right:6px}
+
+section{display:flex;flex-direction:column;gap:22px}
+.cab{display:flex;flex-direction:column;gap:10px}
+
+/* números do banco */
+.numeros{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border-block:1.5px solid var(--ink)}
+.numeros div{padding:16px 16px 16px 0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.numeros div+div{padding-left:16px;border-left:1px solid var(--line)}
+.numeros b{font:700 clamp(1.7rem,4vw,2.5rem)/1 var(--display);font-variant-numeric:tabular-nums}
+.numeros span{font-size:.9rem;color:var(--muted)}
+.fonte{font-size:.82rem;color:var(--muted)}
+
+/* mapa do que existe */
+.mapa{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.mapa article{background:var(--surface);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.mapa ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:9px;font-size:.92rem;line-height:1.4}
+.mapa li{display:flex;flex-direction:column;gap:3px}
+.mapa li small{color:var(--muted);font-size:.84rem}
+.tags{display:flex;flex-wrap:wrap;gap:4px}
+.tag{font:500 .66rem/1 var(--mono);letter-spacing:.04em;text-transform:uppercase;padding:3px 6px;border-radius:4px;background:var(--chip);color:var(--muted)}
+.tag.c{color:var(--acc)} .tag.r{color:var(--acc2)} .tag.d{color:var(--gold)}
+.achados{display:grid;grid-template-columns:repeat(2,1fr);gap:0 36px;counter-reset:a}
+.achados div{padding:14px 0;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:4px}
+.achados p{font-size:.94rem;color:var(--muted)}
+
+/* seletor */
+.seletor{display:flex;flex-wrap:wrap;gap:6px}
+.seletor button{border:1.5px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 14px;font-weight:600;font-size:.9rem}
+.seletor button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+
+/* palco */
+.mesa{display:flex;flex-direction:column;background:var(--surface);border-radius:18px;overflow:hidden}
+.palco{--art-bg:var(--stage);--art-ink:var(--ink);--art-acc:var(--acc);background:var(--art-bg);padding:30px 22px 20px;display:flex;flex-direction:column;justify-content:flex-end;min-width:0;position:relative}
+.palco.mao{--art-bg:#F6EEDC;--art-ink:#3A3340;color:#3A3340}
+.palco.papel{--art-bg:#E6D9BE;--art-ink:#3A3340;color:#3A3340}
+.palco.papel::after{content:"";position:absolute;inset:0;pointer-events:none;mix-blend-mode:multiply;opacity:.5;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' seed='3'/%3E%3CfeColorMatrix values='0 0 0 0 .3 0 0 0 0 .24 0 0 0 0 .16 0 0 0 1.1 -.5'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)'/%3E%3C/svg%3E")}
+.palco.pixel{--art-bg:#1A2140;--art-ink:#E9EEFF;color:#E9EEFF;background-image:radial-gradient(#ffffff55 1px,transparent 1.4px);background-size:38px 34px}
+.palco.massinha{--art-bg:#DCE7F2;color:#14302A}
+.cena{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;align-items:end}
+.cena figure{margin:0;display:flex;flex-direction:column;align-items:center;gap:6px;min-width:0}
+.cena figcaption{font-size:.76rem;font-weight:600;text-align:center;opacity:.8}
+.cena figcaption i{font:500 .6rem/1 var(--mono);font-style:normal;text-transform:uppercase;letter-spacing:.06em;color:var(--art-acc);display:block;margin-top:2px}
+.arte{width:100%;height:auto;display:block;overflow:visible}
+canvas.arte{image-rendering:pixelated;aspect-ratio:108/110;object-fit:contain}
+.ficha{padding:24px;display:grid;grid-template-columns:minmax(0,190px) minmax(0,1fr);gap:20px 28px;min-width:0}
+.ficha>div{display:flex;flex-direction:column;gap:8px}
+.ficha h3{font-size:1.5rem}
+.ficha dl{margin:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px 22px}
+.ficha dt{font:500 .68rem/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:3px}
+.ficha dd{margin:0;font-size:.93rem;line-height:1.45}
+
+.lado{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:8px}
+.lado figure{margin:0;border-radius:12px;overflow:hidden;display:flex;flex-direction:column;background:var(--surface);min-width:0}
+.lado .palco{padding:12px 8px 6px}
+.lado figcaption{padding:8px 6px 10px;font-size:.78rem;font-weight:600;text-align:center}
+
+.recado{border-left:4px solid var(--acc);padding:4px 0 4px 20px;display:flex;flex-direction:column;gap:10px}
+.recado p{max-width:74ch}
+
+/* diretoria */
+.diretoria{display:grid;grid-template-columns:minmax(0,260px) minmax(0,1fr);gap:28px;background:var(--surface);border-radius:18px;padding:26px;align-items:center}
+.diretoria .bonecos{display:flex;justify-content:center;gap:4px;background:var(--stage);border-radius:14px;padding:18px 8px 10px}
+.diretoria svg{width:33%;height:auto}
+.diretoria .texto{display:flex;flex-direction:column;gap:12px}
+.diretoria ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px;font-size:.94rem;max-width:70ch}
+@media (prefers-reduced-motion:no-preference){ .marcha{animation:marcha 1.1s ease-in-out infinite alternate;transform-origin:50% 100%} .marcha.b{animation-delay:-.55s} }
+@keyframes marcha{from{transform:rotate(-2.2deg)}to{transform:rotate(2.2deg)}}
+
+/* ideias */
+.ideias{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.ideia{background:var(--surface);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:9px;min-width:0}
+.ideia.top{box-shadow:inset 0 0 0 2px var(--acc)}
+.ideia p{font-size:.93rem;color:var(--muted)}
+.ideia .onde{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.ideia .onde b{font:500 .68rem/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--acc2)}
+.ideia .onde em{font:500 .64rem/1 var(--mono);font-style:normal;letter-spacing:.06em;text-transform:uppercase;color:var(--acc)}
+.ideia footer{margin-top:auto;padding-top:8px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:4px 12px;font-size:.78rem;color:var(--muted)}
+.ideia footer b{color:var(--ink);font-weight:600}
+.contagem{font-size:.86rem;color:var(--muted)}
+
+@media (max-width:900px){
+  .mapa{grid-template-columns:repeat(2,1fr)} .ideias{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ficha{grid-template-columns:1fr} .ficha dl{grid-template-columns:repeat(2,minmax(0,1fr))} .lado{grid-template-columns:repeat(4,minmax(0,1fr))}
+}
+@media (max-width:600px){
+  .numeros{grid-template-columns:repeat(2,1fr)} .numeros div:nth-child(3){padding-left:0;border-left:0}
+  .numeros div:nth-child(n+3){border-top:1px solid var(--line)}
+  .mapa,.ideias,.achados,.diretoria{grid-template-columns:1fr}
+  .cena{grid-template-columns:repeat(3,minmax(0,1fr));row-gap:14px} .lado{grid-template-columns:repeat(2,minmax(0,1fr))} .ficha dl{grid-template-columns:1fr}
+}
+</style>
+
+<svg id="defs" aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden"></svg>
+
+<div class="wrap">
+<header class="topo">
+  <span class="olho">Gestão de Acordos · tema de Natal · 10/11/2026</span>
+  <h1>O Natal que está no ar, <em>oito jeitos de desenhar</em> e 35 ideias para crescer</h1>
+  <p class="lead">Li o tema inteiro (código, desenhos, roteiros e as seis tabelas do banco). Abaixo: o que existe hoje, os mesmos personagens em oito estilos de arte para comparar, e o que eu acrescentaria.</p>
+  <nav class="indice" aria-label="Partes">
+    <a href="#raio-x"><b>0</b>O que existe hoje</a>
+    <a href="#estilos"><b>1</b>Estilos de arte</a>
+    <a href="#ideias"><b>2</b>Ideias novas</a>
+  </nav>
+</header>
+
+<section id="raio-x">
+  <div class="cab">
+    <span class="olho">Parte 0 · raio-x</span>
+    <h2>O que existe hoje</h2>
+    <p>Cerca de 110 arquivos e 20 mil linhas em <code>src/components/Natal</code>, seis tabelas e catorze funções no banco. Liberado para todos em 09/11.</p>
+  </div>
+  <div class="numeros">
+    <div><b>296</b><span>pessoas passaram pelo presente, de 502 ativas (59%)</span></div>
+    <div><b>206</b><span>assistiram ao vídeo até o fim; 93 pularam, 45 adiaram</span></div>
+    <div><b>144</b><span>inscritas no trem; só 305 ativas têm foto de perfil</span></div>
+    <div><b>151</b><span>viagens em dois dias, 755 assentos, 150 pessoas diferentes</span></div>
+  </div>
+  <p class="fonte">Fonte: banco de produção, uma leitura em 10/11/2026, só contagens (<code>natal_abertura</code>, <code>natal_trem_inscricoes</code>, <code>natal_trem_viagens</code>, <code>perfis</code>).</p>
+
+  <div class="mapa">
+    <article><h3>Em todas as abas</h3><ul>
+      <li>Presente, vídeo de abertura por cidade e carta<span class="tags"><span class="tag d">banco</span></span></li>
+      <li>Trenó com três renas e rastro de faíscas<small>voo sorteado, em média a cada 3 min</small><span class="tags"><span class="tag">acaso</span></span></li>
+      <li>Globo de neve no chat<small>chacoalha quando chega mensagem</small><span class="tags"><span class="tag d">dado real</span></span></li>
+      <li>Gorro de Papai Noel nas fotos</li>
+      <li>Rádio de Natal<small>uma faixa de 2min11s, no mesmo ponto para todos</small><span class="tags"><span class="tag r">relógio único</span></span></li>
+      <li>«Boas Festas» na marca, sincelos, gorro e azevinho nos títulos</li>
+    </ul></article>
+    <article><h3>Dashboard</h3><ul>
+      <li>Varal de pisca-pisca com 7 funções, guirlanda e bolas<span class="tags"><span class="tag c">clique</span></span></li>
+      <li>Neve e montes; neve no alto do card</li>
+      <li>Boneco de neve que desliza no card<span class="tags"><span class="tag c">clique</span><span class="tag">acaso</span></span></li>
+      <li>Bola da saudação: gira, o fio arrebenta, vira bola solta<span class="tags"><span class="tag c">arrasta</span></span></li>
+      <li>Cesta de basquete com distância em metros; o boneco arremessa<span class="tags"><span class="tag c">segredo</span></span></li>
+      <li>Árvore da meta<small>acende conforme o percentual</small><span class="tags"><span class="tag d">dado real</span></span></li>
+      <li>Estação do trem, ticket e sorteio de 5<span class="tags"><span class="tag d">banco</span><span class="tag r">relógio único</span></span></li>
+    </ul></article>
+    <article><h3>Acordos</h3><ul>
+      <li>Chalé: lareira, janela, poltrona, gato, árvore, presentes<span class="tags"><span class="tag c">mouse na lareira</span></span></li>
+      <li>Grinch: espia, quebra a janela ou desce pela chaminé, briga em nuvem<small>a cada 5 a 8 min</small><span class="tags"><span class="tag">acaso</span></span></li>
+      <li>Três duendes arrumam e fofocam<small>martelo, vassoura, prancheta</small><span class="tags"><span class="tag d">acordo salvo chama</span></span></li>
+      <li>Festa do acordo salvo<small>a cada 3 a 6 acordos</small><span class="tags"><span class="tag d">dado real</span></span></li>
+      <li>Pix: varal nos cards, rena de neon, Kevin no Pendente<small>«Esqueceram de Mim»: some sem pendência</small><span class="tags"><span class="tag d">dado real</span></span></li>
+    </ul></article>
+    <article><h3>Analítico</h3><ul>
+      <li>Iglu e urso que pesca<small>uma vez por hora em média, para todos juntos</small><span class="tags"><span class="tag r">relógio único</span></span></li>
+      <li>Conversa com o urso<small>mais de cem falas, usa o nome e a hora; cansa em 10</small><span class="tags"><span class="tag c">clique</span></span></li>
+      <li>Espiar pela janela: 6 cenas; ele fica bravo e fecha a cortina<span class="tags"><span class="tag c">clique</span></span></li>
+      <li>O urso acena para o trem e fica sabendo do Grinch pelos duendes</li>
+      <li>Cubo de gelo do MC Teteu<small>derrete por dia; mouse parado toca a música abafada</small><span class="tags"><span class="tag c">mouse parado</span><span class="tag r">relógio único</span></span></li>
+    </ul></article>
+  </div>
+
+  <div class="cab"><h3>O que a leitura mostrou</h3></div>
+  <div class="achados">
+    <div><b>Três linguagens de arte convivem.</b><p>Boneco, urso e trem são vetor chapado sem contorno. Grinch e duendes têm contorno grosso de desenho animado. Teteu, Kevin e o rosto do Grinch são foto recortada. Funciona, mas não foi uma escolha.</p></div>
+    <div><b>A melhor ideia do tema é a fofoca entre abas.</b><p>O Grinch invade em Acordos, os duendes contam, o urso comenta no Analítico. É um fio só, guardado no navegador. Quase todas as ideias boas daqui para a frente puxam esse mesmo fio.</p></div>
+    <div><b>Foto de perfil é o gargalo.</b><p>O trem só leva quem tem foto, e 197 pessoas ativas não têm. Qualquer coisa nova com rosto (inclusive os bonecos da diretoria) herda o mesmo limite.</p></div>
+    <div><b>O trem deixou de ser raro.</b><p>Com 144 inscritos e umas 75 viagens por dia, cada pessoa viaja duas a três vezes por dia. A surpresa do sorteio dura pouco nesse ritmo.</p></div>
+    <div><b>O gelo termina depois que todo mundo saiu.</b><p>O cubo do Teteu derrete até 25/12, mas a operação para em dezembro. Em 30/11 ele terá derretido 29 dos 54 dias; o final ninguém vê.</p></div>
+    <div><b>Quase nada reage ao trabalho da pessoa.</b><p>Só a árvore da meta, a festa do acordo e o Kevin leem dado real. O resto é cenário. É onde há mais espaço para crescer sem pesar.</p></div>
+  </div>
+</section>
+
+<section id="estilos">
+  <div class="cab">
+    <span class="olho">Parte 1 · exemplos visuais</span>
+    <h2>Os mesmos personagens em oito estilos</h2>
+    <p>Boneco, Papai Noel, urso, duende, árvore e um pinguim (que ainda não existe no tema) redesenhados com as mesmas formas, trocando só o tratamento. Escolha um estilo para ver o elenco e a ficha.</p>
+  </div>
+  <div class="seletor" id="sel-estilo" role="group" aria-label="Estilo de arte"></div>
+  <div class="mesa">
+    <div class="palco" id="palco"><div class="cena" id="cena"></div></div>
+    <div class="ficha" id="ficha"></div>
+  </div>
+
+  <div class="cab">
+    <h3>Lado a lado</h3>
+    <p>Um personagem, os oito estilos. É aqui que dá para sentir a diferença de peso visual em cima de uma tela de trabalho.</p>
+  </div>
+  <div class="seletor" id="sel-pers" role="group" aria-label="Personagem"></div>
+  <div class="lado" id="lado"></div>
+
+  <div class="recado">
+    <h3>O que eu faria</h3>
+    <p><b>Base em «Atual+».</b> Usa as formas que já existem, então nada precisa ser redesenhado nem medido de novo, e aproxima o Dashboard e o Analítico do chalé, que já tem degradê. O ganho vem de detalhe: tricô no cachecol, neve nos galhos, luz de borda, brilho.</p>
+    <p><b>Cartoon só para quem chega fazendo barulho.</b> Grinch, duendes e o que vier de visitante (Max, pinguim ladrão). O contorno grosso passa a significar «isso é um acontecimento», e deixa de parecer um desencontro.</p>
+    <p><b>Feito à mão para tudo que é papel.</b> Bilhetes, a carta, o plano de batalha do Kevin, o álbum de figurinhas. <b>Traço fino</b> nas abas sem cena e no modo leve. <b>Pixel art</b> só se nascer um evento próprio (um fliperama do urso, por exemplo); como tema inteiro ele briga com as fotos reais do trem e dos gorros.</p>
+  </div>
+</section>
+
+<section id="ideias">
+  <div class="cab">
+    <span class="olho">Parte 2 · o que acrescentar</span>
+    <h2>Ideias novas</h2>
+    <p>Começo pela sua, dos bonecos da diretoria, e depois vêm 35 outras, separadas por lugar. As de contorno vermelho são por onde eu começaria.</p>
+  </div>
+
+  <div class="diretoria">
+    <div class="bonecos" id="bonecos"></div>
+    <div class="texto">
+      <span class="olho">Sua ideia, desenvolvida</span>
+      <h3>Quebra-nozes da diretoria</h3>
+      <p>O boneco certo para isso é o quebra-nozes: é de Natal, é um soldado de desfile (combina com quem comanda) e a cabeça dele já é uma peça separada, então a foto entra sem parecer montagem. Dois ou três marcham juntos pelo pé da tela, param, batem continência e seguem.</p>
+      <ul>
+        <li><b>Quando aparece:</b> raro e igual para todos (pelo relógio do Natal, como o urso), duas ou três vezes por dia. E no coral das 16h55.</li>
+        <li><b>Com motivo:</b> setor bateu a meta do dia, o diretor daquele setor aparece e bate palma. Fica mais forte que o acaso.</li>
+        <li><b>Recado:</b> cada diretor grava até três frases curtas; o balão mostra uma. Sem frase, só a continência.</li>
+        <li><b>Onde escolhe:</b> um card em Config › Geral ao lado da liberação, só super admin: marca os usuários, vê a prévia, liga e desliga.</li>
+        <li><b>Banco:</b> uma tabela pequena (usuário, frases, ativo) e uma função de leitura. A foto vem do perfil; sem foto, não entra.</li>
+        <li><b>Cuidado:</b> o boneco precisa ser digno (nada de dança ou tombo), e cada diretor aprova o próprio antes de ir ao ar.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="seletor" id="sel-onde" role="group" aria-label="Filtrar ideias por lugar"></div>
+  <p class="contagem" id="contagem"></p>
+  <div class="ideias" id="lista"></div>
+</section>
+</div>
+
+<script>
+/* ───────── formas ───────── */
+const c=(cx,cy,r,col,o={})=>({t:'c',cx,cy,r,col,...o});
+const e=(cx,cy,rx,ry,col,o={})=>({t:'e',cx,cy,rx,ry,col,...o});
+const r=(x,y,w,h,rx,col,o={})=>({t:'r',x,y,w,h,rx,col,...o});
+const p=(d,col,o={})=>({t:'p',d,col,...o});
+const l=(d,col,w,o={})=>({t:'l',d,col,w,...o});
+const estrela=(cx,cy,R,q)=>{let d='';for(let i=0;i<10;i++){const a=-Math.PI/2+i*Math.PI/5,m=i%2?q:R;d+=(i?'L':'M')+(cx+Math.cos(a)*m).toFixed(1)+' '+(cy+Math.sin(a)*m).toFixed(1)}return d+'Z'};
+
+const BASE={neve:'#F7F5F0',branco:'#FFFFFF',creme:'#F6F0E7',gelo:'#D6E2EC',verm:'#D6403A',vermE:'#A92F35',verde:'#3F9A5B',verdeE:'#2E7A47',verdeC:'#58B271',
+  ouro:'#F2B544',pele:'#F4C9A1',tinta:'#2A2530',lar:'#F28C3A',rosa:'#FF94AA',marrom:'#7A5236',azul:'#6BA6E0',noite:'#2F3B4F',nariz:'#E8937A',pata:'#CDB9A8'};
+const CLAROS=['neve','branco','creme'];
+
+/* k: g=chão · s=sombra · h=brilho · x=detalhe extra (só Atual+) · i=miolo (sem contorno) · f=traço fino · px=só pixel */
+const PERS={
+boneco:{nome:'Boneco de neve',s:[
+  e(50,100.5,30,4.2,'gelo',{k:'g'}),
+  l('M31 66 L13 53 M19 57.4 L16 50','marrom',3), l('M69 66 L87 53 M81 57.4 L84 50','marrom',3),
+  c(50,76,24,'neve'), p('M68 62 Q78 78 66 95 Q58 100 50 100 Q68 90 68 62Z','gelo',{k:'s'}),
+  c(50,42,17,'neve'), p('M62 31 Q70 42 62 55 Q57 58.5 52 59 Q64 50 62 31Z','gelo',{k:'s'}),
+  c(12,52,5.6,'verm'), c(88,52,5.6,'verm'),
+  c(50,69.5,2.2,'tinta'), c(50,79.5,2.2,'tinta'), c(50,89.5,2.2,'tinta'),
+  p('M34 54 Q50 62 66 54 L67 60.5 Q50 69.5 33 60.5Z','verm'), p('M56 62 L64 80 L57.5 81.5 L51 64Z','vermE'),
+  l('M40 58.4 L39.4 63.6 M47 60.4 L46.8 65.8 M54 60.4 L54.2 65.8 M61 58.4 L61.6 63.6','branco',1.3,{k:'x'}),
+  l('M57.6 73 L62 72 M59 77.4 L63.4 76.4','branco',1.3,{k:'x'}),
+  p('M33 33 Q34 12 50 11 Q66 12 67 33Z','verm'), p('M58 13.5 Q66.5 17 67 33 L60 33 Q61 21 58 13.5Z','vermE',{k:'s'}),
+  r(30,29.5,40,8.5,4.2,'creme'), c(50,9.5,5.2,'creme'),
+  p('M60 31 Q65 25 70 28 Q66 33 60 31Z','verde',{k:'x'}), p('M60 31 Q58.5 24.5 63 22 Q64.5 28 60 31Z','verdeE',{k:'x'}), c(59.6,31.4,1.9,'verm',{k:'x'}), c(62,32.8,1.6,'vermE',{k:'x'}),
+  e(44,42.5,2.4,3,'tinta'), e(56,42.5,2.4,3,'tinta'), c(44.8,41.3,.95,'branco',{k:'h'}), c(56.8,41.3,.95,'branco',{k:'h'}),
+  e(38.5,48.5,3.4,2,'rosa',{k:'i',a:.6}), e(61.5,48.5,3.4,2,'rosa',{k:'i',a:.6}),
+  p('M49.5 45 Q57 46 62.5 48.6 Q56 50.6 49.5 50.4 Q47.6 47.8 49.5 45Z','lar'),
+  l('M45.6 52.8 Q50 56.2 54.4 52.8','tinta',1.4,{k:'f'}), r(47.5,52.5,5,2.5,0,'tinta',{k:'px'}),
+]},
+noel:{nome:'Papai Noel',s:[
+  e(50,100.5,27,3.6,'gelo',{k:'g'}),
+  e(39,98,9.5,4.6,'tinta'), e(61,98,9.5,4.6,'tinta'),
+  e(23.5,74,7.2,13.5,'verm',{rot:16}), e(76.5,74,7.2,13.5,'verm',{rot:-16}),
+  p('M27 96 Q22 62 50 57 Q78 62 73 96Z','verm'), p('M66 61 Q76 68 73 96 L64 96 Q69 76 66 61Z','vermE',{k:'s'}),
+  r(46.2,60,7.6,34,0,'creme',{k:'i'}), r(25.5,89,49,8,4,'creme'),
+  l('M31 91.4 v3 M37 91.8 v3 M43 92 v3 M57 92 v3 M63 91.8 v3 M69 91.4 v3','gelo',1.1,{k:'x'}),
+  r(27,75,46,7,0,'tinta',{k:'i'}), r(43.5,73.5,13,10,2,'ouro'), r(47,76.6,6,3.8,.8,'tinta',{k:'i'}),
+  e(20.6,86,6.2,3.6,'creme',{rot:16}), e(79.4,86,6.2,3.6,'creme',{rot:-16}), c(19.6,91.2,4.8,'verde'), c(80.4,91.2,4.8,'verde'),
+  c(50,40,15.5,'pele'),
+  p('M34 39 Q31 66 50 71 Q69 66 66 39 Q61 49.5 50 49.5 Q39 49.5 34 39Z','branco'), p('M58 67.5 Q68 62 66 39 Q65.4 56 55.6 64Z','gelo',{k:'s'}),
+  l('M40 58 q2 2.4 4 0 M56 58 q2 2.4 4 0 M48 64 q2 2.4 4 0','gelo',1.1,{k:'x'}),
+  p('M50 47.4 Q43.5 43.4 36.5 49.4 Q44 53.6 50 49.6 Q56 53.6 63.5 49.4 Q56.5 43.4 50 47.4Z','creme'),
+  c(50,44.6,3.1,'nariz'), e(41,43.6,3,1.9,'rosa',{k:'i',a:.6}), e(59,43.6,3,1.9,'rosa',{k:'i',a:.6}),
+  c(44,38.6,1.9,'tinta'), c(56,38.6,1.9,'tinta'), c(44.6,37.9,.7,'branco',{k:'h'}), c(56.6,37.9,.7,'branco',{k:'h'}),
+  p('M34 30 Q36 8 55 9 Q72 10 80 29 Q72 22.5 65.5 27 Q63.6 29 64.6 31Z','verm'), p('M55 9 Q72 10 80 29 Q72 22.5 65.5 27 Q66 16 55 9Z','vermE',{k:'s'}),
+  r(31.5,26.5,37,8.5,4.2,'branco'), c(80.5,30.6,5.4,'branco'),
+  p('M38 28 Q42 23 46.6 25.6 Q43 30 38 28Z','verde',{k:'x'}), c(46.4,28.6,1.7,'verm',{k:'x'}),
+]},
+urso:{nome:'Urso polar',s:[
+  e(50,100.5,30,3.8,'gelo',{k:'g'}),
+  e(27.5,73,7.2,12.5,'neve',{rot:20}), e(72.5,73,7.2,12.5,'neve',{rot:-20}),
+  e(50,78,24,21.5,'neve'), p('M67 63 Q78 78 68 93 Q60 99 52 99.4 Q68 90 67 63Z','gelo',{k:'s'}),
+  e(50,82,14,13.5,'branco',{k:'i'}),
+  e(34.5,96.6,10,5.4,'neve'), e(65.5,96.6,10,5.4,'neve'), e(34.5,97.2,4.2,2.6,'pata',{k:'i'}), e(65.5,97.2,4.2,2.6,'pata',{k:'i'}),
+  c(33,27.5,6.6,'neve'), c(67,27.5,6.6,'neve'), c(33,27.5,3.2,'rosa',{k:'i'}), c(67,27.5,3.2,'rosa',{k:'i'}),
+  c(50,42,19,'neve'), p('M63 28.6 Q72 42 63 56.6 Q58 60 53 60.8 Q66 51 63 28.6Z','gelo',{k:'s'}),
+  p('M32.5 58 Q50 66.5 67.5 58 L68.5 64.6 Q50 74 31.5 64.6Z','verm'), p('M39 65.6 L34.6 82 L41.8 83.4 L45.6 67.6Z','vermE'),
+  l('M38.6 62.2 L38 67.6 M46 64.4 L45.8 69.8 M54 64.4 L54.2 69.8 M61.4 62.2 L62 67.6','branco',1.3,{k:'x'}),
+  p('M36 32 Q37 13.5 50 12.5 Q63 13.5 64 32Z','verde'), p('M57 14.6 Q63.4 18 64 32 L58.4 32 Q59.4 21.4 57 14.6Z','verdeE',{k:'s'}),
+  r(34,28.6,32,7.6,3.8,'verdeE'), l('M40 29.8 V35 M45 29.8 V35 M50 29.8 V35 M55 29.8 V35 M60 29.8 V35','verde',1.2,{k:'x'}),
+  c(50,10.6,5,'branco'),
+  e(50,49.4,9,6.6,'branco',{k:'i'}), e(50,45.8,3.7,2.7,'tinta'),
+  l('M50 48.4 V51.2 M46.4 51.6 Q50 54.8 53.6 51.6','tinta',1.3,{k:'f'}), r(47.5,50,5,2.5,0,'tinta',{k:'px'}),
+  c(42,41,2.2,'tinta'), c(58,41,2.2,'tinta'), c(42.7,40.2,.8,'branco',{k:'h'}), c(58.7,40.2,.8,'branco',{k:'h'}),
+  e(37.4,47.6,3.4,2,'rosa',{k:'i',a:.6}), e(62.6,47.6,3.4,2,'rosa',{k:'i',a:.6}),
+  e(77.5,87,6.2,3.2,'lar'), p('M82.5 87 L88 83.4 L87 87 L88 90.6Z','lar'), c(74.9,86.4,.8,'tinta',{k:'f'}),
+]},
+duende:{nome:'Duende',s:[
+  e(50,100.5,24,3.4,'gelo',{k:'g'}),
+  p('M44 94 L44 100 L33 100 Q25.6 99.6 24.6 93.6 Q29 96.6 34 94Z','verdeE'), p('M56 94 L56 100 L67 100 Q74.4 99.6 75.4 93.6 Q71 96.6 66 94Z','verdeE'),
+  r(39.6,80,7.4,15,0,'creme'), r(53,80,7.4,15,0,'creme'),
+  l('M40.6 86 h5.4 M40.6 91 h5.4 M54 86 h5.4 M54 91 h5.4','verm',2.2,{k:'i'}),
+  l('M36 63 Q26.6 69 27.4 78','verde',6.4), l('M64 63 Q75 58 77.4 48.6','verde',6.4),
+  c(27.6,80.4,3.8,'pele'), c(78,45.6,3.8,'pele'),
+  p('M35 60 Q50 54.6 65 60 L71.6 84 L66 79.6 L60.6 85.6 L55.4 79.6 L50 85.6 L44.6 79.6 L39.4 85.6 L34 79.6 L28.4 84Z','verde'),
+  r(33.4,69.6,33.2,5,0,'tinta',{k:'i'}), r(45.6,68.4,8.8,7.4,1.5,'ouro'),
+  p('M37.6 58.6 L41.6 64.4 L45.8 59.4 L50 65.2 L54.2 59.4 L58.4 64.4 L62.4 58.6 Q50 54.4 37.6 58.6Z','verm'),
+  p('M35.6 39 L21.6 33 L34.6 48Z','pele'), p('M64.4 39 L78.4 33 L65.4 48Z','pele'),
+  c(50,42,15.6,'pele'),
+  e(40.6,47.4,3.2,2,'rosa',{k:'i',a:.7}), e(59.4,47.4,3.2,2,'rosa',{k:'i',a:.7}),
+  c(44,41.6,2.1,'tinta'), c(56,41.6,2.1,'tinta'), c(44.7,40.9,.8,'branco',{k:'h'}), c(56.7,40.9,.8,'branco',{k:'h'}),
+  c(50,45.8,2.3,'nariz'), l('M45 50 Q50 54.2 55 50','tinta',1.4,{k:'f'}), r(47.5,50,5,2.5,0,'tinta',{k:'px'}),
+  p('M35 33 Q40 16 52 10.4 Q64 5 76 14.6 Q68 12.4 63.4 18 Q60.4 24 65 33Z','verm'), p('M52 10.4 Q64 5 76 14.6 Q68 12.4 63.4 18 Q60 13 52 10.4Z','vermE',{k:'s'}),
+  r(33,29.6,34,7.6,3.8,'branco'), c(77,15.4,3.5,'ouro'),
+  l('M43 74 l2 2 M57 74 l-2 2','verdeE',1.1,{k:'x'}), c(39,66,1.1,'ouro',{k:'x'}), c(61,66,1.1,'ouro',{k:'x'}),
+]},
+pinguim:{nome:'Pinguim',novo:1,s:[
+  e(50,100.5,26,3.6,'gelo',{k:'g'}),
+  e(41,98.6,8.4,3.8,'lar'), e(59,98.6,8.4,3.8,'lar'),
+  e(26,72,5.8,15.5,'noite',{rot:14}), e(74,72,5.8,15.5,'noite',{rot:-14}),
+  e(50,68,23,31,'noite'), e(50,75,15.6,23.4,'branco',{k:'i'}),
+  c(43.4,46.4,8.6,'branco',{k:'i'}), c(56.6,46.4,8.6,'branco',{k:'i'}),
+  p('M66 44 Q76 64 68 90 Q62 97 56 98.6 Q70 84 66 44Z','tinta',{k:'s',a:.25}),
+  c(44,46,2.3,'tinta'), c(56,46,2.3,'tinta'), c(44.7,45.2,.85,'branco',{k:'h'}), c(56.7,45.2,.85,'branco',{k:'h'}),
+  p('M45 51.6 Q50 50 55 51.6 L50 58.4Z','lar'),
+  e(38.2,52.4,3,1.9,'rosa',{k:'i',a:.7}), e(61.8,52.4,3,1.9,'rosa',{k:'i',a:.7}),
+  p('M30 61 Q50 69 70 61 L71 67.4 Q50 76.4 29 67.4Z','verde'), p('M58 68.6 L64.6 85 L58 86.6 L52.6 70.4Z','verdeE'),
+  l('M36.6 65 L36 70.4 M45 67.2 L44.8 72.6 M55 67.2 L55.2 72.6 M63.4 65 L64 70.4','ouro',1.4,{k:'x'}),
+  p('M32.6 37 Q35 14 53 14 Q69 14.6 77 31 Q69 25.4 63 30 Q61.4 32 62.4 36Z','verm'), p('M53 14 Q69 14.6 77 31 Q69 25.4 63 30 Q63.6 20 53 14Z','vermE',{k:'s'}),
+  r(30.4,32.6,35.6,8.4,4.2,'branco'), c(77.6,32.6,5.2,'branco'),
+]},
+arvore:{nome:'Árvore e presente',s:[
+  e(50,100.5,36,3.8,'gelo',{k:'g'}),
+  r(45.6,86,8.8,14,1.5,'marrom'),
+  p('M50 44 L17 89 Q50 99 83 89Z','verdeE'), p('M50 27 L25 62 Q50 71 75 62Z','verde'), p('M50 11 L33 39 Q50 46 67 39Z','verdeC'),
+  p('M33 39 Q38 36.6 41.6 39.4 Q46 36.8 50 39.8 Q54 36.8 58.4 39.4 Q62 36.6 67 39 Q50 46 33 39Z','branco',{k:'x'}),
+  p('M25 62 Q31 59 35.6 62.6 Q41 59.4 46 63 Q50 60 54 63 Q59 59.4 64.4 62.6 Q69 59 75 62 Q50 71 25 62Z','branco',{k:'x'}),
+  l('M31 55 Q50 65 69 53','ouro',1.5,{k:'i'}), l('M25 79 Q46 91 62 84','ouro',1.5,{k:'i'}),
+  c(40,52,3,'verm'), c(58,56.6,3,'azul'), c(33,75,3.3,'ouro'), c(49,81,3.3,'verm'), c(50,33,2.7,'ouro'), c(60,71,3,'azul'),
+  c(39.2,51.2,.9,'branco',{k:'h'}), c(48.2,80.2,.9,'branco',{k:'h'}), c(57.2,55.8,.9,'branco',{k:'h'}),
+  p(estrela(50,10,7.4,3.2),'ouro'),
+  r(64,86,24,14,1.5,'verm'), r(62.4,81.6,27.2,6,1.5,'vermE'), r(74,81.6,4,18.4,0,'ouro',{k:'i'}),
+  p('M76 81.6 Q69.6 74.6 67.4 78.8 Q68.6 82.2 76 81.6Z','ouro'), p('M76 81.6 Q82.4 74.6 84.6 78.8 Q83.4 82.2 76 81.6Z','ouro'),
+]}};
+
+/* ───────── cores ───────── */
+const rgb=h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16));
+const mix=(a,b,t)=>{const A=rgb(a),B=rgb(b);return '#'+A.map((v,i)=>Math.round(v+(B[i]-v)*t).toString(16).padStart(2,'0')).join('')};
+const VIVO={...BASE,neve:'#FFFFFF',gelo:'#C8DFF3',verm:'#E9362C',vermE:'#B8201F',verde:'#33B04E',verdeE:'#1F8A3B',verdeC:'#5BD070',ouro:'#FFC22E',pele:'#FFCB9A',lar:'#FF8A1F',noite:'#33456B',azul:'#4DA3FF',rosa:'#FF8FB0'};
+const PAPEL=Object.fromEntries(Object.entries(BASE).map(([k,v])=>[k,CLAROS.includes(k)?mix(v,'#E9DCC0',.35):mix(v,'#9C8A66',.2)]));
+const TINTA_MAO='#3A3340', TRACO='#221C1A';
+
+/* ───────── defs compartilhados ───────── */
+(function(){
+  let d='';
+  for(const [k,v] of Object.entries(BASE)){
+    const cl=CLAROS.includes(k);
+    d+=`<linearGradient id="gp-${k}" x1="0" y1="0" x2=".3" y2="1"><stop offset="0" stop-color="${mix(v,'#ffffff',.2)}"/><stop offset=".5" stop-color="${v}"/><stop offset="1" stop-color="${cl?mix(v,'#A9C2D8',.5):mix(v,'#000000',.16)}"/></linearGradient>`;
+    d+=`<radialGradient id="gm-${k}" cx=".34" cy=".26" r=".92"><stop offset="0" stop-color="${mix(v,'#ffffff',.42)}"/><stop offset=".46" stop-color="${v}"/><stop offset="1" stop-color="${cl?mix(v,'#8FA9C2',.6):mix(v,'#000000',.34)}"/></radialGradient>`;
+    d+=`<pattern id="lap-${k}" width="4.6" height="4.6" patternUnits="userSpaceOnUse" patternTransform="rotate(-38)"><rect width="4.6" height="4.6" fill="${cl?'#FDFAF2':mix(v,'#FBF6EA',.58)}"/><path d="M0 2.3H4.6" stroke="${cl?'#B4C4D4':v}" stroke-width="1.7" opacity="${cl?.45:.7}"/></pattern>`;
+  }
+  d+=`<pattern id="hachura" width="3.6" height="3.6" patternUnits="userSpaceOnUse" patternTransform="rotate(42)"><path d="M0 1.8H3.6" stroke="${TINTA_MAO}" stroke-width=".8" opacity=".42"/></pattern>`;
+  d+=`<filter id="f-sombra" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="1.4" stdDeviation="1.3" flood-color="#0B1A2A" flood-opacity=".22"/></filter>`;
+  d+=`<filter id="f-mao" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency=".05" numOctaves="2" seed="7"/><feDisplacementMap in="SourceGraphic" scale="2.8"/></filter>`;
+  d+=`<filter id="f-papel" x="-30%" y="-30%" width="160%" height="170%"><feDropShadow dx=".4" dy="1.2" stdDeviation=".7" flood-color="#2A1E0C" flood-opacity=".4"/></filter>`;
+  d+=`<filter id="f-grao" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="1.2" numOctaves="2" seed="3"/><feColorMatrix values="0 0 0 0 .3  0 0 0 0 .24  0 0 0 0 .16  0 0 0 1.1 -.5"/></filter>`;
+  d+=`<filter id="f-borra" x="-40%" y="-80%" width="180%" height="260%"><feGaussianBlur stdDeviation="1.8"/></filter>`;
+  document.getElementById('defs').innerHTML=d;
+})();
+
+/* ───────── desenho em SVG ───────── */
+function geo(s){
+  if(s.t==='c') return `<circle cx="${s.cx}" cy="${s.cy}" r="${s.r}"`;
+  if(s.t==='e') return `<ellipse cx="${s.cx}" cy="${s.cy}" rx="${s.rx}" ry="${s.ry}"`+(s.rot?` transform="rotate(${s.rot} ${s.cx} ${s.cy})"`:'');
+  if(s.t==='r') return `<rect x="${s.x}" y="${s.y}" width="${s.w}" height="${s.h}" rx="${s.rx}"`;
+  return `<path d="${s.d}"`;
+}
+const alfa=s=>s.a?` fill-opacity="${s.a}"`:'';
+const cheio=(s,cor,extra='')=>`${geo(s)} fill="${cor}"${alfa(s)}${extra}/>`;
+const linha=(s,cor,w,extra='')=>`${geo(s)} fill="none" stroke="${cor}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"${extra}/>`;
+const BRILHOS='<path d="M11 20l1.3 3.6 3.6 1.3-3.6 1.3L11 29.8l-1.3-3.6-3.6-1.3 3.6-1.3z" fill="#F2B544"/><path d="M90 66l.9 2.5 2.5.9-2.5.9-.9 2.5-.9-2.5-2.5-.9 2.5-.9z" fill="#F2B544" opacity=".8"/><path d="M86 8l.7 1.9 1.9.7-1.9.7-.7 1.9-.7-1.9-1.9-.7 1.9-.7z" fill="#F2B544" opacity=".6"/>';
+
+const ESTILOS={
+plano:{nome:'Atual',sub:'Vetor chapado, sem contorno',fora:'x,px',
+  des:s=>s.t==='l'?linha(s,BASE[s.col],s.w):cheio(s,BASE[s.col]),
+  como:'Formas redondas, cor lisa, sombra em dois tons. É o boneco, o urso, o trem e o iglu que estão no ar.',
+  onde:'Já é a base do Dashboard e do Analítico. Conversa bem com os ícones do sistema, no claro e no escuro.',
+  peso:'O mais leve. É o que foi medido em 10/11 (155 ms/s no Dashboard).', esf:'Nenhum.'},
+plus:{nome:'Atual+',sub:'O mesmo desenho, com acabamento',fora:'px',
+  des:s=>s.t==='l'?linha(s,BASE[s.col],s.w):(s.k==='s'||s.k==='h'||s.a||s.k==='g')?cheio(s,BASE[s.col],s.k==='s'?' opacity=".7"':''):cheio(s,`url(#gp-${s.col})`),
+  env:x=>`<g filter="url(#f-sombra)">${x}</g>${BRILHOS}`,
+  como:'Degradê suave em cada peça, sombra de contato, tricô no cachecol, azevinho no gorro, neve nos galhos e brilhos em volta.',
+  onde:'No lugar do atual, peça por peça. Aproxima Dashboard e Analítico do chalé, que já é desenhado assim.',
+  peso:'Degradê parado não custa nada. Vale a regra de sempre: nenhum filtro em peça que anima.', esf:'Baixo. Mesmas formas, troca de preenchimento e detalhes novos.'},
+cartoon:{nome:'Cartoon',sub:'Contorno grosso, cor viva',fora:'x,px',
+  des:s=>{const cor=VIVO[s.col];
+    if(s.t==='l') return s.k==='i'?linha(s,cor,s.w):s.col==='tinta'?linha(s,TRACO,s.w+.7):linha(s,TRACO,s.w+2.6)+linha(s,cor,s.w);
+    if(s.k) return cheio(s,cor,s.k==='s'?' opacity=".8"':'');
+    return cheio(s,cor,` stroke="${TRACO}" stroke-width="2.6" stroke-linejoin="round" paint-order="stroke"`)},
+  como:'Contorno escuro por fora, cores saturadas, leitura imediata mesmo pequeno. É a linguagem do Grinch, dos duendes e da nuvem de briga.',
+  onde:'Personagens que chegam e fazem bagunça. Como tema inteiro, pesa em cima de uma tela de trabalho.',
+  peso:'Igual ao atual: o contorno é só mais um traço.', esf:'Médio. Boneco, urso, trem e chalé ganhariam contorno; Grinch e duendes já estão assim.'},
+mao:{nome:'Feito à mão',sub:'Lápis de cor em papel',fora:'x,h,px',palco:'mao',
+  des:s=>{
+    if(s.t==='l') return linha(s,s.col==='tinta'?TINTA_MAO:mix(BASE[s.col],'#3A3340',.25),Math.max(1.2,s.w*.85));
+    if(s.k==='s') return cheio({...s,a:0},'url(#hachura)');
+    if(s.k==='g') return cheio(s,'url(#lap-gelo)');
+    if(s.a) return cheio(s,`url(#lap-${s.col})`);
+    return cheio(s,`url(#lap-${s.col})`,` stroke="${TINTA_MAO}" stroke-width="1.25" stroke-linejoin="round"`)},
+  env:x=>`<g filter="url(#f-mao)">${x}</g>`,
+  como:'Traço tremido, cor riscada a lápis, sombra em hachura, fundo de papel. Parece desenho de criança caprichado.',
+  onde:'Tudo que é papel: bilhetes, a carta da abertura, o plano de batalha do Kevin, um álbum de figurinhas.',
+  peso:'O tremido tem de vir pronto no desenho. Distorção ao vivo em peça animada repete o problema do drop-shadow.', esf:'Alto. Tudo redesenhado; animação quadro a quadro combina mais que deslize suave.'},
+papel:{nome:'Recorte de papel',sub:'Camadas com sombra',fora:'x,h,s,px',palco:'papel',
+  des:s=>{const cor=PAPEL[s.col];
+    if(s.t==='l') return linha(s,cor,s.w+.5,s.w>2?' filter="url(#f-papel)"':'');
+    if(s.k==='g'||s.a) return cheio(s,cor);
+    return cheio(s,cor,' filter="url(#f-papel)"')},
+  como:'Cada peça é uma folha recortada e colada, com sombra embaixo e grão de papel. Tons de cartolina.',
+  onde:'Cenários: o chalé, o vilarejo de gengibre, a tela de entrada, o cartão de mensagem.',
+  peso:'Sombra por camada como filtro pesa. Sombra desenhada (cópia deslocada), como a da neve do card, resolve.', esf:'Médio para alto. As formas servem, mas cada peça vira várias camadas.'},
+massinha:{nome:'Massinha',sub:'Volume e brilho',fora:'x,s,px',palco:'massinha',
+  des:s=>{const cor=BASE[s.col];
+    if(s.t==='l') return linha(s,mix(cor,'#000000',.1),s.w+.9)+(s.w>2?linha(s,mix(cor,'#ffffff',.3),s.w*.35,' opacity=".7"'):'');
+    if(s.k==='g') return cheio(s,'#0B1A2A',' opacity=".28" filter="url(#f-borra)"');
+    if(s.k==='h'||s.a) return cheio(s,cor);
+    return cheio(s,`url(#gm-${s.col})`,` stroke="${mix(cor,'#000000',.4)}" stroke-width=".5" stroke-opacity=".45"`)},
+  como:'Cada peça com luz no alto e sombra embaixo, como boneco de massinha ou brinquedo de vinil. Lembra os especiais de Natal em stop-motion.',
+  onde:'Peças grandes e paradas: a abertura, o Modo TV, um cartão de fim de ano.',
+  peso:'Bom parado ou como imagem pronta. Animar por partes exige muitos quadros.', esf:'Alto. Cada personagem vira ilustração por pose.'},
+traco:{nome:'Traço fino',sub:'Só linha e uma cor',fora:'x,h,s,g,px',
+  des:s=>{const I='var(--art-ink)',B='var(--art-bg)',A='var(--art-acc)';
+    if(s.t==='l'){ if(s.k==='i'&&s.col==='verm') return linha(s,'none',s.w,` style="stroke:${A}"`);
+      return s.w>3?linha(s,'none',s.w,` style="stroke:${I}"`)+linha(s,'none',s.w-3,` style="stroke:${B}"`):linha(s,'none',1.5,` style="stroke:${I}"`)}
+    if(s.a) return '';
+    const f=s.col==='tinta'?I:(s.col==='verm'||s.col==='vermE')?A:B;
+    return `${geo(s)} style="fill:${f};stroke:${I}" stroke-width="${s.k==='i'?1:1.5}" stroke-linejoin="round"/>`},
+  env:x=>`<path d="M16 100.4H84" fill="none" style="stroke:var(--art-ink)" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="1 5"/>${x}`,
+  como:'Contorno de espessura única e o vermelho como único preenchimento. Discreto, elegante, some no fundo quando precisa.',
+  onde:'As abas sem cena, o modo leve, telas vazias, ícones do menu.',
+  peso:'Quase nada. Serve ao modo leve como está.', esf:'Baixo. Sai direto das formas atuais.'},
+pixel:{nome:'Pixel art',sub:'Sprite em grade de 40 × 44',palco:'pixel',
+  como:'Poucos pixels, contorno escuro, sombra de um tom. Aqui cada personagem cabe em 40 × 44 pontos.',
+  onde:'Um evento com cara própria: um fliperama do urso, as figurinhas do álbum, o pet em pixel que ficou pausado.',
+  peso:'O mais barato de animar: tira de quadros com steps(), como a bola de 72 quadros.', esf:'Alto. Tudo redesenhado em grade; as fotos reais do trem e dos gorros destoam.'},
+};
+
+function svgDe(pers,id){
+  const E=ESTILOS[id], fora=(E.fora||'').split(',');
+  let x=''; for(const s of PERS[pers].s){ if(fora.includes(s.k)) continue; x+=E.des(s); }
+  return `<svg class="arte" viewBox="-4 -2 108 110" role="img" aria-label="${PERS[pers].nome}, estilo ${E.nome}">${E.env?E.env(x):x}</svg>`;
+}
+
+/* ───────── pixel art: desenha grande, amostra o centro de cada ponto, contorna ───────── */
+function pixelDe(pers){
+  const N=40,M=44,U=2.5,S=6, big=document.createElement('canvas'); big.width=N*U*S; big.height=M*U*S;
+  const g=big.getContext('2d',{willReadFrequently:true}); g.scale(S,S); g.lineCap='round'; g.lineJoin='round';
+  for(const s of PERS[pers].s){
+    if(['x','h','s','g','f'].includes(s.k)) continue;
+    const cor=VIVO[s.col]; g.fillStyle=cor; g.strokeStyle=cor; g.beginPath();
+    if(s.t==='c'){g.arc(s.cx,s.cy,s.r,0,7);g.fill()}
+    else if(s.t==='e'){g.ellipse(s.cx,s.cy,s.rx,s.ry,(s.rot||0)*Math.PI/180,0,7);g.fill()}
+    else if(s.t==='r'){ if(g.roundRect&&s.rx) g.roundRect(s.x,s.y,s.w,s.h,s.rx); else g.rect(s.x,s.y,s.w,s.h); g.fill()}
+    else if(s.t==='p'){g.fill(new Path2D(s.d))}
+    else {g.lineWidth=Math.max(s.w,2.8);g.stroke(new Path2D(s.d))}
+  }
+  const img=g.getImageData(0,0,big.width,big.height).data, grade=[];
+  for(let j=0;j<M;j++){grade.push([]);for(let i=0;i<N;i++){const k=((Math.floor((j+.5)*U*S))*big.width+Math.floor((i+.5)*U*S))*4;grade[j].push(img[k+3]>127?[img[k],img[k+1],img[k+2]]:null)}}
+  const tem=(i,j)=>j>=0&&j<M&&i>=0&&i<N&&grade[j][i];
+  const cv=document.createElement('canvas'); cv.width=N; cv.height=M; cv.className='arte'; cv.setAttribute('role','img'); cv.setAttribute('aria-label',PERS[pers].nome+', pixel art');
+  const o=cv.getContext('2d');
+  for(let j=0;j<M;j++)for(let i=0;i<N;i++){
+    const q=grade[j][i];
+    if(q){const borda=!tem(i+1,j)||!tem(i,j+1), k=borda?.82:1; o.fillStyle=`rgb(${q[0]*k|0},${q[1]*k|0},${q[2]*k|0})`; o.fillRect(i,j,1,1)}
+    else if(tem(i-1,j)||tem(i+1,j)||tem(i,j-1)||tem(i,j+1)){o.fillStyle='#1E1B2E';o.fillRect(i,j,1,1)}
+  }
+  return cv;
+}
+function arte(pers,id){ if(id==='pixel') return pixelDe(pers); const t=document.createElement('template'); t.innerHTML=svgDe(pers,id); return t.content.firstChild; }
+
+/* ───────── interface dos estilos ───────── */
+let estilo='plus', pers='boneco';
+const $=id=>document.getElementById(id);
+function botoes(alvo,itens,atual,aoEscolher){
+  const comFoco=alvo.contains(document.activeElement);
+  alvo.innerHTML=''; for(const [id,rot] of itens){const b=document.createElement('button');b.type='button';b.id=alvo.id+'-'+id;b.textContent=rot;b.setAttribute('aria-pressed',id===atual);b.onclick=()=>aoEscolher(id);alvo.append(b);if(comFoco&&id===atual)b.focus()}
+}
+function pintarEstilo(){
+  const E=ESTILOS[estilo];
+  botoes($('sel-estilo'),Object.entries(ESTILOS).map(([k,v])=>[k,v.nome]),estilo,id=>{estilo=id;pintarEstilo()});
+  $('palco').className='palco '+(E.palco||'');
+  const cena=$('cena'); cena.innerHTML='';
+  for(const [k,v] of Object.entries(PERS)){const f=document.createElement('figure');f.append(arte(k,estilo));const c=document.createElement('figcaption');c.innerHTML=v.nome+(v.novo?'<i>ainda não existe</i>':'');f.append(c);cena.append(f)}
+  $('ficha').innerHTML=`<div><span class="olho">${E.sub}</span><h3>${E.nome}</h3></div><dl>
+    <div><dt>Como é</dt><dd>${E.como}</dd></div><div><dt>Onde encaixa</dt><dd>${E.onde}</dd></div>
+    <div><dt>Peso em PC fraco</dt><dd>${E.peso}</dd></div><div><dt>Trabalho para converter</dt><dd>${E.esf}</dd></div></dl>`;
+}
+function pintarLado(){
+  botoes($('sel-pers'),Object.entries(PERS).map(([k,v])=>[k,v.nome]),pers,id=>{pers=id;pintarLado()});
+  const L=$('lado'); L.innerHTML='';
+  for(const [k,v] of Object.entries(ESTILOS)){const f=document.createElement('figure'),d=document.createElement('div');d.className='palco '+(v.palco||'');d.append(arte(pers,k));const c=document.createElement('figcaption');c.textContent=v.nome;f.append(d,c);L.append(f)}
+}
+pintarEstilo(); pintarLado();
+
+/* ───────── quebra-nozes da diretoria ───────── */
+function quebraNozes(cor,ini,cls){
+  return `<svg viewBox="0 0 120 196" class="marcha ${cls}" role="img" aria-label="Quebra-nozes com foto de perfil no lugar da cabeça">
+  <rect x="26" y="180" width="68" height="10" rx="3" fill="#7A5236"/><rect x="26" y="180" width="68" height="3" rx="1.5" fill="#A9774F"/>
+  <rect x="44" y="134" width="14" height="40" fill="#F6F0E7"/><rect x="62" y="134" width="14" height="40" fill="#F6F0E7"/>
+  <rect x="41" y="160" width="19" height="20" rx="3" fill="#2A2530"/><rect x="60" y="160" width="19" height="20" rx="3" fill="#2A2530"/>
+  <rect x="22" y="86" width="13" height="42" rx="6.5" fill="${cor}"/><rect x="85" y="86" width="13" height="42" rx="6.5" fill="${cor}"/>
+  <rect x="21" y="118" width="15" height="7" rx="2" fill="#F2B544"/><rect x="84" y="118" width="15" height="7" rx="2" fill="#F2B544"/>
+  <circle cx="28.5" cy="132" r="6" fill="#F4C9A1"/><circle cx="91.5" cy="132" r="6" fill="#F4C9A1"/>
+  <rect x="36" y="80" width="48" height="56" rx="7" fill="${cor}"/>
+  <path d="M60 82V136" stroke="#F2B544" stroke-width="2"/><rect x="36" y="118" width="48" height="8" fill="#F6F0E7"/><rect x="54" y="116" width="12" height="12" rx="2" fill="#F2B544"/>
+  <circle cx="51" cy="94" r="2.6" fill="#F2B544"/><circle cx="69" cy="94" r="2.6" fill="#F2B544"/><circle cx="51" cy="106" r="2.6" fill="#F2B544"/><circle cx="69" cy="106" r="2.6" fill="#F2B544"/>
+  <ellipse cx="33" cy="86" rx="10" ry="5" fill="#F2B544"/><ellipse cx="87" cy="86" rx="10" ry="5" fill="#F2B544"/>
+  <rect x="40" y="4" width="40" height="34" rx="5" fill="#2A2530"/><rect x="40" y="28" width="40" height="7" fill="#F2B544"/><path d="${estrela(60,17,6,2.6)}" fill="#F2B544"/>
+  <circle cx="60" cy="56" r="26" fill="#FFFFFF"/><circle cx="60" cy="56" r="22.5" fill="#B9C9D6"/>
+  <circle cx="60" cy="50" r="8.5" fill="#EEF3F7"/><path d="M42.6 70 Q46 59.6 60 59.6 Q74 59.6 77.4 70 A22.5 22.5 0 0 1 42.6 70Z" fill="#EEF3F7"/>
+  <text x="60" y="76" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6.4" fill="#566E68">${ini}</text></svg>`;
+}
+$('bonecos').innerHTML=quebraNozes('#C2362F','FOTO','')+quebraNozes('#1C7A50','FOTO','b')+quebraNozes('#2E5FA8','FOTO','');
+
+/* ───────── ideias ───────── */
+const ONDE={todas:'Todas as abas',dashboard:'Dashboard',acordos:'Acordos',analitico:'Analítico',outras:'Outras abas'};
+const IDEIAS=[
+['acordos','Pilha de presentes do dia','Cada acordo salvo vira um presente que um duende embrulha e põe debaixo da árvore do chalé. A pilha cresce ao longo do dia e zera à noite. Seria o primeiro enfeite que mostra o trabalho da própria pessoa.','M','leve','não',1],
+['acordos','O coração do Grinch cresce','Um arco para o mês, como o gelo que derrete. Primeira semana: ele quebra tudo. Segunda: quebra, mas esquece um presente. Terceira: devolve o que levou. Última: entra pela porta, ajuda os duendes e janta com eles. Sai da data, igual para todos.','M','leve','não',1],
+['analitico','O pinguim que rouba o peixe','Uma pescaria em cada quatro termina diferente: na fisgada, um pinguim sai do buraco, pega o peixe e foge. O urso fica bravo. Mais tarde o pinguim aparece no Dashboard com o peixe, e o urso reclama dele na conversa seguinte. É o fio da fofoca do Grinch, de novo.','M','leve','não',1],
+['analitico','O urso passa a acreditar no boneco','Hoje ele diz que não acredita que o boneco joga basquete. Se a pessoa fizer o boneco acertar a cesta, na próxima conversa o urso admite: «tá bom, eu vi». Custa uma anotação no navegador.','P','leve','não',1],
+['todas','Coral das 16h55','Cinco minutos antes do fim do expediente, um coral cruza o pé da tela cantando dez segundos. Mesmo horário para todos, pelo relógio do Natal. É o lugar natural para os quebra-nozes da diretoria.','M','leve','não',1],
+['outras','Natal nos detalhes da interface','Bengala doce na barra de rolagem, floco girando no lugar do «carregando», lacinho no botão Salvar, azevinho no aviso de sucesso, boneco na tela vazia («nada por aqui, só neve»). Só CSS, e chega a quem não tem Dashboard.','P','leve','não',1],
+['todas','Último dia útil','A operação sai em dezembro, então o Natal do Gestão acaba em 30/11. Nesse dia o gelo termina de derreter, o Grinch janta no chalé, o trem leva todo mundo que se inscreveu e o urso se despede.','M','médio','não',1],
+['dashboard','Colônia de pinguins na estação','Três ou quatro pinguins moram ao lado da estação. Quando o trem chega, fazem fila; um embarca no vagão dos presentes e desce na volta seguinte. Entre as viagens, escorregam de barriga no monte de neve.','M','leve','não'],
+['todas','Pinguim carteiro','Atravessa a tela com um envelope maior que ele. Clicou, abre um bilhete: a frase do dia, uma dica do sistema ou o recado de um diretor. É o jeito de o tema carregar mensagem de verdade.','M','leve','só para recados'],
+['dashboard','Torcida na cesta','Com a bola solta, pinguins sobem na neve do card e levantam plaquinhas com a nota do arremesso: 10 para cesta de longe, 2 para bola na tabela. Três erros seguidos e um deles cobre os olhos.','P','leve','não'],
+['analitico','Pesca-surpresa','Nem sempre vem peixe. Às vezes vem uma bota, um boleto molhado, a bola de Natal que alguém perdeu, a garrafa da Erika. Uma tabela de raridades decide, e o item raro vira assunto da conversa.','P','leve','não'],
+['analitico','A planilha de peixes de verdade','A planilha que ele confere lá dentro passa a mostrar a contagem real de pescarias do mês: coluna A, os que pegou; coluna B, os que fugiram. Sai do mesmo relógio, ninguém grava nada.','P','leve','não'],
+['analitico','Novas cenas pela janela','Assistindo «Esqueceram de Mim» numa TV de gelo, embrulhando presente, ensaiando a dança do Teteu, jogando xadrez com um pinguim, em chamada de vídeo com a mãe do retrato.','M','leve','não'],
+['analitico','Aurora no fim do dia','Depois das 16h o céu atrás do iglu ganha uma aurora lenta. Com a meta do dia batida, ela fica mais forte. São duas faixas de degradê mudando de opacidade.','P','leve','não'],
+['analitico','O urso patina','Uma visita em cada cinco não é pescaria: ele sai de patins, dá duas voltas no lago, cai sentado e volta para dentro fingindo que nada aconteceu.','M','leve','não'],
+['acordos','Armadilhas do Kevin','De vez em quando o Grinch cai numa armadilha em vez de bagunçar: a lata de tinta no barbante, os carrinhos no chão, a maçaneta quente. Sai derrotado e os duendes comemoram. Na parede, o plano de batalha desenhado a giz de cera.','M','leve','não'],
+['acordos','Max, o cachorro','O cachorro do Grinch, com o chifre amarrado na cabeça, aparece antes dele: fareja a janela, rouba uma meia e some. Quem vê o Max sabe que a invasão vem logo.','P','leve','não'],
+['acordos','O gato ganha vida','Clicar no gato faz ronronar. Ele segue o ponteiro com a cabeça, derruba uma bola da árvore de propósito e dorme em cima da prancheta do duende.','P','leve','não'],
+['acordos','A fuga pelo Dashboard','Às vezes o Grinch não sai pela janela: foge com o saco para o Dashboard, corre por cima dos cards, e o boneco de neve acerta uma bola de neve nele. Os duendes passam atrás.','G','médio','não'],
+['acordos','Meias com o nome da equipe','As meias da lareira trazem as iniciais das equipes do setor. A da equipe que mais fechou acordo no dia amanhece mais cheia.','P','leve','não'],
+['dashboard','Guerra de bola de neve','Clicar no monte de neve do card faz uma bola, arremessada com a mesma física da bola da saudação. Acertou o boneco, ele revida e a neve escorre na tela. Acertou o trenó, cai um presente.','M','médio','não'],
+['dashboard','Presente de paraquedas','Um voo do trenó em cada seis solta um presente que desce de paraquedas. Quem clica antes de ele tocar o chão ganha uma figurinha.','P','leve','não'],
+['todas','Álbum de Natal','Vinte figurinhas para o mês: uma por dia útil que resta e as raras (cesta de três, ver o urso patinar, encontrar o Max). O álbum mora no menu do perfil. Dá motivo para olhar o tema todo dia sem virar jogo de clicar.','G','leve','sim, pequena'],
+['dashboard','Bolas que destravam','Cinco cestas trocam a bola vermelha por uma dourada. Cesta de longe, bola de basquete. Cesta do boneco, bola de neve. Fica guardado por pessoa.','P','leve','não'],
+['dashboard','Recorde da cesta','A distância em metros já é medida. Uma plaquinha na tabela mostra o recorde do dia e de quem é. Só um arremesso por minuto conta, para não virar disputa no horário de trabalho.','M','leve','sim, pequena'],
+['dashboard','Rudolph perdido','Uma vez por dia o trenó passa sem a rena da frente. Minutos depois o Rudolph cruza o pé da tela procurando os outros, com o nariz piscando. Clicou no nariz, o varal troca de função.','P','leve','não'],
+['dashboard','O boneco tem dias','Segunda-feira, cachecol torto. Sexta, óculos escuros. No dia da meta batida, medalha. E no frio de verdade ele bate os braços.','P','leve','não'],
+['todas','Pegadas na neve','Depois que alguém passa (pinguim, Max, rena) ficam pegadas por um minuto. Seguir as pegadas leva ao esconderijo do dia.','P','leve','não'],
+['todas','Neve que segue o tempo lá fora','O Calendário já busca o clima de Birigui e de Marília. Com chuva de verdade, a neve engrossa; com sol forte, o boneco abre um guarda-sol. Ninguém precisa saber por quê.','P','leve','não'],
+['todas','Estrela cadente','Rara, cruza o alto em um segundo. Quem clica a tempo vê «faça um pedido», e a estrela vira figurinha.','P','leve','não'],
+['todas','Chacoalhar o globo','Arrastar o globo de neve do chat e soltar faz nevar forte na tela por cinco segundos.','P','leve','não'],
+['todas','Biscoito fujão','O biscoito de gengibre do vagão da árvore some do trem uma vez por dia e se esconde atrás de um card diferente. Achou, ele volta correndo para o vagão.','M','leve','não'],
+['todas','Rádio com mais faixas','Hoje é uma faixa de 2min11s em laço o mês inteiro. Três ou quatro faixas em ordem fixa mantêm a rádio igual para todos e cansam menos.','P','leve','não'],
+['outras','Tela de entrada','É a única tela que todo mundo vê. Depois da liberação, uma noite de neve calma atrás do formulário, o chalé aceso ao longe e o trem pequeno no horizonte.','M','leve','não'],
+['outras','Um morador por aba','Cada aba sem cena ganha um personagem pequeno no rodapé: pinguim em Relatórios, rena em Metas, duende de prancheta em Configurações. Parado quase sempre, uma piscada de vez em quando.','M','leve','não'],
+];
+let filtro='tudo';
+function pintarIdeias(){
+  botoes($('sel-onde'),[['tudo','Tudo'],...Object.entries(ONDE)],filtro,id=>{filtro=id;pintarIdeias()});
+  const vis=IDEIAS.filter(i=>filtro==='tudo'||i[0]===filtro);
+  $('contagem').textContent=vis.length+(vis.length===1?' ideia':' ideias')+' · esforço: P pequeno, M médio, G grande';
+  $('lista').innerHTML=vis.map(([o,t,x,esf,peso,banco,top])=>`<article class="ideia${top?' top':''}"><div class="onde"><b>${ONDE[o]}</b>${top?'<em>começaria aqui</em>':''}</div><h3>${t}</h3><p>${x}</p><footer><span>Esforço <b>${esf}</b></span><span>Peso <b>${peso}</b></span><span>Banco <b>${banco}</b></span></footer></article>`).join('');
+}
+pintarIdeias();
+</script>
