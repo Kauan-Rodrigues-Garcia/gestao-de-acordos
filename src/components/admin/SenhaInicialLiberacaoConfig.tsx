@@ -110,7 +110,7 @@ export default function SenhaInicialLiberacaoConfig() {
         {error ? (
           <p className="rounded-lg border border-warning/40 bg-warning/10 p-3 text-xs text-foreground">
             Não deu para ler o andamento. Falta aplicar a migration
-            {' '}<code className="font-mono">20261110120000_senha_inicial_troca_obrigatoria.sql</code> no banco.
+            {' '}<code className="font-mono">20261110160000_senha_inicial_troca_obrigatoria.sql</code> no banco.
           </p>
         ) : isLoading ? (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">

@@ -159,7 +159,7 @@ export interface Perfil {
   senha_troca_obrigatoria?: boolean | null;
   /**
    * Conta que ainda entrava com a senha inicial na auditoria de 10/11/2026
-   * (20261110120000). O card «Uma senha só sua» aparece quando o super admin
+   * (20261110160000). O card «Uma senha só sua» aparece quando o super admin
    * libera a troca; some quando a pessoa cria a senha.
    */
   senha_inicial_pendente?: boolean | null;

@@ -64,9 +64,9 @@ ALTER TABLE public.perfis
   ADD COLUMN IF NOT EXISTS senha_inicial_trocada_em TIMESTAMPTZ;
 
 COMMENT ON COLUMN public.perfis.senha_inicial_pendente IS
-  'Conta que ainda entrava com a senha inicial na auditoria de 10/11/2026. O card «Uma senha só sua» aparece quando senha_inicial_liberacao tem linha. Desliga só em fn_senha_troca_concluida. 20261110120000.';
+  'Conta que ainda entrava com a senha inicial na auditoria de 10/11/2026. O card «Uma senha só sua» aparece quando senha_inicial_liberacao tem linha. Desliga só em fn_senha_troca_concluida. 20261110160000.';
 COMMENT ON COLUMN public.perfis.senha_inicial_trocada_em IS
-  'Quando a pessoa marcada em senha_inicial_pendente criou a senha própria. 20261110120000.';
+  'Quando a pessoa marcada em senha_inicial_pendente criou a senha própria. 20261110160000.';
 COMMENT ON COLUMN public.perfis.senha_troca_obrigatoria IS
   'O sistema exige a troca da senha antes de qualquer uso. Liga: reset por pedido (fn_senha_pedido_concluir), reset direto e conta nova (api/alterar-senha, api/criar-usuario). Desliga só em fn_senha_troca_concluida.';
 
@@ -159,7 +159,7 @@ CREATE TABLE IF NOT EXISTS public.senha_inicial_liberacao (
 );
 
 COMMENT ON TABLE public.senha_inicial_liberacao IS
-  'Uma linha = troca da senha inicial liberada (o card aparece para quem tem perfis.senha_inicial_pendente). Escrita só por fn_senha_inicial_liberar (super_admin). Ver 20261110120000.';
+  'Uma linha = troca da senha inicial liberada (o card aparece para quem tem perfis.senha_inicial_pendente). Escrita só por fn_senha_inicial_liberar (super_admin). Ver 20261110160000.';
 
 ALTER TABLE public.senha_inicial_liberacao ENABLE ROW LEVEL SECURITY;
 

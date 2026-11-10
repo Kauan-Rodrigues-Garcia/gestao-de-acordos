@@ -2,7 +2,7 @@
  * liberacao.ts — a troca da senha inicial já foi liberada?
  *
  * Auditoria de segurança de 10/11/2026: 236 contas ativas ainda entravam com a
- * senha inicial, igual para todo mundo. A migration 20261110120000 marca essas
+ * senha inicial, igual para todo mundo. A migration 20261110160000 marca essas
  * contas (`perfis.senha_inicial_pendente`), mas NÃO as trava: quem decide a
  * hora é o super admin, pelo card de Configurações › Geral
  * (`fn_senha_inicial_liberar`). Liberado, quem está marcado encontra o card
