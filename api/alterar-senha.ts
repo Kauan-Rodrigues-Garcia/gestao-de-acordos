@@ -305,11 +305,13 @@ export default async function handler(req: ReqLike, res: ResLike): Promise<void>
     //    valer, duas pessoas conhecem o acesso. Desde 10/11/2026 a troca é
     //    OBRIGATÓRIA no próximo acesso (`senha_troca_obrigatoria`), e não mais
     //    só o botão de chave: a auditoria achou centenas de contas que nunca
-    //    trocaram a senha recebida.
+    //    trocaram a senha recebida. A senha já não é a inicial, então a pessoa
+    //    sai da campanha (`senha_inicial_pendente`): senão o prazo da campanha
+    //    anularia a senha nova antes de ela entrar (20261110220000).
     await fetch(`${url}/rest/v1/perfis?id=eq.${alvoId}`, {
       method: 'PATCH',
       headers: { ...admin, Prefer: 'return=minimal' },
-      body: JSON.stringify({ senha_alterada: false, senha_troca_obrigatoria: true }),
+      body: JSON.stringify({ senha_alterada: false, senha_troca_obrigatoria: true, senha_inicial_pendente: false }),
     }).catch(() => {/* senha já trocou; não falha a operação por causa da flag */});
 
     // 6) Auditoria (best-effort). A senha NUNCA entra no log.

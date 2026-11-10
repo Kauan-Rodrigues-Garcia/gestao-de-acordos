@@ -50,18 +50,24 @@ export function useTransferenciaPedidos(ativo: boolean, souSuperAdmin: boolean):
   useEffect(() => { recarregar(); }, [recarregar]);
 
   // A notificação do banco é o sinal. Só a mais nova com a rota interessa.
-  const { notificacoes } = useNotificacoes();
+  const { notificacoes, cargaInicialConcluida } = useNotificacoes();
   const ultimaDoCanal = useMemo(
     () => notificacoes.find(n => n.rota === ROTA_TRANSFERENCIAS)?.id ?? null,
     [notificacoes],
   );
-  const vista = useRef<string | null>(null);
+  // A base é o que já estava na lista quando a carga inicial voltou — inclusive
+  // NADA. As notificações são apagadas toda madrugada (pg_cron 00:05), então a
+  // primeira do canal no dia chega com a lista vazia: tratar "nenhuma vista
+  // ainda" como "a primeira é antiga" engolia o primeiro pedido do dia, que só
+  // aparecia recarregando a página (10/11/2026).
+  const vista = useRef<string | null | undefined>(undefined);
   useEffect(() => {
-    if (!ativo || !ultimaDoCanal || vista.current === ultimaDoCanal) return;
-    const primeira = vista.current === null;
+    if (!ativo || !cargaInicialConcluida) return;
+    if (vista.current === undefined) { vista.current = ultimaDoCanal; return; }
+    if (vista.current === ultimaDoCanal) return;
     vista.current = ultimaDoCanal;
-    if (!primeira) recarregar();
-  }, [ativo, ultimaDoCanal, recarregar]);
+    if (ultimaDoCanal) recarregar();
+  }, [ativo, cargaInicialConcluida, ultimaDoCanal, recarregar]);
 
   useEffect(() => {
     if (!ativo) return;
