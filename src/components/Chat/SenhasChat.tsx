@@ -13,7 +13,7 @@ import { useMemo } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CartaoPedidoSenha } from '@/components/admin/senha/CartaoPedidoSenha';
-import { pedidoSenhaAberto, type PedidoSenha, type ResumoSenhas } from '@/lib/senhaPedidos';
+import { pedidoSenhaAberto, ultimaMovimentacao, type PedidoSenha, type ResumoSenhas } from '@/lib/senhaPedidos';
 import { horaCurta, rotuloDoDia } from './formatos';
 import { IconeSenhas } from './IconeSenhas';
 
@@ -69,16 +69,16 @@ export function PainelSenhas({
   onVoltar: () => void;
 }) {
   const abertos = useMemo(
-    () => pedidos.filter(pedidoSenhaAberto).sort((a, b) => a.criado_em.localeCompare(b.criado_em)),
+    () => pedidos.filter(pedidoSenhaAberto).sort((a, b) => ultimaMovimentacao(a).localeCompare(ultimaMovimentacao(b))),
     [pedidos],
   );
   const historico = useMemo(() => {
     const dias = new Map<string, PedidoSenha[]>();
     const fechados = pedidos
       .filter(p => !pedidoSenhaAberto(p))
-      .sort((a, b) => (b.decidido_em ?? b.criado_em).localeCompare(a.decidido_em ?? a.criado_em));
+      .sort((a, b) => ultimaMovimentacao(b).localeCompare(ultimaMovimentacao(a)));
     for (const p of fechados) {
-      const dia = rotuloDoDia(p.decidido_em ?? p.criado_em);
+      const dia = rotuloDoDia(ultimaMovimentacao(p));
       dias.set(dia, [...(dias.get(dia) ?? []), p]);
     }
     return [...dias.entries()];

@@ -68,6 +68,7 @@ const MENSAGEM_ERRO: Record<string, string> = {
   pedido_inexistente: 'Pedido não encontrado.',
   em_andamento: 'Outro super admin está aprovando este pedido agora.',
   ja_decidido: 'Este pedido já foi decidido.',
+  ja_pedido: 'Já há outro pedido aberto para esta pessoa — aprove aquele.',
   sem_efeito: 'A pessoa foi desligada, excluída ou mudou para um cargo de cúpula. O pedido foi cancelado.',
 };
 

@@ -4,17 +4,20 @@
  *   • super admin: Aprovar (com confirmação) ou Recusar (motivo opcional).
  *     Aprovar chama o servidor, que gera a senha e a redefine;
  *   • quem pediu: a situação, «Cancelar pedido» enquanto espera e, aprovado,
- *     a senha provisória para passar à pessoa — até ela trocar (ou 7 dias).
+ *     a senha provisória para passar à pessoa — até ela trocar ou o prazo de
+ *     2 horas vencer (20261110230000);
+ *   • expirado: o super admin gera uma senha nova no mesmo cartão; quem pediu
+ *     solicita de novo, com o mesmo motivo.
  */
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { Check, Copy, KeyRound, Loader2, X } from 'lucide-react';
+import { Check, Clock, Copy, KeyRound, Loader2, RefreshCw, X } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { PERFIL_LABELS } from '@/lib/index';
-import { ROTULO_STATUS_SENHA, pedidoSenhaAberto, type PedidoSenha } from '@/lib/senhaPedidos';
-import { aprovarPedidoSenha, cancelarPedidoSenha, recusarPedidoSenha } from '@/services/senhaPedidos.service';
+import { HORAS_SENHA_PROVISORIA, ROTULO_STATUS_SENHA, pedidoSenhaAberto, type PedidoSenha } from '@/lib/senhaPedidos';
+import { aprovarPedidoSenha, cancelarPedidoSenha, recusarPedidoSenha, repetirPedidoSenha } from '@/services/senhaPedidos.service';
 
 const COR_STATUS: Record<PedidoSenha['status'], string> = {
   pendente: 'bg-amber-500/15 text-amber-700 dark:text-amber-400',
@@ -22,7 +25,12 @@ const COR_STATUS: Record<PedidoSenha['status'], string> = {
   aprovado: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
   recusado: 'bg-destructive/10 text-destructive',
   cancelado: 'bg-muted text-muted-foreground',
+  expirado: 'bg-orange-500/15 text-orange-700 dark:text-orange-300',
 };
+
+const hora = (iso: string | null | undefined) => (iso
+  ? new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  : '');
 
 const dataHora = (iso: string | null) => (iso
   ? new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', '')
@@ -42,13 +50,16 @@ export function CartaoPedidoSenha({ pedido, souSuperAdmin, meuId, onMudou }: {
 }) {
   const aberto = pedidoSenhaAberto(pedido);
   const decidivel = souSuperAdmin && pedido.status === 'pendente';
+  const expirado = pedido.status === 'expirado';
   const [confirmando, setConfirmando] = useState(false);
   const [recusando, setRecusando] = useState(false);
   const [motivo, setMotivo] = useState('');
   const [ocupado, setOcupado] = useState(false);
   // A senha que ESTE navegador acabou de gerar: aparece antes de a lista reler.
   const [senhaGerada, setSenhaGerada] = useState<string | null>(null);
-  const senha = pedido.senha ?? senhaGerada;
+  // Só vale para o status da lista: depois de gerar de novo, a lista relê e
+  // o cartão volta como aprovado; a senha gerada não aparece em cartão expirado.
+  const senha = pedido.senha ?? (expirado ? null : senhaGerada);
   const primeiro = pedido.alvo_nome.split(' ')[0];
   const meuPedido = !!meuId && pedido.solicitante_id === meuId;
 
@@ -64,6 +75,20 @@ export function CartaoPedidoSenha({ pedido, souSuperAdmin, meuId, onMudou }: {
       toast.success(`Senha de ${primeiro} resetada. A senha já está no chat de ${pedido.solicitante_nome.split(' ')[0]}.`);
       if (r.aviso) toast.warning(r.aviso, { duration: 15000 });
     }
+    onMudou();
+  }
+
+  async function gerarDeNovo() {
+    setSenhaGerada(null);
+    await aprovar();
+  }
+
+  async function repetir() {
+    setOcupado(true);
+    const r = await repetirPedidoSenha(pedido.id);
+    setOcupado(false);
+    if (!r.ok) toast.error(r.erro);
+    else toast.success('Pedido enviado de novo ao super admin.');
     onMudou();
   }
 
@@ -101,7 +126,7 @@ export function CartaoPedidoSenha({ pedido, souSuperAdmin, meuId, onMudou }: {
             </span>
           )}
         </p>
-        <span className="text-[11px] text-muted-foreground">{dataHora(pedido.criado_em)}</span>
+        <span className="text-[11px] text-muted-foreground">{dataHora(pedido.movido_em ?? pedido.criado_em)}</span>
       </header>
 
       <div className="mt-2 flex items-center gap-2.5 rounded-lg bg-muted/40 px-2 py-1.5">
@@ -146,15 +171,52 @@ export function CartaoPedidoSenha({ pedido, souSuperAdmin, meuId, onMudou }: {
               Passe para {primeiro}{pedido.alvo_usuario ? <> (login <span className="font-mono">{pedido.alvo_usuario}</span>)</> : null}.
               Ao entrar, o sistema obriga a criar uma senha nova — e esta some daqui.
             </p>
+            {pedido.expira_em && (
+              <p className="mt-1 flex items-center gap-1 text-[11px] font-medium text-orange-700 dark:text-orange-300">
+                <Clock className="h-3 w-3" /> Vale até {hora(pedido.expira_em)}. Depois disso a senha deixa de funcionar.
+              </p>
+            )}
           </div>
         ) : (
           <p className="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
             <KeyRound className="h-3.5 w-3.5" />
             {pedido.trocada_em
               ? `${primeiro} já criou a senha nova em ${dataHora(pedido.trocada_em)}.`
-              : 'A senha provisória expirou (7 dias). Se ainda precisar, peça outro reset.'}
+              : 'A senha provisória não está mais disponível. Se ainda precisar, peça outro reset.'}
           </p>
         )
+      )}
+
+      {/* ── Expirado: a senha deixou de valer ──────────────────────────────── */}
+      {expirado && (
+        <div className="mt-2 rounded-lg border border-orange-500/40 bg-orange-500/[0.07] p-2.5 text-xs">
+          <p className="flex items-center gap-1.5 font-medium text-orange-700 dark:text-orange-300">
+            <Clock className="h-3.5 w-3.5" />
+            {primeiro} não trocou a senha em {HORAS_SENHA_PROVISORIA} horas
+            {pedido.expira_em ? ` (venceu às ${hora(pedido.expira_em)})` : ''}. A senha provisória não abre mais a conta.
+          </p>
+          {souSuperAdmin ? (
+            confirmando ? (
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span>Gerar outra senha para {primeiro} e mandar para {pedido.solicitante_nome.split(' ')[0]}?</span>
+                <Button size="sm" className="h-7 gap-1.5" disabled={ocupado} onClick={() => void gerarDeNovo()}>
+                  {ocupado ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                  {ocupado ? 'Gerando…' : 'Confirmar'}
+                </Button>
+                <Button size="sm" variant="ghost" className="h-7" disabled={ocupado} onClick={() => setConfirmando(false)}>Voltar</Button>
+              </div>
+            ) : (
+              <Button size="sm" className="mt-2 h-8 gap-1.5" disabled={ocupado} onClick={() => setConfirmando(true)}>
+                <RefreshCw className="h-3.5 w-3.5" /> Gerar senha nova
+              </Button>
+            )
+          ) : meuPedido ? (
+            <Button size="sm" className="mt-2 h-8 gap-1.5" disabled={ocupado} onClick={() => void repetir()}>
+              {ocupado ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+              Solicitar novamente
+            </Button>
+          ) : null}
+        </div>
       )}
 
       {/* ── Decidir (super admin) ──────────────────────────────────────────── */}

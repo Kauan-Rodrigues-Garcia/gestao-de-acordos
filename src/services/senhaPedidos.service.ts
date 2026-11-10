@@ -54,6 +54,10 @@ export const pedirResetSenha = (alvoId: string, motivo?: string | null) =>
 export const cancelarPedidoSenha = (pedidoId: string) =>
   resultado('fn_senha_pedido_cancelar', { p_pedido: pedidoId });
 
+/** Quem pediu, cartão expirado: o mesmo pedido volta para o super admin, com o mesmo motivo. */
+export const repetirPedidoSenha = (pedidoId: string) =>
+  resultado('fn_senha_pedido_repetir', { p_pedido: pedidoId });
+
 export const recusarPedidoSenha = (pedidoId: string, motivo?: string | null) =>
   resultado('fn_senha_pedido_recusar', { p_pedido: pedidoId, p_motivo: motivo?.trim() || null });
 

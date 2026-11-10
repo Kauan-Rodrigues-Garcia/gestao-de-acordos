@@ -7,7 +7,10 @@
  * 20261105100000); aqui só o que a tela mostra.
  */
 
-export type StatusSenhaPedido = 'pendente' | 'executando' | 'aprovado' | 'recusado' | 'cancelado';
+export type StatusSenhaPedido = 'pendente' | 'executando' | 'aprovado' | 'recusado' | 'cancelado' | 'expirado';
+
+/** Quanto vale a senha provisória (20261110230000). O banco é quem manda; isto é só o texto. */
+export const HORAS_SENHA_PROVISORIA = 2;
 
 export interface PedidoSenha {
   id: string;
@@ -29,9 +32,13 @@ export interface PedidoSenha {
   decidido_em: string | null;
   motivo_recusa: string | null;
   erro: string | null;
-  /** Só com o pedido aprovado, enquanto a pessoa não trocou e por 7 dias. */
+  /** Só com o pedido aprovado, enquanto a pessoa não trocou e dentro do prazo (`expira_em`). */
   senha: string | null;
   trocada_em: string | null;
+  /** Até quando a senha provisória vale (aprovação + 2 h). */
+  expira_em?: string | null;
+  /** Quando o pedido foi enviado ou reenviado — a ordem do canal. */
+  movido_em?: string | null;
   criado_em: string;
 }
 
@@ -41,6 +48,7 @@ export const ROTULO_STATUS_SENHA: Readonly<Record<StatusSenhaPedido, string>> = 
   aprovado: 'Resetada',
   recusado: 'Recusado',
   cancelado: 'Cancelado',
+  expirado: 'Expirado',
 };
 
 export const pedidoSenhaAberto = (p: Pick<PedidoSenha, 'status'>) => p.status === 'pendente' || p.status === 'executando';
@@ -57,11 +65,15 @@ export interface ResumoSenhas {
   ultimaEm: string | null;
 }
 
-const ultimaMovimentacao = (p: PedidoSenha) =>
-  p.decidido_em && p.decidido_em > p.criado_em ? p.decidido_em : p.criado_em;
+/** O último movimento do pedido: enviado, reenviado ou decidido. Ordena o canal. */
+export function ultimaMovimentacao(p: Pick<PedidoSenha, 'decidido_em' | 'criado_em' | 'movido_em'>): string {
+  let u = p.movido_em ?? p.criado_em;
+  if (p.decidido_em && p.decidido_em > u) u = p.decidido_em;
+  return u;
+}
 
 export function resumoDasSenhas(pedidos: readonly PedidoSenha[], souSuperAdmin: boolean): ResumoSenhas {
-  const abertos = pedidos.filter(pedidoSenhaAberto).sort((a, b) => b.criado_em.localeCompare(a.criado_em));
+  const abertos = pedidos.filter(pedidoSenhaAberto).sort((a, b) => ultimaMovimentacao(b).localeCompare(ultimaMovimentacao(a)));
   let ultimaEm: string | null = null;
   for (const p of pedidos) {
     const u = ultimaMovimentacao(p);
