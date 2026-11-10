@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   MIN_PERGUNTAS, PERGUNTAS_PADRAO, PROPORCAO_CARTAO, aplicarDesempates, apurar, cedulaComTodos, empatadas,
-  contarCedulas, empatesPendentes, forcarEmpates, jaEscolhidos, maximoDeRespostas, melhorGrade, simularCedulas,
+  contarCedulas, empatesPendentes, forcarEmpates, situacaoDasDecisoes, jaEscolhidos, maximoDeRespostas, melhorGrade, simularCedulas,
   quadroDeTitulos, simularVotos, somarMeusVotos, type Candidato,
 } from './cedula';
 
@@ -125,8 +125,9 @@ describe('desempate da diretoria', () => {
   it('acha o empate e conta o que falta decidir', () => {
     expect(empatadas([empate])).toHaveLength(1);
     expect(empatesPendentes([empate], {})).toBe(1);
-    expect(empatesPendentes([empate], { [P.id]: 'c' })).toBe(1); // c não estava empatado
+    expect(empatesPendentes([empate], { [P.id]: 'd' })).toBe(1); // d não tem voto: não vale
     expect(empatesPendentes([empate], { [P.id]: 'b' })).toBe(0);
+    expect(empatesPendentes([empate], { [P.id]: 'c' })).toBe(0); // desde 10/11: quem tem voto pode levar
   });
 
   it('o escolhido vira o único vencedor e sobe para o 1º; votos iguais', () => {
@@ -138,9 +139,17 @@ describe('desempate da diretoria', () => {
     expect(quadroDeTitulos([r]).map(q => q.id)).toEqual(['b']);
   });
 
-  it('sem empate, nada muda', () => {
+  it('manter o único 1º, ou escolher quem não tem voto, não muda nada', () => {
     const [claro] = apurar(cedula, { [P.id]: { a: 4, b: 2 } });
-    expect(aplicarDesempates([claro], { [P.id]: 'b' })[0]).toBe(claro);
+    expect(aplicarDesempates([claro], { [P.id]: 'a' })[0]).toBe(claro);
+    expect(aplicarDesempates([claro], { [P.id]: 'c' })[0]).toBe(claro);
+  });
+
+  it('a escolha da diretoria pode ser o 2º mais votado: ele vai para o 1º lugar', () => {
+    const [claro] = apurar(cedula, { [P.id]: { a: 4, b: 2 } });
+    const [r] = aplicarDesempates([claro], { [P.id]: 'b' });
+    expect(r.vencedores).toEqual(['b']);
+    expect(r.linhas.map(l => [l.id, l.votos])).toEqual([['b', 2], ['a', 4], ['c', 0]]);
   });
 
   it('a demonstração força empates sem criar voto', () => {
@@ -151,5 +160,40 @@ describe('desempate da diretoria', () => {
     const soma = (v: typeof votos) => Object.values(v).flatMap(c => Object.values(c)).reduce((x, y) => x + y, 0);
     expect(soma(forcados)).toBe(soma(votos));
     expect(empatadas(apurar(ced, forcados)).length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe('o mesmo líder em 1º em mais de uma categoria (10/11/2026)', () => {
+  const [P1, P2, P3] = PERGUNTAS_PADRAO;
+  const cedula = [P1, P2, P3].map(pergunta => ({ pergunta, candidatos: ['a', 'b', 'c', 'd'] }));
+  // A Ana em 1º em P1 (3×2 Bruno) e em P2 (sozinha); Carla em 1º em P3, Bruno com 1 voto em P3.
+  const res = apurar(cedula, { [P1.id]: { a: 3, b: 2 }, [P2.id]: { a: 2 }, [P3.id]: { c: 2, b: 1 } });
+
+  it('as duas da Ana pedem decisão; a P3 não', () => {
+    const d = situacaoDasDecisoes(res, {});
+    expect(d.pendentes).toBe(2);
+    expect(d.porPergunta.get(P1.id)).toMatchObject({ pendente: true, empate: false });
+    expect(d.porPergunta.get(P1.id)!.repetidos).toEqual([{ id: 'a', outras: [P2] }]);
+    expect(d.porPergunta.get(P3.id)).toMatchObject({ pendente: false, decidida: false });
+  });
+
+  it('dar P1 ao Bruno resolve as duas', () => {
+    const d = situacaoDasDecisoes(res, { [P1.id]: 'b' });
+    expect(d.pendentes).toBe(0);
+    expect(d.titulos.get('a')).toEqual([P2]);
+    expect(d.titulos.get('b')).toEqual([P1]);
+  });
+
+  it('manter a Ana numa não dispensa a outra; nas duas, libera', () => {
+    expect(situacaoDasDecisoes(res, { [P1.id]: 'a' }).pendentes).toBe(1);
+    expect(situacaoDasDecisoes(res, { [P1.id]: 'a', [P2.id]: 'a' }).pendentes).toBe(0);
+  });
+
+  it('dar a categoria a quem já leva outra deixa a outra pendente', () => {
+    // P1 vai para o Bruno; e se o Bruno também fosse o 1º de P3? Só com a Carla tirada de P3.
+    const res2 = apurar(cedula, { [P1.id]: { a: 3, b: 2 }, [P2.id]: { a: 2 }, [P3.id]: { b: 2, c: 1 } });
+    const d = situacaoDasDecisoes(res2, { [P1.id]: 'b' });
+    expect(d.porPergunta.get(P3.id)).toMatchObject({ pendente: true });
+    expect(d.porPergunta.get(P2.id)).toMatchObject({ pendente: false });
   });
 });

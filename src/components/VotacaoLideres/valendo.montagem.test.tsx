@@ -75,6 +75,8 @@ const apuracao = (desempates: Array<{ pergunta_id: string; escolhido_id: string 
 const { PainelVotacoes } = await import('./PainelVotacoes');
 const { AvisoVotacao } = await import('./AvisoVotacao');
 const { liberarParaOsLideres } = await import('./banco');
+const { VisaoDiretoria } = await import('./VisaoDiretoria');
+const { apurar, cedulaComTodos } = await import('./cedula');
 
 beforeEach(() => {
   localStorage.clear();
@@ -115,9 +117,9 @@ describe('PainelVotacoes', () => {
     const tela = await screen.findByRole('dialog', { name: /Apuração/ });
     const liberar = within(tela).getByRole('button', { name: /Liberar o resultado/ }) as HTMLButtonElement;
     expect(liberar.disabled).toBe(true);
-    expect(within(tela).getByText(/Falta decidir 1 empate/)).toBeTruthy();
+    expect(within(tela).getByText(/Falta decidir 1 categoria/)).toBeTruthy();
 
-    fireEvent.click(within(within(tela).getByRole('radiogroup', { name: /Desempate/ })).getByRole('radio', { name: /Bruno/ }));
+    fireEvent.click(within(within(tela).getByRole('radiogroup', { name: /Decisão/ })).getByRole('radio', { name: /Bruno/ }));
     await waitFor(() => expect(banco.desempatar).toHaveBeenCalledWith('v-encerrada', 'q1', 'b'));
     await waitFor(() => expect(liberar.disabled).toBe(false));
 
@@ -163,5 +165,32 @@ describe('liberarParaOsLideres', () => {
       .mockResolvedValueOnce({ data: null, error: null });
     await expect(liberarParaOsLideres(nova)).rejects.toThrow(/Já existe uma votação aberta/);
     expect(rpc.mock.calls[2]).toEqual(['fn_votacao_lideranca_mudar', { p_id: 'v1', p_acao: 'cancelar' }]);
+  });
+});
+
+describe('VisaoDiretoria: o mesmo líder em 1º em duas categorias (10/11/2026)', () => {
+  const gente = PESSOAS.map(p => ({ ...p, setor: 'Play 1' }));
+  const cedula = cedulaComTodos(PERGUNTAS, gente);
+  // Ana em 1º nas duas: q1 (3 × 2 do Bruno) e q2 (2 × 1 da Carla).
+  const resultados = apurar(cedula, { q1: { a: 3, b: 2 }, q2: { a: 2, c: 1 } });
+  const pessoas = new Map(gente.map(p => [p.id, p]));
+
+  it('as duas categorias pedem decisão, com os mais votados e o «já leva»', () => {
+    const onDesempatar = vi.fn();
+    render(<VisaoDiretoria resultados={resultados} pessoas={pessoas} desempates={{}} onDesempatar={onDesempatar} onLiberar={() => {}} />);
+    expect(screen.getByText(/Falta decidir 2 categorias/)).toBeTruthy();
+    expect(screen.getAllByText(/Em 1º em mais de uma/)).toHaveLength(2);
+    const q1 = screen.getByRole('radiogroup', { name: /Decisão: Quem é o mais comunicativo/ });
+    expect(within(q1).getAllByRole('radio').map(b => b.textContent)).toEqual([
+      expect.stringMatching(/Ana3 votos.*já leva/), expect.stringMatching(/Bruno2 votos/),
+    ]);
+    fireEvent.click(within(q1).getByRole('radio', { name: /Bruno/ }));
+    expect(onDesempatar).toHaveBeenCalledWith('q1', 'b');
+  });
+
+  it('com q1 para o Bruno, nada falta e o liberar destrava', () => {
+    render(<VisaoDiretoria resultados={resultados} pessoas={pessoas} desempates={{ q1: 'b' }} onDesempatar={() => {}} onLiberar={() => {}} />);
+    expect(screen.getByText(/Tudo decidido/)).toBeTruthy();
+    expect((screen.getByRole('button', { name: /Liberar o resultado/ }) as HTMLButtonElement).disabled).toBe(false);
   });
 });

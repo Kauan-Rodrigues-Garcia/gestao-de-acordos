@@ -22,7 +22,10 @@ const L4    = '00000000-0000-4000-8000-0000000000c4';
 const FORA  = '00000000-0000-4000-8000-0000000000f1';
 const SETOR = '00000000-0000-4000-8000-0000000000e1';
 
-const SQL = readFileSync(resolve(__dirname, '../../../supabase/migrations/20261104230000_votacao_lideranca.sql'), 'utf8');
+const ler = (n: string) => readFileSync(resolve(__dirname, `../../../supabase/migrations/${n}`), 'utf8');
+const SQL = ler('20261104230000_votacao_lideranca.sql');
+/** 10/11/2026: a diretoria decide também o líder em 1º em mais de uma categoria. */
+const SQL_REPETIDOS = ler('20261110150000_votacao_decisao_repetidos.sql');
 const PERGUNTAS = Array.from({ length: 15 }, (_, i) => ({ id: `q${i + 1}`, emoji: '⭐', texto: `Pergunta ${i + 1}?` }));
 
 let db: PGlite;
@@ -86,7 +89,8 @@ beforeAll(async () => {
       as $$ select current_setting('teste.super', true) = 'sim' $$;
   `);
   await db.exec(SQL);
-  await db.exec(SQL); // reexecutável
+  await db.exec(SQL_REPETIDOS);
+  await db.exec(SQL_REPETIDOS); // reexecutável
 });
 
 beforeEach(async () => {
@@ -213,7 +217,9 @@ describe('diretoria', () => {
     expect(JSON.stringify(r)).not.toContain('eleitor":"'); // nada de quem votou em quem
 
     await expect(como(DIR, 'select public.fn_votacao_lideranca_liberar($1) v', [id])).rejects.toThrow(/Falta decidir 1/);
-    await expect(como(DIR, 'select public.fn_votacao_lideranca_desempatar($1, $2, $3) v', [id, 'q1', L3])).rejects.toThrow(/empatados/);
+    await expect(como(DIR, 'select public.fn_votacao_lideranca_desempatar($1, $2, $3) v', [id, 'q1', L3])).rejects.toThrow(/não tem voto/);
+    // q2 é só do L3, e o L3 não leva outra: não precisa de decisão.
+    await expect(como(DIR, 'select public.fn_votacao_lideranca_desempatar($1, $2, $3) v', [id, 'q2', L3])).rejects.toThrow(/não precisa de decisão/);
     await expect(como(L1, 'select public.fn_votacao_lideranca_desempatar($1, $2, $3) v', [id, 'q1', L1])).rejects.toThrow(/NAO_AUTORIZADO/);
     await como(DIR, 'select public.fn_votacao_lideranca_desempatar($1, $2, $3) v', [id, 'q1', L2]);
     await como(DIR, 'select public.fn_votacao_lideranca_liberar($1) v', [id]);
@@ -271,5 +277,75 @@ describe('permissões no banco', () => {
              has_function_privilege('authenticated', 'public.fn_vl_montar(uuid, boolean, boolean)', 'execute') f,
              has_function_privilege('authenticated', 'public.fn_votacao_lideranca_votar(uuid, jsonb, timestamptz)', 'execute') g`);
     expect(r.rows[0]).toEqual({ t: false, v: false, f: false, g: true });
+  });
+});
+
+describe('o mesmo líder em 1º em mais de uma categoria (20261110150000)', () => {
+  const decidir = (id: string, q: string, quem: string) =>
+    como(DIR, 'select public.fn_votacao_lideranca_desempatar($1, $2, $3) v', [id, q, quem]);
+  const liberar = (id: string) => como(DIR, 'select public.fn_votacao_lideranca_liberar($1) v', [id]);
+  const pendentes = (id: string) => db.query<{ pergunta_id: string; empate: boolean; repetido: boolean }>(
+    'select pergunta_id, empate, repetido from public.fn_vl_pendentes($1) order by 1', [id]).then(r => r.rows);
+
+  /**
+   * A Carla (L3) em 1º em q1 (2 votos contra 1 da Ana) e em q2 (sozinha); o
+   * Diego (L4) em 1º em q3, e a Ana (L1) tem 1 voto em q3 também.
+   */
+  async function carlaEmDuas(): Promise<string> {
+    const id = await salvar();
+    await mudar(id, 'abrir');
+    await db.exec(`
+      insert into public.votacao_lideranca_votos (votacao_id, pergunta_id, eleitor_id, candidato_id) values
+        ('${id}', 'q1', '${L1}', '${L3}'), ('${id}', 'q1', '${L4}', '${L3}'), ('${id}', 'q1', '${L2}', '${L1}'),
+        ('${id}', 'q2', '${L2}', '${L3}'),
+        ('${id}', 'q3', '${L1}', '${L4}'), ('${id}', 'q3', '${L3}', '${L4}'), ('${id}', 'q3', '${L4}', '${L1}');`);
+    await mudar(id, 'encerrar', DIR);
+    return id;
+  }
+
+  it('as duas categorias da Carla ficam pendentes e o resultado não sai', async () => {
+    const id = await carlaEmDuas();
+    expect(await pendentes(id)).toEqual([
+      { pergunta_id: 'q1', empate: false, repetido: true },
+      { pergunta_id: 'q2', empate: false, repetido: true },
+    ]);
+    await expect(liberar(id)).rejects.toThrow(/Falta decidir 2 categoria/);
+  });
+
+  it('passar q1 para a Ana resolve as duas: a Carla fica só com q2', async () => {
+    const id = await carlaEmDuas();
+    await decidir(id, 'q1', L1);
+    expect(await pendentes(id)).toEqual([]);
+    await liberar(id);
+    const r = await apuracao(id);
+    expect(r.desempates).toEqual([expect.objectContaining({ pergunta_id: 'q1', escolhido_id: L1 })]);
+    const motivo = await db.query<{ motivo: string }>('select motivo from public.votacao_lideranca_desempates where votacao_id = $1', [id]);
+    expect(motivo.rows[0].motivo).toBe('repetido');
+  });
+
+  it('a diretoria pode manter a Carla nas duas, mas decide cada uma', async () => {
+    const id = await carlaEmDuas();
+    await decidir(id, 'q1', L3);
+    expect((await pendentes(id)).map(p => p.pergunta_id)).toEqual(['q2']);
+    await expect(liberar(id)).rejects.toThrow(/Falta decidir 1 categoria/);
+    await decidir(id, 'q2', L3);
+    await liberar(id);
+  });
+
+  it('só quem tem voto na categoria pode levar', async () => {
+    const id = await carlaEmDuas();
+    await expect(decidir(id, 'q2', L1)).rejects.toThrow(/não tem voto/);
+  });
+
+  it('passar uma categoria para quem já leva outra deixa a outra pendente', async () => {
+    const id = await carlaEmDuas();
+    await decidir(id, 'q2', L3);   // q2 fica com a Carla…
+    await decidir(id, 'q1', L1);   // …e q1 vai para a Ana: tudo resolvido
+    expect(await pendentes(id)).toEqual([]);
+    // Agora a Ana leva q1; se a diretoria der q3 a ela também, q3 não está pendente: recusa.
+    await expect(decidir(id, 'q3', L1)).rejects.toThrow(/não precisa de decisão/);
+    // Trocar q1 para a Carla de novo: q1 já tem decisão (pode trocar) e nada fica pendente — foi escolha dela.
+    await decidir(id, 'q1', L3);
+    expect(await pendentes(id)).toEqual([]);
   });
 });

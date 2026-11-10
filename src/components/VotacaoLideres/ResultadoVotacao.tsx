@@ -128,7 +128,7 @@ export function ResultadoVotacao({ cedula, resultados, pessoas, meus, demo = fal
                             <FotoLider lider={p} className="h-28 w-28 text-3xl ring-4 ring-warning" />
                           </div>
                           <p className="text-xl font-bold">{p?.nome ?? 'Líder'}</p>
-                          <p className="text-xs text-muted-foreground">{p?.setor}{r.desempatado ? ' · desempate da diretoria' : ''}</p>
+                          <p className="text-xs text-muted-foreground">{p?.setor}{r.desempatado ? ' · escolha da diretoria' : ''}</p>
                         </div>
                       );
                     })}

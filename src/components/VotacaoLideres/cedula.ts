@@ -214,7 +214,7 @@ export interface ResultadoDaPergunta {
   linhas: LinhaDoResultado[];
   /** Ids empatados no 1º lugar; um só quando há vencedor claro. Vazio sem votos. */
   vencedores: string[];
-  /** O vencedor saiu do desempate da diretoria (`aplicarDesempates`). */
+  /** O vencedor saiu de uma decisão da diretoria (`aplicarDesempates`): empate ou líder em mais de uma. */
   desempatado?: boolean;
 }
 
@@ -231,29 +231,91 @@ export function apurar(cedula: readonly ItemDaCedula[], votos: Votos): Resultado
   });
 }
 
-/** perguntaId → o líder que a diretoria escolheu entre os empatados. */
+/**
+ * perguntaId → o líder que a diretoria escolheu para levar a categoria. Desde
+ * 10/11/2026 vale para empate E para líder em 1º em mais de uma categoria; o
+ * escolhido tem de ter voto nela.
+ */
 export type Desempates = Record<string, string>;
 
-/** Perguntas empatadas no 1º lugar, que a diretoria precisa decidir. */
+/** Perguntas empatadas no 1º lugar. */
 export function empatadas(resultados: readonly ResultadoDaPergunta[]): ResultadoDaPergunta[] {
   return resultados.filter(r => r.vencedores.length > 1);
 }
 
-/** Quantos empates ainda não têm decisão (escolha fora dos empatados não vale). */
-export function empatesPendentes(resultados: readonly ResultadoDaPergunta[], desempates: Desempates): number {
-  return empatadas(resultados).filter(r => !r.vencedores.includes(desempates[r.pergunta.id] ?? '')).length;
+/** A decisão vale: o escolhido tem voto nesta pergunta. */
+const decisaoValida = (r: ResultadoDaPergunta, escolhido: string | undefined): escolhido is string =>
+  !!escolhido && r.linhas.some(l => l.id === escolhido && l.votos > 0);
+
+export interface SituacaoDaPergunta {
+  /** A diretoria já decidiu (com uma escolha válida). */
+  decidida: boolean;
+  /** Ainda precisa de decisão para liberar. */
+  pendente: boolean;
+  /** Empate no 1º lugar (pela contagem). */
+  empate: boolean;
+  /**
+   * Dos 1ºs colocados desta pergunta, quem também leva outra — com as outras
+   * que leva. Só nas que não estão decididas.
+   */
+  repetidos: Array<{ id: string; outras: Pergunta[] }>;
+}
+
+export interface Decisoes {
+  porPergunta: Map<string, SituacaoDaPergunta>;
+  /** Quantas faltam decidir. */
+  pendentes: number;
+  /** Quem leva o quê agora (as decididas pelo escolhido; as outras, pelos 1ºs colocados). */
+  titulos: Map<string, Pergunta[]>;
 }
 
 /**
- * O resultado depois da diretoria (pedido de 04/11/2026): empate não vai para a
- * tela — a diretoria escolhe um dos empatados antes de liberar. O escolhido vira
- * o único vencedor e sobe para o 1º lugar das barras; os votos não mudam.
+ * O que a diretoria precisa decidir antes de liberar (10/11/2026) — a mesma
+ * regra de `fn_vl_pendentes` no banco. Uma pergunta não decidida fica pendente
+ * quando deu empate no 1º lugar, ou quando um dos 1ºs colocados também leva
+ * outra (contando as decisões já tomadas). Manter o mesmo líder é escolha da
+ * diretoria, mas cada categoria dele é decidida.
+ */
+export function situacaoDasDecisoes(resultados: readonly ResultadoDaPergunta[], decisoes: Desempates): Decisoes {
+  const leva = new Map<string, string[]>();
+  const titulos = new Map<string, Pergunta[]>();
+  for (const r of resultados) {
+    const d = decisoes[r.pergunta.id];
+    const quem = decisaoValida(r, d) ? [d] : r.vencedores;
+    leva.set(r.pergunta.id, quem);
+    for (const id of quem) titulos.set(id, [...(titulos.get(id) ?? []), r.pergunta]);
+  }
+  const porPergunta = new Map<string, SituacaoDaPergunta>();
+  let pendentes = 0;
+  for (const r of resultados) {
+    const decidida = decisaoValida(r, decisoes[r.pergunta.id]);
+    const empate = r.vencedores.length > 1;
+    const repetidos = decidida ? [] : r.vencedores
+      .map(id => ({ id, outras: (titulos.get(id) ?? []).filter(p => p.id !== r.pergunta.id) }))
+      .filter(x => x.outras.length > 0);
+    const pendente = !decidida && (empate || repetidos.length > 0);
+    if (pendente) pendentes++;
+    porPergunta.set(r.pergunta.id, { decidida, pendente, empate, repetidos });
+  }
+  return { porPergunta, pendentes, titulos };
+}
+
+/** Quantas categorias ainda não têm decisão. */
+export function empatesPendentes(resultados: readonly ResultadoDaPergunta[], desempates: Desempates): number {
+  return situacaoDasDecisoes(resultados, desempates).pendentes;
+}
+
+/**
+ * O resultado depois da diretoria: o escolhido vira o único vencedor e vai
+ * para o 1º lugar das barras (os votos não mudam). Escolha sem voto na
+ * pergunta não vale; manter quem já era o único 1º não muda nada.
  */
 export function aplicarDesempates(resultados: readonly ResultadoDaPergunta[], desempates: Desempates): ResultadoDaPergunta[] {
   return resultados.map(r => {
     const escolhido = desempates[r.pergunta.id];
-    if (r.vencedores.length < 2 || !escolhido || !r.vencedores.includes(escolhido)) return r;
-    const linhas = [...r.linhas].sort((a, b) => b.votos - a.votos || Number(b.id === escolhido) - Number(a.id === escolhido));
+    if (!decisaoValida(r, escolhido)) return r;
+    if (r.vencedores.length === 1 && r.vencedores[0] === escolhido) return r;
+    const linhas = [...r.linhas].sort((a, b) => Number(b.id === escolhido) - Number(a.id === escolhido) || b.votos - a.votos);
     return { ...r, linhas, vencedores: [escolhido], desempatado: true };
   });
 }
