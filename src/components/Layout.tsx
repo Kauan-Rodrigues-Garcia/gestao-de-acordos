@@ -70,7 +70,7 @@ import { BolhaChat } from '@/components/Chat/BolhaChat';
 import { getImpersonacaoAtiva, sairImpersonacao } from '@/services/impersonacao.service';
 import { CrachaPendente } from '@/components/CrachaPendente';
 import { TemaNatalContext, cenaDaRota as cenaNatalDaRota, soParado as natalSoParado, temFundo as temFundoNatal } from '@/components/Natal/tema';
-import { EVENTO_REINICIAR_ABERTURA, abrirNatal, useNatal } from '@/components/Natal/previa';
+import { EVENTO_REINICIAR_ABERTURA, abrirNatal, desligarNatal, useNatal } from '@/components/Natal/previa';
 import { VIDEOS as VIDEOS_NATAL, marcarAbertura } from '@/components/Natal/abertura';
 import { guardarAssistiu } from '@/components/Natal/assistiuAbertura';
 import { MarcaNatal } from '@/components/Natal/MarcaNatal';
@@ -327,8 +327,15 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   // depois, todo mundo, a partir do presente (`Natal/previa.ts`).
   const {
     podeVer: podeVerNatal, prevista: previaNatal, estilo: natal, pessoa: pessoaNatal, aberto: natalAberto,
-    presenteOculto, pronto: natalPronto, video: videoNatal,
+    presenteOculto, pronto: natalPronto, video: videoNatal, desligado: natalDesligado,
   } = useNatal();
+  // «Tema de Natal» no menu de temas: só para quem já tem o Natal (presente aberto).
+  const interruptorNatal = useMemo(
+    () => (podeVerNatal && natalAberto
+      ? { ligado: !natalDesligado, aoMudar: (ligado: boolean) => desligarNatal(pessoaNatal, !ligado) }
+      : undefined),
+    [podeVerNatal, natalAberto, natalDesligado, pessoaNatal],
+  );
   // O tema entra no meio da abertura (atrás do bilhete), com ela ainda na tela:
   // a abertura fica montada até avisar que terminou.
   const [aberturaNatalViva, setAberturaNatalViva] = useState(false);
@@ -943,7 +950,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               )}
             </Button>
             <HelpDrawer />
-            <ThemeToggle />
+            <ThemeToggle natal={interruptorNatal} />
             {/* Perfil no header — clicável para upload de foto */}
             <Popover open={perfilPopoverOpen} onOpenChange={setPerfilPopoverOpen}>
               <PopoverTrigger asChild>

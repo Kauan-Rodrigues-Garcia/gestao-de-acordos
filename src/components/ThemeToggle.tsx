@@ -1,4 +1,4 @@
-import { Moon, Sun, Monitor, Flower2, Leaf, Droplets, PanelLeft, Feather } from 'lucide-react';
+import { Moon, Sun, Monitor, Flower2, Leaf, Droplets, PanelLeft, Feather, Snowflake } from 'lucide-react';
 import { definirModoLeve, useModoLeveEscolhido } from '@/lib/modoLeve';
 import { CHAVE_MENU_ESCURO, aplicarMenuEscuro } from '@/lib/menuEscuro';
 import { useEffect, useState } from 'react';
@@ -69,7 +69,17 @@ function Amostra({ tema }: { tema: TemaInfo }) {
  * O interruptor «Detalhes de Halloween» (outubro) saiu com o tema, em
  * 03/11/2026 — ver `arquivo-morto/halloween/`.
  */
-export function ThemeToggle() {
+
+/**
+ * O interruptor «Tema de Natal» (10/11/2026): o `Layout` só passa quando a
+ * pessoa já tem o Natal (liberado e presente aberto). Ver `Natal/previa.ts`.
+ */
+export interface InterruptorNatal {
+  ligado: boolean;
+  aoMudar: (ligado: boolean) => void;
+}
+
+export function ThemeToggle({ natal }: { natal?: InterruptorNatal } = {}) {
   const { theme, setTheme, resolvedTheme } = useTheme();
   const atual = (theme ?? 'system') as EscolhaTema;
   const escuroEmVigor = ehTemaEscuro(resolvedTheme);
@@ -151,6 +161,22 @@ export function ThemeToggle() {
           Sistema
           {atual === 'system' && <span className="ml-auto text-primary">✓</span>}
         </DropdownMenuItem>
+        {/* Quem não quiser o Natal desliga; o menu fica aberto para ver o efeito. */}
+        {natal && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuCheckboxItem
+              checked={natal.ligado}
+              onCheckedChange={v => natal.aoMudar(v === true)}
+              onSelect={e => e.preventDefault()}
+              title="Liga ou desliga os enfeites, a neve e a música de Natal. Vale só para você, neste computador."
+              className="gap-2"
+            >
+              <Snowflake className="h-3.5 w-3.5" />
+              Tema de Natal
+            </DropdownMenuCheckboxItem>
+          </>
+        )}
         {/*
           Modo leve (`lib/modoLeve.ts`): para computador fraco. Vale para a
           máquina, não para a pessoa, e o menu fica aberto para ver o efeito.

@@ -7,7 +7,7 @@
  * fazia o next-themes pôr `.dark` por cima do Rosa. Os testes montam o
  * provider com a MESMA configuração do App.
  */
-import { act, render } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ThemeProvider, useTheme } from 'next-themes';
 import { ThemeToggle } from './ThemeToggle';
@@ -128,5 +128,37 @@ describe('ehTemaEscuro', () => {
     expect(['dark', 'dark-grey', 'deep-blue'].map(ehTemaEscuro)).toEqual([true, true, true]);
     expect(['light', 'rosa', 'verde', 'system', undefined].map(ehTemaEscuro))
       .toEqual([false, false, false, false, false]);
+  });
+});
+
+describe('ThemeToggle — interruptor «Tema de Natal»', () => {
+  function abrirMenu() {
+    const botao = document.querySelector('[data-tema-botao]') as HTMLElement;
+    act(() => {
+      fireEvent.keyDown(botao, { key: 'Enter' });
+    });
+  }
+
+  it('sem o Natal (prop ausente), o interruptor não aparece', () => {
+    localStorage.setItem('theme', 'light');
+    montar();
+    abrirMenu();
+    expect(screen.queryByText('Sistema')).not.toBeNull();
+    expect(screen.queryByText('Tema de Natal')).toBeNull();
+  });
+
+  it('com o Natal, aparece marcado e desmarcar avisa «desligado»', () => {
+    localStorage.setItem('theme', 'light');
+    const aoMudar = vi.fn();
+    render(
+      <ThemeProvider attribute="class" defaultTheme="system" enableSystem themes={NOMES_TEMAS} enableColorScheme={false}>
+        <ThemeToggle natal={{ ligado: true, aoMudar }} />
+      </ThemeProvider>,
+    );
+    abrirMenu();
+    const item = screen.getByRole('menuitemcheckbox', { name: /Tema de Natal/ });
+    expect(item.getAttribute('aria-checked')).toBe('true');
+    act(() => { fireEvent.click(item); });
+    expect(aoMudar).toHaveBeenCalledWith(false);
   });
 });

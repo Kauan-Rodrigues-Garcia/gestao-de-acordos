@@ -95,6 +95,28 @@ function lerAberto(pessoa: string): string | null {
   try { return localStorage.getItem(chaveAberto(pessoa)); } catch { return null; }
 }
 
+/*
+ * «Tema de Natal» no menu de temas (10/11/2026): quem não quiser desliga.
+ * Vale para a pessoa neste navegador (como o tema de cor), não vai para o
+ * banco. Desligado, o estilo vira `null` e nada do Natal aparece — a música
+ * também cala, porque o botão dela sai da tela (`sairDaRadio`). O presente
+ * continua contado como aberto, então ele não volta a aparecer.
+ */
+const chaveDesligado = (pessoa: string) => `natal:desligado:${pessoa}`;
+
+function lerDesligado(pessoa: string): boolean {
+  try { return localStorage.getItem(chaveDesligado(pessoa)) === '1'; } catch { return false; }
+}
+
+/** Liga ou desliga o tema de Natal para esta pessoa, neste navegador. */
+export function desligarNatal(pessoa: string, desligado: boolean) {
+  try {
+    if (desligado) localStorage.setItem(chaveDesligado(pessoa), '1');
+    else localStorage.removeItem(chaveDesligado(pessoa));
+  } catch { /* modo privado: vale até recarregar */ }
+  window.dispatchEvent(new Event(EVENTO));
+}
+
 /** A pessoa abriu o presente: o Natal entra. */
 export function abrirNatal(pessoa: string) {
   try { localStorage.setItem(chaveAberto(pessoa), '1'); } catch { /* modo privado: vale até recarregar */ }
@@ -177,6 +199,8 @@ export interface EstadoNatal {
   pessoa: string;
   /** O presente está aberto neste navegador (o Natal ligado por ele). */
   aberto: boolean;
+  /** A pessoa desligou o tema no menu de temas (`desligarNatal`). */
+  desligado: boolean;
   presenteOculto: boolean;
   /** Já se sabe se a pessoa abriu em outro computador (o presente espera por isso para não piscar). */
   pronto: boolean;
@@ -195,6 +219,7 @@ export function useNatal(): EstadoNatal {
   const gravado = useSyncExternalStore(assinar, ler);
   const abertoLocal = useSyncExternalStore(assinar, () => lerAberto(pessoa));
   const presenteOculto = useSyncExternalStore(assinar, lerOculto);
+  const desligado = useSyncExternalStore(assinar, () => lerDesligado(pessoa));
   const videoDaPrevia = useSyncExternalStore(assinarVideoDaPrevia, lerVideoDaPrevia);
   useEffect(() => { if (prevista) lerDoEndereco(); }, [prevista]);
   // O banco só é perguntado com o presente ainda fechado aqui (aberto, não há o que saber).
@@ -202,8 +227,8 @@ export function useNatal(): EstadoNatal {
   const aberto = presenteAberto(abertoLocal, doBanco.liberou);
   // Sem o presente aberto, nada do Natal aparece (é ele que traz o tema).
   return {
-    podeVer, prevista, pessoa, aberto,
-    estilo: podeVer && aberto ? estiloDoNatal(gravado, prevista) : null,
+    podeVer, prevista, pessoa, aberto, desligado,
+    estilo: podeVer && aberto && !desligado ? estiloDoNatal(gravado, prevista) : null,
     presenteOculto: prevista && presenteOculto,
     pronto: abertoLocal === '1' || doBanco.pronto,
     video: (prevista && videoDaPrevia) || doBanco.video,
