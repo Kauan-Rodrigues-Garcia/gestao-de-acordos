@@ -23,8 +23,12 @@
 .nt-saud-laco path { fill: #D32F2F; stroke: #9A1B1B; stroke-width: .6; }
 .nt-saud-laco .no { fill: #B71C1C; }
 
-.nt-saud-bola canvas { position: absolute; left: 0; top: 0; translate: 0 var(--puxa, 0px); cursor: grab; touch-action: none; filter: drop-shadow(0 4px 5px oklch(0.2 0.04 25 / .35)); }
-.nt-saud-bola canvas:active { cursor: grabbing; }
+/* A janela do tamanho da bola e a tira de quadros correndo atrás dela (10/11/2026,
+   `pintarTira`): a placa de vídeo move a tira, e a sombra é da janela, parada. */
+.nt-saud-janela { position: absolute; left: 0; top: 0; overflow: hidden; translate: 0 var(--puxa, 0px); cursor: grab; touch-action: none;
+  filter: drop-shadow(0 4px 5px oklch(0.2 0.04 25 / .35)); }
+.nt-saud-janela:active { cursor: grabbing; }
+.nt-saud-janela canvas { position: absolute; left: 0; top: 0; max-width: none; will-change: transform; }
 
 /* ── A brincadeira: puxar arrebenta o fio (`BolaSolta`) ───────────────────────── */
 

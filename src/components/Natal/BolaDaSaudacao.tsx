@@ -31,7 +31,7 @@ import { mirar, sortearErro, T_PEGA, T_SOLTA, type Lado } from './cesta/arremess
 import { bonecoDaCesta, type BonecoNaCesta } from './cesta/boneco';
 import { prepararSomDaCesta, somDaCesta, somDoArremessoDoBoneco, somDoAro, somDoBonecoPegando } from './cesta/som';
 import { Confete } from './presente/Confete';
-import { acordarQuandoOlhar, ninguemOlhando } from '@/lib/atencao';
+import { ninguemOlhando, ouvirAtencao } from '@/lib/atencao';
 import './saudacao.css';
 
 /** A bola tem o diâmetro da linha da saudação (`text-2xl`, 32 px). */
@@ -198,6 +198,39 @@ function desenhar(cx: CanvasRenderingContext2D, giro: number) {
   cx.lineWidth = 1.3;
   cx.beginPath(); cx.arc(CX, ARGOLA_Y, 2.6, 0, Math.PI * 2); cx.stroke();
 }
+
+// ── O giro pendurada: uma tira de quadros pintada uma vez ─────────────────────
+
+/*
+ * (10/11/2026, PCs fracos) A bola pendurada repintava o canvas 30 vezes por
+ * segundo, para sempre. Mas o desenho dela se repete: 6 flocos por fileira
+ * (60°), 18 contas de duas cores alternadas (40°) e as faixas, que são iguais
+ * em qualquer ângulo. A cada 120° ela está igualzinha. Então o ciclo é pintado
+ * UMA vez, numa tira de `QUADROS_DO_CICLO` quadros, e o que gira é a tira
+ * correndo atrás de uma janela do tamanho da bola: uma animação de `transform`
+ * em degraus, que a placa de vídeo toca sozinha. Mesmo passo de antes (1,67°
+ * por quadro, ~29 por segundo no giro de repouso), sem JavaScript por quadro.
+ * O giro do clique só muda a velocidade da tira (`updatePlaybackRate`).
+ */
+const CICLO = (2 * Math.PI) / 3;
+const QUADROS_DO_CICLO = 72;
+/** Quanto a tira leva para dar um ciclo no giro de repouso. */
+const CICLO_MS = (CICLO / GIRO_BASE) * 1000;
+
+function pintarTira(cv: HTMLCanvasElement, dpr: number) {
+  cv.width = LARGURA * QUADROS_DO_CICLO * dpr;
+  cv.height = ALTURA * dpr;
+  const cx = cv.getContext('2d');
+  if (!cx) return;
+  for (let i = 0; i < QUADROS_DO_CICLO; i++) {
+    cx.setTransform(dpr, 0, 0, dpr, i * LARGURA * dpr, 0);
+    desenhar(cx, (i / QUADROS_DO_CICLO) * CICLO);
+  }
+  cx.setTransform(1, 0, 0, 1, 0, 0);
+}
+
+/** Onde a tira deve estar (ms da animação) para mostrar a bola no giro `giro`. */
+const tempoDoGiro = (giro: number) => ((((giro % CICLO) + CICLO) % CICLO) / CICLO) * CICLO_MS;
 
 // ── A brincadeira: puxar a bola arrebenta o fio ──────────────────────────────
 
@@ -722,7 +755,10 @@ interface Puxao {
 
 export function BolaDaSaudacao() {
   const caixa = useRef<HTMLSpanElement>(null);
+  /** A janela do tamanho da bola, e a tira de quadros que corre atrás dela. */
+  const janela = useRef<HTMLSpanElement>(null);
   const tela = useRef<HTMLCanvasElement>(null);
+  const giro = useRef<Animation | null>(null);
   /** Do fio do varal até a argola, em px. Zero: sem varal, só a bola. */
   const [fio, setFio] = useState(0);
   const empurrao = useRef<HTMLSpanElement>(null);
@@ -751,57 +787,67 @@ export function BolaDaSaudacao() {
    * o meio dele, mais o desvio do centro da bola, que fica abaixo do meio).
    */
   const centroDaBola = useCallback(() => {
-    const r = tela.current?.getBoundingClientRect() ?? caixa.current?.getBoundingClientRect();
+    const r = janela.current?.getBoundingClientRect() ?? caixa.current?.getBoundingClientRect();
     return r ? { x: r.left + r.width / 2, y: r.top + r.height / 2 + (CY - ALTURA / 2) } : { x: window.innerWidth / 2, y: 120 };
   }, []);
   /** Quase chegando: o fio cresce de novo. */
   const [chegando, setChegando] = useState(false);
   const aoChegando = useCallback(() => { setChegando(true); setReligou(v => v + 1); }, []);
-  const voltou = useCallback((giro: number) => {
-    giroPendurada.current = giro;
+  const voltou = useCallback((g: number) => {
+    giroPendurada.current = g;
     velocidade.current = GIRO_BASE;
+    // A pendurada continua do giro em que a solta parou, sem pulo.
+    const a = giro.current;
+    if (a) { a.updatePlaybackRate(1); a.currentTime = tempoDoGiro(g); }
     setSolta(null);
     setChegando(false);
   }, []);
 
-  // O giro.
+  // O giro: a tira de quadros correndo atrás da janela (ver `pintarTira`).
   useEffect(() => {
     const cv = tela.current;
-    const cx = cv?.getContext('2d');
-    if (!cv || !cx) return;
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
-    cv.width = LARGURA * dpr;
-    cv.height = ALTURA * dpr;
-    cx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    let antes = performance.now(), quadro = 0, visivel = true;
-    let dormindo: (() => void) | null = null;
-    const passo = (agora: number) => {
-      // Ninguém olhando (`lib/atencao.ts`): para de girar até a volta.
-      if (ninguemOlhando()) {
-        dormindo = acordarQuandoOlhar(() => { dormindo = null; cancelAnimationFrame(quadro); antes = performance.now(); if (visivel && !parada) quadro = requestAnimationFrame(passo); });
-        return;
-      }
-      // 30 quadros por segundo bastam para um enfeite girando (e pesam metade).
-      if (agora - antes < 31) { if (visivel && !parada) quadro = requestAnimationFrame(passo); return; }
-      const dt = Math.min(0.1, (agora - antes) / 1000);
-      antes = agora;
-      const v = velocidade.current;
-      velocidade.current = GIRO_BASE + (v - GIRO_BASE) * Math.exp(-FREIO * dt);
-      giroPendurada.current += velocidade.current * dt;
-      desenhar(cx, giroPendurada.current);
-      if (visivel && !parada) quadro = requestAnimationFrame(passo);
-    };
-    desenhar(cx, giroPendurada.current);
-    // Fora da tela (rolou para baixo), para de desenhar.
-    const obs = new IntersectionObserver(([e]) => {
-      visivel = e.isIntersecting;
-      cancelAnimationFrame(quadro);
-      dormindo?.(); dormindo = null;
-      if (visivel && !parada) { antes = performance.now(); quadro = requestAnimationFrame(passo); }
-    });
-    obs.observe(cv);
-    return () => { cancelAnimationFrame(quadro); dormindo?.(); obs.disconnect(); };
+    if (!cv) return;
+    pintarTira(cv, Math.min(2, window.devicePixelRatio || 1));
+    const largura = LARGURA * QUADROS_DO_CICLO;
+    const quadroDoGiro = (g: number) => Math.floor(tempoDoGiro(g) / CICLO_MS * QUADROS_DO_CICLO);
+    if (parada || typeof cv.animate !== 'function') {
+      cv.style.transform = `translateX(${-quadroDoGiro(giroPendurada.current) * LARGURA}px)`;
+      return;
+    }
+    const a = cv.animate(
+      [{ transform: 'translateX(0)' }, { transform: `translateX(${-largura}px)` }],
+      { duration: CICLO_MS, iterations: Infinity, easing: `steps(${QUADROS_DO_CICLO}, end)` },
+    );
+    a.currentTime = tempoDoGiro(giroPendurada.current);
+    giro.current = a;
+    // Ninguém olhando, ou a bola fora da tela: a tira para onde está.
+    let visivel = true;
+    const conferir = () => { if (visivel && !ninguemOlhando()) a.play(); else a.pause(); };
+    const pararDeOuvir = ouvirAtencao(conferir);
+    const obs = new IntersectionObserver(([e]) => { visivel = e.isIntersecting; conferir(); });
+    obs.observe(cv.parentElement ?? cv);
+    return () => { pararDeOuvir(); obs.disconnect(); a.cancel(); giro.current = null; };
   }, [parada]);
+
+  /** O giro forte do clique: a tira acelera e vai freando até o giro de sempre. */
+  const freio = useRef(0);
+  useEffect(() => () => window.clearTimeout(freio.current), []);
+  const acelerarGiro = () => {
+    window.clearTimeout(freio.current);
+    let antes = performance.now();
+    const passo = () => {
+      const a = giro.current;
+      if (!a) return;
+      const agora = performance.now(), dt = (agora - antes) / 1000;
+      antes = agora;
+      velocidade.current = GIRO_BASE + (velocidade.current - GIRO_BASE) * Math.exp(-FREIO * dt);
+      const fim = velocidade.current - GIRO_BASE < 0.04;
+      if (fim) velocidade.current = GIRO_BASE;
+      a.updatePlaybackRate(velocidade.current / GIRO_BASE);
+      if (!fim) freio.current = window.setTimeout(passo, 90);
+    };
+    passo();
+  };
 
   // O fio até o varal.
   useEffect(() => {
@@ -882,6 +928,7 @@ export function BolaDaSaudacao() {
   const empurrar = () => {
     velocidade.current = GIRO_CLIQUE;
     if (parada) return;
+    acelerarGiro();
     empurrao.current?.animate(
       [{ rotate: '0deg' }, { rotate: '14deg' }, { rotate: '-10deg' }, { rotate: '6deg' }, { rotate: '-3deg' }, { rotate: '1deg' }, { rotate: '0deg' }],
       { duration: 2600, easing: 'ease-out' },
@@ -897,7 +944,7 @@ export function BolaDaSaudacao() {
     setZoeira({ texto: ZOEIRAS[i], x: c.x, y: c.y, id: Date.now() });
   };
 
-  const aoApertar = (ev: React.PointerEvent<HTMLCanvasElement>) => {
+  const aoApertar = (ev: React.PointerEvent<HTMLSpanElement>) => {
     if (solta) return;
     ev.preventDefault();
     // Um gesto de verdade: libera o som da cesta, caso o fio arrebente neste puxão.
@@ -914,7 +961,7 @@ export function BolaDaSaudacao() {
     };
   };
 
-  const aoMover = (ev: React.PointerEvent<HTMLCanvasElement>) => {
+  const aoMover = (ev: React.PointerEvent<HTMLSpanElement>) => {
     const p = puxao.current;
     if (!p || p.acabou) return;
     const dx = ev.clientX - p.x0, dy = ev.clientY - p.y0;
@@ -978,14 +1025,17 @@ export function BolaDaSaudacao() {
               </svg>
             </>
           )}
-          <canvas
-            ref={tela}
+          <span
+            ref={janela}
+            className="nt-saud-janela"
             style={{ width: LARGURA, height: ALTURA, visibility: solta ? 'hidden' : undefined }}
             onPointerDown={aoApertar}
             onPointerMove={aoMover}
             onPointerUp={aoSoltar}
             onPointerCancel={aoSoltar}
-          />
+          >
+            <canvas ref={tela} style={{ width: LARGURA * QUADROS_DO_CICLO, height: ALTURA }} />
+          </span>
         </span>
       </span>
       {solta && <BolaSolta de={solta.de} pega={solta.pega} casa={centroDaBola} aoChegando={aoChegando} aoTerminar={voltou} />}

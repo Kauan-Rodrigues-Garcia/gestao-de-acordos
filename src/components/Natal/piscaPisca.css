@@ -41,6 +41,21 @@
 /* Tudo aceso, parado — a pausa entre uma função e outra. */
 [data-pisca="fixo"] .pp-luz { animation: none; opacity: 1; }
 
+/*
+ * As camadas de um fio (`pp-camada pp-a` / `pp-b`, 10/11/2026): quem agrupa as
+ * lâmpadas de cada fio numa caixa só. Nas funções em que o fio inteiro pisca
+ * junto, quem anima é a caixa — uma animação por fio, em vez de uma por
+ * lâmpada (os PCs fracos sentem cada uma). Nas outras, a caixa fica acesa e
+ * cada lâmpada pisca no seu tempo, como antes.
+ */
+.pp-camada { will-change: opacity; }
+[data-pisca="alterna"] .pp-camada { animation: pp-liga 1.1s steps(1, end) infinite; }
+[data-pisca="frenetico"] .pp-camada { animation: pp-liga .22s steps(1, end) infinite; }
+[data-pisca="devagar"] .pp-camada { animation: pp-respira 3.6s ease-in-out infinite; }
+[data-pisca="alterna"] .pp-camada .pp-luz,
+[data-pisca="frenetico"] .pp-camada .pp-luz,
+[data-pisca="devagar"] .pp-camada .pp-luz { animation: none; opacity: 1; }
+
 @keyframes pp-liga { 0% { opacity: 1; } 50% { opacity: var(--min); } }
 @keyframes pp-respira { 0%, 100% { opacity: var(--min); } 50% { opacity: 1; } }
 @keyframes pp-corre { 0%, 8% { opacity: 1; } 22%, 100% { opacity: var(--min); } }

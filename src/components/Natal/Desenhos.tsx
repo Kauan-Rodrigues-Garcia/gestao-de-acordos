@@ -54,30 +54,39 @@ export function GloboDeNeve({ nevando: comMensagem }: { nevando: boolean }) {
     antes.current = nevando;
   }, [nevando]);
 
+  /*
+   * (10/11/2026, PCs fracos) O globo fica na tela em TODAS as abas. A neve e o
+   * reflexo animavam dentro do SVG, e animação dentro de SVG não vai para a
+   * placa de vídeo: cada quadro refazia estilo e leiaute da página inteira, o
+   * dia todo. Agora o desenho é parado, e o que anima mora em caixas HTML por
+   * cima dele (`.globo-vidro`, recortado no círculo do vidro), em coordenadas
+   * do próprio desenho (a camada é escalada junto). O balanço do hover e o
+   * chacoalho vão na caixa de fora (`.nt-globo-caixa`), com tudo dentro.
+   */
   return (
-    <svg viewBox="0 0 100 112" className={cn('nt-globo', nevando && 'nevando', chacoalha && 'chacoalha')} aria-hidden="true">
-      <defs>
-        <clipPath id={`${ID}-dentro`}><circle cx="50" cy="46" r="36.6" /></clipPath>
-        <radialGradient id={`${ID}-ceu`} cx="38%" cy="28%" r="80%">
-          <stop offset="0" stopColor="#F4FCFB" />
-          <stop offset=".55" stopColor="#CDEBEA" />
-          <stop offset="1" stopColor="#93CBCF" />
-        </radialGradient>
-        <radialGradient id={`${ID}-luz`} cx="50%" cy="50%" r="50%">
-          <stop offset="0" stopColor="#FFD56B" stopOpacity=".75" />
-          <stop offset="1" stopColor="#FFD56B" stopOpacity="0" />
-        </radialGradient>
-        <linearGradient id={`${ID}-madeira`} x1="0" x2="1" y1="0" y2="0">
-          <stop offset="0" stopColor="#7A4428" />
-          <stop offset=".35" stopColor="#A2643D" />
-          <stop offset=".7" stopColor="#8B5131" />
-          <stop offset="1" stopColor="#6A3A21" />
-        </linearGradient>
-      </defs>
+    <span className={cn('nt-globo-caixa', nevando && 'nevando', chacoalha && 'chacoalha')} aria-hidden="true">
+      <svg viewBox="0 0 100 112" className="nt-globo">
+        <defs>
+          <clipPath id={`${ID}-dentro`}><circle cx="50" cy="46" r="36.6" /></clipPath>
+          <radialGradient id={`${ID}-ceu`} cx="38%" cy="28%" r="80%">
+            <stop offset="0" stopColor="#F4FCFB" />
+            <stop offset=".55" stopColor="#CDEBEA" />
+            <stop offset="1" stopColor="#93CBCF" />
+          </radialGradient>
+          <radialGradient id={`${ID}-luz`} cx="50%" cy="50%" r="50%">
+            <stop offset="0" stopColor="#FFD56B" stopOpacity=".75" />
+            <stop offset="1" stopColor="#FFD56B" stopOpacity="0" />
+          </radialGradient>
+          <linearGradient id={`${ID}-madeira`} x1="0" x2="1" y1="0" y2="0">
+            <stop offset="0" stopColor="#7A4428" />
+            <stop offset=".35" stopColor="#A2643D" />
+            <stop offset=".7" stopColor="#8B5131" />
+            <stop offset="1" stopColor="#6A3A21" />
+          </linearGradient>
+        </defs>
 
-      <ellipse cx="50" cy="108.5" rx="40" ry="3.2" fill="oklch(0.2 0.03 200 / .28)" />
+        <ellipse cx="50" cy="108.5" rx="40" ry="3.2" fill="oklch(0.2 0.03 200 / .28)" />
 
-      <g className="globo-mexe">
         {/* Dentro do vidro */}
         <g clipPath={`url(#${ID}-dentro)`}>
           <rect x="10" y="6" width="80" height="80" fill={`url(#${ID}-ceu)`} />
@@ -89,26 +98,11 @@ export function GloboDeNeve({ nevando: comMensagem }: { nevando: boolean }) {
           <Pinheiro x={77} y={69} s={0.82} />
           <path d="M8 76 C26 70 44 75 60 72 C74 69 84 72 92 74 L92 90 L8 90 Z" fill="#E6F0F5" />
           <path d="M8 79 C30 75 50 79 70 77 C80 76 88 77 92 78 L92 90 L8 90 Z" fill="#FFFFFF" />
-
-          <g className="neve-leve">
-            {FLOCOS_LEVES.map(([x, d, t, dx, r], i) => (
-              <circle key={i} className="floco" cx={x} cy="8" r={r}
-                style={{ ['--d' as string]: `${d}s`, ['--t' as string]: `${t}s`, ['--dx' as string]: `${dx}px` }} />
-            ))}
-          </g>
-          <g className="neve-forte">
-            {FLOCOS_FORTES.map(([x, d, t, , r], i) => (
-              <circle key={i} className={cn('floco', i % 2 && 'avesso')} cx={x} cy="8" r={r}
-                style={{ ['--d' as string]: `${d}s`, ['--t' as string]: `${t}s` }} />
-            ))}
-          </g>
         </g>
 
         {/* O vidro */}
         <circle cx="50" cy="46" r="37.4" fill="none" stroke="#FFFFFF" strokeOpacity=".75" strokeWidth="1.4" />
         <circle cx="50" cy="46" r="38.2" fill="none" stroke="oklch(0.35 0.04 210 / .35)" strokeWidth=".7" />
-        <path className="reflexo" d="M20.5 38 A31 31 0 0 1 40 14.5" fill="none" stroke="#FFFFFF" strokeWidth="3.4" strokeLinecap="round" />
-        <ellipse className="reflexo" cx="66" cy="19.5" rx="4.6" ry="2.4" transform="rotate(28 66 19.5)" fill="#FFFFFF" />
         <path d="M24 70 A31 31 0 0 0 76 70" fill="none" stroke="#FFFFFF" strokeOpacity=".35" strokeWidth="1.2" strokeLinecap="round" />
 
         {/* A base de madeira */}
@@ -120,10 +114,35 @@ export function GloboDeNeve({ nevando: comMensagem }: { nevando: boolean }) {
         <rect x="13" y="101" width="74" height="1.6" rx=".8" fill="#8F5A37" />
         <rect x="39.5" y="90" width="21" height="6.5" rx="1.2" fill="#E8BB4E" stroke="#A97B1E" strokeWidth=".6" />
         <path d="M43 93.2 H57" stroke="#9A6C14" strokeWidth=".8" strokeLinecap="round" strokeDasharray="2.2 1.3" />
-      </g>
-    </svg>
+      </svg>
+
+      {/* O que anima: caixas HTML em coordenadas do desenho (100 × 112), escaladas junto. */}
+      <span className="globo-camada">
+        <span className="globo-vidro">
+          <span className="neve-leve">
+            {FLOCOS_LEVES.map(([x, d, t, dx, r], i) => (
+              <i key={i} className={dx < 0 ? 'b' : undefined}
+                style={{ left: x - r - VIDRO.x, top: 8 - r - VIDRO.y, width: r * 2, height: r * 2, animationDuration: `${t}s`, animationDelay: `${d}s` }} />
+            ))}
+          </span>
+          <span className="neve-forte">
+            {FLOCOS_FORTES.map(([x, d, t, , r], i) => (
+              <i key={i} className={i % 2 ? 'b' : undefined}
+                style={{ left: x - r - VIDRO.x, top: 8 - r - VIDRO.y, width: r * 2, height: r * 2, animationDuration: `${t}s`, animationDelay: `${d}s` }} />
+            ))}
+          </span>
+        </span>
+        <svg className="globo-reflexo" viewBox="0 0 100 112">
+          <path d="M20.5 38 A31 31 0 0 1 40 14.5" fill="none" stroke="#FFFFFF" strokeWidth="3.4" strokeLinecap="round" />
+          <ellipse cx="66" cy="19.5" rx="4.6" ry="2.4" transform="rotate(28 66 19.5)" fill="#FFFFFF" />
+        </svg>
+      </span>
+    </span>
   );
 }
+
+/** O quadrado do círculo do vidro (cx 50, cy 46, r 36,6), em coordenadas do desenho. */
+const VIDRO = { x: 50 - 36.6, y: 46 - 36.6 };
 
 function Pinheiro({ x, y, s }: { x: number; y: number; s: number }) {
   const p = (dx: number, dy: number) => `${x + dx * s},${y + dy * s}`;

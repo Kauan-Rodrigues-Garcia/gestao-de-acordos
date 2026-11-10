@@ -8,55 +8,67 @@
 .nt-nevado { position: absolute; left: -1px; right: -1px; top: -23px; height: 46px; z-index: 3; pointer-events: none;
   animation: nt-nevado-chega .9s ease-out both; }
 @keyframes nt-nevado-chega { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
-.nt-neve-topo { position: absolute; inset: 0; overflow: visible; filter: drop-shadow(0 1.2px 1.2px oklch(0.35 0.05 240 / .22)); }
-.nt-claro .nt-neve-topo { filter: drop-shadow(0 1.5px 2px oklch(0.45 0.07 240 / .28)); }
+/* (10/11/2026) A sombra é uma cópia do contorno logo abaixo, e não `drop-shadow`:
+   o sulco animando dentro do SVG refazia a sombra do card inteiro a cada quadro. */
+.nt-neve-topo { position: absolute; inset: 0; overflow: visible; }
+.nt-neve-topo .massa-sombra { fill: oklch(0.35 0.05 240 / .2); }
+.nt-claro .nt-neve-topo .massa-sombra { fill: oklch(0.45 0.07 240 / .24); }
 .nt-claro .nt-neve-topo .massa { stroke: oklch(0.8 0.04 240); stroke-width: .9; }
 
-/* (09/11/2026, mais leve) As faíscas moram num SVG próprio, sem sombra: dentro do topo
-   (que tem `drop-shadow`), cada piscada refazia a sombra do card inteiro. */
+/* (10/11/2026) As faíscas são caixas HTML com a estrelinha parada dentro: a
+   placa de vídeo anima a caixa. Animadas como `<path>` do SVG, cada piscada
+   refazia o estilo e o leiaute da página. */
 .nt-neve-faiscas { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
-.nt-neve-faiscas .faisca { fill: #FFFFFF; opacity: 0; transform-box: fill-box; transform-origin: center;
+.nt-neve-faiscas .faisca { position: absolute; opacity: 0; will-change: transform, opacity;
   animation: nt-faisca 4.2s ease-in-out var(--d) infinite; }
-.nt-claro .nt-neve-faiscas .faisca { fill: oklch(0.78 0.09 230); }
+.nt-neve-faiscas .faisca svg { display: block; width: 100%; height: 100%; overflow: visible; fill: #FFFFFF; }
+.nt-claro .nt-neve-faiscas .faisca svg { fill: oklch(0.78 0.09 230); }
 @keyframes nt-faisca {
   0%, 72%, 100% { opacity: 0; transform: scale(.3) rotate(0deg); }
   84% { opacity: 1; transform: scale(1) rotate(45deg); }
 }
 
-/* O sulco do deslize na neve. */
-.nt-neve-topo .sulco { fill: oklch(0.62 0.05 240 / .2); animation: nt-sulco 4.5s ease-in forwards; }
+/* O sulco do deslize na neve: uma caixa HTML por sulco (`.nt-sulcos`), que acende
+   quando o boneco passa (o atraso vem dele) e some devagar. */
+.nt-sulcos { position: absolute; inset: 0; pointer-events: none; }
+.nt-sulcos .sulco { position: absolute; width: 8.4px; height: 1.5px; border-radius: 50%; background: oklch(0.62 0.05 240 / .2);
+  opacity: 0; will-change: opacity; animation: nt-sulco 4.5s ease-in both; }
 @keyframes nt-sulco { 0% { opacity: 0; } 10% { opacity: 1; } 55% { opacity: .8; } 100% { opacity: 0; } }
 
-/* ── O boneco ────────────────────────────────────────────────────────────── */
+/* ── O boneco ──────────────────────────────────────────────────────────────
+   (10/11/2026) Caixas empilhadas, cada uma com uma animação no máximo:
+     .nt-bn (posição: o deslize)  > .bn-chega (a chegada)  > .bn-fole (respira)
+     > .bn-palco (o desenho, 72 × 76 escalado para 54 × 57) > os pedaços (`.bn-l`).
+   Os pontos de giro ficam em unidades do desenho, porque o palco tem o tamanho dele. */
 .nt-bn { position: absolute; left: 0; top: 0; width: 54px; height: 57px; pointer-events: auto; cursor: pointer; will-change: transform; }
-/* (09/11/2026, mais leve) Sem `drop-shadow`: com o corpo animando dentro, a sombra era refeita a cada quadro. */
-.nt-bn svg { display: block; overflow: visible;
-  animation: nt-bn-chega .9s cubic-bezier(.3, 1.45, .5, 1) .35s both; }
+.bn-chega, .bn-fole { position: absolute; inset: 0; }
+.bn-chega { animation: nt-bn-chega .9s cubic-bezier(.3, 1.45, .5, 1) .35s both; }
 @keyframes nt-bn-chega { from { opacity: 0; transform: translateY(-18px) scale(.8); } to { opacity: 1; transform: none; } }
+.bn-palco { position: absolute; left: 0; top: 0; width: 72px; height: 76px; transform: scale(.75); transform-origin: 0 0; }
+.bn-defs { position: absolute; }
+.bn-l { position: absolute; left: 0; top: 0; width: 72px; height: 76px; display: block; overflow: visible; }
 .nt-bn .sombra { fill: oklch(0.4 0.05 240 / .2); }
 .nt-claro .nt-bn .bola { stroke: oklch(0.84 0.03 240); stroke-width: .7; }
 
 /* ── A névoa ─────────────────────────────────────────────────────────────────
-   `--vel` (0 a 1) vem do laço do boneco, já suavizado: a névoa acompanha a
-   velocidade de verdade em vez de trocar de estado num estalo. No tema claro
-   ela ganha um azul de sombra — névoa branca em fundo branco não existe. */
+   Estica, revolve e solta o rastro com a classe `deslizando` (transição: entra
+   e assenta macio). No tema claro ela ganha um azul de sombra — névoa branca em
+   fundo branco não existe. */
 .nt-claro .nt-bn .nv-tinta { stop-color: oklch(0.86 0.045 240); }
-.nv-vira { transform-box: view-box; transform-origin: 36px 72px; }
+.nv-vira { transform-origin: 36px 72px; }
 .esq .nv-vira { transform: scaleX(-1); }
 
-/* A almofada: estica para trás e achata conforme a velocidade. */
-.nv-nuvem { transform-box: view-box; transform-origin: 40px 72px;
-  transform: translateX(calc(var(--vel, 0) * -3.4px)) scale(calc(1 + var(--vel, 0) * .22), calc(1 - var(--vel, 0) * .1)); }
-/* (09/11/2026, mais leve) A almofada só se mexe deslizando (parada, respirava sem fim). */
-.nv-tufo { transform-box: fill-box; transform-origin: 50% 80%; }
-@keyframes nv-respira { from { transform: scale(.9); opacity: .85; } to { transform: translateY(-.5px) scale(1.06); opacity: 1; } }
-.deslizando .nv-tufo { animation: nv-revolve 1s ease-in-out var(--d) infinite alternate; }
-@keyframes nv-revolve { from { transform: translateX(.6px) scale(.94); } to { transform: translate(-1.6px, -.9px) scale(1.14); } }
+/* A almofada: estica para trás e achata deslizando; revolve por dentro. */
+.nv-nuvem { transform-origin: 40px 72px; transition: transform 1.1s cubic-bezier(.3, .6, .3, 1); }
+.deslizando .nv-nuvem { transform: translateX(-3.4px) scale(1.22, .9); }
+.nv-revolve { transform-origin: 36px 70px; }
+.deslizando .nv-revolve { animation: nv-revolve 1s ease-in-out infinite alternate; }
+@keyframes nv-revolve { from { transform: translateX(.5px) scale(.97, 1); } to { transform: translate(-1px, -.6px) scale(1.04, 1.07); } }
 
 /* O rastro: só existe em movimento, e cada fiapo se desfaz para trás. */
-.nv-rastro { opacity: var(--vel, 0); }
-.nv-fio { transform-box: fill-box; transform-origin: center; opacity: 0;
-  animation: nv-desfaz 1.35s cubic-bezier(.25, .6, .4, 1) var(--d) infinite paused; }
+.nv-rastro { opacity: 0; transition: opacity 1.2s ease; }
+.deslizando .nv-rastro { opacity: 1; transition-duration: .7s; }
+.nv-fio { opacity: 0; animation: nv-desfaz 1.35s cubic-bezier(.25, .6, .4, 1) var(--d) infinite paused; }
 .deslizando .nv-fio { animation-play-state: running; }
 @keyframes nv-desfaz {
   0% { opacity: 0; transform: translate(4px, 0) scale(.6); }
@@ -64,17 +76,21 @@
   100% { opacity: 0; transform: translate(-12px, -2.5px) scale(1.6); }
 }
 
-/* Parado, dois brilhinhos piscam na névoa assentada; somem quando ele sai. */
-.nv-brilho { opacity: calc(1 - var(--vel, 0) * 2); }
-.nv-brilho path { fill: #FFFFFF; transform-box: fill-box; transform-origin: center; animation: nt-faisca 3.4s ease-in-out infinite; }
-.nv-brilho g + g path { animation-delay: -1.7s; }
-.nt-claro .nv-brilho path { fill: oklch(0.78 0.09 230); }
+/* Ao parar, dois brilhinhos piscam uma vez na névoa que assenta. */
+.nv-brilho { transition: opacity .4s ease; }
+.deslizando .nv-brilho { opacity: 0; }
+.nv-faisca { opacity: 0; }
+.nv-faisca path { fill: #FFFFFF; }
+.nt-claro .nv-faisca path { fill: oklch(0.78 0.09 230); }
+.assentou .nv-faisca { animation: nt-faisca 1.7s ease-in-out .5s 1 both; }
+.assentou .nv-faisca.outra { animation-delay: 1.4s; }
 
-/* Os grupos que se mexem giram em volta da base do montinho. */
-.bn-salto, .bn-inclina, .bn-corpo { transform-box: view-box; transform-origin: 36px 72px; }
+/* As caixas que se mexem giram em volta da base do montinho. */
+.bn-salto, .bn-inclina, .bn-corpo { transform-origin: 36px 72px; }
 
 /* Virar: o rosto e os botões puxam para o lado, a cenoura troca de lado e a
-   ponta do cachecol passa para trás — tudo por transição, sem girar o boneco. */
+   ponta do cachecol passa para trás — tudo por transição, sem girar o boneco.
+   (Rosto, botões e nariz ficam dentro do SVG: só mexem na virada, de leve.) */
 .bn-rosto, .bn-frente { transition: transform .65s cubic-bezier(.4, 0, .2, 1); }
 .dir .bn-rosto { transform: translateX(2.3px); }
 .esq .bn-rosto { transform: translateX(-2.3px); }
@@ -90,30 +106,41 @@
 .deslizando.dir .bn-inclina { transform: rotate(4deg); }
 .deslizando.esq .bn-inclina { transform: rotate(-4deg); }
 
-/* Parado: respira, pisca e balança o pompom. (09/11/2026, mais leve) A cabeça, os braços e as
-   pontas do cachecol só mexem quando ele faz alguma coisa (eram 5 animações sem fim a mais). */
-.bn-corpo { animation: bn-respira 3.2s ease-in-out infinite alternate; }
-@keyframes bn-respira { from { transform: scale(1, 1); } to { transform: scale(1.016, .984); } }
+/* Parado: respira no fole e pisca quando o sorteio quer (`piscando`). A cabeça,
+   os braços e as pontas do cachecol só mexem quando ele faz alguma coisa. */
+.bn-fole { transform-origin: 50% 96%; will-change: transform;
+  animation: bn-respira 3.2s ease-in-out infinite alternate; }
+@keyframes bn-respira { from { transform: scale(1, 1); } to { transform: scale(1.014, .986); } }
+.nt-bn.deslizando .bn-fole, .nt-bn.na-cesta .bn-fole, .nt-bn.esperando .bn-fole,
+.nt-bn.comemorando .bn-fole, .nt-bn.triste .bn-fole, .nt-bn.pulando .bn-fole { animation: none; }
 
-.bn-cabeca { transform-box: view-box; transform-origin: 36px 40px; }
+.bn-cabeca { transform-origin: 36px 40px; }
 @keyframes bn-cabeca { from { transform: rotate(-3deg); } to { transform: rotate(3.5deg); } }
 
-.bn-olhos { transform-box: fill-box; transform-origin: center; animation: bn-pisca 5.2s infinite; }
-@keyframes bn-pisca { 0%, 91%, 97%, 100% { transform: scaleY(1); } 94% { transform: scaleY(.1); } }
+.bn-olhos { transform-box: fill-box; transform-origin: center; }
+.nt-bn.piscando .bn-olhos { animation: bn-pisca .2s ease-in-out 1; }
+@keyframes bn-pisca { 0%, 100% { transform: scaleY(1); } 45% { transform: scaleY(.1); } }
 
-.bn-braco { transform-box: view-box; }
 .bn-braco-e { transform-origin: 21px 50px; }
 .bn-braco-d { transform-origin: 51px 50px; animation-delay: -1.7s; }
 @keyframes bn-braco-calmo { from { transform: rotate(-4deg); } to { transform: rotate(4deg); } }
 
-.bn-ponta { transform-box: view-box; }
 .bn-ponta-e { transform-origin: 28.8px 42.8px; }
 .bn-ponta-d { transform-origin: 43.2px 42.8px; }
 @keyframes bn-ponta-e { from { transform: rotate(2deg); } to { transform: rotate(7deg); } }
 @keyframes bn-ponta-d { from { transform: rotate(-2deg); } to { transform: rotate(-7deg); } }
 
-.bn-pompom { transform-box: fill-box; transform-origin: 50% 100%; animation: bn-pompom 2.6s ease-in-out infinite alternate; }
+/* O pompom balança em movimento; quando ele para, assenta num balanço que perde força.
+   A caixa de fora tem o −8° do gorro; o pompom gira em volta do pé dele (36, 10,3). */
+.bn-gorro-giro { transform: rotate(-8deg); transform-origin: 36px 18px; }
+.bn-pompom { transform-origin: 36px 10.3px; }
+.deslizando .bn-pompom, .comemorando .bn-pompom { animation: bn-pompom .95s ease-in-out infinite alternate; }
 @keyframes bn-pompom { from { transform: rotate(-6deg); } to { transform: rotate(6deg); } }
+.assentou .bn-pompom { animation: bn-pompom-assenta 1.6s ease-out 1; }
+@keyframes bn-pompom-assenta {
+  0% { transform: rotate(-11deg); } 22% { transform: rotate(8deg); } 44% { transform: rotate(-5deg); }
+  66% { transform: rotate(2.5deg); } 84% { transform: rotate(-1deg); } 100% { transform: rotate(0); }
+}
 
 /* Deslizando: um balanço macio, braços abertos se equilibrando, o cachecol
    esvoaçando para trás e o pompom chacoalhando de leve. */
@@ -130,7 +157,6 @@
 .deslizando .bn-ponta-d { animation: bn-esvoaca-d .7s ease-in-out infinite alternate; }
 @keyframes bn-esvoaca-e { from { transform: rotate(12deg); } to { transform: rotate(22deg); } }
 @keyframes bn-esvoaca-d { from { transform: rotate(-12deg); } to { transform: rotate(-22deg); } }
-.deslizando .bn-pompom { animation-duration: .95s; }
 
 /* Acenando: o braço do lado para onde ele olha sobe e balança. */
 .nt-bn.acenando.dir .bn-braco-d { animation: bn-aceno-d .36s ease-in-out infinite alternate; }
@@ -215,6 +241,8 @@
 .nt-bn.comemorando .bn-boca { opacity: 0; }
 .nt-bn.comemorando .bn-boca-aberta { opacity: 1; }
 .nt-bn.comemorando .bn-pompom { animation-duration: .4s; }
+/* Comemorando ou triste, a piscada sorteada não atropela a cara dele. */
+.nt-bn.comemorando.piscando .bn-olhos { animation: none; }
 
 /* Errou: balança a cabeça («não…»), bracinhos caídos, corpo murcho, boquinha triste. */
 .nt-bn.triste .bn-cabeca { animation: bn-nao .42s ease-in-out 2; }
@@ -229,4 +257,3 @@
 
 /* Modo leve: tudo parado. */
 .nt-nevado.quieto, .nt-nevado.quieto * { animation: none !important; transition: none !important; }
-.nt-nevado.quieto .nt-neve-topo, .nt-nevado.quieto .nt-bn svg { filter: none; }

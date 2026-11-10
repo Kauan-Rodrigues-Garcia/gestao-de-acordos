@@ -6,11 +6,13 @@
  */
 
 /* ── Globo de neve ───────────────────────────────────────────────────────── */
-/* (09/11/2026, mais leve) Sem `drop-shadow`: a neve caindo dentro refazia a sombra a cada quadro. */
-.nt-globo { width: 60px; height: 67px; overflow: visible; }
-.nt-globo .globo-mexe { transform-box: view-box; transform-origin: 50px 104px; }
-.group:hover .nt-globo .globo-mexe { animation: nt-inclina .9s ease-in-out; }
-.nt-globo.chacoalha .globo-mexe { animation: nt-chacoalha 1.2s cubic-bezier(.36,.07,.19,.97); }
+/* (09/11/2026, mais leve) Sem `drop-shadow`: a neve caindo dentro refazia a sombra a cada quadro.
+   (10/11/2026) O desenho é parado; a neve e o reflexo são caixas HTML por cima (`.globo-camada`),
+   que a placa de vídeo anima sozinha. Nada de variável nos quadros-chave. */
+.nt-globo-caixa { position: relative; display: block; width: 60px; height: 67px; transform-origin: 30px 62.4px; }
+.nt-globo { display: block; width: 60px; height: 67px; overflow: visible; }
+.group:hover .nt-globo-caixa { animation: nt-inclina .9s ease-in-out; }
+.nt-globo-caixa.chacoalha { animation: nt-chacoalha 1.2s cubic-bezier(.36,.07,.19,.97); }
 @keyframes nt-inclina { 0%, 100% { transform: rotate(0); } 35% { transform: rotate(-4deg); } 70% { transform: rotate(2.5deg); } }
 @keyframes nt-chacoalha {
   0%, 100% { transform: rotate(0); }
@@ -18,22 +20,30 @@
   34% { transform: rotate(-7deg); } 46% { transform: rotate(5deg); } 60% { transform: rotate(-3deg); } 76% { transform: rotate(1.5deg); }
 }
 
-.nt-globo .floco { fill: #FFFFFF; stroke: oklch(0.75 0.03 220 / .5); stroke-width: .25; }
-.nt-globo .neve-leve .floco { animation: nt-cai var(--t) linear var(--d) infinite; }
-@keyframes nt-cai {
-  0% { transform: translate(0, 0); opacity: 0; }
-  10% { opacity: 1; }
-  50% { transform: translate(calc(var(--dx) * -1), 36px); }
-  88% { opacity: 1; }
-  100% { transform: translate(var(--dx), 68px); opacity: 0; }
+/* A camada: 100 × 112 (o desenho), escalada para os 60 × 67 da caixa. */
+.globo-camada { position: absolute; left: 0; top: 0; width: 100px; height: 112px; transform: scale(.6); transform-origin: 0 0; pointer-events: none; }
+.globo-vidro { position: absolute; left: 13.4px; top: 9.4px; width: 73.2px; height: 73.2px; border-radius: 50%; overflow: hidden; }
+.globo-vidro i { position: absolute; border-radius: 50%; background: #FFFFFF; box-shadow: 0 0 0 .25px oklch(0.75 0.03 220 / .5); opacity: 0; will-change: transform, opacity;
+  animation-timing-function: linear; animation-iteration-count: infinite; }
+.neve-leve i { animation-name: nt-globo-cai-a; }
+.neve-leve i.b { animation-name: nt-globo-cai-b; }
+@keyframes nt-globo-cai-a {
+  0% { transform: translate(0, 0); opacity: 0; } 10% { opacity: 1; }
+  50% { transform: translate(-2.5px, 36px); } 88% { opacity: 1; }
+  100% { transform: translate(2.5px, 68px); opacity: 0; }
+}
+@keyframes nt-globo-cai-b {
+  0% { transform: translate(0, 0); opacity: 0; } 10% { opacity: 1; }
+  50% { transform: translate(2.5px, 36px); } 88% { opacity: 1; }
+  100% { transform: translate(-2.5px, 68px); opacity: 0; }
 }
 
-/* O redemoinho só corre com mensagem; parado e invisível, não custa nada. */
-.nt-globo .neve-forte { opacity: 0; transition: opacity .9s; }
-.nt-globo.nevando .neve-forte { opacity: 1; }
-.nt-globo .neve-forte .floco { animation: nt-redemoinho var(--t) linear var(--d) infinite paused; }
-.nt-globo .neve-forte .floco.avesso { animation-name: nt-redemoinho-avesso; }
-.nt-globo.nevando .neve-forte .floco { animation-play-state: running; }
+/* O redemoinho só corre com mensagem; sem ela, os flocos nem existem para a placa (display). */
+.neve-forte { position: absolute; inset: 0; display: none; }
+.nevando .neve-forte { display: block; animation: nt-globo-aparece .9s ease-out both; }
+@keyframes nt-globo-aparece { from { opacity: 0; } to { opacity: 1; } }
+.neve-forte i { animation-name: nt-redemoinho; }
+.neve-forte i.b { animation-name: nt-redemoinho-avesso; }
 @keyframes nt-redemoinho {
   0% { transform: translate(0, 0); opacity: 0; } 8% { opacity: 1; }
   25% { transform: translate(6px, 16px); } 50% { transform: translate(-5px, 34px); }
@@ -47,13 +57,14 @@
   100% { transform: translate(1px, 70px); opacity: 0; }
 }
 
+/* Com mensagem, a janela da casinha acende (fica acesa: piscar dentro do SVG custava a página toda). */
 .nt-globo .janela { fill: #5A3A2E; transition: fill .5s; }
 .nt-globo .luz-casa { opacity: 0; transition: opacity .8s; }
-.nt-globo.nevando .janela { fill: #FFD46A; }
-.nt-globo.nevando .luz-casa { opacity: 1; animation: nt-lareira 2.4s ease-in-out infinite; }
-@keyframes nt-lareira { 0%, 100% { opacity: .85; } 40% { opacity: 1; } 70% { opacity: .7; } }
+.nevando .nt-globo .janela { fill: #FFD46A; }
+.nevando .nt-globo .luz-casa { opacity: .9; }
 
-.nt-globo .reflexo { opacity: .55; animation: nt-brilho-vidro 5s ease-in-out infinite; }
+.globo-reflexo { position: absolute; inset: 0; width: 100px; height: 112px; overflow: visible; will-change: opacity;
+  animation: nt-brilho-vidro 5s ease-in-out infinite; }
 @keyframes nt-brilho-vidro { 0%, 100% { opacity: .45; } 50% { opacity: .8; } }
 
 /* ── Gorro nas fotos ─────────────────────────────────────────────────────── */

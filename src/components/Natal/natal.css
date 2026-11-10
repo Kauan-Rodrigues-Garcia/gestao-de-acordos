@@ -13,8 +13,59 @@
 .nt-revoada { position: absolute; inset: 0; z-index: 6; pointer-events: none; overflow: hidden; }
 
 /* ── Neve e montes ───────────────────────────────────────────────────────── */
-.nt-neve { position: absolute; inset: 0; width: 100%; height: 100%; opacity: .8; }
-.nt-claro .nt-neve { opacity: 1; }
+/*
+ * A neve (`Neve` em `CenaNatal.tsx`, 10/11/2026): um `span` por floco, com UMA
+ * animação de `transform`, que a placa de vídeo toca sozinha. O vento vai nos
+ * quadros-chave: nove pontos de uma onda, três ondas diferentes. Uma animação
+ * só por floco, e só de `transform`: duas no mesmo elemento (`translate` para
+ * a queda e `transform` para o vento) o navegador não manda para a placa —
+ * ficam na thread principal, refazendo o estilo a cada quadro (medido).
+ * Nada de variável nos quadros-chave. A duração e o atraso vêm do floco.
+ */
+.nt-flocos { position: absolute; inset: 0; overflow: hidden; }
+.nt-flocos span {
+  position: absolute;
+  top: -12px;
+  border-radius: 50%;
+  background: radial-gradient(circle, currentColor 0 42%, transparent 72%);
+  will-change: transform;
+  animation: nt-floco-a linear infinite;
+}
+.nt-flocos span:nth-child(3n + 1) { animation-name: nt-floco-b; }
+.nt-flocos span:nth-child(3n + 2) { animation-name: nt-floco-c; }
+@keyframes nt-floco-a {
+  0% { transform: translate3d(0px, 0vh, 0); }
+  12.5% { transform: translate3d(7.1px, 13vh, 0); }
+  25% { transform: translate3d(10px, 26vh, 0); }
+  37.5% { transform: translate3d(7.1px, 39vh, 0); }
+  50% { transform: translate3d(0px, 52vh, 0); }
+  62.5% { transform: translate3d(-7.1px, 65vh, 0); }
+  75% { transform: translate3d(-10px, 78vh, 0); }
+  87.5% { transform: translate3d(-7.1px, 91vh, 0); }
+  100% { transform: translate3d(0px, 104vh, 0); }
+}
+@keyframes nt-floco-b {
+  0% { transform: translate3d(0px, 0vh, 0); }
+  12.5% { transform: translate3d(-14.8px, 13vh, 0); }
+  25% { transform: translate3d(-11.3px, 26vh, 0); }
+  37.5% { transform: translate3d(6.1px, 39vh, 0); }
+  50% { transform: translate3d(16px, 52vh, 0); }
+  62.5% { transform: translate3d(6.1px, 65vh, 0); }
+  75% { transform: translate3d(-11.3px, 78vh, 0); }
+  87.5% { transform: translate3d(-14.8px, 91vh, 0); }
+  100% { transform: translate3d(0px, 104vh, 0); }
+}
+@keyframes nt-floco-c {
+  0% { transform: translate3d(0px, 0vh, 0); }
+  12.5% { transform: translate3d(8.4px, 13vh, 0); }
+  25% { transform: translate3d(15.6px, 26vh, 0); }
+  37.5% { transform: translate3d(20.3px, 39vh, 0); }
+  50% { transform: translate3d(22px, 52vh, 0); }
+  62.5% { transform: translate3d(20.3px, 65vh, 0); }
+  75% { transform: translate3d(15.6px, 78vh, 0); }
+  87.5% { transform: translate3d(8.4px, 91vh, 0); }
+  100% { transform: translate3d(0px, 104vh, 0); }
+}
 .nt-montes { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 110px; }
 .nt-montes .longe { fill: oklch(0.95 0.015 230 / .1); }
 .nt-montes .perto { fill: oklch(0.97 0.012 230 / .16); }
@@ -29,12 +80,16 @@
 .nt-varal .soquete { fill: oklch(0.32 0.05 150); }
 .nt-varal.com-guirlanda .fio { stroke: oklch(0.36 0.07 150); }
 
-.nt-halo, .nt-miolo { position: absolute; border-radius: 50%; pointer-events: none; will-change: opacity; }
-.nt-halo { width: 30px; height: 30px; background: radial-gradient(circle, color-mix(in oklch, var(--cor) 70%, transparent) 0%, color-mix(in oklch, var(--cor) 25%, transparent) 40%, transparent 70%);
+/* As luzes acesas (10/11/2026): duas camadas, uma por fio, por cima do vidro das
+   lâmpadas. O pisca vem do controlador (`piscaPisca.ts` / `piscaPisca.css`): nas
+   funções do fio inteiro anima a camada; nas outras, cada lâmpada. */
+.nt-varal-fio { position: absolute; left: 0; top: 0; width: 100%; height: 48px; z-index: 2; pointer-events: none; --min: 0; }
+.nt-halo { position: absolute; width: 30px; height: 30px; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle, color-mix(in oklch, var(--cor) 70%, transparent) 0%, color-mix(in oklch, var(--cor) 25%, transparent) 40%, transparent 70%);
   --min: 0; }
-/* O pisca do varal vem do controlador (`piscaPisca.ts` / `piscaPisca.css`). */
-.nt-miolo { width: 6px; height: 8px; background: radial-gradient(circle, #fff 0%, rgb(255 255 255 / .6) 45%, transparent 75%); z-index: 1;
-  --min: .1; }
+/* O miolo branco mora dentro do brilho: os dois acendem juntos, numa caixa só. */
+.nt-miolo { position: absolute; left: 12px; top: 11px; width: 6px; height: 8px; border-radius: 50%;
+  background: radial-gradient(circle, #fff 0%, rgb(255 255 255 / .6) 45%, transparent 75%); }
 .nt-vidro { --min: .5; position: absolute; z-index: 1; width: 0; height: 0; transform-origin: 0 0; pointer-events: none; }
 .nt-vidro > svg { position: absolute; left: -6px; top: 3px; overflow: visible; }
 @keyframes nt-pisca { 0%, 100% { opacity: 1; } 45% { opacity: .25; } 60% { opacity: .9; } }
@@ -69,16 +124,16 @@
 .nt-treno { position: absolute; left: 0; width: 280px; animation: nt-voa var(--dur, 16s) linear 1 forwards; will-change: transform; }
 .nt-treno-arco { animation: nt-arco var(--dur, 16s) ease-in-out 1 forwards; }
 .nt-treno-vira { transform-origin: 50% 50%; }
-.nt-treno-svg { position: relative; width: 280px; height: auto; overflow: visible; animation: nt-sobe-desce 2.2s ease-in-out infinite alternate;
-  filter: drop-shadow(0 4px 6px oklch(0.15 0.03 250 / .35)); }
+/* Sem `drop-shadow` (10/11/2026): com as renas galopando dentro, a sombra era refeita a cada quadro. */
+.nt-treno-svg { position: relative; display: block; width: 280px; height: auto; overflow: visible; animation: nt-sobe-desce 2.2s ease-in-out infinite alternate; }
 @keyframes nt-voa { from { transform: translateX(var(--x0)); } to { transform: translateX(var(--x1)); } }
 @keyframes nt-arco {
   0%   { transform: translateY(0); }
   50%  { transform: translateY(var(--curva, 0px)); }
   100% { transform: translateY(var(--desvio, 0px)); }
 }
-/* O rastro do trenó: faíscas num canvas do tamanho da revoada (`RevoadaNatal`). */
-.nt-revoada-rastro { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+/* O rastro do trenó: faíscas num canvas só da faixa do céu por onde ele passa (`RevoadaNatal` diz o alto e a altura). */
+.nt-revoada-rastro { position: absolute; left: 0; width: 100%; pointer-events: none; }
 
 @keyframes nt-sobe-desce { from { transform: translateY(-6px) rotate(-2deg); } to { transform: translateY(6px) rotate(1.5deg); } }
 .nt-treno-svg .arreio { fill: none; stroke: #D9B24A; stroke-width: 1.2; stroke-linecap: round; }
@@ -126,7 +181,8 @@
 @keyframes nt-rena-rabo { from { transform: rotate(-22deg); } to { transform: rotate(18deg); } }
 @keyframes nt-rena-sino { from { transform: rotate(-24deg); } to { transform: rotate(24deg); } }
 @keyframes nt-rena-pisca { 0%, 93%, 100% { transform: scaleY(1); } 96% { transform: scaleY(.1); } }
-.nt-treno-svg .nariz { filter: drop-shadow(0 0 3px #FF4040); animation: nt-pisca 1.2s ease-in-out infinite; }
+/* O brilho do nariz é o `nariz-halo` atrás dele: filtro em peça animada custa pintura a cada quadro. */
+.nt-treno-svg .nariz { animation: nt-pisca 1.2s ease-in-out infinite; }
 .nt-treno-svg .nariz-halo { animation: nt-pisca 1.2s ease-in-out infinite; }
 
 /* ── Modo leve: leve, mas bonito (09/11/2026) ──────────────────────────────
@@ -134,27 +190,11 @@
    só com o que a placa de vídeo anima sozinha (opacidade e `transform`, sem
    variável nos quadros-chave):
      - o pisca-pisca do varal respira devagar, os dois fios revezando;
-     - 22 flocos de neve de CSS no lugar da neve em canvas (`NeveLeve`). */
-html[data-leve] .nt-varal-leve .pp-luz {
+     - a neve fica com 22 flocos (`Neve`, tipo `leve`; `data-anima-sempre`). */
+html[data-leve] .nt-varal-leve .pp-camada {
   animation: pp-leve 4.2s ease-in-out infinite !important;
   animation-delay: 0s !important;
 }
-html[data-leve] .nt-varal-leve .pp-b { animation-delay: -2.1s !important; }
+html[data-leve] .nt-varal-leve .pp-camada.pp-b { animation-delay: -2.1s !important; }
+html[data-leve] .nt-varal-leve .pp-luz { animation: none !important; opacity: 1; }
 @keyframes pp-leve { 0%, 100% { opacity: .5; } 50% { opacity: 1; } }
-
-.nt-neve-leve { position: absolute; inset: 0; overflow: hidden; }
-.nt-neve-leve span {
-  position: absolute;
-  top: -12px;
-  border-radius: 50%;
-  background: radial-gradient(circle, currentColor 0 42%, transparent 72%);
-  will-change: transform;
-  animation-name: nt-neve-leve-a;
-  animation-timing-function: linear;
-  animation-iteration-count: infinite;
-}
-.nt-neve-leve span:nth-child(3n + 1) { animation-name: nt-neve-leve-b; }
-.nt-neve-leve span:nth-child(3n + 2) { animation-name: nt-neve-leve-c; }
-@keyframes nt-neve-leve-a { from { transform: translate3d(0, 0, 0); } 50% { transform: translate3d(18px, 52vh, 0); } to { transform: translate3d(-6px, 104vh, 0); } }
-@keyframes nt-neve-leve-b { from { transform: translate3d(0, 0, 0); } 50% { transform: translate3d(-22px, 52vh, 0); } to { transform: translate3d(8px, 104vh, 0); } }
-@keyframes nt-neve-leve-c { from { transform: translate3d(0, 0, 0); } 50% { transform: translate3d(10px, 52vh, 0); } to { transform: translate3d(26px, 104vh, 0); } }

@@ -13,10 +13,20 @@
 /* (09/11/2026) Só o halo pisca; a lâmpada acende e fica. Dentro do SVG cada
    animação refaz o estilo e repinta o card a cada quadro: eram 38, ficam 19. */
 .av-lampada.acesa { animation: av-acende .5s ease-out var(--a) both; }
-/* (09/11/2026, mais leve) Uma luz em cada três pisca (`ArvoreDaMeta.tsx`, `.pisca`); as outras acendem e ficam. */
 .av-halo { animation: av-acende .5s ease-out var(--a) both; }
-.av-halo.pisca { animation: av-acende .5s ease-out var(--a) both, av-pisca var(--t) ease-in-out calc(var(--a) + .5s) infinite; }
 .av-halo { transform-box: fill-box; transform-origin: center; }
+
+/* ── A camada HTML (10/11/2026): o que anima sem fim, fora do SVG ──────────
+   Caixa HTML com só `opacity`/`transform` = a placa de vídeo anima sozinha. */
+.nt-arvore-caixa { position: relative; width: 160px; height: 200px; }
+.nt-arvore-caixa > svg { position: relative; }
+.av-por-cima { position: absolute; inset: 0; pointer-events: none; }
+/* Uma luz em cada três pisca: a caixa de fora acende na vez dela, a de dentro pisca. */
+.av-halo-html { position: absolute; width: 14px; height: 14px; opacity: 0; animation: av-acende-html .5s ease-out var(--a) both; }
+.av-halo-html i { position: absolute; inset: 0; border-radius: 50%; will-change: opacity;
+  background: radial-gradient(circle closest-side, color-mix(in srgb, var(--cor) 90%, transparent) 0, color-mix(in srgb, var(--cor) 38%, transparent) 35%, transparent 100%);
+  animation: av-pisca var(--t) ease-in-out var(--a) infinite; }
+@keyframes av-acende-html { from { opacity: 0; } to { opacity: 1; } }
 @keyframes av-acende { from { opacity: 0; } 40% { opacity: 1; filter: brightness(1.6); } to { opacity: 1; } }
 @keyframes av-pisca { 0%, 100% { opacity: 1; } 45% { opacity: .55; } 60% { opacity: .95; } }
 
@@ -37,17 +47,23 @@
   filter: drop-shadow(0 0 4px #FFD54F); }
 @keyframes av-estrela { 0% { transform: scale(.6); filter: brightness(1) drop-shadow(0 0 0 #FFD54F); } 40% { transform: scale(1.35); filter: brightness(1.8) drop-shadow(0 0 10px #FFE58A); } 100% { transform: scale(1); } }
 @keyframes av-pulsa { from { transform: scale(1); } to { transform: scale(1.08); } }
-.av-estrela-brilho { animation: av-pisca 1.8s ease-in-out infinite; }
+.av-estrela-brilho { position: absolute; width: 2.8px; height: 2.8px; border-radius: 50%; background: #FFFFFF; opacity: .85;
+  will-change: opacity; animation: av-pisca 1.8s ease-in-out infinite; }
 
 .av-raios { transform-box: view-box; transform-origin: 80px 19px; animation: av-raios-entra 1s ease-out var(--a) both; }
 @keyframes av-raios-entra { from { opacity: 0; transform: scale(.3); } to { opacity: 1; transform: scale(1); } }
 @keyframes av-gira { from { transform: rotate(0); } to { transform: rotate(360deg); } }
 
 /* ── Meta batida: aura e faíscas douradas subindo ────────────────────────── */
-.av-aura { animation: av-aura 3s ease-in-out infinite alternate; }
+/* A aura: atrás do desenho, uma caixa HTML elíptica com o degradê (era uma elipse do SVG). */
+.av-por-tras { position: absolute; pointer-events: none; }
+.av-aura { left: 0; top: 6px; width: 160px; height: 196px; will-change: opacity;
+  background: radial-gradient(closest-side, rgb(255 216 107 / .55) 0, rgb(255 201 61 / .18) 55%, rgb(255 201 61 / 0) 100%);
+  animation: av-aura 3s ease-in-out infinite alternate; }
 @keyframes av-aura { from { opacity: .55; } to { opacity: 1; } }
-.av-faisca { fill: #FFD54F; opacity: 0; transform-box: fill-box; transform-origin: center;
+.av-faisca { position: absolute; opacity: 0; will-change: transform, opacity;
   animation: av-sobe 3s ease-out var(--d) infinite; }
+.av-faisca svg { display: block; width: 100%; height: 100%; overflow: visible; fill: #FFD54F; }
 @keyframes av-sobe {
   0% { opacity: 0; transform: translateY(0) scale(.4) rotate(0); }
   20% { opacity: 1; }
@@ -57,4 +73,6 @@
 /* Modo leve: tudo aceso e parado. */
 .nt-arvore.quieto { filter: none; }
 .nt-arvore.quieto * { animation: none !important; }
-.nt-arvore.quieto .av-faisca { display: none; }
+.nt-arvore-caixa.quieto * { animation: none !important; }
+.nt-arvore-caixa.quieto .av-halo-html { opacity: 1; }
+.nt-arvore-caixa.quieto .av-faisca { display: none; }

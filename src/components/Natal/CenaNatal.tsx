@@ -49,111 +49,62 @@ export function FundoNatal({ cena, leve = false }: { cena: CenaNatal; leve?: boo
   return (
     <div className={cn('nt-fundo', claro && 'nt-claro')} aria-hidden="true">
       {cena.montes && <Montes />}
-      {cena.neve && (leve ? <NeveLeve /> : <Neve cheia={cena.neve === 'cheia'} />)}
+      {cena.neve && <Neve tipo={leve ? 'leve' : cena.neve === 'cheia' ? 'cheia' : 'normal'} />}
     </div>
   );
 }
 
-/** Os flocos da neve do modo leve: posição, tamanho, tempo e atraso, fixos (iguais em toda tela). */
-const FLOCOS_LEVES = Array.from({ length: 22 }, (_, i) => {
-  const r = (k: number) => ((Math.sin((i + 1) * 12.9898 * k) * 43758.5453) % 1 + 1) % 1;
-  return { x: r(1) * 100, tam: 3 + r(2) * 4, dura: 11 + r(3) * 9, atraso: -r(4) * 20, op: 0.5 + r(6) * 0.45 };
-});
+type TipoDeNeve = 'leve' | 'normal' | 'cheia';
+
+interface Floco { x: number; tam: number; cai: number; atraso: number; op: number }
+
+/** Um número fixo de 0 a 1 por floco e por uso (`k`): a neve é a mesma em toda tela e em toda carga. */
+const sorteDoFloco = (i: number, k: number) => ((Math.sin((i + 1) * 12.9898 * k) * 43758.5453) % 1 + 1) % 1;
 
 /**
- * A neve do modo leve (09/11/2026): 22 flocos de CSS, cada um só com
- * `transform` — a placa de vídeo anima sozinha, sem JavaScript nem pintura
- * por quadro. `data-anima-sempre`: o modo leve não a para (`index.css`).
+ * Os flocos de um tipo de neve. `z` é a distância: perto = maior, mais rápido
+ * e mais aceso; longe = miúdo, lento e apagado. É o que dá fundura à neve.
  */
-function NeveLeve() {
+function criarFlocos(quantos: number, tamanho: [number, number], queda: [number, number]): Floco[] {
+  return Array.from({ length: quantos }, (_, i) => {
+    const r = (k: number) => sorteDoFloco(i, k);
+    const z = r(5), cai = queda[1] - z * (queda[1] - queda[0]);
+    return { x: r(1) * 100, tam: tamanho[0] + z * (tamanho[1] - tamanho[0]), cai, atraso: -r(4) * cai, op: 0.4 + z * 0.55 };
+  });
+}
+
+/**
+ * Quantos flocos, de que tamanho (px) e em quantos segundos cruzam a tela
+ * (perto, longe). O modo leve fica com os 22 de sempre.
+ */
+const FLOCOS: Record<TipoDeNeve, Floco[]> = {
+  leve: criarFlocos(22, [3, 7], [11, 20]),
+  normal: criarFlocos(40, [2, 5.6], [15, 40]),
+  cheia: criarFlocos(64, [2, 7], [13, 44]),
+};
+
+/**
+ * A neve (10/11/2026): flocos de CSS, um `span` cada. Antes a neve cheia era
+ * um canvas da tela inteira repintado 20 vezes por segundo — JavaScript e
+ * pintura a cada quadro, e por isso travada em 20 quadros. Agora cada floco
+ * tem UMA animação de `transform` (`natal.css`), que a placa de vídeo toca
+ * sozinha a 60 quadros: a queda com o vento dentro, em onda. Uma só por
+ * floco — duas no mesmo elemento não vão para a placa (ver `natal.css`).
+ *
+ * Com ninguém olhando, `lib/atencao.css` pausa tudo. No modo leve são os 22
+ * flocos de sempre, com `data-anima-sempre` (o modo leve não os para).
+ */
+function Neve({ tipo }: { tipo: TipoDeNeve }) {
   return (
-    <div className="nt-neve-leve" data-anima-sempre="">
-      {FLOCOS_LEVES.map((f, i) => (
-        <span key={i} style={{ left: `${f.x.toFixed(2)}%`, width: f.tam, height: f.tam, opacity: f.op, animationDuration: `${f.dura.toFixed(1)}s`, animationDelay: `${f.atraso.toFixed(1)}s` }} />
+    <div className="nt-flocos" data-anima-sempre={tipo === 'leve' ? '' : undefined}>
+      {FLOCOS[tipo].map((f, i) => (
+        <span key={i} style={{
+          left: `${f.x.toFixed(2)}%`, width: f.tam.toFixed(1) + 'px', height: f.tam.toFixed(1) + 'px', opacity: f.op.toFixed(2),
+          animationDuration: `${f.cai.toFixed(1)}s`, animationDelay: `${f.atraso.toFixed(1)}s`,
+        }} />
       ))}
     </div>
   );
-}
-
-const PLANOS_DA_NEVE = 3;
-/**
- * A neve a 20 quadros por segundo (09/11/2026, eram 30): os PCs da operação
- * são fracos. O passo de cada floco cresce na mesma conta, então ela cai na
- * mesma velocidade de antes.
- */
-const QUADRO_DA_NEVE_MS = 50;
-/** Um floco a cada tantos px² (09/11/2026: eram 11 mil e 16 mil; antes, 9 mil). */
-const AREA_POR_FLOCO = { cheia: 22_000, normal: 30_000 } as const;
-
-/**
- * Neve em canvas, no molde da chuva do Halloween: meia resolução, 20 quadros
- * por segundo, um preenchimento por plano. Longe = floco menor, mais lento e
- * mais apagado. Cada floco ondula de lado, cada um no seu ritmo.
- *
- * A cor só é lida quando o tema troca: `getComputedStyle` num laço obriga o
- * navegador a recalcular o estilo da página. E o laço segue no
- * `requestAnimationFrame`, pulando quadros: acordar por `setTimeout` foi
- * medido mais caro (09/11/2026) — cada acordada abre um quadro do zero.
- */
-function Neve({ cheia }: { cheia: boolean }) {
-  const ref = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    const cv = ref.current; if (!cv) return;
-    const cx = cv.getContext('2d'); if (!cx) return;
-    type Floco = { x: number; y: number; v: number; r: number; fase: number; onda: number; plano: number };
-    let flocos: Floco[] = [], cor = getComputedStyle(cv).color || '#fff', rodando = true, w = 0, h = 0, t = 0;
-    const passo = QUADRO_DA_NEVE_MS / 33;
-    const novo = (qualquerAltura: boolean): Floco => {
-      const plano = Math.floor(Math.random() * PLANOS_DA_NEVE), z = (plano + Math.random()) / PLANOS_DA_NEVE;
-      return {
-        x: Math.random() * w, y: qualquerAltura ? Math.random() * h : -6 - Math.random() * 40,
-        v: 0.35 + z * 0.9, r: 0.8 + z * (cheia ? 2.4 : 1.8), fase: Math.random() * Math.PI * 2, onda: 0.4 + Math.random() * 0.8, plano,
-      };
-    };
-    const ajustar = () => {
-      w = cv.clientWidth; h = cv.clientHeight;
-      cv.width = Math.max(1, Math.round(w / 2)); cv.height = Math.max(1, Math.round(h / 2));
-      cx.setTransform(cv.width / Math.max(1, w), 0, 0, cv.height / Math.max(1, h), 0, 0);
-      flocos = Array.from({ length: Math.round(w * h / (cheia ? AREA_POR_FLOCO.cheia : AREA_POR_FLOCO.normal)) }, () => novo(true));
-    };
-    // A cor vem do tema (`currentColor` do canvas): relida só quando ele troca.
-    const tema = new MutationObserver(() => { cor = getComputedStyle(cv).color || cor; });
-    tema.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'data-theme', 'style'] });
-    let espera = 0, ultimo = 0;
-    // Ninguém olhando (`lib/atencao.ts`): a neve dorme e volta onde estava.
-    let dormindo: (() => void) | null = null;
-    const proximo = () => { if (rodando) espera = requestAnimationFrame(desenhar); };
-    const desenhar = (agora: number) => {
-      if (!rodando) return;
-      if (ninguemOlhando()) { dormindo = acordarQuandoOlhar(() => { dormindo = null; proximo(); }); return; }
-      if (agora - ultimo < QUADRO_DA_NEVE_MS - 4) { proximo(); return; }
-      ultimo = agora;
-      t += 0.033 * passo;
-      cx.clearRect(0, 0, w, h);
-      cx.fillStyle = cor;
-      for (const f of flocos) {
-        f.y += f.v * 2 * passo;
-        f.x += Math.sin(t * f.onda + f.fase) * 0.5 * passo;
-        if (f.y > h + 6) Object.assign(f, novo(false));
-      }
-      for (let p = 0; p < PLANOS_DA_NEVE; p++) {
-        cx.globalAlpha = 0.35 + (p / PLANOS_DA_NEVE) * 0.6;
-        cx.beginPath();
-        for (const f of flocos) {
-          if (f.plano !== p) continue;
-          cx.moveTo(f.x + f.r, f.y);
-          cx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
-        }
-        cx.fill();
-      }
-      proximo();
-    };
-    ajustar();
-    const obs = new ResizeObserver(ajustar); obs.observe(cv);
-    requestAnimationFrame(desenhar);
-    return () => { rodando = false; cancelAnimationFrame(espera); dormindo?.(); obs.disconnect(); tema.disconnect(); };
-  }, [cheia]);
-  return <canvas ref={ref} className="nt-neve" />;
 }
 
 function Montes() {
@@ -205,17 +156,32 @@ function Varal({ guirlanda, bolas, leve }: { guirlanda: boolean; bolas: boolean;
   const vaos = Math.ceil(largura / VAO) + 1;
   const modo = usePiscaPisca();
   // No modo leve, o pisca-pisca respira devagar (só opacidade; ver `natal.css`).
+  /*
+   * As luzes acesas (10/11/2026, PCs fracos): cada lâmpada é UMA caixa (o
+   * brilho, com o miolo dentro), e elas moram em duas camadas, uma por fio
+   * (`pp-camada pp-a` / `pp-b`). Nas funções em que o fio inteiro pisca junto
+   * (alterna, frenético, devagar), quem anima é a camada — duas animações em
+   * vez de 96; nas outras, cada lâmpada no seu tempo (`piscaPisca.css`).
+   */
+  const fio = (canal: 0 | 1) => (
+    <div className={cn('nt-varal-fio pp-camada', canal ? 'pp-b' : 'pp-a')}>
+      {Array.from({ length: vaos }, (_, v) => LAMPADAS.map((t, i) => {
+        const n = v * LAMPADAS.length + i;
+        if (n % 2 !== canal) return null;
+        const { x, y } = naCurva(t), cor = CORES_LUZ[n % CORES_LUZ.length];
+        return (
+          <span key={n} className="nt-halo pp-luz"
+            style={{ left: v * VAO + x - 15, top: y + (guirlanda ? 16 : 12) - 15, ['--cor' as string]: cor, ...varsDaLampada(n) }}>
+            <i className="nt-miolo" />
+          </span>
+        );
+      }))}
+    </div>
+  );
   return (
     <div className={cn('nt-varal', guirlanda && 'com-guirlanda', leve && 'nt-varal-leve')} data-pisca={leve ? 'devagar' : modo}>
       {Array.from({ length: vaos }, (_, v) => (
         <div key={v} className="nt-vao" style={{ width: VAO }}>
-          {LAMPADAS.map((t, i) => {
-            const { x, y } = naCurva(t), n = v * LAMPADAS.length + i, cor = CORES_LUZ[n % CORES_LUZ.length];
-            return (
-              <span key={i} className={cn('nt-halo pp-luz', n % 2 ? 'pp-b' : 'pp-a')}
-                style={{ left: x - 15, top: y + (guirlanda ? 16 : 12) - 15, ['--cor' as string]: cor, ...varsDaLampada(n) }} />
-            );
-          })}
           <svg viewBox={`0 0 ${VAO} 44`} width={VAO} height={44}>
             {guirlanda && <Guirlanda />}
             <path d={`M0 4 Q${VAO / 2} 24 ${VAO} 4`} className="fio" />
@@ -229,13 +195,12 @@ function Varal({ guirlanda, bolas, leve }: { guirlanda: boolean; bolas: boolean;
             const { x, y } = naCurva(t), n = v * LAMPADAS.length + i;
             return <Vidro key={i} x={x} y={guirlanda ? y + 4 : y} giro={inclinacao(t)} cor={CORES_LUZ[n % CORES_LUZ.length]} />;
           })}
-          {LAMPADAS.map((t, i) => {
-            const { x, y } = naCurva(t), n = v * LAMPADAS.length + i;
-            return <span key={i} className={cn('nt-miolo pp-luz', n % 2 ? 'pp-b' : 'pp-a')} style={{ left: x - 3, top: y + (guirlanda ? 16 : 12) - 4, ...varsDaLampada(n) }} />;
-          })}
           {bolas && v % 2 === 1 && <Bola indice={v} />}
         </div>
       ))}
+      {/* Por cima do vidro das lâmpadas: o brilho acende sobre a cor dela. */}
+      {fio(0)}
+      {fio(1)}
     </div>
   );
 }
@@ -474,6 +439,15 @@ function criarBrilho(cor: string): HTMLCanvasElement {
 /** O próximo voo: exponencial em torno de 3 min, nunca antes de 40 s nem depois de 7 min. */
 const proximoVooEm = () => Math.min(420_000, Math.max(40_000, -Math.log(1 - Math.random()) * 180_000));
 
+/** Quanto o trenó começa e termina fora da tela, e as medidas do desenho dele (`.nt-treno-svg`). */
+const FORA_DA_TELA = 340;
+const LARGURA_DO_TRENO = 280;
+const ALTURA_DO_TRENO = LARGURA_DO_TRENO * 64 / 270;
+/** O rastro a 30 quadros por segundo: faísca não precisa de mais. */
+const QUADRO_DO_RASTRO_MS = 33;
+/** A curva do `ease-in-out` do arco (`nt-arco`), de perto o bastante para a faísca nascer no lugar. */
+const suave = (t: number) => t * t * (3 - 2 * t);
+
 /**
  * O trenó é um evento à parte, como os morcegos do Halloween (Cleber,
  * 05/11/2026: «independente da aba que a pessoa estiver»): o `Layout` monta a
@@ -496,31 +470,54 @@ export function RevoadaNatal({ ativo }: { ativo: boolean }) {
     window.addEventListener(EVENTO_TRENO, voar);
     return () => { window.clearTimeout(t); window.removeEventListener(EVENTO_TRENO, voar); };
   }, [ativo]);
-  // O rastro: faíscas que saem da traseira do trenó e ficam no céu onde nasceram.
+  /*
+   * O rastro: faíscas que saem da traseira do trenó e ficam no céu onde nasceram.
+   *
+   * Mais leve desde 10/11/2026:
+   *   - onde o trenó está sai da CONTA do voo (o relógio da animação dele), e
+   *     não de medir o desenho na tela a cada quadro — medir obrigava o
+   *     navegador a refazer o leiaute da página 60 vezes por segundo;
+   *   - o canvas é só a faixa do céu por onde ele passa, e não a tela inteira;
+   *   - 30 quadros por segundo, e dorme com ninguém olhando (o voo também para).
+   */
   const rastro = useRef<HTMLCanvasElement>(null);
-  const vira = useRef<HTMLDivElement>(null);
+  const treno = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!voo) return;
-    const cv = rastro.current, caixaEl = caixa.current;
+    const cv = rastro.current, trenoEl = treno.current;
     const ctx = cv?.getContext('2d');
-    if (!cv || !caixaEl || !ctx) return;
-    cv.width = caixaEl.clientWidth;
-    cv.height = caixaEl.clientHeight;
+    if (!cv || !trenoEl || !ctx) return;
+    // A faixa: do ponto mais alto do arco até onde as faíscas ainda caem acesas.
+    const topo = Math.max(0, voo.altura + Math.min(0, voo.curva, voo.desvio) - 30);
+    const altura = Math.round(voo.altura + Math.max(0, voo.curva, voo.desvio) + ALTURA_DO_TRENO + 150 - topo);
+    cv.style.top = `${topo}px`;
+    cv.style.height = `${altura}px`;
+    cv.width = voo.largura;
+    cv.height = altura;
     const brilhos = [criarBrilho('#FFE9A6'), criarBrilho('#FFFFFF'), criarBrilho('#FFD54F')];
     const faiscas: Faisca[] = [];
-    let antes = performance.now(), quadro = 0;
+    // O relógio do voo é o da própria animação: pausou (ninguém olhando), ele para junto.
+    const relogio = trenoEl.getAnimations()[0] ?? null;
+    const comecou = performance.now(), duracaoMs = voo.duracao * 1000;
+    const x0 = voo.paraDireita ? -FORA_DA_TELA : voo.largura + 20, x1 = voo.paraDireita ? voo.largura + 20 : -FORA_DA_TELA;
+    // A traseira fica na ponta direita do desenho; voando para a direita, ele está espelhado.
+    const traseira = ((voo.paraDireita ? 1 - TRASEIRA_DO_TRENO : TRASEIRA_DO_TRENO) - 0.5) * LARGURA_DO_TRENO * voo.escala;
+    const recua = voo.paraDireita ? -1 : 1;     // as faíscas saem para trás
+    let antes = comecou, quadro = 0, rodando = true;
+    let dormindo: (() => void) | null = null;
+    const proximo = () => { if (rodando) quadro = requestAnimationFrame(passo); };
     const passo = (agora: number) => {
+      if (!rodando) return;
+      if (ninguemOlhando()) { dormindo = acordarQuandoOlhar(() => { dormindo = null; antes = performance.now(); proximo(); }); return; }
+      if (agora - antes < QUADRO_DO_RASTRO_MS - 4) { proximo(); return; }
       const dt = Math.min(0.05, (agora - antes) / 1000);
       antes = agora;
-      // Onde está a traseira do trenó agora (o trenó fica na ponta direita do desenho).
-      const svg = vira.current?.querySelector('svg');
-      if (svg) {
-        const r = svg.getBoundingClientRect(), c = caixaEl.getBoundingClientRect();
-        const fracao = voo.paraDireita ? 1 - TRASEIRA_DO_TRENO : TRASEIRA_DO_TRENO;
-        const x = r.left - c.left + r.width * fracao;
-        const y = r.top - c.top + r.height * 0.66;
-        const recua = voo.paraDireita ? -1 : 1;     // as faíscas saem para trás
-        for (let i = 0; i < 2; i++) {
+      const p = Math.min(1, Math.max(0, (relogio ? Number(relogio.currentTime ?? 0) : agora - comecou) / duracaoMs));
+      const arco = p < 0.5 ? voo.curva * suave(p * 2) : voo.curva + (voo.desvio - voo.curva) * suave((p - 0.5) * 2);
+      const x = x0 + (x1 - x0) * p + LARGURA_DO_TRENO / 2 + traseira;
+      const y = voo.altura + arco + ALTURA_DO_TRENO / 2 + 0.16 * ALTURA_DO_TRENO * voo.escala - topo;
+      if (p < 1) {
+        for (let i = 0; i < 3; i++) {
           faiscas.push({
             x: x + acaso(-6, 6), y: y + acaso(-5, 5),
             vx: recua * acaso(10, 50), vy: acaso(-10, 25),
@@ -544,25 +541,25 @@ export function RevoadaNatal({ ativo }: { ativo: boolean }) {
         ctx.drawImage(brilhos[f.cor], f.x - t, f.y - t, t * 2, t * 2);
       }
       ctx.globalAlpha = 1;
-      quadro = requestAnimationFrame(passo);
+      proximo();
     };
-    quadro = requestAnimationFrame(passo);
-    return () => { cancelAnimationFrame(quadro); ctx.clearRect(0, 0, cv.width, cv.height); };
+    proximo();
+    return () => { rodando = false; cancelAnimationFrame(quadro); dormindo?.(); ctx.clearRect(0, 0, cv.width, cv.height); };
   }, [voo]);
 
   if (!ativo) return null;
-  const fora = 340;
   return (
     <div ref={caixa} className="nt-revoada" aria-hidden="true">
       {voo && <canvas ref={rastro} className="nt-revoada-rastro" />}
       {voo && (
         <div
           key={voo.id}
+          ref={treno}
           className="nt-treno"
           style={{
             top: voo.altura,
-            ['--x0' as string]: `${voo.paraDireita ? -fora : voo.largura + 20}px`,
-            ['--x1' as string]: `${voo.paraDireita ? voo.largura + 20 : -fora}px`,
+            ['--x0' as string]: `${voo.paraDireita ? -FORA_DA_TELA : voo.largura + 20}px`,
+            ['--x1' as string]: `${voo.paraDireita ? voo.largura + 20 : -FORA_DA_TELA}px`,
             ['--dur' as string]: `${voo.duracao.toFixed(1)}s`,
             ['--curva' as string]: `${voo.curva.toFixed(0)}px`,
             ['--desvio' as string]: `${voo.desvio.toFixed(0)}px`,
@@ -571,7 +568,7 @@ export function RevoadaNatal({ ativo }: { ativo: boolean }) {
           onAnimationEnd={e => { if (e.target === e.currentTarget) setVoo(null); }}
         >
           <div className="nt-treno-arco">
-            <div ref={vira} className="nt-treno-vira" style={{ transform: `scale(${voo.escala.toFixed(2)}) scaleX(${voo.paraDireita ? -1 : 1})` }}>
+            <div className="nt-treno-vira" style={{ transform: `scale(${voo.escala.toFixed(2)}) scaleX(${voo.paraDireita ? -1 : 1})` }}>
               <Treno />
             </div>
           </div>

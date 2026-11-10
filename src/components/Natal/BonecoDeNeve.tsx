@@ -1,11 +1,11 @@
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MutableRefObject } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MutableRefObject, type ReactNode } from 'react';
 import { useTheme } from 'next-themes';
 import { ehTemaEscuro } from '@/lib/temas';
 import { useModoLeve } from '@/lib/modoLeve';
 import { cn } from '@/lib/utils';
 import { bolaNaPose, COLO, poseDoArremesso, T_FIM, type Lado, type Pose } from './cesta/arremesso';
 import { registrarBoneco } from './cesta/boneco';
-import { acordarQuandoOlhar, ninguemOlhando } from '@/lib/atencao';
+import { ninguemOlhando } from '@/lib/atencao';
 import './boneco.css';
 
 /*
@@ -25,6 +25,22 @@ import './boneco.css';
  *
  * Clicar nele faz pular e acenar. No modo leve ele fica parado, sem animação.
  *
+ * Leve para PC fraco (10/11/2026, medido): animação de CSS DENTRO de um SVG
+ * (num `<g>`, num `<path>`) não vai para a placa de vídeo — cada uma refaz o
+ * estilo e o leiaute da página a cada quadro. Ele parado tinha quatro sem fim
+ * (respirar, piscar, pompom, brilho da névoa) e as faíscas da neve, e custava
+ * mais que todo o resto do Natal do Dashboard. Agora, parado:
+ *   - respira no `.bn-fole`, uma caixa HTML em volta do desenho (a placa faz);
+ *   - pisca quando o relógio sorteia (às vezes duas vezes seguidas), e não num
+ *     compasso fixo; entre uma piscada e outra, nada roda;
+ *   - o pompom balança só em movimento, e assenta com um balanço que perde força
+ *     quando ele para; o brilho da névoa pisca uma vez ao assentar;
+ *   - as faíscas da neve são caixas HTML, não `<path>`;
+ *   - a sombra da neve é uma cópia do contorno, não `drop-shadow` (o sulco do
+ *     deslize, animando dentro, refazia a sombra do card inteiro);
+ *   - não há laço por quadro: o deslize é uma animação só (ver «O deslize»).
+ * E cada pedaço que mexe é uma caixa própria (ver «O desenho»): deslizando, acenando, nada anima dentro de SVG.
+ *
  * O segredo da cesta (Cleber, 05/11/2026 — só para quem perceber): durante a
  * brincadeira da bola da saudação, levar a bola até ele faz o boneco notar
  * («!»), parar, virar para ela e esticar os bracinhos pedindo. Entregando, ele
@@ -40,9 +56,8 @@ const ALTURA = 46;
 /** O `rounded-xl` do card. */
 const RAIO = 12;
 
-/** O boneco na tela, em px (o SVG é 72×76). */
+/** O boneco na tela, em px (o desenho é 72×76, escalado em `.bn-palco`). */
 const LARG_BONECO = 54;
-const ALT_BONECO = 57;
 /** Onde o montinho encosta na neve, medido do alto do boneco. */
 const BASE = 55.2;
 /** O boneco não chega às quinas: lá a neve desce pela lateral. */
@@ -141,7 +156,7 @@ export function TopoNevado() {
   const leve = useModoLeve();
   const claro = useClaro();
   const caixa = useRef<HTMLDivElement>(null);
-  const rastro = useRef<SVGGElement>(null);
+  const rastro = useRef<HTMLDivElement>(null);
   const [largura, setLargura] = useState(0);
   const id = useId().replace(/:/g, '');
 
@@ -171,18 +186,21 @@ export function TopoNevado() {
                 <stop offset="1" stopColor={claro ? '#B9CFE2' : '#C9DBEA'} />
               </linearGradient>
             </defs>
+            {/* A sombra: o mesmo contorno, um tico abaixo (no lugar do `drop-shadow`). */}
+            <path className="massa-sombra" d={geo.massa} transform="translate(0 1.3)" />
             <path className="massa" d={geo.massa} fill={`url(#${id}-neve)`} />
-            <g ref={rastro} />
           </svg>
-          {/* As faíscas num SVG à parte, sem a sombra do topo (`boneco.css`). */}
-          <svg className="nt-neve-faiscas" width={largura} height={ALTURA} viewBox={`0 0 ${largura} ${ALTURA}`}>
+          {/* Os sulcos do deslize: caixas HTML (`.sulco`), cada uma acende na hora em que ele passa. */}
+          <div ref={rastro} className="nt-sulcos" />
+          {/* As faíscas: caixas HTML (a placa de vídeo anima), cada uma com a estrelinha parada dentro. */}
+          <div className="nt-neve-faiscas">
             {geo.faiscas.map(({ x, y, d, s }) => (
-              <g key={x} transform={`translate(${f(x)} ${f(y)}) scale(${f(s)})`}>
-                <path className="faisca" style={{ '--d': `${d}s` } as CSSProperties}
-                  d="M0-2.6L.55-.55 2.6 0 .55.55 0 2.6-.55.55-2.6 0-.55-.55Z" />
-              </g>
+              <span key={x} className="faisca"
+                style={{ left: f(x - 2.6 * s) + 'px', top: f(y - 2.6 * s) + 'px', width: f(5.2 * s) + 'px', height: f(5.2 * s) + 'px', '--d': `${d}s` } as CSSProperties}>
+                <svg viewBox="-2.6 -2.6 5.2 5.2"><path d={ESTRELINHA} /></svg>
+              </span>
             ))}
-          </svg>
+          </div>
           {largura >= LARGURA_MINIMA && <BonecoDeNeve geo={geo} parado={leve} rastro={rastro} />}
         </>
       )}
@@ -193,24 +211,65 @@ export function TopoNevado() {
 
 // ── O boneco ──────────────────────────────────────────────────────────────────
 
-const SVG = 'http://www.w3.org/2000/svg';
+const ESTRELINHA = 'M0-2.6L.55-.55 2.6 0 .55.55 0 2.6-.55.55-2.6 0-.55-.55Z';
 const acaso = (min: number, max: number) => min + Math.random() * (max - min);
+/** Quanto ele leva para pegar velocidade, e para frear (s). */
+const RAMPA_S = 1.1;
+/** Um sulco na neve a cada tantos px de deslize. */
+const SULCO_A_CADA = 8;
+
+/*
+ * O deslize (10/11/2026, PCs fracos): uma animação só, de `transform`, no
+ * elemento do boneco — a placa de vídeo toca sozinha, sem JavaScript por
+ * quadro. Antes um laço escrevia a posição 30 vezes por segundo, e isso
+ * obrigava a página inteira a se redesenhar junto (com todos os enfeites).
+ *
+ * O caminho é amostrado em pontos do perfil de velocidade (acelera em
+ * `RAMPA_S`, cruza a `VELOCIDADE`, freia em `RAMPA_S`), seguindo a altura da
+ * neve em cada ponto. Os sulcos nascem todos no início, cada um com o atraso
+ * da hora em que ele passa por ali.
+ */
+interface Deslize { anim: Animation; xEm: (ms: number) => number; sulcos: { el: HTMLElement; ms: number }[] }
+
+function perfilDoDeslize(distancia: number) {
+  const V = VELOCIDADE;
+  const R = Math.min(RAMPA_S, distancia / V);
+  const cruzeiro = (distancia - V * R) / V;
+  const T = 2 * R + cruzeiro;
+  /** Quanto andou (px) em `t` segundos. */
+  const andou = (t: number) => {
+    const c = Math.min(T, Math.max(0, t));
+    if (c < R) return (V * c * c) / (2 * R);
+    if (c < R + cruzeiro) return (V * R) / 2 + V * (c - R);
+    return distancia - (V * (T - c) ** 2) / (2 * R);
+  };
+  /** Em que segundo ele passa por `d` px. */
+  const quando = (d: number) => {
+    if (d < (V * R) / 2) return Math.sqrt((2 * R * d) / V);
+    if (d < distancia - (V * R) / 2) return R + (d - (V * R) / 2) / V;
+    return T - Math.sqrt((2 * R * Math.max(0, distancia - d)) / V);
+  };
+  return { T, andou, quando };
+}
 
 function BonecoDeNeve({ geo, parado, rastro }: {
   geo: Geometria;
   parado: boolean;
-  rastro: MutableRefObject<SVGGElement | null>;
+  rastro: MutableRefObject<HTMLDivElement | null>;
 }) {
   const raiz = useRef<HTMLDivElement>(null);
   const geoAtual = useRef(geo);
   geoAtual.current = geo;
-  // O clique precisa falar com o laço que está rodando.
+  // O clique precisa falar com o boneco que está rodando.
   const cutucar = useRef<() => void>(() => {});
+  // O card mudou de largura: ele volta para dentro da neve.
+  const reposicionar = useRef<() => void>(() => {});
 
   const limites = () => [MARGEM, geoAtual.current.largura - MARGEM] as const;
+  const transformEm = (x: number) => `translate3d(${f(x - LARG_BONECO / 2)}px, ${f(geoAtual.current.topo(x) - BASE)}px, 0)`;
   const posicionar = (x: number) => {
     const el = raiz.current;
-    if (el) el.style.transform = `translate3d(${f(x - LARG_BONECO / 2)}px, ${f(geoAtual.current.topo(x) - BASE)}px, 0)`;
+    if (el) el.style.transform = transformEm(x);
   };
   // Virar não gira o boneco: o rosto, o nariz e a ponta do cachecol trocam de
   // lado com transição (`boneco.css`), como quem só olha para o outro lado.
@@ -225,7 +284,8 @@ function BonecoDeNeve({ geo, parado, rastro }: {
     const [, max] = limites();
     posicionar(max - 20);
     virar(-1);
-  }, [parado, geo]);
+  }, [parado, geo]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { reposicionar.current(); }, [geo]);
 
   useEffect(() => {
     if (parado) return;
@@ -235,34 +295,46 @@ function BonecoDeNeve({ geo, parado, rastro }: {
     const depois = (ms: number, fn: () => void) => { relogios.push(window.setTimeout(fn, ms)); };
 
     const [min0, max0] = limites();
-    const e = {
-      x: acaso(min0, max0), alvo: 0, v: 0, dir: Math.random() < 0.5 ? 1 : -1,
-      movendo: false, ate: performance.now() + 900, sulco: 0, nevoa: 0,
-    };
+    const e = { x: acaso(min0, max0), dir: Math.random() < 0.5 ? 1 : -1 };
     virar(e.dir);
     posicionar(e.x);
 
-    // O sulco do deslize na neve. A névoa que ele levanta é do desenho (CSS).
-    const sulco = (x: number) => {
-      const g = rastro.current;
-      if (!g) return;
-      const m = document.createElementNS(SVG, 'ellipse');
-      m.setAttribute('cx', f(x));
-      m.setAttribute('cy', f(geoAtual.current.topo(x) + 2.2));
-      m.setAttribute('rx', '4.2');
-      m.setAttribute('ry', '.75');
-      m.setAttribute('class', 'sulco');
-      m.addEventListener('animationend', () => m.remove());
-      g.appendChild(m);
-      while (g.childNodes.length > MAX_SULCOS) g.firstChild?.remove();
+    // Uma classe de efeito único que pode voltar antes de acabar: tira, e põe de novo no próximo quadro.
+    const repetir = (classe: string, ms: number) => {
+      el.classList.remove(classe);
+      requestAnimationFrame(() => {
+        el.classList.add(classe);
+        depois(ms, () => el.classList.remove(classe));
+      });
     };
 
-    const parar = (agora: number) => {
-      e.movendo = false;
-      e.v = 0;
+    // A vez do próximo passeio.
+    let vez = 0;
+    const agendar = (ms: number) => { window.clearTimeout(vez); vez = window.setTimeout(partir, ms); };
+
+    // ── O deslize ──
+    let deslize: Deslize | null = null;
+    /** Interrompe o deslize onde ele estiver (clique, a bola chegando). */
+    const pararDeslize = () => {
+      const d = deslize;
+      if (!d) return;
+      deslize = null;
+      const ms = Number(d.anim.currentTime ?? 0);
+      e.x = d.xEm(ms);
+      posicionar(e.x);
+      d.anim.cancel();
+      // Os sulcos por onde ele ainda não passou somem.
+      for (const s of d.sulcos) if (s.ms > ms) s.el.remove();
       el.classList.remove('deslizando');
+    };
+
+    const chegou = () => {
+      el.classList.remove('deslizando');
+      // O pompom assenta balançando, e a névoa solta um brilho ao baixar.
+      repetir('assentou', 3400);
       const r = Math.random();
-      let pausa = acaso(1800, 5200);
+      // (10/11/2026) Fica mais tempo parado olhando a tela.
+      let pausa = acaso(4500, 11000);
       if (r < 0.3) {
         // Acena para quem está na tela.
         depois(450, () => el.classList.add('acenando'));
@@ -274,27 +346,86 @@ function BonecoDeNeve({ geo, parado, rastro }: {
         depois(2000, () => virar(e.dir));
         pausa = Math.max(pausa, 2700);
       }
-      e.ate = agora + pausa;
+      agendar(pausa);
+    };
+
+    const deslizar = (alvo: number) => {
+      if (cesta.ativo || el.classList.contains('esperando')) return;
+      const x0 = e.x, sinal = Math.sign(alvo - x0), distancia = Math.abs(alvo - x0);
+      const { T, andou, quando } = perfilDoDeslize(distancia);
+      const quadros = Math.max(8, Math.ceil(T * 12));
+      const frames = Array.from({ length: quadros + 1 }, (_, i) => ({ transform: transformEm(x0 + sinal * andou((T * i) / quadros)) }));
+      const anim = el.animate(frames, { duration: T * 1000, easing: 'linear', fill: 'forwards' });
+      // Os sulcos, cada um acendendo quando ele passa.
+      const sulcos: Deslize['sulcos'] = [];
+      const g = rastro.current;
+      if (g) {
+        while (g.childElementCount > MAX_SULCOS) g.firstElementChild?.remove();
+        for (let d = SULCO_A_CADA; d < distancia; d += SULCO_A_CADA) {
+          const x = x0 + sinal * d, ms = quando(d) * 1000;
+          const s = document.createElement('span');
+          s.className = 'sulco';
+          s.style.left = `${f(x - 4.2)}px`;
+          s.style.top = `${f(geoAtual.current.topo(x) + 2.2 - 0.75)}px`;
+          s.style.animationDelay = `${Math.round(ms)}ms`;
+          s.addEventListener('animationend', () => s.remove());
+          g.appendChild(s);
+          sulcos.push({ el: s, ms });
+        }
+      }
+      deslize = { anim, xEm: ms => x0 + sinal * andou(ms / 1000), sulcos };
+      el.classList.remove('assentou');
+      el.classList.add('deslizando');
+      anim.onfinish = () => {
+        if (deslize?.anim !== anim) return;
+        deslize = null;
+        e.x = alvo;
+        posicionar(alvo);
+        anim.cancel();
+        chegou();
+      };
     };
 
     const partir = () => {
+      if (cesta.ativo || el.classList.contains('esperando')) return;
+      // Ninguém olhando: não sai, só confere de novo depois.
+      if (ninguemOlhando()) { agendar(4000); return; }
       const [min, max] = limites();
-      if (max - min < 40) return;
-      let alvo = acaso(min, max);
-      for (let i = 0; i < 6 && Math.abs(alvo - e.x) < 70; i++) alvo = acaso(min, max);
-      e.alvo = alvo;
+      e.x = Math.min(max, Math.max(min, e.x));
+      if (max - min < 40) { agendar(5000); return; }
+      // (10/11/2026) Passeios curtos, de 90 a 320 px: antes sorteava um ponto
+      // qualquer do card e cruzava a tela inteira, deslizando quase o tempo todo.
+      let lado = Math.random() < 0.5 ? -1 : 1;
+      const passo = acaso(90, 320);
+      if (e.x + lado * passo > max || e.x + lado * passo < min) lado = -lado;
+      const alvo = Math.min(max, Math.max(min, e.x + lado * passo));
+      if (Math.abs(alvo - e.x) < 40) { agendar(acaso(1500, 3000)); return; }
       e.dir = alvo > e.x ? 1 : -1;
       virar(e.dir);
-      e.ate = Infinity;
       // Primeiro olha para onde vai, depois sai deslizando.
-      depois(420, () => {
-        e.movendo = true;
-        e.sulco = 0;
-        el.classList.add('deslizando');
-      });
+      depois(420, () => deslizar(alvo));
     };
 
-    // ── A cesta: esperar a bola, arremessar, reagir ──
+    reposicionar.current = () => {
+      if (deslize || cesta.ativo) return;
+      const [min, max] = limites();
+      e.x = Math.min(max, Math.max(min, e.x));
+      posicionar(e.x);
+    };
+
+    // A piscada: na hora que o sorteio quiser, às vezes duas seguidas — gente
+    // não pisca no compasso. Entre uma e outra, nenhuma animação roda.
+    let piscada = 0;
+    const piscar = () => {
+      if (!ninguemOlhando()) {
+        repetir('piscando', 200);
+        if (Math.random() < 0.25) window.setTimeout(() => repetir('piscando', 200), 330);
+      }
+      piscada = window.setTimeout(piscar, acaso(2600, 7000));
+    };
+    piscada = window.setTimeout(piscar, acaso(1200, 4000));
+
+    // ── A cesta: esperar a bola, arremessar, reagir (só aqui roda um laço por quadro: é jogo) ──
     const cesta = { ativo: false, inicio: 0, lado: 1 as Lado, resultado: null as boolean | null, reagiu: false };
     const VARIAVEIS = ['--py', '--psx', '--psy', '--pr', '--pbe', '--pbd', '--pbs'];
     const aplicarPose = (p: Pose) => {
@@ -308,16 +439,44 @@ function BonecoDeNeve({ geo, parado, rastro }: {
       s.setProperty('--pbs', p.estica.toFixed(3));
     };
     const limparPose = () => VARIAVEIS.forEach(v => el.style.removeProperty(v));
+    let quadro = 0;
     const terminarCesta = () => {
       if (!cesta.ativo) return;
       cesta.ativo = false;
       cesta.reagiu = false;
+      cancelAnimationFrame(quadro);
       el.classList.remove('na-cesta', 'focado', 'comemorando', 'triste');
       limparPose();
-      e.ate = performance.now() + acaso(900, 1800);
+      agendar(acaso(900, 1800));
     };
     /** Onde o boneco está na tela, e quantos px valem uma unidade do desenho. */
     const naTela = () => { const r = el.getBoundingClientRect(); return { r, esc: r.width / 72 }; };
+
+    /** Um quadro da cesta. */
+    const animarCesta = (agora: number) => {
+      if (!cesta.ativo) return;
+      const t = agora - cesta.inicio;
+      if (t < T_FIM) {
+        const p = poseDoArremesso(t, cesta.lado);
+        aplicarPose(p);
+        el.classList.toggle('focado', p.fase === 'mirando' || p.fase === 'agachando' || p.fase === 'subindo');
+      } else {
+        if (el.classList.contains('na-cesta')) { el.classList.remove('na-cesta', 'focado'); limparPose(); }
+        if (cesta.resultado !== null && !cesta.reagiu) {
+          cesta.reagiu = true;
+          const reacao = cesta.resultado ? 'comemorando' : 'triste';
+          el.classList.add(reacao);
+          const inicio = cesta.inicio;
+          depois(cesta.resultado ? 1600 : 1450, () => { if (cesta.inicio === inicio) terminarCesta(); });
+        } else if (cesta.resultado === null && t > T_FIM + 4000) {
+          terminarCesta();
+          return;
+        }
+        // Reagindo: o resto é CSS, o laço pode parar.
+        if (cesta.reagiu) return;
+      }
+      quadro = requestAnimationFrame(animarCesta);
+    };
 
     const desregistrar = registrarBoneco({
       colo() {
@@ -332,18 +491,17 @@ function BonecoDeNeve({ geo, parado, rastro }: {
         }
         if (!sim) {
           el.classList.remove('esperando');
-          e.ate = performance.now() + 900;
+          agendar(900);
           return;
         }
         if (!el.classList.contains('esperando')) {
+          pararDeslize();
+          window.clearTimeout(vez);
           el.classList.add('esperando');
           el.classList.remove('notou');
           void el.getBoundingClientRect(); // recomeça o «!»
           el.classList.add('notou');
           depois(1300, () => el.classList.remove('notou'));
-          e.movendo = false;
-          e.v = 0;
-          e.ate = Infinity;
           el.classList.remove('deslizando', 'acenando', 'pulando');
         }
         if (bolaX != null) {
@@ -353,6 +511,8 @@ function BonecoDeNeve({ geo, parado, rastro }: {
         }
       },
       receber(lado) {
+        pararDeslize();
+        window.clearTimeout(vez);
         cesta.ativo = true;
         cesta.inicio = performance.now();
         cesta.lado = lado;
@@ -360,14 +520,11 @@ function BonecoDeNeve({ geo, parado, rastro }: {
         cesta.reagiu = false;
         el.classList.remove('esperando', 'notou', 'acenando', 'deslizando', 'pulando', 'comemorando', 'triste');
         el.classList.add('na-cesta');
-        el.style.setProperty('--vel', '0');
-        e.nevoa = 0;
-        e.movendo = false;
-        e.v = 0;
-        e.ate = Infinity;
         e.dir = lado;
         virar(lado);
         aplicarPose(poseDoArremesso(0, lado));
+        cancelAnimationFrame(quadro);
+        quadro = requestAnimationFrame(animarCesta);
         return cesta.inicio;
       },
       bolaEm(t) {
@@ -379,30 +536,10 @@ function BonecoDeNeve({ geo, parado, rastro }: {
       cancelar() { el.classList.remove('esperando', 'notou'); terminarCesta(); },
     });
 
-    /** Um quadro da cesta (no lugar do passeio). */
-    const animarCesta = (agora: number) => {
-      const t = agora - cesta.inicio;
-      if (t < T_FIM) {
-        const p = poseDoArremesso(t, cesta.lado);
-        aplicarPose(p);
-        el.classList.toggle('focado', p.fase === 'mirando' || p.fase === 'agachando' || p.fase === 'subindo');
-        return;
-      }
-      if (el.classList.contains('na-cesta')) { el.classList.remove('na-cesta', 'focado'); limparPose(); }
-      if (cesta.resultado !== null && !cesta.reagiu) {
-        cesta.reagiu = true;
-        const reacao = cesta.resultado ? 'comemorando' : 'triste';
-        el.classList.add(reacao);
-        const inicio = cesta.inicio;
-        depois(cesta.resultado ? 1600 : 1450, () => { if (cesta.inicio === inicio) terminarCesta(); });
-      } else if (cesta.resultado === null && t > T_FIM + 4000) {
-        terminarCesta();
-      }
-    };
-
     cutucar.current = () => {
       // Com a bola (ou esperando por ela), o clique não atrapalha.
       if (cesta.ativo || el.classList.contains('esperando')) return;
+      pararDeslize();
       el.classList.remove('pulando');
       void el.offsetWidth; // reinicia o pulo se clicarem de novo
       el.classList.add('pulando');
@@ -410,256 +547,243 @@ function BonecoDeNeve({ geo, parado, rastro }: {
       relogios.length = 0;
       depois(720, () => el.classList.remove('pulando'));
       virar(e.dir);
-      e.movendo = false;
-      e.v = 0;
-      el.classList.remove('deslizando');
       el.classList.add('acenando');
       depois(1900, () => el.classList.remove('acenando'));
-      e.ate = performance.now() + 2600;
+      agendar(2600);
     };
 
-    let antes = performance.now();
-    let ultimoX = Number.NaN;
-    let ultimaGeo: unknown = null;
-    let dormindo: (() => void) | null = null;
-    let quadro = requestAnimationFrame(function laco(agora) {
-      if (cesta.ativo) {
-        antes = agora;
-        ultimoX = Number.NaN; // a cesta mexe nele por conta própria: na volta, reposiciona
-        animarCesta(agora);
-        quadro = requestAnimationFrame(laco);
-        return;
-      }
-      // Ninguém olhando (`lib/atencao.ts`): o boneco dorme até a volta.
-      if (ninguemOlhando()) {
-        dormindo = acordarQuandoOlhar(() => { dormindo = null; antes = performance.now(); quadro = requestAnimationFrame(laco); });
-        return;
-      }
-      // Passeando, 30 quadros por segundo bastam (09/11/2026: os PCs da
-      // operação são fracos); o corpo e os braços são CSS e seguem lisos. A
-      // cesta, que é jogo, continua a 60.
-      if (agora - antes < 31) { quadro = requestAnimationFrame(laco); return; }
-      const dt = Math.min(0.05, (agora - antes) / 1000);
-      antes = agora;
-      const [min, max] = limites();
-      e.x = Math.min(max, Math.max(min, e.x));
-      if (e.movendo) {
-        e.alvo = Math.min(max, Math.max(min, e.alvo));
-        const falta = e.alvo - e.x;
-        // Desliza: ganha velocidade devagar e freia de longe, sem parar seco.
-        const vAlvo = VELOCIDADE * Math.min(1, Math.abs(falta) / 40);
-        e.v += (vAlvo - e.v) * Math.min(1, dt * 2.4);
-        const anda = Math.min(Math.abs(falta), Math.max(e.v, 1.5) * dt);
-        e.x += Math.sign(falta) * anda;
-        e.sulco += anda;
-        if (e.sulco >= 6) { e.sulco = 0; sulco(e.x); }
-        if (Math.abs(e.alvo - e.x) < 0.4) parar(agora);
-      } else if (agora >= e.ate) {
-        partir();
-      }
-      // A névoa segue a velocidade de verdade: cresce no arranque e assenta
-      // devagar depois que ele para (`--vel`, de 0 a 1, em `boneco.css`).
-      const alvoNevoa = e.movendo ? e.v / VELOCIDADE : 0;
-      const nevoa = e.nevoa + (alvoNevoa - e.nevoa) * Math.min(1, dt * 2.2);
-      if (Math.abs(nevoa - e.nevoa) > 0.002 || (nevoa === 0) !== (e.nevoa === 0)) {
-        el.style.setProperty('--vel', nevoa.toFixed(3));
-      }
-      e.nevoa = nevoa;
-      // Parado, não reescreve o mesmo `transform` a cada quadro.
-      // (O card mudando de tamanho troca a geometria: aí reposiciona também.)
-      if (e.x !== ultimoX || geoAtual.current !== ultimaGeo) { ultimoX = e.x; ultimaGeo = geoAtual.current; posicionar(e.x); }
-      quadro = requestAnimationFrame(laco);
-    });
+    agendar(900);
 
     return () => {
+      const d = deslize;
+      deslize = null;
+      d?.anim.cancel();
       cancelAnimationFrame(quadro);
-      dormindo?.();
+      window.clearTimeout(vez);
+      window.clearTimeout(piscada);
       relogios.forEach(t => window.clearTimeout(t));
       desregistrar();
       limparPose();
-      el.classList.remove('deslizando', 'acenando', 'pulando', 'esperando', 'notou', 'na-cesta', 'focado', 'comemorando', 'triste');
+      el.classList.remove('deslizando', 'acenando', 'pulando', 'esperando', 'notou', 'na-cesta', 'focado', 'comemorando', 'triste', 'piscando', 'assentou');
       cutucar.current = () => {};
+      reposicionar.current = () => {};
     };
   }, [parado]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div ref={raiz} className="nt-bn dir" onClick={() => cutucar.current()}>
-      <DesenhoBoneco />
+      {/* A chegada, a respiração (o fole) e o palco do desenho: três caixas, uma animação em cada. */}
+      <div className="bn-chega"><div className="bn-fole"><DesenhoBoneco /></div></div>
       {/* Notou a bola chegando. */}
       <span className="nt-bn-nota" aria-hidden="true">!</span>
     </div>
   );
 }
 
-/** De frente, o rosto um pouco puxado para o lado da classe `dir`/`esq` do pai. */
+/** Um pedaço do boneco: um SVG do tamanho do desenho inteiro (72 × 76), com só aquele pedaço. */
+function Camada({ className, style, children }: { className?: string; style?: CSSProperties; children: ReactNode }) {
+  return <svg viewBox="0 0 72 76" width={72} height={76} className={cn('bn-l', className)} style={style}>{children}</svg>;
+}
+
+/*
+ * O desenho (10/11/2026, PCs fracos): cada pedaço que mexe é uma caixa HTML
+ * própria — um SVG do tamanho do desenho com só aquele pedaço —, empilhadas
+ * no `.bn-palco` (72 × 76, escalado para o tamanho do boneco). Assim braço,
+ * pompom, ponta do cachecol e névoa balançam como caixas, e a placa de vídeo
+ * anima sozinha. Era um SVG só, com tudo animando DENTRO dele — o que obriga
+ * a página inteira a se redesenhar a cada quadro. Os pontos de giro do CSS
+ * (`transform-origin`) continuam em unidades do desenho.
+ *
+ * De frente, o rosto um pouco puxado para o lado da classe `dir`/`esq` do pai.
+ */
 function DesenhoBoneco() {
   const id = useId().replace(/:/g, '');
   const u = (n: string) => `url(#${id}-${n})`;
   return (
-    <svg viewBox="0 0 72 76" width={LARG_BONECO} height={ALT_BONECO}>
-      <defs>
-        <radialGradient id={`${id}-bola`} cx="36%" cy="30%" r="78%">
-          <stop offset="0" stopColor="#FFFFFF" />
-          <stop offset=".58" stopColor="#F1F7FC" />
-          <stop offset="1" stopColor="#C8D9E8" />
-        </radialGradient>
-        <radialGradient id={`${id}-pompom`} cx="38%" cy="32%" r="70%">
-          <stop offset="0" stopColor="#FFFFFF" />
-          <stop offset="1" stopColor="#E2E7EE" />
-        </radialGradient>
-        {/* A névoa: branco no miolo sumindo na borda — macia sem precisar de blur. */}
-        <radialGradient id={`${id}-nevoa`}>
-          <stop offset="0" stopColor="#FFFFFF" stopOpacity="1" />
-          <stop offset=".45" stopColor="#FFFFFF" stopOpacity=".9" />
-          <stop offset=".78" stopColor="#FFFFFF" stopOpacity=".35" />
-          <stop offset="1" stopColor="#FFFFFF" stopOpacity="0" />
-        </radialGradient>
-        {/* A bruma de baixo e o rastro: no tema claro puxam para o azul (`boneco.css`). */}
-        <radialGradient id={`${id}-bruma`}>
-          <stop className="nv-tinta" offset="0" stopColor="#FFFFFF" stopOpacity=".95" />
-          <stop className="nv-tinta" offset=".55" stopColor="#FFFFFF" stopOpacity=".6" />
-          <stop className="nv-tinta" offset="1" stopColor="#FFFFFF" stopOpacity="0" />
-        </radialGradient>
-        <linearGradient id={`${id}-gorro`} x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0" stopColor="#EC5A50" />
-          <stop offset="1" stopColor="#B5272B" />
-        </linearGradient>
-        <linearGradient id={`${id}-cachecol`} x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0" stopColor="#43A56E" />
-          <stop offset="1" stopColor="#26784B" />
-        </linearGradient>
-        <linearGradient id={`${id}-cenoura`} x1="0" x2="1" y1="0" y2="0">
-          <stop offset="0" stopColor="#FFA24A" />
-          <stop offset="1" stopColor="#EA6E19" />
-        </linearGradient>
-      </defs>
+    <div className="bn-palco">
+      {/* Os degradês: um SVG só, sem tamanho, que todos os pedaços usam. */}
+      <svg width="0" height="0" className="bn-defs" aria-hidden="true">
+        <defs>
+          <radialGradient id={`${id}-bola`} cx="36%" cy="30%" r="78%">
+            <stop offset="0" stopColor="#FFFFFF" />
+            <stop offset=".58" stopColor="#F1F7FC" />
+            <stop offset="1" stopColor="#C8D9E8" />
+          </radialGradient>
+          <radialGradient id={`${id}-pompom`} cx="38%" cy="32%" r="70%">
+            <stop offset="0" stopColor="#FFFFFF" />
+            <stop offset="1" stopColor="#E2E7EE" />
+          </radialGradient>
+          {/* A névoa: branco no miolo sumindo na borda — macia sem precisar de blur. */}
+          <radialGradient id={`${id}-nevoa`}>
+            <stop offset="0" stopColor="#FFFFFF" stopOpacity="1" />
+            <stop offset=".45" stopColor="#FFFFFF" stopOpacity=".9" />
+            <stop offset=".78" stopColor="#FFFFFF" stopOpacity=".35" />
+            <stop offset="1" stopColor="#FFFFFF" stopOpacity="0" />
+          </radialGradient>
+          {/* A bruma de baixo e o rastro: no tema claro puxam para o azul (`boneco.css`). */}
+          <radialGradient id={`${id}-bruma`}>
+            <stop className="nv-tinta" offset="0" stopColor="#FFFFFF" stopOpacity=".95" />
+            <stop className="nv-tinta" offset=".55" stopColor="#FFFFFF" stopOpacity=".6" />
+            <stop className="nv-tinta" offset="1" stopColor="#FFFFFF" stopOpacity="0" />
+          </radialGradient>
+          <linearGradient id={`${id}-gorro`} x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stopColor="#EC5A50" />
+            <stop offset="1" stopColor="#B5272B" />
+          </linearGradient>
+          <linearGradient id={`${id}-cachecol`} x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stopColor="#43A56E" />
+            <stop offset="1" stopColor="#26784B" />
+          </linearGradient>
+          <linearGradient id={`${id}-cenoura`} x1="0" x2="1" y1="0" y2="0">
+            <stop offset="0" stopColor="#FFA24A" />
+            <stop offset="1" stopColor="#EA6E19" />
+          </linearGradient>
+        </defs>
+      </svg>
 
-      <ellipse className="sombra" cx="36" cy="73.6" rx="21" ry="2.4" />
+      <Camada><ellipse className="sombra" cx="36" cy="73.6" rx="21" ry="2.4" /></Camada>
 
-      <g className="bn-salto">
-        <g className="bn-inclina">
-          <g className="bn-corpo">
+      <div className="bn-l bn-salto">
+        <div className="bn-l bn-inclina">
+          <div className="bn-l bn-corpo">
             {/* Braços de graveto com luvinha, atrás do corpo */}
-            <g className="bn-braco bn-braco-e">
+            <Camada className="bn-braco bn-braco-e">
               <path d="M21 50 L8 40.6" stroke="#6B4A2F" strokeWidth="2" strokeLinecap="round" fill="none" />
               <path d="M12.2 43.6 L11 38.9" stroke="#6B4A2F" strokeWidth="1.35" strokeLinecap="round" fill="none" />
               <circle cx="6.2" cy="39.1" r="3.5" fill="#D6403A" />
               <circle cx="8.7" cy="36.3" r="1.55" fill="#D6403A" />
               <ellipse cx="8.9" cy="41.7" rx="2.5" ry="1.35" fill="#F6F0E7" transform="rotate(-38 8.9 41.7)" />
               <ellipse cx="5.2" cy="38.2" rx="1.2" ry=".7" fill="#FFFFFF" opacity=".35" />
-            </g>
-            <g className="bn-braco bn-braco-d">
+            </Camada>
+            <Camada className="bn-braco bn-braco-d">
               <path d="M51 50 L64 40.6" stroke="#6B4A2F" strokeWidth="2" strokeLinecap="round" fill="none" />
               <path d="M59.8 43.6 L61 38.9" stroke="#6B4A2F" strokeWidth="1.35" strokeLinecap="round" fill="none" />
               <circle cx="65.8" cy="39.1" r="3.5" fill="#D6403A" />
               <circle cx="63.3" cy="36.3" r="1.55" fill="#D6403A" />
               <ellipse cx="63.1" cy="41.7" rx="2.5" ry="1.35" fill="#F6F0E7" transform="rotate(38 63.1 41.7)" />
               <ellipse cx="64.8" cy="38.2" rx="1.2" ry=".7" fill="#FFFFFF" opacity=".35" />
-            </g>
+            </Camada>
 
             {/* Corpo gordinho */}
-            <ellipse className="bola" cx="36" cy="55.4" rx="19.6" ry="17.3" fill={u('bola')} />
-            <ellipse cx="28.4" cy="47.2" rx="6.2" ry="3.7" fill="#FFFFFF" opacity=".75" transform="rotate(-28 28.4 47.2)" />
-            <circle cx="24.6" cy="52.4" r=".8" fill="#FFFFFF" />
-            <g className="bn-frente">
-              {[51.4, 58.6].map(y => (
-                <g key={y}>
-                  <circle cx="36" cy={y} r="1.8" fill="#2A2730" />
-                  <circle cx="35.4" cy={y - 0.6} r=".55" fill="#FFFFFF" opacity=".5" />
-                </g>
-              ))}
-            </g>
-
-            {/* Cabeça */}
-            <g className="bn-cabeca">
-              <circle className="bola" cx="36" cy="27.4" r="13.6" fill={u('bola')} />
-              <ellipse cx="30.2" cy="21.2" rx="4.1" ry="2.4" fill="#FFFFFF" opacity=".78" transform="rotate(-30 30.2 21.2)" />
-              <g className="bn-rosto">
-                <ellipse cx="28" cy="31.8" rx="3.1" ry="1.85" fill="#FF94AA" opacity=".6" />
-                <ellipse cx="44" cy="31.8" rx="3.1" ry="1.85" fill="#FF94AA" opacity=".6" />
-                <circle cx="27.2" cy="31.2" r=".55" fill="#FFFFFF" opacity=".85" />
-                <circle cx="43.2" cy="31.2" r=".55" fill="#FFFFFF" opacity=".85" />
-                <g className="bn-olhos">
-                  <ellipse cx="31.2" cy="26.2" rx="2.25" ry="2.75" fill="#2A2530" />
-                  <ellipse cx="40.8" cy="26.2" rx="2.25" ry="2.75" fill="#2A2530" />
-                  <circle cx="32" cy="25.1" r="1" fill="#FFFFFF" />
-                  <circle cx="41.6" cy="25.1" r="1" fill="#FFFFFF" />
-                  <circle cx="30.6" cy="27.5" r=".45" fill="#FFFFFF" opacity=".8" />
-                  <circle cx="40.2" cy="27.5" r=".45" fill="#FFFFFF" opacity=".8" />
-                </g>
-                {/* Olhinhos de alegria (^ ^), quando ele acerta a cesta. */}
-                <path className="bn-olhos-feliz" d="M29 27 Q31.2 23.4 33.4 27 M38.6 27 Q40.8 23.4 43 27"
-                  stroke="#2A2530" strokeWidth="1.7" strokeLinecap="round" fill="none" />
-                <path className="bn-boca" d="M33.6 34.6 Q36 36.8 38.4 34.6" stroke="#3A3440" strokeWidth="1.2" strokeLinecap="round" fill="none" />
-                {/* Boca aberta (esperando a bola, comemorando) e boquinha triste (errou). */}
-                <path className="bn-boca-aberta" d="M33.7 34.3 Q36 34.9 38.3 34.3 Q38 37.6 36 37.7 Q34 37.6 33.7 34.3Z" fill="#7A2E3A" />
-                <path className="bn-boca-triste" d="M33.9 36.2 Q36 34.4 38.1 36.2" stroke="#3A3440" strokeWidth="1.2" strokeLinecap="round" fill="none" />
-                {/* Cenourinha curta: troca de lado quando ele muda de direção */}
-                <g className="bn-nariz">
-                  <path d="M35 30 Q35.6 29 36.8 29.3 L42.2 30.9 Q43 31.3 42.2 31.7 L36.8 32.9 Q35.4 33 35 31.8Z" fill={u('cenoura')} />
-                  <path d="M38.3 29.9 l-.3 2.4 M40.3 30.5 l-.2 1.4" stroke="#C25A14" strokeWidth=".5" strokeLinecap="round" fill="none" />
-                </g>
+            <Camada>
+              <ellipse className="bola" cx="36" cy="55.4" rx="19.6" ry="17.3" fill={u('bola')} />
+              <ellipse cx="28.4" cy="47.2" rx="6.2" ry="3.7" fill="#FFFFFF" opacity=".75" transform="rotate(-28 28.4 47.2)" />
+              <circle cx="24.6" cy="52.4" r=".8" fill="#FFFFFF" />
+              <g className="bn-frente">
+                {[51.4, 58.6].map(y => (
+                  <g key={y}>
+                    <circle cx="36" cy={y} r="1.8" fill="#2A2730" />
+                    <circle cx="35.4" cy={y - 0.6} r=".55" fill="#FFFFFF" opacity=".5" />
+                  </g>
+                ))}
               </g>
-              {/* Gorro de lã com pompom e raminho de azevinho */}
-              <g className="bn-gorro" transform="rotate(-8 36 18)">
-                <path d="M23 20 Q22.4 6.6 36 6 Q49.6 6.6 49 20Z" fill={u('gorro')} />
-                <path d="M28 9 Q26 13 26.3 18" stroke="#FFFFFF" strokeWidth="1.2" strokeLinecap="round" opacity=".28" fill="none" />
-                <path d="M36 6.6V19 M30.4 8.2 Q29.6 13 30 19 M41.6 8.2 Q42.4 13 42 19" stroke="#9E1F24" strokeWidth=".6" opacity=".45" fill="none" />
-                <rect x="21.4" y="17.2" width="29.2" height="5.8" rx="2.9" fill="#F6F0E7" />
-                <path d="M24.2 17.6v5M27 17.3v5.4M29.8 17.3v5.4M32.6 17.3v5.4M35.4 17.3v5.4M38.2 17.3v5.4M41 17.3v5.4M43.8 17.3v5.4M46.6 17.3v5.4M49.2 17.7v4.8"
-                  stroke="#DDD2C2" strokeWidth=".6" />
-                <path d="M43.6 18.4 Q46.6 14.6 50.2 16.6 Q47.2 19.8 43.6 18.4Z" fill="#2F8F57" />
-                <path d="M43.6 18.4 Q42.4 14 45.8 12.4 Q46.8 16.4 43.6 18.4Z" fill="#3DA367" />
-                <circle cx="43.4" cy="18.6" r="1.35" fill="#D62828" />
-                <circle cx="45" cy="19.7" r="1.2" fill="#E03A3A" />
-                <circle cx="42" cy="19.8" r="1.1" fill="#C91F1F" />
-                <circle cx="43" cy="18.1" r=".4" fill="#FFFFFF" opacity=".7" />
-                <g className="bn-pompom">
+            </Camada>
+
+            {/* Cabeça (com o gorro), e o pompom numa caixa só dele */}
+            <div className="bn-l bn-cabeca">
+              <Camada>
+                <circle className="bola" cx="36" cy="27.4" r="13.6" fill={u('bola')} />
+                <ellipse cx="30.2" cy="21.2" rx="4.1" ry="2.4" fill="#FFFFFF" opacity=".78" transform="rotate(-30 30.2 21.2)" />
+                <g className="bn-rosto">
+                  <ellipse cx="28" cy="31.8" rx="3.1" ry="1.85" fill="#FF94AA" opacity=".6" />
+                  <ellipse cx="44" cy="31.8" rx="3.1" ry="1.85" fill="#FF94AA" opacity=".6" />
+                  <circle cx="27.2" cy="31.2" r=".55" fill="#FFFFFF" opacity=".85" />
+                  <circle cx="43.2" cy="31.2" r=".55" fill="#FFFFFF" opacity=".85" />
+                  <g className="bn-olhos">
+                    <ellipse cx="31.2" cy="26.2" rx="2.25" ry="2.75" fill="#2A2530" />
+                    <ellipse cx="40.8" cy="26.2" rx="2.25" ry="2.75" fill="#2A2530" />
+                    <circle cx="32" cy="25.1" r="1" fill="#FFFFFF" />
+                    <circle cx="41.6" cy="25.1" r="1" fill="#FFFFFF" />
+                    <circle cx="30.6" cy="27.5" r=".45" fill="#FFFFFF" opacity=".8" />
+                    <circle cx="40.2" cy="27.5" r=".45" fill="#FFFFFF" opacity=".8" />
+                  </g>
+                  {/* Olhinhos de alegria (^ ^), quando ele acerta a cesta. */}
+                  <path className="bn-olhos-feliz" d="M29 27 Q31.2 23.4 33.4 27 M38.6 27 Q40.8 23.4 43 27"
+                    stroke="#2A2530" strokeWidth="1.7" strokeLinecap="round" fill="none" />
+                  <path className="bn-boca" d="M33.6 34.6 Q36 36.8 38.4 34.6" stroke="#3A3440" strokeWidth="1.2" strokeLinecap="round" fill="none" />
+                  {/* Boca aberta (esperando a bola, comemorando) e boquinha triste (errou). */}
+                  <path className="bn-boca-aberta" d="M33.7 34.3 Q36 34.9 38.3 34.3 Q38 37.6 36 37.7 Q34 37.6 33.7 34.3Z" fill="#7A2E3A" />
+                  <path className="bn-boca-triste" d="M33.9 36.2 Q36 34.4 38.1 36.2" stroke="#3A3440" strokeWidth="1.2" strokeLinecap="round" fill="none" />
+                  {/* Cenourinha curta: troca de lado quando ele muda de direção */}
+                  <g className="bn-nariz">
+                    <path d="M35 30 Q35.6 29 36.8 29.3 L42.2 30.9 Q43 31.3 42.2 31.7 L36.8 32.9 Q35.4 33 35 31.8Z" fill={u('cenoura')} />
+                    <path d="M38.3 29.9 l-.3 2.4 M40.3 30.5 l-.2 1.4" stroke="#C25A14" strokeWidth=".5" strokeLinecap="round" fill="none" />
+                  </g>
+                </g>
+                {/* Gorro de lã com raminho de azevinho */}
+                <g transform="rotate(-8 36 18)">
+                  <path d="M23 20 Q22.4 6.6 36 6 Q49.6 6.6 49 20Z" fill={u('gorro')} />
+                  <path d="M28 9 Q26 13 26.3 18" stroke="#FFFFFF" strokeWidth="1.2" strokeLinecap="round" opacity=".28" fill="none" />
+                  <path d="M36 6.6V19 M30.4 8.2 Q29.6 13 30 19 M41.6 8.2 Q42.4 13 42 19" stroke="#9E1F24" strokeWidth=".6" opacity=".45" fill="none" />
+                  <rect x="21.4" y="17.2" width="29.2" height="5.8" rx="2.9" fill="#F6F0E7" />
+                  <path d="M24.2 17.6v5M27 17.3v5.4M29.8 17.3v5.4M32.6 17.3v5.4M35.4 17.3v5.4M38.2 17.3v5.4M41 17.3v5.4M43.8 17.3v5.4M46.6 17.3v5.4M49.2 17.7v4.8"
+                    stroke="#DDD2C2" strokeWidth=".6" />
+                  <path d="M43.6 18.4 Q46.6 14.6 50.2 16.6 Q47.2 19.8 43.6 18.4Z" fill="#2F8F57" />
+                  <path d="M43.6 18.4 Q42.4 14 45.8 12.4 Q46.8 16.4 43.6 18.4Z" fill="#3DA367" />
+                  <circle cx="43.4" cy="18.6" r="1.35" fill="#D62828" />
+                  <circle cx="45" cy="19.7" r="1.2" fill="#E03A3A" />
+                  <circle cx="42" cy="19.8" r="1.1" fill="#C91F1F" />
+                  <circle cx="43" cy="18.1" r=".4" fill="#FFFFFF" opacity=".7" />
+                </g>
+              </Camada>
+              {/* O pompom: o gorro é girado −8°, então a caixa dele também. */}
+              <div className="bn-l bn-gorro-giro">
+                <Camada className="bn-pompom">
                   <circle cx="36" cy="5.4" r="4.9" fill={u('pompom')} />
                   <path d="M33.2 3.6 q.8-.9 1.8-.6 M37.4 3 q1-.2 1.6.6 M34.4 7.4 q.9.6 1.9.3" stroke="#D5DCE5" strokeWidth=".6" strokeLinecap="round" fill="none" />
-                </g>
-              </g>
-            </g>
+                </Camada>
+              </div>
+            </div>
 
-            {/* Cachecol: a volta no pescoço e a ponta, sempre do lado de trás */}
-            <path d="M23.6 38.6 Q36 44.6 48.4 38.6 Q49.8 41 48.6 43.2 Q36 49.4 23.4 43.2 Q22.2 41 23.6 38.6Z" fill={u('cachecol')} />
-            <path d="M26.4 41.2 Q36 45.8 45.6 41.2" stroke="#FFFFFF" strokeWidth="1.2" strokeDasharray="2.4 2.6" opacity=".55" fill="none" />
-            <g className="bn-ponta bn-ponta-e">
+            {/* Cachecol: a volta no pescoço e as pontas, sempre do lado de trás */}
+            <Camada>
+              <path d="M23.6 38.6 Q36 44.6 48.4 38.6 Q49.8 41 48.6 43.2 Q36 49.4 23.4 43.2 Q22.2 41 23.6 38.6Z" fill={u('cachecol')} />
+              <path d="M26.4 41.2 Q36 45.8 45.6 41.2" stroke="#FFFFFF" strokeWidth="1.2" strokeDasharray="2.4 2.6" opacity=".55" fill="none" />
+            </Camada>
+            <Camada className="bn-ponta bn-ponta-e">
               <path d="M26 42.4 L31.6 43.4 L30.2 56 L24.2 54.8Z" fill={u('cachecol')} />
               <path d="M25.4 46.6 L31 47.6 M24.9 50.6 L30.6 51.6" stroke="#EC5A50" strokeWidth="1.4" />
               <path d="M24.4 55v2.4M26.1 55.3v2.5M27.8 55.6v2.5M29.5 55.9v2.2" stroke="#26784B" strokeWidth=".95" strokeLinecap="round" />
-            </g>
-            <g className="bn-ponta bn-ponta-d">
+            </Camada>
+            <Camada className="bn-ponta bn-ponta-d">
               <path d="M46 42.4 L40.4 43.4 L41.8 56 L47.8 54.8Z" fill={u('cachecol')} />
               <path d="M46.6 46.6 L41 47.6 M47.1 50.6 L41.4 51.6" stroke="#EC5A50" strokeWidth="1.4" />
               <path d="M47.6 55v2.4M45.9 55.3v2.5M44.2 55.6v2.5M42.5 55.9v2.2" stroke="#26784B" strokeWidth=".95" strokeLinecap="round" />
-            </g>
-          </g>
-        </g>
-      </g>
+            </Camada>
+          </div>
+        </div>
+      </div>
 
       {/* A névoa de neve em que ele desliza, no lugar dos pés. Parado, ela
-          assenta numa almofada redonda que respira; deslizando, estica para
-          trás, revolve e solta um rastro que se desfaz. */}
-      <g className="nv-vira">
-        <g className="nv-rastro">
-          <ellipse cx="8" cy="71.6" rx="20" ry="4.4" fill={u('bruma')} opacity=".85" />
+          assenta numa almofada redonda; deslizando, estica para trás, revolve e
+          solta um rastro que se desfaz. Cada parte é uma caixa (a placa anima). */}
+      <div className="bn-l nv-vira">
+        <div className="bn-l nv-rastro">
+          <Camada><ellipse cx="8" cy="71.6" rx="20" ry="4.4" fill={u('bruma')} opacity=".85" /></Camada>
           {[[17, 70, 6.6, 0], [9, 70.8, 5.6, -0.45], [2, 71.4, 4.6, -0.9]].map(([x, y, r, d]) => (
-            <circle key={x} className="nv-fio" cx={x} cy={y} r={r} fill={u('bruma')} style={{ '--d': `${d}s` } as CSSProperties} />
+            <Camada key={x} className="nv-fio" style={{ transformOrigin: `${x}px ${y}px`, '--d': `${d}s` } as CSSProperties}>
+              <circle cx={x} cy={y} r={r} fill={u('bruma')} />
+            </Camada>
           ))}
-        </g>
-        <g className="nv-nuvem">
-          <ellipse cx="36" cy="71.6" rx="26" ry="6" fill={u('bruma')} />
-          {[[21, 69.4, 7.2, 0], [29, 67.4, 7.6, -0.9], [43, 67.4, 7.6, -1.8], [51, 69.4, 7.2, -2.7], [36, 68.2, 8.4, -1.3]].map(([x, y, r, d]) => (
-            <circle key={x} className="nv-tufo" cx={x} cy={y} r={r} fill={u('nevoa')} style={{ '--d': `${d}s` } as CSSProperties} />
-          ))}
-          <ellipse cx="36" cy="70.8" rx="17" ry="4.6" fill={u('nevoa')} />
-        </g>
-        <g className="nv-brilho">
-          <g transform="translate(24 66.6) scale(.7)"><path d="M0-2.6L.55-.55 2.6 0 .55.55 0 2.6-.55.55-2.6 0-.55-.55Z" /></g>
-          <g transform="translate(49.4 65.4) scale(.55)"><path d="M0-2.6L.55-.55 2.6 0 .55.55 0 2.6-.55.55-2.6 0-.55-.55Z" /></g>
-        </g>
-      </g>
-    </svg>
+        </div>
+        <div className="bn-l nv-nuvem">
+          <Camada className="nv-revolve">
+            <ellipse cx="36" cy="71.6" rx="26" ry="6" fill={u('bruma')} />
+            {[[21, 69.4, 7.2], [29, 67.4, 7.6], [43, 67.4, 7.6], [51, 69.4, 7.2], [36, 68.2, 8.4]].map(([x, y, r]) => (
+              <circle key={x} cx={x} cy={y} r={r} fill={u('nevoa')} />
+            ))}
+            <ellipse cx="36" cy="70.8" rx="17" ry="4.6" fill={u('nevoa')} />
+          </Camada>
+        </div>
+        <div className="bn-l nv-brilho">
+          <Camada className="nv-faisca" style={{ transformOrigin: '24px 66.6px' }}>
+            <g transform="translate(24 66.6) scale(.7)"><path d={ESTRELINHA} /></g>
+          </Camada>
+          <Camada className="nv-faisca outra" style={{ transformOrigin: '49.4px 65.4px' }}>
+            <g transform="translate(49.4 65.4) scale(.55)"><path d={ESTRELINHA} /></g>
+          </Camada>
+        </div>
+      </div>
+    </div>
   );
 }

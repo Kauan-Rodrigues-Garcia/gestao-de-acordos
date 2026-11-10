@@ -119,7 +119,17 @@ export function ArvoreDaMeta({ pct, rotulo }: { pct: number; rotulo: string }) {
   const fimDasLuzes = acesas * PASSO_LUZ;
   const atraso = (s: number): CSSProperties => ({ '--a': `${s.toFixed(2)}s` } as CSSProperties);
 
+  /*
+   * (10/11/2026, PCs fracos) O que anima SEM FIM — as luzes que piscam e, com a
+   * meta batida, a aura, as faíscas e o brilho da estrela — mora numa camada
+   * HTML em volta do desenho (`.av-por-tras`, `.av-por-cima`): a placa de vídeo
+   * anima caixa HTML sozinha; dentro do SVG, cada animação refazia o estilo e
+   * repintava o card a cada quadro. O SVG só tem o que acende uma vez e fica.
+   */
+  const pisca = (k: number) => k % 3 === 0;
   return (
+    <div className={cn('nt-arvore-caixa', completa && 'completa', leve && 'quieto')}>
+    {completa && <span className="av-por-tras av-aura" aria-hidden="true" />}
     <svg
       viewBox="0 0 160 200" width={160} height={200}
       className={cn('nt-arvore', claro && 'nt-claro', completa && 'completa', leve && 'quieto')}
@@ -140,11 +150,6 @@ export function ArvoreDaMeta({ pct, rotulo }: { pct: number; rotulo: string }) {
           <stop offset="0" stopColor="#FFFFFF" />
           <stop offset="1" stopColor={claro ? '#D2E1EE' : '#DCE8F3'} />
         </linearGradient>
-        <radialGradient id={`${id}-aura`}>
-          <stop offset="0" stopColor="#FFD86B" stopOpacity=".55" />
-          <stop offset=".55" stopColor="#FFC93D" stopOpacity=".18" />
-          <stop offset="1" stopColor="#FFC93D" stopOpacity="0" />
-        </radialGradient>
         <radialGradient id={`${id}-brilho-estrela`}>
           <stop offset="0" stopColor="#FFF4C2" stopOpacity=".95" />
           <stop offset=".4" stopColor="#FFD54F" stopOpacity=".45" />
@@ -166,9 +171,6 @@ export function ArvoreDaMeta({ pct, rotulo }: { pct: number; rotulo: string }) {
           <clipPath key={i} id={`${id}-recorte-${i}`}><path d={a.d} /></clipPath>
         ))}
       </defs>
-
-      {/* O brilho dourado que a árvore solta quando a meta é batida */}
-      {completa && <ellipse className="av-aura" cx={CX} cy="104" rx="80" ry="98" fill={u('aura')} />}
 
       {/* Tronco e chão de neve */}
       <rect x="72" y="148" width="16" height="28" rx="3" fill={u('tronco')} />
@@ -222,8 +224,8 @@ export function ArvoreDaMeta({ pct, rotulo }: { pct: number; rotulo: string }) {
         const estilo = { ...atraso(k * PASSO_LUZ), '--t': `${(2.2 + ((k * 7) % 5) * 0.35).toFixed(2)}s` } as CSSProperties;
         return (
           <g key={k} transform={`translate(${l.x.toFixed(2)} ${l.y.toFixed(2)})`}>
-            {/* Uma em cada três pisca; as outras acendem e ficam (09/11/2026, mais leve). */}
-            {acesa && <circle className={cn('av-halo', k % 3 === 0 && 'pisca')} r="7" fill={u(`halo-${l.cor}`)} style={estilo} />}
+            {/* Uma em cada três pisca (o halo dela é da camada HTML, `.av-por-cima`); as outras acendem e ficam. */}
+            {acesa && !pisca(k) && <circle className="av-halo" r="7" fill={u(`halo-${l.cor}`)} style={estilo} />}
             <rect x="-1" y="-.6" width="2" height="1.6" rx=".3" fill="#2B3A31" />
             <ellipse cy="2.6" rx="1.9" ry="2.5" className={cn('av-lampada', acesa && 'acesa')}
               fill={acesa ? CORES_LUZ[l.cor] : '#4A5A51'} style={estilo} />
@@ -255,14 +257,25 @@ export function ArvoreDaMeta({ pct, rotulo }: { pct: number; rotulo: string }) {
       )}
       <polygon points={ESTRELA} className={cn('av-estrela', completa && 'acesa')}
         fill={completa ? u('ouro') : '#CFC4A0'} style={atraso(fimDasLuzes + 0.6)} />
-      {completa && <circle cx={CX - 3} cy="15.4" r="1.4" fill="#FFFFFF" opacity=".85" className="av-estrela-brilho" />}
-
-      {completa && FAISCAS.map(([x, y, d, s], i) => (
-        <g key={i} transform={`translate(${x} ${y}) scale(${s})`}>
-          <path className="av-faisca" style={{ '--d': `${d}s` } as CSSProperties}
-            d={i % 3 === 2 ? 'M0-1.4A1.4 1.4 0 1 1 0 1.4 1.4 1.4 0 1 1 0-1.4Z' : 'M0-3.4L.7-.7 3.4 0 .7.7 0 3.4-.7.7-3.4 0-.7-.7Z'} />
-        </g>
-      ))}
     </svg>
+    <div className="av-por-cima" aria-hidden="true">
+      {LUZES.map((l, k) => k < acesas && pisca(k) && (
+        // A caixa de fora acende na vez dela; a de dentro pisca (uma animação por caixa).
+        <span key={k} className="av-halo-html"
+          style={{ left: l.x - 7, top: l.y - 7, ...atraso(k * PASSO_LUZ), ['--cor' as string]: CORES_LUZ[l.cor] } as CSSProperties}>
+          <i style={{ '--t': `${(2.2 + ((k * 7) % 5) * 0.35).toFixed(2)}s`, ...atraso(k * PASSO_LUZ + 0.5) } as CSSProperties} />
+        </span>
+      ))}
+      {completa && <span className="av-estrela-brilho" style={{ left: CX - 3 - 1.4, top: 15.4 - 1.4 }} />}
+      {completa && FAISCAS.map(([x, y, d, s], i) => (
+        <span key={i} className="av-faisca"
+          style={{ left: x - 3.4 * s, top: y - 3.4 * s, width: 6.8 * s, height: 6.8 * s, '--d': `${d}s` } as CSSProperties}>
+          <svg viewBox="-3.4 -3.4 6.8 6.8">
+            <path d={i % 3 === 2 ? 'M0-1.4A1.4 1.4 0 1 1 0 1.4 1.4 1.4 0 1 1 0-1.4Z' : 'M0-3.4L.7-.7 3.4 0 .7.7 0 3.4-.7.7-3.4 0-.7-.7Z'} />
+          </svg>
+        </span>
+      ))}
+    </div>
+    </div>
   );
 }
