@@ -57,7 +57,7 @@ export function DialogLixeira({
     try {
       const r = await aoRestaurar(ids);
       if (r.restaurados) toast.success(`${r.restaurados} NR(s) restaurado(s).`);
-      if (r.repetidos) toast.warning(`${r.repetidos} NR(s) ficaram na lixeira: já foram lançados de novo neste mês.`);
+      if (r.repetidos) toast.warning(`${r.repetidos} NR(s) ficaram na lixeira: a mesma pessoa já lançou esse NR de novo neste mês.`);
       setMarcados(new Set());
       setItens(await carregar());
     } catch (e) {

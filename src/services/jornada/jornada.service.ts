@@ -12,6 +12,10 @@
  *   fn_jornada_lixeira / restaurar — apagar vai para a lixeira e volta de lá (idem).
  *   fn_jornada_faixas / faixas_salvar — a 2ª, 3ª e 4ª metas (migration 20261105140000).
  *
+ * NR com pessoas diferentes (migration 20261110120000): a mesma pessoa não
+ * lança o mesmo NR duas vezes no mês na aba; outra pessoa pode, e o NR fica
+ * marcado — `outros` em cada lançamento e `compartilhados` no painel.
+ *
  * As tabelas não têm acesso direto: tudo passa pelas funções. As funções ainda
  * não estão nos tipos gerados: daí `rpcSemTipo`.
  */
@@ -53,6 +57,13 @@ export interface PessoaPlacar {
   metas: number[];
 }
 
+/** Outra pessoa com o mesmo NR na aba no mês: o nome e o 1º dia dela com ele. */
+export interface OutroNoNr {
+  perfil_id: string;
+  nome: string | null;
+  data: string;
+}
+
 export interface RegistroJornada {
   id: string;
   nr: string;
@@ -60,6 +71,17 @@ export interface RegistroJornada {
   perfil_id: string;
   nome: string | null;
   criado_em: string;
+  /**
+   * Quem MAIS tem este NR na aba no mês (10/11/2026). Vazio = só esta pessoa.
+   * Sem a migration 20261110120000 vem sempre vazio.
+   */
+  outros: OutroNoNr[];
+}
+
+/** Um NR do mês que está com 2+ pessoas, cada uma com o 1º dia dela. */
+export interface NrCompartilhado {
+  nr: string;
+  pessoas: OutroNoNr[];
 }
 
 export interface PainelJornada {
@@ -74,6 +96,11 @@ export interface PainelJornada {
   pessoas: PessoaPlacar[];
   dias: { dia: string; total: number }[];
   registros: RegistroJornada[];
+  /**
+   * Os NRs do mês com mais de uma pessoa (migration 20261110120000): a
+   * liderança vê os do grupo; o operador, só os que são dele.
+   */
+  compartilhados: NrCompartilhado[];
 }
 
 /**
@@ -127,7 +154,8 @@ export async function buscarPainel(grupoId: string, dia: string): Promise<Painel
       };
     }),
     dias: data.dias ?? [],
-    registros: data.registros ?? [],
+    registros: (data.registros ?? []).map(r => ({ ...r, outros: r.outros ?? [] })),
+    compartilhados: data.compartilhados ?? [],
   };
 }
 
@@ -235,9 +263,11 @@ export interface ItemImportado {
 
 export interface ResultadoLote {
   inseridos: number;
-  /** Já lançados neste mês na aba (por qualquer pessoa). */
+  /** Que a própria pessoa já tinha lançado neste mês na aba. */
   repetidos: number;
   invalidos: number;
+  /** Dos que entraram, quantos já estão com outra pessoa no mês (ficam marcados). */
+  compartilhados: number;
 }
 
 /** Importa muitos NRs de uma vez. Mesmas regras do lançamento de um. */
@@ -251,6 +281,7 @@ export async function lancarLote(grupoId: string, itens: ItemImportado[]): Promi
     inseridos: Number(data?.inseridos ?? 0),
     repetidos: Number(data?.repetidos ?? 0),
     invalidos: Number(data?.invalidos ?? 0),
+    compartilhados: Number(data?.compartilhados ?? 0),
   };
 }
 
@@ -288,7 +319,7 @@ export async function listarLixeira(grupoId: string): Promise<ItemLixeira[]> {
   return data ?? [];
 }
 
-/** Tira da lixeira. O NR que já foi lançado de novo no mês fica lá (`repetidos`). */
+/** Tira da lixeira. O NR que a mesma pessoa já lançou de novo no mês fica lá (`repetidos`). */
 export async function restaurar(ids: string[]): Promise<{ restaurados: number; repetidos: number }> {
   const { data, error } = await rpcSemTipo<{ restaurados: number; repetidos: number }>('fn_jornada_restaurar', { p_ids: ids });
   if (error) throw erroDoLote('fn_jornada_restaurar', error.message);

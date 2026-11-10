@@ -29,6 +29,7 @@ const SQL = [
   ler('20261104210000_jornada_meta_individual.sql'),
   ler('20261105140000_jornada_quatro_metas.sql'),
   ler('20261105170000_jornada_no_desempenho_do_dia.sql'),
+  ler('20261110120000_jornada_nr_por_pessoa.sql'),
 ];
 
 let db: PGlite;
@@ -328,5 +329,81 @@ describe('cada operador só vê os NRs dele; a liderança vê todos com o nome',
     await expect(como(ANA, 'select public.fn_jornada_excluir($1) v', [doLu])).rejects.toThrow(/Sem permissao/);
     expect(await como<number>(ANA, 'select public.fn_jornada_excluir_lote($1::uuid[]) v', [`{${doLu}}`])).toBe(0);
     expect(nrs(await painel(LU))).toEqual(['200']);
+  });
+});
+
+describe('20261110120000 — o mesmo NR com pessoas diferentes fica marcado', () => {
+  // Camila atendeu no dia 3; o Léo atendeu o mesmo cliente no dia 4.
+  const CAMILA = '00000000-0000-4000-8000-0000000000e1';
+  const LEO = '00000000-0000-4000-8000-0000000000e2';
+  const LIDER = '00000000-0000-4000-8000-0000000000d1';
+  type Outro = { perfil_id: string; nome: string; data: string };
+  type Painel = {
+    registros: { id: string; nr: string; perfil_id: string; outros: Outro[] }[];
+    compartilhados: { nr: string; pessoas: Outro[] }[];
+  };
+  const painel = (uid: string, dia: string) => como<Painel>(uid, 'select public.fn_jornada_painel($1, $2) v', [EQ_SUP, dia]);
+  const lancar = (uid: string, nr: string, dia: string) => como<string>(uid, 'select public.fn_jornada_lancar($1, $2, $3) v', [EQ_SUP, nr, dia]);
+  const lote = (uid: string, itens: { nr: string; data: string }[]) =>
+    como<Record<string, number>>(uid, 'select public.fn_jornada_lancar_lote($1, $2::jsonb) v', [EQ_SUP, JSON.stringify(itens)]);
+
+  beforeAll(async () => {
+    await db.exec(`
+      insert into public.perfis (id, nome, perfil, empresa_id, setor_id, equipe_id) values
+        ('${CAMILA}', 'Camila', 'operador', '${EMP}', '${JOR}', '${EQ_SUP}'),
+        ('${LEO}', 'Léo', 'operador', '${EMP}', '${JOR}', '${EQ_SUP}') on conflict do nothing;
+      insert into public.perfis (id, nome, perfil, empresa_id, setor_id)
+        values ('${LIDER}', 'Lider', 'lider', '${EMP}', '${JOR}') on conflict do nothing;
+      delete from public.jornada_registros;
+      insert into public.jornada_registros (empresa_id, tipo, equipe_id, perfil_id, nr, data) values
+        ('${EMP}', 'acesso', '${EQ_SUP}', '${LEO}', '777', '2026-10-20');  -- outubro: não marca novembro`);
+  });
+
+  it('a mesma pessoa continua barrada; outra pessoa entra', async () => {
+    await lancar(CAMILA, '777', '2026-11-03');
+    await expect(lancar(CAMILA, '777', '2026-11-04')).rejects.toThrow(/por voce neste mes/);
+    await expect(lancar(LEO, '777', '2026-11-04')).resolves.toBeTruthy();
+  });
+
+  it('cada lançamento traz quem mais tem o NR no mês', async () => {
+    const leo = await painel(LEO, '2026-11-04');
+    expect(leo.registros.map(r => [r.nr, r.outros])).toEqual([['777', [{ perfil_id: CAMILA, nome: 'Camila', data: '2026-11-03' }]]]);
+    const camila = await painel(CAMILA, '2026-11-03');
+    expect(camila.registros[0].outros).toEqual([{ perfil_id: LEO, nome: 'Léo', data: '2026-11-04' }]);
+    // O operador continua sem ver o NR do outro na lista dele.
+    expect(camila.registros.map(r => r.perfil_id)).toEqual([CAMILA]);
+  });
+
+  it('os compartilhados do mês: a liderança e as duas pessoas veem; quem não tem o NR, não', async () => {
+    const esperado = [{ nr: '777', pessoas: [
+      { perfil_id: CAMILA, nome: 'Camila', data: '2026-11-03' },
+      { perfil_id: LEO, nome: 'Léo', data: '2026-11-04' },
+    ] }];
+    expect((await painel(LIDER, '2026-11-05')).compartilhados).toEqual(esperado);
+    expect((await painel(CAMILA, '2026-11-05')).compartilhados).toEqual(esperado);
+    expect((await painel(ANA, '2026-11-05')).compartilhados).toEqual([]);
+  });
+
+  it('importar: o próprio repetido não entra; o que já está com outra pessoa entra e é contado', async () => {
+    await lancar(LEO, '888', '2026-11-04');
+    expect(await lote(CAMILA, [{ nr: '777', data: '2026-11-05' }, { nr: '888', data: '2026-11-05' }, { nr: '999', data: '2026-11-05' }]))
+      .toEqual({ inseridos: 2, repetidos: 1, invalidos: 0, compartilhados: 1 });
+  });
+
+  it('restaurar: volta se a dona não relançou, mesmo com outra pessoa no NR', async () => {
+    const id = await lancar(LEO, '555', '2026-11-04');
+    await lancar(CAMILA, '555', '2026-11-05');
+    await como(LEO, 'select public.fn_jornada_excluir($1) v', [id]);
+    expect(await como(LEO, 'select public.fn_jornada_restaurar($1::uuid[]) v', [`{${id}}`])).toEqual({ restaurados: 1, repetidos: 0 });
+    // Apagou e relançou: o antigo fica na lixeira.
+    await como(LEO, 'select public.fn_jornada_excluir($1) v', [id]);
+    await lancar(LEO, '555', '2026-11-06');
+    expect(await como(LEO, 'select public.fn_jornada_restaurar($1::uuid[]) v', [`{${id}}`])).toEqual({ restaurados: 0, repetidos: 1 });
+  });
+
+  it('os ajudantes não ficam abertos para o app', async () => {
+    const r = await db.query<{ v: boolean }>(
+      `select has_function_privilege('authenticated', 'public.fn_jornada_nr_outros(uuid,text,text,date,uuid)', 'EXECUTE') v`);
+    expect(r.rows[0].v).toBe(false);
   });
 });

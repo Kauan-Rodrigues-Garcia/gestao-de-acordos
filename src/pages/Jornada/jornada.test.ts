@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   contagem, diaDaSemana, diaPorExtenso, diasDoMesAte, iniciais, lerMetas, nomesCurtos,
-  percentual, situacaoMetas, somarDias,
+  percentual, situacaoMetas, somarDias, textoDosOutros,
 } from './jornada';
 
 describe('jornada — contas da aba Acesso/Retenção', () => {
@@ -68,5 +68,15 @@ describe('jornada — até quatro metas no mês', () => {
     expect(t.get('b')).toBe('Maria S.');
     expect(t.get('c')).toBe('maria P.');
     expect(t.get('d')).toBe('?');
+  });
+});
+
+describe('textoDosOutros', () => {
+  it('um, dois e três nomes, com o dia', () => {
+    expect(textoDosOutros([{ nome: 'Léo', data: '2026-11-04' }])).toBe('Léo (04/11)');
+    expect(textoDosOutros([{ nome: 'Léo', data: '2026-11-04' }, { nome: 'Camila', data: '2026-11-03' }]))
+      .toBe('Léo (04/11) e Camila (03/11)');
+    expect(textoDosOutros([{ nome: 'A', data: '2026-11-01' }, { nome: null, data: '2026-11-02' }, { nome: 'C', data: '2026-11-03' }]))
+      .toBe('A (01/11), Sem nome (02/11) e C (03/11)');
   });
 });

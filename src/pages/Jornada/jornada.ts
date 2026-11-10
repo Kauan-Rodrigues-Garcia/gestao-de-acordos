@@ -168,3 +168,19 @@ export function nomesCurtos(pessoas: { id: string; nome: string | null }[]): Map
   }
   return curtos;
 }
+
+/** «04/11», de uma data ISO. */
+export function diaMes(diaISO: string): string {
+  const [, m, d] = diaISO.slice(0, 10).split('-');
+  return `${d}/${m}`;
+}
+
+/**
+ * O NR com outras pessoas (10/11/2026): «Léo (04/11)», «Léo (04/11) e Camila
+ * (03/11)», «Léo (04/11), Camila (03/11) e Ana (02/11)».
+ */
+export function textoDosOutros(outros: readonly { nome: string | null; data: string }[]): string {
+  const partes = outros.map(o => `${o.nome?.trim() || 'Sem nome'} (${diaMes(o.data)})`);
+  if (partes.length <= 1) return partes[0] ?? '';
+  return `${partes.slice(0, -1).join(', ')} e ${partes[partes.length - 1]}`;
+}

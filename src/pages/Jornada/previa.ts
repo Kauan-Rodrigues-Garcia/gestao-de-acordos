@@ -6,7 +6,7 @@
  * mudar a meta mexem nesta lista e nunca chegam ao banco. O F5 recomeça.
  */
 import type {
-  PainelJornada, PessoaPlacar, RegistroJornada, TipoJornada,
+  NrCompartilhado, OutroNoNr, PainelJornada, PessoaPlacar, RegistroJornada, TipoJornada,
 } from '@/services/jornada/jornada.service';
 import { diaDaSemana, somarDias } from './jornada';
 
@@ -15,15 +15,18 @@ export interface PessoaPrevia {
   nome: string;
 }
 
+/** Um lançamento guardado na prévia; o `outros` é calculado ao montar o painel. */
+export type RegistroPrevia = Omit<RegistroJornada, 'outros'>;
+
 export interface EstadoPrevia {
   pessoas: PessoaPrevia[];
-  registros: RegistroJornada[];
+  registros: RegistroPrevia[];
   /** Metas de cada operador no mês, em ordem (até 4). Vazia = sem meta. */
   metas: number[];
   /** Metas individuais: perfil → metas do mês. */
   metasPessoa: Record<string, number[]>;
   /** A lixeira da prévia. */
-  apagados: (RegistroJornada & { apagado_em: string })[];
+  apagados: (RegistroPrevia & { apagado_em: string })[];
 }
 
 /** Nomes fictícios: a prévia não mostra ninguém da operação. */
@@ -48,7 +51,7 @@ export function gerarPrevia(tipo: TipoJornada, hoje: string, eu: PessoaPrevia): 
   const metas = tipo === 'acesso' ? [100, 120, 140, 160] : [30, 40];
   const [min, max] = tipo === 'acesso' ? [2, 8] : [0, 3];
 
-  const registros: RegistroJornada[] = [];
+  const registros: RegistroPrevia[] = [];
   let nr = 13100000;
   for (let d = 40; d >= 0; d--) {
     const dia = somarDias(hoje, -d);
@@ -71,12 +74,52 @@ export function gerarPrevia(tipo: TipoJornada, hoje: string, eu: PessoaPrevia): 
       }
     }
   }
+  // Alguns clientes atendidos por duas pessoas (10/11/2026), para a marca
+  // «compartilhado» aparecer: o mesmo NR com outra pessoa, alguns dias depois, no mesmo mês.
+  const outrosDoGrupo = registros.filter(r => r.perfil_id !== eu.id);
+  for (let k = 0; k < 6 && outrosDoGrupo.length; k++) {
+    const base = outrosDoGrupo[Math.floor(sorte() * outrosDoGrupo.length)];
+    const outra = pessoas[1 + Math.floor(sorte() * (pessoas.length - 1))];
+    const dia = somarDias(base.data, 1 + Math.floor(sorte() * 6));
+    if (outra.id === base.perfil_id || dia > hoje || dia.slice(0, 7) !== base.data.slice(0, 7)) continue;
+    if (registros.some(r => r.nr === base.nr && r.perfil_id === outra.id)) continue;
+    registros.push({ ...base, id: `previa-comp-${k}`, perfil_id: outra.id, nome: outra.nome, data: dia, criado_em: `${dia}T15:${10 + k}:00Z` });
+  }
   // Uma pessoa com meta própria, para a prévia mostrar como fica.
   return {
     pessoas, registros, metas,
     metasPessoa: { 'previa-0': tipo === 'acesso' ? [120, 150] : [40] },
     apagados: [],
   };
+}
+
+/**
+ * Quem MAIS tem o NR deste lançamento no mesmo mês (o 1º dia de cada um) — o
+ * `outros` de `fn_jornada_painel`. Exportada para os testes.
+ */
+export function outrosNoMes(registros: readonly RegistroPrevia[], r: RegistroPrevia): OutroNoNr[] {
+  const mes = r.data.slice(0, 7);
+  const primeiro = new Map<string, OutroNoNr>();
+  for (const x of registros) {
+    if (x.nr !== r.nr || x.perfil_id === r.perfil_id || !x.data.startsWith(mes)) continue;
+    const ja = primeiro.get(x.perfil_id);
+    if (!ja || x.data < ja.data) primeiro.set(x.perfil_id, { perfil_id: x.perfil_id, nome: x.nome, data: x.data });
+  }
+  return [...primeiro.values()].sort((a, b) => a.data.localeCompare(b.data) || (a.nome ?? '').localeCompare(b.nome ?? '', 'pt-BR'));
+}
+
+/** Os NRs do mês com 2+ pessoas, o mais recente primeiro — o `compartilhados` do painel. Exportada para os testes. */
+export function compartilhadosNoMes(registros: readonly RegistroPrevia[], mes: string): NrCompartilhado[] {
+  const porNr = new Map<string, RegistroPrevia[]>();
+  for (const r of registros) if (r.data.startsWith(mes)) porNr.set(r.nr, [...(porNr.get(r.nr) ?? []), r]);
+  const lista: (NrCompartilhado & { ultima: string })[] = [];
+  for (const [nr, rs] of porNr) {
+    const pessoas = outrosNoMes(rs, { ...rs[0], perfil_id: '' });
+    if (pessoas.length > 1) lista.push({ nr, pessoas, ultima: pessoas[pessoas.length - 1].data });
+  }
+  return lista
+    .sort((a, b) => b.ultima.localeCompare(a.ultima) || a.nr.localeCompare(b.nr))
+    .map(({ nr, pessoas }) => ({ nr, pessoas }));
 }
 
 /** O mesmo formato que `fn_jornada_painel` devolve, calculado da prévia. */
@@ -110,6 +153,8 @@ export function painelDaPrevia(estado: EstadoPrevia, tipo: TipoJornada, dia: str
     dias: [...totalPorDia].map(([d, total]) => ({ dia: d, total })).sort((a, b) => a.dia.localeCompare(b.dia)),
     registros: doMes
       .filter(r => r.data === dia)
-      .sort((a, b) => b.criado_em.localeCompare(a.criado_em)),
+      .sort((a, b) => b.criado_em.localeCompare(a.criado_em))
+      .map(r => ({ ...r, outros: outrosNoMes(doMes, r) })),
+    compartilhados: compartilhadosNoMes(doMes, mes),
   };
 }

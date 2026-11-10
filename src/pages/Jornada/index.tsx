@@ -10,7 +10,12 @@
  * grava, o campo limpa e o cursor volta. A data fica onde a pessoa deixou.
  *
  * Quem pode o quê é do banco (migrations 20261104180000 e 20261104200000): a
- * tela só pergunta. Sem grupo nenhum, o super_admin vê uma prévia com dados de
+ * tela só pergunta.
+ *
+ * NR com pessoas diferentes (10/11/2026, migration 20261110120000): a mesma
+ * pessoa não lança o mesmo NR duas vezes no mês; outra pessoa pode, e o NR
+ * fica marcado — a etiqueta amarela na linha, o aviso ao lançar e a lista
+ * «Compartilhados» do mês. Sem grupo nenhum, o super_admin vê uma prévia com dados de
  * exemplo (`previa.ts`) que não grava nada.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -37,15 +42,18 @@ import {
   buscarPainel, excluir, excluirLote, exportar, lancar, lancarLote, salvarFaixas, salvarMeta, salvarMetasPessoas,
   listarLixeira, restaurar, type ItemImportado, type ItemLixeira, type ResultadoLote,
   type PainelJornada, type PessoaPlacar, type RegistroJornada, type GrupoJornada, type TipoJornada,
+  type OutroNoNr,
 } from '@/services/jornada/jornada.service';
+import { DialogCompartilhados } from './DialogCompartilhados';
 import { DialogMeta, type MetaIndividual } from './DialogMeta';
 import { DialogImportar } from './DialogImportar';
 import { DialogLixeira } from './DialogLixeira';
 import { baixarCsv, paraCsv } from './importar';
-import { gerarPrevia, painelDaPrevia, type EstadoPrevia } from './previa';
+import { gerarPrevia, outrosNoMes, painelDaPrevia, type EstadoPrevia } from './previa';
 import {
   ORDINAIS, TEXTOS, contagem, diaDaSemana, diaPorExtenso, diasDoMesAte,
-  horaSaoPaulo, iniciais, mesPorExtenso, nomesCurtos, percentual, situacaoMetas, somarDias,
+  diaMes, horaSaoPaulo, iniciais, mesPorExtenso, nomesCurtos, percentual, situacaoMetas, somarDias,
+  textoDosOutros,
 } from './jornada';
 
 /** «Retenção · Jornada» (equipe) ou «Suporte · Equipe X · Jornada» (subgrupo). */
@@ -134,7 +142,8 @@ export default function PaginaJornada({ tipo }: { tipo: TipoJornada }) {
 
 /** O que a tela faz com o que a pessoa digita — no banco, ou na prévia. */
 interface AcoesJornada {
-  lancar: (nr: string, data: string) => Promise<void>;
+  /** Grava; devolve quem MAIS tem o NR na aba no mês (vazio = só você). */
+  lancar: (nr: string, data: string) => Promise<OutroNoNr[]>;
   excluir: (id: string) => Promise<void>;
   /** Metas do grupo no mês (vazia tira) e as individuais que mudaram. Só a liderança. */
   salvarMeta: (metas: number[], individuais: MetaIndividual[]) => Promise<void>;
@@ -165,7 +174,18 @@ function Painel({ grupo, tipo }: { grupo: GrupoJornada; tipo: TipoJornada }) {
   const recarregar = () => queryClient.invalidateQueries({ queryKey: ['jornada-painel', grupo.grupo_id] });
 
   const acoes: AcoesJornada = {
-    lancar: async (nr, data) => { await lancar(grupo.grupo_id, nr, data); void recarregar(); },
+    lancar: async (nr, data) => {
+      const id = await lancar(grupo.grupo_id, nr, data);
+      // O painel do dia do lançamento já relido traz o `outros` dele (e é o que a tela vai mostrar).
+      const chave = ['jornada-painel', grupo.grupo_id, data];
+      const novo = await queryClient.fetchQuery({ queryKey: chave, queryFn: () => buscarPainel(grupo.grupo_id, data), staleTime: 0 })
+        .catch((): null => null);
+      void queryClient.invalidateQueries({
+        queryKey: ['jornada-painel', grupo.grupo_id],
+        predicate: q => q.queryKey[2] !== data,
+      });
+      return novo?.registros.find(r => r.id === id)?.outros ?? [];
+    },
     excluir: async id => { await excluir(id); void recarregar(); },
     salvarMeta: async (metas, individuais) => {
       try {
@@ -255,25 +275,29 @@ function PainelPrevia({ tipo }: { tipo: TipoJornada }) {
 
   const acoes: AcoesJornada = {
     lancar: async (nr, data) => {
-      const ja = estado.registros.find(r => r.nr === nr && r.data.slice(0, 7) === data.slice(0, 7));
-      if (ja) {
-        throw new Error(ja.perfil_id === eu
-          ? 'Este NR já foi lançado por você neste mês.'
-          : 'Este NR já foi lançado por outra pessoa neste mês.');
+      // A mesma regra do banco: a mesma pessoa não repete o NR no mês; outra pessoa pode.
+      if (estado.registros.some(r => r.nr === nr && r.perfil_id === eu && r.data.slice(0, 7) === data.slice(0, 7))) {
+        throw new Error('Este NR já foi lançado por você neste mês.');
       }
-      setEstado(e => ({ ...e, registros: [...e.registros, novoRegistro(nr, data)] }));
+      const novo = novoRegistro(nr, data);
+      setEstado(e => ({ ...e, registros: [...e.registros, novo] }));
+      return outrosNoMes(estado.registros, novo);
     },
     excluir: async id => setEstado(e => paraLixeira(e, new Set([id]))),
     lancarLote: async itens => {
-      const chaves = new Set(estado.registros.map(r => `${r.nr}|${r.data.slice(0, 7)}`));
+      const meus = new Set(estado.registros.filter(r => r.perfil_id === eu).map(r => `${r.nr}|${r.data.slice(0, 7)}`));
+      const deOutros = new Set(estado.registros.filter(r => r.perfil_id !== eu).map(r => `${r.nr}|${r.data.slice(0, 7)}`));
       const novos = itens.filter(i => {
         const k = `${i.nr}|${i.data.slice(0, 7)}`;
-        if (chaves.has(k)) return false;
-        chaves.add(k);
+        if (meus.has(k)) return false;
+        meus.add(k);
         return true;
       });
       setEstado(e => ({ ...e, registros: [...e.registros, ...novos.map(i => novoRegistro(i.nr, i.data))] }));
-      return { inseridos: novos.length, repetidos: itens.length - novos.length, invalidos: 0 };
+      return {
+        inseridos: novos.length, repetidos: itens.length - novos.length, invalidos: 0,
+        compartilhados: novos.filter(i => deOutros.has(`${i.nr}|${i.data.slice(0, 7)}`)).length,
+      };
     },
     excluirLote: async ids => {
       setEstado(e => paraLixeira(e, new Set(ids)));
@@ -284,9 +308,10 @@ function PainelPrevia({ tipo }: { tipo: TipoJornada }) {
       .map(({ id, nr, data, apagado_em }) => ({ id, nr, data, apagado_em })),
     restaurar: async ids => {
       const querem = new Set(ids);
-      const vivos = new Set(agora.current.registros.map(r => `${r.nr}|${r.data.slice(0, 7)}`));
+      // Por pessoa: só barra quem relançou o mesmo NR no mês.
+      const vivos = new Set(agora.current.registros.map(r => `${r.nr}|${r.data.slice(0, 7)}|${r.perfil_id}`));
       const voltam = agora.current.apagados.filter(a => {
-        const k = `${a.nr}|${a.data.slice(0, 7)}`;
+        const k = `${a.nr}|${a.data.slice(0, 7)}|${a.perfil_id}`;
         if (!querem.has(a.id) || vivos.has(k)) return false;
         vivos.add(k);
         return true;
@@ -369,8 +394,15 @@ function Tela({
               tipo={tipo}
               hoje={hoje}
               aoGravar={async (nr, data) => {
-                await acoes.lancar(nr, data);
+                const outros = await acoes.lancar(nr, data);
                 if (data !== dia) setDia(data);
+                // Lançou, e o cliente já está com outra pessoa: fica marcado (não é erro).
+                if (outros.length) {
+                  toast.warning(`NR ${nr} também está com ${textoDosOutros(outros)}.`, {
+                    description: 'Foi lançado e conta para você. Ele fica marcado como compartilhado.',
+                    duration: 8000,
+                  });
+                }
               }}
             />
           ) : (
@@ -652,6 +684,8 @@ function CardDia({
   const [confirmarApagar, setConfirmarApagar] = useState(false);
   const [ocupado, setOcupado] = useState(false);
   const [lixeiraAberta, setLixeiraAberta] = useState(false);
+  const [compartilhadosAberto, setCompartilhadosAberto] = useState(false);
+  const euId = useAuth().perfil?.id ?? null;
   const ultimoClicado = useRef<number | null>(null);
   const totalPorDia = useMemo(
     () => new Map(painel.dias.map(d => [d.dia, Number(d.total)])),
@@ -731,7 +765,7 @@ function CardDia({
     acoes.restaurar(ids)
       .then(r => {
         if (r.restaurados) toast.success(`${r.restaurados} NR(s) de volta.`);
-        if (r.repetidos) toast.warning('Não voltou: o NR já foi lançado de novo neste mês.');
+        if (r.repetidos) toast.warning('Não voltou: esse NR já foi lançado de novo pela mesma pessoa neste mês.');
       })
       .catch(e => toast.error((e as Error).message));
   }
@@ -838,6 +872,19 @@ function CardDia({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          {/* Os clientes do mês com mais de uma pessoa (10/11/2026). */}
+          {painel.compartilhados.length > 0 && (
+            <Button
+              variant="outline" size="sm"
+              className="h-8 px-2.5 border-warning/50 text-warning hover:bg-warning/10 hover:text-warning"
+              onClick={() => setCompartilhadosAberto(true)}
+              title={`Clientes de ${nomeDoMes(dia)} lançados por mais de uma pessoa`}
+            >
+              <Users className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Compartilhados</span>
+              <span className="tabular-nums">{painel.compartilhados.length}</span>
+            </Button>
+          )}
           <Button
             variant="outline" size="icon" className="h-8 w-8"
             onClick={() => setLixeiraAberta(true)}
@@ -1023,6 +1070,14 @@ function CardDia({
         carregar={acoes.lixeira}
         aoRestaurar={acoes.restaurar}
       />
+      <DialogCompartilhados
+        aberto={compartilhadosAberto}
+        aoFechar={() => setCompartilhadosAberto(false)}
+        lista={painel.compartilhados}
+        nomeDoMes={nomeDoMes(dia)}
+        euId={euId}
+        aoAbrirDia={setDia}
+      />
     </section>
   );
 }
@@ -1102,6 +1157,19 @@ function LinhaRegistro({
         >
           {dono.curto}
         </button>
+      )}
+      {/* O cliente também está com outra pessoa neste mês (10/11/2026). */}
+      {registro.outros.length > 0 && (
+        <span
+          className="min-w-0 truncate inline-flex items-center gap-1 rounded px-1.5 h-5 text-[11px] font-medium bg-warning/15 text-warning"
+          title={`Também com ${textoDosOutros(registro.outros)} neste mês`}
+          aria-label={`Também com ${textoDosOutros(registro.outros)}`}
+        >
+          <Users className="h-3 w-3 shrink-0" />
+          {registro.outros.length === 1
+            ? `${(registro.outros[0].nome ?? '').trim().split(/\s+/)[0] || 'outra pessoa'} · ${diaMes(registro.outros[0].data)}`
+            : `+${registro.outros.length}`}
+        </span>
       )}
       <span className="ml-auto text-[11px] text-muted-foreground tabular-nums shrink-0">{horaSaoPaulo(registro.criado_em)}</span>
       <Button

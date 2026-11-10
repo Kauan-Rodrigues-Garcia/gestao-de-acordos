@@ -61,9 +61,11 @@ export function DialogImportar({
     try {
       const r = await aoImportar(leitura.itens);
       const partes = [`${r.inseridos} lançado(s)`];
-      if (r.repetidos) partes.push(`${r.repetidos} já lançado(s) neste mês`);
+      if (r.repetidos) partes.push(`${r.repetidos} já lançado(s) por você neste mês`);
       if (r.invalidos) partes.push(`${r.invalidos} inválido(s)`);
-      (r.inseridos ? toast.success : toast.warning)(partes.join(' · '));
+      (r.inseridos ? toast.success : toast.warning)(partes.join(' · '), r.compartilhados ? {
+        description: `${r.compartilhados} deles já estão com outra pessoa neste mês: ficam marcados como compartilhados.`,
+      } : undefined);
       aoFechar();
     } catch (erro) {
       toast.error((erro as Error).message);
