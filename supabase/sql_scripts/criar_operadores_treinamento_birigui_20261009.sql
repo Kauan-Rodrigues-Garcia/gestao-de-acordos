@@ -1,3 +1,8 @@
+-- ⚠ 10/11/2026 (auditoria de segurança): este script criava as contas com uma
+-- senha fixa, igual para todo mundo. Não cria mais: cada conta nasce com uma
+-- senha aleatória que ninguém conhece. Para a pessoa entrar, a liderança pede o
+-- reset em Usuários (canal «Senhas») — ou crie a conta pela tela, que já
+-- entrega uma senha provisória e obriga a troca no primeiro acesso.
 -- =============================================================================
 -- Operadores novos do Treinamento (Birigui) — outubro/2026
 -- 09/10/2026 · BookPlay · 6 logins
@@ -14,7 +19,7 @@
 -- Mesmo formato de criar_operadores_play4_playmix_play5_20260928.sql. Para
 -- cada login:
 --   1. cria o acesso (auth.users + auth.identities) com o e-mail
---      <login>@interno.sistema e a senha 123456. O gatilho `trg_novo_usuario`
+--      <login>@interno.sistema e uma senha aleatória (ver o aviso no topo). O gatilho `trg_novo_usuario`
 --      cria a linha em `perfis` com cargo operador, setor e empresa;
 --   2. põe a pessoa na equipe «Treinamento» do setor de origem — o padrão de
 --      quem está em treinamento (Play 1, Play 3; a do Playmix foi criada hoje);
@@ -116,7 +121,7 @@ begin
       phone_change, phone_change_token, reauthentication_token
     ) values (
       '00000000-0000-0000-0000-000000000000', v_id, 'authenticated', 'authenticated',
-      v_email, extensions.crypt('123456', extensions.gen_salt('bf', 10)), now(),
+      v_email, extensions.crypt(encode(extensions.gen_random_bytes(24), 'base64'), extensions.gen_salt('bf', 10)), now(),
       jsonb_build_object('provider', 'email', 'providers', jsonb_build_array('email')),
       jsonb_build_object(
         'nome', r.nome, 'perfil', 'operador', 'usuario', r.login,

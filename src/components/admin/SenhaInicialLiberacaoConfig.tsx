@@ -73,6 +73,7 @@ export default function SenhaInicialLiberacaoConfig() {
   const pendentes = data?.pendentes ?? 0;
   const trocaram = data?.trocaram ?? 0;
   const total = pendentes + trocaram;
+  const expiradas = data?.expiradas ?? 0;
   const pct = total ? Math.round((trocaram / total) * 100) : 0;
 
   return (
@@ -125,6 +126,15 @@ export default function SenhaInicialLiberacaoConfig() {
               senha resetada já pedem a troca sozinhas, sem depender daqui.
               {data?.liberado_por_nome ? ` Liberada por ${data.liberado_por_nome}.` : ''}
             </p>
+
+            {data?.prazo_em && (
+              <p className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs leading-relaxed text-foreground">
+                <strong>Prazo: {quando(data.prazo_em)}.</strong> Depois dele, quem não trocou tem a senha
+                inicial anulada e a sessão encerrada. Para voltar, a liderança pede o reset em Usuários
+                e você aprova no canal «Senhas» do chat. Administrador e diretoria você redefine direto.
+                {expiradas > 0 ? ` ${expiradas} ${expiradas === 1 ? 'pessoa perdeu' : 'pessoas perderam'} o prazo e ainda ${expiradas === 1 ? 'não voltou' : 'não voltaram'}.` : ''}
+              </p>
+            )}
 
             <div>
               <div className="flex items-baseline justify-between text-xs">

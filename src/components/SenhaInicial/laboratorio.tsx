@@ -20,6 +20,7 @@ createRoot(document.getElementById('root')!).render(
     <CardSenhaInicial
       nome={nome}
       usuario={nome.toLowerCase().replace(/\s+/g, '_')}
+      prazo="13/11"
       onTrocada={() => alert('Trocou!')}
       onSair={() => alert('Sair')}
     />

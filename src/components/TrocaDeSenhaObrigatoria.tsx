@@ -26,7 +26,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { getImpersonacaoAtiva } from '@/services/impersonacao.service';
 import { CardSenhaInicial } from './SenhaInicial/CardSenhaInicial';
-import { qualPortao, useSenhaInicialLiberada } from './SenhaInicial/liberacao';
+import { diaDoPrazo, qualPortao, useSenhaInicialLiberada, useSenhaInicialPrazo } from './SenhaInicial/liberacao';
 import { TrocarSenhaModal } from './TrocarSenhaModal';
 
 export function TrocaDeSenhaObrigatoria(): React.ReactElement | null {
@@ -35,6 +35,7 @@ export function TrocaDeSenhaObrigatoria(): React.ReactElement | null {
   // Só quem está marcado pergunta pela liberação: os demais não leem a tabela.
   const marcada = perfil?.senha_inicial_pendente === true;
   const liberada = useSenhaInicialLiberada(perfil?.empresa_id, marcada);
+  const prazo = useSenhaInicialPrazo();
   const portao = qualPortao(perfil, liberada);
 
   // Outro login na mesma aba: a marca de «já trocou» é por pessoa.
@@ -46,7 +47,7 @@ export function TrocaDeSenhaObrigatoria(): React.ReactElement | null {
   const sair = () => { void signOut(); };
 
   if (portao === 'inicial') {
-    return <CardSenhaInicial nome={perfil.nome} usuario={perfil.usuario} onTrocada={aoTrocar} onSair={sair} />;
+    return <CardSenhaInicial nome={perfil.nome} usuario={perfil.usuario} prazo={diaDoPrazo(prazo)} onTrocada={aoTrocar} onSair={sair} />;
   }
 
   return (

@@ -29,6 +29,8 @@ import { concluirTrocaDeSenha } from '@/services/senhaPedidos.service';
 interface Props {
   nome?: string | null;
   usuario?: string | null;
+  /** «13/11»: depois desse dia a senha inicial deixa de funcionar. */
+  prazo?: string | null;
   onTrocada: () => void;
   onSair: () => void;
 }
@@ -60,7 +62,7 @@ function Passo({ ok, children }: { ok: boolean; children: React.ReactNode }) {
   );
 }
 
-export function CardSenhaInicial({ nome, usuario, onTrocada, onSair }: Props): React.ReactElement {
+export function CardSenhaInicial({ nome, usuario, prazo, onTrocada, onSair }: Props): React.ReactElement {
   const [senha, setSenha] = useState('');
   const [confirma, setConfirma] = useState('');
   const [mostrar, setMostrar] = useState(false);
@@ -176,6 +178,12 @@ export function CardSenhaInicial({ nome, usuario, onTrocada, onSair }: Props): R
               Ninguém da empresa vê a sua senha, nem a liderança.
             </span>
           </p>
+          {prazo && (
+            <p className="text-center text-xs text-muted-foreground">
+              A senha inicial funciona só até <strong className="text-foreground">{prazo}</strong>.
+              Depois disso, é preciso pedir uma nova à sua liderança.
+            </p>
+          )}
         </div>
 
         <DialogFooter className="gap-2 border-t border-border bg-muted/30 px-6 py-3 sm:justify-between">

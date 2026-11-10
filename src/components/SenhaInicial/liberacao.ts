@@ -24,13 +24,15 @@ import { rpcSemTipo } from '@/lib/supabaseSemTipo';
 import { assinarSinal } from '@/lib/sinais';
 
 let liberadoEm: string | null = null;
+/** Até quando a senha inicial vale (20261110180000). Sem a coluna, `null`. */
+let prazoEm: string | null = null;
 let carregando: Promise<void> | null = null;
 const ouvintes = new Set<() => void>();
 
 function avisar() { for (const o of ouvintes) o(); }
 
 /** Cliente sem tipo: a tabela ainda não está em `database.types.ts`. */
-interface Consulta extends PromiseLike<{ data: { liberado_em: string } | null; error: { message: string } | null }> {
+interface Consulta extends PromiseLike<{ data: { liberado_em: string; prazo_em?: string | null } | null; error: { message: string } | null }> {
   select(colunas: string): Consulta;
   limit(n: number): Consulta;
   maybeSingle(): Consulta;
@@ -41,17 +43,21 @@ const CHAVE_GUARDADA = 'senha-inicial:liberacao';
 const VALIDADE_LIBERADO_MS = 30 * 60_000;
 const VALIDADE_NAO_LIBERADO_MS = 5 * 60_000;
 
-function lerGuardada(): { liberadoEm: string | null; em: number } | null {
+function lerGuardada(): { liberadoEm: string | null; prazoEm?: string | null; em: number } | null {
   try {
     const bruto = localStorage.getItem(CHAVE_GUARDADA);
     if (!bruto) return null;
-    const v = JSON.parse(bruto) as { liberadoEm?: unknown; em?: unknown };
-    return { liberadoEm: typeof v.liberadoEm === 'string' ? v.liberadoEm : null, em: Number(v.em) || 0 };
+    const v = JSON.parse(bruto) as { liberadoEm?: unknown; prazoEm?: unknown; em?: unknown };
+    return {
+      liberadoEm: typeof v.liberadoEm === 'string' ? v.liberadoEm : null,
+      prazoEm: typeof v.prazoEm === 'string' ? v.prazoEm : null,
+      em: Number(v.em) || 0,
+    };
   } catch { return null; }
 }
 
-function guardar(valor: string | null): void {
-  try { localStorage.setItem(CHAVE_GUARDADA, JSON.stringify({ liberadoEm: valor, em: Date.now() })); } catch { /* sem armazenamento */ }
+function guardar(valor: string | null, prazo: string | null = prazoEm): void {
+  try { localStorage.setItem(CHAVE_GUARDADA, JSON.stringify({ liberadoEm: valor, prazoEm: prazo, em: Date.now() })); } catch { /* sem armazenamento */ }
 }
 
 /** A guardada ainda vale? Exportada para os testes. */
@@ -60,18 +66,21 @@ export function guardadaVale(g: { liberadoEm: string | null; em: number } | null
   return agora - g.em < (g.liberadoEm ? VALIDADE_LIBERADO_MS : VALIDADE_NAO_LIBERADO_MS);
 }
 
-function trocar(novo: string | null) {
-  if (novo !== liberadoEm) { liberadoEm = novo; avisar(); }
+function trocar(novo: string | null, prazo: string | null = prazoEm) {
+  if (novo !== liberadoEm || prazo !== prazoEm) { liberadoEm = novo; prazoEm = prazo; avisar(); }
 }
 
 async function ler(forcar: boolean): Promise<void> {
   const guardada = forcar ? null : lerGuardada();
-  if (guardada && guardadaVale(guardada)) { trocar(guardada.liberadoEm); return; }
-  const { data, error } = await tabela().select('liberado_em').limit(1).maybeSingle();
+  if (guardada && guardadaVale(guardada)) { trocar(guardada.liberadoEm, guardada.prazoEm ?? null); return; }
+  // `*` e não a lista de colunas: sem a migration do prazo a coluna não existe,
+  // e pedir por nome faria a leitura falhar — e o card sumir para todo mundo.
+  const { data, error } = await tabela().select('*').limit(1).maybeSingle();
   if (error) return;
   const novo = data?.liberado_em ?? null;
-  guardar(novo);
-  trocar(novo);
+  const prazo = novo ? data?.prazo_em ?? null : null;
+  guardar(novo, prazo);
+  trocar(novo, prazo);
 }
 
 function carregar(forcar = false): Promise<void> {
@@ -102,19 +111,40 @@ export function useSenhaInicialLiberada(empresaId: string | null | undefined, at
   return ativo && valor !== null;
 }
 
+/** Até quando a senha inicial vale; `null` se não liberado ou sem prazo. */
+export function useSenhaInicialPrazo(): string | null {
+  return useSyncExternalStore(
+    o => { ouvintes.add(o); return () => { ouvintes.delete(o); }; },
+    () => prazoEm,
+  );
+}
+
+/** «13/11», no fuso de Brasília. */
+export function diaDoPrazo(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' });
+}
+
 /** O botão do card. Só o super_admin passa no banco. `liberar = false` recolhe. */
 export async function liberarSenhaInicial(liberar: boolean): Promise<{ erro: string | null }> {
   const { data, error } = await rpcSemTipo<string | null>('fn_senha_inicial_liberar', { p_liberar: liberar });
   if (error) return { erro: error.message };
   const novo = liberar ? (typeof data === 'string' ? data : new Date().toISOString()) : null;
-  guardar(novo);
-  trocar(novo);
+  guardar(novo, liberar ? prazoEm : null);
+  trocar(novo, liberar ? prazoEm : null);
+  if (liberar) void carregar(true);
   return { erro: null };
 }
 
 export interface PainelSenhaInicial {
   liberado_em: string | null;
   liberado_por_nome: string | null;
+  /** Depois dele a senha inicial é anulada em quem não trocou. */
+  prazo_em: string | null;
+  /** Ativos que perderam o prazo e ainda não voltaram por pedido de reset. */
+  expiradas: number;
   /** Ativos que ainda não criaram a senha. */
   pendentes: number;
   /** Quem já criou desde a marcação. */
@@ -131,6 +161,8 @@ export async function lerPainelSenhaInicial(): Promise<PainelSenhaInicial> {
   return {
     liberado_em: d.liberado_em ?? null,
     liberado_por_nome: d.liberado_por_nome ?? null,
+    prazo_em: d.prazo_em ?? null,
+    expiradas: Number(d.expiradas) || 0,
     pendentes: Number(d.pendentes) || 0,
     trocaram: Number(d.trocaram) || 0,
     por_setor: Array.isArray(d.por_setor) ? d.por_setor : [],

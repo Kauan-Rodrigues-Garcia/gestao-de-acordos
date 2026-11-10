@@ -1,5 +1,10 @@
+-- ⚠ 10/11/2026 (auditoria de segurança): este script criava as contas com uma
+-- senha fixa, igual para todo mundo. Não cria mais: cada conta nasce com uma
+-- senha aleatória que ninguém conhece. Para a pessoa entrar, a liderança pede o
+-- reset em Usuários (canal «Senhas») — ou crie a conta pela tela, que já
+-- entrega uma senha provisória e obriga a troca no primeiro acesso.
 -- ═══════════════════════════════════════════════════════════════════════════
--- Cria 9 operadores no setor Conecta Play — senha padrão 123456
+-- Cria 9 operadores no setor Conecta Play — senha aleatória (ver o aviso abaixo)
 -- ═══════════════════════════════════════════════════════════════════════════
 --
 -- ESCREVE EM PRODUÇÃO, E ESCREVE NO SCHEMA `auth`. Leia a ressalva antes.
@@ -141,7 +146,7 @@ BEGIN
     ) VALUES (
       '00000000-0000-0000-0000-000000000000',
       v_id, 'authenticated', 'authenticated', v_email,
-      extensions.crypt('123456', extensions.gen_salt('bf')),
+      extensions.crypt(encode(extensions.gen_random_bytes(24), 'base64'), extensions.gen_salt('bf')),
       NOW(), NOW(), NOW(),
       '{"provider":"email","providers":["email"]}'::JSONB,
       JSONB_BUILD_OBJECT(
