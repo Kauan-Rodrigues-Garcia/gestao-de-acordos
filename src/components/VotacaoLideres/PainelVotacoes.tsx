@@ -2,6 +2,7 @@
  * PainelVotacoes — as votações gravadas no banco (09/11/2026), em
  * Configurações › Votação da Liderança, acima do rascunho.
  *
+ *   (todas)    Acompanhar → `AcompanhamentoVotacao` (por setor, quem falta, parcial)
  *   aberta     quantos já votaram e quem falta (nunca em quem), Encerrar
  *   encerrada  Apurar e liberar → `ApuracaoDiretoria` (empates e liberação)
  *   liberada   Ver resultado (a mesma revelação dos líderes)
@@ -11,7 +12,7 @@
  */
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { Ban, CheckCircle2, ChevronDown, Loader2, Lock, RefreshCw, Scale, Trophy, Users } from 'lucide-react';
+import { Ban, BarChart3, CheckCircle2, ChevronDown, Loader2, Lock, RefreshCw, Scale, Trophy, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import {
@@ -21,6 +22,7 @@ import {
 import { NOME_DO_PRODUTO } from './participantes';
 import { ehProduto } from '@/lib/produto';
 
+const AcompanhamentoVotacao = lazy(() => import('./AcompanhamentoVotacao').then(m => ({ default: m.AcompanhamentoVotacao })));
 const ApuracaoDiretoria = lazy(() => import('./ApuracaoDiretoria').then(m => ({ default: m.ApuracaoDiretoria })));
 const TelaResultado = lazy(() => import('./TelaResultado').then(m => ({ default: m.TelaResultado })));
 
@@ -50,6 +52,7 @@ export function PainelVotacoes({ versao }: Props) {
   const [mostrarAntigas, setMostrarAntigas] = useState(false);
   const [andamento, setAndamento] = useState<Record<string, ApuracaoDaVotacao>>({});
   const [apurando, setApurando] = useState<VotacaoNaLista | null>(null);
+  const [acompanhando, setAcompanhando] = useState<VotacaoNaLista | null>(null);
   const [vendo, setVendo] = useState<{ titulo: string; retrato: RetratoDaVotacao } | null>(null);
   const [ocupado, setOcupado] = useState<string | null>(null);
 
@@ -161,6 +164,11 @@ export function PainelVotacoes({ versao }: Props) {
         )}
 
         <div className="flex flex-wrap gap-1.5">
+          {(v.estado === 'aberta' || v.estado === 'encerrada' || v.estado === 'liberada') && (
+            <Button size="sm" variant="outline" className="h-7 gap-1 text-xs" onClick={() => setAcompanhando(v)}>
+              <BarChart3 className="h-3.5 w-3.5" /> Acompanhar
+            </Button>
+          )}
           {(v.estado === 'aberta' || v.estado === 'encerrada') && (
             <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs" onClick={() => void verQuemVotou(v.id)}>
               <Users className="h-3.5 w-3.5" /> {quem ? 'Esconder quem votou' : 'Quem já votou'}
@@ -218,6 +226,10 @@ export function PainelVotacoes({ versao }: Props) {
       )}
 
       <Suspense fallback={null}>
+        {acompanhando && (
+          <AcompanhamentoVotacao votacaoId={acompanhando.id} titulo={acompanhando.titulo} estado={acompanhando.estado}
+            onFechar={() => { setAcompanhando(null); void carregar(); }} />
+        )}
         {apurando && (
           <ApuracaoDiretoria votacaoId={apurando.id} titulo={apurando.titulo}
             onFechar={() => setApurando(null)}

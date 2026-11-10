@@ -85,7 +85,7 @@ export interface VotacaoNaLista {
 
 /** O retrato da diretoria: com os horários de quem já votou (nunca em quem). */
 export interface ApuracaoDaVotacao extends RetratoDaVotacao {
-  envios: Array<{ eleitor_id: string; nome: string | null; enviado_em: string; respondidas: number }> | null;
+  envios: Array<{ eleitor_id: string; nome: string | null; comecou_em?: string | null; enviado_em: string; respondidas: number }> | null;
 }
 
 export interface NovaVotacao {
@@ -117,7 +117,25 @@ export async function liberarParaOsLideres(v: NovaVotacao): Promise<string> {
 
 export const listarVotacoes = () => rpc<VotacaoNaLista[]>('fn_votacao_lideranca_listar');
 export const lerApuracao = (id: string) => rpc<ApuracaoDaVotacao>('fn_votacao_lideranca_apuracao', { p_id: id });
-export const encerrarVotacao = (id: string) => rpc<void>('fn_votacao_lideranca_mudar', { p_id: id, p_acao: 'encerrar' });
+
+/**
+ * O acompanhamento (10/11/2026). O super_admin lê o registro, que traz a
+ * contagem também com a votação ABERTA (a parcial); a tela usa só a contagem
+ * e os horários, nunca em quem cada um votou. Sem ser super_admin o banco
+ * recusa, e vale a apuração da diretoria: a contagem só depois de encerrada.
+ */
+export async function lerAcompanhamento(id: string): Promise<{ retrato: ApuracaoDaVotacao; comParcial: boolean }> {
+  try {
+    const r = await rpc<ApuracaoDaVotacao & { votos?: unknown; eventos?: unknown }>('fn_votacao_lideranca_registro', { p_id: id });
+    const { votos: _votos, eventos: _eventos, ...retrato } = r;
+    return { retrato, comParcial: true };
+  } catch (e) {
+    if (!(e instanceof ErroDoBanco) || e.code !== '42501') throw e;
+    const retrato = await lerApuracao(id);
+    return { retrato, comParcial: retrato.contagem !== null };
+  }
+}
+export const encerrarVotacao =(id: string) => rpc<void>('fn_votacao_lideranca_mudar', { p_id: id, p_acao: 'encerrar' });
 export const cancelarVotacao = (id: string) => rpc<void>('fn_votacao_lideranca_mudar', { p_id: id, p_acao: 'cancelar' });
 export const desempatar = (id: string, perguntaId: string, escolhidoId: string) =>
   rpc<void>('fn_votacao_lideranca_desempatar', { p_id: id, p_pergunta: perguntaId, p_escolhido: escolhidoId });
