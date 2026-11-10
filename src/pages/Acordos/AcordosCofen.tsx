@@ -55,7 +55,7 @@ import { PER_PAGE, buildMensagem, getPageNumbers } from '@/pages/Dashboard/helpe
 import { TableSkeleton } from './TableSkeleton';
 import { useAlcanceAcordos } from './useAlcanceAcordos';
 import { SeletorAlcance } from './SeletorAlcance';
-import { PPTableFilters } from './cofen/PPTableFilters';
+import { PPTableFilters, SeletorMesCofen } from './cofen/PPTableFilters';
 import { PPTableBody, PPColunas } from './cofen/PPTableBody';
 import { PPModals } from './cofen/PPModals';
 
@@ -537,10 +537,12 @@ export function AcordosCofen() {
       <div className="max-w-[1400px] mx-auto space-y-6">
         <div>
           {/* Cabeçalho */}
-          {/* O chalé de Natal (`Natal/chale`): o vão livre do cabeçalho, e o chão é o pé dele. */}
-          <div data-natal-cabecalho data-natal-chao className="flex items-center justify-between mb-4">
+          {/* O chalé de Natal (`Natal/chale`): o vão livre do cabeçalho; o chão é a linha
+              das abas (`PPTableFilters`), logo abaixo — igual ao Nosso produto (10/11/2026). */}
+          <div data-natal-cabecalho className="flex items-center justify-between mb-5">
             <div>
               <h1 className="text-xl font-bold text-foreground">Acordos</h1>
+              <SeletorMesCofen mesFiltro={mesFiltro} setMesFiltro={setMesFiltro} setCurrentPage={setCurrentPage} />
               <p className="text-sm text-muted-foreground mt-0.5">
                 {loading ? 'Carregando...' : `${totalCount} acordo(s) no total`}
                 {selecionados.length > 0 && <span className="ml-2 text-primary font-medium">· {selecionados.length} selecionado(s)</span>}
@@ -582,17 +584,8 @@ export function AcordosCofen() {
             </div>
           </div>
 
-          {/* De quem são os acordos: setor, equipe, Individual — o alcance da aba. */}
-          <SeletorAlcance
-            niveis={niveis} equipesDoSetor={equipesDoSetor} setoresDisponiveis={setoresDoFiltro}
-            filtroSetor={filtroSetor} setFiltroSetor={setFiltroSetor}
-            visao={visao} setVisao={setVisao}
-            aoMudar={() => setCurrentPage(1)}
-          />
-
           <PPTableFilters
             activeTab={activeTab} setActiveTab={setActiveTab}
-            mesFiltro={mesFiltro} setMesFiltro={setMesFiltro}
             busca={busca} setBusca={setBusca}
             filtroStatus={filtroStatus} setFiltroStatus={setFiltroStatus}
             filtroTipo={filtroTipo} setFiltroTipo={setFiltroTipo}
@@ -604,7 +597,15 @@ export function AcordosCofen() {
             statusLabels={statusLabels} tipoLabels={tipoLabels}
             isPP={isPP} usuarioTemLogicaDiretoExtra={usuarioTemLogicaDiretoExtra}
             temFiltros={temFiltros} limparFiltros={limparFiltros}
-          />
+          >
+            {/* De quem são os acordos: setor, equipe, Individual — o alcance da aba. Depois das abas, como no Nosso produto. */}
+            <SeletorAlcance
+              niveis={niveis} equipesDoSetor={equipesDoSetor} setoresDisponiveis={setoresDoFiltro}
+              filtroSetor={filtroSetor} setFiltroSetor={setFiltroSetor}
+              visao={visao} setVisao={setVisao}
+              aoMudar={() => setCurrentPage(1)}
+            />
+          </PPTableFilters>
 
           <div ref={novoInlineRef} />
 

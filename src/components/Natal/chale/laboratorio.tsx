@@ -2,9 +2,10 @@
  * Laboratório do chalé — `npm run dev` e abrir /lab-chale.html.
  *
  * O alto da aba Acordos de mentira (título, mês, botões e a fileira das abas,
- * como no Nosso produto; `?regra=cofen` imita o cabeçalho da regra Cofen, sem
- * abas antes do seletor), dentro de um `<main>`, com a camada do Natal de
- * verdade. `?tema=dark`.
+ * como no Nosso produto; `?regra=cofen` imita a mesa da regra Cofen, que desde
+ * 10/11/2026 tem a mesma ordem: mês no cabeçalho, abas e depois o «Visualizar
+ * acordos de»), dentro de um `<main>`, com a camada do Natal de verdade.
+ * `?tema=dark`.
  *
  * Sem StrictMode, como o app (ele roda os efeitos duas vezes e esconde
  * defeito de montagem). Os botões no pé chamam o Grinch na hora; `?grinch=`
@@ -37,17 +38,15 @@ function Lab() {
         <CamadaNatal cena={cena} />
         <div className="p-6">
           <div className="mx-auto max-w-[1400px]">
-            <div data-natal-cabecalho {...(cofen ? { 'data-natal-chao': '' } : {})} className="mb-5 flex items-center justify-between">
+            <div data-natal-cabecalho className="mb-5 flex items-center justify-between">
               <div>
                 <h1 className="text-xl font-bold">Acordos</h1>
-                {!cofen && (
-                  <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
-                    <span className="inline-flex h-6 w-6 items-center justify-center rounded border"><ChevronLeft className="h-3 w-3" /></span>
-                    <span className="min-w-[100px] text-center font-semibold">novembro de 2026</span>
-                    <span className="inline-flex h-6 w-6 items-center justify-center rounded border"><ChevronRight className="h-3 w-3" /></span>
-                    <span className="px-2">Mês atual</span>
-                  </div>
-                )}
+                <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
+                  <span className="inline-flex h-6 w-6 items-center justify-center rounded border"><ChevronLeft className="h-3 w-3" /></span>
+                  <span className="min-w-[100px] text-center font-semibold">novembro de 2026</span>
+                  <span className="inline-flex h-6 w-6 items-center justify-center rounded border"><ChevronRight className="h-3 w-3" /></span>
+                  <span className="px-2">Mês atual</span>
+                </div>
                 <p className="mt-0.5 text-sm text-muted-foreground">1951 acordo(s) no total</p>
               </div>
               <div className="flex flex-wrap justify-end gap-2">
@@ -56,13 +55,11 @@ function Lab() {
                 <Botao primario><Plus className="h-4 w-4" /> Novo Acordo</Botao>
               </div>
             </div>
-            {!cofen && (
-              <div data-natal-chao className="mb-4 flex items-center gap-1 border-b">
-                {['Todos', 'Verificar', 'Pagos / Quitados', 'Não Pagos'].map((t, i) => (
-                  <span key={t} className={`-mb-px border-b-2 px-4 py-2.5 text-sm font-medium ${i === 0 ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}>{t}</span>
-                ))}
-              </div>
-            )}
+            <div data-natal-chao className="mb-4 flex items-center gap-1 border-b">
+              {['Todos', cofen ? 'Pendentes' : 'Verificar', 'Pagos / Quitados', 'Não Pagos'].map((t, i) => (
+                <span key={t} className={`-mb-px border-b-2 px-4 py-2.5 text-sm font-medium ${i === 0 ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}>{t}</span>
+              ))}
+            </div>
             <div className="mb-4 flex h-14 items-center gap-2 rounded-xl border bg-card px-4 text-xs">
               <span className="text-muted-foreground">Grinch:</span>
               <button type="button" className="rounded border px-2 py-1" onClick={() => window.dispatchEvent(new Event(EVENTO_GRINCH_INVADIR))}>invadir o chalé</button>

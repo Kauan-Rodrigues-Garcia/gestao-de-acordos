@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -12,8 +13,6 @@ import { ESTADOS_BRASIL } from '@/lib/index';
 interface PPTableFiltersProps {
   activeTab: 'todos' | 'pendentes' | 'pagos' | 'nao_pagos';
   setActiveTab: (tab: 'todos' | 'pendentes' | 'pagos' | 'nao_pagos') => void;
-  mesFiltro: string;
-  setMesFiltro: (mes: string) => void;
   busca: string;
   setBusca: (v: string) => void;
   filtroStatus: string;
@@ -35,11 +34,12 @@ interface PPTableFiltersProps {
   usuarioTemLogicaDiretoExtra: boolean;
   temFiltros: boolean;
   limparFiltros: () => void;
+  /** Entre as abas e os filtros: o «Visualizar acordos de:». */
+  children?: ReactNode;
 }
 
 export function PPTableFilters({
   activeTab, setActiveTab,
-  mesFiltro, setMesFiltro,
   busca, setBusca,
   filtroTipo, setFiltroTipo,
   filtroData, setFiltroData,
@@ -51,11 +51,13 @@ export function PPTableFilters({
   isPP,
   usuarioTemLogicaDiretoExtra,
   temFiltros, limparFiltros,
+  children,
 }: PPTableFiltersProps) {
   return (
     <>
       {/* Tabs */}
-      <div className="flex items-center gap-1 mb-4 border-b border-border">
+      {/* `data-natal-chao`: a linha das abas é o chão do chalé de Natal (`Natal/chale`), como no Nosso produto. */}
+      <div data-natal-chao className="flex items-center gap-1 mb-4 border-b border-border">
         {([
           { key: 'todos',      label: 'Todos' },
           { key: 'pendentes',  label: 'Pendentes' },
@@ -77,47 +79,8 @@ export function PPTableFilters({
         ))}
       </div>
 
-      {/* Seletor de mês */}
-      <div className="flex items-center gap-2 mb-4 px-1">
-        <span className="text-xs text-muted-foreground font-medium shrink-0">Mês:</span>
-        <div className="flex items-center gap-1">
-          <Button
-            variant="outline" size="icon" className="h-7 w-7"
-            onClick={() => {
-              const [y, m] = mesFiltro.split('-').map(Number);
-              const prev = new Date(y, m - 2, 1);
-              setMesFiltro(`${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`);
-              setCurrentPage(1);
-            }}
-          >
-            <ChevronLeft className="w-3.5 h-3.5" />
-          </Button>
-          <span className="text-sm font-semibold min-w-[110px] text-center">
-            {new Date(mesFiltro + '-15').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
-          </span>
-          <Button
-            variant="outline" size="icon" className="h-7 w-7"
-            onClick={() => {
-              const [y, m] = mesFiltro.split('-').map(Number);
-              const next = new Date(y, m, 1);
-              setMesFiltro(`${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`);
-              setCurrentPage(1);
-            }}
-          >
-            <ChevronRight className="w-3.5 h-3.5" />
-          </Button>
-          <Button
-            variant="ghost" size="sm" className="h-7 text-xs gap-1 text-muted-foreground"
-            onClick={() => {
-              const d = new Date();
-              setMesFiltro(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
-              setCurrentPage(1);
-            }}
-          >
-            Mês atual
-          </Button>
-        </div>
-      </div>
+      {/* «Visualizar acordos de:» (`SeletorAlcance`) — depois das abas, como no Nosso produto. */}
+      {children}
 
       {/* Filtros */}
       <Card className="border-border mb-4" data-tour="filtros">
@@ -220,5 +183,43 @@ export function PPTableFilters({
         </CardContent>
       </Card>
     </>
+  );
+}
+
+/**
+ * O seletor de mês da regra Cofen, no cabeçalho debaixo do título (10/11/2026),
+ * no mesmo lugar e no mesmo jeito do Nosso produto. Antes ficava abaixo das
+ * abas; com ele no cabeçalho a ordem das duas mesas é a mesma, e o chalé de
+ * Natal tem a mesma altura nas duas.
+ */
+export function SeletorMesCofen({ mesFiltro, setMesFiltro, setCurrentPage }: {
+  mesFiltro: string;
+  setMesFiltro: (mes: string) => void;
+  setCurrentPage: (p: number) => void;
+}) {
+  const irPara = (y: number, m0: number) => {
+    const d = new Date(y, m0, 1);
+    setMesFiltro(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    setCurrentPage(1);
+  };
+  const [y, m] = mesFiltro.split('-').map(Number);
+  return (
+    <div className="flex items-center gap-1 mt-2">
+      <Button variant="outline" size="icon" className="h-6 w-6" aria-label="Mês anterior" onClick={() => irPara(y, m - 2)}>
+        <ChevronLeft className="w-3 h-3" />
+      </Button>
+      <span className="text-xs font-semibold min-w-[100px] text-center text-muted-foreground">
+        {new Date(mesFiltro + '-15').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+      </span>
+      <Button variant="outline" size="icon" className="h-6 w-6" aria-label="Próximo mês" onClick={() => irPara(y, m)}>
+        <ChevronRight className="w-3 h-3" />
+      </Button>
+      <Button
+        variant="ghost" size="sm" className="h-6 text-xs text-muted-foreground px-2"
+        onClick={() => { const d = new Date(); irPara(d.getFullYear(), d.getMonth()); }}
+      >
+        Mês atual
+      </Button>
+    </div>
   );
 }
