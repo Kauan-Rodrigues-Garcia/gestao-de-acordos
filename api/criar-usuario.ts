@@ -50,6 +50,19 @@ interface Corpo {
 }
 
 const MIN_SENHA = 6;
+
+/**
+ * A senha que a administração define para outra pessoa é provisória (a troca é
+ * obrigatória no primeiro acesso), mas não pode ser adivinhável enquanto vale:
+ * 6+ caracteres, letra e número, sem sequência manjada. A auditoria de
+ * 10/11/2026 achou 236 contas ativas com a mesma senha inicial óbvia.
+ * Régua irmã de `src/lib/senhaForte.ts` (este arquivo roda fora do bundle).
+ */
+function senhaFraca(senha: string): boolean {
+  const s = senha.toLowerCase();
+  return !/[a-z]/.test(s) || !/[0-9]/.test(s) || new Set(s).size < 4
+    || /123456|654321|234567|012345|abcdef|qwerty|senha|password|mundial/.test(s);
+}
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SLUG_CARGO = /^[a-z0-9_]{2,40}$/;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -153,8 +166,8 @@ export default async function handler(req: ReqLike, res: ResLike): Promise<void>
       res.status(400).json({ error: 'Nome e e-mail válidos são obrigatórios.' });
       return;
     }
-    if (senha.length < MIN_SENHA || senha.length > 72) {
-      res.status(400).json({ error: `A senha deve ter entre ${MIN_SENHA} e 72 caracteres.` });
+    if (senha.length < MIN_SENHA || senha.length > 72 || senhaFraca(senha)) {
+      res.status(400).json({ error: `A senha deve ter entre ${MIN_SENHA} e 72 caracteres, com letra e número, e não pode ser uma sequência óbvia.` });
       return;
     }
     if (!SLUG_CARGO.test(perfil)) {
@@ -242,10 +255,12 @@ export default async function handler(req: ReqLike, res: ResLike): Promise<void>
 
     // 5) O cargo, pela service_role (o gatilho de escalada só barra sessão de
     // usuário). Falhou: desfaz a conta, para não sobrar um operador órfão.
+    // A senha de quem criou a conta é provisória: a pessoa é obrigada a criar
+    // a dela no primeiro acesso (`senha_troca_obrigatoria`, 10/11/2026).
     const cargoUpd = await fetch(`${url}/rest/v1/perfis?id=eq.${novo.id}`, {
       method: 'PATCH',
       headers: { ...admin, Prefer: 'return=representation' },
-      body: JSON.stringify({ perfil, setor_id: setorId }),
+      body: JSON.stringify({ perfil, setor_id: setorId, senha_troca_obrigatoria: true }),
     });
     const gravado = cargoUpd.ok ? ((await cargoUpd.json()) as unknown[]) : [];
     if (!gravado.length) {

@@ -6,6 +6,7 @@
  */
 import { supabase } from '@/lib/supabase';
 
+/** Mínimo da senha que a administração define para outra pessoa (com letra e número, desde 10/11/2026). */
 export const MIN_SENHA = 6;
 
 /**

@@ -158,6 +158,12 @@ export interface Perfil {
   /** Senha resetada por pedido (canal «Senhas»): o sistema exige a troca (20261105100000). */
   senha_troca_obrigatoria?: boolean | null;
   /**
+   * Conta que ainda entrava com a senha inicial na auditoria de 10/11/2026
+   * (20261110120000). O card «Uma senha só sua» aparece quando o super admin
+   * libera a troca; some quando a pessoa cria a senha.
+   */
+  senha_inicial_pendente?: boolean | null;
+  /**
    * Quando a pessoa leu as boas-vindas do chat (migration 20260825240000).
    * `null` = ainda não viu, e o cartão aparece antes da primeira conversa.
    */

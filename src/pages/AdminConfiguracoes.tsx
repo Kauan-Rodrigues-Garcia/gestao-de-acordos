@@ -25,6 +25,7 @@ import AdminTags from '@/components/admin/AdminTags';
 import AcessoMultiempresa from '@/components/admin/AcessoMultiempresa';
 import LiberacaoChat from '@/components/admin/LiberacaoChat';
 import NatalLiberacaoConfig from '@/components/admin/NatalLiberacaoConfig';
+import SenhaInicialLiberacaoConfig from '@/components/admin/SenhaInicialLiberacaoConfig';
 import CrachaPedidoConfig from '@/components/admin/CrachaPedidoConfig';
 import AdminDocumentacoes from '@/pages/AdminDocumentacoes';
 import AdminCargos from '@/components/admin/AdminCargos';
@@ -288,6 +289,12 @@ export default function AdminConfiguracoes() {
               abriu o presente em Birigui e em Marília. Só super_admin — as
               funções `fn_natal_*` conferem de novo no banco. */}
           {ehSuperAdmin && <NatalLiberacaoConfig />}
+
+          {/* ── Senha inicial (10/11/2026): a hora em que a troca passa a ser
+              obrigatória para quem ainda estava com a senha igual para todo
+              mundo, e quantos faltam. Temporário. Só super_admin — as funções
+              `fn_senha_inicial_*` conferem de novo no banco. */}
+          {ehSuperAdmin && <SenhaInicialLiberacaoConfig />}
 
           {/* Modelos de mensagem */}
           <Card className="border-border">

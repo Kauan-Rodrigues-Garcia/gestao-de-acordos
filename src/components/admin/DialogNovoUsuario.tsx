@@ -314,7 +314,7 @@ export function DialogNovoUsuario({
                   </Button>
                 </div>
                 <p className={cn('text-[11px]', senhaCurta ? 'text-destructive' : 'text-muted-foreground')}>
-                  Mínimo {MIN_SENHA} caracteres. Passe a senha para a pessoa — ela pode trocar depois.
+                  Mínimo {MIN_SENHA} caracteres, com letra e número. Passe a senha para a pessoa — no primeiro acesso o sistema obriga a criar a dela.
                 </p>
               </div>
             </Passo>

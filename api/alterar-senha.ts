@@ -51,6 +51,19 @@ function enderecoCliente(req: ReqLike): string | null {
 }
 
 const MIN_SENHA = 6;
+
+/**
+ * A senha que a administração define para outra pessoa é provisória (a troca é
+ * obrigatória no primeiro acesso), mas não pode ser adivinhável enquanto vale:
+ * 6+ caracteres, letra e número, sem sequência manjada. A auditoria de
+ * 10/11/2026 achou 236 contas ativas com a mesma senha inicial óbvia.
+ * Régua irmã de `src/lib/senhaForte.ts` (este arquivo roda fora do bundle).
+ */
+function senhaFraca(senha: string): boolean {
+  const s = senha.toLowerCase();
+  return !/[a-z]/.test(s) || !/[0-9]/.test(s) || new Set(s).size < 4
+    || /123456|654321|234567|012345|abcdef|qwerty|senha|password|mundial/.test(s);
+}
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
@@ -212,8 +225,8 @@ export default async function handler(req: ReqLike, res: ResLike): Promise<void>
     }
     // Teto de 72: o bcrypt do GoTrue ignora o que passa disso, e a senha
     // "longa" valeria só pelo começo. Mesma régua de api/criar-usuario.ts.
-    if (novaSenha.length < MIN_SENHA || novaSenha.length > 72) {
-      res.status(400).json({ error: `A senha deve ter entre ${MIN_SENHA} e 72 caracteres.` });
+    if (novaSenha.length < MIN_SENHA || novaSenha.length > 72 || senhaFraca(novaSenha)) {
+      res.status(400).json({ error: `A senha deve ter entre ${MIN_SENHA} e 72 caracteres, com letra e número, e não pode ser uma sequência óbvia.` });
       return;
     }
     if (alvoId === caller.id) {
@@ -288,13 +301,15 @@ export default async function handler(req: ReqLike, res: ResLike): Promise<void>
       return;
     }
 
-    // 5) Faz o botão de chave voltar para o usuário definir a senha dele.
-    //    A senha que o admin digitou é temporária de propósito: enquanto ela
-    //    valer, duas pessoas conhecem o acesso.
+    // 5) A senha que o admin digitou é temporária de propósito: enquanto ela
+    //    valer, duas pessoas conhecem o acesso. Desde 10/11/2026 a troca é
+    //    OBRIGATÓRIA no próximo acesso (`senha_troca_obrigatoria`), e não mais
+    //    só o botão de chave: a auditoria achou centenas de contas que nunca
+    //    trocaram a senha recebida.
     await fetch(`${url}/rest/v1/perfis?id=eq.${alvoId}`, {
       method: 'PATCH',
       headers: { ...admin, Prefer: 'return=minimal' },
-      body: JSON.stringify({ senha_alterada: false }),
+      body: JSON.stringify({ senha_alterada: false, senha_troca_obrigatoria: true }),
     }).catch(() => {/* senha já trocou; não falha a operação por causa da flag */});
 
     // 6) Auditoria (best-effort). A senha NUNCA entra no log.

@@ -8,7 +8,12 @@
  *     e o botão some (`perfis.senha_alterada = true`);
  *   • `obrigatoria` (05/11/2026): a senha foi resetada por pedido da liderança
  *     (`perfis.senha_troca_obrigatoria`). Não fecha, não tem Cancelar — só
- *     «Sair». Ver `TrocaDeSenhaObrigatoria`.
+ *     «Sair». Ver `TrocaDeSenhaObrigatoria`. Desde 10/11/2026 a mesma trava
+ *     vale para a senha resetada direto e para a conta recém-criada. (Quem
+ *     ainda estava com a senha inicial vê outro card: `SenhaInicial/`.)
+ *
+ * A senha nova passa pela régua de `@/lib/senhaForte`: 6+ caracteres, letra e
+ * número, sem sequência manjada e sem o próprio nome.
  *
  * Nos dois casos, depois de o GoTrue aceitar a senha nova,
  * `fn_senha_troca_concluida` desliga a trava e apaga a senha provisória que
@@ -24,9 +29,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/lib/supabase';
 import { concluirTrocaDeSenha } from '@/services/senhaPedidos.service';
+import { useAuth } from '@/hooks/useAuth';
+import { MIN_SENHA_FORTE, problemaDaSenha } from '@/lib/senhaForte';
 import { toast } from 'sonner';
-
-const MIN_SENHA = 6;
 
 interface TrocarSenhaModalProps {
   open: boolean;
@@ -43,9 +48,11 @@ interface TrocarSenhaModalProps {
 /** O GoTrue recusa repetir a senha atual — aqui, a provisória. */
 function mensagemDoErro(msg: string): string {
   if (/same.?password|different from the old/i.test(msg)) {
-    return 'A senha nova precisa ser diferente da provisória.';
+    return 'A senha nova precisa ser diferente da atual.';
   }
-  if (/weak|at least/i.test(msg)) return `Senha fraca: use ao menos ${MIN_SENHA} caracteres.`;
+  if (/weak|at least|pwned|leaked|should contain/i.test(msg)) {
+    return `Senha fraca ou conhecida demais: use ao menos ${MIN_SENHA_FORTE} caracteres, com letra e número, e fuja das óbvias.`;
+  }
   return msg;
 }
 
@@ -56,18 +63,16 @@ export function TrocarSenhaModal({
   const [confirma, setConfirma] = useState('');
   const [mostrar, setMostrar]   = useState(false);
   const [salvando, setSalvando] = useState(false);
+  const { perfil } = useAuth();
 
   function resetar() {
     setSenha(''); setConfirma(''); setMostrar(false);
   }
 
   async function salvar() {
-    if (senha.length < MIN_SENHA) {
-      toast.error(`A senha precisa ter ao menos ${MIN_SENHA} caracteres.`);
-      return;
-    }
-    if (senha.length > 72) {
-      toast.error('A senha pode ter no máximo 72 caracteres.');
+    const problema = problemaDaSenha(senha, { usuario: perfil?.usuario, nome: perfil?.nome });
+    if (problema) {
+      toast.error(problema);
       return;
     }
     if (senha !== confirma) {
@@ -128,15 +133,14 @@ export function TrocarSenhaModal({
           <DialogDescription>
             {obrigatoria ? (
               <>
-                A sua senha foi resetada a pedido da liderança. A senha que você usou para
-                entrar é provisória — crie uma senha nova para continuar usando o sistema.
-                Escolha uma fácil de lembrar.
+                A senha que você usou para entrar é provisória. Crie uma senha só sua
+                para continuar usando o sistema: ao menos {MIN_SENHA_FORTE} caracteres, com
+                letra e número, sem o seu nome.
               </>
             ) : (
               <>
-                Defina uma senha nova para acessar o sistema. Recomendamos uma senha
-                fácil de lembrar — pode ser a mesma que você usa no sistema Mundial.
-                Esta troca aparece só uma vez.
+                Defina uma senha só sua: ao menos {MIN_SENHA_FORTE} caracteres, com letra e
+                número, sem o seu nome. Não use a mesma senha de outros sistemas.
               </>
             )}
           </DialogDescription>
@@ -152,7 +156,7 @@ export function TrocarSenhaModal({
                 autoFocus
                 disabled={salvando}
                 autoComplete="new-password"
-                placeholder={`Mínimo ${MIN_SENHA} caracteres`}
+                placeholder={`Mínimo ${MIN_SENHA_FORTE}, com letra e número`}
                 onChange={e => setSenha(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') void salvar(); }}
                 className="pr-9"

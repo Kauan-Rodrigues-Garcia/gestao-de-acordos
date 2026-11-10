@@ -697,9 +697,9 @@ export function DialogUsuario({
                   </Button>
                 </div>
                 <p className="text-[11px] text-muted-foreground leading-snug">
-                  Mínimo {MIN_SENHA} caracteres. A senha atual não pode ser consultada —
-                  só substituída. Informe a nova a {editando.nome.split(' ')[0]}; o botão
-                  de chave vai aparecer para ela definir uma própria.
+                  Mínimo {MIN_SENHA} caracteres, com letra e número. A senha atual não pode ser consultada —
+                  só substituída. Informe a nova a {editando.nome.split(' ')[0]}; no próximo
+                  acesso o sistema obriga a criar uma própria.
                 </p>
               </div>
               {novaSenha.length > 0 && (
