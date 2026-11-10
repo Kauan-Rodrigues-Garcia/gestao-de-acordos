@@ -488,7 +488,8 @@ O uso indevido pode gerar medidas disciplinares, inclusive rescisão por justa c
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Sempre que este termo mudar, você será avisado e precisará aceitar a nova versão no próximo acesso.
 
-Ao clicar em «Aceitar e Continuar», você declara que leu e entendeu este termo e que concorda com ele.$TERMO$
+Ao clicar em «Aceitar e Continuar», você declara que leu e entendeu este termo e que concorda com ele.$TERMO$,
+       TRUE
   FROM _termo_alvo a;
 
 -- Os dois trechos que mudam entre a cobrança e o Comercial.
