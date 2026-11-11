@@ -44,6 +44,11 @@ export interface FatosConflitoNr {
   extraAtualOpNome: string | null;
   /** Setor do dono, só para a mensagem do aviso. */
   donoSetorNome:  string | null;
+  /**
+   * Marquei «Extra» à mão antes de salvar (11/11/2026). Com a lógica ligada
+   * para mim, vincula ao DIRETO do dono mesmo que ele também tenha a lógica.
+   */
+  marcouExtra?:   boolean;
 }
 
 // ─── Decisão ────────────────────────────────────────────────────────────────
@@ -99,7 +104,8 @@ export function decidirConflitoNr(fatos: FatosConflitoNr): DecisaoConflitoNr {
   }
 
   // 4. CASO A — eu tenho a lógica e o dono não.
-  if (euTemLogica && !donoTemLogica) return { caso: 'eu_viro_extra', ...base };
+  //    Ou eu marquei «Extra» à mão: declarei que sou Extra, o dono segue Direto.
+  if (euTemLogica && (!donoTemLogica || fatos.marcouExtra)) return { caso: 'eu_viro_extra', ...base };
 
   // 5. CASO B — o dono tem a lógica e eu não.
   if (!euTemLogica && donoTemLogica) {

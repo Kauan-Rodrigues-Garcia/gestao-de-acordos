@@ -1,0 +1,313 @@
+-- ============================================================================
+-- Par Direto/Extra: o PLANO é do DIRETO
+-- ============================================================================
+--
+-- ## Por que (11/11/2026, achado na correção dos pares divergentes)
+--
+-- `fn_vincular_extra_ao_direto` gravava no DIRETO as parcelas que a pessoa do
+-- EXTRA digitou. Logs de 11/11: Direto com entrada de R$ 416,66 e total de
+-- R$ 5.416,66 em 17 parcelas virou «1 parcela» 4 minutos depois, quando outra
+-- pessoa tabulou o mesmo NR como Extra; em 06/11, 17 → 10. Desde agosto, ~55
+-- vínculos mudaram as parcelas do Direto nesse momento (não corrigidos: a
+-- maioria é de mês fechado e não dá para separar renegociação de estrago).
+-- Os dois de novembro com entrada foram restaurados pelos logs em 11/11.
+--
+-- ## O que muda
+--
+--   1. Ao LIGAR o par (`fn_acordos_par_vinculo`, 20261111170000): parcelas,
+--      valor total e entrada vêm sempre do DIRETO; o resto segue a regra da
+--      tabulação nova (e o «pago» não se desfaz).
+--   2. `fn_vincular_extra_ao_direto` não grava mais `parcelas` no DIRETO.
+--
+-- O resto das duas funções é a versão de 20261111170000 (aplicada em 11/11).
+-- Não escreve em nenhuma linha. Reaplicável.
+
+BEGIN;
+
+-- ── 1. Ligar o par: o PLANO vem do DIRETO ───────────────────────────────────
+CREATE OR REPLACE FUNCTION public.fn_acordos_par_vinculo()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public', 'pg_temp'
+AS $function$
+DECLARE
+  v_par_atual uuid := NEW.par_acordo_id;
+  v_candidato uuid;
+  v_par       public.acordos%ROWTYPE;
+  v_a         public.acordos%ROWTYPE;
+  v_g         public.acordos%ROWTYPE;   -- ganhador: a tabulação nova
+  v_p         public.acordos%ROWTYPE;   -- perdedor
+  v_d         public.acordos%ROWTYPE;   -- o DIRETO do par: dono do plano
+  v_status    text;
+  v_dt_pag    date;
+  v_mudancas  jsonb;
+  v_ok        boolean := true;
+  v_erro      text;
+  v_campo     text;
+BEGIN
+  IF COALESCE(current_setting('app.par_vinculo_em_curso', true), '') = 'on' THEN
+    RETURN NULL;
+  END IF;
+
+  -- O vínculo deixou de ser o mesmo (virou outro tipo, outro dono, outra
+  -- chave, saiu da empresa): as duas metades se soltam.
+  IF TG_OP = 'UPDATE' AND OLD.par_acordo_id IS NOT NULL AND (
+       NEW.vinculo_operador_id IS DISTINCT FROM OLD.vinculo_operador_id
+    OR COALESCE(NEW.tipo_vinculo, 'direto') <> COALESCE(OLD.tipo_vinculo, 'direto')
+    OR NEW.operador_id IS DISTINCT FROM OLD.operador_id
+    OR NEW.empresa_id  IS DISTINCT FROM OLD.empresa_id
+    OR public.fn_acordo_chave_valor(NEW.nr_cliente, NEW.instituicao)
+       IS DISTINCT FROM public.fn_acordo_chave_valor(OLD.nr_cliente, OLD.instituicao)
+  ) THEN
+    PERFORM set_config('app.par_vinculo_em_curso', 'on', true);
+    UPDATE public.acordos SET par_acordo_id = NULL
+     WHERE id IN (NEW.id, OLD.par_acordo_id) AND par_acordo_id IS NOT NULL;
+    PERFORM set_config('app.par_vinculo_em_curso', 'off', true);
+    v_par_atual := NULL;
+  END IF;
+
+  -- Declara vínculo e ainda não tem par: procura, liga e ALINHA
+  -- (20261111170000). Vale a linha criada por último; o «pago» de qualquer
+  -- lado nunca se desfaz.
+  IF v_par_atual IS NULL THEN
+    IF NEW.vinculo_operador_id IS NOT NULL THEN
+      v_candidato := public.fn_acordo_par_candidato(NEW.id);
+      IF v_candidato IS NOT NULL THEN
+        PERFORM set_config('app.par_vinculo_em_curso', 'on', true);
+        UPDATE public.acordos
+           SET par_acordo_id = CASE WHEN id = NEW.id THEN v_candidato ELSE NEW.id END
+         WHERE id IN (NEW.id, v_candidato);
+
+        SELECT * INTO v_a   FROM public.acordos WHERE id = NEW.id;
+        SELECT * INTO v_par FROM public.acordos WHERE id = v_candidato;
+        IF v_par.criado_em > v_a.criado_em THEN
+          v_g := v_par; v_p := v_a;
+        ELSE
+          v_g := v_a;   v_p := v_par;
+        END IF;
+
+        v_status := v_g.status;
+        v_dt_pag := v_g.data_pagamento;
+        IF v_g.status IS DISTINCT FROM 'pago' AND v_p.status = 'pago' THEN
+          v_status := 'pago';
+          v_dt_pag := v_p.data_pagamento;
+        END IF;
+
+        -- O plano (parcelas, total, entrada) é sempre o do DIRETO: o EXTRA
+        -- costuma ser tabulado sem a entrada e com outra contagem, e copiar
+        -- isso apagava o plano de quem é dono do NR (20261111180000).
+        IF COALESCE(v_a.tipo_vinculo, 'direto') = 'direto' THEN v_d := v_a; ELSE v_d := v_par; END IF;
+
+        BEGIN
+          UPDATE public.acordos SET
+            nome_cliente   = v_g.nome_cliente,
+            valor          = v_g.valor,
+            valor_total    = v_d.valor_total,
+            valor_entrada  = v_d.valor_entrada,
+            vencimento     = v_g.vencimento,
+            status         = v_status,
+            data_pagamento = v_dt_pag,
+            parcelas       = v_d.parcelas,
+            tipo           = v_g.tipo,
+            whatsapp       = v_g.whatsapp
+          WHERE id IN (v_g.id, v_p.id)
+            AND (nome_cliente, valor, valor_total, valor_entrada, vencimento, status,
+                 data_pagamento, parcelas, tipo, whatsapp)
+                IS DISTINCT FROM
+                (v_g.nome_cliente, v_g.valor, v_d.valor_total, v_d.valor_entrada, v_g.vencimento, v_status,
+                 v_dt_pag, v_d.parcelas, v_g.tipo, v_g.whatsapp);
+        EXCEPTION WHEN OTHERS THEN
+          -- Ligar não cai por isso: o par fica ligado e a próxima edição sincroniza.
+          RAISE WARNING 'fn_acordos_par_vinculo: par % não alinhado ao ligar: %', v_candidato, SQLERRM;
+        END;
+
+        PERFORM set_config('app.par_vinculo_em_curso', 'off', true);
+      END IF;
+    END IF;
+    RETURN NULL;
+  END IF;
+
+  IF TG_OP <> 'UPDATE' THEN RETURN NULL; END IF;
+
+  v_mudancas := public.fn_acordo_par_mudancas(OLD, NEW);
+  IF jsonb_array_length(v_mudancas) = 0 THEN RETURN NULL; END IF;
+
+  SELECT * INTO v_par FROM public.acordos WHERE id = v_par_atual FOR UPDATE;
+  -- O par tem que declarar o vínculo de volta. Sem isso, não se escreve nele.
+  IF NOT FOUND
+     OR v_par.par_acordo_id IS DISTINCT FROM NEW.id
+     OR v_par.operador_id IS DISTINCT FROM NEW.vinculo_operador_id
+     OR v_par.vinculo_operador_id IS DISTINCT FROM NEW.operador_id THEN
+    RETURN NULL;
+  END IF;
+
+  -- O par pode recusar (NR que voltou a valer e já é de outro, por exemplo).
+  -- A edição de quem salvou não cai por isso: o card diz que o outro lado
+  -- não acompanhou.
+  BEGIN
+    PERFORM set_config('app.par_vinculo_em_curso', 'on', true);
+    UPDATE public.acordos SET
+      nome_cliente   = NEW.nome_cliente,
+      valor          = NEW.valor,
+      valor_total    = NEW.valor_total,
+      valor_entrada  = NEW.valor_entrada,
+      vencimento     = NEW.vencimento,
+      status         = NEW.status,
+      data_pagamento = NEW.data_pagamento,
+      parcelas       = NEW.parcelas,
+      tipo           = NEW.tipo,
+      whatsapp       = NEW.whatsapp
+    WHERE id = v_par.id;
+    PERFORM set_config('app.par_vinculo_em_curso', 'off', true);
+  EXCEPTION WHEN OTHERS THEN
+    v_ok   := false;
+    v_erro := SQLERRM;
+    PERFORM set_config('app.par_vinculo_em_curso', 'off', true);
+    RAISE WARNING 'fn_acordos_par_vinculo: par % não sincronizado: %', v_par.id, SQLERRM;
+  END;
+
+  IF public.fn_acordo_par_aviso_de_pessoa(
+       OLD.status = 'verificar_pendente' AND NEW.status = 'nao_pago'
+       AND jsonb_array_length(v_mudancas) = 1) THEN
+    v_campo := public.fn_nr_campo_chave(NEW.nr_cliente, NEW.instituicao);
+    PERFORM public.fn_acordo_par_avisar(
+      'alterado', NEW.empresa_id, NEW.operador_id, NEW.id, v_par.operador_id, v_par.id,
+      jsonb_build_object(
+        'rotulo',       CASE WHEN v_campo = 'instituicao' THEN 'Código' ELSE 'NR' END,
+        'chave',        public.fn_acordo_chave_valor(NEW.nr_cliente, NEW.instituicao),
+        'cliente',      NEW.nome_cliente,
+        'parcela',      NEW.numero_parcela,
+        'parcelas',     NEW.parcelas,
+        'mudancas',     v_mudancas,
+        'sincronizado', v_ok,
+        'erro',         v_erro));
+  END IF;
+
+  RETURN NULL;
+END;
+$function$;
+
+-- ── 2. Vincular o EXTRA não reescreve o plano do DIRETO ─────────────────────
+CREATE OR REPLACE FUNCTION public.fn_vincular_extra_ao_direto(
+  p_direto_id uuid, p_extra_op_id uuid, p_extra_op_nome text, p_valor numeric, p_vencimento date,
+  p_nome_cliente text, p_tipo text, p_nr_cliente text, p_instituicao text,
+  p_whatsapp text DEFAULT NULL::text, p_parcelas integer DEFAULT 1)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_uid              UUID := auth.uid();
+  v_empresa_id       UUID;
+  v_direto_operador  UUID;
+  v_direto_tipo      TEXT;
+  v_direto_vinculo   UUID;
+  v_direto_nr        TEXT;
+  v_direto_inst      TEXT;
+  v_empresa_slug     TEXT;
+  v_nome_real        TEXT;
+  v_perfil_ativo     BOOLEAN;
+  v_situacao         TEXT;
+  v_arquivado        BOOLEAN;
+BEGIN
+  IF v_uid IS NULL OR v_uid IS DISTINCT FROM p_extra_op_id THEN
+    RAISE EXCEPTION 'NAO_AUTORIZADO: o operador do vínculo deve ser o usuário autenticado'
+      USING ERRCODE = '42501';
+  END IF;
+
+  SELECT p.empresa_id, p.nome, p.ativo, p.situacao, p.arquivado, e.slug
+    INTO v_empresa_id, v_nome_real, v_perfil_ativo, v_situacao, v_arquivado,
+         v_empresa_slug
+    FROM public.perfis p
+    JOIN public.empresas e ON e.id = p.empresa_id
+   WHERE p.id = v_uid;
+
+  IF NOT FOUND OR NOT COALESCE(v_perfil_ativo, FALSE)
+     OR COALESCE(v_arquivado, FALSE) OR v_situacao = 'desligado' THEN
+    RAISE EXCEPTION 'NAO_AUTORIZADO: perfil inativo ou inexistente'
+      USING ERRCODE = '42501';
+  END IF;
+
+  SELECT a.operador_id, a.tipo_vinculo, a.vinculo_operador_id,
+         TRIM(COALESCE(a.nr_cliente, '')), TRIM(COALESCE(a.instituicao, ''))
+    INTO v_direto_operador, v_direto_tipo, v_direto_vinculo,
+         v_direto_nr, v_direto_inst
+    FROM public.acordos a
+   WHERE a.id = p_direto_id
+     AND a.empresa_id = v_empresa_id
+   FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'ACORDO_NAO_ENCONTRADO: acordo fora da empresa do usuário'
+      USING ERRCODE = '42501';
+  END IF;
+
+  IF v_direto_operador = v_uid
+     OR COALESCE(v_direto_tipo, 'direto') <> 'direto'
+     OR v_direto_vinculo IS NOT NULL THEN
+    RAISE EXCEPTION 'VINCULO_INVALIDO: o acordo não é um DIRETO livre';
+  END IF;
+
+  IF (v_empresa_slug <> 'pagueplay' AND (
+       v_direto_nr = ''
+       OR v_direto_nr IS DISTINCT FROM TRIM(COALESCE(p_nr_cliente, ''))
+     ))
+     OR (v_empresa_slug = 'pagueplay' AND (
+       v_direto_inst = ''
+       OR v_direto_inst IS DISTINCT FROM TRIM(COALESCE(p_instituicao, ''))
+     )) THEN
+    RAISE EXCEPTION 'CHAVE_DIVERGENTE: NR/código não pertence ao acordo informado'
+      USING ERRCODE = '42501';
+  END IF;
+
+  -- Só quem vincula precisa da lógica ligada (20261111170000). Antes também
+  -- se exigia o dono SEM a lógica, e o Extra marcado à mão virava pedido de
+  -- transferência quando os dois tinham.
+  IF NOT public.fn_direto_extra_ativo(v_uid, v_empresa_id) THEN
+    RAISE EXCEPTION 'REGRA_DIRETO_EXTRA_INVALIDA: configuração dos operadores não permite este vínculo'
+      USING ERRCODE = '42501';
+  END IF;
+
+  -- The EXTRA is inserted first by the UI.  Requiring that reciprocal row
+  -- prevents a caller from using this RPC as an arbitrary agreement updater.
+  IF NOT EXISTS (
+    SELECT 1
+      FROM public.acordos e
+     WHERE e.empresa_id = v_empresa_id
+       AND e.operador_id = v_uid
+       AND e.tipo_vinculo = 'extra'
+       AND e.vinculo_operador_id = v_direto_operador
+       AND (
+         (v_empresa_slug <> 'pagueplay'
+          AND TRIM(COALESCE(e.nr_cliente, '')) = v_direto_nr)
+         OR (v_empresa_slug = 'pagueplay'
+             AND TRIM(COALESCE(e.instituicao, '')) = v_direto_inst)
+       )
+  ) THEN
+    RAISE EXCEPTION 'VINCULO_INVALIDO: acordo EXTRA correspondente não encontrado'
+      USING ERRCODE = '42501';
+  END IF;
+
+  UPDATE public.acordos SET
+    vinculo_operador_id   = v_uid,
+    vinculo_operador_nome = v_nome_real,
+    valor                 = p_valor,
+    vencimento            = p_vencimento,
+    nome_cliente          = p_nome_cliente,
+    tipo                  = p_tipo,
+    whatsapp              = p_whatsapp
+    -- `parcelas` saiu (20261111180000): o EXTRA reescrevia o plano do DIRETO
+    -- (17 parcelas com entrada viravam 1). `p_parcelas` fica na assinatura
+    -- por compatibilidade com a tela antiga.
+  WHERE id = p_direto_id;
+
+  PERFORM p_parcelas;
+
+  -- Kept only for wire compatibility; names are always sourced from perfis.
+  PERFORM p_extra_op_nome;
+END;
+$function$;
+
+COMMIT;

@@ -896,7 +896,24 @@ caminho. A ordem:
    CASO A  eu tenho, o dono não  → eu = EXTRA, dono continua DIRETO (sem autorização)
    CASO B  eu não tenho, o dono tem → aviso; ao confirmar eu = DIRETO e o dono cai para EXTRA
    CASO C/D ambos ou nenhum têm  → autorização completa de líder
+            (exceção, 11/11/2026: eu tenho a lógica e marquei «Extra» à mão
+             antes de salvar → CASO A, mesmo que o dono também tenha)
 ```
+
+Desde 11/11/2026 (migration `20261111170000`), dois ajustes em volta da escada:
+
+- **Acordo encerrado de mês anterior não segura o NR de outra pessoa.**
+  Encerrado = pago, vencimento antes do mês corrente (São Paulo) e última
+  parcela do plano (ou parcela única). Quem tabula esse NR agora entra como
+  DIRETO, sem conflito. Plano em andamento continua segurando (o dono precisa
+  reagendar a parcela do mês). O próprio dono não é afetado: para ele segue o
+  fluxo de adicionar parcela. A régua é `fn_acordo_encerrado_mes_anterior`, e a
+  tela pergunta por `fn_nr_registro_vigente`.
+- **Ligar o par alinha os dois lados.** Quando o banco liga DIRETO e EXTRA
+  (`par_acordo_id`), vale a linha criada por último nos campos do par; se
+  um dos lados já estava pago, o par fica pago com a data de pagamento dele.
+  O **plano** (parcelas, valor total, entrada) é sempre o do DIRETO, e vincular
+  um EXTRA não reescreve mais as parcelas do DIRETO (`20261111180000`).
 
 O passo 2 vem **antes** das regras de Direto/Extra de propósito — é a diferença
 entre "mudar de dono" e "criar um vínculo com quem não trabalha mais aqui".

@@ -11,6 +11,7 @@
  * eficiente do que fazer full-scan na tabela `acordos`.
  */
 import { supabase } from '@/lib/supabase';
+import { rpcSemTipo } from '@/lib/supabaseSemTipo';
 
 // ─── Tipos ──────────────────────────────────────────────────────────────────
 
@@ -88,6 +89,30 @@ export async function verificarNrRegistro(
   acordoIdExcluir?: string,
 ): Promise<NrConflito | null> {
   if (!nrValue?.trim()) return null;
+
+  // O registro que VALE para quem pergunta (20261111170000): acordo encerrado
+  // de mês anterior de outra pessoa não segura o NR — a mesma régua que o
+  // banco aplica na gravação (`fn_nr_dono_conflitante`).
+  const rpc = await rpcSemTipo<{ id: string; operador_id: string; operador_nome: string | null; acordo_id: string }[]>('fn_nr_registro_vigente', {
+    p_empresa_id:        empresaId,
+    p_nr:                nrValue.trim(),
+    p_campo:             campo,
+    p_excluir_acordo_id: acordoIdExcluir ?? null,
+  });
+  if (!rpc.error) {
+    const linha = rpc.data?.[0];
+    if (!linha) return null;
+    return {
+      registroId:   linha.id,
+      acordoId:     linha.acordo_id,
+      operadorId:   linha.operador_id,
+      operadorNome: linha.operador_nome ?? 'Operador desconhecido',
+    };
+  }
+  // Função ainda não aplicada no banco: segue pela tabela, como antes.
+  if (!String(rpc.error.message ?? '').includes('fn_nr_registro_vigente')) {
+    throw new Error(`NR_VERIFICACAO_FALHOU: ${rpc.error.message}`);
+  }
 
   let query = supabase
     .from('nr_registros')

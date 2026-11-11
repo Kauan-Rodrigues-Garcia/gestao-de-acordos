@@ -117,6 +117,21 @@ describe('decidirConflitoNr — os seis desfechos', () => {
     const d = decidirConflitoNr(fatos({ euTemLogica: true, donoTemLogica: true }));
     expect(d.caso).toBe('autorizacao_lider');
   });
+
+  it('CASO D com «Extra» marcado à mão → vincula como EXTRA (11/11/2026)', () => {
+    const d = decidirConflitoNr(fatos({ euTemLogica: true, donoTemLogica: true, marcouExtra: true }));
+    expect(d.caso).toBe('eu_viro_extra');
+  });
+
+  it('«Extra» marcado sem a lógica ligada para mim não muda nada', () => {
+    const d = decidirConflitoNr(fatos({ euTemLogica: false, donoTemLogica: true, marcouExtra: true }));
+    expect(d.caso).toBe('aviso_direto_extra');
+  });
+
+  it('«Extra» marcado não passa por cima de um EXTRA que já existe', () => {
+    const d = decidirConflitoNr(fatos({ euTemLogica: true, donoTemLogica: true, marcouExtra: true, jaTemExtra: true }));
+    expect(d.caso).toBe('troca_extra');
+  });
 });
 
 describe('decidirConflitoNr — precedência entre os desvios', () => {

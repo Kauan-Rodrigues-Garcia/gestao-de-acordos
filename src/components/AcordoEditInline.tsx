@@ -409,14 +409,18 @@ export function AcordoEditInline({
           setSaving(true);
           let decisao: DecisaoConflitoNr;
           try {
-            decisao = decidirConflitoNr(await coletarFatosConflitoNr({
-              conflito,
-              empresaId:     empresa.id,
-              meuOperadorId: perfil.id,
-              euTemLogica:   usuarioTemLogicaDiretoExtra,
-              campoChave,
-              valorChave:    valorNovo,
-            }));
+            decisao = decidirConflitoNr({
+              ...await coletarFatosConflitoNr({
+                conflito,
+                empresaId:     empresa.id,
+                meuOperadorId: perfil.id,
+                euTemLogica:   usuarioTemLogicaDiretoExtra,
+                campoChave,
+                valorChave:    valorNovo,
+              }),
+              // «Extra» marcado à mão vincula ao DIRETO do dono (11/11/2026).
+              marcouExtra: isExtra,
+            });
           } catch (e) {
             toast.error(
               mensagemErroNr(e, label) ?? (e instanceof Error ? e.message : 'Erro ao verificar o vínculo.'),

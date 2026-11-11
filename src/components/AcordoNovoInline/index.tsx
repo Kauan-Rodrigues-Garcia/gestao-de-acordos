@@ -626,7 +626,10 @@ export function AcordoNovoInline({
               return;
             }
             onAcordoRemovido?.(conflitoFinal.acordoId);
-            const inserido = await executarSalvar(payload);
+            // Quem saiu não tem DIRETO para parear: o «Extra» marcado à mão
+            // não vale aqui — o acordo muda de dono como DIRETO (11/11/2026).
+            const { tipo_vinculo: _extraManual, ...payloadDoDesligado } = payload;
+            const inserido = await executarSalvar(payloadDoDesligado);
             if (!inserido) return;
             limparDraft();
             await concluirSalvo(
@@ -673,8 +676,11 @@ export function AcordoNovoInline({
 
           const donoTemLogica = await fetchIsDiretoExtraAtivo({ userId: conflitoFinal.operadorId, empresaId: empresa.id });
 
-          // CASO A: EU tem lógica, DONO não → EU = EXTRA
-          if (euTemLogica && !donoTemLogica) {
+          // CASO A: EU tem lógica, DONO não → EU = EXTRA.
+          // Também quando EU marquei «Extra» à mão (11/11/2026): a pessoa
+          // declarou que é Extra, então vincula ao DIRETO do dono mesmo que ele
+          // também tenha a lógica — antes virava pedido de transferência.
+          if (euTemLogica && (!donoTemLogica || isExtra)) {
             const payloadExtra = { ...payload, tipo_vinculo: 'extra', vinculo_operador_id: conflitoFinal.operadorId, vinculo_operador_nome: conflitoFinal.operadorNome };
             const inseridoExtra = await executarSalvar(payloadExtra);
             if (inseridoExtra) {

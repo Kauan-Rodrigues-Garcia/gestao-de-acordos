@@ -93,9 +93,16 @@ function createBuilder(table: string) {
   return builder;
 }
 
+// `fn_nr_registro_vigente` (20261111170000). Por padrão responde como banco
+// SEM a migration, e o serviço segue pela tabela — os testes abaixo continuam
+// valendo para esse caminho. Os do RPC trocam a resposta.
+const SEM_FUNCAO = { data: null, error: { message: 'Could not find the function public.fn_nr_registro_vigente in the schema cache' } };
+const rpcMock = vi.fn(async (_nome: string, _args: unknown) => SEM_FUNCAO as { data: unknown; error: { message: string } | null });
+
 vi.mock('@/lib/supabase', () => ({
   supabase: {
     from: vi.fn((table: string) => createBuilder(table)),
+    rpc:  (nome: string, args: unknown) => rpcMock(nome, args),
   },
 }));
 
@@ -113,6 +120,30 @@ beforeEach(() => {
   calls.length = 0;
   currentCall = null;
   nextResult = { data: null, error: null };
+  rpcMock.mockReset().mockImplementation(async () => SEM_FUNCAO);
+});
+
+describe('verificarNrRegistro — pela função do banco (20261111170000)', () => {
+  it('usa fn_nr_registro_vigente e não lê a tabela', async () => {
+    rpcMock.mockResolvedValue({ data: [{ id: 'r1', operador_id: 'op', operador_nome: 'Ana', acordo_id: 'a1' }], error: null });
+    const r = await verificarNrRegistro(' 123 ', 'emp1', 'nr_cliente', 'ex');
+    expect(r).toEqual({ registroId: 'r1', acordoId: 'a1', operadorId: 'op', operadorNome: 'Ana' });
+    expect(rpcMock).toHaveBeenCalledWith('fn_nr_registro_vigente', {
+      p_empresa_id: 'emp1', p_nr: '123', p_campo: 'nr_cliente', p_excluir_acordo_id: 'ex',
+    });
+    expect(calls).toHaveLength(0);
+  });
+
+  it('sem linha = livre (ex.: titular encerrado de mês anterior)', async () => {
+    rpcMock.mockResolvedValue({ data: [], error: null });
+    expect(await verificarNrRegistro('123', 'emp1', 'nr_cliente')).toBeNull();
+  });
+
+  it('erro que não é «função ausente» falha FECHADO', async () => {
+    rpcMock.mockResolvedValue({ data: null, error: { message: 'timeout' } });
+    await expect(verificarNrRegistro('123', 'emp1', 'nr_cliente')).rejects.toThrow(/NR_VERIFICACAO_FALHOU/);
+    expect(calls).toHaveLength(0);
+  });
 });
 
 // ── verificarNrRegistro ─────────────────────────────────────────────────────
