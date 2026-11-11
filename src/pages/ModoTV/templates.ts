@@ -200,11 +200,19 @@ export const TEMPLATES: Template[] = [
     ],
   },
   {
-    // 30/10/2026: o mesmo ranking da aba do Analítico, com os prêmios.
+    // 30/10/2026: o mesmo ranking da aba do Analítico, com os prêmios. Desde
+    // 11/11/2026 a MESMA conta (fn_ranking_quitacao_calcular) e o mesmo leitor
+    // (normalizarRanking): critério, prêmios, destaques e disputa por equipe
+    // vêm da configuração do setor.
     id: 'quitacao', categoria: 'ranking',
     nome: 'Ranking de quitação',
-    descricao: 'O top 10 de quitação do mês, com o prêmio até o 6º e quanto falta para passar do 7º ao 10º.',
-    campos: [TITULO('Ranking de quitação')],
+    descricao: 'O top 10 de quitação do mês, com os prêmios, os destaques do mês e quanto falta para passar quem está acima.',
+    campos: [
+      TITULO('Ranking de quitação'),
+      { chave: 'destaques', rotulo: 'Mostrar os destaques do mês', tipo: 'liga', padrao: true },
+      // Só pesa quando o setor disputa por equipe; vazio = a equipe do painel (ou a primeira).
+      { chave: 'equipe_id', rotulo: 'Equipe (quando cada equipe disputa)', tipo: 'equipe', padrao: '' },
+    ],
   },
   {
     id: 'imagem', categoria: 'midia',

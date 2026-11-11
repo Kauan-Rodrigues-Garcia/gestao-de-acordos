@@ -58,7 +58,7 @@ export default function AbaEventos({ ehSuperAdmin, podeConfigurarRankingQuitacao
     {
       id: 'ranking_quitacao', rotulo: 'Ranking de quitação', icone: Medal,
       visivel: podeConfigurarRankingQuitacao,
-      descricao: 'Em que setor o ranking aparece e os prêmios do 1º ao 6º.',
+      descricao: 'Em que setor aparece, quem disputa (setor ou equipe), o critério, os prêmios e os destaques do mês.',
       conteudo: <RankingQuitacaoConfig />,
     },
     {

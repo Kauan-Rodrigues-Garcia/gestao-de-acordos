@@ -118,3 +118,103 @@
   font-variant-numeric: tabular-nums;
   color: var(--foreground);
 }
+
+/* ── 11/11/2026: ao vivo, zona de prêmio, destaques e brinde ─────────────── */
+
+/* O ponto do «ao vivo»: verde e pulsando com o canal de pé, cinza sem ele. */
+.rq-ponto {
+  position: relative;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: color-mix(in oklch, var(--muted-foreground) 60%, transparent);
+}
+.rq-ponto-vivo { background: var(--success); }
+.rq-ponto-vivo::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--success);
+  animation: rq-pulso 2s ease-out infinite;
+}
+@keyframes rq-pulso {
+  from { transform: scale(1); opacity: 0.6; }
+  to   { transform: scale(2.6); opacity: 0; }
+}
+.rq-status { background: var(--card); }
+
+/* Os números do mês: a mesma superfície da lista, divididos por fios. */
+.rq-resumo {
+  border: 1px solid var(--border);
+  border-radius: 1.25rem;
+  background: var(--card);
+}
+.rq-resumo > div + div { border-left: 1px solid color-mix(in oklch, var(--border) 70%, transparent); }
+@media (max-width: 639px) {
+  .rq-resumo > div:nth-child(3) { border-left: 0; }
+  .rq-resumo > div:nth-child(n + 3) { border-top: 1px solid color-mix(in oklch, var(--border) 70%, transparent); }
+}
+
+/* Um destaque do mês. */
+.rq-destaque {
+  border: 1px solid var(--border);
+  border-radius: 1.25rem;
+  background: var(--card);
+}
+
+/* A coroa do 1º, na cor da medalha. */
+.rq-coroa {
+  color: var(--medalha);
+  fill: color-mix(in oklch, var(--medalha) 35%, transparent);
+  filter: drop-shadow(0 2px 4px color-mix(in oklch, var(--medalha) 50%, transparent));
+}
+
+/* Onde acaba a zona de prêmio: um fio tracejado com o recado no meio. */
+.rq-zona {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.6875rem;
+  color: var(--muted-foreground);
+  background: color-mix(in oklch, var(--muted) 45%, var(--card));
+}
+.rq-zona::before,
+.rq-zona::after {
+  content: '';
+  flex: 1;
+  border-top: 1px dashed color-mix(in oklch, var(--foreground) 22%, var(--border));
+}
+.rq-zona > span { flex: 0 1 auto; text-align: center; }
+.rq-lista > .rq-zona + li { border-top: 0; }
+
+/* Subiu / desceu. */
+.rq-variacao {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  font-size: 0.625rem;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* O brinde, abaixo do valor; sozinho (sem valor), no lugar dele. */
+.rq-premio-brinde {
+  margin-top: 0.25rem;
+  max-width: 9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1.1;
+  color: var(--foreground);
+}
+.rq-premio-brinde-so { font-size: 0.8125rem; font-weight: 700; }
+.rq-premio-compacto { min-width: 4.5rem; padding: 0.3rem 0.6rem 0.35rem; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rq-ponto-vivo::after { animation: none; }
+}

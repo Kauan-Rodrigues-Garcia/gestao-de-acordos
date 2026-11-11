@@ -21,7 +21,10 @@
  * Puro: sem React e sem banco. Testado em `numeros.test.ts`.
  */
 import { hoPercentualDaConfig } from '@/lib/hoPercentual';
-import { POSICOES_COM_PREMIO, faltaParaPassar } from '@/pages/Analitico/RankingQuitacao/regras';
+import {
+  escolherDisputa, faltaParaPassar, normalizarRanking, temPremio,
+  type CategoriaRanking, type Criterio,
+} from '@/services/rankingQuitacao/ranking';
 import type { NumerosTv, PessoaRanking, QuitacaoTv, TelaDoPainel, Unidade } from './tipos';
 import { opcao } from './templates';
 
@@ -354,55 +357,78 @@ export function equipesDaTela(v: VisaoTv, tela: Pick<TelaDoPainel, 'template' | 
 export interface QuitacaoNaTela {
   /** Vazio quando há o que mostrar. */
   motivo: string;
+  criterio: Criterio;
+  /** Na disputa por equipe, a equipe mostrada («Equipe Rosa»). */
+  disputaNome: string | null;
   podio: QuitacaoLinha[];
-  /** Do 4º ao 6º: ainda com prêmio. */
+  /** Depois do pódio, ainda na zona de prêmio. */
   premiados: QuitacaoLinha[];
-  /** Do 7º ao 10º: quanto falta para passar quem está acima. */
+  /** Fora da zona de prêmio: quanto falta para passar quem está acima. */
   perseguindo: (QuitacaoLinha & { falta: number })[];
+  /** Quantas posições têm prêmio. */
+  premiadas: number;
   participantes: number;
+  /** Os destaques do mês (20261111150500), já na ordem da configuração. */
+  categorias: CategoriaRanking[];
 }
 
 export interface QuitacaoLinha {
   posicao: number; id: string; nome: string; foto: string | null;
   quitacoes: number; valor: number; premio: number | null;
+  /** O brinde da posição («Troféu»), ao lado ou no lugar do valor. */
+  premioTexto: string | null;
+  /** Posição premiada, mas sem o mínimo de quitações. */
+  abaixoMinimo: boolean;
 }
 
 /**
- * A cena de quitação, nas mesmas regras da aba do Analítico (`AbaRankingQuitacao`):
- * prêmio até o 6º, «falta para passar» do 7º ao 10º. O valor é o recebido no
- * mês dos acordos quitados (desde 04/11/2026; antes, o Valor Acordo) — não tem H.O.
+ * A cena de quitação: o MESMO leitor da aba do Analítico
+ * (`normalizarRanking`), então a parede mostra a mesma ordem, os mesmos
+ * prêmios e os mesmos destaques. O valor é o recebido no mês dos acordos
+ * quitados (desde 04/11/2026; antes, o Valor Acordo) — não tem H.O.
+ *
+ * Por equipe (`disputa: 'equipe'`): a equipe escolhida na tela, senão a do
+ * painel, senão a primeira.
  */
-export function quitacaoDaTela(v: Pick<VisaoTv, 'quitacao' | 'setorNome' | 'mesIso'>): QuitacaoNaTela {
-  const vazio = (motivo: string): QuitacaoNaTela => ({ motivo, podio: [], premiados: [], perseguindo: [], participantes: 0 });
-  const q = v.quitacao;
-  if (!q) return vazio(AGUARDANDO_ATUALIZACAO);
-  if (!q.habilitado) {
-    return vazio(`${v.setorNome || 'Este setor'} não tem o Ranking de quitação. Ative em Configurações → Geral.`);
+export function quitacaoDaTela(
+  v: Pick<VisaoTv, 'quitacao' | 'setorNome' | 'mesIso'> & Partial<Pick<VisaoTv, 'equipeDoPainel'>>,
+  equipeDaTela?: string | null,
+): QuitacaoNaTela {
+  const vazio = (motivo: string): QuitacaoNaTela => ({
+    motivo, criterio: 'valor', disputaNome: null, podio: [], premiados: [], perseguindo: [],
+    premiadas: 0, participantes: 0, categorias: [],
+  });
+  if (!v.quitacao) return vazio(AGUARDANDO_ATUALIZACAO);
+  const r = normalizarRanking(v.quitacao);
+  if (!r.habilitado) {
+    return vazio(`${v.setorNome || 'Este setor'} não tem o Ranking de quitação. Ative em Configurações → Eventos e gincanas.`);
   }
-  const premios = Array.isArray(q.premios) ? q.premios.map(num) : [];
-  const linhas: QuitacaoLinha[] = (Array.isArray(q.posicoes) ? q.posicoes : [])
-    .map(p => ({
-      posicao: Math.trunc(num(p.posicao)), id: String(p.id), nome: p.nome ?? '', foto: p.foto ?? null,
-      quitacoes: Math.max(0, Math.trunc(num(p.quitacoes))), valor: num(p.valor),
-      premio: null as number | null,
-    }))
-    .filter(p => p.posicao >= 1 && p.posicao <= 10)
-    .sort((a, b) => a.posicao - b.posicao)
-    .map(p => ({ ...p, premio: p.posicao <= POSICOES_COM_PREMIO && premios[p.posicao - 1] > 0 ? premios[p.posicao - 1] : null }));
+  const d = escolherDisputa(r, equipeDaTela || v.equipeDoPainel || null);
+  const linhas: QuitacaoLinha[] = (d?.posicoes ?? []).map(p => ({
+    posicao: p.posicao, id: p.operador_id, nome: p.nome, foto: p.foto_url,
+    quitacoes: p.quitacoes, valor: p.valor, premio: p.premio, premioTexto: p.premio_texto, abaixoMinimo: p.abaixo_minimo,
+  }));
   if (!linhas.length) {
     const mes = MESES_TV[Number(v.mesIso.slice(5, 7)) - 1];
+    if (r.importado_em && d?.nome) return { ...vazio(`Ninguém da ${d.nome} quitou acordo${mes ? ` em ${mes}` : ''} ainda.`), categorias: r.categorias };
     return vazio(`O Ranking de quitação${mes ? ` de ${mes}` : ''} ainda não foi importado.`);
   }
   const porPosicao = new Map(linhas.map(l => [l.posicao, l]));
+  const comPremio = (l: QuitacaoLinha) => temPremio({ premio: l.premio, premio_texto: l.premioTexto }) || l.abaixoMinimo;
+  const depois = linhas.filter(l => l.posicao > 3);
   return {
     motivo: '',
+    criterio: r.criterio,
+    disputaNome: r.disputa === 'equipe' ? d?.nome ?? null : null,
     podio: linhas.filter(l => l.posicao <= 3),
-    premiados: linhas.filter(l => l.posicao > 3 && l.posicao <= POSICOES_COM_PREMIO),
-    perseguindo: linhas.filter(l => l.posicao > POSICOES_COM_PREMIO).map(l => {
+    premiados: depois.filter(comPremio),
+    perseguindo: depois.filter(l => !comPremio(l)).map(l => {
       const acima = porPosicao.get(l.posicao - 1);
-      return { ...l, falta: acima ? faltaParaPassar(acima.valor, l.valor) : 0 };
+      return { ...l, falta: acima ? faltaParaPassar(r.criterio, acima, l) : 0 };
     }),
-    participantes: Math.max(linhas.length, Math.trunc(num(q.participantes))),
+    premiadas: r.posicoes_premiadas,
+    participantes: Math.max(linhas.length, d?.participantes ?? 0, r.disputa === 'setor' ? r.participantes : 0),
+    categorias: r.categorias,
   };
 }
 

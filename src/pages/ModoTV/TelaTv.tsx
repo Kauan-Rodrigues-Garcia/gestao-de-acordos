@@ -15,13 +15,13 @@
  * número anima só quando MUDA (`useContador`), e a troca de tela é um fade de
  * opacidade, que a GPU faz sozinha.
  */
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type { TelaDoPainel, TemaId } from './tipos';
 import { CORES, type Cores } from './cores';
 import { alvoDoDiaProprio, opcao } from './templates';
 import {
   MAX_EQUIPES_NA_TELA, equipesDaTela, iniciais, moedaTv, nomeCurto, nomeDoItem, percentualTv, quitacaoDaTela, rankingDaTela, tamanhoQueCabe,
-  type EquipesNaTela, type ItemDoRanking, type QuitacaoLinha, type RankingNaTela, type VisaoTv,
+  type EquipesNaTela, type ItemDoRanking, type QuitacaoLinha, type QuitacaoNaTela, type RankingNaTela, type VisaoTv,
 } from './numeros';
 import { Destaque } from './destaque/Destaque';
 import { CenaLivre } from './livre/CenaLivre';
@@ -846,54 +846,79 @@ function RankingEquipesVivo({ r, tela, c }: { r: EquipesNaTela; tela: TelaDoPain
   );
 }
 
-// ── Ranking de quitação (30/10/2026) ─────────────────────────────────────────
+// ── Ranking de quitação (30/10/2026; destaques e equipes em 11/11/2026) ─────
 
 const quitacoesTexto = (n: number) => `${n} ${n === 1 ? 'quitação' : 'quitações'}`;
 
 /**
- * A aba do Analítico na parede: pódio com a altura proporcional ao valor
- * quitado (a distância de verdade entre as pessoas), do 4º ao 6º com o
- * prêmio, do 7º ao 10º com quanto falta para passar quem está acima.
+ * A aba do Analítico na parede, lida pelo MESMO leitor (`quitacaoDaTela` →
+ * `normalizarRanking`): pódio com a altura proporcional ao que ordena (valor
+ * ou quantidade), depois do pódio a zona de prêmio e, fora dela, quanto falta
+ * para passar quem está acima. Com destaques do mês ligados, eles entram numa
+ * faixa no alto e o resto encolhe para caber.
  */
 function Quitacao({ v, tela, c }: { v: VisaoTv; tela: TelaDoPainel; c: Cores }) {
-  const q = quitacaoDaTela(v);
+  const q = quitacaoDaTela(v, opcao<string>(tela, 'equipe_id'));
   if (q.motivo) return <Aviso texto={q.motivo} c={c} />;
-  const maior = Math.max(1, ...q.podio.map(p => p.valor));
+  const destaques = opcao<boolean>(tela, 'destaques') !== false ? q.categorias.slice(0, 4) : [];
+  const compacto = destaques.length > 0;
+  const porQtd = q.criterio === 'quantidade';
+  const medida = (p: QuitacaoLinha) => (porQtd ? p.quitacoes : p.valor);
+  const maior = Math.max(1, ...q.podio.map(medida));
   const ordem = [1, 0, 2].filter(i => q.podio[i]);
+  const titulo = [opcao<string>(tela, 'titulo'), q.disputaNome].filter(Boolean).join(' · ');
+  const linhas = [...q.premiados, ...q.perseguindo].sort((a, b) => a.posicao - b.posicao);
+  const fimDaZona = q.premiadas >= 3 ? q.premiadas : 0;
   return (
     <div style={{ ...centro, top: 140, justifyContent: 'flex-start' }}>
-      <Titulo texto={opcao<string>(tela, 'titulo')} c={c} />
+      <Titulo texto={titulo} c={c} />
+      {compacto && (
+        <div style={{ display: 'flex', gap: 20, width: '100%', marginBottom: 24, flexShrink: 0 }}>
+          {destaques.map(k => <DestaqueQuitacao key={k.id} k={k} c={c} />)}
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 48, width: '100%', flex: 1, minHeight: 0 }}>
         <div style={{ flex: '0 0 860px', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 24 }}>
           {ordem.map(i => {
             const p = q.podio[i];
+            const foto = compacto ? (i === 0 ? 120 : 100) : (i === 0 ? 150 : 124);
             return (
               <div key={p.id} style={{ width: 280, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <Foto nome={p.nome} foto={p.foto} tamanho={i === 0 ? 150 : 124} c={c} borda={MEDALHA[i]} />
-                <div style={{ fontSize: i === 0 ? 42 : 36, fontWeight: 700, marginTop: 14, maxWidth: 280, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <Foto nome={p.nome} foto={p.foto} tamanho={foto} c={c} borda={MEDALHA[i]} />
+                <div style={{ fontSize: compacto ? 36 : (i === 0 ? 42 : 36), fontWeight: 700, marginTop: 12, maxWidth: 280, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {nomeCurto(p.nome)}
                 </div>
-                <div style={{ fontSize: 32, fontWeight: 700, marginTop: 4 }}>{moedaTv(p.valor)}</div>
-                <div style={{ fontSize: 26, color: c.suave }}>{quitacoesTexto(p.quitacoes)}</div>
+                <div style={{ fontSize: compacto ? 30 : 32, fontWeight: 700, marginTop: 2 }}>{porQtd ? quitacoesTexto(p.quitacoes) : moedaTv(p.valor)}</div>
+                <div style={{ fontSize: 24, color: c.suave }}>{porQtd ? moedaTv(p.valor) : quitacoesTexto(p.quitacoes)}</div>
                 <div style={{
-                  width: '100%', marginTop: 14, borderRadius: '24px 24px 0 0',
-                  height: 120 + Math.round(200 * (p.valor / maior)),
+                  width: '100%', marginTop: 12, borderRadius: '24px 24px 0 0',
+                  height: (compacto ? 100 : 120) + Math.round((compacto ? 140 : 200) * (medida(p) / maior)),
                   background: `linear-gradient(180deg, ${MEDALHA[i]}55, ${MEDALHA[i]}14)`,
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 14, gap: 8,
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 12, gap: 8,
                 }}>
-                  <span style={{ fontSize: 76, fontWeight: 800, lineHeight: 1, color: MEDALHA[i] }}>{p.posicao}</span>
-                  {p.premio != null && <SeloPremio valor={p.premio} c={c} />}
+                  <span style={{ fontSize: compacto ? 60 : 76, fontWeight: 800, lineHeight: 1, color: MEDALHA[i] }}>{p.posicao}</span>
+                  {(p.premio != null || p.premioTexto) && <SeloPremio valor={p.premio} texto={p.premioTexto} c={c} />}
                 </div>
               </div>
             );
           })}
         </div>
-        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', gap: 10 }}>
-          {[...q.premiados, ...q.perseguindo].map(p => (
-            <LinhaQuitacao key={p.id} p={p} c={c} falta={'falta' in p ? (p as { falta: number }).falta : null} />
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', gap: compacto ? 8 : 10 }}>
+          {linhas.map(p => (
+            <Fragment key={p.id}>
+              <LinhaQuitacao p={p} c={c} compacto={compacto} porQtd={porQtd}
+                falta={'falta' in p ? (p as { falta: number }).falta : null} />
+              {p.posicao === fimDaZona && linhas.some(l => l.posicao > fimDaZona) && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16, fontSize: 22, color: c.suave, flexShrink: 0 }}>
+                  <span style={{ flex: 1, borderTop: `2px dashed ${c.trilho}` }} />
+                  prêmio até o {fimDaZona}º
+                  <span style={{ flex: 1, borderTop: `2px dashed ${c.trilho}` }} />
+                </div>
+              )}
+            </Fragment>
           ))}
           {q.participantes > 10 && (
-            <div style={{ fontSize: 26, color: c.suave, textAlign: 'right' }}>{q.participantes} pessoas no ranking</div>
+            <div style={{ fontSize: 24, color: c.suave, textAlign: 'right' }}>{q.participantes} pessoas no ranking</div>
           )}
         </div>
       </div>
@@ -901,32 +926,66 @@ function Quitacao({ v, tela, c }: { v: VisaoTv; tela: TelaDoPainel; c: Cores }) 
   );
 }
 
-function SeloPremio({ valor, c }: { valor: number; c: Cores }) {
+const TITULO_DESTAQUE: Record<string, string> = {
+  mais_quitacoes: 'Mais quitações', maior_valor: 'Maior valor', maior_quitacao: 'Maior quitação', equipe_campea: 'Equipe campeã',
+};
+
+function DestaqueQuitacao({ k, c }: { k: QuitacaoNaTela['categorias'][number]; c: Cores }) {
+  const w = k.vencedor;
+  const linha2 = !w ? 'Ninguém ainda'
+    : k.id === 'maior_quitacao' ? `${moedaTv(w.valor)} numa quitação`
+    : k.id === 'mais_quitacoes' ? quitacoesTexto(w.quitacoes)
+    : moedaTv(w.valor);
+  const premio = [k.premio != null ? moedaTv(k.premio) : '', k.premio_texto ?? ''].filter(Boolean).join(' + ');
   return (
-    <span style={{ fontSize: 26, fontWeight: 800, padding: '6px 16px', borderRadius: 999, background: c.ok, color: '#0b1220', whiteSpace: 'nowrap' }}>
-      Prêmio {moedaTv(valor)}
+    <div style={{ flex: 1, minWidth: 0, height: 128, display: 'flex', alignItems: 'center', gap: 18, padding: '0 22px', borderRadius: 28, background: c.linha }}>
+      {w && !w.equipe
+        ? <Foto nome={w.nome} foto={w.foto_url} tamanho={76} c={c} borda={c.destaque} />
+        : <div style={{ width: 76, height: 76, borderRadius: '50%', flexShrink: 0, background: c.fundo2, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 34, fontWeight: 800, color: c.destaque }}>★</div>}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 22, fontWeight: 700, color: c.destaque, letterSpacing: 2, textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {TITULO_DESTAQUE[k.id] ?? k.titulo}
+        </div>
+        <div style={{ fontSize: 32, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{w ? (w.equipe ? w.nome : nomeCurto(w.nome)) : '—'}</div>
+        <div style={{ fontSize: 22, color: c.suave, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {linha2}{premio ? ` · ${premio}` : ''}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SeloPremio({ valor, texto, c }: { valor: number | null; texto?: string | null; c: Cores }) {
+  const fala = [valor != null ? moedaTv(valor) : '', texto ?? ''].filter(Boolean).join(' + ');
+  return (
+    <span style={{ fontSize: 24, fontWeight: 800, padding: '6px 16px', borderRadius: 999, background: c.ok, color: '#0b1220', whiteSpace: 'nowrap', maxWidth: 270, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+      {valor != null ? `Prêmio ${fala}` : fala}
     </span>
   );
 }
 
-function LinhaQuitacao({ p, c, falta }: { p: QuitacaoLinha; c: Cores; falta: number | null }) {
+function LinhaQuitacao({ p, c, falta, compacto, porQtd }: { p: QuitacaoLinha; c: Cores; falta: number | null; compacto: boolean; porQtd: boolean }) {
   // Sete linhas têm de caber na altura da tela: tudo numa linha só, sem quebra.
   const umaLinha: CSSProperties = { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' };
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 18, height: 88, padding: '0 22px', borderRadius: 24, background: c.linha, flexShrink: 0 }}>
-      <span style={{ width: 52, fontSize: 40, fontWeight: 800, color: c.suave, textAlign: 'center' }}>{p.posicao}</span>
-      <Foto nome={p.nome} foto={p.foto} tamanho={60} c={c} />
+    <div style={{ display: 'flex', alignItems: 'center', gap: 18, height: compacto ? 66 : 88, padding: '0 22px', borderRadius: 24, background: c.linha, flexShrink: 0 }}>
+      <span style={{ width: 52, fontSize: compacto ? 34 : 40, fontWeight: 800, color: c.suave, textAlign: 'center' }}>{p.posicao}</span>
+      <Foto nome={p.nome} foto={p.foto} tamanho={compacto ? 48 : 60} c={c} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 34, fontWeight: 700, ...umaLinha }}>{nomeCurto(p.nome)}</div>
-        <div style={{ fontSize: 24, color: c.suave, ...umaLinha }}>{moedaTv(p.valor)} · {quitacoesTexto(p.quitacoes)}</div>
+        <div style={{ fontSize: compacto ? 30 : 34, fontWeight: 700, ...umaLinha }}>{nomeCurto(p.nome)}</div>
+        <div style={{ fontSize: compacto ? 20 : 24, color: c.suave, ...umaLinha }}>
+          {porQtd ? `${quitacoesTexto(p.quitacoes)} · ${moedaTv(p.valor)}` : `${moedaTv(p.valor)} · ${quitacoesTexto(p.quitacoes)}`}
+        </div>
       </div>
-      {p.premio != null
-        ? <SeloPremio valor={p.premio} c={c} />
-        : falta != null && (
-          <span style={{ fontSize: 26, fontWeight: 700, color: c.alerta, textAlign: 'right', lineHeight: 1.15 }}>
-            falta {moedaTv(falta)}<br /><span style={{ fontWeight: 500, color: c.suave }}>para passar o {p.posicao - 1}º</span>
-          </span>
-        )}
+      {(p.premio != null || p.premioTexto)
+        ? <SeloPremio valor={p.premio} texto={p.premioTexto} c={c} />
+        : p.abaixoMinimo
+          ? <span style={{ fontSize: 22, color: c.suave }}>abaixo do mínimo</span>
+          : falta != null && (
+            <span style={{ fontSize: compacto ? 22 : 26, fontWeight: 700, color: c.alerta, textAlign: 'right', lineHeight: 1.15 }}>
+              falta {porQtd ? quitacoesTexto(falta) : moedaTv(falta)}<br /><span style={{ fontWeight: 500, color: c.suave }}>para passar o {p.posicao - 1}º</span>
+            </span>
+          )}
     </div>
   );
 }

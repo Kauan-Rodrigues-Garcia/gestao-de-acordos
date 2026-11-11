@@ -69,6 +69,15 @@ export function numerosDemo(): NumerosTv {
       ].map(([nome, quitacoes, valor], i) => ({
         posicao: i + 1, id: `demo-q${i}`, nome: nome as string, foto: null as string | null, quitacoes: quitacoes as number, valor: valor as number,
       })),
+      // Os destaques do mês (20261111150500).
+      categorias: [
+        { id: 'mais_quitacoes', premio: 150, premio_texto: null,
+          vencedor: { id: 'demo-q0', nome: 'Carlos Eduardo Rocha', foto: null, quitacoes: 18, valor: 92_410.5 } },
+        { id: 'maior_quitacao', premio: null, premio_texto: 'Troféu',
+          vencedor: { id: 'demo-q2', nome: 'Ana Beatriz Lima', foto: null, quitacoes: 1, valor: 12_480 } },
+        { id: 'equipe_campea', premio: 300, premio_texto: 'Pizza',
+          vencedor: { id: 'demo-eq', nome: 'Equipe Rosa', foto: null, quitacoes: 61, valor: 284_990.7, equipe: true } },
+      ],
     },
     calculado_em: new Date().toISOString(),
   };

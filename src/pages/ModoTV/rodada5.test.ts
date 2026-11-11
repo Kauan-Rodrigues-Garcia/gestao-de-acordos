@@ -187,7 +187,7 @@ describe('quitacaoDaTela', () => {
 
   it('setor sem o ranking avisa onde ligar', () => {
     const q = quitacaoDaTela(visao({ quitacao: { habilitado: false } }));
-    expect(q.motivo).toMatch(/não tem o Ranking de quitação.*Configurações → Geral/);
+    expect(q.motivo).toMatch(/não tem o Ranking de quitação.*Configurações → Eventos e gincanas/);
   });
 
   it('mês sem importação avisa o mês', () => {

@@ -1,10 +1,14 @@
-/** Até que posição o ranking paga prêmio. Do 7º ao 10º aparece, sem prêmio. */
-export const POSICOES_COM_PREMIO = 6;
+/**
+ * As regras do ranking moram em `services/rankingQuitacao/ranking.ts` desde
+ * 11/11/2026 (a aba e a TV leem o mesmo módulo). Isto fica para quem ainda
+ * conta só por valor.
+ */
+import { faltaParaPassar as faltaPeloCriterio } from '@/services/rankingQuitacao/ranking';
 
 /**
- * Quanto falta para passar quem está logo acima. A ordem é por valor; empatar
- * não basta (o desempate é a quantidade), então passar é ficar 1 centavo acima.
+ * Quanto falta para passar quem está logo acima, por valor. Empatar não basta
+ * (o desempate é a quantidade), então passar é ficar 1 centavo acima.
  */
 export function faltaParaPassar(valorAcima: number, valor: number): number {
-  return Math.max(0.01, Math.round((valorAcima - valor) * 100) / 100 + 0.01);
+  return faltaPeloCriterio('valor', { valor: valorAcima, quitacoes: 0 }, { valor, quitacoes: 0 });
 }

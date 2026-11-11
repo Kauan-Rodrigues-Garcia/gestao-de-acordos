@@ -80,7 +80,12 @@ export interface EquipeNoRanking {
   meta: number;
 }
 
-/** O Ranking de quitação do setor no mês, a mesma conta de `fn_ranking_quitacao`. */
+/**
+ * O Ranking de quitação do setor no mês: a mesma conta da aba do Analítico
+ * (`fn_ranking_quitacao_calcular`, 20261111150500). Quem lê é
+ * `normalizarRanking` (services/rankingQuitacao/ranking.ts), o mesmo leitor da
+ * aba; os campos opcionais faltam no pacote de antes da migration.
+ */
 export type QuitacaoTv =
   | { habilitado: false }
   | {
@@ -88,7 +93,15 @@ export type QuitacaoTv =
       premios: number[];
       participantes: number;
       importado_em: string | null;
-      posicoes: { posicao: number; id: string; nome: string; foto: string | null; quitacoes: number; valor: number }[];
+      /** Só no pacote antigo (antes de 20261111150500). */
+      posicoes?: { posicao: number; id: string; nome: string; foto: string | null; quitacoes: number; valor: number }[];
+      criterio?: 'valor' | 'quantidade';
+      disputa?: 'setor' | 'equipe';
+      minimo_quitacoes?: number;
+      premios_texto?: string[];
+      disputas?: unknown[];
+      equipes?: unknown[];
+      categorias?: unknown[];
     };
 
 /** O pacote de `fn_tv_numeros_calcular`. */
