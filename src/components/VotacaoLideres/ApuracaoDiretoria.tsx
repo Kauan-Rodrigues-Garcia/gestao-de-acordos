@@ -11,13 +11,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
-import { Loader2, Scale, X } from 'lucide-react';
+import { FileSpreadsheet, Loader2, Scale, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { apurar, type Desempates, type Votos } from './cedula';
 import {
   desempatar, lerApuracao, liberarResultado, mensagemDoErro, montarDoRetrato, type ApuracaoDaVotacao,
 } from './banco';
 import { VisaoDiretoria } from './VisaoDiretoria';
+import { baixarCampeoes } from './baixarCampeoes';
 
 interface Props {
   votacaoId: string;
@@ -104,7 +105,17 @@ export function ApuracaoDiretoria({ votacaoId, titulo, onFechar, onLiberado }: P
             <p className="truncate text-[11px] text-muted-foreground">{titulo}</p>
           </div>
         </div>
-        <Button variant="ghost" size="icon" onClick={onFechar} aria-label="Fechar a apuração"><X className="h-5 w-5" /></Button>
+        <div className="flex shrink-0 items-center gap-1">
+          {/* A planilha sai do que está na tela, com as decisões de agora. */}
+          <Button variant="outline" size="sm" className="gap-1.5" disabled={!retrato}
+            onClick={() => {
+              if (!retrato) return;
+              baixarCampeoes(retrato).catch((e: unknown) => toast.error('Não deu para montar o Excel', { description: mensagemDoErro(e) }));
+            }}>
+            <FileSpreadsheet className="h-4 w-4" /> <span className="hidden sm:inline">Baixar</span> Excel
+          </Button>
+          <Button variant="ghost" size="icon" onClick={onFechar} aria-label="Fechar a apuração"><X className="h-5 w-5" /></Button>
+        </div>
       </header>
       <main className="relative min-h-0 flex-1 overflow-y-auto">
         {erro && (

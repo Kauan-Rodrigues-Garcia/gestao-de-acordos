@@ -26,6 +26,8 @@ const ler = (n: string) => readFileSync(resolve(__dirname, `../../../supabase/mi
 const SQL = ler('20261104230000_votacao_lideranca.sql');
 /** 10/11/2026: a diretoria decide também o líder em 1º em mais de uma categoria. */
 const SQL_REPETIDOS = ler('20261110150000_votacao_decisao_repetidos.sql');
+/** 11/11/2026: a diretoria escolhe qualquer participante, com ou sem voto. */
+const SQL_LIVRE = ler('20261111190000_votacao_escolha_livre_diretoria.sql');
 const PERGUNTAS = Array.from({ length: 15 }, (_, i) => ({ id: `q${i + 1}`, emoji: '⭐', texto: `Pergunta ${i + 1}?` }));
 
 let db: PGlite;
@@ -91,6 +93,8 @@ beforeAll(async () => {
   await db.exec(SQL);
   await db.exec(SQL_REPETIDOS);
   await db.exec(SQL_REPETIDOS); // reexecutável
+  await db.exec(SQL_LIVRE);
+  await db.exec(SQL_LIVRE); // reexecutável
 });
 
 beforeEach(async () => {
@@ -217,7 +221,7 @@ describe('diretoria', () => {
     expect(JSON.stringify(r)).not.toContain('eleitor":"'); // nada de quem votou em quem
 
     await expect(como(DIR, 'select public.fn_votacao_lideranca_liberar($1) v', [id])).rejects.toThrow(/Falta decidir 1/);
-    await expect(como(DIR, 'select public.fn_votacao_lideranca_desempatar($1, $2, $3) v', [id, 'q1', L3])).rejects.toThrow(/não tem voto/);
+    await expect(como(DIR, 'select public.fn_votacao_lideranca_desempatar($1, $2, $3) v', [id, 'q1', FORA])).rejects.toThrow(/não participa/);
     // q2 é só do L3, e o L3 não leva outra: não precisa de decisão.
     await expect(como(DIR, 'select public.fn_votacao_lideranca_desempatar($1, $2, $3) v', [id, 'q2', L3])).rejects.toThrow(/não precisa de decisão/);
     await expect(como(L1, 'select public.fn_votacao_lideranca_desempatar($1, $2, $3) v', [id, 'q1', L1])).rejects.toThrow(/NAO_AUTORIZADO/);
@@ -332,9 +336,23 @@ describe('o mesmo líder em 1º em mais de uma categoria (20261110150000)', () =
     await liberar(id);
   });
 
-  it('só quem tem voto na categoria pode levar', async () => {
+  it('desde 11/11 quem não tem voto também pode levar; quem não participa, não', async () => {
     const id = await carlaEmDuas();
-    await expect(decidir(id, 'q2', L1)).rejects.toThrow(/não tem voto/);
+    await decidir(id, 'q2', L1);   // a Ana não tem voto em q2: vale assim mesmo
+    await expect(decidir(id, 'q1', FORA)).rejects.toThrow(/não participa/);
+    expect(await pendentes(id)).toEqual([]);
+    await liberar(id);
+    const r = await apuracao(id);
+    expect(r.desempates).toEqual([expect.objectContaining({ pergunta_id: 'q2', escolhido_id: L1 })]);
+  });
+
+  it('categoria tirada da votação deixa de contar como «mais de uma»', async () => {
+    const id = await carlaEmDuas();
+    await db.query(`update public.votacao_lideranca set perguntas = (
+        select jsonb_agg(q) from jsonb_array_elements(perguntas) q where q->>'id' <> 'q2') where id = $1`, [id]);
+    expect(await pendentes(id)).toEqual([]);   // a Carla fica só com q1
+    await expect(decidir(id, 'q2', L1)).rejects.toThrow(/não está na votação/);
+    await liberar(id);
   });
 
   it('passar uma categoria para quem já leva outra deixa a outra pendente', async () => {

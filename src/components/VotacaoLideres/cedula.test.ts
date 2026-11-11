@@ -130,6 +130,16 @@ describe('desempate da diretoria', () => {
     expect(empatesPendentes([empate], { [P.id]: 'c' })).toBe(0); // desde 10/11: quem tem voto pode levar
   });
 
+  it('desde 11/11 a diretoria escolhe quem teve 0 votos', () => {
+    const cedula4 = [{ pergunta: P, candidatos: ['a', 'b', 'c', 'z'] }];
+    const [r0] = apurar(cedula4, { [P.id]: { a: 3, b: 3, c: 1 } });
+    expect(empatesPendentes([r0], { [P.id]: 'z' })).toBe(0);
+    const [r] = aplicarDesempates([r0], { [P.id]: 'z' });
+    expect(r.vencedores).toEqual(['z']);
+    expect(r.linhas[0]).toEqual({ id: 'z', votos: 0, pct: 0 });
+    expect(r.desempatado).toBe(true);
+  });
+
   it('o escolhido vira o único vencedor e sobe para o 1º; votos iguais', () => {
     const [r] = aplicarDesempates([empate], { [P.id]: 'b' });
     expect(r.vencedores).toEqual(['b']);
@@ -139,10 +149,10 @@ describe('desempate da diretoria', () => {
     expect(quadroDeTitulos([r]).map(q => q.id)).toEqual(['b']);
   });
 
-  it('manter o único 1º, ou escolher quem não tem voto, não muda nada', () => {
+  it('manter o único 1º, ou escolher quem não está na pergunta, não muda nada', () => {
     const [claro] = apurar(cedula, { [P.id]: { a: 4, b: 2 } });
     expect(aplicarDesempates([claro], { [P.id]: 'a' })[0]).toBe(claro);
-    expect(aplicarDesempates([claro], { [P.id]: 'c' })[0]).toBe(claro);
+    expect(aplicarDesempates([claro], { [P.id]: 'x' })[0]).toBe(claro);
   });
 
   it('a escolha da diretoria pode ser o 2º mais votado: ele vai para o 1º lugar', () => {

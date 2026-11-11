@@ -233,8 +233,8 @@ export function apurar(cedula: readonly ItemDaCedula[], votos: Votos): Resultado
 
 /**
  * perguntaId → o líder que a diretoria escolheu para levar a categoria. Desde
- * 10/11/2026 vale para empate E para líder em 1º em mais de uma categoria; o
- * escolhido tem de ter voto nela.
+ * 10/11/2026 vale para empate E para líder em 1º em mais de uma categoria; desde
+ * 11/11/2026 o escolhido pode ser qualquer participante, com ou sem voto.
  */
 export type Desempates = Record<string, string>;
 
@@ -243,9 +243,13 @@ export function empatadas(resultados: readonly ResultadoDaPergunta[]): Resultado
   return resultados.filter(r => r.vencedores.length > 1);
 }
 
-/** A decisão vale: o escolhido tem voto nesta pergunta. */
+/**
+ * A decisão vale: o escolhido participa da pergunta. Desde 11/11/2026 com ou
+ * sem voto nela — «não importa os votos, eu estou decidindo» (migration
+ * 20261111190000); antes exigia pelo menos 1 voto.
+ */
 const decisaoValida = (r: ResultadoDaPergunta, escolhido: string | undefined): escolhido is string =>
-  !!escolhido && r.linhas.some(l => l.id === escolhido && l.votos > 0);
+  !!escolhido && r.linhas.some(l => l.id === escolhido);
 
 export interface SituacaoDaPergunta {
   /** A diretoria já decidiu (com uma escolha válida). */
@@ -307,7 +311,7 @@ export function empatesPendentes(resultados: readonly ResultadoDaPergunta[], des
 
 /**
  * O resultado depois da diretoria: o escolhido vira o único vencedor e vai
- * para o 1º lugar das barras (os votos não mudam). Escolha sem voto na
+ * para o 1º lugar das barras (os votos não mudam). Escolha de quem não está na
  * pergunta não vale; manter quem já era o único 1º não muda nada.
  */
 export function aplicarDesempates(resultados: readonly ResultadoDaPergunta[], desempates: Desempates): ResultadoDaPergunta[] {

@@ -12,7 +12,7 @@
  */
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { Ban, BarChart3, CheckCircle2, ChevronDown, Loader2, Lock, RefreshCw, Scale, Trophy, Users } from 'lucide-react';
+import { Ban, BarChart3, CheckCircle2, ChevronDown, FileSpreadsheet, Loader2, Lock, RefreshCw, Scale, Trophy, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import {
@@ -20,6 +20,7 @@ import {
   montarDoRetrato, resultadosDoRetrato, type ApuracaoDaVotacao, type RetratoDaVotacao, type VotacaoNaLista,
 } from './banco';
 import { NOME_DO_PRODUTO } from './participantes';
+import { baixarCampeoes } from './baixarCampeoes';
 import { ehProduto } from '@/lib/produto';
 
 const AcompanhamentoVotacao = lazy(() => import('./AcompanhamentoVotacao').then(m => ({ default: m.AcompanhamentoVotacao })));
@@ -95,6 +96,18 @@ export function PainelVotacoes({ versao }: Props) {
       await carregar();
     } catch (e) {
       toast.error('Não deu certo', { description: mensagemDoErro(e) });
+    } finally {
+      setOcupado(null);
+    }
+  };
+
+  /** Excel dos campeões (11/11/2026): lê a apuração e baixa. */
+  const baixarExcel = async (v: VotacaoNaLista) => {
+    setOcupado(v.id);
+    try {
+      await baixarCampeoes(await lerApuracao(v.id));
+    } catch (e) {
+      toast.error('Não deu para montar o Excel', { description: mensagemDoErro(e) });
     } finally {
       setOcupado(null);
     }
@@ -187,6 +200,11 @@ export function PainelVotacoes({ versao }: Props) {
           {v.estado === 'liberada' && (
             <Button size="sm" variant="outline" className="h-7 gap-1 text-xs" disabled={travado} onClick={() => void verResultado(v)}>
               <Trophy className="h-3.5 w-3.5" /> Ver resultado
+            </Button>
+          )}
+          {(v.estado === 'encerrada' || v.estado === 'liberada') && (
+            <Button size="sm" variant="outline" className="h-7 gap-1 text-xs" disabled={travado} onClick={() => void baixarExcel(v)}>
+              <FileSpreadsheet className="h-3.5 w-3.5" /> Excel dos campeões
             </Button>
           )}
           {(v.estado === 'aberta' || v.estado === 'encerrada' || v.estado === 'rascunho') && (

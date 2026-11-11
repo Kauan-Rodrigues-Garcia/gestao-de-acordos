@@ -100,7 +100,8 @@ export function VisaoDiretoria({ resultados, pessoas, desempates, onDesempatar, 
           const comVoto = r.linhas.filter(l => l.votos > 0);
           const verTodas = todasAsOpcoes.has(r.pergunta.id);
           // As opções: os mais votados; o escolhido sempre aparece, mesmo fora dos primeiros.
-          const opcoes = verTodas ? comVoto : comVoto.filter((l, i) => i < OPCOES || l.id === escolhido);
+          // «Ver todos» abre todos os participantes, com ou sem voto (11/11/2026: a diretoria decide).
+          const opcoes = verTodas ? r.linhas : r.linhas.filter(l => (l.votos > 0 && comVoto.indexOf(l) < OPCOES) || l.id === escolhido);
           return (
             <li key={r.pergunta.id}
               className={cn('rounded-xl border bg-card p-3 sm:p-4', s.pendente && 'border-warning/60', s.decidida && 'border-success/50')}>
@@ -153,13 +154,13 @@ export function VisaoDiretoria({ resultados, pessoas, desempates, onDesempatar, 
                       );
                     })}
                   </div>
-                  {comVoto.length > OPCOES && (
+                  {r.linhas.length > opcoes.length || verTodas ? (
                     <button type="button" className="mt-2 flex items-center gap-1 text-xs font-medium text-primary hover:underline"
                       onClick={() => setTodasAsOpcoes(t => { const n = new Set(t); if (n.has(r.pergunta.id)) n.delete(r.pergunta.id); else n.add(r.pergunta.id); return n; })}>
                       <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', verTodas && 'rotate-180')} />
-                      {verTodas ? 'Só os mais votados' : `Ver todos com voto (${comVoto.length})`}
+                      {verTodas ? 'Só os mais votados' : `Ver todos os participantes (${r.linhas.length})`}
                     </button>
-                  )}
+                  ) : null}
                 </>
               ) : (
                 <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm">
