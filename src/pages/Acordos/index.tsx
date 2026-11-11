@@ -18,7 +18,7 @@ import { useRegistrarPixAoPagar } from '@/hooks/useRegistrarPixAoPagar';
 import { useEmpresaTags } from '@/hooks/useEmpresaTags';
 import { useTagsEmUso } from '@/hooks/useTagsEmUso';
 import { supabase, Acordo } from '@/lib/supabase';
-import { resolverOperadoresDaEquipe } from '@/services/acordos.service';
+import { comOcultarExtraComPar, resolverOperadoresDaEquipe } from '@/services/acordos.service';
 import { ModalConfirmarPagamento } from '@/components/ModalConfirmarPagamento';
 import { ModalReagendar, type ReagendarParams } from '@/components/ModalReagendar';
 import { valorDemaisParcelas } from '@/lib/money';
@@ -43,7 +43,7 @@ import { type ItemFila } from '@/components/ModalFilaWhatsApp';
 import { liberarNrPorAcordoId }  from '@/services/nr_registros.service';
 import { enviarParaLixeira }     from '@/services/lixeira.service';
 import { registrarLog }          from '@/services/logs.service';
-import { deduplicarVinculados, temVisaoAmpla, type AcordoComVinculo } from '@/lib/deduplicarVinculados';
+import { deduplicarVinculados, type AcordoComVinculo } from '@/lib/deduplicarVinculados';
 import { emGruposParalelos } from '@/lib/emGruposParalelos';
 import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
 import { PER_PAGE, getPageNumbers } from './helpers';
@@ -244,7 +244,7 @@ function AcordosNossoProduto() {
     // Um acordo só, vindo do card do chat ou da notificação: os filtros da
     // tela (mês, aba, operador) esconderiam o de outro mês ou outro status.
     ids: [acordoFoco], page: 1, perPage: PER_PAGE,
-  } : {
+  } : comOcultarExtraComPar({
     busca:        buscaConsulta || undefined,
     status:       statusFiltro,
     tipo:         filtroTipo && filtroTipo !== 'all' ? filtroTipo : undefined,
@@ -269,7 +269,9 @@ function AcordosNossoProduto() {
     tag_ids:      filtroTag && filtroTag !== 'all' ? [filtroTag] : undefined,
     page:         currentPage,
     perPage:      PER_PAGE,
-  });
+  // Acordo vinculado uma vez só: o servidor esconde o EXTRA cujo DIRETO a
+  // pessoa também enxerga (11/11/2026). Com filtro Direto/Extra, não.
+  }, filtroVinculo === 'todos'));
 
   // Quais parcelas de cada grupo já existem — é o que decide o botão de
   // reagendar e o modal que abre ao marcar pago. Ver `useParcelasExistentes`.
@@ -719,7 +721,6 @@ function AcordosNossoProduto() {
 
   const acordosHoje = useMemo(() => acordos.filter(a => a.vencimento === hoje), [acordos, hoje]);
 
-  const visaoAmpla = temVisaoAmpla(perfil?.perfil);
 
   const acordosParaExibir = useMemo<AcordoComVinculo[]>(() => {
     // O acordo pedido aparece como é, sem o filtro de vínculo nem a dedução
@@ -729,7 +730,9 @@ function AcordosNossoProduto() {
     if (usuarioTemLogicaDiretoExtra && filtroVinculo !== 'todos') {
       base = base.filter(a => (a.tipo_vinculo ?? 'direto') === filtroVinculo);
     }
-    if (visaoAmpla && filtroVinculo === 'todos') {
+    // Sem depender do cargo: na lista só dos próprios acordos não há par para
+    // juntar (as duas metades são de pessoas diferentes), e a função não muda nada.
+    if (filtroVinculo === 'todos') {
       base = deduplicarVinculados(base, isPP);
     }
     // Sem recorte por status aqui: quem exclui pago/nao_pago na aba Verificar e
@@ -757,7 +760,7 @@ function AcordosNossoProduto() {
       if (!aHoje && bHoje) return 1;
       return 0;
     });
-  }, [acordos, acordoFoco, visaoAmpla, usuarioTemLogicaDiretoExtra, filtroVinculo, isPP, hoje]);
+  }, [acordos, acordoFoco, usuarioTemLogicaDiretoExtra, filtroVinculo, isPP, hoje]);
 
   if (linkAntigoDoPix) {
     const resto = new URLSearchParams(searchParams);

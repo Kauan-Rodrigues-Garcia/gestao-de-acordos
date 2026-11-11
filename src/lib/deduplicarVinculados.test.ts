@@ -158,3 +158,36 @@ describe('deduplicarVinculados', () => {
     expect(out).toHaveLength(1);
   });
 });
+
+describe('deduplicarVinculados — pelo vínculo explícito (par_acordo_id)', () => {
+  it('junta cada EXTRA ao seu DIRETO mesmo com parcelas de vários meses do mesmo NR', () => {
+    const d1 = mk({ id: 'D1', nr_cliente: '55', operador_id: 'op1', vencimento: '2026-10-30', par_acordo_id: 'E1', vinculo_operador_id: 'op2', vinculo_operador_nome: 'Bia' });
+    const d2 = mk({ id: 'D2', nr_cliente: '55', operador_id: 'op1', vencimento: '2026-11-30', par_acordo_id: 'E2', vinculo_operador_id: 'op2', vinculo_operador_nome: 'Bia' });
+    const e1 = mk({ id: 'E1', nr_cliente: '55', operador_id: 'op2', tipo_vinculo: 'extra', vencimento: '2026-10-30', par_acordo_id: 'D1', vinculo_operador_id: 'op1', vinculo_operador_nome: 'Ana' });
+    const e2 = mk({ id: 'E2', nr_cliente: '55', operador_id: 'op2', tipo_vinculo: 'extra', vencimento: '2026-11-30', par_acordo_id: 'D2', vinculo_operador_id: 'op1', vinculo_operador_nome: 'Ana' });
+    const out = deduplicarVinculados([d1, e1, d2, e2], false);
+    expect(out.map(a => a.id)).toEqual(['D1', 'D2']);
+    expect(out.every(a => a._vinculoDuplo)).toBe(true);
+    expect(out[0]._acordoExtraId).toBe('E1');
+    expect(out[1]._acordoExtraId).toBe('E2');
+  });
+
+  it('o nome do lado EXTRA é o do operador EXTRA, não o do dono do DIRETO', () => {
+    const d = mk({ id: 'D', nr_cliente: '9', operador_id: 'op1', par_acordo_id: 'E', vinculo_operador_id: 'op2', vinculo_operador_nome: 'Bia' });
+    const e = mk({ id: 'E', nr_cliente: '9', operador_id: 'op2', tipo_vinculo: 'extra', par_acordo_id: 'D', vinculo_operador_id: 'op1', vinculo_operador_nome: 'Ana' });
+    expect(deduplicarVinculados([e, d], false)[0]._vinculoExtraOperadorNome).toBe('Bia');
+  });
+
+  it('mantém a ordem da lista (a do servidor)', () => {
+    const x = mk({ id: 'X', nr_cliente: '1' });
+    const d = mk({ id: 'D', nr_cliente: '9', operador_id: 'op1', par_acordo_id: 'E' });
+    const e = mk({ id: 'E', nr_cliente: '9', operador_id: 'op2', tipo_vinculo: 'extra', par_acordo_id: 'D' });
+    const y = mk({ id: 'Y', nr_cliente: '' });
+    expect(deduplicarVinculados([x, e, d, y], false).map(a => a.id)).toEqual(['X', 'D', 'Y']);
+  });
+
+  it('EXTRA cujo DIRETO não está na lista continua aparecendo', () => {
+    const e = mk({ id: 'E', nr_cliente: '9', operador_id: 'op2', tipo_vinculo: 'extra', par_acordo_id: 'D' });
+    expect(deduplicarVinculados([e], false).map(a => a.id)).toEqual(['E']);
+  });
+});

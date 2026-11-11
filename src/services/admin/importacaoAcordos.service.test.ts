@@ -89,12 +89,23 @@ describe('lerRelatorioAcordos', () => {
   });
 
   it('não trata a instituição como NR quando o acordo não tinha NR', async () => {
-    // Exatamente o que `COLUNAS` escreve para um acordo sem `nr_cliente`.
+    // Exatamente o que `COLUNAS` escreve para um acordo sem `nr_cliente`: a
+    // chave vira o Código (a instituição).
     const { linhas } = await lerRelatorioAcordos(planilha([
-      { ...LINHA_COMPLETA, 'NR / Código': 'BOOKPLAY', 'Instituição': 'BOOKPLAY' },
+      { ...LINHA_COMPLETA, 'NR / Código': '12345', 'Instituição': '12345' },
     ]));
     expect(linhas[0].nr_cliente).toBe('');
-    expect(linhas[0].instituicao).toBe('BOOKPLAY');
+    expect(linhas[0].instituicao).toBe('12345');
+  });
+
+  it('recusa chave com letra ou símbolo (11/11/2026) — o banco recusaria', async () => {
+    const { linhas, recusadas } = await lerRelatorioAcordos(planilha([
+      { ...LINHA_COMPLETA, 'NR / Código': 'BOOKPLAY', 'Instituição': 'BOOKPLAY' },
+      { ...LINHA_COMPLETA, 'NR / Código': '12.345-6' },
+    ]));
+    expect(linhas).toEqual([]);
+    expect(recusadas).toHaveLength(2);
+    expect(recusadas[0].motivo).toMatch(/só números/);
   });
 
   it('recusa a linha sem vencimento em vez de gravar uma data inventada', async () => {

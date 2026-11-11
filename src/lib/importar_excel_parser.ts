@@ -233,6 +233,9 @@ function montarRegistro(
   // NR só com número (26/10/2026). A Instituição fica de fora: em Nosso
   // produto ela é texto (BOOKPLAY, MUNDIAL EDITORA…).
   if (nr_cliente && !/^\d+$/.test(nr_cliente)) erros.push('NR só aceita números');
+  // Sem NR, a chave é a Instituição — o Código da regra Cofen (11/11/2026). O
+  // banco recusa chave com letra (20261111150100); aqui a linha já sai marcada.
+  if (!nr_cliente && instituicao && !/^\d+$/.test(instituicao)) erros.push('Código só aceita números');
   if (valor === null) erros.push('Valor inválido');
   if (!vencimento)    erros.push('Vencimento inválido');
 

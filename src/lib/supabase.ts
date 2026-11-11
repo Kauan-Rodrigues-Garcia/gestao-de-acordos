@@ -275,6 +275,8 @@ export interface Acordo {
   vinculo_operador_id?: string | null;
   /** Quando tipo_vinculo = 'extra': nome do operador DIRETO (desnormalizado para exibição) */
   vinculo_operador_nome?: string | null;
+  /** A outra metade do par DIRETO/EXTRA, linha a linha. Só o banco escreve (20261030235500). */
+  par_acordo_id?: string | null;
   /** IDs das tags visuais aplicadas a este acordo */
   tag_ids?: string[] | null;
   /** Valor total do acordo parcelado — PaguePay only. NULL = comportamento antigo/Bookplay. */

@@ -44,6 +44,7 @@ import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
 import { useEmpresaTags } from '@/hooks/useEmpresaTags';
 import { toast } from 'sonner';
 import type { ItemFila } from '@/components/ModalFilaWhatsApp';
+import { comOcultarExtraComPar } from '@/services/acordos.service';
 import { liberarNrPorAcordoId } from '@/services/nr_registros.service';
 import { enviarParaLixeira } from '@/services/lixeira.service';
 import { registrarLog } from '@/services/logs.service';
@@ -165,7 +166,7 @@ export function AcordosCofen() {
     acordoFoco ? {
       // Os filtros da tela (mês, aba, visão) esconderiam o acordo de outro mês.
       ids: [acordoFoco], page: 1, perPage: PER_PAGE,
-    } : {
+    } : comOcultarExtraComPar({
       busca:        buscaConsulta || undefined,
       status:       statusFiltroComputed,
       tipo:         filtroTipo && filtroTipo !== 'all' ? filtroTipo : undefined,
@@ -180,7 +181,8 @@ export function AcordosCofen() {
       page:         currentPage,
       perPage:      PER_PAGE,
       prioritize_today: true,
-    },
+    // Acordo vinculado uma vez só (11/11/2026) — ver `comOcultarExtraComPar`.
+    }, filtroVinculo === 'todos'),
   );
 
   const acordosDeHoje = useMemo(() =>
@@ -198,7 +200,9 @@ export function AcordosCofen() {
     if (usuarioTemLogicaDiretoExtra && filtroVinculo !== 'todos') {
       base = base.filter(a => (a.tipo_vinculo ?? 'direto') === filtroVinculo);
     }
-    if (visaoAmpla && filtroVinculo === 'todos') {
+    // Sem depender do cargo: na lista só dos próprios acordos não há par para
+    // juntar (as duas metades são de pessoas diferentes), e a função não muda nada.
+    if (filtroVinculo === 'todos') {
       base = deduplicarVinculados(base, isPP);
     }
     return [...base].sort((a, b) => {
@@ -221,7 +225,7 @@ export function AcordosCofen() {
       return 0;
     });
   // `isPP` escolhe a chave com que `deduplicarVinculados` agrupa (`instituicao` na regra Cofen).
-  }, [acordos, acordoFoco, usuarioTemLogicaDiretoExtra, filtroVinculo, visaoAmpla, hoje, isPP]);
+  }, [acordos, acordoFoco, usuarioTemLogicaDiretoExtra, filtroVinculo, hoje, isPP]);
 
   useEffect(() => {
     if (!podeVerSetor) return;

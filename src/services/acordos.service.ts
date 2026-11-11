@@ -45,6 +45,44 @@ export interface FiltrosAcordo {
   perPage?: number;
   /** Garante que acordos de hoje apareçam sempre na página 1 via duas queries */
   prioritize_today?: boolean;
+  /**
+   * Esconde, no servidor, o EXTRA de um par ligado cujo DIRETO quem consulta
+   * também enxerga — o acordo vinculado aparece uma vez só, e a contagem e as
+   * páginas batem (11/11/2026, migration 20261111150000).
+   *
+   * Só para lista SEM recorte de operador, equipe, setor, tag ou estado: com
+   * recorte, o DIRETO pode ficar fora da lista mesmo sendo visível, e o acordo
+   * sumiria. Ver `deveOcultarExtraComPar`.
+   */
+  ocultar_extra_com_par?: boolean;
+}
+
+/**
+ * A lista pode pedir ao servidor para esconder o EXTRA do par?
+ *
+ * Só quando nenhum recorte pode deixar o DIRETO de fora. Os campos que o par
+ * sincroniza (situação, forma, vencimento, nome) não entram na lista: os dois
+ * lados têm o mesmo valor, e o filtro pega os dois ou nenhum.
+ */
+export function deveOcultarExtraComPar(f: Pick<FiltrosAcordo,
+  'operador_id' | 'equipe_id' | 'setor_id' | 'tag_ids' | 'estado_uf' | 'ids'>): boolean {
+  return !f.operador_id && !f.equipe_id && !f.setor_id
+    && !f.tag_ids?.length && !f.estado_uf && !f.ids?.length;
+}
+
+/**
+ * Os filtros da mesa de Acordos, com o pedido de esconder o EXTRA do par quando
+ * cabe. `ligado` é falso quando a tela filtra por Direto/Extra — aí o EXTRA
+ * tem de vir.
+ */
+export function comOcultarExtraComPar<T extends FiltrosAcordo>(filtros: T, ligado: boolean): T {
+  return { ...filtros, ocultar_extra_com_par: ligado && deveOcultarExtraComPar(filtros) };
+}
+
+/** O banco ainda não tem o campo calculado (migration não aplicada). */
+function erroDeCampoAusente(e: unknown): boolean {
+  const msg = String((e as { message?: string } | null)?.message ?? e ?? '');
+  return msg.includes('extra_absorvido');
 }
 
 /**
@@ -136,6 +174,18 @@ export function buscaParaFiltro(busca: string): string {
 
 /** Busca acordos com filtros opcionais e suporte a paginação server-side */
 export async function fetchAcordos(filtros?: FiltrosAcordo): Promise<{ data: Acordo[], count: number }> {
+  if (!filtros?.ocultar_extra_com_par) return buscarAcordos(filtros);
+  try {
+    return await buscarAcordos(filtros);
+  } catch (e) {
+    // Front publicado antes da migration 20261111150000: a lista continua
+    // abrindo, só sem a junção do par no servidor (a tela ainda junta na página).
+    if (!erroDeCampoAusente(e)) throw e;
+    return buscarAcordos({ ...filtros, ocultar_extra_com_par: false });
+  }
+}
+
+async function buscarAcordos(filtros?: FiltrosAcordo): Promise<{ data: Acordo[], count: number }> {
   // Quando há filtro de intervalo de mês usa a tabela direta (sem dedup).
   // Sem filtro de data usa a view deduplicada (DISTINCT ON por grupo).
   // Usa a tabela direta quando há filtro de intervalo de mês OU filtro de data exata
@@ -186,6 +236,8 @@ export async function fetchAcordos(filtros?: FiltrosAcordo): Promise<{ data: Aco
     // que e o que "tem esta tag" significa num campo multivalorado.
     if (filtros?.tag_ids?.length) q = q.overlaps('tag_ids', filtros.tag_ids);
     if (filtros?.ids?.length) q = q.in('id', filtros.ids);
+    // Campo calculado do PostgREST (migration 20261111150000).
+    if (filtros?.ocultar_extra_com_par) q = q.eq('extra_absorvido', false);
     const busca = filtros?.busca ? buscaParaFiltro(filtros.busca) : '';
     if (busca) {
       q = q.or(
@@ -238,7 +290,7 @@ export async function fetchAcordos(filtros?: FiltrosAcordo): Promise<{ data: Aco
       supabase.from(sourceTable)
         .select(SELECT, { count: 'exact' })
         .neq('vencimento', hoje)
-        .order('vencimento', { ascending: true })
+        .order('vencimento', { ascending: true }).order('id', { ascending: true })
         .range(restOffset, restOffset + restNeeded - 1)
     );
     if (errB) throw errB;
@@ -252,7 +304,7 @@ export async function fetchAcordos(filtros?: FiltrosAcordo): Promise<{ data: Aco
 
   // ── QUERY ÚNICA (caminho normal) ──────────────────────────────────────────
   let query = applyFilters(
-    supabase.from(sourceTable).select(SELECT, { count: 'exact' }).order('vencimento', { ascending: true })
+    supabase.from(sourceTable).select(SELECT, { count: 'exact' }).order('vencimento', { ascending: true }).order('id', { ascending: true })
   );
 
   if (filtros?.apenas_hoje) query = query.eq('vencimento', getTodayISO());

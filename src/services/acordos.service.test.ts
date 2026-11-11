@@ -36,6 +36,8 @@ interface BuilderCall {
   or?: string;
   range?: [number, number];
   order?: { col: string; opts?: unknown };
+  /** Todas as ordenações, na ordem em que foram pedidas. */
+  orders?: { col: string; opts?: unknown }[];
   limit?: number;
   selectArg?: unknown;
   countOpt?: unknown;
@@ -78,7 +80,7 @@ function createBuilder(table: string) {
     lte:   vi.fn((col: string, val: unknown) => { call.filters.push(['lte', col, val]); return builder; }),
     in:    vi.fn((col: string, values: unknown[]) => { call.in = { col, values }; return builder; }),
     or:    vi.fn((expr: string) => { call.or = expr; return builder; }),
-    order: vi.fn((col: string, opts?: unknown) => { call.order = { col, opts }; return builder; }),
+    order: vi.fn((col: string, opts?: unknown) => { call.order = call.order ?? { col, opts }; (call.orders ??= []).push({ col, opts }); return builder; }),
     limit: vi.fn((n: number) => { call.limit = n; return builder; }),
     range: vi.fn((from: number, to: number) => { call.range = [from, to]; return builder; }),
     // thenable — resolve com o próximo resultado da tabela atual
@@ -100,6 +102,8 @@ vi.mock('@/lib/supabase', () => ({
 // SUT depois do vi.mock.
 import {
   fetchAcordos,
+  deveOcultarExtraComPar,
+  comOcultarExtraComPar,
   verificarNrDuplicado,
   verificarNrsDuplicadosEmLote,
   calcularMetricas,
@@ -136,6 +140,45 @@ beforeEach(() => {
 // fetchAcordos
 // ══════════════════════════════════════════════════════════════════════════
 
+describe('fetchAcordos — acordo vinculado uma vez só (20261111150000)', () => {
+  it('pede extra_absorvido = false quando ligado', async () => {
+    resultsByTable['acordos_deduplicados'] = [{ data: [{ id: 'a1' }], error: null, count: 1 }];
+    await fetchAcordos({ ocultar_extra_com_par: true });
+    expect(calls[0].filters).toContainEqual(['eq', 'extra_absorvido', false]);
+  });
+
+  it('sem a migration aplicada, refaz a consulta sem o filtro em vez de quebrar a lista', async () => {
+    resultsByTable['acordos_deduplicados'] = [
+      { data: null, error: { message: 'column acordos_deduplicados.extra_absorvido does not exist' } as never, count: 0 },
+      { data: [{ id: 'a1' }], error: null, count: 1 },
+    ];
+    const r = await fetchAcordos({ ocultar_extra_com_par: true });
+    expect(r.count).toBe(1);
+    expect(calls).toHaveLength(2);
+    expect(calls[1].filters).not.toContainEqual(['eq', 'extra_absorvido', false]);
+  });
+
+  it('outro erro continua sendo erro', async () => {
+    resultsByTable['acordos_deduplicados'] = [
+      { data: null, error: { message: 'permission denied' } as never, count: 0 },
+    ];
+    await expect(fetchAcordos({ ocultar_extra_com_par: true })).rejects.toMatchObject({ message: 'permission denied' });
+  });
+
+  it('não liga com recorte que pode deixar o DIRETO fora da lista', () => {
+    expect(deveOcultarExtraComPar({})).toBe(true);
+    expect(deveOcultarExtraComPar({ operador_id: 'op' })).toBe(false);
+    expect(deveOcultarExtraComPar({ equipe_id: 'eq' })).toBe(false);
+    expect(deveOcultarExtraComPar({ setor_id: 'st' })).toBe(false);
+    expect(deveOcultarExtraComPar({ tag_ids: ['t'] })).toBe(false);
+    expect(deveOcultarExtraComPar({ estado_uf: 'SP' })).toBe(false);
+    expect(deveOcultarExtraComPar({ ids: ['a'] })).toBe(false);
+    expect(comOcultarExtraComPar({ busca: 'x' }, true).ocultar_extra_com_par).toBe(true);
+    // Filtro Direto/Extra da tela: o EXTRA tem de vir.
+    expect(comOcultarExtraComPar({ busca: 'x' }, false).ocultar_extra_com_par).toBe(false);
+  });
+});
+
 describe('fetchAcordos', () => {
   it('lê da view acordos_deduplicados com order por vencimento asc e sem paginação por padrão', async () => {
     resultsByTable['acordos_deduplicados'] = [{
@@ -154,6 +197,8 @@ describe('fetchAcordos', () => {
     expect(c.operation).toBe('select');
     expect(c.countOpt).toEqual({ count: 'exact' });
     expect(c.order).toEqual({ col: 'vencimento', opts: { ascending: true } });
+    // Desempate por id: sem ele a paginação repetia/pulava linhas do mesmo dia.
+    expect(c.orders?.[1]).toEqual({ col: 'id', opts: { ascending: true } });
     // Sem paginação.
     expect(c.range).toBeUndefined();
   });

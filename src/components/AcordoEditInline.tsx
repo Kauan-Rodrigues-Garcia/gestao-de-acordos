@@ -49,6 +49,8 @@ import { useRegistrarPixAoPagar } from '@/hooks/useRegistrarPixAoPagar';
 import { abrirChatplay } from '@/lib/chatplay';
 import { camposComCpf, ERRO_CPF_NO_CODIGO } from '@/lib/cpf';
 import { ehSoNumeros, propsSoNumeros } from '@/lib/soNumeros';
+import { avisosAntesDeSalvar, type AvisoAcordo } from '@/lib/avisosAcordo';
+import { ModalAvisosAntesDeSalvar } from '@/components/ModalAvisosAntesDeSalvar';
 import {
   estadoFechamentoDoAcordo, mensagemFechamento, mesDaData,
 } from '@/lib/fechamentoMes';
@@ -144,6 +146,11 @@ export function AcordoEditInline({
   const [pendencia,        setPendencia]        = useState<PendenciaConflitoNr | null>(null);
   const [autorizando,      setAutorizando]      = useState(false);
   const [confirmandoAviso, setConfirmandoAviso] = useState(false);
+  // «Confira antes de salvar» (11/11/2026) — só sobre o que a pessoa MUDOU.
+  const [avisosPendentes, setAvisosPendentes] = useState<AvisoAcordo[] | null>(null);
+  // As opções do salvar que abriu os avisos, para o «salvar assim mesmo».
+  const avisosConfirmar = useRef<{ confirmouRemocao: boolean; vinculoOk: boolean }>(
+    { confirmouRemocao: false, vinculoOk: false });
 
   // Form state initialised from acordo
   const initialEstado = getEstadoFromAcordo(acordo);
@@ -222,7 +229,8 @@ export function AcordoEditInline({
     : Number(acordo.valor_entrada ?? 0);
 
   async function handleSave(
-    { confirmouRemocao = false, vinculoOk = false }: { confirmouRemocao?: boolean; vinculoOk?: boolean } = {},
+    { confirmouRemocao = false, vinculoOk = false, avisosOk = false }:
+      { confirmouRemocao?: boolean; vinculoOk?: boolean; avisosOk?: boolean } = {},
   ) {
     // Nome do cliente é opcional nas duas regras (Cleber, 08/10/2026): a
     // tabulação nova já aceitava sem nome, e a edição barrava o acordo inteiro.
@@ -279,6 +287,34 @@ export function AcordoEditInline({
       toast.error(`${ERRO_CPF_NO_CODIGO} Encontrado em: ${comCpf.join(', ')}.`);
       return;
     }
+    // Código só com número (26/10/2026). Só quando MUDOU: o acordo antigo com
+    // Código sujo ainda pode ser editado em outros campos sem travar. (O NR da
+    // regra Nosso produto não se edita aqui.)
+    if (isPaguePlay && instituicao.trim() && instituicao.trim() !== (acordo.instituicao ?? '').trim()
+        && !ehSoNumeros(instituicao)) {
+      toast.error('O Código só aceita números');
+      return;
+    }
+    // «Confira antes de salvar»: nome com número, valor alto/baixo, vencimento
+    // estranho — só nos campos que mudaram, para o acordo antigo fora do padrão
+    // não perguntar a cada edição. Não bloqueia. Ver `lib/avisosAcordo.ts`.
+    if (!avisosOk) {
+      const avisos = avisosAntesDeSalvar({
+        nomeCliente,
+        valores: [{ rotulo: 'Valor', valor: valorNum }],
+        vencimento,
+        status,
+        hoje: getTodayISO(),
+      }).filter(a =>
+        (a.campo === 'nome' && (nomeCliente ?? '').trim() !== (acordo.nome_cliente ?? '').trim())
+        || (a.campo === 'valor' && Math.abs(valorNum - Number(acordo.valor)) > 0.004)
+        || (a.campo === 'vencimento' && vencimento !== acordo.vencimento));
+      if (avisos.length) {
+        avisosConfirmar.current = { confirmouRemocao, vinculoOk };
+        setAvisosPendentes(avisos);
+        return;
+      }
+    }
     // ─── Vínculo mudou: confirmação e servidor ANTES do resto ──────────────
     // A janela decide o caminho (manual, pedido ao líder, ou volta a EXTRA) e,
     // ao concluir, chama o salvar de novo com `vinculoOk`.
@@ -327,14 +363,6 @@ export function AcordoEditInline({
       // Valor da entrada editado sem mexer na quantidade: o total do acordo
       // muda junto e precisa cair em todas as linhas do grupo.
       planoQuantidade = { acao: 'contador', novoTotal: parcelasNum };
-    }
-
-    // Código só com número (26/10/2026). Só quando MUDOU: o acordo antigo com
-    // Código sujo ainda pode ser editado em outros campos sem travar.
-    if (isPaguePlay && instituicao.trim() && instituicao.trim() !== (acordo.instituicao ?? '').trim()
-        && !ehSoNumeros(instituicao)) {
-      toast.error('O Código só aceita números');
-      return;
     }
 
     // ─── Conflito de NR/Código na edição ──────────────────────────────────
@@ -793,7 +821,7 @@ export function AcordoEditInline({
           : 'Acordo agora é DIRETO.',
       );
     }
-    void handleSave({ vinculoOk: true });
+    void handleSave({ vinculoOk: true, avisosOk: true });
   }
 
   /** DIRETO → EXTRA (acompanhamento). Com EXTRA vinculado o servidor recusa. */
@@ -809,7 +837,7 @@ export function AcordoEditInline({
     }
     extraGravavel.current = true;
     toast.success('Acordo marcado como EXTRA.');
-    void handleSave({ vinculoOk: true });
+    void handleSave({ vinculoOk: true, avisosOk: true });
   }
 
   function cancelarPendencia() {
@@ -1285,7 +1313,7 @@ export function AcordoEditInline({
                 <AlertDialogCancel disabled={saving}>Cancelar</AlertDialogCancel>
                 <AlertDialogAction
                   disabled={saving}
-                  onClick={() => { setRemocaoPendente(null); void handleSave({ confirmouRemocao: true, vinculoOk: true }); }}
+                  onClick={() => { setRemocaoPendente(null); void handleSave({ confirmouRemocao: true, vinculoOk: true, avisosOk: true }); }}
                 >
                   Apagar e salvar
                 </AlertDialogAction>
@@ -1301,6 +1329,16 @@ export function AcordoEditInline({
             rotuloConfirmar="Tornar Direto e salvar"
             onClose={() => { setModalVinculo(null); setIsExtra(extraOriginal); }}
             onConcluido={aoTornarDireto}
+          />
+
+          <ModalAvisosAntesDeSalvar
+            avisos={avisosPendentes}
+            salvando={saving}
+            onCorrigir={() => setAvisosPendentes(null)}
+            onSalvarAssim={() => {
+              setAvisosPendentes(null);
+              void handleSave({ ...avisosConfirmar.current, avisosOk: true });
+            }}
           />
 
           {/* Vínculo: DIRETO → EXTRA. */}

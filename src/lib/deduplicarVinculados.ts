@@ -57,6 +57,54 @@ export function deduplicarVinculados(
 ): AcordoComVinculo[] {
   if (!acordos?.length) return [];
 
+  // 1. Pelo vínculo explícito (`par_acordo_id`, 20261030235500): o EXTRA cujo
+  //    DIRETO está na lista some, e o DIRETO leva o nome dele. É o caminho
+  //    exato — por chave, com parcelas, o «primeiro direto + primeiro extra»
+  //    juntava metades de meses diferentes e deixava as outras duplicadas.
+  const porId = new Map(acordos.map(a => [a.id, a]));
+  const absorvidos = new Map<string, Acordo>(); // id do DIRETO → EXTRA
+  for (const a of acordos) {
+    if (a.tipo_vinculo !== 'extra' || !a.par_acordo_id) continue;
+    const direto = porId.get(a.par_acordo_id);
+    if (!direto || direto.par_acordo_id !== a.id) continue;
+    if ((direto.tipo_vinculo ?? 'direto') !== 'direto' || direto.operador_id === a.operador_id) continue;
+    absorvidos.set(direto.id, a);
+  }
+  const idsExtraAbsorvidos = new Set([...absorvidos.values()].map(e => e.id));
+  const restantes: AcordoComVinculo[] = [];
+  const ligados: AcordoComVinculo[] = [];
+  for (const a of acordos) {
+    if (idsExtraAbsorvidos.has(a.id)) continue;
+    const extra = absorvidos.get(a.id);
+    if (extra) {
+      ligados.push({
+        ...a,
+        _vinculoDuplo:             true,
+        _vinculoExtraOperadorId:   extra.operador_id,
+        _vinculoExtraOperadorNome: (extra as Acordo & { perfis?: { nome?: string } }).perfis?.nome
+          ?? a.vinculo_operador_nome
+          ?? null,
+        _acordoExtraId:            extra.id,
+      });
+    } else {
+      restantes.push(a);
+    }
+  }
+
+  // 2. O que sobrou (linhas antigas sem par ligado): a regra de antes, por chave.
+  // A saída segue a ordem da entrada (a do servidor, por vencimento).
+  const finais = new Map<string, AcordoComVinculo>();
+  for (const a of [...ligados, ...deduplicarPorChave(restantes, isPP)]) finais.set(a.id, a);
+  return acordos.filter(a => finais.has(a.id)).map(a => finais.get(a.id) as AcordoComVinculo);
+}
+
+/** A junção antiga, por chave (NR/Código) — para pares que o banco não ligou. */
+function deduplicarPorChave(
+  acordos: Acordo[],
+  isPP: boolean,
+): AcordoComVinculo[] {
+  if (!acordos.length) return [];
+
   const campoChave: 'instituicao' | 'nr_cliente' = isPP ? 'instituicao' : 'nr_cliente';
 
   // Agrupa por chave composta (empresa_id + valorChave). Ignora acordos sem chave.
@@ -89,8 +137,10 @@ export function deduplicarVinculados(
         ...direto,
         _vinculoDuplo:             true,
         _vinculoExtraOperadorId:   extra.operador_id,
-        _vinculoExtraOperadorNome: extra.vinculo_operador_nome
-          ?? (extra as Acordo & { perfis?: { nome?: string } }).perfis?.nome
+        // No EXTRA, `vinculo_operador_nome` é o dono do DIRETO; o nome do
+        // operador EXTRA é o do perfil dele, ou o que o DIRETO guarda.
+        _vinculoExtraOperadorNome: (extra as Acordo & { perfis?: { nome?: string } }).perfis?.nome
+          ?? direto.vinculo_operador_nome
           ?? null,
         _acordoExtraId:            extra.id,
       });

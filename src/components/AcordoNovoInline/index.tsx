@@ -53,6 +53,8 @@ import { FormPP } from './FormPP';
 import { FormBP } from './FormBP';
 import type { ConflitNR, AcordoNovoInlineProps, SharedFormState } from './types';
 import { avisarAcordoSalvo } from '@/components/Natal/tema';
+import { avisosAntesDeSalvar, type AvisoAcordo } from '@/lib/avisosAcordo';
+import { ModalAvisosAntesDeSalvar } from '@/components/ModalAvisosAntesDeSalvar';
 
 // Re-export public API so callers using `@/components/AcordoNovoInline` keep working
 export { ModalAutorizacaoNR } from './ModalAutorizacaoNR';
@@ -233,6 +235,8 @@ export function AcordoNovoInline({
   // NR já tabulado pelo PRÓPRIO operador → oferta de adicionar parcela
   const [acordoParaParcela, setAcordoParaParcela] = useState<Acordo | null>(null);
   const [salvandoParcela,   setSalvandoParcela]   = useState(false);
+  // «Confira antes de salvar» (11/11/2026): o que parece fora do padrão.
+  const [avisosPendentes, setAvisosPendentes] = useState<AvisoAcordo[] | null>(null);
 
   const tipos     = isPaguePlay ? TIPOS_PAGUEPLAY : TIPOS_BOOKPLAY;
   const tipoAtual = tipos.find((t) => t.value === tipo);
@@ -345,10 +349,11 @@ export function AcordoNovoInline({
         const { acordo_grupo_id: _g, numero_parcela: _n, valor_total: _vt, ...payloadMin } = payloadSemQP;
         const { data: inseridoMin, error: e2 } = await supabase
           .from('acordos').insert(payloadMin as never).select('*, perfis(id, nome, email, perfil, setor_id)').single();
-        if (e2) { toast.error(`Erro ao salvar: ${e2.message}`); return null; }
+        if (e2) { toast.error(mensagemErroNr(e2.message, isPaguePlay ? 'Código' : 'NR') ?? `Erro ao salvar: ${e2.message}`); return null; }
         return inseridoMin as Acordo;
       }
-      toast.error(`Erro ao salvar: ${error.message}`);
+      // Recusa do banco com frase própria (NR/Código só número, NR de outro).
+      toast.error(mensagemErroNr(error.message, isPaguePlay ? 'Código' : 'NR') ?? `Erro ao salvar: ${error.message}`);
       return null;
     }
     return inserido as Acordo;
@@ -422,9 +427,28 @@ export function AcordoNovoInline({
     setAvisoPixAutomatico({ nr, forma: tipo, motivo, inserido });
   }
 
-  async function salvar() {
+  /**
+   * Os avisos que não bloqueiam (nome com número, valor alto ou baixo,
+   * vencimento estranho). Ver `lib/avisosAcordo.ts`.
+   */
+  function avisosDoFormulario(): AvisoAcordo[] {
+    const valorNum = parseCurrencyInput(valorStr);
+    const cofenTotal = isPaguePlay && temParcelas && parcelas > 1;
+    const valores = entradaAtiva
+      ? [{ rotulo: 'Entrada', valor: valorNum }, { rotulo: 'Demais parcelas', valor: parseCurrencyInput(demaisStr) }]
+      : [{ rotulo: cofenTotal ? 'Valor total' : 'Valor', valor: valorNum }];
+    return avisosAntesDeSalvar({
+      nomeCliente, valores, vencimento, status, hoje: getTodayISO(),
+    });
+  }
+
+  async function salvar(confirmouAvisos = false) {
     const erro = validar();
     if (erro) { toast.error(erro); return; }
+    if (!confirmouAvisos) {
+      const avisos = avisosDoFormulario();
+      if (avisos.length) { setAvisosPendentes(avisos); return; }
+    }
     if (!perfil?.id)  { toast.error('Usuário não autenticado'); return; }
     if (!empresa?.id) { toast.error('Empresa não identificada'); return; }
 
@@ -918,7 +942,8 @@ export function AcordoNovoInline({
 
   const formState: SharedFormState = {
     colSpan, isPaguePlay,
-    salvando, salvar, cancelar,
+    // Embrulhado: o botão chama com o evento de clique, que não é «confirmou».
+    salvando, salvar: () => salvar(), cancelar,
     nomeCliente, setNomeCliente,
     nrCliente, setNrCliente,
     vencimento, setVencimento,
@@ -975,6 +1000,12 @@ export function AcordoNovoInline({
   return (
     <>
       {isPaguePlay ? <FormPP state={formState} /> : <FormBP state={formState} />}
+      <ModalAvisosAntesDeSalvar
+        avisos={avisosPendentes}
+        salvando={salvando}
+        onCorrigir={() => setAvisosPendentes(null)}
+        onSalvarAssim={() => { setAvisosPendentes(null); void salvar(true); }}
+      />
       <ModalAdicionarParcela
         aberto={!!acordoParaParcela}
         acordo={acordoParaParcela}

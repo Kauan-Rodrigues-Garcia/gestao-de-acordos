@@ -67,6 +67,11 @@ export function mensagemErroNr(e: unknown, label = 'NR'): string | null {
     return limpa || `Este ${label} acabou de ser tabulado por outro operador. Recarregue a lista.`;
   }
 
+  // Gatilho `trg_acordos_chave_so_numeros` (20261111150100).
+  if (txt.includes('CHAVE_SO_NUMEROS')) {
+    return `O ${label} só aceita números — sem letras, pontos ou símbolos. O acordo NÃO foi salvo.`;
+  }
+
   if (txt.includes(ERRO_NR_VERIFICACAO)) {
     return `Não foi possível verificar se este ${label} já está tabulado. `
          + 'O acordo NÃO foi salvo — verifique a conexão e tente de novo.';

@@ -184,6 +184,15 @@ export async function lerRelatorioAcordos(
       return;
     }
 
+    // NR/Código só com números (11/11/2026): o banco recusa acordo novo com
+    // letra na chave (20261111150100). Recusada aqui, a linha sai na lista com
+    // o motivo, em vez de cair no erro genérico do lote.
+    const chave = (codigo && codigo !== instituicao ? codigo : '') || instituicao;
+    if (chave && !/^\d+$/.test(chave)) {
+      recusadas.push({ linha: numero, rotulo, motivo: 'NR/Código com letra, ponto ou símbolo — só números são aceitos.' });
+      return;
+    }
+
     const [parcelaAtual, totalParcelas] = parcela(r['Parcela']);
 
     linhas.push({

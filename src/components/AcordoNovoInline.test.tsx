@@ -295,8 +295,10 @@ function semearEstadoPP(extra: Record<string, string> = {}, estado = 'SP') {
  */
 beforeAll(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
-  // 15h UTC = 12h em São Paulo, então o dia é 20/05 no fuso que o app usa.
-  vi.setSystemTime(new Date('2026-05-20T15:00:00Z'));
+  // 15h UTC = 12h em São Paulo, então o dia é 15/05 no fuso que o app usa —
+  // o mesmo dia que o calendário mockado devolve: vencimento no passado abre
+  // o «Confira antes de salvar» (11/11/2026), que não é o assunto destes testes.
+  vi.setSystemTime(new Date('2026-05-15T15:00:00Z'));
 });
 afterAll(() => { vi.useRealTimers(); });
 
@@ -1316,5 +1318,41 @@ describe('AcordoNovoInline — tags', () => {
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
     const insert = supabaseCalls.find(c => c.table === 'acordos' && c.op === 'insert');
     expect((insert?.payload as { tag_ids?: string[] })?.tag_ids).toEqual([TAG.id]);
+  });
+});
+
+describe('AcordoNovoInline — «Confira antes de salvar» (11/11/2026)', () => {
+  it('valor acima de R$ 10.000 avisa antes; «Salvar assim mesmo» grava', async () => {
+    const onSaved = vi.fn();
+    verificarNrRegistroMock.mockResolvedValue(null);
+    routes.insertAcordo = { data: { id: 'alto-1', nr_cliente: '888' } as Acordo, error: null };
+
+    renderInline({ onSaved });
+    preencherMinimoBookplay('888');
+    fireEvent.change(screen.getByPlaceholderText('0,00'), { target: { value: '15000' } });
+    clickSalvarAcordo();
+
+    expect(await screen.findByText('Confira antes de salvar')).toBeTruthy();
+    expect(screen.getByText(/acima de R\$\s?10\.000,00/)).toBeTruthy();
+    expect(supabaseCalls.some(c => c.table === 'acordos' && c.op === 'insert')).toBe(false);
+
+    fireEvent.click(screen.getByRole('button', { name: /Salvar assim mesmo/i }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+    expect(supabaseCalls.some(c => c.table === 'acordos' && c.op === 'insert')).toBe(true);
+  });
+
+  it('«Voltar e corrigir» não grava', async () => {
+    const onSaved = vi.fn();
+    verificarNrRegistroMock.mockResolvedValue(null);
+    renderInline({ onSaved });
+    preencherMinimoBookplay('889');
+    fireEvent.change(screen.getByPlaceholderText(/Nome completo/i), { target: { value: 'Cliente 2' } });
+    clickSalvarAcordo();
+
+    expect(await screen.findByText(/O nome do cliente tem número/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Voltar e corrigir/i }));
+    expect(screen.queryByText('Confira antes de salvar')).toBeNull();
+    expect(onSaved).not.toHaveBeenCalled();
+    expect(supabaseCalls.some(c => c.table === 'acordos' && c.op === 'insert')).toBe(false);
   });
 });
