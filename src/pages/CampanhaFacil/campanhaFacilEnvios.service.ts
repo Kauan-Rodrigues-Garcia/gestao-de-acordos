@@ -21,6 +21,7 @@ import {
   type ContatoEnvio, type MensagemDaCampanha, type OperadorCampanha, type ParteRedistribuida,
 } from './envios';
 import { COLUNAS_SETOR_DO_FILTRO, listaDoFiltroDeSetores } from '@/lib/setoresDosFiltros';
+import type { PendenteComBase } from './descontoDaEdicao';
 
 /** As tabelas nasceram depois dos tipos gerados — mesmo recurso do numeros.service. */
 const db = supabase as unknown as SupabaseClient;
@@ -203,14 +204,27 @@ async function criarEnvios(
   return new Map(((data ?? []) as { operador: string; envio: string }[]).map(r => [r.operador, r.envio]));
 }
 
+/**
+ * A coluna `base` ainda não existe no banco (migration 20261111120000 não
+ * aplicada): o PostgREST recusa o INSERT com PGRST204. A gravação refaz sem
+ * ela — a campanha sai, só sem dar para trocar o desconto depois.
+ */
+let semColunaBase = false;
+const faltaColunaBase = (e: { code?: string; message?: string } | null) =>
+  e?.code === 'PGRST204' && /\bbase\b/.test(e.message ?? '');
+
 /** As mensagens de cada operador, em pedaços. */
 async function gravarContatos(partes: readonly ParteEnvio[], envioPorOperador: Map<string, string>): Promise<void> {
   for (const p of partes) {
     const envioId = envioPorOperador.get(p.operador.id);
     if (!envioId) throw new Error(`O envio de ${p.operador.nome} não foi criado.`);
     for (const pedaco of emPedacos(p.contatos, LOTE_GRAVAR)) {
-      const { error } = await db.from('campanha_facil_contatos')
-        .insert(pedaco.map(c => ({ ...c, envio_id: envioId })));
+      const linhas = () => pedaco.map(({ base, ...c }) => (semColunaBase ? { ...c, envio_id: envioId } : { ...c, base, envio_id: envioId }));
+      let { error } = await db.from('campanha_facil_contatos').insert(linhas());
+      if (faltaColunaBase(error)) {
+        semColunaBase = true;
+        ({ error } = await db.from('campanha_facil_contatos').insert(linhas()));
+      }
       if (error) throw error;
     }
   }
@@ -486,6 +500,30 @@ export async function mensagensDoLote(envioIds: readonly string[]): Promise<Mens
   return todas;
 }
 
+/**
+ * As mensagens PENDENTES da campanha com as variáveis e a base — o que a
+ * troca de desconto precisa (11/11/2026). Sem a coluna `base` no banco
+ * (42703), voltam sem ela, e a tela diz que o desconto não pode mudar.
+ */
+export async function pendentesComBase(envioIds: readonly string[]): Promise<PendenteComBase[]> {
+  const todas: PendenteComBase[] = [];
+  let colunas = 'id, variaveis, base';
+  for (const ids of emPedacos(envioIds, LOTE_IDS)) {
+    for (let de = 0; ; de += PAGINA) {
+      const pedir = () => db.from('campanha_facil_contatos')
+        .select(colunas).in('envio_id', ids).eq('status', 'pendente')
+        .order('ordem').range(de, de + PAGINA - 1);
+      let { data, error } = await pedir();
+      if (semColuna(error) && colunas.includes('base')) { colunas = 'id, variaveis'; ({ data, error } = await pedir()); }
+      if (error) throw error;
+      const linhas = (data ?? []) as unknown as Partial<PendenteComBase>[];
+      todas.push(...linhas.map(l => ({ id: l.id as string, variaveis: l.variaveis ?? null, base: l.base ?? null })));
+      if (linhas.length < PAGINA) break;
+    }
+  }
+  return todas;
+}
+
 /** Grava a edição de uma campanha DESATIVADA. Não relança: isso é `ativarLote`. */
 export async function editarLote(p: {
   loteId: string;
@@ -493,15 +531,22 @@ export async function editarLote(p: {
   /** `null` = mensagem não muda. */
   modelo: string | null;
   partes: readonly ParteRedistribuida[];
+  /**
+   * O desconto novo (11/11/2026): as variáveis de valor refeitas de CADA
+   * pendente. `null` = desconto não muda — a chamada fica igual à de antes.
+   */
+  variaveis?: readonly { id: string; variaveis: Record<string, string> }[] | null;
 }): Promise<void> {
-  const { error } = await db.rpc('fn_campanha_facil_lote_editar', {
+  const args: Record<string, unknown> = {
     p_lote: p.loteId,
     p_titulo: p.titulo,
     p_modelo: p.modelo,
     p_atribuicao: p.partes
       .filter(x => x.contatos.length > 0)
       .map(x => ({ operador_id: x.operador.id, contatos: x.contatos })),
-  });
+  };
+  if (p.variaveis) args.p_variaveis = p.variaveis;
+  const { error } = await db.rpc('fn_campanha_facil_lote_editar', args);
   if (error) throw error;
 }
 
@@ -526,15 +571,20 @@ export async function repassarEnvios(p: {
   if (p.faltaram.length === 0 || p.recebedores.length === 0) return 0;
   const ids = p.faltaram.map(e => e.id);
 
+  // A base vai junto (11/11/2026): quem recebe o repasse continua com o
+  // desconto trocável. Sem a coluna no banco, lê sem ela.
   const pendentes: ContatoGravado[] = [];
+  let colunas = `${COLUNAS_CONTATO_REPASSE}, base`;
   for (const envioId of ids) {
     for (let de = 0; ; de += PAGINA) {
-      const { data, error } = await db.from('campanha_facil_contatos')
-        .select(COLUNAS_CONTATO_REPASSE)
+      const pedir = () => db.from('campanha_facil_contatos')
+        .select(colunas)
         .eq('envio_id', envioId).neq('status', 'enviado')
         .order('ordem').range(de, de + PAGINA - 1);
+      let { data, error } = await pedir();
+      if (semColuna(error) && colunas !== COLUNAS_CONTATO_REPASSE) { colunas = COLUNAS_CONTATO_REPASSE; ({ data, error } = await pedir()); }
       if (error) throw error;
-      pendentes.push(...((data ?? []) as ContatoGravado[]));
+      pendentes.push(...((data ?? []) as unknown as ContatoGravado[]).map(c => ({ ...c, base: c.base ?? null })));
       if ((data ?? []).length < PAGINA) break;
     }
   }

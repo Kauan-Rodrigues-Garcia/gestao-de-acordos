@@ -234,10 +234,14 @@ export function useEnviosCampanha(empresaId: string | null, perfil: Perfil | nul
 
   const editar = useCallback(async (p: {
     lote: LoteCampanha; titulo: string; modelo: string | null; partes: ParteRedistribuida[];
+    /** O desconto novo, só desta campanha (11/11/2026). `null` = não muda. */
+    variaveis?: { id: string; variaveis: Record<string, string> }[] | null;
   }): Promise<boolean> => {
     try {
-      await editarLote({ loteId: p.lote.id, titulo: p.titulo, modelo: p.modelo, partes: p.partes });
-      toast.success('Campanha atualizada. Libere de novo quando quiser que os operadores vejam.');
+      await editarLote({ loteId: p.lote.id, titulo: p.titulo, modelo: p.modelo, partes: p.partes, variaveis: p.variaveis });
+      toast.success(p.variaveis
+        ? `Campanha atualizada com o desconto novo em ${p.variaveis.length.toLocaleString('pt-BR')} ${p.variaveis.length === 1 ? 'mensagem pendente' : 'mensagens pendentes'}. Libere de novo quando quiser que os operadores vejam.`
+        : 'Campanha atualizada. Libere de novo quando quiser que os operadores vejam.');
       return true;
     } catch (err) {
       console.error('[CampanhaFacil] editar:', err);

@@ -7,6 +7,7 @@
  * por mensagem (migration 20261007150000): ele envia direto dali, sem planilha.
  */
 import { CampaignCore, type CampaignItem, type Discounts } from './lib/campaign-core';
+import { baseDoItem, type BaseDoContato } from './descontoDaEdicao';
 
 /** Quem pode receber a campanha. */
 export interface OperadorCampanha {
@@ -154,6 +155,12 @@ export interface ContatoEnvio {
    * (`fn_cf_renderizar`) — e o {{cpf}} continua mascarado.
    */
   variaveis: Record<string, string> | null;
+  /**
+   * Os números do cliente que a conta do desconto usa (11/11/2026): é com eles
+   * que o líder troca o desconto da campanha já lançada (`descontoDaEdicao`).
+   * `null` no relatório sem valores.
+   */
+  base: BaseDoContato | null;
 }
 
 const vazioViraNull = (s: string | null | undefined) => {
@@ -195,6 +202,7 @@ export function contatoDoItem(item: CampaignItem, ordem: number, discounts?: Par
     // «Quem encaminhará não informado» não se aplica: quem recebe é o operador.
     pendencias: (item.issues ?? []).filter(i => !/encaminhar/i.test(i)),
     variaveis: variaveisDoContato(item, discounts),
+    base: baseDoItem(item),
   };
 }
 

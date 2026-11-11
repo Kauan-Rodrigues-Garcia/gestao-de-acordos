@@ -46,12 +46,21 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import {
-  enviosDoLote, enviosDoLoteDoSetor, listarOperadoresParaCampanha, mensagensDoLote, placarDosEnvios, situacaoDoLote, votosDoLote,
+  enviosDoLote, enviosDoLoteDoSetor, listarOperadoresParaCampanha, mensagensDoLote, pendentesComBase, placarDosEnvios,
+  situacaoDoLote, votosDoLote,
   type AvaliacaoDoOperador, type EnvioResumo, type LoteCampanha, type PlacarOperador, type SituacaoLote,
 } from './campanhaFacilEnvios.service';
 import { redistribuir, type MensagemDaCampanha, type OperadorCampanha } from './envios';
 import { mensagemUsaValores } from './regras-mensagem';
 import { RealceDeVariavel, VariableChips, insertVariable } from './VariaveisMensagem';
+import { CampoPercentual } from './CampoPercentual';
+import { CampaignCore, type Discounts } from './lib/campaign-core';
+import { PARCELA_MINIMA } from './parcela-minima';
+import { textoDoPercentual } from './percentual';
+import {
+  DISCOUNT_FIELDS, descontosDasVariaveis, descontosIguais, motivoSemDesconto, recalcularPendentes,
+  type PendenteComBase,
+} from './descontoDaEdicao';
 import type { useEnviosCampanha } from './useEnviosCampanha';
 
 type Envios = ReturnType<typeof useEnviosCampanha>;
@@ -914,10 +923,14 @@ function ListaMarcavel({ titulo, itens, marcados, onAlternar }: {
 // ── Editar ───────────────────────────────────────────────────────────────────
 
 /**
- * A campanha desativada: título, mensagem e quem recebe.
+ * A campanha desativada: título, mensagem, desconto e quem recebe.
  *
  * O que já foi enviado (ou copiado) e o «não deu» ficam com quem tem; os
  * pendentes são redivididos para nivelar — ver `redistribuir`.
+ *
+ * O desconto (11/11/2026) muda só os PENDENTES desta campanha: o já enviado
+ * não muda, nem as outras campanhas, nem as configurações do setor. A conta
+ * é a da montagem, refeita da base de cada mensagem — ver `descontoDaEdicao`.
  */
 function DialogoEditarCampanha({ lote, envios, operadoresDoSetor, onFechar, onSalvar }: {
   lote: LoteCampanha;
@@ -925,7 +938,10 @@ function DialogoEditarCampanha({ lote, envios, operadoresDoSetor, onFechar, onSa
   operadoresDoSetor: OperadorCampanha[];
   onFechar: () => void;
   onSalvar: (
-    dados: { titulo: string; modelo: string | null; partes: ReturnType<typeof redistribuir> },
+    dados: {
+      titulo: string; modelo: string | null; partes: ReturnType<typeof redistribuir>;
+      variaveis: { id: string; variaveis: Record<string, string> }[] | null;
+    },
     liberar: boolean,
   ) => Promise<void>;
 }) {
@@ -972,13 +988,58 @@ function DialogoEditarCampanha({ lote, envios, operadoresDoSetor, onFechar, onSa
     : !modelo.trim() ? 'A mensagem não pode ficar vazia.'
     : lote.sem_valores && mensagemUsaValores(modelo) ? 'O relatório desta campanha não tem valores: a mensagem não pode usar parcela, quitação, junção, anual ou cartão.'
     : null;
-  const podeSalvar = !!partes && !problemaModelo && !!titulo.trim() && (pendentes === 0 || escolhidos.length > 0);
+  // ── O desconto (11/11/2026) ──
+  // Relatório sem valores não tem desconto; campanha sem modelo guardado não
+  // tem como refazer o texto.
+  const temDesconto = !lote.sem_valores && !!lote.modelo;
+  const [pendentesBase, setPendentesBase] = useState<PendenteComBase[] | null>(null);
+  const [erroDesconto, setErroDesconto] = useState(false);
+  const [descontos, setDescontos] = useState<Discounts | null>(null);
+  const [recalcular, setRecalcular] = useState(false);
+  const [manter, setManter] = useState(false);
+
+  useEffect(() => {
+    if (!temDesconto) return;
+    let vivo = true;
+    pendentesComBase(envios.map((e) => e.id))
+      .then((l) => {
+        if (!vivo) return;
+        setPendentesBase(l);
+        setDescontos(descontosDasVariaveis(l[0]?.variaveis));
+      })
+      .catch((err) => { console.error('[CampanhaFacil] desconto da campanha:', err); if (vivo) setErroDesconto(true); });
+    return () => { vivo = false; };
+  }, [envios, temDesconto]);
+
+  const descontosOriginais = useMemo(() => descontosDasVariaveis(pendentesBase?.[0]?.variaveis), [pendentesBase]);
+  const motivoDesconto = pendentesBase ? motivoSemDesconto(pendentesBase) : null;
+  const descontoMudou = !motivoDesconto && !!descontos && !!descontosOriginais && !descontosIguais(descontos, descontosOriginais);
+  // A parcela mínima olha a mensagem que vai valer.
+  const modeloDaConta = modeloMudou && !problemaModelo ? modelo : (lote.modelo ?? '');
+  const recalculo = useMemo(() => {
+    if (!descontoMudou || !pendentesBase || !descontos) return null;
+    return recalcularPendentes(pendentesBase, modeloDaConta, descontos, { recalcular, manter });
+  }, [descontoMudou, pendentesBase, descontos, modeloDaConta, recalcular, manter]);
+  /** A primeira pendente com o desconto novo: o líder confere antes de salvar. */
+  const exemploDesconto = useMemo(() => {
+    const p = pendentesBase?.[0];
+    const nova = recalculo?.novas.find((x) => x.id === p?.id);
+    if (!p?.variaveis || !nova) return null;
+    return CampaignCore.renderTemplate(modeloDaConta, { ...p.variaveis, ...nova.variaveis });
+  }, [pendentesBase, recalculo, modeloDaConta]);
+  const descontoTrava = descontoMudou && (!recalculo || recalculo.travadas > 0);
+
+  const podeSalvar = !!partes && !problemaModelo && !!titulo.trim() && (pendentes === 0 || escolhidos.length > 0)
+    && !descontoTrava;
 
   async function salvar(liberar: boolean) {
     if (!partes) return;
     setSalvando(true);
     try {
-      await onSalvar({ titulo: titulo.trim(), modelo: modeloMudou ? modelo : null, partes }, liberar);
+      await onSalvar({
+        titulo: titulo.trim(), modelo: modeloMudou ? modelo : null, partes,
+        variaveis: descontoMudou && recalculo ? recalculo.novas : null,
+      }, liberar);
     } finally {
       setSalvando(false);
     }
@@ -1029,6 +1090,94 @@ function DialogoEditarCampanha({ lote, envios, operadoresDoSetor, onFechar, onSa
             </p>
           )}
         </div>
+
+        {temDesconto && (
+          <div className="space-y-2">
+            <p className="text-xs font-medium">Desconto</p>
+            {erroDesconto ? (
+              <p className="text-xs text-destructive">Não foi possível carregar o desconto da campanha. Feche e tente de novo.</p>
+            ) : !pendentesBase ? (
+              <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" /> Carregando…
+              </div>
+            ) : motivoDesconto || !descontos || !descontosOriginais ? (
+              <p className="text-xs text-muted-foreground">{motivoDesconto}</p>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {DISCOUNT_FIELDS.map(([key, label, afeta]) => {
+                    const mudou = Number(descontos[key]) !== Number(descontosOriginais[key]);
+                    return (
+                      <label
+                        key={key}
+                        className={cn(
+                          'flex min-w-0 flex-col gap-1 rounded-md border px-2.5 py-2 text-xs',
+                          mudou ? 'border-primary' : 'border-border',
+                        )}
+                      >
+                        <span className="truncate text-muted-foreground" title={label}>{label}</span>
+                        <CampoPercentual
+                          rotulo={label}
+                          valor={descontos[key]}
+                          aoMudar={(v) => setDescontos((d) => (d ? { ...d, [key]: v } : d))}
+                        />
+                        <span className="truncate whitespace-nowrap text-[10px] leading-tight text-muted-foreground/80" title={`Afeta: ${afeta}`}>
+                          {mudou ? `Era ${textoDoPercentual(descontosOriginais[key])}%` : afeta}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Vale só para esta campanha e só para as {n(pendentesBase.length)} mensagens pendentes. As já enviadas
+                  não mudam, e as configurações de desconto do setor também não.
+                  {descontoMudou && ' Mensagem pendente editada à mão volta ao texto da campanha, já com o valor novo.'}
+                </p>
+                {descontoMudou && (
+                  <Button
+                    variant="ghost" size="sm" className="h-7 px-2 text-xs"
+                    onClick={() => { setDescontos({ ...descontosOriginais }); setRecalcular(false); setManter(false); }}
+                  >
+                    Voltar ao desconto da campanha
+                  </Button>
+                )}
+                {recalculo && recalculo.comParcelaBaixa > 0 && (
+                  <div className="space-y-1.5 rounded-md border border-warning/40 bg-warning/5 p-2.5 text-xs">
+                    <p className="font-medium">
+                      Com este desconto, {n(recalculo.comParcelaBaixa)} {recalculo.comParcelaBaixa === 1 ? 'cliente fica' : 'clientes ficam'} com
+                      parcela abaixo de {CampaignCore.formatCurrency(PARCELA_MINIMA)}.
+                    </p>
+                    {(recalculo.contagem.recalculaveis > 0 || recalcular) && (
+                      <label className="flex cursor-pointer items-center gap-2">
+                        <Checkbox checked={recalcular} onCheckedChange={(v) => setRecalcular(v === true)} />
+                        Refazer o parcelamento em menos vezes, sem mudar o total
+                      </label>
+                    )}
+                    {(recalculo.contagem.mantiveis > 0 || manter) && (
+                      <label className="flex cursor-pointer items-center gap-2">
+                        <Checkbox checked={manter} onCheckedChange={(v) => setManter(v === true)} />
+                        Manter a parcela baixa mesmo assim (Pix Automático e Cartão Recorrente não aceitam)
+                      </label>
+                    )}
+                    {recalculo.travadas > 0 && (
+                      <p className="text-destructive">
+                        {n(recalculo.travadas)} {recalculo.travadas === 1 ? 'mensagem ainda trava' : 'mensagens ainda travam'}: mude o desconto ou a mensagem para salvar.
+                      </p>
+                    )}
+                  </div>
+                )}
+                {exemploDesconto && !descontoTrava && (
+                  <div className="space-y-1">
+                    <p className="text-[11px] font-medium text-muted-foreground">Como fica a primeira mensagem pendente</p>
+                    <p className="max-h-40 overflow-y-auto whitespace-pre-wrap rounded-md border border-border bg-muted/40 p-2.5 text-xs leading-relaxed">
+                      {exemploDesconto}
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
 
         <div className="space-y-1.5">
           <p className="text-xs font-medium">Quem recebe</p>

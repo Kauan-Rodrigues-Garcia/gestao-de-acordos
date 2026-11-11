@@ -50,20 +50,11 @@ import { MinhasCampanhas } from './HistoricoCampanhas';
 import { JanelaDaMensagem } from './JanelaDaMensagem';
 import { exemploDaMensagem } from './detalheDasVariaveis';
 import { CampoPercentual } from './CampoPercentual';
+import { DISCOUNT_FIELDS } from './descontoDaEdicao';
 import { textoDoPercentual } from './percentual';
 import { fraseRecebidos, horaDe, type Recebimento } from './jaRecebeu';
 import { telefoneLegivel } from '@/pages/CampanhasWhatsapp/whatsapp';
 
-/** Cada %, e o que ele muda (21/10/2026): um desconto, um grupo de variáveis. */
-const DISCOUNT_FIELDS: [keyof typeof CampaignCore.DEFAULT_DISCOUNTS, string, string][] = [
-  ['overdue', 'Atrasadas', 'Todas e 1 parcela'],
-  ['settlement', 'Quitação', 'Pix e cartão'],
-  ['interest', 'Juros', 'Saldo com juros'],
-  ['bundle', 'Junção', 'À vista, 6x e 12x'],
-  ['annual', 'Anual', 'À vista e cartão'],
-  ['pix_automatico', 'Pix Automático', 'Com desconto e só a parcela'],
-  ['cartao_recorrente', 'Cartão Recorrente', 'Com desconto e só a parcela'],
-];
 
 export default function CampanhaFacil() {
   const { empresa } = useEmpresa();
