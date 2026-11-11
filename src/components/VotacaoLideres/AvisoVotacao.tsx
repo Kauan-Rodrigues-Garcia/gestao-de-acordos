@@ -45,7 +45,11 @@ const gravar = (chave: string, v: string) => { try { localStorage.setItem(chave,
 const chaveVisto = (id: string) => `votacao-lideres:resultado-visto:${id}`;
 const chaveMinimizado = (id: string) => `votacao-lideres:minimizado:${id}`;
 
-export function AvisoVotacao({ recuoEsquerda }: { recuoEsquerda: number }) {
+/**
+ * `acimaDoRodape`: só no app do celular (11/11/2026 — o card não existia lá e
+ * os líderes não viam a votação). Ver `CardDaVotacao`.
+ */
+export function AvisoVotacao({ recuoEsquerda, acimaDoRodape }: { recuoEsquerda: number; acimaDoRodape?: number }) {
   const { perfil } = useAuth();
   const eu = perfil?.id ?? null;
   const ehDiretoria = perfil?.perfil === 'diretoria';
@@ -140,7 +144,7 @@ export function AvisoVotacao({ recuoEsquerda }: { recuoEsquerda: number }) {
   return (
     <Suspense fallback={null}>
       {alvo && !votando && !vendo && !apurando && (
-        <CardDaVotacao tipo={alvo.tipo} titulo={alvo.titulo} minimizado={minimizado} recuoEsquerda={recuoEsquerda}
+        <CardDaVotacao tipo={alvo.tipo} titulo={alvo.titulo} minimizado={minimizado} recuoEsquerda={recuoEsquerda} acimaDoRodape={acimaDoRodape}
           onAbrir={() => { void abrir(); }} onMinimizar={() => minimizar(true)} onExpandir={() => minimizar(false)}
           onDispensar={alvo.tipo === 'resultado' ? () => marcarVisto(alvo.id) : undefined} />
       )}

@@ -31,6 +31,7 @@ import { useAvisos } from './useAvisos';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { getImpersonacaoAtiva, sairImpersonacao } from '@/services/impersonacao.service';
 import { ChatDoApp } from './comum/ChatDoApp';
+import { AvisoVotacao } from '@/components/VotacaoLideres/AvisoVotacao';
 import { InterruptorUnidade, TrocaDeVisao } from './comum/Topo';
 import { ResumoDaVisao } from './ResumoDaVisao';
 import { acessoDasVisoes, rotaDaVisao, visaoDaBusca } from '@/lib/mobile/visoes';
@@ -228,6 +229,9 @@ function TelaDoOperador() {
 
       {/* O chat do gestão, no canto (05/10/2026). */}
       <ChatDoApp />
+      {/* Votação da Liderança (11/11/2026): o card só existia no site. Quem
+          não participa de nada não vê nada. */}
+      <AvisoVotacao recuoEsquerda={16} acimaDoRodape={0} />
     </div>
   );
 }

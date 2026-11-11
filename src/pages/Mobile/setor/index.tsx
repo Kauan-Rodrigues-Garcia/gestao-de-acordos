@@ -22,6 +22,7 @@ import { getImpersonacaoAtiva, sairImpersonacao } from '@/services/impersonacao.
 import type { EscopoAnalitico } from '@/services/analitico/escopoAnalitico';
 import { FotoOuLogo, FundoVivo } from '../comum/partesComuns';
 import { ChatDoApp } from '../comum/ChatDoApp';
+import { AvisoVotacao } from '@/components/VotacaoLideres/AvisoVotacao';
 import { InterruptorUnidade, TrocaDeVisao } from '../comum/Topo';
 import { BotaoInstalar, PassoIPhone } from '../equipe/InstalarApp';
 import { IconeAba } from '../equipe/partes';
@@ -198,6 +199,8 @@ function TelaDoSetor() {
 
       <PassoIPhone aberto={passoIPhone} onFechar={() => setPassoIPhone(false)} />
       <ChatDoApp acimaDoRodape={temSetor ? 72 : 0} />
+      {/* Votação da Liderança (11/11/2026): o card só existia no site. */}
+      <AvisoVotacao recuoEsquerda={16} acimaDoRodape={temSetor ? 72 : 0} />
 
       {temSetor && !tela.carregando && (
         <nav className="e-abas" aria-label="Abas" style={{ gridTemplateColumns: `repeat(${abas.length}, 1fr)` }}>

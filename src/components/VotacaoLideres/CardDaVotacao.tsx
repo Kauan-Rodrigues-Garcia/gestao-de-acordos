@@ -37,16 +37,25 @@ interface Props {
   onDispensar?: () => void;
   /** Recuo do menu lateral (px), como o dock de autorizações. */
   recuoEsquerda?: number;
+  /**
+   * App do celular (11/11/2026): quanto subir o card, em px, acima de uma barra
+   * fixa embaixo (as abas da equipe/setor). Presente = conta também a margem
+   * segura do iPhone, como a bolha do chat.
+   */
+  acimaDoRodape?: number;
   demo?: boolean;
 }
 
-export function CardDaVotacao({ tipo, titulo, minimizado, onAbrir, onMinimizar, onExpandir, onDispensar, recuoEsquerda = 16, demo }: Props) {
+export function CardDaVotacao({ tipo, titulo, minimizado, onAbrir, onMinimizar, onExpandir, onDispensar, recuoEsquerda = 16, acimaDoRodape, demo }: Props) {
   const votar = tipo === 'votar';
   const t = TEXTOS[tipo];
   const Icone = tipo === 'votar' ? Vote : tipo === 'apurar' ? Scale : Trophy;
   return (
     <div className="fixed bottom-4 left-4 z-[45] print:hidden md:left-[var(--recuo-votacao)]"
-      style={{ '--recuo-votacao': `${recuoEsquerda}px` } as React.CSSProperties}>
+      style={{
+        '--recuo-votacao': `${recuoEsquerda}px`,
+        ...(acimaDoRodape !== undefined ? { bottom: `calc(env(safe-area-inset-bottom) + ${16 + acimaDoRodape}px)` } : {}),
+      } as React.CSSProperties}>
       <AnimatePresence mode="wait">
         {minimizado ? (
           <motion.button key="pilula" type="button" onClick={onExpandir}
