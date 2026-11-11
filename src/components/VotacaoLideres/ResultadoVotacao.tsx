@@ -54,6 +54,17 @@ export function ResultadoVotacao({ cedula, resultados, pessoas, meus, demo = fal
   }, [apurando, ordemFixa.length]);
   useEffect(() => { setVerTodos(false); }, [idx]);
 
+  // Trocou de pergunta: volta ao topo (11/11/2026). No celular a lista empurra a
+  // tela para baixo, e a próxima pergunta abria no meio, sem o título.
+  const raiz = useRef<HTMLDivElement>(null);
+  const primeira = useRef(true);
+  useEffect(() => {
+    if (primeira.current) { primeira.current = false; return; }
+    // Quem rola é o <main> da tela (TelaResultado / TelaVotacao), não a página.
+    const rolagem = raiz.current?.closest('main');
+    if (rolagem) rolagem.scrollTop = 0;
+  }, [idx]);
+
   // Fechou a tela no meio do suspense: o temporizador não sobra.
   const suspense = useRef(0);
   useEffect(() => () => window.clearTimeout(suspense.current), []);
@@ -82,7 +93,7 @@ export function ResultadoVotacao({ cedula, resultados, pessoas, meus, demo = fal
   }, [idx, fim, revelados, revelar, ir]);
 
   return (
-    <div className="mx-auto flex min-h-full max-w-3xl flex-col gap-5 px-4 py-6 sm:px-6">
+    <div ref={raiz} className="mx-auto flex min-h-full max-w-3xl flex-col gap-5 px-4 pt-6 sm:px-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-lg font-bold">Resultado</h2>
@@ -233,7 +244,9 @@ export function ResultadoVotacao({ cedula, resultados, pessoas, meus, demo = fal
         )}
       </AnimatePresence>
 
-      <div className="flex items-center justify-between gap-2 border-t pt-3">
+      {/* Grudada no pé (11/11/2026): no celular, depois de revelar, a lista de votos
+          empurrava «Próxima» para fora da tela. */}
+      <div className="sticky bottom-0 -mx-4 flex items-center justify-between gap-2 border-t bg-background px-4 py-3 sm:-mx-6 sm:px-6">
         <Button variant="ghost" className="gap-1.5" disabled={idx === 0 || apurando} onClick={() => ir(idx - 1)}><ChevronLeft className="h-4 w-4" /> Anterior</Button>
         <span className="hidden text-xs text-muted-foreground sm:inline">Espaço revela e avança</span>
         <Button variant={revelado || idx === fim ? 'default' : 'ghost'} className="gap-1.5" disabled={idx === fim || apurando} onClick={() => ir(idx + 1)}>

@@ -115,7 +115,8 @@ describe('PainelVotacoes', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Apurar e liberar o resultado/ }));
 
     const tela = await screen.findByRole('dialog', { name: /Apuração/ });
-    const liberar = within(tela).getByRole('button', { name: /Liberar o resultado/ }) as HTMLButtonElement;
+    // A apuração chega do banco depois que a tela abre: espera o botão aparecer.
+    const liberar = await within(tela).findByRole('button', { name: /Liberar o resultado/ }) as HTMLButtonElement;
     expect(liberar.disabled).toBe(true);
     expect(within(tela).getByText(/Falta decidir 1 categoria/)).toBeTruthy();
 

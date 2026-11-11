@@ -139,6 +139,12 @@ export function TelaVotacao({ cedula, pessoas, eleitorId, semente, formato = 'ca
   }, [fechou, cedula, pessoas, eleitorId, semente, meus]);
   const finais = useMemo(() => aplicarDesempates(apuracao, desempates), [apuracao, desempates]);
 
+  // Cada etapa começa do topo (11/11/2026): o «Começar» fica no pé da abertura,
+  // e no celular a rolagem de lá passava para as categorias, que abriam no meio,
+  // sem o título e as instruções.
+  const corpo = useRef<HTMLElement>(null);
+  useEffect(() => { if (corpo.current) corpo.current.scrollTop = 0; }, [etapa]);
+
   // Trava a rolagem da página de trás enquanto a votação está aberta.
   useEffect(() => {
     const antes = document.body.style.overflow;
@@ -202,7 +208,7 @@ export function TelaVotacao({ cedula, pessoas, eleitorId, semente, formato = 'ca
         </div>
       )}
 
-      <main className="min-h-0 flex-1 overflow-y-auto">
+      <main ref={corpo} className="min-h-0 flex-1 overflow-y-auto">
         <AnimatePresence mode="wait">
           {etapa === 'abertura' && (
             <motion.section key="abertura" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }}
