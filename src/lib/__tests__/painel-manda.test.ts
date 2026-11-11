@@ -244,6 +244,13 @@ const EXCECOES: Record<string, Excecao> = {
     linhas: 1, familia: 'definicao-ou-dado',
     motivo: 'exclui admin da LISTA de quem pode ser cadastrado como atendente. Filtro de cadastro, não de acesso.',
   },
+  'components/VotacaoLideres/AvisoVotacao.tsx': {
+    linhas: 1, familia: 'definicao-ou-dado',
+    motivo: 'espelho de `fn_vl_eh_diretoria` (09/11/2026): quem apura a Votação da Liderança é decidido no BANCO '
+      + 'pelo cargo diretoria, e não por chave — uma chave no painel acenderia o card «Abrir a apuração» para '
+      + 'quem o servidor recusa. A linha só decide se vale pedir `fn_votacao_lideranca_listar`; não libera nada: '
+      + 'desempatar e liberar o resultado são barrados no banco. O super_admin apura por Configurações.',
+  },
 
   /*
    * ── Dívida: ZERO ──────────────────────────────────────────────────────────
