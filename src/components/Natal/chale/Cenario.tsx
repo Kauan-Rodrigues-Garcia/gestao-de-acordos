@@ -16,7 +16,6 @@
  */
 import { memo, useEffect, useRef } from 'react';
 import { agoraDoServidor } from '@/components/Sirene/sirene';
-import { ninguemOlhando, ouvirAtencao } from '@/lib/atencao';
 import { cn } from '@/lib/utils';
 import { acasoDa, varsDaLampada } from '../piscaPisca';
 import { Cx, D } from './pecas';
@@ -710,8 +709,13 @@ function pontoDaTv(agoraMs: number, duracao: number): number {
  * O que passa na TV: um vídeo de 60 × 60 que dá a volta a cada hora e meia,
  * no MESMO ponto para todo mundo — ninguém conversa com ninguém: a posição é a
  * hora do banco (`agoraDoServidor`, a mesma da sirene) dividida pela duração.
- * A cada 30 s confere se escorregou. Com ninguém olhando, no modo leve ou com a
- * TV fora do ar (o Grinch a derrubou), pausa; na volta, pula para o ponto certo.
+ * A cada 30 s confere se escorregou. Pausa só no modo leve ou com a TV fora do
+ * ar (o Grinch a derrubou); na volta, pula para o ponto certo.
+ *
+ * NÃO segue o «ninguém olhando» (`lib/atencao.ts`), de propósito (Cleber,
+ * 11/11/2026): quem quiser assiste com a janela em outra tela. Se o navegador
+ * pausar sozinho com a aba escondida, ao voltar ela (`visibilitychange`) o
+ * vídeo pula para o ponto de todo mundo.
  */
 const VideoDaTv = memo(function VideoDaTv({ parado }: { parado: boolean }) {
   const ref = useRef<HTMLVideoElement>(null);
@@ -726,15 +730,15 @@ const VideoDaTv = memo(function VideoDaTv({ parado }: { parado: boolean }) {
       if (Math.min(dif, d - dif) > TOLERANCIA_DA_TV) v.currentTime = alvo;
     };
     const conferir = () => {
-      if (parado || ninguemOlhando()) { v.pause(); return; }
+      if (parado) { v.pause(); return; }
       acertar();
       v.play().catch(() => { /* sem permissão para tocar: fica no quadro parado */ });
     };
     v.addEventListener('loadedmetadata', conferir);
-    const pararDeOuvir = ouvirAtencao(conferir);
+    document.addEventListener('visibilitychange', conferir);
     const id = window.setInterval(() => { if (!v.paused) acertar(); }, 30_000);
     conferir();
-    return () => { v.removeEventListener('loadedmetadata', conferir); pararDeOuvir(); window.clearInterval(id); v.pause(); };
+    return () => { v.removeEventListener('loadedmetadata', conferir); document.removeEventListener('visibilitychange', conferir); window.clearInterval(id); v.pause(); };
   }, [parado]);
   return (
     <video ref={ref} className="ch-tv-video" src={VIDEO_DA_TV} muted loop playsInline preload="metadata"
@@ -806,7 +810,7 @@ export function Tv({ bag, leve }: { bag: boolean; leve: boolean }) {
           <rect x={399} y={146.6} width={6} height={2.4} rx={0.8} fill="#2A1810" /><rect x={455} y={146.6} width={6} height={2.4} rx={0.8} fill="#2A1810" />
         </D>
         {/* a tela: o vídeo, a faixa do tubo, o chuvisco (na bagunça) e o reflexo do vidro */}
-        <Cx x={tx} y={ty} w={l} h={l} className="ch-tv-tela">
+        <Cx x={tx} y={ty} w={l} h={l} className="ch-tv-tela" data-nao-pausa="">
           <VideoDaTv parado={bag || leve} />
           <D x={tx} y={ty - 8} w={l} h={8} className="ch-tv-faixa"><rect x={tx} y={ty - 8} width={l} height={8} fill="#FFFFFF" opacity={0.12} /></D>
           {bag && <Chuvisco />}
