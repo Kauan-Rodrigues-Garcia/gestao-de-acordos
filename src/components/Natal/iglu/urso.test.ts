@@ -6,7 +6,7 @@ import {
 } from './urso';
 
 describe('as visitas do urso', () => {
-  it('são raras: perto de uma janela em cada VISITA_A_CADA', () => {
+  it('acontecem em perto de uma janela em cada VISITA_A_CADA', () => {
     const n = 4000;
     let com = 0;
     for (let j = 0; j < n; j++) if (visitaDaJanela(j) !== null) com++;
@@ -42,8 +42,9 @@ describe('as visitas do urso', () => {
 });
 
 describe('o urso pescando', () => {
-  it('sai mais vezes: uma por hora, em média (umas nove no expediente)', () => {
-    expect(JANELA_MS * VISITA_A_CADA).toBe(60 * 60_000);
+  it('sai mais vezes: duas por hora (umas dezoito no expediente), 4 min pescando', () => {
+    expect(JANELA_MS * VISITA_A_CADA).toBe(30 * 60_000);
+    expect(PESCANDO_S).toBe(240);
   });
 
   it('de tempos em tempos um peixe belisca: dois ciclos em cada três, e cabe no ciclo', () => {

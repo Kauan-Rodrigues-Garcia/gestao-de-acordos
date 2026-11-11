@@ -2,9 +2,26 @@
  * O chalé de Natal no alto de Acordos (`Chale.tsx`). Fica na camada do Natal
  * (`.nt-camada`, que tem altura 0 e deixa passar o clique): a caixa vai do
  * alto do `<main>` até o chão (a linha das abas). Só a lareira pega o mouse.
+ *
+ * ## O palco (11/11/2026)
+ *
+ * `.ch-palco` é o quadro de 600 × 176 (mais o que sobe até a barra e o anexo
+ * à direita), escalado para a altura da página. Dentro dele tudo é posicionado
+ * nas coordenadas do quadro (`pecas.tsx`): `.ch-d` é um desenho (um `<svg>`),
+ * `.ch-cx` uma caixa que agrupa.
+ *
+ * A REGRA DESTE ARQUIVO: toda animação daqui é de `transform` ou `opacity`
+ * numa caixa HTML (um `<svg>` inteiro conta), uma só por elemento, sem
+ * variável nos quadros-chave. É o que a placa de vídeo toca sozinha. Animação
+ * em `<g>`/`<path>` dentro de um SVG faz a página redesenhar o desenho todo a
+ * cada quadro — foi o que se mediu no Dashboard em 10/11. Nada de filtro.
  */
 .nt-chale { position: absolute; top: 0; pointer-events: none; }
-.nt-chale svg { display: block; overflow: visible; }
+.ch-palco { position: absolute; left: 0; top: 0; width: 0; height: 0; transform-origin: 0 0; }
+.ch-o { position: absolute; width: 0; height: 0; }
+.ch-cx { position: absolute; }
+.ch-d { position: absolute; display: block; overflow: visible; }
+.ch-defs { position: absolute; }
 
 /*
  * A parede (redesenho de 06/11/2026): papel de parede listrado e lambri NOS
@@ -15,253 +32,150 @@
 .nt-ch-parede { fill: color-mix(in oklab, var(--primary) 7%, var(--background)); }
 .nt-ch-listra { fill: color-mix(in oklab, var(--primary) 11%, var(--background)); opacity: .55; }
 .nt-ch-lambri { fill: color-mix(in oklab, var(--primary) 14%, var(--background)); }
-.nt-ch-painel { fill: none; stroke: color-mix(in oklab, var(--primary) 26%, var(--background)); stroke-width: 1; }
+.nt-ch-painel { fill: color-mix(in oklab, var(--primary) 11%, var(--background)); stroke: color-mix(in oklab, var(--primary) 26%, var(--background)); stroke-width: 1; }
+.nt-ch-painel-luz { fill: var(--background); opacity: .6; }
 .nt-ch-moldura { fill: color-mix(in oklab, var(--primary) 30%, var(--background)); }
+.nt-ch-moldura-luz { fill: var(--background); opacity: .45; }
 .nt-ch-rodape { fill: color-mix(in oklab, var(--primary) 34%, var(--background)); }
-/* O brilho do fogo na parede: pulsa com as chamas. */
-.nt-ch-luz-fogo { animation: nt-ch-luz-fogo 2.6s ease-in-out infinite; }
-@keyframes nt-ch-luz-fogo { 0%, 100% { opacity: .85; } 40% { opacity: 1; } 70% { opacity: .7; } }
 /* O presente na cor do Gestão. */
 .nt-ch-presente-gestao .frente, .nt-ch-presente-gestao .tampa { fill: var(--primary); }
 .nt-ch-presente-gestao .lado { fill: color-mix(in oklab, var(--primary) 70%, black); }
 
-/* A neve lá fora, as estrelas e as janelinhas acesas do vilarejo. */
-.nt-ch-floco { fill: #FFFFFF; animation: nt-ch-cai 4.5s linear infinite; }
-.nt-ch-estrelinha { animation: nt-ch-estrelinha 3.2s ease-in-out infinite; }
-@keyframes nt-ch-estrelinha { 0%, 100% { opacity: .9; } 50% { opacity: .25; } }
-.nt-ch-casinha { animation: nt-ch-casinha 4s ease-in-out infinite; }
-@keyframes nt-ch-casinha { 0%, 100% { opacity: 1; } 45% { opacity: .75; } 50% { opacity: .95; } }
-@keyframes nt-ch-cai { from { transform: translate(0, 0); } to { transform: translate(-6px, 74px); } }
+/* O clarão do fogo na parede: pulsa com as chamas. */
+.ch-luz-fogo { animation: ch-luz-fogo 2.6s ease-in-out infinite; }
+@keyframes ch-luz-fogo { 0%, 100% { opacity: .85; } 40% { opacity: 1; } 70% { opacity: .7; } }
 
-/* A poltrona balança para frente e para trás, apoiada no meio dos balanços. */
-.nt-ch-poltrona { transform-origin: 124px 176px; animation: nt-ch-balanca 3.6s ease-in-out infinite; }
-@keyframes nt-ch-balanca { 0%, 100% { transform: rotate(-4deg); } 50% { transform: rotate(4deg); } }
+/* ── A janela: o vidro recorta o que está lá fora. ───────────────────────── */
+.ch-vidro { overflow: hidden; border-radius: 1.6px; }
+.ch-estrelas { animation: ch-estrelas 3.2s ease-in-out infinite; }
+@keyframes ch-estrelas { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+/* A neve: a tira tem duas vezes a altura do vidro e desce uma altura, em laço. */
+.ch-neve-janela { animation: ch-neve-janela 9s linear infinite; }
+.ch-neve-janela.perto { animation-duration: 5.4s; }
+@keyframes ch-neve-janela { from { transform: translateY(0); } to { transform: translateY(51.2px); } }
 
-/* O gato: respira e mexe o rabo; o «z» sobe e some. */
-.nt-ch-gato-respira { transform-box: fill-box; transform-origin: 50% 100%; animation: nt-ch-respira 3s ease-in-out infinite; }
-@keyframes nt-ch-respira { 50% { transform: scale(1.03, 1.08); } }
-.nt-ch-gato-rabo { transform-box: fill-box; transform-origin: 0% 60%; animation: nt-ch-rabo 5s ease-in-out infinite; }
-@keyframes nt-ch-rabo { 0%, 70%, 100% { transform: rotate(0deg); } 78% { transform: rotate(-14deg); } 86% { transform: rotate(6deg); } }
-.nt-ch-zzz { font: 800 8px/1 system-ui, sans-serif; fill: #9AA3B5; animation: nt-ch-zzz 3.2s ease-out infinite; }
-@keyframes nt-ch-zzz { 0% { opacity: 0; transform: translate(0, 0); } 30% { opacity: 1; } 100% { opacity: 0; transform: translate(6px, -12px); } }
+/* ── A mesinha: o vapor do chocolate. ────────────────────────────────────── */
+.ch-vapor { animation: ch-vapor 3.4s ease-in-out infinite; }
+@keyframes ch-vapor { 0% { opacity: 0; transform: translateY(3px); } 35% { opacity: .9; } 100% { opacity: 0; transform: translateY(-6px); } }
 
-/* O fogo: as chamas tremem (cada uma no seu ritmo), o calor pulsa, as brasas sobem. */
-.nt-ch-lareira { pointer-events: none; }
-.nt-ch-fogo { pointer-events: auto; cursor: default; }
-.nt-ch-chamas { transform-origin: 300px 166px; transition: transform 0.6s cubic-bezier(.3, 1.4, .5, 1); }
-.nt-ch-fogo:hover .nt-ch-chamas { transform: scale(1.12, 1.22); }
-.nt-ch-chama { transform-origin: 300px 166px; }
-.nt-ch-chama.c1 { animation: nt-ch-chama1 0.9s ease-in-out infinite alternate; }
-.nt-ch-chama.c2 { animation: nt-ch-chama2 0.7s ease-in-out infinite alternate; }
-.nt-ch-chama.c3 { animation: nt-ch-chama3 0.55s ease-in-out infinite alternate; }
-@keyframes nt-ch-chama1 { from { transform: scale(1, 0.94) skewX(-3deg); } to { transform: scale(1.04, 1.06) skewX(3deg); } }
-@keyframes nt-ch-chama2 { from { transform: scale(1.02, 1.05) skewX(4deg); } to { transform: scale(0.97, 0.92) skewX(-4deg); } }
-@keyframes nt-ch-chama3 { from { transform: scale(0.95, 0.9) skewX(-5deg); } to { transform: scale(1.05, 1.1) skewX(5deg); } }
-.nt-ch-calor { transform-box: fill-box; transform-origin: center; animation: nt-ch-calor 2.2s ease-in-out infinite; opacity: 0.85; }
-.nt-ch-fogo:hover .nt-ch-calor { opacity: 1; }
-@keyframes nt-ch-calor { 0%, 100% { transform: scale(1); } 40% { transform: scale(1.08); } 70% { transform: scale(0.96); } }
-.nt-ch-brasa { fill: #FFC14D; animation: nt-ch-brasa 2.4s ease-out infinite; }
-@keyframes nt-ch-brasa { 0% { opacity: 0; transform: translate(0, 0); } 15% { opacity: 1; } 100% { opacity: 0; transform: translate(6px, -54px); } }
-.nt-ch-brasas-chao { animation: nt-ch-brasas 1.6s ease-in-out infinite alternate; }
-@keyframes nt-ch-brasas { from { opacity: 0.55; } to { opacity: 1; } }
-.nt-ch-reflexo { opacity: 0.22; animation: nt-ch-reflexo 2.2s ease-in-out infinite; }
-@keyframes nt-ch-reflexo { 50% { opacity: 0.36; } }
+/* ── O relógio: o pêndulo. ───────────────────────────────────────────────── */
+.ch-pendulo { animation: ch-pendulo 1.1s ease-in-out infinite alternate; }
+@keyframes ch-pendulo { from { transform: rotate(-15deg); } to { transform: rotate(15deg); } }
 
-/* As velas. */
-.nt-ch-vela { transform-box: fill-box; transform-origin: 50% 100%; animation: nt-ch-vela 0.8s ease-in-out infinite alternate; }
-@keyframes nt-ch-vela { from { transform: scale(0.9, 0.95) skewX(-4deg); } to { transform: scale(1.05, 1.08) skewX(4deg); } }
-.nt-ch-vela-brilho { opacity: 0.3; animation: nt-ch-vela-brilho 1.6s ease-in-out infinite; }
-@keyframes nt-ch-vela-brilho { 50% { opacity: 0.5; } }
+/* ── A poltrona balança para frente e para trás, apoiada no meio dos balanços. */
+.ch-balanca { animation: ch-balanca 3.6s ease-in-out infinite; }
+@keyframes ch-balanca { 0%, 100% { transform: rotate(-4deg); } 50% { transform: rotate(4deg); } }
 
-/* As luzinhas da cornija e da árvore: o pisca vem do controlador (`piscaPisca.ts`). */
-.nt-ch-luz { --min: .45; }
-.nt-ch-luz-halo { --min: 0; }
-[data-pisca] .nt-ch-luz-halo { --min: 0; }
-.nt-ch-estrela path { transform-box: fill-box; transform-origin: center; animation: nt-ch-estrela 3s ease-in-out infinite; }
-/* Sem o `drop-shadow` no quadro do meio (09/11/2026): filtro animado refaz o desfoque a cada quadro. */
-@keyframes nt-ch-estrela { 50% { transform: scale(1.12) rotate(8deg); } }
+/* ── O gato: respira e mexe o rabo; o «z» sobe e some. ───────────────────── */
+.ch-gato { transition: transform .45s ease-in, opacity .4s; }
+.ch-gato-respira { animation: ch-respira 3s ease-in-out infinite; }
+@keyframes ch-respira { 50% { transform: scale(1.03, 1.08); } }
+.ch-gato-rabo { animation: ch-rabo 5s ease-in-out infinite; }
+@keyframes ch-rabo { 0%, 70%, 100% { transform: rotate(0deg); } 78% { transform: rotate(-14deg); } 86% { transform: rotate(6deg); } }
+.ch-zzz { position: absolute; font: 800 8px/1 system-ui, sans-serif; color: #9AA3B5; animation: ch-zzz 3.2s ease-out infinite; }
+@keyframes ch-zzz { 0% { opacity: 0; transform: translate(0, 0); } 30% { opacity: 1; } 100% { opacity: 0; transform: translate(6px, -12px); } }
+.ch-gato-olhos-abertos, .ch-gato-espanto { opacity: 0; }
+.ch-gato-espanto { position: absolute; font: 900 15px/1 system-ui, sans-serif; color: #D5353A; }
+/* O susto: pula no lugar, de olho arregalado. E foge para baixo da poltrona. */
+.ch-gato.susto { transform: translateY(-7px) scale(1.05, 1.16); transition: transform .14s cubic-bezier(.3, 1.9, .5, 1); }
+.ch-gato.susto .ch-gato-olhos-abertos, .ch-gato.susto .ch-gato-espanto { opacity: 1; }
+.ch-gato.susto .ch-gato-olhos-fechados { opacity: 0; }
+.ch-gato.susto .ch-zzz, .ch-gato.fugiu .ch-zzz { animation: none; opacity: 0; }
+.ch-gato.fugiu { transform: translateX(-96px); opacity: 0; }
 
-/* Do teto: a bola e a estrela balançando. */
-.nt-ch-pendurado { animation: nt-ch-pendulo 4s ease-in-out infinite; }
-@keyframes nt-ch-pendulo { 0%, 100% { transform: rotate(-5deg); } 50% { transform: rotate(5deg); } }
+/* ── O fogo: as chamas tremem (cada uma no seu ritmo), o calor pulsa, as brasas sobem. */
+.ch-fogo { pointer-events: auto; cursor: default; overflow: hidden; border-radius: 50% 50% 0 0 / 31% 31% 0 0; }
+.ch-chamas { transition: transform .6s cubic-bezier(.3, 1.4, .5, 1); }
+.ch-fogo:hover .ch-chamas { transform: scale(1.12, 1.22); }
+.ch-chama.c1 { animation: ch-chama1 .9s ease-in-out infinite alternate; }
+.ch-chama.c2 { animation: ch-chama2 .7s ease-in-out infinite alternate; }
+.ch-chama.c3 { animation: ch-chama3 .55s ease-in-out infinite alternate; }
+@keyframes ch-chama1 { from { transform: scale(1, .94) skewX(-3deg); } to { transform: scale(1.04, 1.06) skewX(3deg); } }
+@keyframes ch-chama2 { from { transform: scale(1.02, 1.05) skewX(4deg); } to { transform: scale(.97, .92) skewX(-4deg); } }
+@keyframes ch-chama3 { from { transform: scale(.95, .9) skewX(-5deg); } to { transform: scale(1.05, 1.1) skewX(5deg); } }
+.ch-calor { opacity: .85; animation: ch-calor 2.2s ease-in-out infinite; }
+@keyframes ch-calor { 0%, 100% { transform: scale(1); } 40% { transform: scale(1.08); } 70% { transform: scale(.96); } }
+.ch-brasa { position: absolute; width: 2.6px; height: 2.6px; border-radius: 50%; background: #FFC14D; opacity: 0; animation: ch-brasa 2.4s ease-out infinite; }
+@keyframes ch-brasa { 0% { opacity: 0; transform: translate(0, 0); } 15% { opacity: 1; } 100% { opacity: 0; transform: translate(6px, -50px); } }
+.ch-reflexo { opacity: .22; animation: ch-reflexo 2.2s ease-in-out infinite; }
+@keyframes ch-reflexo { 50% { opacity: .36; } }
+
+/* ── As velas. ───────────────────────────────────────────────────────────── */
+.ch-vela-chama { transition: opacity .2s; animation: ch-vela .8s ease-in-out infinite alternate; }
+@keyframes ch-vela { from { transform: scale(.9, .95) skewX(-4deg); } to { transform: scale(1.05, 1.08) skewX(4deg); } }
+
+/* ── As luzinhas da cornija e da árvore: o pisca vem do controlador
+   (`piscaPisca.ts`). Cada lâmpada é uma caixa: o miolo claro dentro do brilho. */
+.ch-luzes { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+.ch-lampada { position: absolute; border-radius: 50%; --min: .28;
+  background: radial-gradient(circle, #fff 0 9%, var(--cor) 22% 34%, color-mix(in oklab, var(--cor) 55%, transparent) 48%, transparent 70%); }
+.ch-estrela { transition: opacity .3s; animation: ch-estrela 3s ease-in-out infinite; }
+@keyframes ch-estrela { 50% { transform: scale(1.12) rotate(8deg); } }
+
+/* ── Do teto: a bola e a estrela balançando. ─────────────────────────────── */
+.ch-pendurado { animation: ch-pendurado 4s ease-in-out infinite; }
+.ch-pendurado.p2 { animation-delay: -1.4s; }
+.ch-pendurado.p3 { animation-delay: -2.6s; }
+@keyframes ch-pendurado { 0%, 100% { transform: rotate(-5deg); } 50% { transform: rotate(5deg); } }
+
+/* ── A TV de tubo. ───────────────────────────────────────────────────────── */
+.ch-tv-tela { overflow: hidden; border-radius: 3.4px; animation: ch-tv-treme 4.6s steps(1, end) infinite; }
+/* O tubo treme de vez em quando. */
+@keyframes ch-tv-treme { 0%, 100% { opacity: 1; } 46% { opacity: .86; } 48% { opacity: 1; } 81% { opacity: .9; } 82% { opacity: 1; } }
+/* O vídeo (60 × 60) esticado na tela em pixels grandes, sem borrar. O `max-width`
+   desfaz o do Tailwind (`video { max-width: 100% }`): a caixa-mãe tem largura 0. */
+.ch-tv-video { position: absolute; display: block; max-width: none; max-height: none; object-fit: cover; image-rendering: pixelated; background: #0B1626; }
+/* A faixa clara que desce a tela. */
+.ch-tv-faixa { animation: ch-tv-faixa 3.6s linear infinite; }
+@keyframes ch-tv-faixa { from { transform: translateY(0); } to { transform: translateY(54px); } }
+.ch-tv-antena { transition: transform .4s cubic-bezier(.3, 1.6, .5, 1); }
+.ch-tv-chuvisco { animation: ch-tv-chuvisco .28s steps(1, end) infinite; }
+@keyframes ch-tv-chuvisco {
+  0% { transform: translate(0, 0); } 25% { transform: translate(-3px, 3px); }
+  50% { transform: translate(3px, -3px); } 75% { transform: translate(-2px, -4px); }
+}
+
+/* ── O anexo: o cavalinho de balanço. ────────────────────────────────────── */
+.ch-cavalinho { animation: ch-cavalinho 2.8s ease-in-out infinite; }
+@keyframes ch-cavalinho { 0%, 100% { transform: rotate(-5deg); } 50% { transform: rotate(5deg); } }
+
+/* ══ A bagunça ═══════════════════════════════════════════════════════════════
+ * Cada objeto tem a sua versão bagunçada (classe `bag`). A volta ao lugar é a
+ * mesma transição ao contrário — é o duende consertando. O atraso
+ * (`transition-delay`) só existe na ida: é o Grinch chegando em cada um, na
+ * hora marcada na gravação (`grinch/gravacao.ts`).
+ */
+.ch-bag { transition: transform .55s cubic-bezier(.3, 1.3, .5, 1), opacity .4s; }
+.ch-bag.tapete.bag { transform: translateX(16px) skewX(-24deg) scaleX(.78); }
+.ch-bag.poltrona.bag { transform: rotate(68deg) translate(8px, -4px); }
+.ch-bag.poltrona.bag .ch-balanca { animation: none; }
+.ch-bag.relogio.bag { transform: rotate(27deg); }
+.ch-bag.relogio.bag .ch-pendulo { animation: none; transform: rotate(-27deg); }
+.ch-bag.guirlanda.bag { transform: translate(10px, 22px) rotate(42deg); }
+.ch-bag.vela.v1.bag { transform: translateY(1px) rotate(-86deg); transition-delay: .16s; }
+.ch-bag.vela.v2.bag { transform: translateY(1px) rotate(84deg); }
+.ch-bag.vela.bag .ch-vela-chama { opacity: 0; animation: none; }
+/* As meias caem uma por uma, enquanto ele passa por baixo. */
+.ch-bag.meia { transition-timing-function: cubic-bezier(.5, 0, .6, 1.25); }
+.ch-bag.meia.m1.bag { transform: translate(-14px, 98px) rotate(-82deg); }
+.ch-bag.meia.m2.bag { transform: translate(-40px, 101px) rotate(-104deg); transition-delay: .62s; }
+.ch-bag.meia.m3.bag { transform: translate(18px, 98px) rotate(-98deg); transition-delay: 1.78s; }
+.ch-bag-bola .bola { transition: transform .7s cubic-bezier(.5, 0, .7, 1.4); }
+.ch-bag-bola .fio { transition: opacity .2s; }
+.ch-bag-bola.bag .bola { transform: translate(-30px, 122px) rotate(-200deg); }
+.ch-bag-bola.bag .fio { opacity: 0; }
+/* A TV: torta, a antena caída, fora do ar. */
+.ch-bag.tv.bag { transform: rotate(7deg); }
+.ch-bag.tv.bag .ch-tv-antena { transform: rotate(-26deg) translateY(2px); }
+.ch-bag.tv.bag .ch-tv-video, .ch-bag.tv.bag .ch-tv-faixa { visibility: hidden; }
+.ch-bag.presente.p1.bag { transform: scale(1.12, .62) skewX(-8deg); }
+.ch-bag.presente.p2.bag { transform: translate(94px, 22px) rotate(150deg); transition-duration: .7s; }
+.ch-bag.presente.p3.bag { transform: rotate(22deg) translateX(6px); transition-delay: .3s; }
+.ch-bag.arvore { transition-duration: .8s; }
+.ch-bag.arvore.bag { transform: rotate(17deg); }
+.ch-bag.arvore.bag .ch-estrela { opacity: 0; animation: none; }
+.ch-resto { animation: ch-resto-cai .5s cubic-bezier(.3, 1.4, .5, 1) both; }
+@keyframes ch-resto-cai { from { opacity: 0; transform: translateY(-14px); } to { opacity: 1; transform: none; } }
 
 /* Modo leve: o chalé fica, parado. */
 .nt-chale.leve * { animation: none !important; transition: none !important; }
-
-/* ══ O Grinch e os duendes (`grinch/`) ═══════════════════════════════════════
- * Tudo anda por `transform` e `opacity` — nada de filtro nem desfoque se
- * mexendo, para computador fraco aguentar. No modo leve (`.leve`) as
- * animações param, como o resto do chalé.
- */
-
-/* ── A bagunça: cada objeto tem a sua versão (classe `bag`). A volta ao lugar
-   é a mesma transição ao contrário — é o duende consertando. ────────────── */
-[class*="nt-bag-"] { transition: transform .55s cubic-bezier(.3, 1.3, .5, 1), opacity .4s; transform-box: fill-box; }
-.nt-bag-tapete { transform-origin: 50% 50%; }
-.nt-bag-tapete.bag { transform: translateX(16px) skewX(-24deg) scaleX(.78); }
-.nt-bag-poltrona { transform-origin: 94% 100%; }
-.nt-bag-poltrona.bag { transform: rotate(68deg) translate(8px, -4px); }
-.nt-bag-guirlanda { transform-origin: 50% 50%; }
-.nt-bag-guirlanda.bag { transform: translate(10px, 22px) rotate(42deg); }
-.nt-bag-vela { transform-origin: 50% 100%; }
-.nt-bag-vela.v1.bag { transform: translateY(1px) rotate(-86deg); }
-.nt-bag-vela.v2.bag { transform: translateY(1px) rotate(84deg); }
-.nt-bag-vela.bag .nt-ch-vela, .nt-bag-vela.bag .nt-ch-vela-brilho { opacity: 0 !important; animation: none; }
-.nt-bag-meia { transform-origin: 50% 0%; }
-.nt-bag-meia.m1.bag { transform: translate(-14px, 98px) rotate(-82deg); }
-.nt-bag-meia.m2.bag { transform: translate(20px, 100px) rotate(94deg); }
-.nt-bag-meia.m3.bag { transform: translate(18px, 98px) rotate(-98deg); }
-.nt-bag-bola .bola { transition: transform .7s cubic-bezier(.5, 0, .7, 1.4); transform-box: fill-box; transform-origin: 50% 50%; }
-.nt-bag-bola .fio { transition: opacity .2s; }
-.nt-bag-bola.bag .bola { transform: translate(-30px, 122px) rotate(-200deg); }
-.nt-bag-bola.bag .fio { opacity: 0; }
-.nt-bag-presentes .p1, .nt-bag-presentes .p2, .nt-bag-presentes .p3 { transition: transform .55s cubic-bezier(.3, 1.3, .5, 1); transform-box: fill-box; }
-.nt-bag-presentes .p1 { transform-origin: 50% 100%; }
-.nt-bag-presentes .p2 { transform-origin: 50% 50%; }
-.nt-bag-presentes .p3 { transform-origin: 50% 100%; }
-.nt-bag-presentes.bag .p1 { transform: scale(1.12, .62) skewX(-8deg); }
-.nt-bag-presentes.bag .p2 { transform: translate(52px, 46px) rotate(118deg) scale(.86, .7); }
-.nt-bag-presentes.bag .p3 { transform: translate(-58px, 2px) rotate(-38deg) scaleY(.78); }
-.nt-bag-presentes { transition: none; }
-.nt-bag-arvore { transform-origin: 50% 100%; }
-.nt-bag-arvore.bag { transform: rotate(-21deg) translateX(-4px); }
-.nt-bag-arvore.bag .nt-arvore-estrela { opacity: 0; }
-.nt-arvore-estrela { transition: opacity .3s; }
-.nt-restos .resto { animation: nt-resto-cai .5s cubic-bezier(.3, 1.4, .5, 1) both; }
-@keyframes nt-resto-cai { from { opacity: 0; transform: translateY(-14px); } to { opacity: 1; transform: none; } }
-/* O gato foge da briga e volta quando está tudo arrumado. */
-.nt-ch-gato { transition: transform .5s ease-in, opacity .4s; }
-.nt-ch-gato.fugiu { transform: translateX(-70px); opacity: 0; }
-
-/* ── A janela: trinca (desenhando) e, quebrada, os cacos voando. ─────────── */
-.nt-trincas { stroke-dasharray: 100; stroke-dashoffset: 0; }
-.nt-trincas.trincando { animation: nt-trinca .55s ease-out both; }
-@keyframes nt-trinca { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
-.nt-cacos-voando path { transform-box: fill-box; transform-origin: center; animation: nt-caco .8s cubic-bezier(.2, .6, .4, 1) both; }
-@keyframes nt-caco {
-  0% { transform: translate(0, 0) rotate(0); opacity: 1; }
-  100% { transform: translate(var(--dx), var(--dy)) rotate(260deg); opacity: 0; }
-}
-
-/* ── O Grinch: o rosto espiando, e o corpo inteiro entrando, posando e saindo. */
-.nt-grinch-espia { transform: translateY(42px); transition: transform 1.1s cubic-bezier(.3, 0, .2, 1); }
-.nt-grinch-espia.aparece { transform: translateY(0); animation: nt-grinch-olha 2.2s ease-in-out .9s infinite; }
-@keyframes nt-grinch-olha { 0%, 100% { transform: translateY(0) rotate(0); } 30% { transform: translateY(-1px) rotate(-3deg); } 65% { transform: translateY(0) rotate(3deg); } }
-
-.nt-grinch-inteiro { will-change: transform; }
-/* Pela janela: sai do vidro pequeno (lá fora), faz o arco e cai amassando. */
-.nt-grinch-inteiro.entra-janela { animation: nt-grinch-entra-janela .9s cubic-bezier(.4, 0, .6, 1) both; }
-@keyframes nt-grinch-entra-janela {
-  0% { transform: translate(118px, 70px) scale(.55); }
-  45% { transform: translate(176px, 52px) scale(.9) rotate(14deg); }
-  82% { transform: translate(226px, 174px) scale(1.12, .8) rotate(0); }
-  100% { transform: translate(226px, 174px) scale(1); }
-}
-/* Pela chaminé: cai de dentro da lareira, coberto de fuligem. */
-.nt-grinch-inteiro.entra-chamine { animation: nt-grinch-entra-chamine 1s cubic-bezier(.5, 0, .7, 1) both; }
-@keyframes nt-grinch-entra-chamine {
-  0% { transform: translate(300px, 150px) scale(.4); opacity: 0; }
-  30% { transform: translate(300px, 132px) scale(.8, 1.15); opacity: 1; }
-  80% { transform: translate(300px, 174px) scale(1.14, .8); }
-  100% { transform: translate(300px, 174px) scale(1); }
-}
-/* A pose no meio da bagunça: esfrega as mãos e balança, satisfeito. */
-.nt-grinch-inteiro.pose-janela { --px: 404px; }
-.nt-grinch-inteiro.pose-chamine { --px: 300px; }
-.nt-grinch-inteiro[class*="pose-"] { transform: translate(var(--px), 174px); animation: nt-grinch-pose-entra .35s ease-out both; }
-@keyframes nt-grinch-pose-entra { from { transform: translate(var(--px), 174px) scale(.9, 1.1); } to { transform: translate(var(--px), 174px) scale(1); } }
-[class*="pose-"] .nt-grinch-corpo { animation: nt-grinch-ri .5s ease-in-out infinite alternate; transform-box: fill-box; transform-origin: 50% 100%; }
-@keyframes nt-grinch-ri { from { transform: rotate(-3deg) translateY(0); } to { transform: rotate(3deg) translateY(-1.5px); } }
-[class*="pose-"] .nt-grinch-braco { animation: nt-grinch-esfrega .22s ease-in-out infinite alternate; transform-box: fill-box; }
-[class*="pose-"] .nt-grinch-braco.esq { transform-origin: 100% 0%; }
-[class*="pose-"] .nt-grinch-braco.dir { transform-origin: 0% 0%; animation-delay: -.11s; }
-@keyframes nt-grinch-esfrega { from { transform: rotate(-12deg); } to { transform: rotate(12deg); } }
-/* E vai embora por onde veio. */
-.nt-grinch-inteiro.sai-janela { animation: nt-grinch-sai-janela 1s cubic-bezier(.4, 0, .6, 1) both; }
-@keyframes nt-grinch-sai-janela {
-  0% { transform: translate(404px, 174px) scale(1, .82); }
-  15% { transform: translate(400px, 170px) scale(.92, 1.1); }
-  60% { transform: translate(230px, 30px) scale(.85) rotate(-16deg); }
-  100% { transform: translate(118px, 72px) scale(.4); opacity: 0; }
-}
-.nt-grinch-inteiro.sai-chamine { animation: nt-grinch-sai-chamine 1s cubic-bezier(.4, 0, .6, 1) both; }
-@keyframes nt-grinch-sai-chamine {
-  0% { transform: translate(300px, 174px) scale(1, .82); }
-  25% { transform: translate(300px, 168px) scale(.9, 1.15); }
-  100% { transform: translate(300px, 136px) scale(.35); opacity: 0; }
-}
-.nt-grinch-pernas { transform-box: fill-box; }
-
-/* ── A nuvem da briga ──────────────────────────────────────────────────── */
-.nt-briga { will-change: transform; }
-.nt-briga.inteiro { animation: nt-briga-anda-inteiro 4.6s ease-in-out both; }
-.nt-briga.compacto { animation: nt-briga-anda-compacto 4.6s ease-in-out both; }
-/* A opacidade fica cheia em todos os quadros: só no último a poeira baixa. */
-@keyframes nt-briga-anda-inteiro {
-  0% { transform: translate(226px, 136px) scale(.4); opacity: 1; }
-  8% { transform: translate(236px, 132px) scale(1.45); opacity: 1; }
-  24% { transform: translate(316px, 128px) scale(1.5); opacity: 1; }
-  40% { transform: translate(420px, 134px) scale(1.4); opacity: 1; }
-  56% { transform: translate(262px, 130px) scale(1.55); opacity: 1; }
-  74% { transform: translate(392px, 136px) scale(1.45); opacity: 1; }
-  92% { transform: translate(404px, 132px) scale(1.5); opacity: 1; }
-  100% { transform: translate(404px, 132px) scale(2); opacity: 0; }
-}
-@keyframes nt-briga-anda-compacto {
-  0% { transform: translate(300px, 136px) scale(.4); opacity: 1; }
-  10% { transform: translate(300px, 132px) scale(1.3); opacity: 1; }
-  30% { transform: translate(256px, 128px) scale(1.35); opacity: 1; }
-  50% { transform: translate(344px, 134px) scale(1.3); opacity: 1; }
-  70% { transform: translate(272px, 130px) scale(1.4); opacity: 1; }
-  92% { transform: translate(300px, 132px) scale(1.35); opacity: 1; }
-  100% { transform: translate(300px, 132px) scale(1.9); opacity: 0; }
-}
-.nt-briga-sacode { animation: nt-briga-sacode .16s linear infinite alternate; }
-@keyframes nt-briga-sacode { from { transform: translate(-1.5px, 1px) rotate(-2deg); } to { transform: translate(1.5px, -1px) rotate(2deg); } }
-.nt-briga-bolota { transform-box: fill-box; transform-origin: center; animation: nt-briga-bolota .32s ease-in-out infinite alternate; }
-@keyframes nt-briga-bolota { from { transform: scale(.92); } to { transform: scale(1.08); } }
-.nt-briga-riscos { animation: nt-briga-gira .6s linear infinite; }
-@keyframes nt-briga-gira { to { transform: rotate(360deg); } }
-.nt-briga-estrela { opacity: 0; animation: nt-briga-estrela .9s ease-out infinite; }
-@keyframes nt-briga-estrela {
-  0% { transform: translate(0, 0) rotate(0) scale(.2); opacity: 0; }
-  20% { opacity: 1; }
-  100% { transform: translate(var(--dx), var(--dy)) rotate(240deg) scale(1.1); opacity: 0; }
-}
-.nt-briga-escapa { opacity: 0; transform-box: fill-box; }
-.nt-briga-escapa.braco { animation: nt-briga-escapa 1.3s steps(1) infinite; }
-.nt-briga-escapa.pe { animation: nt-briga-escapa 1.3s steps(1) -.45s infinite; }
-.nt-briga-escapa.gorro { animation: nt-briga-escapa 1.3s steps(1) -.9s infinite; }
-@keyframes nt-briga-escapa { 0%, 62%, 100% { opacity: 0; } 30% { opacity: 1; } }
-.nt-briga-xinga { animation: nt-briga-xinga .7s steps(1) infinite; }
-@keyframes nt-briga-xinga { 0% { transform: translate(0, 0); opacity: 1; } 50% { transform: translate(6px, -12px); opacity: .0; } }
-
-/* A fuligem da chaminé: incha e some. */
-.nt-fuligem circle { transform-box: fill-box; transform-origin: center; animation: nt-fuligem 1s ease-out both; }
-@keyframes nt-fuligem { 0% { transform: scale(.2); opacity: .9; } 50% { opacity: .85; } 100% { transform: scale(1.8) translateY(-6px); opacity: 0; } }
-
-/* ── Os duendes ────────────────────────────────────────────────────────── */
-.nt-duende { transition-property: transform; transition-timing-function: linear; will-change: transform; }
-.nt-duende-vira { transition: transform .15s; }
-.nt-duende-perna { transform-box: fill-box; transform-origin: 50% 0%; }
-.nt-duende.anda .nt-duende-perna.a { animation: nt-duende-passo var(--passo, .34s) ease-in-out infinite alternate; }
-.nt-duende.anda .nt-duende-perna.b { animation: nt-duende-passo var(--passo, .34s) ease-in-out calc(var(--passo, .34s) * -1) infinite alternate; }
-@keyframes nt-duende-passo { from { transform: rotate(-22deg); } to { transform: rotate(22deg); } }
-.nt-duende.anda .nt-duende-pula { animation: nt-duende-pula var(--passo, .34s) ease-in-out infinite alternate; }
-@keyframes nt-duende-pula { from { transform: translateY(0); } to { transform: translateY(-1.6px); } }
-.nt-duende-braco { transform-box: fill-box; transform-origin: 10% 10%; }
-.nt-duende.conserta .nt-duende-braco { animation: nt-duende-trabalha .28s ease-in-out infinite alternate; }
-@keyframes nt-duende-trabalha { from { transform: rotate(-55deg); } to { transform: rotate(18deg); } }
-.nt-duende.conserta .nt-duende-pula { animation: nt-duende-esforco .28s ease-in-out infinite alternate; }
-@keyframes nt-duende-esforco { from { transform: scaleY(1); } to { transform: scaleY(.95); } }
-.nt-duende-faiscas path { opacity: 0; transform-box: fill-box; transform-origin: center; }
-.nt-duende.conserta .nt-duende-faiscas path { animation: nt-duende-faisca .56s ease-out infinite; }
-@keyframes nt-duende-faisca { 0% { opacity: 0; transform: scale(.3); } 40% { opacity: 1; transform: scale(1.1); } 100% { opacity: 0; transform: scale(.4) translateY(-4px); } }
-.nt-duende.parado .nt-duende-pula { animation: nt-duende-respira 1.6s ease-in-out infinite; }
-@keyframes nt-duende-respira { 50% { transform: translateY(-.6px); } }
-.nt-duende-olhos { transform-box: fill-box; transform-origin: center; animation: nt-duende-pisca 3.4s ease-in-out infinite; }
-@keyframes nt-duende-pisca { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.1); } }
-/* O balão: surge com um pulinho. */
-.nt-duende-balao { transform-box: fill-box; transform-origin: 50% 100%; animation: nt-duende-balao .3s cubic-bezier(.3, 1.6, .5, 1) both; }
-@keyframes nt-duende-balao { from { transform: scale(.3); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-.nt-duende-texto { font: 600 10px/1 system-ui, -apple-system, 'Segoe UI', sans-serif; fill: #1F2937; }

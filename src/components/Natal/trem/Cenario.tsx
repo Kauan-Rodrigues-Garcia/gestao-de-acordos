@@ -48,6 +48,8 @@ function Vilarejo() {
       <path d="M47 -22 L54 -46 L61 -22 Z" fill="#3F9A5B" />
       {/* a casinha de gengibre */}
       <rect x={-30} y={-34} width={52} height={34} rx={3} fill="#C9844A" />
+      <rect x={12} y={-32} width={10} height={32} fill="#000000" opacity={0.1} />
+      <rect x={-30} y={-34} width={52} height={5} fill="#000000" opacity={0.14} />
       <path d="M-36 -32 L-4 -58 L28 -32 Z" fill="#A9683A" />
       <path d="M-37 -31 Q-30 -27 -24 -32 Q-17 -27 -11 -33 Q-4 -27 3 -33 Q10 -27 16 -32 Q22 -27 29 -31 L28 -35 L-4 -60 L-36 -35 Z" fill="#FFFFFF" />
       {/* balas de goma no telhado */}
@@ -74,6 +76,7 @@ function Boneco() {
     <g className="nt-boneco-trilho">
       <circle cx={0} cy={-13} r={13} fill="#FFFFFF" />
       <circle cx={0} cy={-34} r={9.5} fill="#FFFFFF" />
+      <path d="M6 -24.5 A13 13 0 0 1 6 -1.5 A16 16 0 0 0 6 -24.5 Z M4 -42.6 A9.5 9.5 0 0 1 4 -25.4 A12 12 0 0 0 4 -42.6 Z" fill="#C9D6E3" opacity={0.75} />
       <circle cx={-3.2} cy={-36} r={1.3} fill="#2A2530" />
       <circle cx={3.2} cy={-36} r={1.3} fill="#2A2530" />
       <path d="M0 -33.5 L7 -32 L0 -31.5 Z" fill="#E8862F" />
@@ -81,7 +84,10 @@ function Boneco() {
       <ellipse cx={5.5} cy={-31.5} rx={1.8} ry={1.1} fill="#FF94AA" opacity={0.7} />
       <path d="M-9 -26 Q0 -22 9 -26 L9 -23 Q0 -19 -9 -23 Z" fill="#D6403A" />
       <rect x={3} y={-24} width={4} height={10} rx={1.5} fill="#D6403A" />
+      <path d="M-5 -24.4 v2.6 M0 -23.4 v2.6 M3.6 -18.4 h2.8 M3.6 -16 h2.8" stroke="#FFFFFF" strokeWidth={0.9} strokeLinecap="round" opacity={0.85} />
       <rect x={-7} y={-52} width={14} height={11} rx={1.5} fill="#2A2530" />
+      <rect x={-7} y={-45.4} width={14} height={2.6} fill="#D6403A" />
+      <rect x={-5.6} y={-51} width={1.2} height={5} rx={0.6} fill="#FFFFFF" opacity={0.25} />
       <rect x={-10} y={-42.5} width={20} height={3} rx={1.5} fill="#2A2530" />
       <circle cx={0} cy={-14} r={1.2} fill="#2A2530" />
       <circle cx={0} cy={-8} r={1.2} fill="#2A2530" />
@@ -104,6 +110,7 @@ function Pinheiros() {
             <rect x={-2.5} y={-8} width={5} height={8} fill="#7A5236" />
             <path d="M-16 -8 L0 -40 L16 -8 Z" fill="#2E7A47" />
             <path d="M-12 -24 L0 -50 L12 -24 Z" fill="#3F9A5B" />
+            <path d="M0 -50 L12 -24 H0 Z M0 -24 H8 L16 -8 H0 Z" fill="#14402A" opacity={0.22} />
             <path d="M-12 -24 Q-6 -27 0 -24 Q6 -27 12 -24 L10 -28 Q0 -31 -10 -28 Z" fill="#FFFFFF" />
             <path d="M-4 -46 L0 -50 L4 -46 Q0 -44 -4 -46 Z" fill="#FFFFFF" />
           </g>

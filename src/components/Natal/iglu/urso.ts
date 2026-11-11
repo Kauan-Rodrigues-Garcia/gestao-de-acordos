@@ -8,8 +8,8 @@
  *
  * Como o trem e a música, sai do relógio do Natal (`relogioNatal`), sem estado:
  * o dia é dividido em janelas de `JANELA_MS`; um sorteio fixo por janela
- * (`espalhar`) decide se ela tem visita (uma em cada `VISITA_A_CADA`, em média
- * a cada 2 h) e em que minuto ela começa. Quem abre o Analítico na hora certa
+ * (`espalhar`) decide se ela tem visita (uma em cada `VISITA_A_CADA`) e em que
+ * minuto ela começa. Quem abre o Analítico na hora certa
  * vê o urso — todo mundo junto.
  *
  * Uma visita:  saindo (a porta abre, ele vai até a beira do lago)
@@ -24,11 +24,16 @@ export const JANELA_MS = 30 * 60_000;
  * a cada 2 h); o Cleber achou raro demais (05/11/2026: «acontece algumas vezes
  * no dia, é raro, mas não tão raro»): com 2, é uma por hora em média — umas
  * nove no expediente, cada uma com uns 2 min e meio.
+ *
+ * 11/11/2026, de novo o Cleber: «tá difícil ver esse urso pescando». Agora toda
+ * janela tem visita (duas por hora, umas dezoito no expediente) e ele pesca
+ * 4 min. Medido headless no `/lab-trem.html?aba=analitico`: com ele fora, a
+ * página gasta uns 5–10 ms/s a mais de thread principal — leve.
  */
-export const VISITA_A_CADA = 2;
+export const VISITA_A_CADA = 1;
 
 export const SAINDO_S = 3.4;
-export const PESCANDO_S = 150;
+export const PESCANDO_S = 240;
 export const FISGOU_S = 4.5;
 export const ENTRANDO_S = 3.8;
 export const DURACAO_VISITA_S = SAINDO_S + PESCANDO_S + FISGOU_S + ENTRANDO_S;

@@ -70,6 +70,8 @@ const URSO = [
 const TRABALHO: Record<ItemDoChale, readonly string[]> = {
   janela: ['Vidro novo, agora reforçado!', 'Essa janela já é a terceira do mês…', 'Tranca dupla nela!', 'Cuidado com os caquinhos!'],
   poltrona: ['Upa! Poltrona de pé.', 'Ainda tá balançando? Tá!', 'A manta tava no chão, credo.'],
+  relogio: ['Cuco torto não canta!', 'Acertei a hora. Meia-noite em ponto!', 'Pêndulo no lugar. Tique-taque.'],
+  tv: ['Fora do ar?! Uma batidinha resolve.', 'Mexe na antena aí… isso, parou!', 'Tava passando o especial de Natal!', 'Quem dá tapa em TV de tubo?!'],
   tapete: ['Desembola esse tapete…', 'Tapete esticadinho.', 'Varrendo a neve que entrou…'],
   meias: ['Cada meia no seu gancho.', 'Essa meia é do líder, cuidado!', 'Meia furada? Remendo de duende!'],
   velas: ['Vela de pé e acesa de novo.', 'Quase pegou fogo no festão!', 'Fósforo, alguém?'],

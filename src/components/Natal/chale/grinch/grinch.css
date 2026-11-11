@@ -1,0 +1,194 @@
+/*
+ * O Grinch e os duendes do chalé (`Grinch.tsx`, `Duendes.tsx`).
+ *
+ * O Grinch é um boneco articulado: cada junta (`.gr-j`) é uma caixa de tamanho
+ * zero no ponto do encaixe, girada por `transform`. Uma POSE é um conjunto de
+ * ângulos, dado em variáveis no `.gr[data-pose]`; trocar de pose é uma
+ * transição de `transform` — a placa de vídeo faz sozinha. Quem troca as
+ * poses, na hora certa, é a gravação (`gravacao.ts`).
+ *
+ * Ângulo negativo leva a ponta da peça para a FRENTE (o boneco é desenhado
+ * olhando para a direita; `data-olha="-1"` espelha tudo).
+ *
+ *   --tr tronco      --cb cabeça     --dy o quadril sobe/desce (agachar)
+ *   --bf --af  braço e antebraço da frente     --bt --at  os de trás
+ *   --cf --nf  coxa e canela da frente         --ct --nt  as de trás
+ *
+ * As variáveis ficam só nas regras — nunca dentro de `@keyframes` (animação
+ * com variável nos quadros-chave não vai para a placa).
+ */
+.gr { position: absolute; left: 0; top: 175px; width: 0; height: 0; z-index: 3; visibility: hidden; transition-property: transform; will-change: transform; }
+.gr[data-visivel] { visibility: visible; }
+.gr-y, .gr-vira, .gr-bob { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+.gr-s { position: absolute; left: 0; top: 0; display: block; overflow: visible; }
+.gr-vira { transition: transform .14s ease-out; }
+.gr[data-olha="-1"] .gr-vira { transform: scaleX(-1); }
+.gr-bob { transform: translateY(var(--dy, 0px)); transition: transform .22s ease-out; }
+
+.gr-j { position: absolute; width: 0; height: 0; transition: transform .26s cubic-bezier(.3, 1.4, .5, 1); }
+.gr-j.tronco { transform: rotate(var(--tr, 5deg)); }
+.gr-j.cab { transform: rotate(var(--cb, -3deg)); }
+.gr-j.braco.f { transform: rotate(var(--bf, -8deg)); }
+.gr-j.ante.f { transform: rotate(var(--af, -20deg)); }
+.gr-j.braco.t { transform: rotate(var(--bt, 14deg)); }
+.gr-j.ante.t { transform: rotate(var(--at, -26deg)); }
+.gr-j.coxa.f { transform: rotate(var(--cf, -8deg)); }
+.gr-j.canela.f { transform: rotate(var(--nf, 12deg)); }
+.gr-j.coxa.t { transform: rotate(var(--ct, 8deg)); }
+.gr-j.canela.t { transform: rotate(var(--nt, 4deg)); }
+
+/* ── As poses ────────────────────────────────────────────────────────────── */
+/* Na ponta do pé, corcunda, as mãos de garra na frente do peito. */
+.gr[data-pose="espreita"] { --tr: 17deg; --cb: -15deg; --bf: -62deg; --af: -72deg; --bt: -46deg; --at: -80deg; --cf: -30deg; --nf: 48deg; --ct: 14deg; --nt: 30deg; --dy: 3px; }
+/* Correndo: inclinado, os braços para trás. */
+.gr[data-pose="corre"] { --tr: 27deg; --cb: -24deg; --bf: 52deg; --af: -34deg; --bt: 66deg; --at: -28deg; }
+/* O braço da frente esticado para o alto. */
+.gr[data-pose="alcanca"] { --tr: -6deg; --cb: -16deg; --bf: -172deg; --af: -6deg; --bt: 22deg; --at: -30deg; --cf: -4deg; --nf: 4deg; --ct: 4deg; --nt: 2deg; --dy: -1px; }
+/* Os dois braços para a frente, o corpo jogado em cima. */
+.gr[data-pose="empurra"] { --tr: 23deg; --cb: -18deg; --bf: -86deg; --af: -8deg; --bt: -78deg; --at: -10deg; --cf: -34deg; --nf: 44deg; --ct: 34deg; --nt: 8deg; --dy: 3px; }
+/* Dobrado, as mãos no chão. */
+.gr[data-pose="puxa"] { --tr: 62deg; --cb: -42deg; --bf: -84deg; --af: 0deg; --bt: -78deg; --at: 0deg; --cf: -50deg; --nf: 90deg; --ct: -30deg; --nt: 80deg; --dy: 9px; }
+/* O arranco: joga o corpo para trás, os braços para o alto. */
+.gr[data-pose="puxa2"] { --tr: -19deg; --cb: 8deg; --bf: -122deg; --af: -28deg; --bt: -112deg; --at: -28deg; --cf: -22deg; --nf: 12deg; --ct: 14deg; --nt: 16deg; }
+/* Toma distância para o chute… */
+.gr[data-pose="prepara"] { --tr: 13deg; --cb: -10deg; --bf: -40deg; --af: -40deg; --bt: 34deg; --at: -30deg; --cf: 42deg; --nf: 62deg; --ct: -6deg; --nt: 10deg; }
+/* …e chuta. */
+.gr[data-pose="chuta"] { --tr: -17deg; --cb: 6deg; --bf: 48deg; --af: -30deg; --bt: -60deg; --at: -40deg; --cf: -86deg; --nf: 8deg; --ct: 6deg; --nt: 2deg; }
+/* O braço lá em cima… */
+.gr[data-pose="soco-alto"] { --tr: -9deg; --cb: -8deg; --bf: -166deg; --af: -22deg; --bt: 26deg; --at: -40deg; }
+/* …e o tapa. */
+.gr[data-pose="soco"] { --tr: 21deg; --cb: -16deg; --bf: -76deg; --af: -4deg; --bt: 42deg; --at: -30deg; --cf: -20deg; --nf: 26deg; --dy: 1px; }
+/* Rindo: para trás, esfregando as mãos. */
+.gr[data-pose="ri"] { --tr: -8deg; --cb: -8deg; --bf: -42deg; --af: -96deg; --bt: -36deg; --at: -104deg; }
+/* «Shhh»: o dedo na boca, curvado para o gato. */
+.gr[data-pose="shh"] { --tr: 15deg; --cb: 0deg; --bf: -70deg; --af: -116deg; --bt: 32deg; --at: -22deg; --cf: -22deg; --nf: 32deg; --dy: 1px; }
+/* No ar: as pernas encolhidas, os braços para cima. */
+.gr[data-pose="pula"] { --tr: 2deg; --cb: -8deg; --bf: -152deg; --af: -22deg; --bt: -172deg; --at: 14deg; --cf: -72deg; --nf: 100deg; --ct: -42deg; --nt: 88deg; }
+
+/* ── Andando: as pernas em laço, cada uma meio passo atrás da outra. ─────── */
+.gr[data-anda] { --passo: .5s; }
+.gr[data-anda="2"] { --passo: .3s; }
+.gr[data-anda] .gr-j.coxa { animation: gr-coxa var(--passo) linear infinite; }
+.gr[data-anda] .gr-j.canela { animation: gr-canela var(--passo) linear infinite; }
+.gr[data-anda] .gr-j.coxa.t, .gr[data-anda] .gr-j.canela.t { animation-delay: calc(var(--passo) / -2); }
+.gr[data-anda] .gr-bob { animation: gr-bob calc(var(--passo) / 2) ease-in-out infinite alternate; }
+/* O joelho sobe alto, a canela pendurada; a ponta do pé desce na frente e o passo vai para trás. */
+@keyframes gr-coxa { 0% { transform: rotate(24deg); } 38% { transform: rotate(-66deg); } 58% { transform: rotate(-50deg); } 100% { transform: rotate(24deg); } }
+@keyframes gr-canela { 0% { transform: rotate(34deg); } 26% { transform: rotate(92deg); } 58% { transform: rotate(10deg); } 100% { transform: rotate(34deg); } }
+@keyframes gr-bob { from { transform: translateY(4px); } to { transform: translateY(1px); } }
+
+/* ── Rindo: o corpo sacode, as mãos se esfregam, a sobrancelha sobe e desce. */
+.gr[data-pose="ri"] .gr-bob { animation: gr-ri .17s ease-in-out infinite alternate; }
+@keyframes gr-ri { from { transform: translateY(0); } to { transform: translateY(-1.8px); } }
+.gr[data-pose="ri"] .gr-j.ante.f { animation: gr-esfrega-f .2s ease-in-out infinite alternate; }
+.gr[data-pose="ri"] .gr-j.ante.t { animation: gr-esfrega-t .2s ease-in-out infinite alternate; }
+@keyframes gr-esfrega-f { from { transform: rotate(-104deg); } to { transform: rotate(-88deg); } }
+@keyframes gr-esfrega-t { from { transform: rotate(-96deg); } to { transform: rotate(-112deg); } }
+.gr[data-pose="ri"] .gr-j.cab { animation: gr-ri-cab .34s ease-in-out infinite alternate; }
+@keyframes gr-ri-cab { from { transform: rotate(-12deg); } to { transform: rotate(-4deg); } }
+
+/* ── A cara: três bocas, uma em cima da outra. ───────────────────────────── */
+.gr-boca { opacity: 0; }
+.gr-boca.sorriso { opacity: 1; }
+.gr[data-cara="riso"] .gr-boca.sorriso, .gr[data-cara="bico"] .gr-boca.sorriso { opacity: 0; }
+.gr[data-cara="riso"] .gr-boca.riso, .gr[data-cara="bico"] .gr-boca.bico { opacity: 1; }
+
+/* ── Os pulos (no `.gr-y`: o x do boneco é outra caixa, a sombra fica no chão). */
+/* Pela janela: sai do vidro pequeno (lá fora), faz o arco e cai amassando. */
+.gr[data-salto="entra-janela"] .gr-y { animation: gr-entra-janela .75s cubic-bezier(.4, 0, .6, 1) both; }
+@keyframes gr-entra-janela {
+  0% { transform: translate(-78px, -107px) scale(.5) rotate(-24deg); }
+  42% { transform: translate(-44px, -84px) scale(.78) rotate(-12deg); }
+  84% { transform: translate(0, 0) scale(1.12, .8) rotate(0deg); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+.gr[data-salto="sai-janela"] .gr-y { animation: gr-sai-janela .85s cubic-bezier(.4, 0, .6, 1) both; }
+@keyframes gr-sai-janela {
+  0% { transform: translate(0, 0) scale(1.08, .84); }
+  16% { transform: translate(0, -4px) scale(.94, 1.1); }
+  60% { transform: translate(-46px, -82px) scale(.78) rotate(-14deg); }
+  100% { transform: translate(-80px, -107px) scale(.4) rotate(-24deg); opacity: 0; }
+}
+/* Pela chaminé: cai de dentro da lareira, coberto de fuligem. */
+.gr[data-salto="cai-chamine"] .gr-y { animation: gr-cai-chamine 1s cubic-bezier(.5, 0, .7, 1) both; }
+@keyframes gr-cai-chamine {
+  0% { transform: translate(0, -34px) scale(.3); opacity: 0; }
+  35% { transform: translate(0, -18px) scale(.5, .56); opacity: 1; }
+  80% { transform: translate(0, 0) scale(1.14, .8); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+.gr[data-salto="sobe-chamine"] .gr-y { animation: gr-sobe-chamine 1s cubic-bezier(.4, 0, .6, 1) both; }
+@keyframes gr-sobe-chamine {
+  0% { transform: translate(0, 0) scale(1, .82); }
+  25% { transform: translate(0, -4px) scale(.9, 1.12); }
+  70% { transform: translate(0, -18px) scale(.5, .56); opacity: 1; }
+  100% { transform: translate(0, -34px) scale(.3); opacity: 0; }
+}
+/* O pulo no lugar, para alcançar o que está no alto. */
+.gr[data-salto="pulinho"] .gr-y { animation: gr-pulinho .56s cubic-bezier(.3, 0, .7, 1) both; }
+@keyframes gr-pulinho {
+  0% { transform: translateY(0) scale(1); }
+  12% { transform: translateY(0) scale(1.08, .88); }
+  50% { transform: translateY(-46px) scale(.96, 1.06); }
+  88% { transform: translateY(0) scale(1.1, .86); }
+  100% { transform: translateY(0) scale(1); }
+}
+/* O recuo: um pulinho curto para trás (o x vem da gravação). */
+.gr[data-salto="recuo"] .gr-y { animation: gr-recuo .34s ease-out both; }
+@keyframes gr-recuo { 0% { transform: translateY(0); } 45% { transform: translateY(-13px); } 100% { transform: translateY(0); } }
+
+/* ── Na janela: o rosto espiando, as trincas e os cacos. ─────────────────── */
+.gr-espia { transform: translateY(56px); transition: transform 1.1s cubic-bezier(.3, 0, .2, 1); }
+.gr-espia.aparece { transform: translateY(9px); animation: gr-olha 2.2s ease-in-out 1.1s infinite; }
+@keyframes gr-olha { 0%, 100% { transform: translateY(9px) rotate(0); } 30% { transform: translateY(7px) rotate(-4deg); } 65% { transform: translateY(9px) rotate(4deg); } }
+/* Estes dois são de uma vez só e curtos (meio segundo), dentro de um SVG do tamanho do vidro. */
+.gr-trincas { stroke-dasharray: 100; stroke-dashoffset: 0; }
+.gr-trincas.trincando { animation: gr-trinca .55s ease-out both; }
+@keyframes gr-trinca { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
+.gr-cacos-voando path { transform-box: fill-box; transform-origin: center; animation: gr-caco .8s cubic-bezier(.2, .6, .4, 1) both; }
+@keyframes gr-caco {
+  0% { transform: translate(0, 0) rotate(0); opacity: 1; }
+  100% { transform: translate(var(--dx), var(--dy)) rotate(260deg); opacity: 0; }
+}
+/* A fuligem da chaminé: incha e some (uma vez só). */
+.gr-fuligem circle { transform-box: fill-box; transform-origin: center; animation: gr-fuligem 1s ease-out both; }
+@keyframes gr-fuligem { 0% { transform: scale(.2); opacity: .9; } 50% { opacity: .85; } 100% { transform: scale(1.8) translateY(-6px); opacity: 0; } }
+
+/* ── Os duendes ──────────────────────────────────────────────────────────────
+ * A caixa do duende anda por `transform` (a placa faz). As pernas e o braço
+ * mexem dentro do SVG dele, que é pequeno: redesenhar um duende é barato, e
+ * eles só ficam na tela enquanto arrumam.
+ */
+.nt-duende { position: absolute; left: 0; top: 174px; width: 0; height: 0; z-index: 4; transition-property: transform; transition-timing-function: linear; will-change: transform; }
+.nt-duende-svg { position: absolute; left: 0; top: 0; display: block; overflow: visible; }
+.nt-duende-vira { transition: transform .15s; }
+.nt-duende-perna { transform-box: fill-box; transform-origin: 50% 0%; }
+.nt-duende.anda .nt-duende-perna.a { animation: nt-duende-passo var(--passo, .34s) ease-in-out infinite alternate; }
+.nt-duende.anda .nt-duende-perna.b { animation: nt-duende-passo var(--passo, .34s) ease-in-out calc(var(--passo, .34s) * -1) infinite alternate; }
+@keyframes nt-duende-passo { from { transform: rotate(-22deg); } to { transform: rotate(22deg); } }
+.nt-duende.anda .nt-duende-pula { animation: nt-duende-pula var(--passo, .34s) ease-in-out infinite alternate; }
+@keyframes nt-duende-pula { from { transform: translateY(0); } to { transform: translateY(-1.6px); } }
+.nt-duende-braco { transform-box: fill-box; transform-origin: 10% 10%; }
+.nt-duende.conserta .nt-duende-braco { animation: nt-duende-trabalha .28s ease-in-out infinite alternate; }
+@keyframes nt-duende-trabalha { from { transform: rotate(-55deg); } to { transform: rotate(18deg); } }
+.nt-duende.conserta .nt-duende-pula { animation: nt-duende-esforco .28s ease-in-out infinite alternate; }
+@keyframes nt-duende-esforco { from { transform: scaleY(1); } to { transform: scaleY(.95); } }
+.nt-duende-faiscas path { opacity: 0; transform-box: fill-box; transform-origin: center; }
+.nt-duende.conserta .nt-duende-faiscas path { animation: nt-duende-faisca .56s ease-out infinite; }
+@keyframes nt-duende-faisca { 0% { opacity: 0; transform: scale(.3); } 40% { opacity: 1; transform: scale(1.1); } 100% { opacity: 0; transform: scale(.4) translateY(-4px); } }
+.nt-duende.parado .nt-duende-pula { animation: nt-duende-respira 1.6s ease-in-out infinite; }
+@keyframes nt-duende-respira { 50% { transform: translateY(-.6px); } }
+.nt-duende-olhos { transform-box: fill-box; transform-origin: center; animation: nt-duende-pisca 3.4s ease-in-out infinite; }
+@keyframes nt-duende-pisca { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.1); } }
+/* O balão: HTML, surge com um pulinho. */
+.nt-duende-balao {
+  position: absolute; left: 0; bottom: 58px; transform: translateX(-50%); transform-origin: 50% 100%;
+  white-space: pre; text-align: center; font: 600 10px/11.5px system-ui, -apple-system, 'Segoe UI', sans-serif; color: #1F2937;
+  background: #FFFFFF; border: .9px solid #2A2320; border-radius: 5px; padding: 4px 7px;
+  animation: nt-duende-balao .3s cubic-bezier(.3, 1.6, .5, 1) both;
+}
+.nt-duende-balao::after {
+  content: ''; position: absolute; left: 50%; bottom: -4.2px; width: 6.4px; height: 6.4px; background: #FFFFFF;
+  border-right: .9px solid #2A2320; border-bottom: .9px solid #2A2320; transform: translateX(-50%) rotate(45deg);
+}
+@keyframes nt-duende-balao { from { transform: translateX(-50%) scale(.3); opacity: 0; } to { transform: translateX(-50%) scale(1); opacity: 1; } }

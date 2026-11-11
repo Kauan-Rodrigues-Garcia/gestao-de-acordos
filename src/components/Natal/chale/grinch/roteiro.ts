@@ -1,22 +1,19 @@
 /**
  * O roteiro do Grinch no chalé de Acordos — o que acontece e quando. O
  * desenho está em `Grinch.tsx` e `Duendes.tsx`; as falas, em
- * `falasDosDuendes.ts`.
+ * `falasDosDuendes.ts`; a invasão em si, deixa por deixa, em `gravacao.ts`.
  *
- * ## A invasão (06/11/2026, pedido do Kauan)
+ * ## A invasão (06/11/2026, pedido do Kauan; regravada em 11/11/2026)
  *
- *   1. ENTRA. Com o chalé inteiro, pela janela: ele espia, o vidro trinca e
- *      estilhaça, e ele pula para dentro. Com só a lareira à vista (tela
- *      estreita), pela chaminé — como no livro: cai na lareira numa nuvem de
- *      fuligem.
- *   2. BRIGA. A nuvem de poeira de desenho animado roda pela sala, com
- *      estrelinhas e um braço ou uma bota saindo; um a um, os objetos voam
- *      para onde vão ficar bagunçados. O gato foge.
- *   3. POSE e SAI. A poeira baixa, ele esfrega as mãos no meio da bagunça e
- *      vai embora por onde veio. A janela fica quebrada.
- *   4. BAGUNÇA. Uns segundos assim (um acordo salvo encurta: chama os
+ *   1. A GRAVAÇÃO. Com o chalé inteiro, pela janela: ele espia, o vidro trinca
+ *      e estilhaça, ele pula para dentro, assusta o gato e vai bagunçando
+ *      objeto por objeto, da poltrona até a árvore — cada um do seu jeito.
+ *      Depois ri no meio da sala e foge por onde veio. Com só a lareira à
+ *      vista (tela estreita), pela chaminé — como no livro. É uma gravação:
+ *      as mesmas deixas, na mesma hora, para todo mundo (`gravacao.ts`).
+ *   2. BAGUNÇA. Uns segundos assim (um acordo salvo encurta: chama os
  *      duendes na hora).
- *   5. DUENDES. Três duendes entram pelo canto da tela, andando pelo chão
+ *   3. DUENDES. Três duendes entram pelo canto da tela, andando pelo chão
  *      (a linha das abas). Cada um vai ao item mais perto que ninguém pegou,
  *      conserta com a ferramenta dele e o item volta ao lugar. Eles reclamam,
  *      falam do Natal e caguetam pro Urso do iglu (que fica sabendo de
@@ -27,34 +24,34 @@
  * ## Quando
  *
  * A primeira invasão vem 35 a 60 s depois de abrir Acordos; as próximas, 5 a
- * 8 minutos depois de a anterior acabar. Com a aba escondida, espera. No modo
- * leve ele não invade sozinho (as animações estão desligadas e a cena só
- * pularia de um estado para outro) — o laboratório ainda pode chamar.
+ * 8 minutos depois de a anterior acabar. Com a aba escondida, ou com ninguém
+ * olhando (`lib/atencao.ts`), espera. No modo leve ele não invade sozinho (as
+ * animações estão desligadas e a cena só pularia de um estado para outro) — o
+ * laboratório ainda pode chamar.
  *
  * Laboratório (`/lab-chale.html`): `natal-grinch-invadir`, `natal-grinch-espiar`
  * e `natal-duendes` fazem acontecer na hora.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
+import { ninguemOlhando } from '@/lib/atencao';
 import { EVENTO_ACORDO_SALVO } from '../../tema';
 import { registrarInvasao } from '../../noticiaDoGrinch';
 import { criarFalasDosDuendes, type MomentoDoDuende } from './falasDosDuendes';
+import { GRAVACAO_CHAMINE, GRAVACAO_JANELA, tocar } from './gravacao';
 
 export const EVENTO_GRINCH_INVADIR = 'natal-grinch-invadir';
 export const EVENTO_GRINCH_ESPIAR = 'natal-grinch-espiar';
 export const EVENTO_DUENDES = 'natal-duendes';
 
-export type ItemDoChale = 'janela' | 'poltrona' | 'tapete' | 'meias' | 'velas' | 'guirlanda' | 'bola' | 'presentes' | 'arvore';
+export type ItemDoChale = 'janela' | 'relogio' | 'poltrona' | 'tapete' | 'meias' | 'velas' | 'guirlanda' | 'bola' | 'tv' | 'presentes' | 'arvore';
 
-/** O que ele bagunça com o chalé inteiro, e com só a lareira. */
-export const ITENS_INTEIRO: readonly ItemDoChale[] = ['tapete', 'meias', 'velas', 'guirlanda', 'bola', 'presentes', 'arvore', 'poltrona', 'janela'];
-export const ITENS_COMPACTO: readonly ItemDoChale[] = ['tapete', 'meias', 'velas', 'guirlanda', 'bola'];
 
 /** Onde o duende para para consertar cada coisa (x no quadro de 600). */
 export const POSTO: Record<ItemDoChale, number> = {
-  janela: 132, poltrona: 172, tapete: 236, meias: 284, velas: 322, guirlanda: 260, bola: 350, presentes: 432, arvore: 494,
+  janela: 132, relogio: 196, poltrona: 214, tapete: 250, meias: 284, guirlanda: 306, velas: 330, bola: 352, tv: 398, presentes: 500, arvore: 546,
 };
 
-export type FaseDoGrinch = 'calmo' | 'espia' | 'quebra' | 'entra' | 'briga' | 'pose' | 'sai' | 'baguncado' | 'duendes';
+export type FaseDoGrinch = 'calmo' | 'espia' | 'quebra' | 'entra' | 'pose' | 'sai' | 'baguncado' | 'duendes';
 export type IdDuende = 0 | 1 | 2;
 
 export interface Duende {
@@ -76,11 +73,12 @@ export interface EstadoGrinch {
   /** O rosto dele espiando atrás do vidro. */
   espiando: boolean;
   bagunca: Bagunca;
-  gatoFugiu: boolean;
+  /** O gato: dormindo no tapete, de olho arregalado, ou sumido. */
+  gato: 'dorme' | 'susto' | 'fugiu';
   duendes: Duende[];
 }
 
-const CALMO: EstadoGrinch = { fase: 'calmo', via: 'janela', espiando: false, bagunca: {}, gatoFugiu: false, duendes: [] };
+const CALMO: EstadoGrinch = { fase: 'calmo', via: 'janela', espiando: false, bagunca: {}, gato: 'dorme', duendes: [] };
 
 /** Velocidade dos duendes (unidades do quadro por segundo): entrando de longe, e de um item a outro. */
 const VEL_CHEGADA = 95;
@@ -90,18 +88,13 @@ const FALA_MS = 3400;
 
 const espera = (ms: number) => new Promise<void>(r => window.setTimeout(r, ms));
 
-function embaralhar<T>(lista: readonly T[]): T[] {
-  const m = [...lista];
-  for (let i = m.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [m[i], m[j]] = [m[j], m[i]]; }
-  return m;
-}
-
 /**
  * `compacto`: `null` sem chalé na tela (nada acontece), `true` com só a
  * lareira. `direita`: o x, no quadro, da borda direita da tela — de onde os
- * duendes vêm.
+ * duendes vêm. `boneco`: o elemento do Grinch (`Grinch.tsx`), que a gravação
+ * move direto, sem passar pelo React.
  */
-export function useGrinch(compacto: boolean | null, direita: number, leve: boolean): EstadoGrinch {
+export function useGrinch(compacto: boolean | null, direita: number, leve: boolean, boneco: RefObject<HTMLElement | null>): EstadoGrinch {
   const [e, setE] = useState<EstadoGrinch>(CALMO);
   const ref = useRef({ compacto, direita, leve });
   ref.current = { compacto, direita, leve };
@@ -133,34 +126,19 @@ export function useGrinch(compacto: boolean | null, direita: number, leve: boole
       const compactoAgora = ref.current.compacto;
       if (compactoAgora === null) return;
       const via = compactoAgora ? 'chamine' : 'janela';
-      const itens = compactoAgora ? ITENS_COMPACTO : ITENS_INTEIRO;
       registrarInvasao();
-      if (via === 'janela') {
-        p({ via, fase: 'espia', espiando: true }); await espera(1700);
-        if (!vivo) return;
-        p({ fase: 'quebra' }); await espera(700);
-        baguncar('janela');
-        p({ fase: 'entra', espiando: false }); await espera(900);
-      } else {
-        p({ via, fase: 'entra' }); await espera(1000);
-      }
+      p({ via });
+      await tocar(compactoAgora ? GRAVACAO_CHAMINE : GRAVACAO_JANELA, {
+        grinch: () => boneco.current,
+        baguncar,
+        fase: (fase, espiando) => p(espiando === undefined ? { fase } : { fase, espiando }),
+        gato: gato => p({ gato }),
+      }, () => vivo);
       if (!vivo) return;
-      // A briga: um objeto voa a cada 0,4 s, na ordem do acaso.
-      p({ fase: 'briga', gatoFugiu: true });
-      const resto = embaralhar(itens.filter(i => i !== 'janela'));
-      for (const item of resto) {
-        await espera(400);
-        if (!vivo) return;
-        baguncar(item);
-      }
-      await espera(Math.max(600, 4400 - resto.length * 400));
-      if (!vivo) return;
-      p({ fase: 'pose' }); await espera(1600);
-      p({ fase: 'sai' }); await espera(1000);
-      p({ fase: 'baguncado' });
+      p({ fase: 'baguncado', espiando: false, gato: 'fugiu' });
       // Fica bagunçado um pouco — um acordo salvo (ou o laboratório) chama os duendes antes.
       await new Promise<void>(r => {
-        const t = window.setTimeout(r, 8000 + Math.random() * 4000);
+        const t = window.setTimeout(r, 9000);
         chamarDuendesJa = () => { window.clearTimeout(t); r(); };
       });
       chamarDuendesJa = null;
@@ -217,7 +195,7 @@ export function useGrinch(compacto: boolean | null, direita: number, leve: boole
 
       await Promise.all(([0, 1, 2] as const).map(trabalhar));
       if (!vivo) return;
-      p({ gatoFugiu: false });
+      p({ gato: 'dorme' });
       falar(1, falas, 'fim', undefined, true);
       await espera(2000);
       falar(2, falas, 'trabalho', undefined, true);
@@ -248,7 +226,7 @@ export function useGrinch(compacto: boolean | null, direita: number, leve: boole
     let proximaInvasao = Date.now() + (35 + Math.random() * 25) * 1000;
     function vez() {
       const { compacto: c, leve: l } = ref.current;
-      if (!document.hidden && c !== null && !ocupado && !l) {
+      if (!document.hidden && !ninguemOlhando() && c !== null && !ocupado && !l) {
         if (Date.now() >= proximaInvasao) {
           void rodar(invadir).then(() => { proximaInvasao = Date.now() + (300 + Math.random() * 180) * 1000; });
         } else if (!c && Math.random() < 0.18) {
@@ -274,7 +252,7 @@ export function useGrinch(compacto: boolean | null, direita: number, leve: boole
       window.removeEventListener(EVENTO_GRINCH_ESPIAR, aoEspiar);
       window.removeEventListener(EVENTO_DUENDES, aoChamarDuendes);
     };
-  }, []);
+  }, [boneco]);
 
   return e;
 }

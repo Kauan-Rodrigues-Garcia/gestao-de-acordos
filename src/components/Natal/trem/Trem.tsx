@@ -46,6 +46,41 @@ const COR = {
   janela: '#FFD98A',
 } as const;
 
+/**
+ * Os degradês do trem (acabamento de 11/11/2026, o «Atual+» do estudo de
+ * arte): a lata vermelha com volume, o ouro, o creme e o pinho. Só
+ * preenchimento — nenhuma animação nova, nenhum filtro. Vão em cada carro,
+ * porque cada carro é um desenho separado.
+ */
+function DefsDoTrem() {
+  return (
+    <defs>
+      <linearGradient id="nt-trem-lata" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stopColor="#EE6E64" />
+        <stop offset=".45" stopColor={COR.vermelho} />
+        <stop offset="1" stopColor="#B4333A" />
+      </linearGradient>
+      <linearGradient id="nt-trem-vinho" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stopColor="#9A3246" />
+        <stop offset="1" stopColor="#651C2A" />
+      </linearGradient>
+      <linearGradient id="nt-trem-ouro" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stopColor="#FFE39A" />
+        <stop offset=".5" stopColor={COR.ouro} />
+        <stop offset="1" stopColor="#C9841F" />
+      </linearGradient>
+      <linearGradient id="nt-trem-creme" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stopColor="#FFFCF5" />
+        <stop offset="1" stopColor={COR.cremeSombra} />
+      </linearGradient>
+      <linearGradient id="nt-trem-pinho" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stopColor="#5BB87A" />
+        <stop offset="1" stopColor={COR.verdeEscuro} />
+      </linearGradient>
+    </defs>
+  );
+}
+
 function Roda({ cx, cy, r }: { cx: number; cy: number; r: number }) {
   return (
     <g transform={`translate(${cx} ${cy})`}>
@@ -58,6 +93,7 @@ function Roda({ cx, cy, r }: { cx: number; cy: number; r: number }) {
         ))}
         <circle r={r * 0.2} fill={COR.ouro} />
       </g>
+      <path d={`M${-r * 0.82} ${-r * 0.3} A${r * 0.87} ${r * 0.87} 0 0 1 ${-r * 0.2} ${-r * 0.85}`} stroke="#FFFFFF" strokeWidth={r * 0.13} strokeLinecap="round" fill="none" opacity={0.3} />
     </g>
   );
 }
@@ -72,6 +108,8 @@ function Presente({ x, y, l, a, cor, fita }: { x: number; y: number; l: number; 
       <rect x={x} y={y} width={l} height={a * 0.16} rx={2} fill="#FFFFFF" opacity={0.18} />
       <rect x={meio - f / 2} y={y} width={f} height={a} fill={fita} />
       <rect x={x} y={y + a * 0.34} width={l} height={f} fill={fita} />
+      <rect x={x} y={y + a * 0.7} width={l} height={a * 0.3} rx={2} fill="#000000" opacity={0.12} />
+      <rect x={x + 1.4} y={y + 2} width={1.4} height={a * 0.5} rx={0.7} fill="#FFFFFF" opacity={0.3} />
     </g>
   );
 }
@@ -149,12 +187,16 @@ function Vagao({ L, carga, balanco }: { L: number; carga: ReactNode; balanco: st
       {carga}
       {/* grade: o corrimão creme e os pés vermelhos, na frente da carga */}
       {pes.map(px => <rect key={px} x={px} y={50} width={3} height={19} rx={1} fill={COR.vermelhoEscuro} />)}
-      <rect x={0} y={48} width={L} height={4.5} rx={2.25} fill={COR.creme} />
+      <rect x={0} y={48} width={L} height={4.5} rx={2.25} fill="url(#nt-trem-creme)" />
       {/* a caixa */}
       <rect x={1} y={80} width={L - 2} height={10} rx={4} fill={COR.vermelhoEscuro} />
-      <rect x={0} y={68} width={L} height={17} rx={4} fill={COR.vermelho} />
+      <rect x={0} y={68} width={L} height={17} rx={4} fill="url(#nt-trem-lata)" />
       <rect x={3} y={70} width={L - 6} height={3} rx={1.5} fill={COR.vermelhoClaro} />
-      <rect x={-2} y={65.5} width={L + 4} height={5} rx={2.5} fill={COR.creme} />
+      <rect x={2} y={70.5} width={L - 4} height={1.6} fill="#000000" opacity={0.14} />
+      <rect x={-2} y={65.5} width={L + 4} height={5} rx={2.5} fill="url(#nt-trem-creme)" />
+      {/* o friso dourado e um tantinho de neve na borda */}
+      <rect x={4} y={82.6} width={L - 8} height={1} rx={0.5} fill={COR.ouro} opacity={0.75} />
+      <path d={`M2 66 Q6 62.6 11 65 Q15 63.4 18 66 Z M${L - 20} 66 Q${L - 15} 63 ${L - 10} 65 Q${L - 5} 62.8 ${L - 2} 66 Z`} fill="#FFFFFF" />
       {/* rebites */}
       {[10, L - 10].map(px => <circle key={px} cx={px} cy={77} r={1.6} fill={COR.ouro} />)}
       {/* um floco de neve no meio, em creme */}
@@ -206,6 +248,7 @@ function VagaoArvore() {
   const L = 76;
   return (
     <>
+      <DefsDoTrem />
       <Engates L={L} />
       <Vagao L={L} balanco="-0.2s" carga={
         <g>
@@ -213,10 +256,12 @@ function VagaoArvore() {
           <Laco x={62.5} y={50} t={6} cor={COR.vermelho} />
           <rect x={34} y={56} width={8} height={12} rx={1.5} fill={COR.tronco} />
           <path d="M16 62 L38 30 L60 62 Q38 67 16 62 Z" fill={COR.verdeEscuro} />
-          <path d="M18 60 L38 31 L58 60 Q38 64.5 18 60 Z" fill={COR.verde} />
+          <path d="M18 60 L38 31 L58 60 Q38 64.5 18 60 Z" fill="url(#nt-trem-pinho)" />
           <path d="M22 45 L38 17 L54 45 Q38 49.5 22 45 Z" fill={COR.verdeEscuro} />
-          <path d="M24 43.5 L38 18 L52 43.5 Q38 47.5 24 43.5 Z" fill={COR.verde} />
-          <path d="M28 29 L38 8 L48 29 Q38 32 28 29 Z" fill={COR.verde} />
+          <path d="M24 43.5 L38 18 L52 43.5 Q38 47.5 24 43.5 Z" fill="url(#nt-trem-pinho)" />
+          <path d="M28 29 L38 8 L48 29 Q38 32 28 29 Z" fill="url(#nt-trem-pinho)" />
+          {/* o festão dourado */}
+          <path d="M30.6 26 Q38 30 45.6 25.4 M26.4 40.6 Q38 46 49.8 40 M21 56.6 Q38 63 55.4 56" stroke={COR.ouro} strokeWidth={1} fill="none" strokeDasharray="1.6 1.4" opacity={0.9} />
           {/* neve nas pontas dos galhos */}
           <path d="M18 60 Q21 57.5 24 59.4 Q27 57.6 29.5 60.6 Q24 61.6 18 60 Z" fill="#FFFFFF" />
           <path d="M52 59.8 Q54.5 57.4 58 60 Q54.5 61.4 52 59.8 Z" fill="#FFFFFF" />
@@ -232,7 +277,7 @@ function VagaoArvore() {
           ))}
           <path className="nt-trem-estrela"
             d="M38 0.5 L40.1 5.3 L45.3 5.8 L41.4 9.2 L42.6 14.3 L38 11.6 L33.4 14.3 L34.6 9.2 L30.7 5.8 L35.9 5.3 Z"
-            fill={COR.ouro} />
+            fill="url(#nt-trem-ouro)" />
           <Biscoito x={11} />
         </g>
       } />
@@ -253,8 +298,9 @@ function VagaoPlano({ L, carga, balanco }: { L: number; carga: ReactNode; balanc
   return (
     <g className="nt-trem-sacode" style={{ animationDelay: balanco }}>
       <rect x={1} y={84} width={L - 2} height={7} rx={3.5} fill={COR.vermelhoEscuro} />
-      <rect x={0} y={ESTRADO_Y + 2} width={L} height={8} rx={2.5} fill={COR.vermelho} />
-      <rect x={-2} y={ESTRADO_Y - 1} width={L + 4} height={4.5} rx={2.25} fill={COR.creme} />
+      <rect x={0} y={ESTRADO_Y + 2} width={L} height={8} rx={2.5} fill="url(#nt-trem-lata)" />
+      <rect x={-2} y={ESTRADO_Y - 1} width={L + 4} height={4.5} rx={2.25} fill="url(#nt-trem-creme)" />
+      <rect x={1} y={ESTRADO_Y + 3.4} width={L - 2} height={1.4} fill="#000000" opacity={0.14} />
       {Array.from({ length: Math.floor((L - 12) / 26) + 1 }, (_, i) => (
         <circle key={i} cx={6 + i * 26} cy={ESTRADO_Y + 6} r={1.4} fill={COR.ouro} />
       ))}
@@ -268,6 +314,7 @@ function VagaoPassageiros({ passageiros, base }: { passageiros: (PassageiroDoTre
   const L = 262;
   return (
     <>
+      <DefsDoTrem />
       <Engates L={L} />
       <VagaoPlano L={L} balanco="-0.32s" carga={
         <g>
@@ -286,6 +333,7 @@ function VagaoPresentes({ passageiros, base }: { passageiros: (PassageiroDoTrem 
   const L = 216;
   return (
     <>
+      <DefsDoTrem />
       <Engates L={L} tras={false} />
       <VagaoPlano L={L} balanco="-0.4s" carga={
         <g>
@@ -308,6 +356,7 @@ function VagaoPresentes({ passageiros, base }: { passageiros: (PassageiroDoTrem 
 function Locomotiva() {
   return (
     <>
+      <DefsDoTrem />
       {/* fumaça, atrás de tudo */}
       <g className="nt-trem-fumaca">
         {/* A cor vem do `trem.css`: no tema claro o branco sumia no fundo. */}
@@ -322,22 +371,29 @@ function Locomotiva() {
           <path d="M286 86 H292 L310 102 H288 Z" fill={COR.vermelhoEscuro} />
           <path d="M292 89.5 L300 97 M289 92 L294.5 100" stroke={COR.creme} strokeWidth={1.6} strokeLinecap="round" />
           {/* caldeira */}
-          <rect x={230} y={55} width={56} height={31} rx={6} fill={COR.vermelho} />
+          <rect x={230} y={55} width={56} height={31} rx={6} fill="url(#nt-trem-lata)" />
           <rect x={233} y={58} width={50} height={4} rx={2} fill={COR.vermelhoClaro} />
-          <rect x={246} y={55} width={4} height={31} fill={COR.creme} />
-          <rect x={268} y={55} width={4} height={31} fill={COR.creme} />
+          <rect x={233} y={58.6} width={50} height={1.2} rx={0.6} fill="#FFFFFF" opacity={0.35} />
+          <rect x={246} y={55} width={4} height={31} fill="url(#nt-trem-creme)" />
+          <rect x={268} y={55} width={4} height={31} fill="url(#nt-trem-creme)" />
+          {/* os rebites das cintas e o friso dourado */}
+          {[60, 71, 82].map(cy => <circle key={cy} cx={248} cy={cy} r={0.8} fill={COR.ouro} />)}
+          <rect x={236} y={80} width={32} height={1} rx={0.5} fill={COR.ouro} opacity={0.75} />
           {/* domo dourado */}
-          <path d="M236 55.5 A6.5 6.5 0 0 1 249 55.5 Z" fill={COR.ouro} />
+          <path d="M236 55.5 A6.5 6.5 0 0 1 249 55.5 Z" fill="url(#nt-trem-ouro)" />
           <circle cx={240.4} cy={51.6} r={1.2} fill="#FFFFFF" opacity={0.5} />
           {/* chaminé */}
-          <rect x={255} y={38} width={11} height={18} fill={COR.vinho} />
-          <path d="M249.5 30 H271.5 L267.5 40 H253.5 Z" fill={COR.vinho} />
-          <rect x={248.5} y={27.5} width={24} height={4.5} rx={2.25} fill={COR.creme} />
+          <rect x={255} y={38} width={11} height={18} fill="url(#nt-trem-vinho)" />
+          <path d="M249.5 30 H271.5 L267.5 40 H253.5 Z" fill="url(#nt-trem-vinho)" />
+          <rect x={255} y={47} width={11} height={2} fill={COR.ouro} opacity={0.85} />
+          <rect x={248.5} y={27.5} width={24} height={4.5} rx={2.25} fill="url(#nt-trem-creme)" />
           <path d="M249.5 28.5 Q254 24.6 258 27.4 Q262 24.4 266 27.2 Q270 25 272 28.5 Z" fill="#FFFFFF" />
           {/* cabine */}
-          <rect x={198} y={40} width={38} height={46} rx={6} fill={COR.vermelho} />
+          <rect x={198} y={40} width={38} height={46} rx={6} fill="url(#nt-trem-lata)" />
           <rect x={198} y={77} width={38} height={9} fill={COR.vermelhoEscuro} />
-          <rect x={206} y={48} width={22} height={17} rx={5} fill={COR.creme} />
+          <rect x={198} y={42} width={38} height={2.4} fill="#000000" opacity={0.16} />
+          <rect x={200.4} y={46} width={1.6} height={28} rx={0.8} fill="#FFFFFF" opacity={0.28} />
+          <rect x={206} y={48} width={22} height={17} rx={5} fill="url(#nt-trem-creme)" />
           <rect x={209} y={51} width={16} height={11} rx={3.5} fill={COR.janela} />
           <path d="M211 59.5 L216.5 53" stroke="#FFFFFF" strokeWidth={1.4} strokeLinecap="round" opacity={0.7} />
           {/* guirlanda na porta da cabine */}
@@ -346,7 +402,7 @@ function Locomotiva() {
           <circle cx={220.5} cy={74.5} r={0.9} fill={COR.vermelho} />
           <path d="M215.2 77.6 L217 76 L218.8 77.6 M217 76 l-2.2 3.4 M217 76 l2.2 3.4" stroke={COR.vermelho} strokeWidth={1.3} strokeLinecap="round" fill="none" />
           {/* teto com neve */}
-          <rect x={193} y={33} width={48} height={9} rx={4.5} fill={COR.creme} />
+          <rect x={193} y={33} width={48} height={9} rx={4.5} fill="url(#nt-trem-creme)" />
           <rect x={193} y={38.5} width={48} height={3.5} rx={1.75} fill={COR.cremeSombra} />
           <path d="M194 35.6 Q197 30 203 32.4 Q207 27.8 213 31 Q218 27.4 224 30.8 Q230 28 234 32 Q239.5 31.2 240 35.6 Z" fill="#FFFFFF" />
           {/* a frente, de perfil como o resto: a caixa de fumaça, um pouco mais
@@ -365,7 +421,7 @@ function Locomotiva() {
           {/* o farol, em cima da frente, olhando para onde o trem vai */}
           <path className="nt-trem-facho" d="M296 44.5 L322 36 L322 60 L296 51.5 Z" fill={COR.janela} />
           <rect x={281} y={49} width={10} height={4} rx={1} fill={COR.vinho} />
-          <rect x={279} y={41} width={15} height={10} rx={2.5} fill={COR.ouro} />
+          <rect x={279} y={41} width={15} height={10} rx={2.5} fill="url(#nt-trem-ouro)" />
           <rect x={279} y={41} width={15} height={2.6} rx={1.3} fill={COR.ouroEscuro} />
           <ellipse className="nt-trem-farol" cx={294} cy={46.2} rx={2.4} ry={4.2} fill={COR.janela} />
           <ellipse cx={293.6} cy={44.6} rx={0.8} ry={1.3} fill="#FFFFFF" opacity={0.85} />

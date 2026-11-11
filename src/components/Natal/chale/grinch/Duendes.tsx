@@ -10,7 +10,7 @@
  *
  * Mesmo traço do Grinch (contorno escuro), mas pequenos e redondinhos. O
  * duende anda por `transform` com transição (a duração vem do roteiro); as
- * pernas, os braços e o corpo mexem em CSS (`chale.css`). O balão fica fora
+ * pernas, os braços e o corpo mexem em CSS (`grinch.css`). O balão fica fora
  * do grupo que vira de lado, para o texto nunca sair espelhado.
  */
 import { cn } from '@/lib/utils';
@@ -22,8 +22,6 @@ const PELE = '#F4C9A1';
 const ROUPA = ['#2F8F4E', '#2B8A6A', '#3A9A52'] as const;
 const GORRO = [['#2F8F4E', '#1F6B38'], ['#C8353A', '#8E2329'], ['#E2B04A', '#B98A2C']] as const;
 
-/** O chão do chalé (a linha das abas fica em 176). */
-const CHAO = 174;
 /** O desenho do duende tem 40 de altura; aqui ele fica com ~52. */
 const ESCALA = 1.3;
 
@@ -112,40 +110,35 @@ function CorpoDoDuende({ id }: { id: 0 | 1 | 2 }) {
   );
 }
 
-/** O balão de fala, acima do gorro. Três linhas no máximo. */
+/** O balão de fala, acima do gorro: HTML, para o texto sair nítido. Três linhas no máximo. */
 function Balao({ texto }: { texto: string }) {
-  const linhas = quebrarFala(texto).slice(0, 3);
-  const larg = Math.max(...linhas.map(l => l.length)) * 5.5 + 14;
-  const alt = linhas.length * 11.5 + 8;
-  const topo = -56 - alt;
-  return (
-    <g className="nt-duende-balao" key={texto}>
-      <path d={`M${-larg / 2} ${topo + 4} Q${-larg / 2} ${topo} ${-larg / 2 + 4} ${topo} H${larg / 2 - 4} Q${larg / 2} ${topo} ${larg / 2} ${topo + 4} V${topo + alt - 4} Q${larg / 2} ${topo + alt} ${larg / 2 - 4} ${topo + alt} H5 L1 ${topo + alt + 5} L-1 ${topo + alt} H${-larg / 2 + 4} Q${-larg / 2} ${topo + alt} ${-larg / 2} ${topo + alt - 4} Z`}
-        fill="#FFFFFF" stroke={TRACO} strokeWidth={0.9} strokeLinejoin="round" />
-      <text x={0} y={topo + 12.5} textAnchor="middle" className="nt-duende-texto">
-        {linhas.map((l, i) => <tspan key={i} x={0} dy={i === 0 ? 0 : 11.5}>{l}</tspan>)}
-      </text>
-    </g>
-  );
+  return <div className="nt-duende-balao" key={texto}>{quebrarFala(texto).slice(0, 3).join('\n')}</div>;
 }
 
+/**
+ * Cada duende é uma caixa HTML que anda por `transform` (11/11/2026: antes
+ * eram grupos dentro do SVG do chalé, e cada passo redesenhava o chalé todo).
+ * As pernas e o braço mexem dentro do SVG pequeno do próprio duende.
+ */
 export function Duendes({ duendes }: { duendes: Duende[] }) {
   if (!duendes.length) return null;
   return (
-    <g className="nt-duendes">
+    <>
       {duendes.map(d => (
-        <g key={d.id} className={cn('nt-duende', d.acao)}
-          style={{ transform: `translate(${d.x}px, ${CHAO}px)`, transitionDuration: `${d.dur}s`, ['--passo' as string]: `${0.34 + d.id * 0.03}s` }}>
-          <ellipse cx={0} cy={0} rx={10.4} ry={2} fill="#000" opacity={0.14} />
-          <g className="nt-duende-vira" style={{ transform: `scaleX(${d.olha})` }}>
-            <g className="nt-duende-pula">
-              {/* A escala fica num grupo próprio: o CSS anima o `transform` do «pula». */}
-              <g transform={`scale(${ESCALA})`}><CorpoDoDuende id={d.id} /></g>
+        <div key={d.id} className={cn('nt-duende', d.acao)}
+          style={{ transform: `translateX(${d.x}px)`, transitionDuration: `${d.dur}s`, ['--passo' as string]: `${0.34 + d.id * 0.03}s` }}>
+          <svg className="nt-duende-svg" width={1} height={1}>
+            <ellipse cx={0} cy={0} rx={10.4} ry={2} fill="#000" opacity={0.14} />
+            <g className="nt-duende-vira" style={{ transform: `scaleX(${d.olha})` }}>
+              <g className="nt-duende-pula">
+                {/* A escala fica num grupo próprio: o CSS anima o `transform` do «pula». */}
+                <g transform={`scale(${ESCALA})`}><CorpoDoDuende id={d.id} /></g>
+              </g>
             </g>
-          </g>
+          </svg>
           {d.fala && <Balao texto={d.fala} />}
-        </g>
+        </div>
       ))}
-    </g>
+    </>
   );
 }

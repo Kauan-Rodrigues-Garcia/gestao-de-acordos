@@ -129,3 +129,5 @@ scripts/robo59/.env
 !public/video/natal/abertura.mp4
 # 09/11/2026: o de Marília (as corridas e o mural foram só de Birigui).
 !public/video/natal/abertura-marilia.mp4
+# 11/11/2026: o que passa na TV de tubo do chalé (src/components/Natal/chale/Cenario.tsx).
+!public/video/natal/tv-chale.mp4
