@@ -135,6 +135,31 @@
   50% { transform: translate(3px, -3px); } 75% { transform: translate(-2px, -4px); }
 }
 
+/* Clicar na TV abre o balão de «Passando agora». */
+.ch-tv-clique { pointer-events: auto; cursor: pointer; }
+.ch-tv-balao {
+  position: absolute; z-index: 5; transform: translate(-50%, -100%); transform-origin: 50% 100%;
+  display: flex; flex-direction: column; align-items: center; gap: 1.5px; white-space: nowrap; pointer-events: none;
+  font: 500 8.4px/10px system-ui, -apple-system, 'Segoe UI', sans-serif; color: #1F2937;
+  background: #FFFFFF; border: .9px solid #2A2320; border-radius: 6px; padding: 4px 8px 4.4px;
+  box-shadow: 0 1.6px 0 rgba(0, 0, 0, .14);
+  animation: ch-tv-balao .3s cubic-bezier(.3, 1.6, .5, 1) both;
+}
+.ch-tv-balao::after {
+  content: ''; position: absolute; left: 50%; bottom: -4.2px; width: 6.4px; height: 6.4px; background: #FFFFFF;
+  border-right: .9px solid #2A2320; border-bottom: .9px solid #2A2320; transform: translateX(-50%) rotate(45deg);
+}
+.ch-tv-balao strong { font-size: 10.4px; line-height: 12px; font-weight: 700; color: #111827; }
+.ch-tv-balao-ano { font-weight: 500; color: #6B7280; }
+.ch-tv-balao-rotulo {
+  display: inline-flex; align-items: center; gap: 3px; font-size: 7px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: #C8353A;
+}
+.ch-tv-balao-rotulo i { width: 4px; height: 4px; border-radius: 50%; background: #C8353A; animation: ch-tv-balao-luz 1.2s ease-in-out infinite; }
+.ch-tv-balao-tempo { font-size: 7.6px; color: #2F7D52; font-weight: 600; }
+@keyframes ch-tv-balao { from { transform: translate(-50%, -100%) scale(.3); opacity: 0; } to { transform: translate(-50%, -100%) scale(1); opacity: 1; } }
+@keyframes ch-tv-balao-luz { 50% { opacity: .25; } }
+
 /* ── O anexo: o cavalinho de balanço. ────────────────────────────────────── */
 .ch-cavalinho { animation: ch-cavalinho 2.8s ease-in-out infinite; }
 @keyframes ch-cavalinho { 0%, 100% { transform: rotate(-5deg); } 50% { transform: rotate(5deg); } }

@@ -18,7 +18,8 @@
  */
 import { EPOCA } from '../musica';
 
-export const JANELA_MS = 30 * 60_000;
+/** 20 min (11/11/2026, Cleber: «quero que ele saia a mais ou menos cada 20 minutos»; era 30). */
+export const JANELA_MS = 20 * 60_000;
 /**
  * Uma janela em cada tantas tem visita (sorteio fixo por janela). Era 4 (uma
  * a cada 2 h); o Cleber achou raro demais (05/11/2026: «acontece algumas vezes
@@ -26,7 +27,7 @@ export const JANELA_MS = 30 * 60_000;
  * nove no expediente, cada uma com uns 2 min e meio.
  *
  * 11/11/2026, de novo o Cleber: «tá difícil ver esse urso pescando». Agora toda
- * janela tem visita (duas por hora, umas dezoito no expediente) e ele pesca
+ * janela tem visita (com a janela de 20 min, três por hora) e ele pesca
  * 4 min. Medido headless no `/lab-trem.html?aba=analitico`: com ele fora, a
  * página gasta uns 5–10 ms/s a mais de thread principal — leve.
  */

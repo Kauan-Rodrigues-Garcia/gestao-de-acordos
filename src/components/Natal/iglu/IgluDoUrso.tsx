@@ -52,7 +52,7 @@ function useRelogioFino(ativo: boolean): number {
  * vermelho e o verde do Natal no cachecol e no gorro; sem contorno, como o
  * trem e o boneco de neve.
  *
- * Quando o urso sai é o relógio que diz (`urso.ts`): duas vezes por hora, para todo
+ * Quando o urso sai é o relógio que diz (`urso.ts`): mais ou menos a cada 20 min, para todo
  * mundo ao mesmo tempo. Fora das visitas ele está lá dentro — porta fechada,
  * janelinha acesa. Clicar nele (ou no iglu) puxa conversa: o que ele fala, e
  * em que ordem, é `falas.ts` (sorteado por rodada, sem repetir). O balão

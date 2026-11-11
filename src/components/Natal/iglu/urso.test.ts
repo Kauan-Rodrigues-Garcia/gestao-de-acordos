@@ -42,8 +42,8 @@ describe('as visitas do urso', () => {
 });
 
 describe('o urso pescando', () => {
-  it('sai mais vezes: duas por hora (umas dezoito no expediente), 4 min pescando', () => {
-    expect(JANELA_MS * VISITA_A_CADA).toBe(30 * 60_000);
+  it('sai mais ou menos a cada 20 min (três por hora), 4 min pescando', () => {
+    expect(JANELA_MS * VISITA_A_CADA).toBe(20 * 60_000);
     expect(PESCANDO_S).toBe(240);
   });
 

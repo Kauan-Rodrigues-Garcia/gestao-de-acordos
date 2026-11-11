@@ -23,8 +23,9 @@
  *
  * ## Quando
  *
- * A primeira invasão vem 35 a 60 s depois de abrir Acordos; as próximas, 5 a
- * 8 minutos depois de a anterior acabar. Com a aba escondida, ou com ninguém
+ * A primeira invasão vem 35 a 60 s depois de abrir Acordos; as próximas, 12 a
+ * 18 minutos depois de a anterior acabar (eram 5 a 8; o Cleber pediu mais
+ * tempo entre uma bagunça e outra, 11/11/2026). Com a aba escondida, ou com ninguém
  * olhando (`lib/atencao.ts`), espera. No modo leve ele não invade sozinho (as
  * animações estão desligadas e a cena só pularia de um estado para outro) — o
  * laboratório ainda pode chamar.
@@ -228,7 +229,7 @@ export function useGrinch(compacto: boolean | null, direita: number, leve: boole
       const { compacto: c, leve: l } = ref.current;
       if (!document.hidden && !ninguemOlhando() && c !== null && !ocupado && !l) {
         if (Date.now() >= proximaInvasao) {
-          void rodar(invadir).then(() => { proximaInvasao = Date.now() + (300 + Math.random() * 180) * 1000; });
+          void rodar(invadir).then(() => { proximaInvasao = Date.now() + (720 + Math.random() * 360) * 1000; });
         } else if (!c && Math.random() < 0.18) {
           void rodar(espiar);
         }

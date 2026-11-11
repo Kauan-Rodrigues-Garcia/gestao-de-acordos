@@ -1,11 +1,11 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useModoLeve } from '@/lib/modoLeve';
 import { usePiscaPisca } from '../piscaPisca';
 import { Defs } from './pecas';
 import { A, L, SO_LAREIRA } from './medidas';
 import {
-  Anexo, Arvore, BolaDoGrinch, Gato, Janela, Lareira, LuzDoFogo, Mesinha, Parede, Pendurados,
+  Anexo, Arvore, BalaoDaTv, BolaDoGrinch, Gato, Janela, Lareira, LuzDoFogo, Mesinha, Parede, Pendurados,
   Poltrona, Prateleira, Presentes, Relogio, RestosDaBagunca, Tapete, Tv,
 } from './Cenario';
 import { Fuligem, Grinch, GrinchEspiando, JanelaQuebrada } from './grinch/Grinch';
@@ -48,7 +48,8 @@ import './chale.css';
  * mede a página: o cabeçalho (`data-natal-cabecalho`) diz o vão livre entre o
  * título (e as abas) e os botões; o chão (`data-natal-chao`) diz a altura.
  * Cabe inteiro, aparece inteiro; não cabe, fica só a lareira; nem ela, some.
- * Nada aqui pega clique, só a lareira (o mouse em cima atiça o fogo).
+ * Nada aqui pega clique, só a lareira (o mouse em cima atiça o fogo) e a TV
+ * (o clique abre o balão com o filme que está passando; fecha em `BALAO_TV_MS`).
  *
  * Desenho num quadro de `L` × `A` com o chão em `A`; a escala é a da altura.
  */
@@ -58,6 +59,8 @@ const FOLGA = 28;
 /** O anexo: a largura máxima, e a altura livre (no quadro) que ele precisa embaixo dos botões. */
 const ANEXO_MAX = 256;
 const ANEXO_ALTURA = 70;
+/** Quanto tempo o balão da TV fica aberto. */
+const BALAO_TV_MS = 6000;
 
 /**
  * `topo`: quanto (no quadro) sobra acima do desenho até a barra de cima — a
@@ -113,6 +116,12 @@ export function Chale() {
   const direita = lugar ? (lugar.compacto ? SO_LAREIRA.x : 0) + (lugar.larguraMain - lugar.x) / lugar.escala : L + 100;
   const grinch = useGrinch(lugar ? lugar.compacto : null, direita, leve, boneco);
   const b = grinch.bagunca;
+  const [balaoTv, setBalaoTv] = useState(false);
+  useEffect(() => {
+    if (!balaoTv) return;
+    const id = window.setTimeout(() => setBalaoTv(false), BALAO_TV_MS);
+    return () => window.clearTimeout(id);
+  }, [balaoTv]);
 
   useLayoutEffect(() => {
     const el = raiz.current;
@@ -152,7 +161,7 @@ export function Chale() {
             <Lareira topo={t} b={b} />
             {!c && <Gato estado={grinch.gato} />}
             {!c && <Prateleira />}
-            {!c && <Tv bag={!!b.tv} leve={leve} />}
+            {!c && <Tv bag={!!b.tv} leve={leve} onClicar={() => setBalaoTv(v => !v)} />}
             {!c && <Arvore bag={!!b.arvore} />}
             {!c && <Presentes bag={!!b.presentes} />}
             {!c && <Pendurados topo={t} />}
@@ -162,6 +171,7 @@ export function Chale() {
             <Fuligem e={grinch} />
             <Grinch ref={boneco} />
             <Duendes duendes={grinch.duendes} />
+            {!c && balaoTv && <BalaoDaTv foraDoAr={!!b.tv} />}
           </div>
         </div>
       )}

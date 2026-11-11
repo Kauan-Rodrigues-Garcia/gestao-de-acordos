@@ -689,13 +689,15 @@ export const Prateleira = memo(function Prateleira() {
   );
 });
 
-// A tela da TV, no quadro: quadrada, do formato do vídeo (60 × 60, 1:1).
-const TELA = { x: 397, y: 97, l: 46 } as const;
+// A tela da TV, no quadro: 16:9, do formato do vídeo (160 × 90, o «Mini filme.bat»).
+const TELA = { x: 398, y: 96, w: 72, h: 40.5 } as const;
 
-/** O vídeo que passa na TV (pedido do Cleber, 11/11/2026). */
-const VIDEO_DA_TV = '/video/natal/tv-chale.mp4';
+/** O vídeo que passa na TV (pedido do Cleber, 11/11/2026): o Grinch (2000), 160 × 90 a 10 fps. */
+const VIDEO_DA_TV = '/video/natal/tv-chale-grinch.mp4';
+/** O nome do filme, para o balão que abre ao clicar na TV. Trocou o vídeo, troque aqui. */
+const FILME_DA_TV = { nome: 'O Grinch', ano: 2000 } as const;
 /** A duração do vídeo, em segundos — vale até os metadados chegarem. */
-const DURACAO_DA_TV = 5402.8;
+const DURACAO_DA_TV = 6296.2;
 /** Fora do ponto mais do que isto (em s), pula para o ponto certo. */
 const TOLERANCIA_DA_TV = 1.5;
 
@@ -706,7 +708,7 @@ function pontoDaTv(agoraMs: number, duracao: number): number {
 }
 
 /**
- * O que passa na TV: um vídeo de 60 × 60 que dá a volta a cada hora e meia,
+ * O que passa na TV: um filme de 160 × 90 que dá a volta quando acaba,
  * no MESMO ponto para todo mundo — ninguém conversa com ninguém: a posição é a
  * hora do banco (`agoraDoServidor`, a mesma da sirene) dividida pela duração.
  * A cada 30 s confere se escorregou. Pausa só no modo leve ou com a TV fora do
@@ -743,14 +745,14 @@ const VideoDaTv = memo(function VideoDaTv({ parado }: { parado: boolean }) {
   return (
     <video ref={ref} className="ch-tv-video" src={VIDEO_DA_TV} muted loop playsInline preload="metadata"
       disablePictureInPicture aria-hidden="true"
-      style={{ left: TELA.x, top: TELA.y, width: TELA.l, height: TELA.l }} />
+      style={{ left: TELA.x, top: TELA.y, width: TELA.w, height: TELA.h }} />
   );
 });
 
 /** O chuvisco da TV fora do ar (só aparece na bagunça): pontos fixos, deslocados em degraus. */
 const Chuvisco = memo(function Chuvisco() {
-  const x = 395, y = 95, w = 50, h = 50;
-  const pontos = Array.from({ length: 220 }, (_, i) => [x + acasoDa(i) * w, y + acasoDa(i + 300) * h, acasoDa(i + 600)] as const);
+  const x = TELA.x - 2, y = TELA.y - 2, w = TELA.w + 4, h = TELA.h + 4;
+  const pontos = Array.from({ length: 300 },(_, i) => [x + acasoDa(i) * w, y + acasoDa(i + 300) * h, acasoDa(i + 600)] as const);
   return (
     <D x={x} y={y} w={w} h={h} className="ch-tv-chuvisco">
       <rect x={x} y={y} width={w} height={h} fill="#8E949C" />
@@ -761,21 +763,21 @@ const Chuvisco = memo(function Chuvisco() {
 
 /**
  * A TV de tubo (pedido do Cleber, 11/11/2026): gabinete de madeira, antena de
- * coelho, dois botões e o alto-falante, em cima de um rack com o videocassete.
- * A tela é quadrada, do formato do vídeo que passa nela (`VideoDaTv`); a faixa
- * clara descendo, as linhas e o tremor são o tubo.
+ * coelho, e embaixo da tela o alto-falante, a luzinha e os dois botões, em cima
+ * de um rack com o videocassete. A tela é 16:9, do formato do vídeo que passa
+ * nela (`VideoDaTv`); a faixa clara descendo, as linhas e o tremor são o tubo.
  */
-export function Tv({ bag, leve }: { bag: boolean; leve: boolean }) {
-  const { x: tx, y: ty, l } = TELA;
+export function Tv({ bag, leve, onClicar }: { bag: boolean; leve: boolean; onClicar?: () => void }) {
+  const { x: tx, y: ty, w: tw, h: th } = TELA;
   return (
     <>
       {/* o rack, com o videocassete */}
-      <D x={392} y={148} w={78} h={30}>
-        <ellipse cx={431} cy={175.4} rx={37} ry={2.2} fill="url(#nt-ch-contato)" />
-        <path d="M399 150 L397 176 M463 150 L465 176" stroke="url(#nt-ch-madeira-h)" strokeWidth={3} strokeLinecap="round" />
-        <rect x={395} y={148.6} width={72} height={4.6} rx={1.4} fill="url(#nt-ch-madeira)" />
-        <rect x={395} y={148.6} width={72} height={1.2} rx={0.6} fill="#D2A47C" opacity={0.75} />
-        <rect x={398} y={164.6} width={66} height={3.2} rx={1} fill="#7A4E30" />
+      <D x={391} y={148} w={92} h={30}>
+        <ellipse cx={437} cy={175.4} rx={43} ry={2.2} fill="url(#nt-ch-contato)" />
+        <path d="M399 150 L397 176 M475 150 L477 176" stroke="url(#nt-ch-madeira-h)" strokeWidth={3} strokeLinecap="round" />
+        <rect x={394} y={148.6} width={86} height={4.6} rx={1.4} fill="url(#nt-ch-madeira)" />
+        <rect x={394} y={148.6} width={86} height={1.2} rx={0.6} fill="#D2A47C" opacity={0.75} />
+        <rect x={398} y={164.6} width={78} height={3.2} rx={1} fill="#7A4E30" />
         <rect x={408} y={157} width={30} height={7.6} rx={1} fill="#2B2E35" />
         <rect x={408} y={157} width={30} height={1.4} rx={0.7} fill="#4A4E58" />
         <rect x={411} y={159.6} width={13} height={2.4} rx={0.6} fill="#14161A" />
@@ -785,43 +787,78 @@ export function Tv({ bag, leve }: { bag: boolean; leve: boolean }) {
         <rect x={444} y={159} width={12} height={2.6} rx={0.5} fill="#3A3E48" /><rect x={445} y={156.4} width={11} height={2.6} rx={0.5} fill="#55303A" />
         <rect x={447} y={160} width={6} height={0.8} fill="#F6EFE3" opacity={0.7} />
       </D>
-      <Cx x={393} y={74} w={74} h={76} o={[430, 149]} className={cn('ch-bag tv', bag && 'bag')}>
+      <Cx x={393} y={74} w={86} h={76} o={[436, 149]} className={cn('ch-bag tv', bag && 'bag', onClicar && 'ch-tv-clique')} onClick={onClicar}>
         {/* a antena */}
-        <D x={410} y={74} w={40} h={22} o={[430, 94]} className="ch-tv-antena">
-          <path d="M430 93 L417 77 M430 93 L444 79" stroke="#8E949C" strokeWidth={1.1} strokeLinecap="round" />
-          <circle cx={417} cy={77} r={1.2} fill="#C9CED6" /><circle cx={444} cy={79} r={1.2} fill="#C9CED6" />
-          <path d="M425 95 Q430 88 435 95 Z" fill="#3A3E48" />
+        <D x={416} y={74} w={40} h={22} o={[436, 94]} className="ch-tv-antena">
+          <path d="M436 93 L423 77 M436 93 L450 79" stroke="#8E949C" strokeWidth={1.1} strokeLinecap="round" />
+          <circle cx={423} cy={77} r={1.2} fill="#C9CED6" /><circle cx={450} cy={79} r={1.2} fill="#C9CED6" />
+          <path d="M431 95 Q436 88 441 95 Z" fill="#3A3E48" />
         </D>
         {/* o gabinete */}
-        <D x={393} y={92} w={74} h={58}>
-          <rect x={394} y={94} width={72} height={54} rx={5} fill="#3A2214" />
-          <rect x={394} y={93} width={72} height={54} rx={5} fill="url(#nt-ch-nogueira)" />
-          <rect x={395.4} y={94} width={69.2} height={2} rx={1} fill="#C3916A" opacity={0.6} />
-          <path d="M461 140 h3 M459 144 h4" stroke="#3A2214" strokeWidth={0.5} opacity={0.5} />
+        <D x={393} y={92} w={86} h={58}>
+          <rect x={394} y={94} width={84} height={54} rx={5} fill="#3A2214" />
+          <rect x={394} y={93} width={84} height={54} rx={5} fill="url(#nt-ch-nogueira)" />
+          <rect x={395.4} y={94} width={81.2} height={2} rx={1} fill="#C3916A" opacity={0.6} />
           {/* a moldura escura da tela */}
-          <rect x={tx - 1.8} y={ty - 1.8} width={l + 3.6} height={l + 3.6} rx={4.6} fill="#191B20" />
-          <rect x={tx} y={ty} width={l} height={l} rx={3.4} fill="url(#nt-ch-tela)" />
-          {/* o painel: os dois botões e o alto-falante */}
-          <circle cx={455} cy={103} r={3} fill="#191B20" /><circle cx={455} cy={103} r={2.2} fill="#C9CED6" /><path d="M455 103 V101.2" stroke="#191B20" strokeWidth={0.8} strokeLinecap="round" />
-          <circle cx={455} cy={112} r={3} fill="#191B20" /><circle cx={455} cy={112} r={2.2} fill="#C9CED6" /><path d="M455 112 L456.4 110.8" stroke="#191B20" strokeWidth={0.8} strokeLinecap="round" />
-          <path d="M451 120 h8 M451 122.6 h8 M451 125.2 h8 M451 127.8 h8 M451 130.4 h8 M451 133 h8" stroke="#2A1810" strokeWidth={0.9} strokeLinecap="round" />
-          <circle cx={452} cy={140} r={0.8} fill="#FF4D4D" />
+          <rect x={tx - 1.8} y={ty - 1.8} width={tw + 3.6} height={th + 3.6} rx={4.6} fill="#191B20" />
+          <rect x={tx} y={ty} width={tw} height={th} rx={3.4} fill="url(#nt-ch-tela)" />
+          {/* o painel embaixo da tela: o alto-falante, a luzinha e os dois botões */}
+          <path d="M401 139.6 v4.6 M403.6 139.6 v4.6 M406.2 139.6 v4.6 M408.8 139.6 v4.6 M411.4 139.6 v4.6 M414 139.6 v4.6 M416.6 139.6 v4.6 M419.2 139.6 v4.6 M421.8 139.6 v4.6" stroke="#2A1810" strokeWidth={0.9} strokeLinecap="round" />
+          <circle cx={446} cy={142} r={0.8} fill="#FF4D4D" />
+          <circle cx={456} cy={142} r={2.8} fill="#191B20" /><circle cx={456} cy={142} r={2.1} fill="#C9CED6" /><path d="M456 142 V140.3" stroke="#191B20" strokeWidth={0.8} strokeLinecap="round" />
+          <circle cx={465} cy={142} r={2.8} fill="#191B20" /><circle cx={465} cy={142} r={2.1} fill="#C9CED6" /><path d="M465 142 L466.3 140.8" stroke="#191B20" strokeWidth={0.8} strokeLinecap="round" />
           {/* os pezinhos */}
-          <rect x={399} y={146.6} width={6} height={2.4} rx={0.8} fill="#2A1810" /><rect x={455} y={146.6} width={6} height={2.4} rx={0.8} fill="#2A1810" />
+          <rect x={399} y={146.6} width={6} height={2.4} rx={0.8} fill="#2A1810" /><rect x={467} y={146.6} width={6} height={2.4} rx={0.8} fill="#2A1810" />
         </D>
         {/* a tela: o vídeo, a faixa do tubo, o chuvisco (na bagunça) e o reflexo do vidro */}
-        <Cx x={tx} y={ty} w={l} h={l} className="ch-tv-tela" data-nao-pausa="">
+        <Cx x={tx} y={ty} w={tw} h={th} className="ch-tv-tela" data-nao-pausa="">
           <VideoDaTv parado={bag || leve} />
-          <D x={tx} y={ty - 8} w={l} h={8} className="ch-tv-faixa"><rect x={tx} y={ty - 8} width={l} height={8} fill="#FFFFFF" opacity={0.12} /></D>
+          <D x={tx} y={ty - 8} w={tw} h={8} className="ch-tv-faixa"><rect x={tx} y={ty - 8} width={tw} height={8} fill="#FFFFFF" opacity={0.12} /></D>
           {bag && <Chuvisco />}
-          <D x={tx} y={ty} w={l} h={l}>
-            {Array.from({ length: 15 }, (_, i) => <rect key={i} x={tx} y={ty + 0.6 + i * 3.1} width={l} height={0.8} fill="#000" opacity={0.14} />)}
-            <rect x={tx} y={ty} width={l} height={l} fill="url(#nt-ch-vidro-tv)" />
+          <D x={tx} y={ty} w={tw} h={th}>
+            {Array.from({ length: Math.ceil(th / 3.1) }, (_, i) => <rect key={i} x={tx} y={ty + 0.6 + i * 3.1} width={tw} height={0.8} fill="#000" opacity={0.14} />)}
+            <rect x={tx} y={ty} width={tw} height={th} fill="url(#nt-ch-vidro-tv)" />
             <path d={`M${tx + 3} ${ty + 4} Q${tx + 6} ${ty + 1.6} ${tx + 12} ${ty + 1.6}`} stroke="#FFFFFF" strokeWidth={1.1} fill="none" strokeLinecap="round" opacity={0.5} />
           </D>
         </Cx>
       </Cx>
     </>
+  );
+}
+
+/** «faltam 32 min» — quanto falta para o filme acabar (e recomeçar), no ponto de todo mundo. */
+function quantoFalta(): string {
+  const falta = DURACAO_DA_TV - pontoDaTv(agoraDoServidor(), DURACAO_DA_TV);
+  const min = Math.ceil(falta / 60);
+  if (min <= 1) return 'acabando agora!';
+  if (min < 60) return `faltam ${min} min`;
+  const h = Math.floor(min / 60), m = min % 60;
+  return m ? `faltam ${h} h ${m} min` : `faltam ${h} h`;
+}
+
+/**
+ * O balão de «Passando agora», em cima da TV (pedido do Cleber, 11/11/2026):
+ * abre com um clique na TV e fecha sozinho (`Chale`). Fica fora da TV, no fim
+ * do palco, para passar por cima da árvore e dos presentes. Com a TV fora do
+ * ar (o Grinch a derrubou), conta isso em vez do filme.
+ */
+export function BalaoDaTv({ foraDoAr }: { foraDoAr: boolean }) {
+  return (
+    <div className="ch-tv-balao" style={{ left: TELA.x + TELA.w / 2, top: TELA.y - 7 }}>
+      {foraDoAr ? (
+        <>
+          <span className="ch-tv-balao-rotulo fora">Fora do ar!</span>
+          <strong>O Grinch derrubou a TV</strong>
+          <span className="ch-tv-balao-tempo">os duendes já vêm consertar</span>
+        </>
+      ) : (
+        <>
+          <span className="ch-tv-balao-rotulo"><i />Passando agora</span>
+          <strong>{FILME_DA_TV.nome} <span className="ch-tv-balao-ano">({FILME_DA_TV.ano})</span></strong>
+          <span className="ch-tv-balao-tempo">{quantoFalta()}</span>
+        </>
+      )}
+    </div>
   );
 }
 
