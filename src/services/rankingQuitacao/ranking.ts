@@ -18,7 +18,8 @@ export type Disputa = 'setor' | 'equipe';
 /**
  * O que conta como quitação no setor (20261112230000): tudo o que fecha o
  * contrato (Quitação, Junção/troca de plano, saldo zerado) ou só o acordo de
- * Quitação. O Play 2 quer só Quitação; o Play 3, tudo.
+ * Quitação — sem o boleto à vista, que é o fim do contrato (20261112233000).
+ * O Play 2 quer só Quitação; o Play 3, tudo.
  */
 export type Aceita = 'todas' | 'so_quitacao';
 export type CategoriaId = 'mais_quitacoes' | 'maior_valor' | 'maior_quitacao' | 'equipe_campea';
@@ -421,13 +422,19 @@ export function falaDoCriterio(criterio: Criterio, falta: number, formatarReais:
 // ── A prévia da importação ──────────────────────────────────────────────────
 
 /**
- * Os setores que têm quitação gravada no mês e ficam sem NENHUMA com o
- * arquivo — importar substitui o mês da empresa inteira. Foi o que apagou o
- * novembro do Play 3, do Play 5 e do Play Mix Marília em 12/11/2026 (arquivo
- * só com o Play 2).
+ * Cada setor importa o seu (20261112234000): a importação atualiza só os
+ * setores marcados. Em 12/11/2026 um arquivo só do Play 2 apagou o novembro
+ * do Play 3, do Play 5 e do Play Mix Marília — agora eles nem são tocados.
+ *
+ * O setor cairia para menos da metade do que tem hoje: o arquivo parece não
+ * ser dele (uma pessoa de lá no relatório de outro grupo).
  */
-export function setoresQueFicamSemQuitacao<T extends { no_banco: number; no_arquivo: number }>(setores: T[]): T[] {
-  return setores.filter(s => s.no_banco > 0 && s.no_arquivo === 0);
+export const pareceDeOutroSetor = (s: { no_banco: number; no_arquivo: number }) =>
+  s.no_arquivo > 0 && s.no_banco > 0 && s.no_arquivo * 2 < s.no_banco;
+
+/** Os que vêm marcados: os setores do arquivo, menos os que parecem de outro arquivo. */
+export function setoresParaAtualizar<T extends { setor_id: string; no_banco: number; no_arquivo: number }>(setores: T[]): string[] {
+  return setores.filter(s => s.no_arquivo > 0 && !pareceDeOutroSetor(s)).map(s => s.setor_id);
 }
 
 // ── Subiu / desceu desde a última importação vista ─────────────────────────

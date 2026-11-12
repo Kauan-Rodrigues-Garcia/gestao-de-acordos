@@ -273,3 +273,29 @@ describe('última parcela de carnê não é quitação (12/11/2026)', () => {
     expect(r.ultimasParcelasDeCarne).toBeNull();
   });
 });
+
+describe('Quitação no boleto à vista tem origem própria (12/11/2026, NR 12779516)', () => {
+  const CAB_TP = ['Cód. Acordo', 'Num. Parc. Acordo', 'Tp. Doc', 'Nr. Documento', 'Operador', 'Dt. Pgto', 'Recebido',
+    'Valor Acordo', 'Qtd. Parcelas Acordo', 'Valor Restante', 'Situação Atual', 'Data da quitação'];
+  const l = (cod: string, nr: string, tp: string, valor: number, atual = 'Quitação') =>
+    [cod, 1, tp, nr, 'THAINA', d('2026-11-10'), valor, valor, 1, 0, atual, d('2026-11-10')];
+
+  it('boleto à vista = quitacao_boleto; Pix e cartão = quitacao; boleto Semestral = saldo_zerado', () => {
+    const r = extrairQuitacoes([
+      CAB_TP,
+      l('5895010', '12779516', 'Boleto', 275),
+      l('5898644', '12783104', 'Pix', 800),
+      l('5897815', '13037948', 'Cartão', 3800),
+      l('5877157', '12998884', 'Boleto', 955, 'Semestral'),
+    ]);
+    const tipo = Object.fromEntries(r.acordos.map(a => [a.cod_acordo, a.tipo]));
+    expect(tipo).toEqual({ '5895010': 'quitacao_boleto', '5898644': 'quitacao', '5897815': 'quitacao', '5877157': 'saldo_zerado' });
+    expect(r.porTipo).toEqual({ quitacao: 2, quitacao_boleto: 1, juncao: 0, saldo_zerado: 1 });
+  });
+
+  it('no mesmo contrato, Pix Quitação + boleto Quitação: vale a do Pix', () => {
+    const r = extrairQuitacoes([CAB_TP, l('1', '900', 'Boleto', 100), l('2', '900', 'Pix', 200)]);
+    expect(r.acordos).toHaveLength(1);
+    expect(r.acordos[0]).toMatchObject({ tipo: 'quitacao', valor_acordo: 300 });
+  });
+});

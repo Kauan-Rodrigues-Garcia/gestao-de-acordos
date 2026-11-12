@@ -3,13 +3,17 @@
  *
  * Lê o arquivo no navegador, casa o login do operador com o perfil (a mesma
  * regra das outras importações, `resolverOperadores`) e mostra a prévia antes
- * de gravar. Gravar substitui a importação daquele mês na empresa inteira: o
- * relatório é um só para todos os setores, e cada setor vê só a sua gente.
+ * de gravar.
  *
- * Por isso a prévia mostra, por setor, o que o mês tem hoje e o que o arquivo
- * traz (20261112210000). Setor que tinha quitação e fica sem nenhuma aparece
- * em destaque e gravar pede «Entendi» — em 12/11/2026 um arquivo só com o
- * Play 2 apagou o novembro do Play 3, do Play 5 e do Play Mix Marília.
+ * CADA SETOR IMPORTA O SEU (20261112234000): a prévia mostra, por setor, o
+ * que o mês tem hoje e o que o arquivo traz, e a importação atualiza só os
+ * setores marcados — os outros ficam exatamente como estão. Antes, importar
+ * substituía o mês da empresa inteira, e o relatório do Play 2 (12/11/2026)
+ * apagou o novembro do Play 3, do Play 5 e do Play Mix Marília.
+ *
+ * Vêm marcados os setores que estão no arquivo, menos o que cairia para menos
+ * da metade do que tem hoje: aí o arquivo parece não ser daquele setor (uma
+ * pessoa de lá no relatório de outro grupo), e quem importa decide.
  */
 import { useState } from 'react';
 import { AlertTriangle, FileSpreadsheet, Loader2, Upload } from 'lucide-react';
@@ -20,7 +24,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { resolverOperadores } from '@/services/analitico/analitico.service';
 import { lerRelatorioQuitacao, resumoPorOperador, type RelatorioQuitacao } from '@/services/rankingQuitacao/relatorioQuitacao';
 import { importarRanking, previaDaImportacao, type SetorNaPrevia } from '@/services/rankingQuitacao/rankingQuitacao.service';
-import { setoresQueFicamSemQuitacao } from '@/services/rankingQuitacao/ranking';
+import { pareceDeOutroSetor, setoresParaAtualizar } from '@/services/rankingQuitacao/ranking';
 import { cn } from '@/lib/utils';
 import { nomeDoMes } from './mes';
 
@@ -34,7 +38,7 @@ interface Props {
 
 type Previa = RelatorioQuitacao & {
   idPorLogin: Record<string, string | null>;
-  /** Por setor, hoje × arquivo. `null`: não deu para conferir (função pendente ou erro). */
+  /** Por setor, hoje × arquivo. `null`: não deu para conferir — e sem isso não se importa. */
   setores: SetorNaPrevia[] | null;
 };
 
@@ -43,13 +47,17 @@ export function ImportarRankingModal({ aberto, empresaId, onFechar, onImportado 
   const [gravando, setGravando] = useState(false);
   const [previa, setPrevia] = useState<Previa | null>(null);
   const [nomeArquivo, setNomeArquivo] = useState('');
-  const [ciente, setCiente] = useState(false);
+  const [marcados, setMarcados] = useState<Set<string>>(new Set());
+
+  const limpar = () => {
+    setPrevia(null);
+    setNomeArquivo('');
+    setMarcados(new Set());
+  };
 
   const fechar = () => {
     if (gravando) return;
-    setPrevia(null);
-    setNomeArquivo('');
-    setCiente(false);
+    limpar();
     onFechar();
   };
 
@@ -58,17 +66,17 @@ export function ImportarRankingModal({ aberto, empresaId, onFechar, onImportado 
     setNomeArquivo(arquivo.name);
     setLendo(true);
     setPrevia(null);
-    setCiente(false);
+    setMarcados(new Set());
     try {
       const r = await lerRelatorioQuitacao(arquivo);
       if (r.erros.length) { toast.error(r.erros[0]); return; }
       const logins = [...new Set(r.acordos.map(a => a.operador_usuario))];
       const { map } = await resolverOperadores(empresaId, logins);
-      // A conferência por setor não segura a leitura: sem ela, só não há o aviso.
       const setores = r.mes
         ? await previaDaImportacao(empresaId, r.mes, r.acordos.map(a => map[a.operador_usuario] ?? null)).catch((): null => null)
         : null;
       setPrevia({ ...r, idPorLogin: map, setores });
+      setMarcados(new Set(setores ? setoresParaAtualizar(setores) : []));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Não foi possível ler o arquivo.');
     } finally {
@@ -77,17 +85,18 @@ export function ImportarRankingModal({ aberto, empresaId, onFechar, onImportado 
   }
 
   async function confirmar() {
-    if (!previa?.mes) return;
+    if (!previa?.mes || !marcados.size) return;
     setGravando(true);
     try {
       const n = await importarRanking(empresaId, previa.mes, previa.acordos.map(a => ({
         ...a, operador_id: previa.idPorLogin[a.operador_usuario] ?? null,
-      })));
-      toast.success(`Ranking de ${nomeDoMes(previa.mes)} importado: ${n} acordo${n === 1 ? '' : 's'} quitado${n === 1 ? '' : 's'}.`);
+      })), [...marcados]);
+      const nomes = (previa.setores ?? []).filter(s => marcados.has(s.setor_id)).map(s => s.setor_nome).join(', ');
+      toast.success(`Ranking de ${nomeDoMes(previa.mes)} importado: ${n} quitaç${n === 1 ? 'ão' : 'ões'} em ${nomes}.`, {
+        description: 'Os outros setores ficaram como estavam.',
+      });
       const mes = previa.mes;
-      setPrevia(null);
-      setNomeArquivo('');
-      setCiente(false);
+      limpar();
       onImportado(mes);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Não foi possível gravar a importação.');
@@ -96,15 +105,20 @@ export function ImportarRankingModal({ aberto, empresaId, onFechar, onImportado 
     }
   }
 
+  const alternar = (id: string, v: boolean) => setMarcados(m => {
+    const novo = new Set(m);
+    if (v) novo.add(id); else novo.delete(id);
+    return novo;
+  });
+
   const resumo = previa ? resumoPorOperador(previa.acordos) : [];
   const semVinculo = resumo.filter(o => !previa?.idPorLogin[o.operador]);
-  const somem = previa?.setores ? setoresQueFicamSemQuitacao(previa.setores) : [];
-  const apagadas = somem.reduce((t, s) => t + s.no_banco, 0);
-  const travado = somem.length > 0 && !ciente;
+  const noArquivo = (previa?.setores ?? []).filter(s => s.no_arquivo > 0);
+  const foraDoArquivo = (previa?.setores ?? []).filter(s => s.no_arquivo === 0);
 
   return (
     <Dialog open={aberto} onOpenChange={v => { if (!v) fechar(); }}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Importar Ranking de quitação</DialogTitle>
           <DialogDescription>
@@ -149,16 +163,58 @@ export function ImportarRankingModal({ aberto, empresaId, onFechar, onImportado 
               </div>
             </div>
 
-            {(previa.porTipo.juncao > 0 || previa.porTipo.saldo_zerado > 0) && (
-              <p className="text-xs text-muted-foreground">
-                {previa.porTipo.quitacao} de acordo de Quitação, {previa.porTipo.juncao} de troca de plano (Junção) e{' '}
-                {previa.porTipo.saldo_zerado} de saldo zerado. O setor que aceita só Quitação conta só as primeiras.
+            {previa.setores === null ? (
+              <p className="flex gap-2 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2.5 text-xs">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+                Não deu para conferir de que setores é este arquivo. Sem isso a importação não grava — tente de novo.
               </p>
+            ) : noArquivo.length === 0 ? (
+              <p className="rounded-lg border border-border px-3 py-2.5 text-xs text-muted-foreground">
+                Ninguém deste arquivo é de um setor cadastrado no sistema.
+              </p>
+            ) : (
+              <div className="overflow-hidden rounded-lg border border-border">
+                <div className="flex items-center justify-between gap-3 bg-muted/40 px-3 py-1.5 text-[11px] font-medium text-muted-foreground">
+                  <span>Atualizar o setor</span>
+                  <span>Hoje no mês → no arquivo</span>
+                </div>
+                <ul className="divide-y divide-border">
+                  {noArquivo.map(s => {
+                    const marcado = marcados.has(s.setor_id);
+                    const estranho = pareceDeOutroSetor(s);
+                    return (
+                      <li key={s.setor_id} className={cn('space-y-1 px-3 py-2 text-xs', estranho && 'bg-warning/10')}>
+                        <label className="flex cursor-pointer items-center justify-between gap-3">
+                          <span className="flex min-w-0 items-center gap-2">
+                            <Checkbox checked={marcado} onCheckedChange={v => alternar(s.setor_id, v === true)} />
+                            <span className={cn('truncate', marcado ? 'font-medium text-foreground' : 'text-muted-foreground')}>{s.setor_nome}</span>
+                          </span>
+                          <span className="shrink-0 tabular-nums text-muted-foreground">
+                            {s.no_banco} → <span className={cn('font-semibold', estranho ? 'text-warning' : 'text-foreground')}>{s.no_arquivo}</span>
+                          </span>
+                        </label>
+                        {estranho && (
+                          <p className="pl-6 text-[11px] text-warning">
+                            Cairia de {s.no_banco} para {s.no_arquivo}: parece que o arquivo não é deste setor. Marque só se for isso mesmo.
+                          </p>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+                {foraDoArquivo.length > 0 && (
+                  <p className="border-t border-border bg-muted/20 px-3 py-1.5 text-[11px] text-muted-foreground">
+                    Não vêm no arquivo e ficam como estão: {foraDoArquivo.map(s => `${s.setor_nome} (${s.no_banco})`).join(', ')}.
+                  </p>
+                )}
+              </div>
             )}
-            {previa.quitadosPorJuncao > 0 && (
+
+            {(previa.porTipo.juncao > 0 || previa.porTipo.saldo_zerado > 0 || previa.porTipo.quitacao_boleto > 0) && (
               <p className="text-xs text-muted-foreground">
-                {previa.quitadosPorJuncao} quitaç{previa.quitadosPorJuncao === 1 ? 'ão veio' : 'ões vieram'} de
-                Junção que fechou o contrato.
+                {previa.porTipo.quitacao} de acordo de Quitação, {previa.porTipo.quitacao_boleto} de Quitação no boleto à vista
+                (fim do contrato), {previa.porTipo.juncao} de troca de plano (Junção) e {previa.porTipo.saldo_zerado} de
+                saldo zerado. O setor que aceita só Quitação conta só as primeiras.
               </p>
             )}
             {previa.quitadosCompletandoParcelamento > 0 && (
@@ -188,56 +244,15 @@ export function ImportarRankingModal({ aberto, empresaId, onFechar, onImportado 
               </p>
             )}
             {semVinculo.length > 0 && (
-              <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs">
+              <p className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs">
                 {semVinculo.length} login{semVinculo.length === 1 ? '' : 's'} sem usuário no sistema
-                ({semVinculo.slice(0, 4).map(o => o.operador).join(', ')}{semVinculo.length > 4 ? '…' : ''}) —
-                essas quitações são gravadas, mas não aparecem no ranking.
+                ({semVinculo.slice(0, 4).map(o => o.operador).join(', ')}{semVinculo.length > 4 ? '…' : ''}) — sem
+                usuário não há setor, e essas quitações ficam de fora.
               </p>
-            )}
-            {previa.setores && previa.setores.length > 0 && (
-              <div className="overflow-hidden rounded-lg border border-border">
-                <div className="flex items-center justify-between bg-muted/40 px-3 py-1.5 text-[11px] font-medium text-muted-foreground">
-                  <span>Setor</span>
-                  <span>Hoje no mês → no arquivo</span>
-                </div>
-                <ul className="divide-y divide-border">
-                  {previa.setores.map(s => {
-                    const some = s.no_banco > 0 && s.no_arquivo === 0;
-                    return (
-                      <li key={s.setor_id} className={cn('flex items-center justify-between gap-3 px-3 py-1.5 text-xs', some && 'bg-warning/10')}>
-                        <span className={cn('truncate', some && 'font-medium text-warning')}>{s.setor_nome}</span>
-                        <span className="shrink-0 tabular-nums text-muted-foreground">
-                          {s.no_banco} → <span className={cn('font-semibold', some ? 'text-warning' : 'text-foreground')}>{s.no_arquivo}</span>
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            )}
-
-            {somem.length > 0 && (
-              <div className="space-y-2 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2.5 text-xs">
-                <p className="flex gap-2">
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
-                  <span>
-                    O arquivo não tem ninguém de <strong>{somem.map(s => s.setor_nome).join(', ')}</strong>.
-                    Importar apaga {apagadas === 1 ? 'a quitação' : `as ${apagadas} quitações`} de {nomeDoMes(previa.mes)} que
-                    {somem.length === 1 ? ' esse setor tem' : ' esses setores têm'} hoje. O relatório certo é o da empresa
-                    inteira, sem filtro de grupo.
-                  </span>
-                </p>
-                <label className="flex cursor-pointer items-center gap-2 pl-6">
-                  <Checkbox checked={ciente} onCheckedChange={v => setCiente(v === true)} />
-                  <span>Entendi, pode apagar</span>
-                </label>
-              </div>
             )}
 
             <p className="text-xs text-muted-foreground">
-              Substitui a importação de {nomeDoMes(previa.mes)} da empresa inteira. Cada setor
-              habilitado vê só os seus operadores.
-              {previa.setores === null && ' Não deu para conferir os setores agora: confira se o arquivo tem todos eles.'}
+              Atualiza {nomeDoMes(previa.mes)} só nos setores marcados. Os outros ficam exatamente como estão.
             </p>
           </div>
         )}
@@ -246,16 +261,14 @@ export function ImportarRankingModal({ aberto, empresaId, onFechar, onImportado 
           <Button variant="ghost" onClick={fechar} disabled={gravando}>Cancelar</Button>
           <Button
             onClick={() => void confirmar()}
-            disabled={!previa?.mes || !previa.acordos.length || gravando || travado}
-            variant={somem.length > 0 ? 'destructive' : 'default'}
+            disabled={!previa?.mes || !previa.acordos.length || !previa.setores || !marcados.size || gravando}
             className="gap-2"
           >
             {gravando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-            {somem.length > 0 ? 'Importar mesmo assim' : 'Importar'}
+            {marcados.size > 1 ? `Importar ${marcados.size} setores` : 'Importar'}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
-

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   atualizarLembranca, categoriasDaDisputa, configParaGravar, escolherDisputa, faltaParaPassar, lerConfig, normalizarRanking,
-  posicoesComPremio, premioTexto, resumoDaConfig, setoresQueFicamSemQuitacao, variacao, CONFIG_PADRAO,
+  pareceDeOutroSetor, posicoesComPremio, premioTexto, resumoDaConfig, setoresParaAtualizar, variacao, CONFIG_PADRAO,
 } from './ranking';
 
 const pos = (posicao: number, extra: Record<string, unknown> = {}) => ({
@@ -190,14 +190,16 @@ describe('categoriasDaDisputa — destaques por equipe (20261112200000)', () => 
   });
 });
 
-describe('setoresQueFicamSemQuitacao — o aviso da importação (12/11/2026)', () => {
-  it('só o setor que tinha quitação e fica sem nenhuma', () => {
+describe('setoresParaAtualizar — cada setor importa o seu (12/11/2026)', () => {
+  it('marca os setores do arquivo; o que cairia para menos da metade e o que não vem ficam de fora', () => {
     const setores = [
-      { setor_nome: 'Play 2', no_banco: 110, no_arquivo: 110 },
-      { setor_nome: 'Play 3', no_banco: 80, no_arquivo: 0 },
-      { setor_nome: 'Play 5', no_banco: 0, no_arquivo: 12 },
-      { setor_nome: 'Play Mix', no_banco: 30, no_arquivo: 25 },
+      { setor_id: 'p2', no_banco: 110, no_arquivo: 100 },
+      // Uma pessoa do Play 3 no relatório do Play 2: 80 → 1.
+      { setor_id: 'p3', no_banco: 80, no_arquivo: 1 },
+      { setor_id: 'p5', no_banco: 0, no_arquivo: 12 },
+      { setor_id: 'mix', no_banco: 30, no_arquivo: 0 },
     ];
-    expect(setoresQueFicamSemQuitacao(setores).map(s => s.setor_nome)).toEqual(['Play 3']);
+    expect(setoresParaAtualizar(setores)).toEqual(['p2', 'p5']);
+    expect(setores.filter(pareceDeOutroSetor).map(s => s.setor_id)).toEqual(['p3']);
   });
 });

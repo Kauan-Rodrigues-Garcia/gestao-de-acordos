@@ -21,6 +21,8 @@ const MIGRATION = readFileSync(resolve(pasta, '20261112200000_ranking_quitacao_s
 const PREVIA = readFileSync(resolve(pasta, '20261112210000_ranking_quitacao_previa_importacao.sql'), 'utf8');
 const LIDER_CONFIGURA = readFileSync(resolve(pasta, '20261112220000_ranking_quitacao_lider_configura.sql'), 'utf8');
 const ACEITA = readFileSync(resolve(pasta, '20261112230000_ranking_quitacao_aceita_por_setor.sql'), 'utf8');
+const BOLETO = readFileSync(resolve(pasta, '20261112233000_ranking_quitacao_boleto_a_vista.sql'), 'utf8');
+const POR_SETOR = readFileSync(resolve(pasta, '20261112234000_ranking_quitacao_importar_por_setor.sql'), 'utf8');
 
 function trecho(texto: string, de: string, ate: string): string {
   const i = texto.indexOf(de);
@@ -132,6 +134,8 @@ beforeAll(async () => {
   await db.exec(PREVIA);
   await db.exec(LIDER_CONFIGURA);
   await db.exec(ACEITA);
+  await db.exec(BOLETO);
+  await db.exec(POR_SETOR);
 });
 
 afterAll(async () => { await db?.close(); });
@@ -302,5 +306,72 @@ describe('20261112230000 — o que conta como quitação, por setor', () => {
     await db.query(`select set_config('teste.uid', $1, false), set_config('teste.chaves', 'ranking_quitacao_configurar', false)`, [P(9)]);
     await expect(db.query(`select public.fn_ranking_quitacao_definir_setor($1, $2, true, null, '{"aceita":"metade"}'::jsonb)`, [EMP, S_EQ]))
       .rejects.toThrow(/aceita todas as quitacoes ou so acordo de Quitacao/);
+  });
+});
+
+describe('20261112233000 — Quitação no boleto à vista', () => {
+  it('importar grava quitacao_boleto; «só Quitação» deixa de fora, «todas» conta', async () => {
+    await db.query(`select set_config('teste.chaves', 'ranking_quitacao_importar', false)`);
+    await db.query(`select public.fn_ranking_quitacao_importar($1, '2027-01-01', $2::jsonb)`, [EMP, JSON.stringify([
+      { cod_acordo: 'b1', operador_usuario: 'u10', operador_id: P(10), valor_acordo: 275, data_quitacao: '2027-01-10', tipo: 'quitacao_boleto' },
+      { cod_acordo: 'b2', operador_usuario: 'u10', operador_id: P(10), valor_acordo: 800, data_quitacao: '2027-01-11', tipo: 'quitacao' },
+    ])]);
+    const gravado = await db.query(`select cod_acordo, tipo from public.ranking_quitacao_acordos where mes = '2027-01-01' order by 1`);
+    expect(gravado.rows).toEqual([{ cod_acordo: 'b1', tipo: 'quitacao_boleto' }, { cod_acordo: 'b2', tipo: 'quitacao' }]);
+
+    const valorDaEva = async () => {
+      const r = await db.query<{ r: Record<string, any> }>(
+        `select public.fn_ranking_quitacao_calcular($1, $2, '2027-01-01', null) as r`, [EMP, S_SET]);
+      return Number(r.rows[0].r.disputas[0].posicoes[0].valor);
+    };
+    expect(await valorDaEva()).toBe(1075);
+    await db.exec(`update public.ranking_quitacao_setores set config = config || '{"aceita":"so_quitacao"}' where setor_id = '${S_SET}'`);
+    expect(await valorDaEva()).toBe(800);
+  });
+});
+
+describe('20261112234000 — cada setor importa o seu', () => {
+  const FEV = '2027-02-01';
+  const q = (cod: string, pessoa: number, valor: number) =>
+    ({ cod_acordo: cod, operador_usuario: `u${pessoa}`, operador_id: P(pessoa), valor_acordo: valor, data_quitacao: '2027-02-05', tipo: 'quitacao' });
+  const importar = (linhas: object[], setores: string[] | null) =>
+    db.query(`select public.fn_ranking_quitacao_importar($1, $2, $3::jsonb, $4::uuid[]) as n`, [EMP, FEV, JSON.stringify(linhas), setores]);
+  const doMes = async () =>
+    (await db.query<{ cod_acordo: string; valor_acordo: string }>(
+      `select cod_acordo, valor_acordo from public.ranking_quitacao_acordos where mes = $1 order by 1`, [FEV]))
+      .rows.map(r => `${r.cod_acordo}:${Number(r.valor_acordo)}`);
+
+  beforeAll(async () => {
+    await db.query(`select set_config('teste.chaves', 'ranking_quitacao_importar', false)`);
+    // O mês dos dois setores, importado do jeito antigo (empresa inteira).
+    await importar([q('a1', 1, 100), q('a2', 3, 200), q('b1', 8, 300), q('b2', 10, 400)], null);
+  });
+
+  it('o Play 2 importa o dele: o Play 3 fica exatamente como estava', async () => {
+    // Arquivo do Play 2 (S_EQ): a1 mudou de valor, a2 sumiu, a3 é nova.
+    const r = await importar([q('a1', 1, 150), q('a3', 2, 50)], [S_EQ]);
+    expect(r.rows[0]).toEqual({ n: 2 });
+    expect(await doMes()).toEqual(['a1:150', 'a3:50', 'b1:300', 'b2:400']);
+  });
+
+  it('linha de outro setor no arquivo fica de fora; o setor não marcado não é tocado', async () => {
+    // Relatório do Play 2 com uma pessoa do Play 3 (P(8)) no meio.
+    await importar([q('a1', 1, 150), q('a3', 2, 50), q('b9', 8, 999)], [S_EQ]);
+    expect(await doMes()).toEqual(['a1:150', 'a3:50', 'b1:300', 'b2:400']);
+  });
+
+  it('o Play 3 importa o dele depois, e o Play 2 continua', async () => {
+    await importar([q('b1', 8, 310)], [S_SET]);
+    expect(await doMes()).toEqual(['a1:150', 'a3:50', 'b1:310']);
+  });
+
+  it('nenhum setor marcado, ou setor de outra empresa: recusa', async () => {
+    await expect(importar([q('a1', 1, 1)], [])).rejects.toThrow(/pelo menos um setor/);
+    await expect(importar([q('a1', 1, 1)], ['00000000-0000-4000-8000-0000000000ff'])).rejects.toThrow(/nao e desta empresa/);
+  });
+
+  it('a função antiga de 3 parâmetros saiu; a chamada antiga cai na nova (empresa inteira)', async () => {
+    const r = await db.query(`select to_regprocedure('public.fn_ranking_quitacao_importar(uuid,date,jsonb)') as velha`);
+    expect(r.rows[0]).toEqual({ velha: null });
   });
 });

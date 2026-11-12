@@ -114,15 +114,26 @@ export async function previaDaImportacao(
   }));
 }
 
-/** Grava os acordos quitados do mês (substitui a importação anterior). Devolve quantos entraram. */
+/**
+ * Grava os acordos quitados do mês SÓ nos setores pedidos (20261112234000): as
+ * quitações dos outros setores ficam como estão. Devolve quantas entraram.
+ */
 export async function importarRanking(
   empresaId: string,
   mes: string,
   acordos: (AcordoQuitado & { operador_id: string | null })[],
+  setores: string[],
 ): Promise<number> {
+  if (!setores.length) throw new Error('Marque pelo menos um setor para importar.');
   const { data, error } = await rpcSemTipo<number>('fn_ranking_quitacao_importar', {
-    p_empresa_id: empresaId, p_mes: mes, p_linhas: acordos,
+    p_empresa_id: empresaId, p_mes: mes, p_linhas: acordos, p_setores: setores,
   });
-  if (error) throw new Error(error.message);
+  if (error) {
+    // Sem a migration, a função antiga substituiria a empresa inteira: melhor parar.
+    if (semMigrationDoRanking(error) || /p_setores/i.test(error.message)) {
+      throw new Error('A importação por setor chega com a migration 20261112234000, que ainda não foi aplicada no banco. Nada foi gravado.');
+    }
+    throw new Error(error.message);
+  }
   return Number(data ?? 0);
 }

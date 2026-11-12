@@ -250,7 +250,7 @@ export function EditorDoSetor({ empresaId, setor, atual, equipes, onFechar, onSa
               onMudar={v => setCfg(c => ({ ...c, aceita: v }))}
               opcoes={[
                 { valor: 'todas', rotulo: 'Tudo o que quita o contrato', dica: 'Acordo de Quitação, Junção que fechou o contrato (troca de plano) e acordo que ficou com saldo zero.' },
-                { valor: 'so_quitacao', rotulo: 'Só acordo de Quitação', dica: 'Só o que foi negociado como Quitação. Troca de plano e saldo zerado ficam de fora.' },
+                { valor: 'so_quitacao', rotulo: 'Só acordo de Quitação', dica: 'Só o que foi negociado como Quitação. Troca de plano, saldo zerado e Quitação no boleto à vista (o fim do contrato) ficam de fora.' },
               ]}
             />
             <p className="text-[11px] text-muted-foreground">A última parcela de boleto parcelado nunca conta. Mudar aqui vale na hora para o que foi importado a partir de 12/11/2026.</p>

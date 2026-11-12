@@ -78,6 +78,12 @@
  *
  *   quitacao      tem um acordo com «Situação Atual» Quitação (sozinho ou com
  *                 peças do mesmo contrato somadas);
+ *   quitacao_boleto  o acordo de Quitação foi um BOLETO à vista. No 671.xlsx
+ *                 os 9 assim pagam só as 2–4 últimas parcelas vencidas do
+ *                 contrato (NR 12779516: parcelas 23 e 24, reparcelamento que
+ *                 ficou na última) — o contrato terminou, não foi negociada
+ *                 uma quitação. Fica de fora em «Só acordo de Quitação» (Play
+ *                 2) e conta em «todas» (Play 3) — pedido de 12/11/2026;
  *   juncao        quitou por uma Junção que fechou o contrato (troca de
  *                 plano), sem acordo Quitação;
  *   saldo_zerado  quitou porque um Parcelamento, Parcela única, Semestral…
@@ -95,10 +101,10 @@
 import { norm, toDate } from '@/services/analitico/analiticoComum';
 
 /** De onde a quitação veio (ver o cabeçalho). Cada setor escolhe o que aceita. */
-export type TipoQuitacao = 'quitacao' | 'juncao' | 'saldo_zerado';
+export type TipoQuitacao = 'quitacao' | 'quitacao_boleto' | 'juncao' | 'saldo_zerado';
 
 /** Na quitação que juntou acordos, vale a origem mais forte. */
-const FORCA: Record<TipoQuitacao, number> = { quitacao: 3, juncao: 2, saldo_zerado: 1 };
+const FORCA: Record<TipoQuitacao, number> = { quitacao: 4, quitacao_boleto: 3, juncao: 2, saldo_zerado: 1 };
 
 export interface AcordoQuitado {
   cod_acordo: string;
@@ -191,7 +197,7 @@ function mesDoArquivo(datas: (Date | null)[]): string | null {
 export function extrairQuitacoes(rows: unknown[][]): RelatorioQuitacao {
   const vazio = (erro: string): RelatorioQuitacao =>
     ({ mes: null, acordos: [], linhasLidas: 0, quitadosForaDoMes: 0, quitadosPorJuncao: 0, quitadosCompletandoParcelamento: 0,
-       porTipo: { quitacao: 0, juncao: 0, saldo_zerado: 0 }, ultimasParcelasDeCarne: null, erros: [erro] });
+       porTipo: { quitacao: 0, quitacao_boleto: 0, juncao: 0, saldo_zerado: 0 }, ultimasParcelasDeCarne: null, erros: [erro] });
   if (rows.length < 2) return vazio('Planilha sem dados.');
 
   const cab = (rows[0] ?? []).map(norm);
@@ -287,7 +293,9 @@ export function extrairQuitacoes(rows: unknown[][]): RelatorioQuitacao {
     }
     if (dia.slice(0, 7) !== mes.slice(0, 7)) { foraDoMes.add(contrato); continue; }
     if (!porAcordo.has(cod)) {
-      const tipo: TipoQuitacao = situacao === 'quitacao' ? 'quitacao' : quitaPeloRotulo(r) ? 'juncao' : 'saldo_zerado';
+      const noBoleto = iTpDoc >= 0 && norm(r[iTpDoc]) === 'boleto';
+      const tipo: TipoQuitacao = situacao === 'quitacao' ? (noBoleto ? 'quitacao_boleto' : 'quitacao')
+        : quitaPeloRotulo(r) ? 'juncao' : 'saldo_zerado';
       porAcordo.set(cod, {
         cod_acordo: cod, operador_usuario: operador, valor_acordo: valor, data_quitacao: dia, contrato, juncao, tipo,
         centavosRecebidos: recebido(cod),
@@ -349,6 +357,7 @@ export function extrairQuitacoes(rows: unknown[][]): RelatorioQuitacao {
     quitadosCompletandoParcelamento: completandoParcelamento,
     porTipo: {
       quitacao: quitacoes.filter(q => q.tipo === 'quitacao').length,
+      quitacao_boleto: quitacoes.filter(q => q.tipo === 'quitacao_boleto').length,
       juncao: quitacoes.filter(q => q.tipo === 'juncao').length,
       saldo_zerado: quitacoes.filter(q => q.tipo === 'saldo_zerado').length,
     },
@@ -365,7 +374,7 @@ export async function lerRelatorioQuitacao(arquivo: File): Promise<RelatorioQuit
   const ws = nome ? wb.Sheets[nome] : undefined;
   if (!ws) {
     return { mes: null, acordos: [], linhasLidas: 0, quitadosForaDoMes: 0, quitadosPorJuncao: 0, quitadosCompletandoParcelamento: 0,
-      porTipo: { quitacao: 0, juncao: 0, saldo_zerado: 0 }, ultimasParcelasDeCarne: null, erros: ['Planilha vazia ou inválida.'] };
+      porTipo: { quitacao: 0, quitacao_boleto: 0, juncao: 0, saldo_zerado: 0 }, ultimasParcelasDeCarne: null, erros: ['Planilha vazia ou inválida.'] };
   }
   return extrairQuitacoes(utils.sheet_to_json(ws, { header: 1, defval: null }) as unknown[][]);
 }
