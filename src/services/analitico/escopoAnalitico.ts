@@ -69,6 +69,13 @@ export interface LinhaEscopavel {
    */
   ajuste_equipe_id?: string | null;
   /**
+   * Relatório do setor (o 1017 da Manutenção, 12/11/2026): linha sem operador
+   * que soma no recebimento GERAL do setor dela e em mais nada — nem equipe,
+   * nem operador, nem empresa. Pelo setor ela entra como o ajuste lançado para
+   * o setor (carimbo + origem do próprio setor).
+   */
+  relatorio_do_setor?: string | null;
+  /**
    * Setor carimbado na importação.
    *
    * `undefined` = a origem não informou a coluna (RPC antiga, antes da
@@ -247,8 +254,9 @@ export function linhaNoEscopo(linha: LinhaEscopavel, escopo: EscopoAnalitico): b
     case 'empresa':
       // Tudo o que veio no relatório, menos as 2ªs pernas: a contribuição (o
       // pagamento já está no Receptivo) e o espelho do extra da Retenção (já
-      // está no setor que o 59 creditou). Somá-las aqui dobraria.
-      return !linha.contribuicao && !linha.espelho_extra;
+      // está no setor que o 59 creditou). Somá-las aqui dobraria. O relatório
+      // do setor (1017) fica fora por decisão: «só no setor» (12/11/2026).
+      return !linha.contribuicao && !linha.espelho_extra && !linha.relatorio_do_setor;
 
     case 'operador':
       return linha.operador_id === escopo.operadorId;

@@ -21,7 +21,7 @@
  * Sem xlsx aqui: os parsers importam este módulo.
  */
 
-export type TipoRelatorio = '945' | '58' | '994' | 'desconhecido';
+export type TipoRelatorio = '945' | '58' | '994' | '1017' | 'desconhecido';
 
 const normalizar = (v: unknown) =>
   String(v ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -35,6 +35,9 @@ export function identificarRelatorio(cabecalho: readonly unknown[]): TipoRelator
   // O 994 é o único com «Valor Pagto» e «Setor Original» — o 58 chama o valor
   // de «Recebido» e não diz o setor de origem do cliente.
   if (tem('valorpagto') && tem('setororiginal') && tem('subgrupo')) return '994';
+  // O 1017 (recorrência da Manutenção, 12/11/2026) é o único com «Tipo
+  // Recorrência» e «Parcela Recorrência» — e não tem cobradora nem TpDoc.
+  if (tem('tiporecorrencia') && tem('parcelarecorrencia')) return '1017';
   // O 58 não tem Id.Baixa e tem as colunas da cobradora.
   if (!tem('idbaixa') && tem('cobradora', 'operador') && tem('tpdoc', 'dtpgto', 'datapgto')) return '58';
   return 'desconhecido';
@@ -60,7 +63,18 @@ export const MSG_994_NO_LUGAR_DO_945 =
   'O 994 se importa no Analítico, recorte Mês, botão «Importar 994». ' +
   'Aqui entra o relatório 945 de recebimento diário (com Id.Baixa, UF Coren e Split).';
 
-export const MSG_OUTRO_NO_LUGAR_DO_994 = (tipo: Exclude<TipoRelatorio, '994'>) =>
+export const MSG_1017_NO_LUGAR_DO_58 =
+  'Este arquivo é o relatório 1017 (recorrência), não o 58. ' +
+  'O 1017 se importa no Analítico, recorte Mês, botão «Importar 1017», pelo líder do setor que o usa. ' +
+  'Aqui entra o relatório 58 de pagamento mensal (Cobradora, TpDoc, DtPgto, Recebido).';
+
+export const MSG_OUTRO_NO_LUGAR_DO_1017 = (tipo: Exclude<TipoRelatorio, '1017'>) =>
+  tipo === 'desconhecido'
+    ? 'Este arquivo não é o relatório 1017. Faltam as colunas Tipo Recorrência e Parcela Recorrência.'
+    : `Este arquivo é o relatório ${tipo}, não o 1017. ` +
+      'Aqui entra o relatório 1017 de recorrência (Nr. Documento, Dt. Pagamento, Tipo Recorrência, Parcela Recorrência, Valor).';
+
+export const MSG_OUTRO_NO_LUGAR_DO_994 =(tipo: Exclude<TipoRelatorio, '994'>) =>
   tipo === '58'
     ? 'Este arquivo é o relatório 58 (pagamento mensal), não o 994. O 58 se importa no botão «Importar 58». ' +
       'Aqui entra o relatório 994 da Retenção (Cód. Venda, Nr. Doc., Valor Pagto, Setor Original, Sub Grupo).'

@@ -92,6 +92,8 @@ import { toast } from 'sonner';
 import { TabulacaoCell } from './TabulacaoCell';
 import { percentualImplicito, rotuloHoPercentual } from '@/lib/hoPercentual';
 import { ImportarModal } from './ImportarModal';
+import { ImportarRelatorioDoSetor } from './ImportarRelatorioDoSetor';
+import { useSetoresQueImportamRelatorio } from '@/hooks/useSetoresQueImportamRelatorio';
 import { RankingView } from './RankingView';
 import { CampoBuscaAnalitico } from './CampoBuscaAnalitico';
 import {
@@ -263,6 +265,7 @@ export function AnaliticoLider({
    * importado hoje» que ficava no localStorage.
    */
   const temRegraCofen = useEmpresaTemRegraCofen(empresaId);
+  const setoresComRelatorio = useSetoresQueImportamRelatorio(empresaId);
   const imp945 = useImportacao945(podeImportarDiario && temRegraCofen ? empresaId : null, 'diario');
   const [modalImportarDiario,   setModalImportarDiario]   = useState(false);
   const [confirmandoLimpezaDia, setConfirmandoLimpezaDia] = useState(false);
@@ -2004,9 +2007,22 @@ export function AnaliticoLider({
   // próprio — prévia do 59, como o 58. Mesmo modal, outro parser — cada botão
   // recusa o arquivo do outro. Chave própria: o relatório é de um setor só.
   const importar994 = acoesDoMes && temPermissao('importar_analitico_retencao');
+  // Relatório próprio do setor (o 1017 da Manutenção, 12/11/2026): só o líder
+  // do setor e o super admin, e só no recorte Mês. Não depende da permissão de
+  // importar o 58 — a regra é outra, e a RPC a confere.
+  const importarRelatorioDoSetor = recorte.modo !== 'dia' && setoresComRelatorio.length > 0;
 
-  const acoesDoRelatorio = (acoesDoMes || importarDiario || itensDeLimpeza.length > 0) && (
+  const acoesDoRelatorio = (acoesDoMes || importarDiario || importarRelatorioDoSetor || itensDeLimpeza.length > 0) && (
     <div className="flex items-center gap-1.5">
+      {importarRelatorioDoSetor && (
+        <ImportarRelatorioDoSetor
+          permitidos={setoresComRelatorio}
+          mes={mes}
+          setorEmFoco={setorId ?? null}
+          nomeDoSetor={id => nomeDoSetor.get(id)}
+          onImportado={onRefetch}
+        />
+      )}
       {importar994 && (
         <Button size="sm" variant="outline" className="gap-1.5 rounded-lg"
           onClick={() => { importHook.setRelatorio('994'); setModalImportar(true); }}

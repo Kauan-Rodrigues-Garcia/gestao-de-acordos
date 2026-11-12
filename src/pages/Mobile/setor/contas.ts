@@ -14,7 +14,8 @@ export function hojeDoConjunto(
   for (const l of linhas ?? []) {
     if (l.data_pagamento !== hojeISO) continue;
     if (escopo && !linhaNoEscopo({ operador_id: l.operador_id, setor_id: l.setor_id, contribuicao: l.contribuicao,
-      contribuicao_de_setor_id: l.contribuicao_de_setor_id, espelho_extra: l.espelho_extra }, escopo)) continue;
+      contribuicao_de_setor_id: l.contribuicao_de_setor_id, espelho_extra: l.espelho_extra,
+      relatorio_do_setor: l.relatorio_do_setor }, escopo)) continue;
     // `qtd`: a linha pode ser um grupo já somado pelo banco (20261109220000).
     total += Number(l.valor_recebido) || 0; qtd += l.qtd ?? 1;
   }

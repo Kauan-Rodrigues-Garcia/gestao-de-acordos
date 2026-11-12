@@ -165,11 +165,13 @@ export function GraficoRecebimento({
           contribuicao: l.contribuicao,
           contribuicao_de_setor_id: l.contribuicao_de_setor_id,
           espelho_extra: l.espelho_extra,
+          relatorio_do_setor: l.relatorio_do_setor,
         }, escopo)) continue;
       } else if (!setorId) {
         // Empresa sem escopo: a contribuição já está no setor de quem cobrou, e
-        // o espelho do extra da Retenção, no setor que o 59 creditou.
-        if (l.contribuicao || l.espelho_extra) continue;
+        // o espelho do extra da Retenção, no setor que o 59 creditou. O
+        // relatório do setor (1017) é só do setor.
+        if (l.contribuicao || l.espelho_extra || l.relatorio_do_setor) continue;
       } else {
         // Sem escopo (quem chama ainda não passa): regra anterior, para o
         // gráfico não ficar vazio.

@@ -2124,6 +2124,8 @@ interface LinhaMesAnalitico {
   ajuste_equipe_id?: string | null;
   /** Espelho do extra da Retenção (20261028150000): não conta na empresa. */
   espelho_extra?: boolean;
+  /** Relatório do setor (1017, 20261112150000): só no setor, não na empresa. */
+  relatorio_do_setor?: string | null;
 }
 
 /** A 2ª perna do Integral, gravada pelo 59 no setor que recebeu. */
@@ -2345,6 +2347,9 @@ async function linhasDeAjusteDoMes(
         // acumulado é o setor dono, e não «sem operador».
         ...(operador ? {} : { contribuicao_de_setor_id: setor }),
         ...(a.alvo === 'equipe' ? { ajuste_equipe_id: a.equipeId } : {}),
+        // Relatório do setor (1017): o mesmo caminho do ajuste de setor, mais
+        // a marca que o tira do total da empresa.
+        ...(a.relatorio ? { relatorio_do_setor: a.relatorio } : {}),
       });
     }
     return linhas;
@@ -2520,6 +2525,8 @@ export interface LinhaRecebidaDia {
   ajuste_equipe_id?: string | null;
   /** Espelho do extra da Retenção: conta no setor, não na empresa — `linhaNoEscopo`. */
   espelho_extra?: boolean;
+  /** Relatório do setor (1017): conta no setor, não na empresa — `linhaNoEscopo`. */
+  relatorio_do_setor?: string | null;
   /**
    * Quantos pagamentos esta linha representa. Ausente vale 1. O mês vem já
    * somado do banco (`fn_analitico_mes_agregado`, 20261109220000): uma linha é
@@ -2551,6 +2558,7 @@ export async function buscarRecebidoPorDia(
       contribuicao_de_setor_id: l.contribuicao_de_setor_id ?? null,
       ajuste_equipe_id: l.ajuste_equipe_id ?? null,
       espelho_extra:    l.espelho_extra === true,
+      relatorio_do_setor: l.relatorio_do_setor ?? null,
       // O ajuste manual continua contando 1, como quando cada linha era contada
       // (aqui ele nunca valeu 0 — o `qtd: 0` dele é do ticket médio do setor).
       qtd:              l.ajuste ? 1 : (l.qtd ?? 1),
@@ -2641,6 +2649,7 @@ export async function buscarAjustesComoLinhasDia(
           data_pagamento:   a.dia,
           ...(operador ? {} : { contribuicao_de_setor_id: a.setorId }),
           ...(a.alvo === 'equipe' ? { ajuste_equipe_id: a.equipeId } : {}),
+          ...(a.relatorio ? { relatorio_do_setor: a.relatorio } : {}),
         };
       });
   } catch {

@@ -608,6 +608,11 @@ export interface AnaliticoDashboardLinha {
    * operador e conta nesta equipe e no setor dela — ver `linhaNoEscopo`.
    */
   ajuste_equipe_id?: string | null;
+  /**
+   * Relatório do setor (o 1017 da Manutenção, 20261112150000): linha sintética
+   * sem operador que conta no setor e NÃO na empresa — ver `linhaNoEscopo`.
+   */
+  relatorio_do_setor?: string | null;
   total: number;
   total_ho: number;
   qtd: number;

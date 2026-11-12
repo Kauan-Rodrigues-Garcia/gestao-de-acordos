@@ -65,6 +65,7 @@ import { primeiroDiaDoMes, ultimoDiaDoMes } from '@/lib/mesReferencia';
 import { invalidarCache, lerComCache } from '@/lib/cacheCurto';
 import { prefixoCacheDoSinal } from '@/lib/sinais';
 import { ROTULO_AJUSTE } from '@/lib/formasPagamento';
+import { relatorioDaOrigem, rotuloDoRelatorio, type CodigoRelatorioDoSetor } from '@/lib/relatoriosDoSetor';
 
 /**
  * A linha sintética tem o formato de um recebimento, sem os campos que só um
@@ -180,6 +181,12 @@ export interface AjusteDoDia {
   dia: string;
   valor: number;
   valorHo: number;
+  /**
+   * Relatório do setor (o 1017 da Manutenção, 20261112150000) — `null` no
+   * ajuste de recebimento. Sempre de alvo `setor`: soma no setor e em mais
+   * nada, nem no total da empresa (`linhaNoEscopo`).
+   */
+  relatorio?: CodigoRelatorioDoSetor | null;
 }
 
 /** A soma do período de um operador. */
@@ -332,6 +339,7 @@ function paraAjusteDoDia(l: Record<string, unknown>): AjusteDoDia {
     dia:        String(l.dia).slice(0, 10),
     valor:      Number(l.valor) || 0,
     valorHo:    Number(l.valor_ho) || 0,
+    relatorio:  relatorioDaOrigem(l.origem),
   };
 }
 
@@ -352,6 +360,7 @@ async function ajustesDoMesLegado(empresaId: string, mes: string): Promise<Ajust
       dia: primeiroDiaDaCompetencia(mes),
       valor: Number(l.valor) || 0,
       valorHo: 0,
+      relatorio: null as CodigoRelatorioDoSetor | null,
     }));
 }
 
@@ -376,8 +385,10 @@ export function ajustesComoLinhas(ajustes: readonly AjusteDoDia[]): AnaliticoDas
       operador_id: a.alvo === 'operador' ? a.operadorId : null,
       setor_id: a.setorId,
       ajuste_equipe_id: a.alvo === 'equipe' ? a.equipeId : null,
+      // Relatório do setor: conta no setor e fica fora da empresa.
+      relatorio_do_setor: a.relatorio,
       forma_pagamento: 'boleto_pix' as const,
-      forma_detalhe: ROTULO_AJUSTE,
+      forma_detalhe: a.relatorio ? rotuloDoRelatorio(a.relatorio) : ROTULO_AJUSTE,
       // Tabulado: o ajuste tem dono e motivo. Marcá-lo como não tabulado o
       // jogaria no aviso de "recebimento sem acordo", que é outra conversa.
       status_tabulacao: 'tabulado' as const,

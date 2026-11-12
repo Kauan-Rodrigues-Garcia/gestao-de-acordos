@@ -34,7 +34,9 @@ import {
   type LinhaRelatorio,
 } from './analiticoComum';
 
-import { identificarRelatorio, MSG_945_NO_LUGAR_DO_58, MSG_994_NO_LUGAR_DO_58 } from '@/services/relatorio945/identificar';
+import {
+  identificarRelatorio, MSG_945_NO_LUGAR_DO_58, MSG_994_NO_LUGAR_DO_58, MSG_1017_NO_LUGAR_DO_58,
+} from '@/services/relatorio945/identificar';
 
 // Compatibilidade: quem já importava tipos/helpers deste módulo continua funcionando.
 export * from './analiticoComum';
@@ -95,9 +97,10 @@ export function parseRelatorioRows(rows: unknown[][]): ResultadoParseRelatorio {
   // O 945 (recebimento diário Cofen) tem mensagem própria: «colunas não
   // encontradas» não diz a quem errou de botão que o arquivo é outro.
   const tipoDoArquivo = identificarRelatorio(headerRow);
-  if (tipoDoArquivo === '945' || tipoDoArquivo === '994') {
+  if (tipoDoArquivo === '945' || tipoDoArquivo === '994' || tipoDoArquivo === '1017') {
     return resultadoVazio(
-      [tipoDoArquivo === '945' ? MSG_945_NO_LUGAR_DO_58 : MSG_994_NO_LUGAR_DO_58],
+      [tipoDoArquivo === '945' ? MSG_945_NO_LUGAR_DO_58
+        : tipoDoArquivo === '994' ? MSG_994_NO_LUGAR_DO_58 : MSG_1017_NO_LUGAR_DO_58],
       headerRow.map(h => String(h ?? '').trim()),
     );
   }

@@ -53,6 +53,7 @@ export function montarGraficoDoMes(entrada: {
       contribuicao: l.contribuicao,
       contribuicao_de_setor_id: l.contribuicao_de_setor_id,
       espelho_extra: l.espelho_extra,
+      relatorio_do_setor: l.relatorio_do_setor,
     }, escopo)) continue;
     const dia = Number(l.data_pagamento.slice(8, 10));
     if (l.data_pagamento.slice(0, 7) !== mes) continue;

@@ -251,6 +251,13 @@ const EXCECOES: Record<string, Excecao> = {
       + 'quem o servidor recusa. A linha só decide se vale pedir `fn_votacao_lideranca_listar`; não libera nada: '
       + 'desempatar e liberar o resultado são barrados no banco. O super_admin apura por Configurações.',
   },
+  'lib/relatoriosDoSetor.ts': {
+    linhas: 2, familia: 'definicao-ou-dado',
+    motivo: 'espelho de `fn_relatorio_setor_importar` (12/11/2026): o Cleber decidiu que o relatório do setor '
+      + '(1017 da Manutenção) só é importado pelo líder do PRÓPRIO setor e pelo super admin — «nenhuma '
+      + 'permissão de cargo abre isto». O banco recusa qualquer outro; uma chave no painel mostraria o botão '
+      + 'a quem a RPC barra. A linha só decide se o botão aparece; não libera nada.',
+  },
 
   /*
    * ── Dívida: ZERO ──────────────────────────────────────────────────────────
