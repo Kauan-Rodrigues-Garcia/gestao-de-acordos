@@ -8,6 +8,7 @@
  */
 import { supabase } from '@/lib/supabase';
 import { PERFIL_LABELS } from '@/lib/index';
+import { ehTipoDaVotacao, type TipoDaVotacao } from './textos';
 import {
   aplicarDesempates, apurar, cedulaComTodos,
   type Candidato, type Desempates, type ItemDaCedula, type MeusVotos, type Pergunta, type ResultadoDaPergunta, type Votos,
@@ -20,7 +21,16 @@ import {
  */
 
 export interface RetratoDaVotacao {
-  votacao: { id: string; titulo: string; produto: string; estado: string; aberta_em: string | null; liberada_em: string | null };
+  votacao: {
+    id: string; titulo: string; produto: string; estado: string; aberta_em: string | null; liberada_em: string | null;
+    /** Desde 20261112160000; sem ele (banco antigo) vale 'lideranca' e as duas regras ligadas. */
+    tipo?: TipoDaVotacao;
+    um_por_candidato?: boolean;
+    um_titulo?: boolean;
+    guardada_em?: string | null;
+    /** Quantos votam (os eleitores, ou os próprios participantes). */
+    eleitores_total?: number;
+  };
   perguntas: Pergunta[];
   participantes: Array<{ id: string; nome: string; foto: string | null; perfil: string | null; setor: string | null }>;
   contagem: Array<{ pergunta_id: string; candidato_id: string; votos: number }> | null;
@@ -29,7 +39,16 @@ export interface RetratoDaVotacao {
   enviado_em?: string | null;
 }
 
-export interface ResultadoLiberado { id: string; titulo: string; liberada_em: string }
+export interface ResultadoLiberado { id: string; titulo: string; liberada_em: string; tipo?: TipoDaVotacao }
+
+/** As regras da votação, com o padrão de antes da 20261112160000. */
+export function regrasDoRetrato(r: Pick<RetratoDaVotacao, 'votacao'>): { tipo: TipoDaVotacao; umPorCandidato: boolean; umTitulo: boolean } {
+  return {
+    tipo: ehTipoDaVotacao(r.votacao.tipo) ? r.votacao.tipo : 'lideranca',
+    umPorCandidato: r.votacao.um_por_candidato !== false,
+    umTitulo: r.votacao.um_titulo !== false,
+  };
+}
 
 export class ErroDoBanco extends Error {
   constructor(message: string, readonly code?: string) { super(message); }
@@ -73,8 +92,15 @@ export interface VotacaoNaLista {
   titulo: string;
   produto: string;
   estado: EstadoDaVotacao;
+  /** Desde 20261112160000 (sem ele: 'lideranca'). */
+  tipo?: TipoDaVotacao;
   perguntas: number;
+  /** Quem concorre. */
   participantes: number;
+  /** Quem vota (sem a 20261112160000: os próprios participantes). */
+  eleitores?: number;
+  /** Encerrada e guardada sem liberar (20261112160000). */
+  guardada_em?: string | null;
   votaram: number;
   criada_em: string;
   aberta_em: string | null;
@@ -86,6 +112,8 @@ export interface VotacaoNaLista {
 /** O retrato da diretoria: com os horários de quem já votou (nunca em quem). */
 export interface ApuracaoDaVotacao extends RetratoDaVotacao {
   envios: Array<{ eleitor_id: string; nome: string | null; comecou_em?: string | null; enviado_em: string; respondidas: number }> | null;
+  /** Só quando quem vota é separado de quem concorre (votação dos gerentes). */
+  eleitores?: Array<{ id: string; nome: string; foto: string | null; perfil: string | null; setor: string | null; equipe: string | null }> | null;
 }
 
 export interface NovaVotacao {
@@ -105,6 +133,42 @@ export async function liberarParaOsLideres(v: NovaVotacao): Promise<string> {
   const id = await rpc<string>('fn_votacao_lideranca_salvar', {
     p_id: null, p_titulo: v.titulo, p_produto: v.produto, p_setor_ids: v.setorIds, p_cargos: v.cargos,
     p_perguntas: v.perguntas.map(p => ({ id: p.id, emoji: p.emoji, texto: p.texto })), p_participantes: v.participantes,
+  });
+  try {
+    await rpc<void>('fn_votacao_lideranca_mudar', { p_id: id, p_acao: 'abrir' });
+  } catch (e) {
+    await rpc<void>('fn_votacao_lideranca_mudar', { p_id: id, p_acao: 'cancelar' }).catch((): undefined => undefined);
+    throw e;
+  }
+  return id;
+}
+
+/**
+ * Votação de qualquer tipo (12/11/2026, `fn_votacao_lideranca_gravar`): grava e
+ * abre. A votação dos gerentes precisa da migration 20261112160000; a da
+ * liderança, sem regra nova, segue pela função antiga e funciona sem ela.
+ */
+export interface VotacaoCompleta extends NovaVotacao {
+  tipo: TipoDaVotacao;
+  equipeIds: string[];
+  cargosEleitores: string[];
+  /** Quem vota; vazio na liderança (votam os próprios participantes). */
+  eleitores: string[];
+  umPorCandidato: boolean;
+  umTitulo: boolean;
+}
+
+export async function liberarVotacao(v: VotacaoCompleta): Promise<string> {
+  if (v.tipo === 'lideranca' && v.umPorCandidato && v.umTitulo) return liberarParaOsLideres(v);
+  const id = await rpc<string>('fn_votacao_lideranca_gravar', {
+    p_id: null,
+    p_dados: {
+      titulo: v.titulo, produto: v.produto, tipo: v.tipo, setor_ids: v.setorIds, equipe_ids: v.equipeIds,
+      cargos: v.cargos, cargos_eleitores: v.cargosEleitores,
+      perguntas: v.perguntas.map(p => ({ id: p.id, emoji: p.emoji, texto: p.texto })),
+      participantes: v.participantes, eleitores: v.tipo === 'lideranca' ? null : v.eleitores,
+      um_por_candidato: v.umPorCandidato, um_titulo: v.umTitulo,
+    },
   });
   try {
     await rpc<void>('fn_votacao_lideranca_mudar', { p_id: id, p_acao: 'abrir' });
@@ -137,6 +201,12 @@ export async function lerAcompanhamento(id: string): Promise<{ retrato: Apuracao
 }
 export const encerrarVotacao =(id: string) => rpc<void>('fn_votacao_lideranca_mudar', { p_id: id, p_acao: 'encerrar' });
 export const cancelarVotacao = (id: string) => rpc<void>('fn_votacao_lideranca_mudar', { p_id: id, p_acao: 'cancelar' });
+/** 12/11/2026 (migration 20261112160000): encerrada → aberta, para quem faltou. */
+export const reabrirVotacao = (id: string) => rpc<void>('fn_votacao_lideranca_mudar', { p_id: id, p_acao: 'reabrir' });
+/** Guarda a encerrada sem liberar: some dos avisos, ninguém decide nem libera. Tudo fica gravado. */
+export const guardarVotacao = (id: string) => rpc<void>('fn_votacao_lideranca_mudar', { p_id: id, p_acao: 'guardar' });
+/** Tira da gaveta: volta a encerrada como estava (apurar, decidir, liberar, reabrir). */
+export const tirarDaGaveta = (id: string) => rpc<void>('fn_votacao_lideranca_mudar', { p_id: id, p_acao: 'desguardar' });
 export const desempatar = (id: string, perguntaId: string, escolhidoId: string) =>
   rpc<void>('fn_votacao_lideranca_desempatar', { p_id: id, p_pergunta: perguntaId, p_escolhido: escolhidoId });
 export const liberarResultado = (id: string) => rpc<void>('fn_votacao_lideranca_liberar', { p_id: id });
@@ -145,7 +215,7 @@ export const liberarResultado = (id: string) => rpc<void>('fn_votacao_lideranca_
 export function montarDoRetrato(r: RetratoDaVotacao): { cedula: ItemDaCedula[]; pessoas: Map<string, Candidato> } {
   const candidatos: Candidato[] = r.participantes.map(p => ({
     id: p.id,
-    nome: (p.nome ?? '').trim() || 'Líder',
+    nome: (p.nome ?? '').trim() || (regrasDoRetrato(r).tipo === 'gerentes' ? 'Gerente' : 'Líder'),
     foto: p.foto || null,
     perfil: p.perfil ?? 'lider',
     setor: p.setor?.trim() || PERFIL_LABELS[p.perfil ?? ''] || 'Sem setor',
@@ -155,6 +225,8 @@ export function montarDoRetrato(r: RetratoDaVotacao): { cedula: ItemDaCedula[]; 
 
 /** O resultado final: a contagem do banco, apurada, com os desempates da diretoria. */
 export function resultadosDoRetrato(r: RetratoDaVotacao, cedula: readonly ItemDaCedula[]): ResultadoDaPergunta[] {
+  // As decisões entram como estão gravadas: com ou sem «um título por pessoa»,
+  // o escolhido pela diretoria é quem leva.
   const votos: Votos = {};
   for (const c of r.contagem ?? []) (votos[c.pergunta_id] ??= {})[c.candidato_id] = c.votos;
   const desempates: Desempates = Object.fromEntries((r.desempates ?? []).map(d => [d.pergunta_id, d.escolhido_id]));

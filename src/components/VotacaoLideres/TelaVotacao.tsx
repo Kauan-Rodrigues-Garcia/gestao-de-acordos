@@ -25,8 +25,9 @@ import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowLeft, Check, ChevronRight, Lock, SkipForward, Vote, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { textosDo, type TipoDaVotacao } from './textos';
 import {
-  aplicarDesempates, apurar, forcarEmpates, jaEscolhidos, maximoDeRespostas, nomeCurto, simularVotos, somarMeusVotos,
+  aplicarDesempates, apurar, forcarEmpates, jaEscolhidos, nomeCurto, respostasExigidas, simularVotos, somarMeusVotos,
   type Candidato, type Desempates, type ItemDaCedula, type MeusVotos, type Pergunta,
 } from './cedula';
 import { FotoLider } from './FotoLider';
@@ -52,6 +53,16 @@ interface Props {
   onEnviar?: (meus: MeusVotos, comecouEm: string | null) => Promise<void>;
   /** Guarda as escolhas neste navegador até enviar: fechou no meio, volta onde parou. */
   rascunhoChave?: string;
+  /** 12/11/2026: liderança (padrão) ou gerentes — muda as palavras. */
+  tipo?: TipoDaVotacao;
+  /** Cada pessoa só pode ser escolhida uma vez por quem vota (padrão: sim). */
+  umPorCandidato?: boolean;
+  /** A mesma pessoa em 1º em mais de uma pede decisão da diretoria (padrão: sim). Só na demonstração. */
+  umTitulo?: boolean;
+  /** Quem vota não concorre (gerentes): o nome dele para o cabeçalho. */
+  nomeEleitor?: string;
+  /** Demonstração dos gerentes: quem vota de verdade, para sortear os votos dos outros. */
+  eleitoresSimulados?: readonly string[];
   onFechar: () => void;
 }
 
@@ -78,8 +89,12 @@ export function SeloDemonstracao() {
   );
 }
 
-export function TelaVotacao({ cedula, pessoas, eleitorId, semente, formato = 'categorias', modo = 'demo', onEnviar, rascunhoChave, onFechar }: Props) {
+export function TelaVotacao({
+  cedula, pessoas, eleitorId, semente, formato = 'categorias', modo = 'demo', onEnviar, rascunhoChave,
+  tipo = 'lideranca', umPorCandidato = true, umTitulo = true, nomeEleitor, eleitoresSimulados, onFechar,
+}: Props) {
   const demo = modo === 'demo';
+  const t = textosDo(tipo);
   const [etapa, setEtapa] = useState<Etapa>('abertura');
   const [i, setI] = useState(0);
   const [meus, setMeus] = useState<MeusVotos>(() => {
@@ -102,14 +117,16 @@ export function TelaVotacao({ cedula, pessoas, eleitorId, semente, formato = 'ca
   const eleitor = eleitorId ? pessoas.get(eleitorId) : undefined;
   const item = cedula[i];
   const respondidas = cedula.filter(c => meus[c.pergunta.id]).length;
-  const maximo = maximoDeRespostas(cedula[0]?.candidatos.length ?? 0, cedula.length);
-  // Quem já foi escolhido em outra pergunta (na atual dá para trocar).
+  const eleitorConcorre = !!eleitorId && (cedula[0]?.candidatos.includes(eleitorId) ?? false);
+  const maximo = respostasExigidas({ candidatos: cedula[0]?.candidatos.length ?? 0, perguntas: cedula.length, eleitorConcorre, umPorCandidato });
+  // Quem já foi escolhido em outra pergunta (na atual dá para trocar). Sem a regra, ninguém trava.
   const bloqueados = useMemo(() => {
+    if (!umPorCandidato) return new Map<string, Pergunta>();
     const porId = new Map<string, Pergunta>(cedula.map(c => [c.pergunta.id, c.pergunta]));
     const m = new Map<string, Pergunta>();
     for (const [cid, pid] of jaEscolhidos(meus, item?.pergunta.id)) { const q = porId.get(pid); if (q) m.set(cid, q); }
     return m;
-  }, [meus, item, cedula]);
+  }, [meus, item, cedula, umPorCandidato]);
   const restam = item ? item.candidatos.filter(id => id !== eleitorId && !bloqueados.has(id)).length : 0;
   // Só envia com tudo preenchido (pedido de 04/11/2026): todas as categorias, ou o
   // máximo possível quando há mais categorias que colegas (cada um vale uma vez).
@@ -132,11 +149,11 @@ export function TelaVotacao({ cedula, pessoas, eleitorId, semente, formato = 'ca
   const fechou = etapa === 'diretoria' || etapa === 'resultado';
   const apuracao = useMemo(() => {
     if (!fechou) return [];
-    const outros = [...pessoas.keys()].filter(id => id !== eleitorId);
-    const sorteados = simularVotos(cedula, outros, semente);
+    const outros = (eleitoresSimulados ?? [...pessoas.keys()]).filter(id => id !== eleitorId);
+    const sorteados = simularVotos(cedula, outros, semente, umPorCandidato);
     const comEmpates = forcarEmpates(sorteados, cedula, Math.min(3, Math.max(1, Math.floor(cedula.length / 8))), semente);
     return apurar(cedula, somarMeusVotos(comEmpates, meus));
-  }, [fechou, cedula, pessoas, eleitorId, semente, meus]);
+  }, [fechou, cedula, pessoas, eleitorId, semente, meus, eleitoresSimulados, umPorCandidato]);
   const finais = useMemo(() => aplicarDesempates(apuracao, desempates), [apuracao, desempates]);
 
   // Cada etapa começa do topo (11/11/2026): o «Começar» fica no pé da abertura,
@@ -186,14 +203,14 @@ export function TelaVotacao({ cedula, pessoas, eleitorId, semente, formato = 'ca
   const progresso = etapa === 'categorias' ? respondidas / Math.max(1, cedula.length) : etapa === 'pergunta' ? (i + (meus[item?.pergunta.id ?? ''] ? 1 : 0)) / cedula.length : etapa === 'abertura' ? 0 : 1;
 
   const conteudo = (
-    <div className="fixed inset-0 z-[95] flex flex-col bg-background text-foreground" role="dialog" aria-modal="true" aria-label="Votação da Liderança">
+    <div className="fixed inset-0 z-[95] flex flex-col bg-background text-foreground" role="dialog" aria-modal="true" aria-label={t.nome}>
       <header className="flex items-center justify-between gap-3 border-b px-4 py-3 sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
           <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary/15 text-primary"><Vote className="h-5 w-5" /></span>
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold">Votação da Liderança</p>
+            <p className="truncate text-sm font-semibold">{t.nome}</p>
             <p className="truncate text-[11px] text-muted-foreground">
-              {eleitor ? <>Votando como <strong className="text-foreground">{eleitor.nome}</strong></> : 'Votando como visitante'}
+              {eleitor || nomeEleitor ? <>Votando como <strong className="text-foreground">{eleitor?.nome ?? nomeEleitor}</strong></> : 'Votando como visitante'}
             </p>
           </div>
         </div>
@@ -217,22 +234,29 @@ export function TelaVotacao({ cedula, pessoas, eleitorId, semente, formato = 'ca
               <motion.span initial={{ scale: 0.6, rotate: -8 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: 'spring', stiffness: 220, damping: 12 }}
                 className="grid h-20 w-20 place-items-center rounded-2xl bg-primary/15 text-5xl" aria-hidden="true">🗳️</motion.span>
               <div>
-                <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Quem é quem na liderança?</h1>
+                <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{t.chamada}</h1>
                 <p className="mt-3 text-muted-foreground">
-                  São <strong className="text-foreground">{cedula.length} categorias</strong> sobre a personalidade dos líderes.
-                  Em cada uma, escolha o colega que mais combina.
+                  São <strong className="text-foreground">{cedula.length} categorias</strong> sobre a personalidade dos {t.pessoas}.
+                  Em cada uma, escolha {tipo === 'lideranca' ? 'o colega' : `o ${t.pessoa}`} que mais combina.
                 </p>
               </div>
               <ul className="grid w-full gap-2 text-left text-sm">
                 <li className="flex items-center gap-3 rounded-lg border bg-card px-3 py-2.5"><Lock className="h-4 w-4 shrink-0 text-primary" /> O voto é secreto: ninguém vê em quem você votou.</li>
-                <li className="flex items-center gap-3 rounded-lg border bg-card px-3 py-2.5"><Check className="h-4 w-4 shrink-0 text-primary" /> Não dá para votar em si mesmo.</li>
-                <li className="flex items-center gap-3 rounded-lg border bg-card px-3 py-2.5">
-                  <Lock className="h-4 w-4 shrink-0 text-primary" />
-                  <span>
-                    Cada colega só pode ser escolhido <strong>uma vez</strong>: quem você já escolheu fica travado nas outras perguntas.
-                    {maximo < cedula.length && <> Com {maximo + 1} participantes, dá para responder até {maximo} das {cedula.length} perguntas.</>}
-                  </span>
-                </li>
+                {eleitorConcorre && <li className="flex items-center gap-3 rounded-lg border bg-card px-3 py-2.5"><Check className="h-4 w-4 shrink-0 text-primary" /> Não dá para votar em si mesmo.</li>}
+                {umPorCandidato ? (
+                  <li className="flex items-center gap-3 rounded-lg border bg-card px-3 py-2.5">
+                    <Lock className="h-4 w-4 shrink-0 text-primary" />
+                    <span>
+                      Cada {tipo === 'lideranca' ? 'colega' : t.pessoa} só pode ser escolhido <strong>uma vez</strong>: quem você já escolheu fica travado nas outras perguntas.
+                      {maximo < cedula.length && <> Dá para responder até {maximo} das {cedula.length} perguntas.</>}
+                    </span>
+                  </li>
+                ) : (
+                  <li className="flex items-center gap-3 rounded-lg border bg-card px-3 py-2.5">
+                    <Check className="h-4 w-4 shrink-0 text-primary" />
+                    <span>O mesmo {t.pessoa} pode ser escolhido em mais de uma categoria.</span>
+                  </li>
+                )}
                 <li className="flex items-center gap-3 rounded-lg border bg-card px-3 py-2.5"><ArrowLeft className="h-4 w-4 shrink-0 text-primary" /> Antes de enviar, dá para revisar e trocar qualquer resposta.</li>
                 <li className="flex items-center gap-3 rounded-lg border bg-card px-3 py-2.5">
                   <Vote className="h-4 w-4 shrink-0 text-primary" />
@@ -270,7 +294,7 @@ export function TelaVotacao({ cedula, pessoas, eleitorId, semente, formato = 'ca
                 <span className="hidden text-center text-xs text-muted-foreground sm:inline">
                   {restam === 0 && !meus[item.pergunta.id]
                     ? 'Você já escolheu todos os colegas: pule esta ou troque uma resposta na revisão'
-                    : `${item.candidatos.length} líderes · cada um só pode ser escolhido uma vez${bloqueados.size ? ` · ${bloqueados.size} já ${bloqueados.size === 1 ? 'escolhido' : 'escolhidos'}` : ''}`}
+                    : `${item.candidatos.length} ${t.pessoas}${umPorCandidato ? ` · cada um só pode ser escolhido uma vez${bloqueados.size ? ` · ${bloqueados.size} já ${bloqueados.size === 1 ? 'escolhido' : 'escolhidos'}` : ''}` : ''}`}
                 </span>
                 <Button variant="ghost" className="gap-1.5" onClick={avancar}>
                   {meus[item.pergunta.id] ? 'Próxima' : 'Pular'} {meus[item.pergunta.id] ? <ChevronRight className="h-4 w-4" /> : <SkipForward className="h-4 w-4" />}
@@ -281,7 +305,7 @@ export function TelaVotacao({ cedula, pessoas, eleitorId, semente, formato = 'ca
 
           {etapa === 'categorias' && (
             <motion.section key="categorias" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="min-h-full">
-              <QuadroDeCategorias cedula={cedula} pessoas={pessoas} eleitorId={eleitorId} meus={meus}
+              <QuadroDeCategorias cedula={cedula} pessoas={pessoas} eleitorId={eleitorId} meus={meus} tipo={tipo} umPorCandidato={umPorCandidato}
                 onEscolher={(pid, id) => setMeus(m => {
                   const n = { ...m };
                   if (id) n[pid] = id; else delete n[pid];
@@ -352,7 +376,7 @@ export function TelaVotacao({ cedula, pessoas, eleitorId, semente, formato = 'ca
 
           {etapa === 'diretoria' && (
             <motion.section key="diretoria" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="min-h-full">
-              <VisaoDiretoria resultados={apuracao} pessoas={pessoas} desempates={desempates}
+              <VisaoDiretoria resultados={apuracao} pessoas={pessoas} desempates={desempates} umTitulo={umTitulo} tipo={tipo}
                 onDesempatar={(pid, id) => setDesempates(d => ({ ...d, [pid]: id }))}
                 onLiberar={() => setEtapa('resultado')} />
             </motion.section>
@@ -360,7 +384,7 @@ export function TelaVotacao({ cedula, pessoas, eleitorId, semente, formato = 'ca
 
           {etapa === 'resultado' && (
             <motion.section key="resultado" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-full">
-              <ResultadoVotacao cedula={cedula} resultados={finais} pessoas={pessoas} meus={meus} demo={demo} />
+              <ResultadoVotacao cedula={cedula} resultados={finais} pessoas={pessoas} meus={meus} demo={demo} tipo={tipo} />
             </motion.section>
           )}
         </AnimatePresence>

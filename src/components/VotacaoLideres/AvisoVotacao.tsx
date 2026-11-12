@@ -25,7 +25,7 @@ import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import {
   enviarVotos, faltaMigration, lerMeusResultados, lerMinhasVotacoes, lerResultado, listarVotacoes, mensagemDoErro,
-  montarDoRetrato, resultadosDoRetrato, type ResultadoLiberado, type RetratoDaVotacao, type VotacaoNaLista,
+  montarDoRetrato, regrasDoRetrato, resultadosDoRetrato, type ResultadoLiberado, type RetratoDaVotacao, type VotacaoNaLista,
 } from './banco';
 import { CardDaVotacao } from './CardDaVotacao';
 
@@ -76,7 +76,8 @@ export function AvisoVotacao({ recuoEsquerda, acimaDoRodape }: { recuoEsquerda: 
       ]);
       setAbertas(a ?? []);
       setResultados(r ?? []);
-      setAApurar((l ?? []).filter(v => v.estado === 'encerrada'));
+      // Guardada (12/11/2026) não cobra a diretoria: está de lado de propósito.
+      setAApurar((l ?? []).filter(v => v.estado === 'encerrada' && !v.guardada_em));
     } catch (e) {
       if (faltaMigration(e)) semMigration.current = true;
     }
@@ -108,9 +109,9 @@ export function AvisoVotacao({ recuoEsquerda, acimaDoRodape }: { recuoEsquerda: 
   const aVotar = abertas.find(v => !v.enviado_em) ?? null;
   const aVer = resultados.find(r => !vistos.has(r.id) && ler(chaveVisto(r.id)) !== '1') ?? null;
   const apurar = aApurar[0] ?? null;
-  const alvo = aVotar ? { tipo: 'votar' as const, id: aVotar.votacao.id, titulo: aVotar.votacao.titulo }
-    : apurar ? { tipo: 'apurar' as const, id: apurar.id, titulo: apurar.titulo }
-    : aVer ? { tipo: 'resultado' as const, id: aVer.id, titulo: aVer.titulo } : null;
+  const alvo = aVotar ? { tipo: 'votar' as const, id: aVotar.votacao.id, titulo: aVotar.votacao.titulo, tipoDaVotacao: regrasDoRetrato(aVotar).tipo }
+    : apurar ? { tipo: 'apurar' as const, id: apurar.id, titulo: apurar.titulo, tipoDaVotacao: apurar.tipo ?? 'lideranca' }
+    : aVer ? { tipo: 'resultado' as const, id: aVer.id, titulo: aVer.titulo, tipoDaVotacao: aVer.tipo ?? 'lideranca' } : null;
   const minimizado = !!alvo && (minimizados.has(alvo.id) || ler(chaveMinimizado(alvo.id)) === '1');
 
   const minimizar = (sim: boolean) => {
@@ -133,23 +134,24 @@ export function AvisoVotacao({ recuoEsquerda, acimaDoRodape }: { recuoEsquerda: 
     }
   };
 
-  const votacao = useMemo(() => (votando ? montarDoRetrato(votando) : null), [votando]);
+  const votacao = useMemo(() => (votando ? { ...montarDoRetrato(votando), ...regrasDoRetrato(votando) } : null), [votando]);
   const resultado = useMemo(() => {
     if (!vendo) return null;
     const { cedula, pessoas } = montarDoRetrato(vendo.retrato);
-    return { cedula, pessoas, resultados: resultadosDoRetrato(vendo.retrato, cedula) };
+    return { cedula, pessoas, resultados: resultadosDoRetrato(vendo.retrato, cedula), tipo: regrasDoRetrato(vendo.retrato).tipo };
   }, [vendo]);
 
   if (!eu) return null;
   return (
     <Suspense fallback={null}>
       {alvo && !votando && !vendo && !apurando && (
-        <CardDaVotacao tipo={alvo.tipo} titulo={alvo.titulo} minimizado={minimizado} recuoEsquerda={recuoEsquerda} acimaDoRodape={acimaDoRodape}
+        <CardDaVotacao tipo={alvo.tipo} tipoDaVotacao={alvo.tipoDaVotacao} titulo={alvo.titulo} minimizado={minimizado} recuoEsquerda={recuoEsquerda} acimaDoRodape={acimaDoRodape}
           onAbrir={() => { void abrir(); }} onMinimizar={() => minimizar(true)} onExpandir={() => minimizar(false)}
           onDispensar={alvo.tipo === 'resultado' ? () => marcarVisto(alvo.id) : undefined} />
       )}
       {votando && votacao && (
         <TelaVotacao modo="real" cedula={votacao.cedula} pessoas={votacao.pessoas} eleitorId={eu} semente={0}
+          tipo={votacao.tipo} umPorCandidato={votacao.umPorCandidato} nomeEleitor={perfil?.nome ?? undefined}
           rascunhoChave={`votacao-lideres:rascunho-voto:${votando.votacao.id}:${eu}`}
           onEnviar={async (meus, comecouEm) => {
             try { await enviarVotos(votando.votacao.id, meus, comecouEm); }
@@ -165,7 +167,7 @@ export function AvisoVotacao({ recuoEsquerda, acimaDoRodape }: { recuoEsquerda: 
       )}
       {vendo && resultado && (
         <TelaResultado titulo={vendo.titulo} cedula={resultado.cedula} resultados={resultado.resultados} pessoas={resultado.pessoas}
-          onFechar={() => setVendo(null)} />
+          tipo={resultado.tipo} onFechar={() => setVendo(null)} />
       )}
     </Suspense>
   );

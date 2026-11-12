@@ -15,8 +15,9 @@ import { FileSpreadsheet, Loader2, Scale, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { apurar, type Desempates, type Votos } from './cedula';
 import {
-  desempatar, lerApuracao, liberarResultado, mensagemDoErro, montarDoRetrato, type ApuracaoDaVotacao,
+  desempatar, lerApuracao, liberarResultado, mensagemDoErro, montarDoRetrato, regrasDoRetrato, type ApuracaoDaVotacao,
 } from './banco';
+import { textosDo } from './textos';
 import { VisaoDiretoria } from './VisaoDiretoria';
 import { baixarCampeoes } from './baixarCampeoes';
 
@@ -58,8 +59,9 @@ export function ApuracaoDiretoria({ votacaoId, titulo, onFechar, onLiberado }: P
     const votos: Votos = {};
     for (const c of retrato.contagem ?? []) (votos[c.pergunta_id] ??= {})[c.candidato_id] = c.votos;
     const desempates: Desempates = Object.fromEntries((retrato.desempates ?? []).map(d => [d.pergunta_id, d.escolhido_id]));
-    return { pessoas, resultados: apurar(cedula, votos), desempates };
+    return { pessoas, resultados: apurar(cedula, votos), desempates, ...regrasDoRetrato(retrato) };
   }, [retrato]);
+  const guardada = !!retrato?.votacao.guardada_em;
 
   const aoDesempatar = async (perguntaId: string, liderId: string) => {
     if (ocupado.current || !montado) return;
@@ -85,7 +87,7 @@ export function ApuracaoDiretoria({ votacaoId, titulo, onFechar, onLiberado }: P
     ocupado.current = true;
     try {
       await liberarResultado(votacaoId);
-      toast.success('Resultado liberado', { description: 'Os líderes vão ver o card «Saiu o resultado».' });
+      toast.success('Resultado liberado', { description: 'Quem participou vai ver o card «Saiu o resultado».' });
       onLiberado();
     } catch (e) {
       toast.error('Não deu para liberar', { description: mensagemDoErro(e) });
@@ -101,7 +103,7 @@ export function ApuracaoDiretoria({ votacaoId, titulo, onFechar, onLiberado }: P
         <div className="flex min-w-0 items-center gap-3">
           <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary/15 text-primary"><Scale className="h-5 w-5" /></span>
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold">Votação da Liderança · apuração</p>
+            <p className="truncate text-sm font-semibold">{textosDo(montado?.tipo).nome} · apuração</p>
             <p className="truncate text-[11px] text-muted-foreground">{titulo}</p>
           </div>
         </div>
@@ -127,10 +129,16 @@ export function ApuracaoDiretoria({ votacaoId, titulo, onFechar, onLiberado }: P
         {!erro && !montado && (
           <p className="mt-10 flex items-center justify-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Apurando…</p>
         )}
+        {montado && guardada && (
+          <p className="mx-auto mt-4 max-w-4xl rounded-lg border border-warning/40 bg-warning/10 px-4 py-2.5 text-sm text-warning">
+            Esta votação está guardada: dá para conferir a apuração, mas para decidir ou liberar é preciso tirar da gaveta (Configurações › Votação da Liderança).
+          </p>
+        )}
         {montado && (
           <VisaoDiretoria resultados={montado.resultados} pessoas={montado.pessoas} desempates={montado.desempates}
-            onDesempatar={(pid, id) => { void aoDesempatar(pid, id); }}
-            onLiberar={() => { void aoLiberar(); }} />
+            umTitulo={montado.umTitulo} tipo={montado.tipo}
+            onDesempatar={(pid, id) => { if (guardada) { toast.error('A votação está guardada', { description: 'Tire da gaveta antes de decidir.' }); return; } void aoDesempatar(pid, id); }}
+            onLiberar={() => { if (guardada) { toast.error('A votação está guardada', { description: 'Tire da gaveta antes de liberar.' }); return; } void aoLiberar(); }} />
         )}
       </main>
     </div>,

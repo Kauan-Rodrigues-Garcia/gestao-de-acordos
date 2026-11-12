@@ -44,13 +44,15 @@ import {
   nomeCurto, simularVotos, type Candidato, type Pergunta,
 } from '@/components/VotacaoLideres/cedula';
 import {
-  NOME_DO_PRODUTO, lerParticipantes, motivoDeConta, type GrupoDaVotacao, type Participante,
+  NOME_DO_PRODUTO, lerParticipantes, motivoDeConta, type Participante,
 } from '@/components/VotacaoLideres/participantes';
 import { FotoLider } from '@/components/VotacaoLideres/FotoLider';
 import { GradeDeLideres } from '@/components/VotacaoLideres/GradeDeLideres';
 import { SeloDemonstracao, TelaVotacao, type FormatoDaVotacao } from '@/components/VotacaoLideres/TelaVotacao';
 import { CardDaVotacao, type TipoDoCard } from '@/components/VotacaoLideres/CardDaVotacao';
 import { TelaResultado } from '@/components/VotacaoLideres/TelaResultado';
+import { MontarVotacaoGerentes } from '@/components/VotacaoLideres/MontarVotacaoGerentes';
+import type { TipoDaVotacao } from '@/components/VotacaoLideres/textos';
 
 /** Cargos que podem entrar na votação; «Líder» já vem marcado. */
 const CARGOS_POSSIVEIS = ['lider', 'elite', 'gerencia'] as const;
@@ -103,7 +105,9 @@ function lerRascunho(): Rascunho {
 
 export default function VotacaoLideresConfig() {
   const { perfil } = useAuth();
-  const [dados, setDados] = useState<{ pessoas: Participante[]; grupos: GrupoDaVotacao[] } | null>(null);
+  const [dados, setDados] = useState<Awaited<ReturnType<typeof lerParticipantes>> | null>(null);
+  /** Que votação montar (12/11/2026): a da liderança ou a dos gerentes. */
+  const [montando, setMontando] = useState<TipoDaVotacao>('lideranca');
   const [erro, setErro] = useState<string | null>(null);
   const [r, setR] = useState<Rascunho>(lerRascunho);
   const [eleitorId, setEleitorId] = useState<string>('');
@@ -263,8 +267,9 @@ export default function VotacaoLideresConfig() {
           <SeloDemonstracao />
         </div>
         <p className="text-sm text-muted-foreground">
-          Os líderes votam uns nos outros em perguntas de personalidade. Em cada pergunta aparecem todos os participantes, e todos
-          votam na mesma votação. Monte abaixo, veja como fica na demonstração e use «Liberar para os líderes» para valer.
+          Duas votações com a mesma mecânica: na da <strong className="text-foreground">Liderança</strong> os líderes votam uns nos outros;
+          na dos <strong className="text-foreground">Gerentes</strong> a operação (os setores e equipes que você escolher) vota nos gerentes.
+          Monte abaixo, veja como fica na demonstração e libere para valer.
         </p>
       </CardHeader>
 
@@ -275,6 +280,27 @@ export default function VotacaoLideresConfig() {
         {!dados && !erro && <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Lendo os líderes do cadastro…</p>}
 
         {dados && (
+          <div className="flex flex-wrap items-center gap-2 border-t pt-4">
+            <span className="text-sm font-semibold">Montar uma votação nova:</span>
+            <div role="radiogroup" aria-label="Tipo de votação" className="flex overflow-hidden rounded-md border text-xs">
+              {([['lideranca', 'Liderança · líderes votam entre si'], ['gerentes', 'Gerentes · a operação vota']] as const).map(([v, t]) => (
+                <button key={v} type="button" role="radio" aria-checked={montando === v} onClick={() => setMontando(v)}
+                  className={cn('px-3 py-1.5', montando === v ? 'bg-primary text-primary-foreground' : 'hover:bg-muted')}>{t}</button>
+              ))}
+            </div>
+            <button type="button" onClick={() => void lerCadastro()} disabled={relendo}
+              title="Lê de novo o cadastro: quem mudou de cargo, setor ou equipe com esta tela aberta"
+              className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline disabled:opacity-60">
+              <RefreshCw className={cn('h-3 w-3', relendo && 'animate-spin')} /> Recarregar cadastro
+            </button>
+          </div>
+        )}
+
+        {dados && montando === 'gerentes' && (
+          <MontarVotacaoGerentes dados={dados} onLiberada={() => setVersaoPainel(v => v + 1)} />
+        )}
+
+        {dados && montando === 'lideranca' && (
           <>
             {/* 1. Operação e setores */}
             <section className="space-y-2.5">

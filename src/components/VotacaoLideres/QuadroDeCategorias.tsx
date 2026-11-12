@@ -18,8 +18,9 @@ import { ArrowLeft, Check, ChevronRight, Search, UserPlus, Vote, X } from 'lucid
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+import { textosDo, type TipoDaVotacao } from './textos';
 import {
-  jaEscolhidos, maximoDeRespostas, nomeCurto,
+  jaEscolhidos, nomeCurto,
   type Candidato, type ItemDaCedula, type MeusVotos, type Pergunta,
 } from './cedula';
 import { FotoLider } from './FotoLider';
@@ -37,11 +38,16 @@ interface Props {
   enviando?: boolean;
   erro?: string | null;
   onEnviar: () => void;
+  /** 12/11/2026: muda as palavras (líder / gerente). */
+  tipo?: TipoDaVotacao;
+  /** Cada pessoa só pode ser escolhida uma vez (padrão). Sem a regra, ninguém trava. */
+  umPorCandidato?: boolean;
 }
 
 const semAcento = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
-export function QuadroDeCategorias({ cedula, pessoas, eleitorId, meus, onEscolher, exigidas, enviando, erro, onEnviar }: Props) {
+export function QuadroDeCategorias({ cedula, pessoas, eleitorId, meus, onEscolher, exigidas, enviando, erro, onEnviar, tipo = 'lideranca', umPorCandidato = true }: Props) {
+  const t = textosDo(tipo);
   const [aberta, setAberta] = useState<string | null>(null);
   const [busca, setBusca] = useState('');
   const [soFaltando, setSoFaltando] = useState(false);
@@ -51,16 +57,16 @@ export function QuadroDeCategorias({ cedula, pessoas, eleitorId, meus, onEscolhe
   const porId = useMemo(() => new Map(cedula.map(c => [c.pergunta.id, c])), [cedula]);
   const respondidas = cedula.filter(c => meus[c.pergunta.id]).length;
   const faltam = cedula.length - respondidas;
-  const maximo = maximoDeRespostas(cedula[0]?.candidatos.length ?? 0, cedula.length);
   const faltamParaEnviar = Math.max(0, exigidas - respondidas);
   const item = aberta ? porId.get(aberta) : undefined;
 
   // Quem já está em OUTRA categoria (na aberta dá para trocar).
   const bloqueados = useMemo(() => {
     const m = new Map<string, Pergunta>();
+    if (!umPorCandidato) return m;
     for (const [cid, pid] of jaEscolhidos(meus, aberta ?? undefined)) { const q = porId.get(pid)?.pergunta; if (q) m.set(cid, q); }
     return m;
-  }, [meus, aberta, porId]);
+  }, [meus, aberta, porId, umPorCandidato]);
 
   const idsDoSeletor = useMemo(() => {
     if (!item) return [];
@@ -105,11 +111,12 @@ export function QuadroDeCategorias({ cedula, pessoas, eleitorId, meus, onEscolhe
     <div className="mx-auto flex min-h-full w-full max-w-6xl flex-col gap-4 px-3 pb-28 pt-5 sm:px-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">Escolha o líder de cada categoria</h2>
+          <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">Escolha o {t.pessoa} de cada categoria</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Toque numa categoria e escolha quem mais combina com ela. Cada colega só pode ser escolhido em uma categoria.
-            {maximo < cedula.length
-              ? <> Com {maximo + 1} participantes, preencha {maximo} das {cedula.length} para enviar.</>
+            Toque numa categoria e escolha quem mais combina com ela.
+            {umPorCandidato ? ' Cada um só pode ser escolhido em uma categoria.' : ` O mesmo ${t.pessoa} pode aparecer em mais de uma.`}
+            {exigidas < cedula.length
+              ? <> Preencha {exigidas} das {cedula.length} para enviar.</>
               : <> Preencha todas para enviar.</>}
           </p>
         </div>
@@ -123,7 +130,7 @@ export function QuadroDeCategorias({ cedula, pessoas, eleitorId, meus, onEscolhe
 
       {lista.length === 0 && (
         <p className="rounded-xl border bg-card px-4 py-8 text-center text-sm text-muted-foreground">
-          {faltamParaEnviar ? 'Nenhuma categoria sem líder.' : 'Tudo preenchido. Confira e envie.'}
+          {faltamParaEnviar ? `Nenhuma categoria sem ${t.pessoa}.` : 'Tudo preenchido. Confira e envie.'}
         </p>
       )}
 
@@ -153,7 +160,7 @@ export function QuadroDeCategorias({ cedula, pessoas, eleitorId, meus, onEscolhe
                     </span>
                   ) : (
                     <span className="mt-1.5 flex items-center gap-1.5 text-sm text-muted-foreground group-hover:text-primary">
-                      <UserPlus className="h-4 w-4" /> Escolher líder
+                      <UserPlus className="h-4 w-4" /> Escolher {t.pessoa}
                     </span>
                   )}
                 </span>
@@ -201,13 +208,13 @@ export function QuadroDeCategorias({ cedula, pessoas, eleitorId, meus, onEscolhe
                 </div>
                 <div className="relative hidden w-56 sm:block">
                   <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-                  <Input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar líder" className="h-9 pl-8" aria-label="Buscar líder" />
+                  <Input value={busca} onChange={e => setBusca(e.target.value)} placeholder={`Buscar ${t.pessoa}`} className="h-9 pl-8" aria-label={`Buscar ${t.pessoa}`} />
                 </div>
               </div>
               <div className="border-b px-3 py-2 sm:hidden">
                 <div className="relative">
                   <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-                  <Input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar líder" className="h-9 pl-8" aria-label="Buscar líder no celular" />
+                  <Input value={busca} onChange={e => setBusca(e.target.value)} placeholder={`Buscar ${t.pessoa}`} className="h-9 pl-8" aria-label={`Buscar ${t.pessoa} no celular`} />
                 </div>
               </div>
 

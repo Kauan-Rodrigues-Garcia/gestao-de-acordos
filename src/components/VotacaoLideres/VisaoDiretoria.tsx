@@ -25,6 +25,7 @@ import {
   type Candidato, type Desempates, type Pergunta, type ResultadoDaPergunta,
 } from './cedula';
 import { FotoLider } from './FotoLider';
+import { textosDo, type TipoDaVotacao } from './textos';
 
 interface Props {
   resultados: ResultadoDaPergunta[];
@@ -32,6 +33,9 @@ interface Props {
   desempates: Desempates;
   onDesempatar: (perguntaId: string, liderId: string) => void;
   onLiberar: () => void;
+  /** A mesma pessoa em 1º em mais de uma pede decisão (padrão). Ver `situacaoDasDecisoes`. */
+  umTitulo?: boolean;
+  tipo?: TipoDaVotacao;
 }
 
 type Filtro = 'decidir' | 'todas';
@@ -41,8 +45,9 @@ const OPCOES = 4;
 
 const emojis = (ps: readonly Pergunta[]) => ps.map(p => p.emoji).join(' ');
 
-export function VisaoDiretoria({ resultados, pessoas, desempates, onDesempatar, onLiberar }: Props) {
-  const d = useMemo(() => situacaoDasDecisoes(resultados, desempates), [resultados, desempates]);
+export function VisaoDiretoria({ resultados, pessoas, desempates, onDesempatar, onLiberar, umTitulo = true, tipo = 'lideranca' }: Props) {
+  const t = textosDo(tipo);
+  const d = useMemo(() => situacaoDasDecisoes(resultados, desempates, { umTitulo }), [resultados, desempates, umTitulo]);
   // As que pedem (ou pediram) a diretoria: pendentes e já decididas.
   const paraDecidir = useMemo(
     () => resultados.filter(r => { const s = d.porPergunta.get(r.pergunta.id); return s?.pendente || s?.decidida; }),
@@ -57,7 +62,7 @@ export function VisaoDiretoria({ resultados, pessoas, desempates, onDesempatar, 
     () => [...d.titulos.entries()].filter(([, ps]) => ps.length > 1).sort((a, b) => b[1].length - a[1].length),
     [d],
   );
-  const nome = (id: string) => { const p = pessoas.get(id); return p ? nomeCurto(p.nome) : 'Líder'; };
+  const nome = (id: string) => { const p = pessoas.get(id); return p ? nomeCurto(p.nome) : t.Pessoa; };
 
   return (
     <div className="mx-auto flex min-h-full max-w-4xl flex-col gap-4 px-4 pb-28 pt-6 sm:px-6">
@@ -68,7 +73,9 @@ export function VisaoDiretoria({ resultados, pessoas, desempates, onDesempatar, 
           </span>
           <h2 className="mt-2 text-2xl font-bold tracking-tight">Apuração antes da liberação</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Onde deu empate no 1º lugar, ou onde o mesmo líder ficou em 1º em mais de uma categoria, a diretoria escolhe quem leva entre os mais votados dela.
+            {umTitulo
+              ? `Onde deu empate no 1º lugar, ou onde o mesmo ${t.pessoa} ficou em 1º em mais de uma categoria, a diretoria escolhe quem leva entre os mais votados dela.`
+              : `Onde deu empate no 1º lugar, a diretoria escolhe quem leva entre os mais votados. Nesta votação o mesmo ${t.pessoa} pode levar mais de uma categoria.`}
           </p>
         </div>
         <div className="grid grid-cols-3 gap-2 text-center">
@@ -143,7 +150,7 @@ export function VisaoDiretoria({ resultados, pessoas, desempates, onDesempatar, 
                             meu ? 'border-success bg-success/10' : escolhido ? 'border-border opacity-55 hover:opacity-100' : 'border-border hover:border-primary/60')}>
                           {meu && <span className="absolute right-1.5 top-1.5 grid h-5 w-5 place-items-center rounded-full bg-success text-success-foreground"><Check className="h-3 w-3" /></span>}
                           <FotoLider lider={p} className="h-14 w-14 rounded-xl text-lg" />
-                          <span className="line-clamp-2 text-sm font-semibold leading-tight">{p ? nomeCurto(p.nome) : 'Líder'}</span>
+                          <span className="line-clamp-2 text-sm font-semibold leading-tight">{p ? nomeCurto(p.nome) : t.Pessoa}</span>
                           <span className="text-[11px] text-muted-foreground">{l.votos} {l.votos === 1 ? 'voto' : 'votos'} · {l.pct.toLocaleString('pt-BR')}%</span>
                           {outras.length > 0 && (
                             <span className="rounded-full bg-warning/15 px-1.5 text-[10px] font-medium text-warning" title={outras.map(q => q.texto).join(' · ')}>
@@ -170,7 +177,7 @@ export function VisaoDiretoria({ resultados, pessoas, desempates, onDesempatar, 
                       <span key={l.id} className={cn('flex items-center gap-1.5', n === 0 ? 'font-semibold' : 'text-muted-foreground')}>
                         <span className="w-5 text-xs tabular-nums">{n + 1}º</span>
                         <FotoLider lider={p} className="h-6 w-6 text-[9px]" />
-                        {p ? nomeCurto(p.nome) : 'Líder'} <span className="text-xs tabular-nums opacity-80">{l.votos}</span>
+                        {p ? nomeCurto(p.nome) : t.Pessoa} <span className="text-xs tabular-nums opacity-80">{l.votos}</span>
                       </span>
                     );
                   })}

@@ -67,8 +67,16 @@ const porNome = (a: Candidato, b: Candidato) => a.nome.localeCompare(b.nome, 'pt
 export function montarAcompanhamento(r: ApuracaoDaVotacao): Acompanhamento {
   const { cedula, pessoas: pessoasPorId } = montarDoRetrato(r);
   const envio = new Map((r.envios ?? []).map(e => [e.eleitor_id, e]));
+  // Quem VOTA (12/11/2026): na votação dos gerentes os eleitores vêm à parte,
+  // com setor e equipe; na da liderança votam os próprios participantes.
+  const quemVota: Candidato[] = r.eleitores
+    ? r.eleitores.map(e => ({
+        id: e.id, nome: (e.nome ?? '').trim() || 'Sem nome', foto: e.foto || null, perfil: e.perfil ?? 'operador',
+        setor: [e.setor?.trim() || 'Sem setor', e.equipe?.trim()].filter(Boolean).join(' · '),
+      }))
+    : [...pessoasPorId.values()];
 
-  const pessoas: PessoaNoAcompanhamento[] = [...pessoasPorId.values()].sort(porNome).map(lider => {
+  const pessoas: PessoaNoAcompanhamento[] = [...quemVota].sort(porNome).map(lider => {
     const e = envio.get(lider.id);
     const ini = e?.comecou_em ? Date.parse(e.comecou_em) : NaN;
     const fim = e?.enviado_em ? Date.parse(e.enviado_em) : NaN;

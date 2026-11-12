@@ -14,6 +14,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronDown, Scale, Trophy, Vote, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { textosDo, type TipoDaVotacao } from './textos';
 
 export type TipoDoCard = 'votar' | 'resultado' | 'apurar';
 
@@ -44,11 +45,20 @@ interface Props {
    */
   acimaDoRodape?: number;
   demo?: boolean;
+  /** 12/11/2026: liderança (padrão) ou gerentes. */
+  tipoDaVotacao?: TipoDaVotacao;
 }
 
-export function CardDaVotacao({ tipo, titulo, minimizado, onAbrir, onMinimizar, onExpandir, onDispensar, recuoEsquerda = 16, acimaDoRodape, demo }: Props) {
+export function CardDaVotacao({ tipo, titulo, minimizado, onAbrir, onMinimizar, onExpandir, onDispensar, recuoEsquerda = 16, acimaDoRodape, demo, tipoDaVotacao = 'lideranca' }: Props) {
   const votar = tipo === 'votar';
-  const t = TEXTOS[tipo];
+  const tv = textosDo(tipoDaVotacao);
+  const base = TEXTOS[tipo];
+  // Os textos foram escritos para a liderança; na dos gerentes trocam as palavras.
+  const t = tipoDaVotacao === 'lideranca' ? base : {
+    ...base,
+    pilula: tipo === 'votar' ? tv.nome : base.pilula,
+    texto: base.texto.replace('o líder', `o ${tv.pessoa}`).replace('para os líderes', 'para todos'),
+  };
   const Icone = tipo === 'votar' ? Vote : tipo === 'apurar' ? Scale : Trophy;
   return (
     <div className="fixed bottom-4 left-4 z-[45] print:hidden md:left-[var(--recuo-votacao)]"
@@ -90,7 +100,7 @@ export function CardDaVotacao({ tipo, titulo, minimizado, onAbrir, onMinimizar, 
                 </motion.span>
                 <div className="min-w-0">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                    Votação da Liderança{demo ? ' · demonstração' : ''}
+                    {tv.nome}{demo ? ' · demonstração' : ''}
                   </p>
                   <h3 id="vl-card-titulo" className="mt-0.5 text-xl font-bold leading-tight">{t.titulo}</h3>
                 </div>

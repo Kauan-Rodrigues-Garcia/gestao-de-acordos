@@ -18,6 +18,7 @@ import {
   nomeCurto, quadroDeTitulos, type Candidato, type ItemDaCedula, type MeusVotos, type ResultadoDaPergunta,
 } from './cedula';
 import { FotoLider } from './FotoLider';
+import { textosDo, type TipoDaVotacao } from './textos';
 
 interface Props {
   cedula: ItemDaCedula[];
@@ -27,13 +28,15 @@ interface Props {
   meus: MeusVotos;
   /** Demonstração: avisa que os votos dos outros foram sorteados. No resultado de verdade, não. */
   demo?: boolean;
+  tipo?: TipoDaVotacao;
 }
 
 const SUSPENSE_MS = 1800;
 /** Quantos aparecem nas barras antes de «Ver todos». */
 const TOPO = 5;
 
-export function ResultadoVotacao({ cedula, resultados, pessoas, meus, demo = false }: Props) {
+export function ResultadoVotacao({ cedula, resultados, pessoas, meus, demo = false, tipo = 'lideranca' }: Props) {
+  const t = textosDo(tipo);
   const quadro = useMemo(() => quadroDeTitulos(resultados), [resultados]);
 
   const fim = resultados.length; // a última «página» é o quadro de títulos
@@ -138,7 +141,7 @@ export function ResultadoVotacao({ cedula, resultados, pessoas, meus, demo = fal
                               className="absolute -top-6 left-1/2 -translate-x-1/2 text-warning"><Crown className="h-9 w-9 fill-warning/40" /></motion.span>
                             <FotoLider lider={p} className="h-28 w-28 text-3xl ring-4 ring-warning" />
                           </div>
-                          <p className="text-xl font-bold">{p?.nome ?? 'Líder'}</p>
+                          <p className="text-xl font-bold">{p?.nome ?? t.Pessoa}</p>
                           <p className="text-xs text-muted-foreground">{p?.setor}{r.desempatado ? ' · escolha da diretoria' : ''}</p>
                         </div>
                       );
@@ -173,7 +176,7 @@ export function ResultadoVotacao({ cedula, resultados, pessoas, meus, demo = fal
                           <span className="w-6 text-center text-xs font-bold tabular-nums text-muted-foreground">{posicao}º</span>
                           <FotoLider lider={p} className="h-8 w-8 text-[11px]" />
                           <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                            {p ? nomeCurto(p.nome) : 'Líder'}
+                            {p ? nomeCurto(p.nome) : t.Pessoa}
                             {meus[r.pergunta.id] === l.id && <span className="ml-2 rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary">seu voto</span>}
                           </span>
                           <span className="shrink-0 text-sm tabular-nums text-muted-foreground">
@@ -186,7 +189,7 @@ export function ResultadoVotacao({ cedula, resultados, pessoas, meus, demo = fal
                 </ul>
                 {r.linhas.length > TOPO && (
                   <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-                    <span>{verTodos ? `Os ${r.linhas.length} líderes` : `Os ${TOPO} mais votados de ${r.linhas.length}`}</span>
+                    <span>{verTodos ? `Os ${r.linhas.length} ${t.pessoas}` : `Os ${TOPO} mais votados de ${r.linhas.length}`}</span>
                     <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setVerTodos(v => !v)}>
                       {verTodos ? `Mostrar só os ${TOPO} primeiros` : `Ver todos os ${r.linhas.length}`}
                     </Button>
@@ -196,7 +199,7 @@ export function ResultadoVotacao({ cedula, resultados, pessoas, meus, demo = fal
             ) : (
               /* Antes de revelar: todos os rostos da pergunta; no suspense, um holofote passeia por eles. */
               <div className="space-y-2 text-center">
-                <p className="text-xs text-muted-foreground">{r.linhas.length} líderes concorrendo</p>
+                <p className="text-xs text-muted-foreground">{r.linhas.length} {t.pessoas} concorrendo</p>
                 <ul className="mx-auto flex max-w-3xl flex-wrap justify-center gap-1.5">
                   {ordemFixa.map((id, n) => {
                     const p = pessoas.get(id);
@@ -230,7 +233,7 @@ export function ResultadoVotacao({ cedula, resultados, pessoas, meus, demo = fal
                     <span className="w-6 text-center text-sm font-bold tabular-nums text-muted-foreground">{posicao}º</span>
                     <FotoLider lider={p} className="h-10 w-10 text-xs" />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold">{p?.nome ?? 'Líder'}</p>
+                      <p className="truncate text-sm font-semibold">{p?.nome ?? t.Pessoa}</p>
                       <p className="truncate text-xs text-muted-foreground" title={q.titulos.map(t => t.texto).join(' · ')}>
                         {q.titulos.map(t => t.emoji).join(' ')}
                       </p>

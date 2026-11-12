@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import type { Candidato, ItemDaCedula, ResultadoDaPergunta } from './cedula';
 import { ResultadoVotacao } from './ResultadoVotacao';
 import { SeloDemonstracao } from './TelaVotacao';
+import { textosDo, type TipoDaVotacao } from './textos';
 
 interface Props {
   titulo: string;
@@ -17,10 +18,11 @@ interface Props {
   resultados: ResultadoDaPergunta[];
   pessoas: ReadonlyMap<string, Candidato>;
   demo?: boolean;
+  tipo?: TipoDaVotacao;
   onFechar: () => void;
 }
 
-export function TelaResultado({ titulo, cedula, resultados, pessoas, demo, onFechar }: Props) {
+export function TelaResultado({ titulo, cedula, resultados, pessoas, demo, tipo = 'lideranca', onFechar }: Props) {
   useEffect(() => {
     const antes = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -35,7 +37,7 @@ export function TelaResultado({ titulo, cedula, resultados, pessoas, demo, onFec
         <div className="flex min-w-0 items-center gap-3">
           <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-warning/15 text-warning"><Trophy className="h-5 w-5" /></span>
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold">Votação da Liderança</p>
+            <p className="truncate text-sm font-semibold">{textosDo(tipo).nome}</p>
             <p className="truncate text-[11px] text-muted-foreground">{titulo}</p>
           </div>
         </div>
@@ -45,7 +47,7 @@ export function TelaResultado({ titulo, cedula, resultados, pessoas, demo, onFec
         </div>
       </header>
       <main className="min-h-0 flex-1 overflow-y-auto">
-        <ResultadoVotacao cedula={cedula} resultados={resultados} pessoas={pessoas} meus={{}} demo={demo} />
+        <ResultadoVotacao cedula={cedula} resultados={resultados} pessoas={pessoas} meus={{}} demo={demo} tipo={tipo} />
       </main>
     </div>,
     document.body,

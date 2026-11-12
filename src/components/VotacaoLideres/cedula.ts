@@ -72,6 +72,17 @@ export const PERGUNTAS_PADRAO: readonly Pergunta[] = [
   { id: 'referencia', emoji: '🌟', texto: 'Quem é o líder que é referência para todos?' },
 ];
 
+/**
+ * Votação dos Gerentes (12/11/2026): a operação vota nos gerentes. Mínimo
+ * menor (3 perguntas, 2 gerentes): costuma haver poucos gerentes.
+ */
+export const MIN_PERGUNTAS_GERENTES = 3;
+export const MIN_GERENTES = 2;
+/** As mesmas perguntas-base, escritas para gerente. */
+export const PERGUNTAS_PADRAO_GERENTES: readonly Pergunta[] = PERGUNTAS_PADRAO.map(p => ({
+  ...p, texto: p.texto.replace(/líder/g, 'gerente'),
+}));
+
 /** Gerador com semente (mulberry32): a mesma semente dá os mesmos votos sorteados. */
 export function aleatorio(semente: number): () => number {
   let a = semente >>> 0;
@@ -148,13 +159,28 @@ export function maximoDeRespostas(participantes: number, perguntas: number): num
 }
 
 /**
+ * Quantas perguntas quem vota precisa preencher (12/11/2026) — a mesma conta
+ * de `fn_votacao_lideranca_votar`. Em quem dá para votar: os candidatos, menos
+ * a própria pessoa se ela também concorre. Com «um por candidato» cada um vale
+ * uma pergunta só; sem, dá para responder todas.
+ */
+export function respostasExigidas(
+  { candidatos, perguntas, eleitorConcorre, umPorCandidato }:
+  { candidatos: number; perguntas: number; eleitorConcorre: boolean; umPorCandidato: boolean },
+): number {
+  const disponiveis = candidatos - (eleitorConcorre ? 1 : 0);
+  if (disponiveis <= 0) return 0;
+  return umPorCandidato ? Math.min(perguntas, disponiveis) : perguntas;
+}
+
+/**
  * As cédulas dos outros líderes, sorteadas — só para a demonstração. Seguem as
  * mesmas regras da votação de verdade: um voto por pergunta, nunca em si mesmo
  * e cada colega escolhido uma vez só. Os pesos variam por pergunta e são
  * concentrados (poucos nomes puxam a maioria, como numa votação de verdade).
  */
 export function simularCedulas(
-  cedula: readonly ItemDaCedula[], eleitores: readonly string[], semente: number,
+  cedula: readonly ItemDaCedula[], eleitores: readonly string[], semente: number, umPorCandidato = true,
 ): Record<string, MeusVotos> {
   const rng = aleatorio(semente ^ 0x5bd1e995);
   const cedulas: Record<string, MeusVotos> = Object.fromEntries(eleitores.map(e => [e, {}]));
@@ -170,7 +196,7 @@ export function simularCedulas(
       let i = opcoes.findIndex(peso => (sorteio -= peso) < 0);
       if (i < 0) for (let j = opcoes.length - 1; j >= 0; j--) if (opcoes[j] > 0) { i = j; break; }
       cedulas[eleitor][pergunta.id] = candidatos[i];
-      fora.add(candidatos[i]);
+      if (umPorCandidato) fora.add(candidatos[i]);
     }
   }
   return cedulas;
@@ -186,8 +212,8 @@ export function contarCedulas(cedula: readonly ItemDaCedula[], cedulas: Readonly
 }
 
 /** Os votos dos outros, já somados (`simularCedulas` + `contarCedulas`). */
-export function simularVotos(cedula: readonly ItemDaCedula[], eleitores: readonly string[], semente: number): Votos {
-  return contarCedulas(cedula, simularCedulas(cedula, eleitores, semente));
+export function simularVotos(cedula: readonly ItemDaCedula[], eleitores: readonly string[], semente: number, umPorCandidato = true): Votos {
+  return contarCedulas(cedula, simularCedulas(cedula, eleitores, semente, umPorCandidato));
 }
 
 /** Junta o voto de quem está votando aos dos outros. */
@@ -280,7 +306,11 @@ export interface Decisoes {
  * outra (contando as decisões já tomadas). Manter o mesmo líder é escolha da
  * diretoria, mas cada categoria dele é decidida.
  */
-export function situacaoDasDecisoes(resultados: readonly ResultadoDaPergunta[], decisoes: Desempates): Decisoes {
+export function situacaoDasDecisoes(
+  resultados: readonly ResultadoDaPergunta[], decisoes: Desempates,
+  /** `false` (12/11/2026, a votação escolhe): a mesma pessoa pode levar várias sem pedir decisão. */
+  { umTitulo = true }: { umTitulo?: boolean } = {},
+): Decisoes {
   const leva = new Map<string, string[]>();
   const titulos = new Map<string, Pergunta[]>();
   for (const r of resultados) {
@@ -294,7 +324,7 @@ export function situacaoDasDecisoes(resultados: readonly ResultadoDaPergunta[], 
   for (const r of resultados) {
     const decidida = decisaoValida(r, decisoes[r.pergunta.id]);
     const empate = r.vencedores.length > 1;
-    const repetidos = decidida ? [] : r.vencedores
+    const repetidos = decidida || !umTitulo ? [] : r.vencedores
       .map(id => ({ id, outras: (titulos.get(id) ?? []).filter(p => p.id !== r.pergunta.id) }))
       .filter(x => x.outras.length > 0);
     const pendente = !decidida && (empate || repetidos.length > 0);
@@ -305,8 +335,8 @@ export function situacaoDasDecisoes(resultados: readonly ResultadoDaPergunta[], 
 }
 
 /** Quantas categorias ainda não têm decisão. */
-export function empatesPendentes(resultados: readonly ResultadoDaPergunta[], desempates: Desempates): number {
-  return situacaoDasDecisoes(resultados, desempates).pendentes;
+export function empatesPendentes(resultados: readonly ResultadoDaPergunta[], desempates: Desempates, umTitulo = true): number {
+  return situacaoDasDecisoes(resultados, desempates, { umTitulo }).pendentes;
 }
 
 /**

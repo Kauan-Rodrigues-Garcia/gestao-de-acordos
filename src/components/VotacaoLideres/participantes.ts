@@ -22,6 +22,8 @@ import type { Candidato } from './cedula';
 export interface Participante extends Candidato {
   /** `null`: pessoa sem setor — só entra incluída à mão. */
   setorId: string | null;
+  /** A equipe do cadastro (`perfis.equipe_id`; para operador é a equipe dele). 12/11/2026. */
+  equipeId?: string | null;
   /** Chave do grupo do setor: `marca:bookplay`, `marca:pagueplay` ou `empresa:<id>`. */
   grupo: string;
   produto: Produto | null;
@@ -34,6 +36,10 @@ export interface SetorDaVotacao {
   grupo: string;
   produto: Produto | null;
 }
+
+/** Uma equipe, para escolher quem vota na votação dos gerentes (12/11/2026). */
+export interface EquipeDaVotacao { id: string; nome: string; setorId: string | null }
+export interface LinhaEquipe { id: string; nome: string | null; setor_id: string | null }
 
 export interface GrupoDaVotacao {
   chave: string;
@@ -59,6 +65,7 @@ export interface LinhaPerfil {
   robo: boolean | null;
   setor_id: string | null;
   empresa_id?: string | null;
+  equipe_id?: string | null;
 }
 export interface LinhaSetor { id: string; nome: string | null; cidade_id: string | null; empresa_id: string | null; ativo: boolean | null }
 export interface LinhaEmpresa { id: string; nome: string | null; slug: string | null; produto: string | null }
@@ -95,7 +102,8 @@ export function motivoDeConta(nome: string): string | null {
 export function montarParticipantes(
   perfis: readonly LinhaPerfil[], setores: readonly LinhaSetor[],
   empresas: readonly LinhaEmpresa[], cidades: readonly LinhaCidade[],
-): { pessoas: Participante[]; grupos: GrupoDaVotacao[] } {
+  equipesDoBanco: readonly LinhaEquipe[] = [],
+): { pessoas: Participante[]; grupos: GrupoDaVotacao[]; equipes: EquipeDaVotacao[] } {
   const empresaPorId = new Map(empresas.map(e => [e.id, e]));
   const cidadePorId = new Map(cidades.map(c => [c.id, c.nome ?? '']));
 
@@ -120,7 +128,7 @@ export function montarParticipantes(
     const nome = (l.nome ?? '').trim();
     if (!l.ativo || l.arquivado || l.situacao === 'desligado' || l.robo || !nome) continue;
     const setor = l.setor_id ? setorPorId.get(l.setor_id) : undefined;
-    const base = { id: l.id, nome, foto: l.foto_url || null, perfil: l.perfil ?? 'operador' };
+    const base = { id: l.id, nome, foto: l.foto_url || null, perfil: l.perfil ?? 'operador', equipeId: l.equipe_id ?? null };
     if (setor) {
       pessoas.push({ ...base, setor: setor.nome, setorId: setor.id, grupo: setor.grupo, produto: setor.produto, empresa: setor.empresa });
     } else {
@@ -142,7 +150,11 @@ export function montarParticipantes(
   const grupos = [...porGrupo.values()]
     .map(g => ({ ...g, setores: g.setores.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR', { numeric: true })) }))
     .sort((a, b) => ordemGrupo(a) - ordemGrupo(b) || a.rotulo.localeCompare(b.rotulo, 'pt-BR'));
-  return { pessoas, grupos };
+  const equipes = equipesDoBanco
+    .filter(e => (e.nome ?? '').trim())
+    .map(e => ({ id: e.id, nome: (e.nome ?? '').trim(), setorId: e.setor_id }))
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR', { numeric: true }));
+  return { pessoas, grupos, equipes };
 }
 
 /**
@@ -150,14 +162,17 @@ export function montarParticipantes(
  * Os perfis vêm em páginas (05/11/2026): o PostgREST corta em 1000 linhas sem
  * avisar, e quem ficasse no fim do alfabeto sumiria da votação.
  */
-export async function lerParticipantes(): Promise<{ pessoas: Participante[]; grupos: GrupoDaVotacao[] }> {
-  const [perfis, setores, empresas, cidades] = await Promise.all([
+export async function lerParticipantes(): Promise<{ pessoas: Participante[]; grupos: GrupoDaVotacao[]; equipes: EquipeDaVotacao[] }> {
+  const [perfis, setores, empresas, cidades, equipes] = await Promise.all([
     lerTodasAsPaginas<LinhaPerfil>((de, ate) => supabase.from('perfis')
-      .select('id, nome, foto_url, perfil, ativo, arquivado, situacao, robo, setor_id, empresa_id')
+      .select('id, nome, foto_url, perfil, ativo, arquivado, situacao, robo, setor_id, empresa_id, equipe_id')
       .eq('ativo', true).order('nome').order('id').range(de, ate)),
     supabase.from('setores').select('id, nome, cidade_id, empresa_id, ativo'),
     supabase.from('empresas').select('id, nome, slug, produto'),
     supabase.from('rh_celulas').select('id, nome'),
+    // As equipes (12/11/2026): para a votação dos gerentes escolher quem vota.
+    lerTodasAsPaginas<LinhaEquipe>((de, ate) => supabase.from('equipes').select('id, nome, setor_id').order('id').range(de, ate))
+      .catch((): LinhaEquipe[] => []),
   ]);
   for (const r of [setores, empresas]) if (r.error) throw new Error(r.error.message);
   return montarParticipantes(
@@ -166,5 +181,6 @@ export async function lerParticipantes(): Promise<{ pessoas: Participante[]; gru
     (empresas.data ?? []) as unknown as LinhaEmpresa[],
     // Sem as cidades, os setores ficam no grupo da empresa: a tela abre mesmo assim.
     (cidades.error ? [] : cidades.data ?? []) as unknown as LinhaCidade[],
+    equipes,
   );
 }

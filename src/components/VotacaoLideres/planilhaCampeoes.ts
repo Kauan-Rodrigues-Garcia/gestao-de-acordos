@@ -75,8 +75,10 @@ export function montarCampeoes(
   resultados: readonly ResultadoDaPergunta[],
   desempates: Desempates,
   pessoas: ReadonlyMap<string, Candidato>,
+  /** 12/11/2026: a votação pode deixar a mesma pessoa levar várias (sem pedir decisão). */
+  umTitulo = true,
 ): Campeoes {
-  const d = situacaoDasDecisoes(resultados, desempates);
+  const d = situacaoDasDecisoes(resultados, desempates, { umTitulo });
   const finais = aplicarDesempates(resultados, desempates);
   const nome = (id: string) => pessoas.get(id)?.nome ?? '';
 
@@ -123,6 +125,7 @@ export interface DadosPlanilhaCampeoes {
   desempates: Desempates;
   pessoas: ReadonlyMap<string, Candidato>;
   votaram: number;
+  umTitulo?: boolean;
 }
 
 /** Do retrato da apuração (o mesmo que a tela da diretoria lê). */
@@ -138,6 +141,7 @@ export function dadosDaApuracao(r: ApuracaoDaVotacao, geradoEm = new Date()): Da
     desempates: Object.fromEntries((r.desempates ?? []).map(x => [x.pergunta_id, x.escolhido_id])),
     pessoas,
     votaram: r.envios?.length ?? 0,
+    umTitulo: r.votacao.um_titulo !== false,
   };
 }
 
@@ -244,7 +248,7 @@ const listaDePerguntas = (ps: readonly Pergunta[]) => ps.map(categoriaTexto).joi
 export function montarPlanilhaCampeoes(d: DadosPlanilhaCampeoes): Uint8Array<ArrayBuffer> {
   const estilos = new Estilos();
   const s = paleta(estilos);
-  const c = montarCampeoes(d.resultados, d.desempates, d.pessoas);
+  const c = montarCampeoes(d.resultados, d.desempates, d.pessoas, d.umTitulo !== false);
   const nome = (id: string) => d.pessoas.get(id)?.nome ?? 'Líder';
   const setor = (id: string) => d.pessoas.get(id)?.setor ?? '';
   const estado = ROTULO_ESTADO[d.estado] ?? d.estado;
