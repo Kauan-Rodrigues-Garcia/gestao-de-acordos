@@ -1066,6 +1066,190 @@ export async function criarAcordosPixLote(
   return { ok: true, importados: novos.length, ignorados, duplicados };
 }
 
+// ── Importação com conferência (12/11/2026) ─────────────────────────────────
+//
+// A liderança mantém planilha do Pix por fora. A importação compara cada NR
+// dela com o Pix de TODOS os setores da empresa antes de lançar qualquer
+// coisa — ver `pages/Acordos/pixImportacao.ts`.
+
+/** Um registro do Pix, com o que a conferência mostra para quem verifica. */
+export interface RegistroPixConferencia {
+  id: string;
+  nr_cliente: string;
+  operador_id: string;
+  operador_nome: string | null;
+  setor_id: string | null;
+  valor: number;
+  status: PixAutoStatus;
+  pago: boolean;
+  criado_em: string;
+  /** Para calcular a comissão que o Pix paga nesta linha (`comissaoDe`). */
+  pct_comissao: number | null;
+  bonus_pct?: number | null;
+  comissao_fixa?: number | null;
+}
+
+/**
+ * Todos os registros vivos do Pix da empresa, de todos os setores e meses.
+ *
+ * A RLS deixa quem tem escopo de setor (`fn_user_escopo('pix') >= 2`) ler a
+ * empresa inteira — é o que deixa a conferência achar o NR que está no
+ * Receptivo quando quem importa é o líder do Play 2.
+ *
+ * `ok: false` quer dizer lista INCOMPLETA. A conferência não pode seguir com
+ * ela: um NR que não veio pareceria «faltando» e seria lançado em dobro.
+ */
+export async function fetchRegistrosPixConferencia(
+  empresaId: string,
+): Promise<{ ok: boolean; registros: RegistroPixConferencia[] }> {
+  const { linhas, ok } = await paginarTudo<RegistroPixConferencia>(
+    'fetchRegistrosPixConferencia',
+    (de, ate) => supabase
+      .from('pix_automatico_acordos')
+      .select('id, nr_cliente, operador_id, operador_nome, setor_id, valor, status, pago, criado_em, '
+        + 'pct_comissao, bonus_pct, comissao_fixa')
+      .eq('empresa_id', empresaId)
+      .order('id', { ascending: true })
+      .range(de, ate),
+  );
+  return {
+    ok,
+    registros: linhas.map(r => ({
+      ...r,
+      valor: Number(r.valor),
+      pago: r.pago === true,
+      pct_comissao: r.pct_comissao == null ? null : Number(r.pct_comissao),
+    })),
+  };
+}
+
+/** Uma linha conferida e marcada para entrar. `ref` volta no resultado. */
+export interface LinhaPixImportada extends LinhaPixLote {
+  ref: string;
+  /** Dia da planilha (`yyyy-MM-dd`). Nulo = agora. */
+  dia: string | null;
+}
+
+/** Recusa do banco numa linha, com a mesma leitura de `criarAcordoPix`. */
+function motivoDaRecusaPix(error: { code?: string; message: string }): string {
+  if (/PIX_NR_MESMO_OPERADOR/i.test(error.message)) return MSG_NR_MESMO_OPERADOR;
+  if (error.code === '23505' || /já está registrado no Pix/i.test(error.message)) {
+    return 'O NR já está com outra pessoa neste mês — só com pedido de transferência.';
+  }
+  return error.message;
+}
+
+/**
+ * Lança as linhas que a conferência liberou, cada uma com a data dela.
+ *
+ * Em blocos: o insert de um bloco é uma transação só, e uma linha recusada pelo
+ * gatilho (alguém registrou o NR entre a conferência e o clique) derrubaria o
+ * bloco inteiro. Quando isso acontece, o bloco é refeito linha a linha — o que
+ * pode entrar entra, e a recusa volta com o motivo, para a tela mostrar.
+ */
+export async function inserirPixImportados(
+  empresaId: string,
+  linhas: readonly LinhaPixImportada[],
+): Promise<{ importados: { ref: string; id: string }[]; falhas: { ref: string; erro: string }[] }> {
+  const montar = (l: LinhaPixImportada): PixAutoAcordoInsert => {
+    const criadoEm = l.dia ? instanteDoDiaPix(l.dia) : null;
+    return {
+      empresa_id:    empresaId,
+      operador_id:   l.operadorId,
+      operador_nome: l.operadorNome,
+      setor_id:      l.setorId,
+      nr_cliente:    l.nrCliente.trim(),
+      valor:         l.valor,
+      status:        'pendente',
+      ...(criadoEm ? { criado_em: criadoEm } : {}),
+    };
+  };
+  // A volta do insert não promete a ordem: a linha é reconhecida pelo par
+  // NR + operador, que a conferência garante único no lote.
+  const chave = (nr: string, op: string) => `${normalizarNr(nr)}|${op}`;
+
+  const importados: { ref: string; id: string }[] = [];
+  const falhas: { ref: string; erro: string }[] = [];
+  const BLOCO = 100;
+  for (let i = 0; i < linhas.length; i += BLOCO) {
+    const bloco = linhas.slice(i, i + BLOCO);
+    const { data, error } = await supabase.from('pix_automatico_acordos')
+      .insert(bloco.map(montar)).select('id, nr_cliente, operador_id');
+    if (!error) {
+      const idPor = new Map((data ?? []).map(r => [chave(r.nr_cliente, r.operador_id), r.id]));
+      for (const l of bloco) {
+        const id = idPor.get(chave(l.nrCliente, l.operadorId));
+        if (id) importados.push({ ref: l.ref, id });
+      }
+      continue;
+    }
+    for (const l of bloco) {
+      const { data: um, error: e } = await supabase.from('pix_automatico_acordos')
+        .insert(montar(l)).select('id').single();
+      if (e || !um) falhas.push({ ref: l.ref, erro: e ? motivoDaRecusaPix(e) : 'Sem resposta do banco' });
+      else importados.push({ ref: l.ref, id: um.id });
+    }
+  }
+  return { importados, falhas };
+}
+
+/** `ids` em pedaços: um `.in()` com centenas de ids estoura a URL do PostgREST. */
+function emPedacos<T>(lista: readonly T[], tamanho = 150): T[][] {
+  const saida: T[][] = [];
+  for (let i = 0; i < lista.length; i += tamanho) saida.push(lista.slice(i, i + tamanho));
+  return saida;
+}
+
+/**
+ * Aprova de uma vez os PENDENTES de um mesmo % (a importação da planilha, em
+ * que a linha verde já foi paga). Mesmo efeito de `avaliarAcordoPix` linha a
+ * linha: trava o % (e o valor fixo, na regra do Jornada) e carimba quem
+ * aprovou. O `.eq('status', 'pendente')` deixa de fora o que outro líder já
+ * decidiu — `count` diz quantas de fato mudaram.
+ */
+export async function aprovarPixEmLote(p: {
+  ids: readonly string[];
+  pctAtual: number;
+  fixoAtual?: number | null;
+  avaliadorId: string;
+  avaliadorNome: string;
+}): Promise<{ ok: boolean; count: number; error?: string }> {
+  let count = 0;
+  for (const ids of emPedacos(p.ids)) {
+    const { data, error } = await supabase
+      .from('pix_automatico_acordos')
+      .update({
+        status:            'aprovado',
+        pct_comissao:      p.pctAtual,
+        ...(p.fixoAtual != null ? { comissao_fixa: p.fixoAtual } : {}),
+        avaliado_por:      p.avaliadorId,
+        avaliado_por_nome: p.avaliadorNome,
+        avaliado_em:       new Date().toISOString(),
+      } as never)
+      .in('id', ids)
+      .eq('status', 'pendente')
+      .select('id');
+    if (error) return { ok: false, count, error: error.message };
+    count += (data ?? []).length;
+  }
+  return { ok: true, count };
+}
+
+/** `marcarComissaoPaga` em pedaços, para a lista grande da importação. */
+export async function marcarComissaoPagaEmLote(p: {
+  ids: readonly string[];
+  responsavelId: string;
+  responsavelNome: string;
+}): Promise<{ ok: boolean; count: number; error?: string }> {
+  let count = 0;
+  for (const ids of emPedacos(p.ids)) {
+    const r = await marcarComissaoPaga({ ...p, ids, pago: true });
+    if (!r.ok) return { ok: false, count, error: r.error };
+    count += r.count;
+  }
+  return { ok: true, count };
+}
+
 /**
  * Aprova ou desaprova. Na aprovação, trava o % vigente do setor na linha
  * (pct_comissao) — mudanças futuras de configuração não alteram o aprovado.

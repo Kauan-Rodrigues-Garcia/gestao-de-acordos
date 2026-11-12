@@ -3,22 +3,22 @@
  * atualizar, importar e exportar planilha, Lixeira, Histórico e limpar os
  * próprios desaprovados. Lixeira e Histórico são diálogos daqui.
  */
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { Download, History, RefreshCw, Trash2, Upload, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { SeletorMes } from '@/components/AnalyticsPanel/SeletorMes';
-import { formatCurrency, parseCurrencyInput } from '@/lib/index';
+import { formatCurrency } from '@/lib/index';
 import { cn } from '@/lib/utils';
-import { gruposDeNumeros, soNumeros } from '@/lib/soNumeros';
 import {
-  comissaoDe, criarAcordosPixLote, excluirItemLixeiraPix, fetchLixeiraPix, fetchLogPix,
+  comissaoDe, excluirItemLixeiraPix, fetchLixeiraPix, fetchLogPix,
   limparDesaprovados, purgarLixeiraPixExpirada, restaurarItemLixeiraPix,
-  type LinhaPixLote, type PixLixeiraItem, type PixLogItem,
+  type PixLixeiraItem, type PixLogItem,
 } from '@/services/pix_automatico.service';
 import { fmtPct, STATUS_INFO } from './pixTelaComum';
 import { PixHistoricoDialog } from './PixHistoricoDialog';
 import { PixLixeiraDialog } from './PixLixeiraDialog';
+import { PixImportarDialog } from './PixImportarDialog';
 import type { PixTela } from './usePixAutomatico';
 import { useTemaNatal } from '@/components/Natal/tema';
 import { RenaNeon } from '@/components/Natal/pix/PixNatal';
@@ -27,7 +27,7 @@ import { GorroNoel } from '@/components/Natal/Desenhos';
 export function PixCabecalho({ pix }: { pix: PixTela }) {
   const {
     empresa, perfil, mes, setMes, loading, carregar, visiveis, pctPorSetor, pctDoMeuSetor, fixoDoMeuSetor,
-    operadores, podeVerDeOutros, podeAgirSobreOutros, noMesAtual, diaNovo, fechamento,
+    podeVerDeOutros, podeAgirSobreOutros,
     meusDesaprovados, quemExclui,
   } = pix;
   const natal = useTemaNatal();
@@ -42,8 +42,7 @@ export function PixCabecalho({ pix }: { pix: PixTela }) {
   const [historicoCarregando, setHistoricoCarregando] = useState(false);
   const [restaurandoId, setRestaurandoId] = useState<string | null>(null);
   const [limpando, setLimpando]       = useState(false);
-  const [importando, setImportando]     = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [importarAberto, setImportarAberto] = useState(false);
 
   async function limparMeusDesaprovados() {
     if (!empresa?.id || !perfil?.id) return;
@@ -157,65 +156,6 @@ export function PixCabecalho({ pix }: { pix: PixTela }) {
     URL.revokeObjectURL(url);
   }
 
-  /** Acha um cabeçalho tolerando variações de nome/caixa. */
-  function pegarCampo(row: Record<string, unknown>, nomes: string[]): unknown {
-    const chaves = Object.keys(row);
-    for (const n of nomes) {
-      const k = chaves.find(c => c.trim().toLowerCase() === n);
-      if (k != null) return row[k];
-    }
-    return undefined;
-  }
-
-  async function importarArquivo(file: File) {
-    if (!empresa?.id || !perfil?.id) return;
-    if (fechamento.impedir('importar Pix neste mês')) return;
-    setImportando(true);
-    try {
-      const [buf, { read: xlsxRead, utils: xlsxUtils }] = await Promise.all([
-        file.arrayBuffer(),
-        import('@e965/xlsx'),
-      ]);
-      const wb = xlsxRead(buf, { type: 'array' });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = xlsxUtils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' });
-
-      const linhas: LinhaPixLote[] = rows.map(row => {
-        // Só número (26/10/2026): «12748027_» vira 12748027; com mais de um
-        // número na célula, fica vazio e a linha entra nos inválidos ignorados.
-        const nrBruto = String(pegarCampo(row, ['nr', 'nr do acordo', 'nr_cliente']) ?? '').trim();
-        const nr = gruposDeNumeros(nrBruto) === 1 ? soNumeros(nrBruto) : '';
-        const valor = parseCurrencyInput(String(pegarCampo(row, ['valor', 'valor total', 'valor do acordo']) ?? ''));
-        const opNome = String(pegarCampo(row, ['operador', 'operador_nome', 'nome']) ?? '').trim();
-
-        // Atribuição de operador: líder + nome reconhecido → esse operador; senão, o usuário logado.
-        let opId = perfil.id;
-        let opNomeFinal = perfil.nome ?? perfil.email ?? '—';
-        let setorId = perfil.setor_id ?? null;
-        if (podeAgirSobreOutros && opNome) {
-          const match = operadores.find(o => o.nome.trim().toLowerCase() === opNome.toLowerCase());
-          if (match) { opId = match.id; opNomeFinal = match.nome; setorId = match.setor_id; }
-        }
-        return { nrCliente: nr, valor, operadorId: opId, operadorNome: opNomeFinal, setorId };
-      });
-
-      const r = await criarAcordosPixLote(empresa.id, linhas, noMesAtual ? null : diaNovo);
-      if (!r.ok) { toast.error('Erro ao importar: ' + r.error); return; }
-      toast.success(
-        `Importados: ${r.importados}` +
-        (r.duplicados ? ` · Duplicados ignorados: ${r.duplicados}` : '') +
-        (r.ignorados ? ` · Inválidos ignorados: ${r.ignorados}` : ''),
-      );
-      await carregar();
-    } catch (e) {
-      toast.error('Falha ao ler a planilha. Confira o arquivo.');
-      console.warn('[PixAutomatico] import:', e);
-    } finally {
-      setImportando(false);
-      if (fileRef.current) fileRef.current.value = '';
-    }
-  }
-
   return (
     <>
       {/* ── Cabeçalho da aba ── */}
@@ -248,13 +188,16 @@ export function PixCabecalho({ pix }: { pix: PixTela }) {
             className="gap-1.5 h-8 text-xs rounded-lg">
             <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} /> Atualizar
           </Button>
-          <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden"
-            onChange={e => { const f = e.target.files?.[0]; if (f) importarArquivo(f); }} />
-          <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()} disabled={importando}
-            className="gap-1.5 h-8 text-xs rounded-lg" title="Importar planilha de Pix Automático">
-            {importando ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-            Importar
-          </Button>
+          {/* Importar é conferência contra o Pix de todos os setores, e só a
+              liderança lê todos os setores (RLS `fn_user_escopo('pix') >= 2`):
+              para o operador, a comparação sairia cega. Ver `PixImportarDialog`. */}
+          {podeAgirSobreOutros && (
+            <Button variant="outline" size="sm" onClick={() => setImportarAberto(true)}
+              className="gap-1.5 h-8 text-xs rounded-lg"
+              title="Importar a planilha do Pix: confere cada NR com todos os setores antes de lançar">
+              <Upload className="w-3.5 h-3.5" /> Importar
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={exportar} disabled={loading || visiveis.length === 0}
             className="gap-1.5 h-8 text-xs rounded-lg" title="Exportar registros visíveis">
             <Download className="w-3.5 h-3.5" /> Exportar
@@ -285,6 +228,9 @@ export function PixCabecalho({ pix }: { pix: PixTela }) {
         podeAgirSobreOutros={podeAgirSobreOutros} restaurandoId={restaurandoId}
         onRestaurar={restaurarDaLixeira} onApagar={apagarDaLixeira}
       />
+      {podeAgirSobreOutros && (
+        <PixImportarDialog pix={pix} aberto={importarAberto} onAbertoChange={setImportarAberto} />
+      )}
       <PixHistoricoDialog
         aberto={historicoAberto} onAbertoChange={setHistoricoAberto}
         carregando={historicoCarregando} itens={historico}
