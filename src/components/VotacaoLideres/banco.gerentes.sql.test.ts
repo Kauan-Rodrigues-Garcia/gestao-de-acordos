@@ -80,6 +80,8 @@ beforeAll(async () => {
       ('${O3}', 'Otávio', null, '${SETOR}', 'operador', true, null);
     create function public.fn_user_is_super_admin() returns boolean language sql stable
       as $$ select current_setting('teste.super', true) = 'sim' $$;
+    create schema supabase_migrations;
+    create table supabase_migrations.schema_migrations (version text primary key, name text, statements text[]);
   `);
   await db.exec(ler('20261104230000_votacao_lideranca.sql'));
   await db.exec(ler('20261110150000_votacao_decisao_repetidos.sql'));
@@ -90,6 +92,9 @@ beforeAll(async () => {
   const perfil = ler('20261112180000_votacao_gerentes_perfil.sql');
   await db.exec(perfil);
   await db.exec(perfil); // reexecutável
+  const naoVotam = ler('20261112235500_votacao_gerentes_nao_votam.sql');
+  await db.exec(naoVotam);
+  await db.exec(naoVotam); // reexecutável
 });
 
 beforeEach(async () => { await db.exec('delete from public.votacao_lideranca;'); });
@@ -207,6 +212,43 @@ describe('votação dos gerentes', () => {
     await mudar(g, 'abrir');
     const g2 = await gravar({});
     await expect(mudar(g2, 'abrir')).rejects.toThrow(/deste tipo aberta/);
+  });
+});
+
+describe('gerente não vota nem recebe aviso (20261112235500)', () => {
+  it('nem o que concorre nem o de cargo gerência, mesmo na lista de quem vota', async () => {
+    // G2 concorre e foi posto para votar; G3 não concorre, mas é gerente.
+    const id = await gravar({ participantes: [G1, G2], eleitores: [O1, O2, O3, G2, G3] });
+    await mudar(id, 'abrir');
+    expect(await como<unknown[]>(G2, 'select public.fn_votacao_lideranca_minha() v')).toEqual([]);
+    expect(await como<unknown[]>(G3, 'select public.fn_votacao_lideranca_minha() v')).toEqual([]);
+    expect(await como<unknown[]>(O1, 'select public.fn_votacao_lideranca_minha() v')).toHaveLength(1);
+    await expect(votar(G2, id, tudo(G1))).rejects.toThrow(/gerente não vota/);
+    await expect(votar(G3, id, tudo(G1))).rejects.toThrow(/gerente não vota/);
+
+    await votar(O1, id, tudo(G1));
+    await votar(O2, id, tudo(G1));
+    await mudar(id, 'encerrar', DIR);
+    await como(DIR, 'select public.fn_votacao_lideranca_liberar($1) v', [id]);
+
+    // Resultado: quem votou recebe o card; gerente (concorrendo ou não), não.
+    expect((await como<Array<{ id: string }>>(O1, 'select public.fn_votacao_lideranca_meus_resultados() v')).map(m => m.id)).toEqual([id]);
+    for (const g of [G1, G2, G3]) {
+      expect(await como<unknown[]>(g, 'select public.fn_votacao_lideranca_meus_resultados() v')).toEqual([]);
+      await expect(como(g, 'select public.fn_votacao_lideranca_resultado($1) v', [id])).rejects.toThrow(/não liberado/);
+    }
+    // A diretoria continua vendo.
+    expect(await como<{ contagem: unknown[] }>(DIR, 'select public.fn_votacao_lideranca_resultado($1) v', [id])).toBeTruthy();
+  });
+
+  it('na Votação da Liderança, quem concorre continua recebendo o resultado', async () => {
+    const id = await salvarLideranca();
+    await mudar(id, 'abrir');
+    await votar(L1, id, { q1: L2, q2: L3, q3: L4 });
+    await mudar(id, 'encerrar', DIR);
+    // Só o aviso interessa aqui (as decisões da diretoria têm os seus testes).
+    await db.query(`update public.votacao_lideranca set estado = 'liberada', liberada_em = now() where id = $1`, [id]);
+    expect((await como<Array<{ id: string }>>(L1, 'select public.fn_votacao_lideranca_meus_resultados() v')).map(m => m.id)).toEqual([id]);
   });
 });
 

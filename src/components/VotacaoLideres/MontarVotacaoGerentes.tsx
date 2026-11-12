@@ -38,7 +38,7 @@ import {
   MIN_GERENTES, MIN_PERGUNTAS_GERENTES, PERGUNTAS_PADRAO_GERENTES, cedulaComTodos, nomeCurto,
   type Candidato,
 } from './cedula';
-import { CARGOS_QUE_VOTAM, gerentesPorOperacao, montarGerentes, rascunhoGerentesPadrao, semEquipe, type RascunhoGerentes } from './gerentes';
+import { CARGOS_QUE_VOTAM, ehGerente, gerentesPorOperacao, montarGerentes, rascunhoGerentesPadrao, semEquipe, type RascunhoGerentes } from './gerentes';
 import { NOME_DO_PRODUTO, type EquipeDaVotacao, type GrupoDaVotacao, type Participante } from './participantes';
 import { FotoLider } from './FotoLider';
 import { TelaVotacao } from './TelaVotacao';
@@ -226,7 +226,7 @@ export function MontarVotacaoGerentes({ dados, onLiberada }: Props) {
     }
     return [...blocos.entries()].sort(([a], [b]) => a.localeCompare(b, 'pt-BR', { numeric: true }));
   }, [m, buscaEleitor]);
-  const incluidosE = r.eleitoresIncluidos.map(id => dados.pessoas.find(p => p.id === id)).filter((p): p is Participante => !!p);
+  const incluidosE = r.eleitoresIncluidos.map(id => dados.pessoas.find(p => p.id === id)).filter((p): p is Participante => !!p && !ehGerente(p, idsCandidatos));
   const incluidosG = r.gerentesIncluidos.map(id => dados.pessoas.find(p => p.id === id)).filter((p): p is Participante => !!p);
   const nomesCargos = r.cargosEleitores.map(c => (PERFIL_LABELS[c] ?? c).toLowerCase()).join(' / ') || 'ninguém';
 
@@ -409,8 +409,13 @@ export function MontarVotacaoGerentes({ dados, onLiberada }: Props) {
             </div>
           )}
         </div>
-        <p className="text-xs font-medium">Incluir quem vota à mão <span className="font-normal text-muted-foreground">· qualquer cargo, setor ou equipe</span></p>
-        <BuscaDePessoa pessoas={dados.pessoas} fora={idsEleitores} produto={r.produto} rotulo="Buscar pessoa para votar"
+        {m.gerentesQueNaoVotam.length > 0 && (
+          <p className="text-xs text-muted-foreground">
+            Gerente não vota nesta votação nem recebe aviso dela: {m.gerentesQueNaoVotam.map(p => nomeCurto(p.nome)).join(', ')} {m.gerentesQueNaoVotam.length === 1 ? 'ficou' : 'ficaram'} de fora.
+          </p>
+        )}
+        <p className="text-xs font-medium">Incluir quem vota à mão <span className="font-normal text-muted-foreground">· qualquer cargo (menos gerente), setor ou equipe</span></p>
+        <BuscaDePessoa pessoas={dados.pessoas.filter(p => !ehGerente(p, idsCandidatos))} fora={idsEleitores} produto={r.produto} rotulo="Buscar pessoa para votar"
           onIncluir={id => mudar({ eleitoresIncluidos: [...r.eleitoresIncluidos.filter(x => x !== id), id], eleitoresFora: r.eleitoresFora.filter(x => x !== id) })} />
         {incluidosE.length > 0 && (
           <div className="flex flex-wrap gap-1.5" aria-label="Incluídos à mão para votar">

@@ -8,7 +8,9 @@
  *              tira (férias, saiu) e inclui à mão (alguém da diretoria);
  *   votam      quem tem os cargos escolhidos (padrão: Operador) nos SETORES
  *              marcados, separados por EQUIPE — a equipe desmarcada sai inteira;
- *              depois dá para tirar e incluir pessoa por pessoa.
+ *              depois dá para tirar e incluir pessoa por pessoa. GERENTE NUNCA
+ *              VOTA (12/11/2026): quem concorre ou tem o cargo `gerencia` sai,
+ *              mesmo incluído à mão — e o banco recusa (20261112235500).
  *   cédula     CADA SETOR VOTA NO SEU GERENTE (12/11/2026): cada pessoa só vê
  *              os gerentes ligados ao setor dela. A ligação vem do cadastro
  *              (o setor do gerente) e quem organiza muda à mão — um gerente
@@ -99,7 +101,13 @@ export interface MontagemGerentes {
   setoresComUm: string[];
   /** Gerentes concorrendo que nenhum eleitor vê. */
   gerentesSemEleitor: Participante[];
+  /** Gerentes que entrariam para votar (pelo filtro ou à mão) e ficaram de fora. */
+  gerentesQueNaoVotam: Participante[];
 }
+
+/** Na Votação dos Gerentes, gerente não vota: quem concorre ou tem o cargo `gerencia`. */
+export const ehGerente = (p: Pick<Participante, 'id' | 'perfil'>, candidatos: ReadonlySet<string>) =>
+  p.perfil === CARGO_GERENTE || candidatos.has(p.id);
 
 /** Quantos gerentes cada operação tem (os botões de operação). Filtro de dado, não de acesso. */
 export function gerentesPorOperacao(pessoas: readonly Participante[]): Map<Produto, number> {
@@ -169,13 +177,16 @@ export function montarGerentes(
   const contaE = new Set(contasEleitores.filter(c => !r.eleitoresVoltaram.includes(c.p.id)).map(c => c.p.id));
   const incluidosE = r.eleitoresIncluidos.map(id => porId.get(id)).filter((p): p is Participante => !!p);
   const jaE = new Set(incluidosE.map(p => p.id));
-  const eleitores = [
+  const idsCandidatos = new Set(candidatos.map(p => p.id));
+  const queriamVotar = [
     ...doFiltro.filter(p => !jaE.has(p.id) && !contaE.has(p.id) && !r.eleitoresFora.includes(p.id)),
     ...incluidosE,
-  ].sort(porNome);
+  ];
+  // Gerente não vota (12/11/2026), nem incluído à mão.
+  const eleitores = queriamVotar.filter(p => !ehGerente(p, idsCandidatos)).sort(porNome);
+  const gerentesQueNaoVotam = queriamVotar.filter(p => ehGerente(p, idsCandidatos)).sort(porNome);
 
   // ── A cédula: cada setor vota no seu gerente ──
-  const idsCandidatos = new Set(candidatos.map(p => p.id));
   const ligadoAMao = (setorId: string) => Object.prototype.hasOwnProperty.call(r.ligacoes ?? {}, setorId);
   const gerentesDoSetor = (setorId: string): Participante[] => {
     const ids = ligadoAMao(setorId)
@@ -199,6 +210,6 @@ export function montarGerentes(
 
   return {
     gerentesDaOperacao, contasGerentes, candidatos, grupos, porSetor, equipesPorSetor, doFiltro, contasEleitores, eleitores, equipeDe, marcados,
-    gerentesDoSetor, ligadoAMao, cedulaPorEleitor, semGerente, setoresComUm, gerentesSemEleitor,
+    gerentesDoSetor, ligadoAMao, cedulaPorEleitor, semGerente, setoresComUm, gerentesSemEleitor, gerentesQueNaoVotam,
   };
 }

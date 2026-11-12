@@ -180,3 +180,24 @@ describe('acompanhamento dos gerentes', () => {
     expect(a.pessoasPorId.has('g1')).toBe(true);
   });
 });
+
+describe('gerente não vota (12/11/2026)', () => {
+  it('nem pelo cargo escolhido, nem incluído à mão; operador incluído à mão continua', () => {
+    const m = montarGerentes(dados, com({
+      setores: ['s1'], cargosEleitores: ['operador', 'gerencia'], eleitoresIncluidos: ['g1', 'g2', 'o4'],
+    }));
+    const ids = m.eleitores.map(p => p.id);
+    expect(ids).not.toContain('g1');
+    expect(ids).not.toContain('g2');
+    expect(ids).toContain('o1');
+    expect(ids).toContain('o4');
+    expect(m.gerentesQueNaoVotam.map(p => p.id)).toEqual(expect.arrayContaining(['g1', 'g2']));
+  });
+
+  it('quem concorre não vota, mesmo sem o cargo de gerência', () => {
+    const m = montarGerentes(dados, com({ setores: ['s1'], gerentesIncluidos: ['o2'] }));
+    expect(m.candidatos.map(p => p.id)).toContain('o2');
+    expect(m.eleitores.map(p => p.id)).not.toContain('o2');
+    expect(m.gerentesQueNaoVotam.map(p => p.id)).toContain('o2');
+  });
+});
