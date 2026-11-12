@@ -31,7 +31,7 @@
  */
 import {
   LayoutDashboard, FileText, Plus, Users, Settings, Trash2, TrendingUp,
-  BarChart3, Upload, Target, BarChart2, Megaphone, MessageSquarePlus,
+  BarChart3, Upload, BarChart2, Megaphone, MessageSquarePlus,
   Ticket, ClipboardList, ClipboardCheck, Smartphone, MessageCircle, Gauge,
   ShoppingBag, Handshake, Send, Zap, Tv, KeyRound, ShieldCheck, Headset,
 } from 'lucide-react';
@@ -250,8 +250,9 @@ export const NAV_ITEMS: NavItem[] = [
   // Cadastrar gente é necessidade de qualquer operação, e a tela é sobre
   // pessoa, setor e equipe — vocabulário que Vendas e RH também usam.
   { label: 'Usuários',         icon: Users,           to: ROUTE_PATHS.ADMIN_USUARIOS,      produtos: TODOS_OS_PRODUTOS, roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_usuarios' },
-  // Metas virou aba dentro de Usuários (BookPlay e PaguePlay) — esconde o menu standalone.
-  { label: 'Metas',            icon: Target,          to: '/admin/metas',                  produtos: SO_COBRANCA, roles: ['administrador','lider','elite','gerencia'], permissaoKey: 'ver_metas', hiddenForBookplay: true, hiddenForPaguePay: true },
+  // Metas é aba dentro de Usuários. O item avulso que ficava aqui estava
+  // escondido nas duas empresas de cobrança e saiu em 12/11/2026; a rota
+  // `/admin/metas` redireciona para a aba (App.tsx).
   { label: 'Configurações',    icon: Settings,        to: ROUTE_PATHS.ADMIN_CONFIGURACOES, produtos: TODOS_OS_PRODUTOS, roles: ['administrador'], permissaoKey: 'ver_configuracoes' },
   { label: 'Lixeira',          icon: Trash2,          to: '/admin/lixeira',                produtos: SO_COBRANCA, roles: ['administrador','lider','operador','elite','gerencia','diretoria'], permissaoKey: 'ver_lixeira' },
   // Estes três eram renderizados À MÃO abaixo do laço, com condição só de slug

@@ -73,6 +73,11 @@ já gravados em `cargos_permissoes.permissoes` / `perfis_permissoes` ficam como
 estão. Uma chave fora do catálogo cai no ramo "ausente vale negado" de
 `fn_user_tem`, e ninguém mais a consulta.
 
+Em 12/11/2026 a `ouvidoria_atendimentos` (vazia) foi para o schema
+`arquivo_morto` (`20261112134421_arquivo_morto_tabelas_sem_uso.sql`). A
+Ouvidoria nova, da regra Cofen, usa outras tabelas (`ouvidoria_manifestacoes`
+e afins). Para restaurar esta, devolva a tabela ao `public` antes do código.
+
 ## Como voltar
 
 Copiar a árvore `src/` desta pasta por cima de `src/`, refazer as pontas

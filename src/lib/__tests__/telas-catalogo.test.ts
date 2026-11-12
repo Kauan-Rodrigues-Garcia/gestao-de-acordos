@@ -198,3 +198,12 @@ describe('o que não é pessoa usando', () => {
     expect(telaDaRota('/acordos/a%20b')).toBeNull();
   });
 });
+
+describe('sub-abas que o Monitoramento mostrava cruas (12/11/2026)', () => {
+  /** Gravadas em `uso_telas` sem rótulo: o painel exibia a chave do código. */
+  it('Pendentes, Desligados e Selo do mês têm nome', () => {
+    expect(rotuloDaTela('acordos:pendentes')).toBe('Acordos · Pendentes');
+    expect(rotuloDaTela('admin/usuarios:desligados')).toBe('Usuários · Desligados');
+    expect(rotuloDaTela('fechamento:selo')).toBe('Fechamento · Selo do mês');
+  });
+});

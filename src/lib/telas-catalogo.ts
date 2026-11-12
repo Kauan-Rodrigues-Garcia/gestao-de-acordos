@@ -138,6 +138,8 @@ export const ROTULO_SEGMENTO: Record<string, Record<string, string>> = {
   'acordos': {
     todos: 'Todos', verificar: 'Verificar', pagos: 'Pagos / Quitados',
     nao_pagos: 'Não pagos', pix: 'Pix Automático',
+    // A mesa da regra Cofen (`AcordosCofen`) chama a fila a verificar assim.
+    pendentes: 'Pendentes',
   },
   'pix-automatico': {
     registros: 'Registros', divergencias: 'NRs divergentes',
@@ -146,6 +148,7 @@ export const ROTULO_SEGMENTO: Record<string, Record<string, string>> = {
   'admin/usuarios': {
     usuarios: 'Lista', setores: 'Setores', equipes: 'Equipes', metas: 'Metas',
     acompanhamento: 'Acompanhamento', comemoracoes: 'Comemorações',
+    desligados: 'Desligados',
   },
   'admin/usuarios:metas': { metas: 'Metas', comissao: 'Comissão' },
   'admin/configuracoes': {
@@ -163,7 +166,7 @@ export const ROTULO_SEGMENTO: Record<string, Record<string, string>> = {
   'admin/configuracoes:logs/uso': {
     geral: 'Visão geral', pessoas: 'Pessoas', ausentes: 'Sem acesso', adocao: 'Adoção de tela',
   },
-  'fechamento': { fechamento: 'Fechamento', premiacoes: 'Premiações e Comissões' },
+  'fechamento': { fechamento: 'Fechamento', premiacoes: 'Premiações e Comissões', selo: 'Selo do mês' },
   'controle-numeros': {
     celulares: 'Celulares', numeros: 'Números', lixeira: 'Lixeira', configuracao: 'Configuração',
   },

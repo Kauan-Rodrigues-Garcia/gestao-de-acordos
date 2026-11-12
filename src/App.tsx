@@ -79,7 +79,6 @@ const AcordoDetalhe     = lazy(() => import('@/pages/AcordoDetalhe'));
 const PainelLider       = lazy(() => import('@/pages/PainelLider'));
 const AdminUsuarios     = lazy(() => import('@/pages/AdminUsuarios'));
 const AdminConfiguracoes= lazy(() => import('@/pages/AdminConfiguracoes'));
-const MetasConfig       = lazy(() => import('@/pages/MetasConfig'));
 const ImportarExcel     = lazy(() => import('@/pages/ImportarExcel'));
 const NotFound          = lazy(() => import('@/pages/not-found/Index'));
 const Lixeira           = lazy(() => import('@/pages/Lixeira'));
@@ -588,13 +587,8 @@ export default function App() {
               } />
               {/* /admin/logs agora é aba dentro de /admin/configuracoes */}
               <Route path={ROUTE_PATHS.ADMIN_LOGS} element={<Navigate to={ROUTE_PATHS.ADMIN_CONFIGURACOES + '?tab=logs'} replace />} />
-              <Route path={ROUTE_PATHS.ADMIN_METAS} element={
-                <LayoutWrapper>
-                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_metas">
-                    <MetasConfig />
-                  </ProtectedRoute>
-                </LayoutWrapper>
-              } />
+              {/* /admin/metas agora é só a aba Metas de /admin/usuarios (12/11/2026) */}
+              <Route path={ROUTE_PATHS.ADMIN_METAS} element={<Navigate to={ROUTE_PATHS.ADMIN_USUARIOS + '?tab=metas'} replace />} />
               <Route path={ROUTE_PATHS.ADMIN_LIXEIRA} element={
                 <LayoutWrapper>
                   <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_lixeira">

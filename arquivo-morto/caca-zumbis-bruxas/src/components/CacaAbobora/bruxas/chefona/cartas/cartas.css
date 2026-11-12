@@ -1,0 +1,57 @@
+/* As cartas do top 10 na tela: inclinam com o mouse e o brilho de carta rara segue o ponteiro. */
+.cdp-grade {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 18px;
+}
+.cdp-item {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+.cdp-carta {
+  --cdp-rx: 0deg;
+  --cdp-ry: 0deg;
+  --cdp-mx: 50%;
+  --cdp-my: 50%;
+  position: relative;
+  aspect-ratio: 5 / 7;
+  transform: perspective(900px) rotateX(var(--cdp-rx)) rotateY(var(--cdp-ry));
+  transition: transform 0.25s ease-out;
+  will-change: transform;
+}
+.cdp-carta:hover {
+  transition: transform 0.06s linear;
+}
+.cdp-carta img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 10px 18px rgb(0 0 0 / 0.45));
+}
+.cdp-brilho {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  mix-blend-mode: color-dodge;
+  transition: opacity 0.2s;
+  background:
+    radial-gradient(circle at var(--cdp-mx) var(--cdp-my), rgb(255 255 255 / 0.55), transparent 42%),
+    linear-gradient(115deg, transparent 30%, rgb(128 255 32 / 0.25) 45%, rgb(157 78 232 / 0.3) 55%, transparent 70%);
+  background-size: 100% 100%, 220% 220%;
+  background-position: center, var(--cdp-mx) var(--cdp-my);
+}
+.cdp-carta:hover .cdp-brilho {
+  opacity: 0.7;
+}
+.cdp-carta[data-posicao='1'] .cdp-brilho {
+  background:
+    radial-gradient(circle at var(--cdp-mx) var(--cdp-my), rgb(255 246 200 / 0.7), transparent 45%),
+    linear-gradient(115deg, transparent 30%, rgb(255 216 74 / 0.35) 45%, rgb(255 255 255 / 0.3) 55%, transparent 70%);
+  background-size: 100% 100%, 220% 220%;
+  background-position: center, var(--cdp-mx) var(--cdp-my);
+}
+@media (prefers-reduced-motion: reduce) {
+  .cdp-carta { transform: none !important; }
+}

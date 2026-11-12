@@ -34,6 +34,10 @@ alcançando a história dele.
   banco é linear e uma migration removida quebra quem rodar do zero.
 - **Tabelas e colunas.** Arquivar código não apaga dado. Cada README diz o que
   continua no banco, e apagar é decisão à parte, com o dono do banco na sala.
+  O equivalente desta pasta no banco é o schema `arquivo_morto` (12/11/2026,
+  `20261112134421_arquivo_morto_tabelas_sem_uso.sql`): a tabela que nada mais
+  usa sai do `public` com as linhas, fica fora da API, e volta com
+  `ALTER TABLE arquivo_morto.<tabela> SET SCHEMA public`.
 
 ## Índice
 

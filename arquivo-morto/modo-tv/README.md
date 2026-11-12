@@ -61,7 +61,10 @@ Admin → Cargos que não ligam mais nada.
 Nada mais é apagado. Continuam no banco:
 
 - tabelas `tv_telas`, `tv_cenas`, `tv_estado`, `tv_fontes`, `tv_midias`,
-  `tv_alertas`, `tv_sorteios`
+  `tv_alertas`, `tv_sorteios` — menos a `tv_midias`, que nem o Modo TV 2
+  usa e foi para o schema `arquivo_morto` em 12/11/2026
+  (`20261112134421_arquivo_morto_tabelas_sem_uso.sql`); devolva ao `public`
+  antes de restaurar este código
 - funções `fn_tv_palco`, `fn_tv_cortar`, `fn_tv_rotacao`, `fn_tv_sinal_vida`,
   `fn_tv_metricas_setor`, `fn_tv_alerta_disparar`, `fn_tv_sorteio_*`,
   `fn_tv_bingo_*`

@@ -23,8 +23,8 @@
  * solta do mesmo jeito (`CacaAbobora/bruxas/chefona/banco.ts`, migration
  * 20261015230000). Um chefe de cada vez: o botão de um espera o outro sair.
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Bot, Crosshair, Loader2, Music2, RefreshCw, Skull, Sparkles, Zap } from 'lucide-react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Bot, Crosshair, Loader2, Music2, RefreshCw, Skull, Sparkles, Trophy, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -57,6 +57,9 @@ import { cabecaMC } from '@/components/CacaAbobora/bruxas/chefona/arte';
 import { PONTO_DA_BRUXA_S } from '@/components/CacaAbobora/bruxas/chefona/lobby/trilha';
 import { canvasDaImagem } from '@/components/CacaAbobora/bruxas/pixels';
 import { cn } from '@/lib/utils';
+
+// As cartas da chefona (o desenho é pesado): só baixam no clique.
+const CartasDoPantano = lazy(() => import('@/components/CacaAbobora/bruxas/chefona/cartas/CartasDoPantano'));
 
 const FUSO = 'America/Sao_Paulo';
 const hora = (iso: string | null | undefined) => (iso
@@ -386,6 +389,7 @@ function SecaoChefona() {
   const dificuldade = DIFICULDADES_CHEFONA[nivel];
   const [confirmando, setConfirmando] = useState(false);
   const [soltando, setSoltando] = useState(false);
+  const [cartas, setCartas] = useState(false);
   const ativa = chefonaNaTela(chefona, Date.now()) && (chefona?.id ?? 0) > 0;
   const ultima = chefona && chefona.id > 0 ? chefona : null;
   // Dois chefes ao mesmo tempo, não (o banco também recusa).
@@ -456,6 +460,19 @@ function SecaoChefona() {
           <Sparkles className="h-3.5 w-3.5" /> Soltar a chefona
         </Button>
       </div>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[11px] text-muted-foreground">
+          Uma carta épica para cada pessoa que tirou vida dela numa rodada em que ela caiu (top 10 e do 11º em diante), com foto, lugar e números, pronta para baixar.
+        </p>
+        <Button size="sm" variant="outline" className="shrink-0 gap-1.5" onClick={() => setCartas(true)}>
+          <Trophy className="h-3.5 w-3.5" /> Cartas da caçada
+        </Button>
+      </div>
+      {cartas && (
+        <Suspense fallback={null}>
+          <CartasDoPantano aberto={cartas} aoFechar={() => setCartas(false)} />
+        </Suspense>
+      )}
       <p className="text-[11px] text-muted-foreground">
         A vida cresce com quem entra na caçada: começa em <b className="tabular-nums">{dificuldade.base}</b> e
         ganha <b className="tabular-nums">+{dificuldade.porPessoa}</b> a cada pessoa que acerta o primeiro tiro.

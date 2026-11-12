@@ -53,7 +53,10 @@ vi.mock('@/lib/supabase', () => {
     eq: () => cadeia,
     maybeSingle: async () => ({ data: mock.meta, error: null }),
   };
-  return { supabase: { from: () => cadeia, rpc: vi.fn() } };
+  // `rpc` responde vazio como o PostgREST: um `vi.fn()` cru devolvia `undefined`,
+  // e o `useLugarNoMes` (fn_meu_lugar_no_mes, mês fechado) quebrava ao
+  // desestruturar — duas rejeições soltas que faziam o vitest sair com erro.
+  return { supabase: { from: () => cadeia, rpc: vi.fn(async () => ({ data: null, error: null })) } };
 });
 
 // Quem não tem a chave do Ranking recebe isto: nenhuma linha, e nenhum erro.
