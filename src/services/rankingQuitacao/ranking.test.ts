@@ -203,3 +203,26 @@ describe('setoresParaAtualizar — cada setor importa o seu (12/11/2026)', () =>
     expect(setores.filter(pareceDeOutroSetor).map(s => s.setor_id)).toEqual(['p3']);
   });
 });
+
+describe('grupos de equipes (20261112235000)', () => {
+  it('lê e grava: cada equipe em um grupo só, grupo com 2 ou mais, nome sem espaço sobrando', () => {
+    const c = lerConfig({ grupos_equipes: [{ nome: ' Mateus e Kim ', equipes: ['m', 'k', 'm'] }, { equipes: ['k', 'l'] }, { equipes: ['x'] }, 'lixo'] });
+    expect(c.grupos_equipes).toHaveLength(3);
+    expect(configParaGravar(c, 0).grupos_equipes).toEqual([{ nome: 'Mateus e Kim', equipes: ['m', 'k'] }]);
+    expect(resumoDaConfig({ ...c, disputa: 'equipe' }, 0)).toContain('1 grupo de equipes');
+  });
+
+  it('a equipe pedida (aba ou TV) que está num grupo cai na disputa do grupo', () => {
+    const r = normalizarRanking({
+      habilitado: true, disputa: 'equipe', premios: [],
+      disputas: [
+        { equipe_id: 'm', nome: 'Mateus + Kim', equipes: ['m', 'k'], posicoes: [pos(1)] },
+        { equipe_id: 'l', nome: 'Luciano', posicoes: [pos(1)] },
+      ],
+    });
+    expect(escolherDisputa(r, 'k')?.nome).toBe('Mateus + Kim');
+    expect(escolherDisputa(r, 'l')?.nome).toBe('Luciano');
+    // Pacote sem `equipes`: a da própria disputa.
+    expect(r.disputas[1].equipes).toEqual(['l']);
+  });
+});

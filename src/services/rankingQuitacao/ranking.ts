@@ -52,11 +52,22 @@ export interface CategoriaConfig {
   premio_texto: string;
 }
 
+/**
+ * Equipes que contam como uma só (20261112235000): no ranking por equipe, no
+ * placar e na Equipe campeã. Ex.: no Play 2, Mateus e Kimberli juntos.
+ */
+export interface GrupoDeEquipes {
+  /** Vazio = os nomes das equipes juntos («Kimberli Marin + Mateus Castro»). */
+  nome: string;
+  equipes: string[];
+}
+
 export interface ConfigRanking {
   criterio: Criterio;
   disputa: Disputa;
   aceita: Aceita;
   equipes_fora: string[];
+  grupos_equipes: GrupoDeEquipes[];
   minimo_quitacoes: number;
   /** O brinde de cada posição, ao lado do valor de `premios`. Mesmo tamanho. */
   premios_texto: string[];
@@ -68,6 +79,7 @@ export const CONFIG_PADRAO: ConfigRanking = {
   disputa: 'setor',
   aceita: 'todas',
   equipes_fora: [],
+  grupos_equipes: [],
   minimo_quitacoes: 0,
   premios_texto: [],
   categorias: [],
@@ -84,6 +96,12 @@ export function lerConfig(bruto: unknown): ConfigRanking {
     disputa: c.disputa === 'equipe' ? 'equipe' : 'setor',
     aceita: c.aceita === 'so_quitacao' ? 'so_quitacao' : 'todas',
     equipes_fora: lista(c.equipes_fora).filter((x): x is string => typeof x === 'string'),
+    grupos_equipes: lista(c.grupos_equipes)
+      .filter((g): g is Record<string, unknown> => !!g && typeof g === 'object')
+      .map(g => ({
+        nome: typeof g.nome === 'string' ? g.nome : '',
+        equipes: lista(g.equipes).filter((x): x is string => typeof x === 'string'),
+      })),
     minimo_quitacoes: Math.max(0, Math.trunc(num(c.minimo_quitacoes))),
     premios_texto: lista(c.premios_texto).map(x => (typeof x === 'string' ? x : '')),
     categorias: lista(c.categorias)
@@ -108,6 +126,7 @@ export function configParaGravar(c: ConfigRanking, posicoesPremiadas: number): R
     disputa: c.disputa,
     aceita: c.aceita,
     equipes_fora: [...new Set(c.equipes_fora)],
+    grupos_equipes: gruposParaGravar(c.grupos_equipes),
     minimo_quitacoes: Math.max(0, Math.min(999, Math.trunc(c.minimo_quitacoes) || 0)),
     premios_texto: textos.some(Boolean) ? textos : [],
     categorias: c.categorias.map(k => ({
@@ -117,6 +136,22 @@ export function configParaGravar(c: ConfigRanking, posicoesPremiadas: number): R
       premio_texto: k.premio_texto.trim().slice(0, 40),
     })),
   };
+}
+
+/**
+ * Os grupos que vão para o banco: cada equipe em um grupo só (vale o
+ * primeiro), sem repetição, e só grupo com 2 ou mais equipes.
+ */
+export function gruposParaGravar(grupos: GrupoDeEquipes[]): GrupoDeEquipes[] {
+  const usadas = new Set<string>();
+  const saida: GrupoDeEquipes[] = [];
+  for (const g of grupos) {
+    const equipes = [...new Set(g.equipes)].filter(id => !usadas.has(id));
+    if (equipes.length < 2) continue;
+    equipes.forEach(id => usadas.add(id));
+    saida.push({ nome: g.nome.trim().slice(0, 40), equipes });
+  }
+  return saida;
 }
 
 /** Uma linha para a lista de setores: «Cada equipe · por quantidade · 6 prêmios · 2 destaques». */
@@ -130,6 +165,8 @@ export function resumoDaConfig(c: ConfigRanking, posicoesPremiadas: number): str
   const destaques = c.categorias.filter(k => k.ativo).length;
   if (destaques) partes.push(`${destaques} ${destaques === 1 ? 'destaque' : 'destaques'}`);
   if (c.minimo_quitacoes > 0) partes.push(`mínimo ${c.minimo_quitacoes}`);
+  const grupos = gruposParaGravar(c.grupos_equipes).length;
+  if (grupos) partes.push(`${grupos} ${grupos === 1 ? 'grupo de equipes' : 'grupos de equipes'}`);
   if (c.equipes_fora.length) partes.push(`${c.equipes_fora.length} ${c.equipes_fora.length === 1 ? 'equipe de fora' : 'equipes de fora'}`);
   return partes.join(' · ');
 }
@@ -161,6 +198,8 @@ export interface DisputaRanking {
   quitacoes_total: number;
   valor_total: number;
   posicoes: PosicaoRanking[];
+  /** As equipes desta disputa: uma, ou o grupo inteiro (20261112235000). */
+  equipes: string[];
   /**
    * Os destaques calculados só com a gente desta disputa (20261112200000),
    * sem a Equipe campeã. Nulo no pacote de antes — aí valem os do setor.
@@ -308,7 +347,7 @@ export function normalizarRanking(bruto: unknown): RankingQuitacao {
     ? [{
         equipe_id: null, nome: null,
         participantes: Math.trunc(num(r.participantes)),
-        quitacoes_total: 0, valor_total: 0, categorias: null,
+        quitacoes_total: 0, valor_total: 0, categorias: null, equipes: [],
         posicoes: ordenar((Array.isArray(r.posicoes) ? r.posicoes : []).map(p => lerPosicao(p, premios, premiosTexto, true))),
       }]
     : (r.disputas as unknown[]).map(d => {
@@ -320,6 +359,9 @@ export function normalizarRanking(bruto: unknown): RankingQuitacao {
           quitacoes_total: Math.trunc(num(x.quitacoes_total)),
           valor_total: num(x.valor_total),
           categorias: Array.isArray(x.categorias) ? lerCategorias(x.categorias) : null,
+          equipes: Array.isArray(x.equipes)
+            ? x.equipes.filter((e): e is string => typeof e === 'string')
+            : (texto(x.equipe_id) ? [texto(x.equipe_id) as string] : []),
           posicoes: ordenar((Array.isArray(x.posicoes) ? x.posicoes : []).map(p => lerPosicao(p, premios, premiosTexto, false))),
         };
       });
@@ -363,7 +405,8 @@ export function normalizarRanking(bruto: unknown): RankingQuitacao {
 export function escolherDisputa(r: RankingQuitacao, equipeId: string | null | undefined): DisputaRanking | null {
   if (!r.disputas.length) return null;
   if (r.disputa === 'setor') return r.disputas[0];
-  return r.disputas.find(d => d.equipe_id === equipeId)
+  // A equipe pedida pode estar num grupo: aí vale a disputa do grupo.
+  return r.disputas.find(d => d.equipe_id === equipeId || (!!equipeId && d.equipes.includes(equipeId)))
     ?? (r.eu ? r.disputas.find(d => d.equipe_id === r.eu?.equipe_id) : undefined)
     ?? r.disputas[0];
 }

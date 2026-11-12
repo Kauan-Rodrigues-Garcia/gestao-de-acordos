@@ -21,7 +21,7 @@
  * (`ranking_quitacao_configurar_setor`, 20261112220000).
  */
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Loader2, Medal, Plus, Settings2, Trash2 } from 'lucide-react';
+import { Link2, Loader2, Medal, Plus, Settings2, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -37,7 +37,7 @@ import { useSetoresDoRanking } from '@/pages/Analitico/RankingQuitacao/useSetore
 import { definirSetorDoRanking, type SetorDoRanking } from '@/services/rankingQuitacao/rankingQuitacao.service';
 import {
   CATEGORIAS, CONFIG_PADRAO, MAX_POSICOES_PREMIADAS, PREMIOS_PADRAO, configParaGravar, posicoesComPremio, resumoDaConfig,
-  type CategoriaConfig, type ConfigRanking,
+  type CategoriaConfig, type ConfigRanking, type GrupoDeEquipes,
 } from '@/services/rankingQuitacao/ranking';
 
 type Setor = { id: string; nome: string; ativo?: boolean | null; tipo?: string | null };
@@ -188,6 +188,11 @@ export function EditorDoSetor({ empresaId, setor, atual, equipes, onFechar, onSa
       toast.error(`O ${semNada + 1}º lugar está sem prêmio, mas o ${ate}º tem. Ponha um valor ou brinde no ${semNada + 1}º, ou tire as posições de baixo.`);
       return;
     }
+    const grupoIncompleto = cfg.grupos_equipes.findIndex(g => g.equipes.length === 1);
+    if (grupoIncompleto >= 0) {
+      toast.error(`O ${grupoIncompleto + 1}º grupo tem uma equipe só. Junte pelo menos duas, ou tire o grupo.`);
+      return;
+    }
     const min = minimo.trim() ? Number(minimo) : 0;
     if (!Number.isInteger(min) || min < 0 || min > 999) {
       toast.error('O mínimo de quitações é um número inteiro, de 0 a 999.');
@@ -233,6 +238,13 @@ export function EditorDoSetor({ empresaId, setor, atual, equipes, onFechar, onSa
                 { valor: 'equipe', rotulo: 'Cada equipe', dica: 'Cada equipe tem o seu ranking e paga a mesma tabela de prêmios.' },
               ]}
             />
+            {equipes.length >= 2 && (
+              <JuntarEquipes
+                equipes={equipes}
+                grupos={cfg.grupos_equipes}
+                onMudar={grupos => setCfg(c => ({ ...c, grupos_equipes: grupos }))}
+              />
+            )}
           </Secao>
 
           <Secao numero={2} titulo="O que conta">
@@ -400,6 +412,81 @@ export function EditorDoSetor({ empresaId, setor, atual, equipes, onFechar, onSa
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * Equipes que contam como uma só (20261112235000): no ranking por equipe, no
+ * placar e na Equipe campeã. Cada equipe entra em um grupo só.
+ */
+function JuntarEquipes({ equipes, grupos, onMudar }: {
+  equipes: Equipe[];
+  grupos: GrupoDeEquipes[];
+  onMudar: (g: GrupoDeEquipes[]) => void;
+}) {
+  const nomeDe = (id: string) => equipes.find(e => e.id === id)?.nome ?? 'Equipe';
+  const mudar = (i: number, m: Partial<GrupoDeEquipes>) => onMudar(grupos.map((g, j) => (j === i ? { ...g, ...m } : g)));
+  return (
+    <div className="mt-3 space-y-2 rounded-lg border border-border p-3">
+      <div>
+        <p className="flex items-center gap-1.5 text-xs font-medium text-foreground"><Link2 className="h-3.5 w-3.5" /> Juntar equipes</p>
+        <p className="text-[11px] text-muted-foreground">
+          As equipes de um grupo contam como uma só: um ranking só quando cada equipe disputa, e uma linha só no placar e na Equipe campeã.
+        </p>
+      </div>
+      {grupos.map((g, i) => {
+        const emOutro = new Set(grupos.flatMap((o, j) => (j === i ? [] : o.equipes)));
+        return (
+          <div key={i} className="space-y-2 rounded-md bg-muted/40 p-2.5">
+            <div className="flex items-center gap-2">
+              <Input
+                className="h-8 text-xs"
+                value={g.nome}
+                maxLength={40}
+                placeholder={g.equipes.length >= 2 ? g.equipes.map(nomeDe).join(' + ') : 'Nome do grupo (opcional)'}
+                onChange={e => mudar(i, { nome: e.target.value })}
+                aria-label={`Nome do ${i + 1}º grupo`}
+              />
+              <Button
+                variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-muted-foreground"
+                onClick={() => onMudar(grupos.filter((_, j) => j !== i))}
+                aria-label={`Desfazer o ${i + 1}º grupo`}
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {equipes.map(e => {
+                const dentro = g.equipes.includes(e.id);
+                const ocupada = emOutro.has(e.id);
+                return (
+                  <button
+                    key={e.id}
+                    type="button"
+                    aria-pressed={dentro}
+                    disabled={ocupada}
+                    title={ocupada ? 'Já está em outro grupo' : undefined}
+                    onClick={() => mudar(i, { equipes: dentro ? g.equipes.filter(x => x !== e.id) : [...g.equipes, e.id] })}
+                    className={cn(
+                      'rounded-full border px-3 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-40',
+                      dentro ? 'border-primary bg-primary/10 text-foreground' : 'border-border bg-card text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    {e.nome}
+                  </button>
+                );
+              })}
+            </div>
+            {g.equipes.length < 2 && <p className="text-[11px] text-muted-foreground">Escolha pelo menos duas equipes.</p>}
+          </div>
+        );
+      })}
+      {grupos.length < 10 && (
+        <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={() => onMudar([...grupos, { nome: '', equipes: [] }])}>
+          <Plus className="h-3.5 w-3.5" /> Juntar equipes
+        </Button>
+      )}
+    </div>
   );
 }
 

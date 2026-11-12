@@ -23,6 +23,7 @@ const LIDER_CONFIGURA = readFileSync(resolve(pasta, '20261112220000_ranking_quit
 const ACEITA = readFileSync(resolve(pasta, '20261112230000_ranking_quitacao_aceita_por_setor.sql'), 'utf8');
 const BOLETO = readFileSync(resolve(pasta, '20261112233000_ranking_quitacao_boleto_a_vista.sql'), 'utf8');
 const POR_SETOR = readFileSync(resolve(pasta, '20261112234000_ranking_quitacao_importar_por_setor.sql'), 'utf8');
+const JUNTAR = readFileSync(resolve(pasta, '20261112235000_ranking_quitacao_juntar_equipes.sql'), 'utf8');
 
 function trecho(texto: string, de: string, ate: string): string {
   const i = texto.indexOf(de);
@@ -136,6 +137,7 @@ beforeAll(async () => {
   await db.exec(ACEITA);
   await db.exec(BOLETO);
   await db.exec(POR_SETOR);
+  await db.exec(JUNTAR);
 });
 
 afterAll(async () => { await db?.close(); });
@@ -373,5 +375,43 @@ describe('20261112234000 — cada setor importa o seu', () => {
   it('a função antiga de 3 parâmetros saiu; a chamada antiga cai na nova (empresa inteira)', async () => {
     const r = await db.query(`select to_regprocedure('public.fn_ranking_quitacao_importar(uuid,date,jsonb)') as velha`);
     expect(r.rows[0]).toEqual({ velha: null });
+  });
+});
+
+describe('20261112235000 — juntar equipes', () => {
+  const grava = (config: object) =>
+    db.query(`select public.fn_ranking_quitacao_definir_setor($1, $2, true, null, $3::jsonb)`, [EMP, S_EQ, JSON.stringify(config)]);
+
+  it('duas equipes juntas: um ranking só, uma linha no placar; tirar o grupo volta ao de antes', async () => {
+    await db.query(`select set_config('teste.uid', $1, false), set_config('teste.chaves', 'ranking_quitacao_configurar', false)`, [P(9)]);
+    await grava({ disputa: 'equipe' });
+    const separado = await ranking(S_EQ);
+    expect(separado.disputas.map((d: any) => d.nome)).toEqual(['Kimberli', 'Luciano']);
+    expect(separado.disputas.map((d: any) => d.equipes)).toEqual([[EQ_A], [EQ_B]]);
+    const pessoas = separado.disputas.reduce((t: number, d: any) => t + d.participantes, 0);
+
+    await grava({ disputa: 'equipe', grupos_equipes: [{ nome: '', equipes: [EQ_A, EQ_B] }] });
+    const junto = await ranking(S_EQ);
+    expect(junto.disputas).toHaveLength(1);
+    expect(junto.disputas[0]).toMatchObject({ equipe_id: EQ_A, nome: 'Kimberli + Luciano', participantes: pessoas, equipes: [EQ_A, EQ_B] });
+    // Um ranking só: as posições correm 1, 2, 3… pelo grupo inteiro.
+    expect(junto.disputas[0].posicoes.map((p: any) => p.posicao)).toEqual(
+      Array.from({ length: junto.disputas[0].posicoes.length }, (_, i) => i + 1));
+    expect(junto.equipes).toHaveLength(1);
+    expect(junto.equipes[0]).toMatchObject({ id: EQ_A, nome: 'Kimberli + Luciano', pessoas });
+
+    await grava({ disputa: 'equipe', grupos_equipes: [{ nome: 'Mateus e Kim', equipes: [EQ_A, EQ_B] }] });
+    expect((await ranking(S_EQ)).disputas[0].nome).toBe('Mateus e Kim');
+
+    await grava({ disputa: 'equipe', grupos_equipes: [] });
+    expect((await ranking(S_EQ)).disputas.map((d: any) => d.nome)).toEqual(['Kimberli', 'Luciano']);
+  });
+
+  it('recusa grupo de uma equipe, equipe de outro setor e equipe em dois grupos', async () => {
+    await expect(grava({ grupos_equipes: [{ equipes: [EQ_A] }] })).rejects.toThrow(/pelo menos duas equipes/);
+    await expect(grava({ grupos_equipes: [{ equipes: [EQ_A, '00000000-0000-4000-8000-0000000000e9'] }] }))
+      .rejects.toThrow(/nao e deste setor/);
+    await expect(grava({ grupos_equipes: [{ equipes: [EQ_A, EQ_B] }, { equipes: [EQ_B, EQ_A] }] }))
+      .rejects.toThrow(/dois grupos/);
   });
 });
