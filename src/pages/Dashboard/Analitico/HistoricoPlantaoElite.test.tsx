@@ -29,6 +29,8 @@ vi.mock('@/lib/index', async (original) => ({
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 import { PlantaoElite } from './PlantaoElite';
+import { PainelHistoricoElite } from './HistoricoPlantaoElite';
+import { montarHistoricoElite } from '@/services/plantaoElite/historicoElite';
 
 const pessoas = [
   { id: 't', nome: 'Tiago Almada', usuario: null },
@@ -105,5 +107,44 @@ describe('Plantão Elite › Histórico', () => {
     expect(linhas).toHaveLength(3); // cabeçalho + 01/10 + 02/10
     expect(linhas[1].textContent).toContain('Tiago & Agatha');
     expect(linhas[1].textContent).toMatch(/R\$\s1\.500,00/);
+  });
+});
+
+describe('Plantão Elite › Histórico › metas individuais e fotos (20261111170500)', () => {
+  const comMetas: RespostaHistoricoElite = {
+    ...historico,
+    pessoas: pessoas.map(p => ({ ...p, foto: p.id === 't' ? 'https://x/tiago.jpg' : null })),
+    metas: [
+      { mes: '2026-10', id: 't', meta: 1000, extras: [1500], fechado: 1200 },
+      { mes: '2026-10', id: 'a', meta: 2000, extras: [], fechado: 500 },
+      { mes: '2026-10', id: 'm', meta: null, extras: [], fechado: 300 },
+      { mes: '2026-10', id: 'g', meta: 100, extras: [], fechado: 200 },
+    ],
+  };
+
+  const desenhar = (r: RespostaHistoricoElite) => render(
+    <PainelHistoricoElite
+      historico={montarHistoricoElite(r)} resposta={r} carregando={false} erro={null} onAtualizar={() => undefined}
+    />,
+  );
+
+  it('mostra cada um com o fechado, as metas batidas e quanto faltou', () => {
+    desenhar(comMetas);
+    fireEvent.click(screen.getByRole('tab', { name: /Outubro de 2026/ }));
+    const bloco = screen.getByText('Metas individuais de outubro').closest('section')!;
+    expect(within(bloco).getByText('2 de 3 bateram a 1ª meta')).toBeInTheDocument();
+
+    const tiago = within(bloco).getByLabelText('Meta de Tiago Almada');
+    expect(tiago.textContent).toContain('Bateu a 1ª meta');
+    expect(tiago.textContent).toMatch(/R\$\s1\.200,00/);
+    expect(tiago.textContent).toMatch(/faltou R\$\s300/);
+    expect(within(bloco).getByLabelText('Meta de Agatha Rocha').textContent).toContain('Não bateu');
+    expect(within(bloco).getByLabelText('Meta de Gabriel Oliveira').textContent).toContain('Bateu a meta');
+    expect(within(bloco).getByLabelText('Meta de Matheus Souza').textContent).toContain('Sem meta no mês');
+  });
+
+  it('sem `metas` no banco o painel não aparece', () => {
+    desenhar(historico);
+    expect(screen.queryByText(/Metas individuais de/)).toBeNull();
   });
 });

@@ -147,3 +147,48 @@ describe('comparativo de quem é de dupla', () => {
     expect([a[0]['2026-10'], a[1]['2026-10'], a[2]['2026-10'], a[3]['2026-10']]).toEqual([100, 100, 150, null]);
   });
 });
+
+describe('metas individuais e fotos (20261111170500)', () => {
+  const dias = [
+    dia('2026-10-01', TA, [100, 50], 1000),
+    dia('2026-10-02', MG, [30, 20], 500),
+    dia('2026-10-03', TA, [200, 0], 800),
+  ];
+
+  it('sem `metas` do banco (migration pendente), nada de painel e nada de foto', () => {
+    const h = montarHistoricoElite(resposta(dias));
+    expect(h.meses[0].metas).toBeNull();
+    expect(h.fotos.size).toBe(0);
+  });
+
+  it('conta quantas metas cada um bateu, quanto falta e quanto veio do plantão', () => {
+    const r = resposta(dias);
+    r.pessoas[0].foto = 'https://x/tiago.jpg';
+    r.metas = [
+      // Tiago: bateu a 1ª (5.000) e a 2ª (6.000), não a 3ª (8.000). Extras fora de ordem.
+      { mes: '2026-10', id: TIAGO, meta: 5000, extras: [8000, 6000], fechado: 6500 },
+      // Agatha: não bateu nem a 1ª.
+      { mes: '2026-10', id: AGATHA, meta: 4000, extras: [], fechado: 3999.99 },
+      // Matheus: sem meta.
+      { mes: '2026-10', id: MATHEUS, meta: null, extras: [], fechado: 900 },
+      // Gabriel: bateu a única, no centavo.
+      { mes: '2026-10', id: GABRIEL, meta: 2000, extras: [], fechado: 2000 },
+    ];
+    const h = montarHistoricoElite(r);
+    const m = h.meses[0].metas!;
+    expect(h.fotos.get(TIAGO)).toBe('https://x/tiago.jpg');
+
+    // Ordem: mais metas batidas primeiro; sem meta por último.
+    expect(m.map(p => p.id)).toEqual([TIAGO, GABRIEL, AGATHA, MATHEUS]);
+
+    const [t, g, a, mt] = m;
+    expect(t).toMatchObject({ foto: 'https://x/tiago.jpg', degraus: [5000, 6000, 8000], batidas: 2, noPlantao: 300 });
+    expect(t.proxima).toEqual({ nivel: 3, valor: 8000, falta: 1500 });
+    expect(t.alcance).toBeCloseTo(1.3);
+    expect(t.dupla?.ids).toEqual(TA);
+
+    expect(g).toMatchObject({ batidas: 1, proxima: null, noPlantao: 20 });
+    expect(a).toMatchObject({ batidas: 0, proxima: { nivel: 1, valor: 4000, falta: 0.01 } });
+    expect(mt).toMatchObject({ degraus: [], batidas: null, alcance: null, proxima: null });
+  });
+});

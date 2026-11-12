@@ -14,6 +14,7 @@
  * mesma dupla no ímpar (até 31/10) e no par (desde 01/11).
  */
 import { rpcSemTipo } from '@/lib/supabaseSemTipo';
+import { metaAtingida } from '@/services/fechamentoOperadores/calculoFechamento';
 import { primeiroNome, type MembroElite, type Plantao } from './plantaoElite';
 
 // ── Resposta do banco ───────────────────────────────────────────────────────
@@ -26,6 +27,18 @@ export interface DiaHistoricoBruto {
   setor_qtd: number;
 }
 
+/**
+ * A meta individual do mês e o fechado do mês inteiro (20261111170500). Sem a
+ * migration o banco não manda `metas`, e a tela esconde o painel.
+ */
+export interface MetaMesBruta {
+  mes: string;
+  id: string;
+  meta: number | null;
+  extras: unknown;
+  fechado: number;
+}
+
 export interface RespostaHistoricoElite {
   inicio: string;
   de: string;
@@ -33,8 +46,11 @@ export interface RespostaHistoricoElite {
   hoje: string;
   sou_da_dupla: boolean;
   setor: { id: string; nome: string | null } | null;
-  pessoas: MembroElite[];
+  /** `foto` desde 20261111170500. */
+  pessoas: (MembroElite & { foto?: string | null })[];
   dias: DiaHistoricoBruto[];
+  /** Desde 20261111170500; ausente = migration pendente. */
+  metas?: MetaMesBruta[] | null;
 }
 
 export async function buscarHistoricoElite(empresaId: string): Promise<RespostaHistoricoElite> {
@@ -53,6 +69,13 @@ export async function buscarHistoricoElite(empresaId: string): Promise<RespostaH
   return {
     ...r,
     pessoas: r.pessoas ?? [],
+    metas: Array.isArray(r.metas)
+      ? r.metas.map(m => ({
+          ...m,
+          meta: m.meta == null ? null : Number(m.meta) || null,
+          fechado: Number(m.fechado) || 0,
+        }))
+      : null,
     dias: (r.dias ?? []).map(d => ({
       ...d,
       membros: (d.membros ?? []).map(m => ({ ...m, valor: Number(m.valor) || 0, qtd: Number(m.qtd) || 0 })),
@@ -101,6 +124,28 @@ export interface ResumoDuplaMes {
   media: number;
 }
 
+/**
+ * Uma pessoa no mês, contra a meta individual dela. `degraus` = a 1ª meta e as
+ * extras, em ordem (a leitura da Comissão e do Fechamento); `batidas` = quantos
+ * degraus o fechado cobre (`metaAtingida`): 0 = nenhuma, nulo = sem meta.
+ */
+export interface MetaPessoaMes {
+  id: string;
+  nome: string;
+  foto: string | null;
+  dupla: DuplaHistorico | null;
+  /** O recebido do mês inteiro, todo dia (régua da aba Fechamento). */
+  fechado: number;
+  /** O que a pessoa trouxe nos próprios dias de plantão, no mês. */
+  noPlantao: number;
+  degraus: number[];
+  batidas: number | null;
+  /** fechado ÷ 1ª meta (fração); nulo sem meta. */
+  alcance: number | null;
+  /** A próxima meta ainda não batida e quanto falta; nulo se bateu todas ou sem meta. */
+  proxima: { nivel: number; valor: number; falta: number } | null;
+}
+
 export interface MesHistorico {
   mes: string;
   diasNoMes: number;
@@ -114,6 +159,8 @@ export interface MesHistorico {
   melhor: DiaHistorico | null;
   porDupla: ResumoDuplaMes[];
   emAndamento: boolean;
+  /** Nulo = o banco ainda não manda as metas (migration 20261111170500). */
+  metas: MetaPessoaMes[] | null;
 }
 
 export interface RitmoDoMes {
@@ -137,6 +184,8 @@ export interface PessoaHistorico {
 
 export interface HistoricoElite {
   inicio: string;
+  /** id → foto (`foto_url`); vazio sem a migration 20261111170500. */
+  fotos: Map<string, string>;
   /** «Receptivo»: o setor das Elites. */
   setorNome: string;
   duplas: DuplaHistorico[];
@@ -151,6 +200,11 @@ export interface HistoricoElite {
 }
 
 const centavos = (v: number) => Math.round(v * 100) / 100;
+
+/** `metas.metas_extras` → os valores positivos (a leitura de `lerMetasExtras`, da Comissão). */
+function lerExtras(valor: unknown): number[] {
+  return (Array.isArray(valor) ? valor : []).map(v => Number(v) || 0).filter(v => v > 0);
+}
 
 /** Dias do mês `yyyy-MM`. */
 export function diasNoMes(mes: string): number {
@@ -190,7 +244,7 @@ export function montarHistoricoElite(r: RespostaHistoricoElite): HistoricoElite 
       m = {
         mes, diasNoMes: n, dias: new Array<DiaHistorico | null>(n).fill(null),
         total: 0, setorTotal: 0, participacao: null, diasComMovimento: 0, media: 0,
-        melhor: null, porDupla: [], emAndamento: mes === r.hoje.slice(0, 7),
+        melhor: null, porDupla: [], emAndamento: mes === r.hoje.slice(0, 7), metas: null,
       };
       meses.set(mes, m);
     }
@@ -254,6 +308,17 @@ export function montarHistoricoElite(r: RespostaHistoricoElite): HistoricoElite 
     m.porDupla.sort((a, b) => (duplas.get(a.chave)?.indice ?? 0) - (duplas.get(b.chave)?.indice ?? 0));
   }
 
+  const fotos = new Map<string, string>();
+  for (const p of r.pessoas) if (p.foto) fotos.set(p.id, p.foto);
+
+  if (Array.isArray(r.metas)) {
+    const listaDuplas = [...duplas.values()];
+    for (const m of lista) {
+      const doMes = r.metas.filter(x => x.mes === m.mes);
+      m.metas = metasDoMes(m, doMes, listaDuplas, nomeDe, fotos);
+    }
+  }
+
   const total = centavos(lista.reduce((s, m) => s + m.total, 0));
   const diasComMovimento = lista.reduce((s, m) => s + m.diasComMovimento, 0);
   const melhor = lista.reduce<DiaHistorico | null>(
@@ -265,6 +330,7 @@ export function montarHistoricoElite(r: RespostaHistoricoElite): HistoricoElite 
 
   return {
     inicio: r.inicio,
+    fotos,
     setorNome: r.setor?.nome ?? 'Setor',
     duplas: [...duplas.values()],
     meses: lista,
@@ -376,6 +442,60 @@ export function pessoasDoMes(m: MesHistorico, duplas: DuplaHistorico[]): (Pessoa
   return [...porId.values()]
     .map(x => ({ ...x, media: x.dias > 0 ? centavos(x.total / x.dias) : 0 }))
     .sort((a, b) => b.total - a.total);
+}
+
+/**
+ * O painel das metas de um mês: cada pessoa com o fechado do mês, a meta e as
+ * extras, quantas bateu e quanto falta para a próxima. Quem bateu mais metas
+ * vem primeiro; empate, quem foi mais longe na 1ª meta; sem meta, por último.
+ */
+export function metasDoMes(
+  m: MesHistorico,
+  brutas: readonly MetaMesBruta[],
+  duplas: readonly DuplaHistorico[],
+  nomeDe: (id: string) => string,
+  fotos: ReadonlyMap<string, string>,
+): MetaPessoaMes[] {
+  const noPlantao = new Map<string, number>();
+  const duplaDe = new Map<string, DuplaHistorico | null>();
+  for (const d of m.dias) {
+    if (!d) continue;
+    for (const p of d.porMembro) {
+      noPlantao.set(p.id, centavos((noPlantao.get(p.id) ?? 0) + p.valor));
+      if (!duplaDe.has(p.id)) duplaDe.set(p.id, duplas.find(du => du.chave === d.dupla) ?? null);
+    }
+  }
+
+  return brutas
+    .map(b => {
+      const meta = Number(b.meta) || 0;
+      const degraus = meta > 0
+        ? [meta, ...lerExtras(b.extras).sort((x, y) => x - y)]
+        : [];
+      const fechado = centavos(Number(b.fechado) || 0);
+      const batidas = metaAtingida(fechado, meta > 0 ? meta : null, degraus.slice(1));
+      const nivel = batidas ?? 0;
+      const proxima = meta > 0 && nivel < degraus.length
+        ? { nivel: nivel + 1, valor: degraus[nivel], falta: centavos(degraus[nivel] - fechado) }
+        : null;
+      return {
+        id: b.id,
+        nome: nomeDe(b.id),
+        foto: fotos.get(b.id) ?? null,
+        dupla: duplaDe.get(b.id) ?? null,
+        fechado,
+        noPlantao: noPlantao.get(b.id) ?? 0,
+        degraus,
+        batidas,
+        alcance: meta > 0 ? fechado / meta : null,
+        proxima,
+      };
+    })
+    .sort((a, b) =>
+      (b.batidas ?? -1) - (a.batidas ?? -1)
+      || (b.alcance ?? -1) - (a.alcance ?? -1)
+      || b.fechado - a.fechado
+      || a.nome.localeCompare(b.nome));
 }
 
 /** «set/26». */

@@ -8,6 +8,8 @@
  *
  *   1. o destaque do mês — quanto as duplas receberam, uma frase dizendo se o
  *      mês está à frente ou atrás do anterior, e o duelo das duplas;
+ *   1b. as metas individuais (11/11/2026) — cada um com a foto, o que fechou
+ *      no mês inteiro, a 1ª meta e as extras, quais bateu e quanto faltou;
  *   2. dia a dia — uma barra por dia, na cor da dupla que estava de plantão;
  *   3. comparativo — uma linha por mês, somando do dia 1 em diante: a linha do
  *      mês escolhido contra as dos outros mostra quem estava à frente em cada
@@ -24,13 +26,15 @@ import {
   Bar, BarChart, CartesianGrid, Cell, Line, LineChart, ReferenceLine,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
-import { ChevronDown, Loader2, RefreshCw, TrendingDown, TrendingUp, Trophy } from 'lucide-react';
+import { Check, ChevronDown, Circle, Loader2, RefreshCw, Target, TrendingDown, TrendingUp, Trophy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { formatarPctDaMeta } from '@/lib/projecaoMetas';
+import { AvatarParticipante } from '@/pages/Analitico/Desafios/AvatarParticipante';
 import {
   acumuladoPorDia, barrasDoMes, compararMedia, pessoasDoMes, ritmoDoMes, rotuloMesCurto, rotuloMesLongo,
   type BarraDoDia, type DiaHistorico, type DuplaHistorico, type HistoricoElite, type MesHistorico,
-  type RespostaHistoricoElite,
+  type MetaPessoaMes, type RespostaHistoricoElite,
 } from '@/services/plantaoElite/historicoElite';
 import { useHistoricoElite } from './useHistoricoElite';
 
@@ -142,6 +146,7 @@ export function PainelHistoricoElite({ historico, resposta, carregando, erro, on
         <div className={cn('space-y-4 transition-opacity', carregando && 'opacity-60')}>
           <EscolhaDoMes h={historico} mes={mes.mes} onEscolher={setMesEscolhido} />
           <Destaque h={historico} m={mes} hoje={resposta?.hoje ?? ''} />
+          <MetasIndividuais m={mes} souDaDupla={!!resposta?.sou_da_dupla} />
           <DiaADia h={historico} m={mes} />
           <Comparativo h={historico} m={mes} />
           <div className="grid gap-4 lg:grid-cols-2">
@@ -176,6 +181,20 @@ function Bloco({ titulo, subtitulo, direita, children, className }: {
 
 function PontoDupla({ dupla, className }: { dupla: DuplaHistorico | null | undefined; className?: string }) {
   return <span className={cn('inline-block w-2.5 h-2.5 rounded-full shrink-0', className)} style={{ background: corDaDupla(dupla) }} />;
+}
+
+/** A foto (ou as iniciais), com um anel na cor da dupla. */
+function Foto({ nome, foto, dupla, className }: {
+  nome: string; foto: string | null | undefined; dupla: DuplaHistorico | null | undefined; className?: string;
+}) {
+  return (
+    <span
+      className="inline-flex shrink-0 rounded-full"
+      style={{ boxShadow: `0 0 0 2px var(--card), 0 0 0 4px ${corDaDupla(dupla)}` }}
+    >
+      <AvatarParticipante nome={nome} fotoUrl={foto} className={cn('border-0', className)} />
+    </span>
+  );
 }
 
 function Legenda({ duplas }: { duplas: DuplaHistorico[] }) {
@@ -324,7 +343,14 @@ function Duelo({ h, m }: { h: HistoricoElite; m: MesHistorico }) {
       <div className="mt-4 space-y-3">
         {linhas.map(l => (
           <div key={l.chave} className="flex items-center gap-3">
-            <PontoDupla dupla={l.dupla} className="w-3 h-3" />
+            <div className="flex shrink-0 gap-1.5">
+              {(l.dupla?.ids ?? []).map(id => (
+                <Foto
+                  key={id} nome={nomeDaPessoa(m, id)} foto={h.fotos.get(id)} dupla={l.dupla}
+                  className="w-8 h-8 text-[10px]"
+                />
+              ))}
+            </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5 text-sm font-medium">
                 <span className="truncate">{l.dupla?.nome}</span>
@@ -347,6 +373,138 @@ function Duelo({ h, m }: { h: HistoricoElite; m: MesHistorico }) {
         {linhas.length === 0 && <p className="text-sm text-muted-foreground">Sem plantão neste mês.</p>}
       </div>
     </section>
+  );
+}
+
+/** O nome de quem esteve de plantão no mês (a dupla guarda só os ids). */
+function nomeDaPessoa(m: MesHistorico, id: string): string {
+  for (const d of m.dias) {
+    const p = d?.porMembro.find(x => x.id === id);
+    if (p) return p.nome;
+  }
+  return '—';
+}
+
+// ── 1b. Metas individuais ───────────────────────────────────────────────────
+
+const ordinal = (n: number) => `${n}ª`;
+
+function MetasIndividuais({ m, souDaDupla }: { m: MesHistorico; souDaDupla: boolean }) {
+  if (!m.metas || m.metas.length === 0) return null;
+  const comMeta = m.metas.filter(p => p.degraus.length > 0);
+  const bateram = comMeta.filter(p => (p.batidas ?? 0) >= 1).length;
+
+  return (
+    <Bloco
+      titulo={souDaDupla ? `Sua meta em ${nomeDoMes(m.mes)}` : `Metas individuais de ${nomeDoMes(m.mes)}`}
+      subtitulo={`O que ${souDaDupla ? 'você fechou' : 'cada um fechou'} no mês inteiro (todos os dias, não só os de plantão) contra a meta individual e as metas extras.${m.emAndamento ? ' O mês ainda está em andamento.' : ''}`}
+      direita={comMeta.length > 1 ? (
+        <span className={cn(
+          'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium',
+          bateram > 0 ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground',
+        )}>
+          <Target className="w-3.5 h-3.5" />
+          {bateram} de {comMeta.length} {m.emAndamento ? 'já bateram' : 'bateram'} a 1ª meta
+        </span>
+      ) : undefined}
+    >
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {m.metas.map(p => <CartaoMeta key={p.id} p={p} emAndamento={m.emAndamento} />)}
+      </div>
+    </Bloco>
+  );
+}
+
+function CartaoMeta({ p, emAndamento }: { p: MetaPessoaMes; emAndamento: boolean }) {
+  const semMeta = p.degraus.length === 0;
+  const batidas = p.batidas ?? 0;
+  const todas = !semMeta && batidas === p.degraus.length;
+  // A régua vai até a última meta, ou até o fechado se passou dela.
+  const teto = Math.max(p.fechado, ...p.degraus, 1);
+  const largura = (v: number) => `${Math.min(100, (v / teto) * 100)}%`;
+  const fatiaPlantao = p.fechado > 0 ? p.noPlantao / p.fechado : null;
+
+  let selo: { texto: string; classe: string };
+  if (semMeta) selo = { texto: 'Sem meta no mês', classe: 'bg-muted text-muted-foreground' };
+  else if (todas) selo = { texto: p.degraus.length > 1 ? 'Bateu todas as metas' : 'Bateu a meta', classe: 'bg-success/10 text-success' };
+  else if (batidas >= 1) selo = { texto: `Bateu a ${ordinal(batidas)} meta`, classe: 'bg-success/10 text-success' };
+  else if (emAndamento) selo = { texto: 'A caminho da 1ª meta', classe: 'bg-warning/10 text-warning' };
+  else selo = { texto: 'Não bateu', classe: 'bg-destructive/10 text-destructive' };
+
+  return (
+    <div
+      className={cn(
+        'rounded-xl border p-4 flex flex-col gap-3',
+        batidas >= 1 ? 'border-success/40 bg-success/[0.03]' : 'border-border',
+      )}
+      aria-label={`Meta de ${p.nome}`}
+    >
+      <div className="flex items-center gap-3">
+        <Foto nome={p.nome} foto={p.foto} dupla={p.dupla} className="w-11 h-11 text-xs" />
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-semibold truncate">{p.nome}</div>
+          <span className={cn('mt-0.5 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold', selo.classe)}>
+            {batidas >= 1 && <Trophy className="w-3 h-3" />}
+            {selo.texto}
+          </span>
+        </div>
+      </div>
+
+      <div>
+        <div className="text-[11px] text-muted-foreground">Fechou no mês</div>
+        <div className="text-xl font-bold tabular-nums tracking-tight">{moeda.format(p.fechado)}</div>
+        {!semMeta && p.alcance != null && (
+          <div className="text-[11px] text-muted-foreground tabular-nums">
+            {formatarPctDaMeta(p.alcance * 100)} da 1ª meta
+          </div>
+        )}
+      </div>
+
+      {!semMeta && (
+        <>
+          {/* A régua: o fechado, com um risco em cada meta. */}
+          <div className="relative h-2.5 w-full rounded-full bg-muted" aria-hidden>
+            <div
+              className={cn('absolute inset-y-0 left-0 rounded-full', batidas >= 1 ? 'bg-success' : 'bg-primary')}
+              style={{ width: largura(p.fechado) }}
+            />
+            {p.degraus.map((v, i) => (
+              <span
+                key={i}
+                className="absolute -top-1 -bottom-1 w-[2px] rounded-full bg-foreground/60"
+                style={{ left: `calc(${largura(v)} - 1px)` }}
+              />
+            ))}
+          </div>
+
+          <ul className="space-y-1">
+            {p.degraus.map((v, i) => {
+              const bateu = i < batidas;
+              const proxima = p.proxima?.nivel === i + 1;
+              return (
+                <li key={i} className="flex items-center gap-2 text-xs tabular-nums">
+                  {bateu
+                    ? <Check className="w-3.5 h-3.5 text-success shrink-0" aria-label="batida" />
+                    : <Circle className="w-3.5 h-3.5 text-muted-foreground/60 shrink-0" aria-label="não batida" />}
+                  <span className={cn('w-14 shrink-0', bateu ? 'font-medium' : 'text-muted-foreground')}>{ordinal(i + 1)} meta</span>
+                  <span className={cn('flex-1', bateu ? 'font-medium' : 'text-muted-foreground')}>{moedaRedonda.format(v)}</span>
+                  {proxima && p.proxima && (
+                    <span className="text-[11px] text-muted-foreground">
+                      {emAndamento ? 'faltam' : 'faltou'} {moedaRedonda.format(p.proxima.falta)}
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      )}
+
+      <div className="mt-auto border-t border-border pt-2 text-[11px] text-muted-foreground tabular-nums">
+        No plantão: <span className="font-medium text-foreground">{moedaRedonda.format(p.noPlantao)}</span>
+        {fatiaPlantao != null && ` · ${formatarPctDaMeta(fatiaPlantao * 100)} do que fechou`}
+      </div>
+    </div>
   );
 }
 
@@ -569,13 +727,7 @@ function Pessoas({ h, m }: { h: HistoricoElite; m: MesHistorico }) {
         {lista.map((p, i) => (
           <li key={p.id} className="flex items-center gap-3">
             <span className="w-4 text-xs font-semibold text-muted-foreground tabular-nums">{i + 1}º</span>
-            <span
-              className="w-8 h-8 shrink-0 rounded-full grid place-items-center text-[11px] font-bold text-white"
-              style={{ background: corDaDupla(p.dupla) }}
-              aria-hidden
-            >
-              {p.nome.split(/\s+/).slice(0, 2).map(s => s[0]).join('').toUpperCase()}
-            </span>
+            <Foto nome={p.nome} foto={h.fotos.get(p.id)} dupla={p.dupla} className="w-9 h-9 text-[11px]" />
             <div className="min-w-0 flex-1">
               <div className="flex items-baseline justify-between gap-2">
                 <span className="text-sm font-medium truncate">{p.nome}</span>

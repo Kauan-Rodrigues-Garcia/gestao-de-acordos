@@ -15,7 +15,7 @@
  * Duas sub-abas (05/11/2026): «Quadro do dia» (a folha) e «Histórico» (todos
  * os meses desde o início, dia a dia — `HistoricoPlantaoElite`).
  */
-import { useRef, useState } from 'react';
+import { Suspense, lazy, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Calendar, ChevronLeft, ChevronRight, Copy, Loader2, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -27,7 +27,13 @@ import {
   type LinhaQuadroElite, type QuadroElite, type RespostaPlantaoElite,
 } from '@/services/plantaoElite/plantaoElite';
 import { usePlantaoElite } from './usePlantaoElite';
-import { HistoricoPlantaoElite } from './HistoricoPlantaoElite';
+/*
+ * Sob demanda: o Histórico traz o recharts (~114 kB gzip). Estático, quem abria
+ * só o Quadro do dia — e o app do celular, que importa a `FolhaPlantaoElite`
+ * daqui — baixava os gráficos sem nunca vê-los.
+ */
+const HistoricoPlantaoElite = lazy(() =>
+  import('./HistoricoPlantaoElite').then(m => ({ default: m.HistoricoPlantaoElite })));
 
 /** Cor do Gestão com `#` — a folha usa só estas, nunca as variáveis do tema. */
 const cor = (k: keyof typeof COR_GESTAO) => `#${COR_GESTAO[k]}`;
@@ -104,7 +110,13 @@ export function PlantaoElite({ empresaId }: Props) {
       </div>
       {viuHistorico && (
         <div className={cn(subAba !== 'historico' && 'hidden')}>
-          <HistoricoPlantaoElite empresaId={empresaId} />
+          <Suspense fallback={(
+            <div className="flex items-center justify-center gap-2 py-20 text-muted-foreground text-sm">
+              <Loader2 className="w-4 h-4 animate-spin" /> Abrindo o histórico…
+            </div>
+          )}>
+            <HistoricoPlantaoElite empresaId={empresaId} />
+          </Suspense>
         </div>
       )}
     </div>

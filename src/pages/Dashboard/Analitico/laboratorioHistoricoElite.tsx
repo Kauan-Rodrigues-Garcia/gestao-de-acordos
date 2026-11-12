@@ -48,7 +48,27 @@ const resposta: RespostaHistoricoElite = {
     { id: G, nome: 'Gabriel Oliveira', usuario: null },
   ].filter(p => !membro || p.id === T || p.id === A),
   dias,
+  metas: metasFicticias(),
 };
+
+/** Metas FICTÍCIAS: o fechado do mês é o do plantão mais o dos outros dias. */
+function metasFicticias() {
+  const metaDe: Record<string, [number, number[]]> = {
+    [T]: [30000, [38000, 45000]], [A]: [26000, [32000]], [M]: [28000, [35000, 42000]], [G]: [24000, []],
+  };
+  const fator: Record<string, number> = { [T]: 2.4, [A]: 1.7, [M]: 1.9, [G]: 2.6 };
+  const soma = new Map<string, number>();
+  for (const d of dias) for (const x of d.membros) {
+    const k = `${d.data.slice(0, 7)}|${x.id}`;
+    soma.set(k, (soma.get(k) ?? 0) + x.valor);
+  }
+  return [...soma.entries()]
+    .filter(([k]) => !membro || k.endsWith(`|${T}`))
+    .map(([k, v]) => {
+      const [mes, id] = k.split('|');
+      return { mes, id, meta: metaDe[id][0], extras: metaDe[id][1], fechado: Math.round(v * fator[id] * 100) / 100 };
+    });
+}
 
 const largura = Number(url.get('largura')) || null;
 
