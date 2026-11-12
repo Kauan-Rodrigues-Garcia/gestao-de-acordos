@@ -1580,6 +1580,20 @@ export const PERMISSOES: PermissaoMeta[] = [
     grupo: 'Analítico', padrao: {},
   },
   /*
+   * 12/11/2026: o líder configura o ranking do PRÓPRIO setor, na aba — quem
+   * disputa, o que conta, prêmios e destaques. Ligar/desligar o setor continua
+   * com a chave de cima. O banco confere o setor (20261112220000).
+   */
+  {
+    key: 'ranking_quitacao_configurar_setor', label: 'Ranking de quitação: configurar o do próprio setor',
+    descricao: 'Na aba do ranking, mudar quem disputa, o que conta, os prêmios e os destaques do seu setor',
+    grupo: 'Analítico', padrao: { lider: true, gerencia: true },
+    depende: {
+      chaves: ['analitico_sub_ranking_quitacao'],
+      motivo: 'o botão de configurar mora dentro da aba.',
+    },
+  },
+  /*
    * Desafios — a aba das gincanas internas.
    *
    * Nasce ligada para todo mundo porque uma gincana existe para ser vista por

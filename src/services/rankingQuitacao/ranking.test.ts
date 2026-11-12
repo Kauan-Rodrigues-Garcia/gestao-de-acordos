@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  atualizarLembranca, configParaGravar, escolherDisputa, faltaParaPassar, lerConfig, normalizarRanking,
-  posicoesComPremio, premioTexto, resumoDaConfig, variacao, CONFIG_PADRAO,
+  atualizarLembranca, categoriasDaDisputa, configParaGravar, escolherDisputa, faltaParaPassar, lerConfig, normalizarRanking,
+  posicoesComPremio, premioTexto, resumoDaConfig, setoresQueFicamSemQuitacao, variacao, CONFIG_PADRAO,
 } from './ranking';
 
 const pos = (posicao: number, extra: Record<string, unknown> = {}) => ({
@@ -153,5 +153,51 @@ describe('subiu / desceu desde o último relatório visto', () => {
     // E a seta continua depois de recarregar.
     l = atualizarLembranca(l, 'r2', [linha('b', 1), linha('a', 2), linha('c', 3)]);
     expect(variacao(l, linha('b', 1))).toBe(1);
+  });
+});
+
+describe('categoriasDaDisputa — destaques por equipe (20261112200000)', () => {
+  const venc = (id: string) => ({ id, nome: id.toUpperCase(), foto: null, quitacoes: 3, valor: 300 });
+  const bruto = (disputa: 'setor' | 'equipe', comDaEquipe = true) => ({
+    habilitado: true, disputa, premios: [], participantes: 4,
+    disputas: [
+      { equipe_id: 'e1', nome: 'Rosa', participantes: 2, quitacoes_total: 5, valor_total: 500, posicoes: [pos(1)],
+        ...(comDaEquipe ? { categorias: [{ id: 'mais_quitacoes', vencedor: venc('rosa1') }, { id: 'maior_valor', vencedor: venc('rosa2') }] } : {}) },
+      { equipe_id: 'e2', nome: 'Azul', participantes: 2, quitacoes_total: 3, valor_total: 300, posicoes: [pos(1)],
+        ...(comDaEquipe ? { categorias: [{ id: 'mais_quitacoes', vencedor: venc('azul1') }, { id: 'maior_valor', vencedor: null }] } : {}) },
+    ],
+    categorias: [
+      { id: 'maior_valor', vencedor: venc('setor2') },
+      { id: 'equipe_campea', vencedor: { id: 'e1', nome: 'Rosa', quitacoes: 5, valor: 500, equipe: true } },
+      { id: 'mais_quitacoes', vencedor: venc('setor1') },
+    ],
+  });
+
+  it('por equipe: os da equipe na tela, a Equipe campeã do setor, na ordem da configuração', () => {
+    const r = normalizarRanking(bruto('equipe'));
+    const azul = categoriasDaDisputa(r, escolherDisputa(r, 'e2'));
+    expect(azul.map(c => c.id)).toEqual(['maior_valor', 'equipe_campea', 'mais_quitacoes']);
+    expect(azul.map(c => c.vencedor?.id ?? null)).toEqual([null, 'e1', 'azul1']);
+    const rosa = categoriasDaDisputa(r, escolherDisputa(r, 'e1'));
+    expect(rosa.map(c => c.vencedor?.id)).toEqual(['rosa2', 'e1', 'rosa1']);
+  });
+
+  it('pacote de antes (sem destaques por disputa) e disputa do setor: os do setor', () => {
+    const antigo = normalizarRanking(bruto('equipe', false));
+    expect(categoriasDaDisputa(antigo, escolherDisputa(antigo, 'e2')).map(c => c.vencedor?.id)).toEqual(['setor2', 'e1', 'setor1']);
+    const setor = normalizarRanking(bruto('setor'));
+    expect(categoriasDaDisputa(setor, escolherDisputa(setor, null))).toBe(setor.categorias);
+  });
+});
+
+describe('setoresQueFicamSemQuitacao — o aviso da importação (12/11/2026)', () => {
+  it('só o setor que tinha quitação e fica sem nenhuma', () => {
+    const setores = [
+      { setor_nome: 'Play 2', no_banco: 110, no_arquivo: 110 },
+      { setor_nome: 'Play 3', no_banco: 80, no_arquivo: 0 },
+      { setor_nome: 'Play 5', no_banco: 0, no_arquivo: 12 },
+      { setor_nome: 'Play Mix', no_banco: 30, no_arquivo: 25 },
+    ];
+    expect(setoresQueFicamSemQuitacao(setores).map(s => s.setor_nome)).toEqual(['Play 3']);
   });
 });

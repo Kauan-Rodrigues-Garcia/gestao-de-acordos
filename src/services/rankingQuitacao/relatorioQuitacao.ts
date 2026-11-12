@@ -54,6 +54,35 @@
  * decidindo SE quita e se a quitação completa um Parcelamento; o valor que
  * entra é o recebido de todos os acordos somados nela.
  *
+ * Última parcela de carnê NÃO é quitação (pedido de 12/11/2026, análise do
+ * 671.xlsx de novembro):
+ *
+ *   - acordo no Boleto (ou Recorrente) com mais de uma parcela é pago mês a
+ *     mês. Quando o cliente paga a última, o ERP muda a «Situação Atual» para
+ *     Quitação e carimba a data — mas ninguém negociou uma quitação: o
+ *     parcelamento só terminou. Ex.: NR 12696562, boleto 18/18, Valor Acordo
+ *     R$ 4.950,00, recebido no mês R$ 275,00. No 671.xlsx foram 10 assim (9
+ *     Boleto + 1 Recorrente), R$ 2.476,17 — todas com o recebido no mês bem
+ *     abaixo do Valor Acordo, porque o resto entrou nos meses anteriores;
+ *   - esse acordo não vira quitação por rótulo nem por saldo zerado, e não
+ *     soma em outra quitação do contrato (é só a parcela do mês);
+ *   - CONTINUAM contando: Boleto à vista (1 parcela — o boleto paga tudo) e
+ *     Cartão parcelado (o cartão paga o acordo inteiro de uma vez: no 671.xlsx
+ *     o recebido é igual ao Valor Acordo em todos os 42).
+ *   - precisa das colunas «Tp. Doc» e «Qtd. Parcelas Acordo»; sem elas a
+ *     regra não tem como ser aplicada e o relatório é lido como antes.
+ *
+ * A ORIGEM de cada quitação vai junto (`tipo`, pedido de 12/11/2026): cada
+ * setor escolhe o que aceita (config `aceita`, 20261112230000). O Play 2 quer
+ * só acordo de Quitação; o Play 3 aceita tudo o que quita o contrato.
+ *
+ *   quitacao      tem um acordo com «Situação Atual» Quitação (sozinho ou com
+ *                 peças do mesmo contrato somadas);
+ *   juncao        quitou por uma Junção que fechou o contrato (troca de
+ *                 plano), sem acordo Quitação;
+ *   saldo_zerado  quitou porque um Parcelamento, Parcela única, Semestral…
+ *                 ficou com saldo zero e a data da quitação.
+ *
  * «Nr. Documento» e «Valor Restante» são opcionais: sem eles, cada acordo
  * conta sozinho e a Junção vale só com a data.
  *
@@ -65,6 +94,12 @@
  */
 import { norm, toDate } from '@/services/analitico/analiticoComum';
 
+/** De onde a quitação veio (ver o cabeçalho). Cada setor escolhe o que aceita. */
+export type TipoQuitacao = 'quitacao' | 'juncao' | 'saldo_zerado';
+
+/** Na quitação que juntou acordos, vale a origem mais forte. */
+const FORCA: Record<TipoQuitacao, number> = { quitacao: 3, juncao: 2, saldo_zerado: 1 };
+
 export interface AcordoQuitado {
   cod_acordo: string;
   operador_usuario: string;
@@ -75,6 +110,7 @@ export interface AcordoQuitado {
   valor_acordo: number;
   /** `AAAA-MM-DD`. */
   data_quitacao: string;
+  tipo: TipoQuitacao;
 }
 
 export interface RelatorioQuitacao {
@@ -89,6 +125,14 @@ export interface RelatorioQuitacao {
   quitadosPorJuncao: number;
   /** Quantas quitaram o saldo de um Parcelamento do mesmo contrato e somaram o pago dele. */
   quitadosCompletandoParcelamento: number;
+  /** Quantas quitações são de cada origem — o setor que aceita só Quitação deixa as outras de fora. */
+  porTipo: Record<TipoQuitacao, number>;
+  /**
+   * Acordos de Boleto/Recorrente com mais de uma parcela que pagaram a última
+   * no mês: o ERP diz Quitação, o ranking não conta. `null`: o arquivo não tem
+   * «Tp. Doc» e «Qtd. Parcelas Acordo», e a regra não foi aplicada.
+   */
+  ultimasParcelasDeCarne: number | null;
   erros: string[];
 }
 
@@ -106,7 +150,13 @@ const COLUNAS = {
 const OPCIONAIS = {
   nrDocumento: 'nr.documento',
   valorRestante: 'valorrestante',
+  /** Boleto, Pix, Cartão, Recorrente… — com a quantidade de parcelas, separa o carnê. */
+  tpDoc: 'tp.doc',
+  qtdParcelasAcordo: 'qtd.parcelasacordo',
 } as const;
+
+/** Formas de pagamento cobradas mês a mês: com mais de uma parcela, a última não é quitação. */
+const PAGO_MES_A_MES = new Set(['boleto', 'recorrente']);
 
 const ROTULOS: Record<keyof typeof COLUNAS, string> = {
   codAcordo: 'Cód. Acordo', operador: 'Operador', dtPgto: 'Dt. Pgto', recebido: 'Recebido',
@@ -140,7 +190,8 @@ function mesDoArquivo(datas: (Date | null)[]): string | null {
 
 export function extrairQuitacoes(rows: unknown[][]): RelatorioQuitacao {
   const vazio = (erro: string): RelatorioQuitacao =>
-    ({ mes: null, acordos: [], linhasLidas: 0, quitadosForaDoMes: 0, quitadosPorJuncao: 0, quitadosCompletandoParcelamento: 0, erros: [erro] });
+    ({ mes: null, acordos: [], linhasLidas: 0, quitadosForaDoMes: 0, quitadosPorJuncao: 0, quitadosCompletandoParcelamento: 0,
+       porTipo: { quitacao: 0, juncao: 0, saldo_zerado: 0 }, ultimasParcelasDeCarne: null, erros: [erro] });
   if (rows.length < 2) return vazio('Planilha sem dados.');
 
   const cab = (rows[0] ?? []).map(norm);
@@ -159,6 +210,12 @@ export function extrairQuitacoes(rows: unknown[][]): RelatorioQuitacao {
 
   const iNr = cab.indexOf(OPCIONAIS.nrDocumento);
   const iRestante = cab.indexOf(OPCIONAIS.valorRestante);
+  const iTpDoc = cab.indexOf(OPCIONAIS.tpDoc);
+  const iQtdParcelas = cab.indexOf(OPCIONAIS.qtdParcelasAcordo);
+  const temCarne = iTpDoc >= 0 && iQtdParcelas >= 0;
+  /** Carnê: Boleto/Recorrente com mais de uma parcela (ver o cabeçalho). */
+  const ehCarne = (r: unknown[]) =>
+    temCarne && PAGO_MES_A_MES.has(norm(r[iTpDoc])) && (numero(r[iQtdParcelas]) ?? 0) > 1;
   const centavos = (v: number) => Math.round(v * 100);
 
   /** O recebido no mês por Cód. Acordo, em centavos: uma linha por parcela paga. */
@@ -184,13 +241,15 @@ export function extrairQuitacoes(rows: unknown[][]): RelatorioQuitacao {
       && (iRestante < 0 || numero(r[iRestante]) === 0);
   };
   /** Contratos que têm um acordo Quitação (ou Junção que quita): os outros acordos deles só somam pelas regras abaixo. */
-  const comQuitacao = new Set(linhas.filter(quitaPeloRotulo).map(contratoDa));
+  const comQuitacao = new Set(linhas.filter(r => quitaPeloRotulo(r) && !ehCarne(r)).map(contratoDa));
 
   // 1º os acordos que quitam (um por Cód. Acordo); 2º os do mesmo contrato viram uma quitação.
   // `valor_acordo` aqui é o Valor Acordo (confere as regras); `centavosRecebidos`, o que entra.
   type Quitou = AcordoQuitado & { contrato: string; juncao: boolean; centavosRecebidos: number };
   const porAcordo = new Map<string, Quitou>();
   const foraDoMes = new Set<string>();
+  /** Os carnês que terminaram no mês (Cód. Acordo): o ERP diz Quitação, o ranking não conta. */
+  const carnesQueTerminaram = new Set<string>();
   /** Os OUTROS acordos do contrato com data de quitação no mês: `contrato|operador|dia` → por Cód. Acordo. */
   type Peca = { valor: number; restante: number };
   const pecas = new Map<string, Map<string, Peca>>();
@@ -202,6 +261,11 @@ export function extrairQuitacoes(rows: unknown[][]): RelatorioQuitacao {
     const valor = numero(r[idx.valorAcordo]);
     const quitou = toDate(r[idx.dataQuitacao]);
     if (!cod || !operador || valor == null || !quitou) continue;
+    // Última parcela de carnê: nem quitação nem peça de outra quitação.
+    if (ehCarne(r)) {
+      if (quitou.getFullYear() >= 2000 && iso(quitou).slice(0, 7) === mes.slice(0, 7)) carnesQueTerminaram.add(cod);
+      continue;
+    }
     const restante = iRestante >= 0 ? numero(r[iRestante]) : null;
     const nr = iNr >= 0 ? String(r[iNr] ?? '').trim() : '';
     const contrato = contratoDa(r);
@@ -223,8 +287,9 @@ export function extrairQuitacoes(rows: unknown[][]): RelatorioQuitacao {
     }
     if (dia.slice(0, 7) !== mes.slice(0, 7)) { foraDoMes.add(contrato); continue; }
     if (!porAcordo.has(cod)) {
+      const tipo: TipoQuitacao = situacao === 'quitacao' ? 'quitacao' : quitaPeloRotulo(r) ? 'juncao' : 'saldo_zerado';
       porAcordo.set(cod, {
-        cod_acordo: cod, operador_usuario: operador, valor_acordo: valor, data_quitacao: dia, contrato, juncao,
+        cod_acordo: cod, operador_usuario: operador, valor_acordo: valor, data_quitacao: dia, contrato, juncao, tipo,
         centavosRecebidos: recebido(cod),
       });
     }
@@ -238,6 +303,7 @@ export function extrairQuitacoes(rows: unknown[][]): RelatorioQuitacao {
     atual.valor_acordo = Math.round((atual.valor_acordo + a.valor_acordo) * 100) / 100;
     atual.centavosRecebidos += a.centavosRecebidos;
     atual.juncao ||= a.juncao;
+    if (FORCA[a.tipo] > FORCA[atual.tipo]) atual.tipo = a.tipo;
     // O código que fica é o do acordo Quitação (a Junção só soma).
     if (atual.codDeJuncao && !a.juncao) {
       atual.cod_acordo = a.cod_acordo;
@@ -275,12 +341,18 @@ export function extrairQuitacoes(rows: unknown[][]): RelatorioQuitacao {
   const quitacoes = [...porContrato.values()];
   return {
     mes,
-    acordos: quitacoes.map(({ cod_acordo, operador_usuario, centavosRecebidos, data_quitacao }) =>
-      ({ cod_acordo, operador_usuario, valor_acordo: centavosRecebidos / 100, data_quitacao })),
+    acordos: quitacoes.map(({ cod_acordo, operador_usuario, centavosRecebidos, data_quitacao, tipo }) =>
+      ({ cod_acordo, operador_usuario, valor_acordo: centavosRecebidos / 100, data_quitacao, tipo })),
     linhasLidas: linhas.length,
     quitadosForaDoMes: foraDoMes.size,
     quitadosPorJuncao: quitacoes.filter(q => q.juncao).length,
     quitadosCompletandoParcelamento: completandoParcelamento,
+    porTipo: {
+      quitacao: quitacoes.filter(q => q.tipo === 'quitacao').length,
+      juncao: quitacoes.filter(q => q.tipo === 'juncao').length,
+      saldo_zerado: quitacoes.filter(q => q.tipo === 'saldo_zerado').length,
+    },
+    ultimasParcelasDeCarne: temCarne ? carnesQueTerminaram.size : null,
     erros: [],
   };
 }
@@ -291,7 +363,10 @@ export async function lerRelatorioQuitacao(arquivo: File): Promise<RelatorioQuit
   const wb = read(await arquivo.arrayBuffer(), { cellDates: true });
   const nome = wb.SheetNames.find(n => norm(n) === 'informacoes') ?? wb.SheetNames[0];
   const ws = nome ? wb.Sheets[nome] : undefined;
-  if (!ws) return { mes: null, acordos: [], linhasLidas: 0, quitadosForaDoMes: 0, quitadosPorJuncao: 0, quitadosCompletandoParcelamento: 0, erros: ['Planilha vazia ou inválida.'] };
+  if (!ws) {
+    return { mes: null, acordos: [], linhasLidas: 0, quitadosForaDoMes: 0, quitadosPorJuncao: 0, quitadosCompletandoParcelamento: 0,
+      porTipo: { quitacao: 0, juncao: 0, saldo_zerado: 0 }, ultimasParcelasDeCarne: null, erros: ['Planilha vazia ou inválida.'] };
+  }
   return extrairQuitacoes(utils.sheet_to_json(ws, { header: 1, defval: null }) as unknown[][]);
 }
 

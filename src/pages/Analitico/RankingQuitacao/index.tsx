@@ -30,7 +30,8 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowDown, ArrowUp, Award, Crown, Gem, Hash, Loader2, Trophy, Upload, Users } from 'lucide-react';
+import { ArrowDown, ArrowUp, Award, Crown, Gem, Hash, Loader2, Settings2, Trophy, Upload, Users } from 'lucide-react';
+import { EditorDoSetor, type EquipeDoEditor } from '@/components/admin/RankingQuitacaoConfig';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabase';
 import { formatBRL } from '@/lib/money';
@@ -39,10 +40,11 @@ import { cn } from '@/lib/utils';
 import { AvatarParticipante } from '@/pages/Analitico/Desafios/AvatarParticipante';
 import { buscarRanking } from '@/services/rankingQuitacao/rankingQuitacao.service';
 import {
-  atualizarLembranca, escolherDisputa, faltaParaPassar, quitacoesTexto, reaisRedondos, temPremio, variacao,
-  type CategoriaId, type CategoriaRanking, type Criterio, type Lembranca, type PosicaoRanking, type RankingQuitacao,
+  atualizarLembranca, categoriasDaDisputa, escolherDisputa, faltaParaPassar, quitacoesTexto, reaisRedondos, temPremio, variacao,
+  type CategoriaId, type CategoriaRanking, type Criterio, type DisputaRanking, type Lembranca, type PosicaoRanking, type RankingQuitacao,
 } from '@/services/rankingQuitacao/ranking';
 import { ImportarRankingModal } from './ImportarRankingModal';
+import { useSetoresDoRanking } from './useSetoresDoRanking';
 import { nomeDoMes, primeiroDia } from './mes';
 import './ranking.css';
 
@@ -54,6 +56,12 @@ interface Props {
   setorId: string | null;
   setorNome: string;
   podeImportar: boolean;
+  /**
+   * Abre a configuração do setor na própria aba: quem tem a chave geral, ou o
+   * líder no próprio setor (`ranking_quitacao_configurar_setor`). O banco
+   * confere o setor (20261112220000).
+   */
+  podeConfigurar: boolean;
   /** Quem está olhando: a linha dele ganha destaque. */
   operadorId: string;
   /** A importação foi de outro mês: a lente vai para ele. */
@@ -75,8 +83,9 @@ const ESPALHAMENTO_MS = 3_000;
 const metrica = (criterio: Criterio, p: { valor: number; quitacoes: number }) =>
   criterio === 'quantidade' ? p.quitacoes : p.valor;
 
-export function AbaRankingQuitacao({ empresaId, mes, setorId, setorNome, podeImportar, operadorId, onMudarMes }: Props) {
+export function AbaRankingQuitacao({ empresaId, mes, setorId, setorNome, podeImportar, podeConfigurar, operadorId, onMudarMes }: Props) {
   const [importando, setImportando] = useState(false);
+  const [configurando, setConfigurando] = useState(false);
   const [equipeEscolhida, setEquipeEscolhida] = useState<string | null>(null);
   const mesDoRanking = primeiroDia(mes);
   const queryClient = useQueryClient();
@@ -95,7 +104,25 @@ export function AbaRankingQuitacao({ empresaId, mes, setorId, setorNome, podeImp
   }, [queryClient, empresaId]));
 
   // Trocou de setor: a equipe escolhida era de outro.
-  useEffect(() => { setEquipeEscolhida(null); }, [setorId]);
+  useEffect(() => { setEquipeEscolhida(null); setConfigurando(false); }, [setorId]);
+
+  // A configuração do setor, só para quem pode mexer nela.
+  const setoresDoRanking = useSetoresDoRanking(empresaId, podeConfigurar);
+  const equipesDoSetor = useQuery({
+    queryKey: ['ranking-quitacao-equipes', empresaId, setorId],
+    enabled: podeConfigurar && configurando && !!setorId,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('equipes').select('id, nome, setor_id, treinamento')
+        .eq('empresa_id', empresaId).eq('setor_id', setorId as string).order('nome');
+      if (error) throw new Error(error.message);
+      return (data as EquipeDoEditor[] | null) ?? [];
+    },
+  });
+  const aoSalvarConfig = useCallback(async () => {
+    await setoresDoRanking.recarregar();
+    await queryClient.invalidateQueries({ queryKey: ['ranking-quitacao', empresaId] });
+    setConfigurando(false);
+  }, [setoresDoRanking, queryClient, empresaId]);
 
   const aoImportar = useCallback((mesImportado: string) => {
     setImportando(false);
@@ -106,6 +133,8 @@ export function AbaRankingQuitacao({ empresaId, mes, setorId, setorNome, podeImp
   const ranking = consulta.data ?? null;
   const disputa = ranking ? escolherDisputa(ranking, equipeEscolhida) : null;
   const posicoes = disputa?.posicoes ?? [];
+  // Por equipe, os destaques são os da equipe na tela (a Equipe campeã é do setor).
+  const destaques = ranking ? categoriasDaDisputa(ranking, disputa) : [];
   const lembranca = useLembranca(setorId, mesDoRanking, disputa?.equipe_id ?? null, ranking?.importado_em ?? null, posicoes);
   const carregando = !!setorId && consulta.isLoading;
   const erro = consulta.error instanceof Error ? consulta.error.message : consulta.error ? 'Não foi possível carregar o ranking.' : null;
@@ -122,11 +151,17 @@ export function AbaRankingQuitacao({ empresaId, mes, setorId, setorNome, podeImp
           </h2>
           <p className="mt-0.5 text-xs text-muted-foreground">
             {ranking?.criterio === 'quantidade' ? 'Pela quantidade de quitações no mês' : 'Pelo valor dos acordos quitados no mês'}
+            {ranking?.aceita === 'so_quitacao' && ' · só acordo de Quitação'}
             {ranking?.disputa === 'equipe' && ' · cada equipe disputa o seu'}
           </p>
         </div>
         <div className="flex items-center gap-2">
           {ranking?.habilitado && <StatusAoVivo aoVivo={aoVivo} importadoEm={ranking.importado_em} atualizando={consulta.isFetching && !carregando} />}
+          {podeConfigurar && ranking?.habilitado && setorId && (
+            <Button variant="outline" size="sm" className="gap-2" onClick={() => setConfigurando(true)}>
+              <Settings2 className="h-4 w-4" /> Configurar
+            </Button>
+          )}
           {podeImportar && (
             <Button variant="outline" size="sm" className="gap-2" onClick={() => setImportando(true)}>
               <Upload className="h-4 w-4" /> Importar relatório
@@ -158,17 +193,30 @@ export function AbaRankingQuitacao({ empresaId, mes, setorId, setorNome, podeImp
             />
           ) : (
             <>
-              <Resumo ranking={ranking} />
-              {ranking.categorias.length > 0 && <Destaques categorias={ranking.categorias} operadorId={operadorId} />}
+              <Resumo ranking={ranking} disputa={disputa} />
+              {destaques.length > 0 && <Destaques categorias={destaques} operadorId={operadorId} />}
               <Podio posicoes={posicoes.slice(0, 3)} criterio={ranking.criterio} lembranca={lembranca} operadorId={operadorId} />
               <Lista ranking={ranking} posicoes={posicoes} lembranca={lembranca} operadorId={operadorId} />
-              <MinhaPosicao ranking={ranking} posicoesNaTela={posicoes.length} />
+              <MinhaPosicao ranking={ranking} disputa={disputa} posicoesNaTela={posicoes.length} />
               {ranking.equipes.length > 1 && (ranking.disputa === 'equipe' || ranking.categorias.some(c => c.id === 'equipe_campea')) && (
                 <PlacarDeEquipes ranking={ranking} />
               )}
             </>
           )}
         </>
+      )}
+
+      {configurando && setorId && (
+        equipesDoSetor.isLoading || setoresDoRanking.carregando ? null : (
+          <EditorDoSetor
+            empresaId={empresaId}
+            setor={{ id: setorId, nome: setorNome || 'setor' }}
+            atual={setoresDoRanking.setores.find(s => s.setor_id === setorId)}
+            equipes={equipesDoSetor.data ?? []}
+            onFechar={() => setConfigurando(false)}
+            onSalvo={aoSalvarConfig}
+          />
+        )
       )}
 
       <ImportarRankingModal
@@ -310,20 +358,21 @@ function SeletorDeEquipe({ ranking, atual, onEscolher }: { ranking: RankingQuita
   );
 }
 
-/** Três números do mês, discretos: o pódio é o protagonista. */
-function Resumo({ ranking }: { ranking: RankingQuitacao }) {
-  const d = escolherDisputa(ranking, null);
-  // Na disputa por equipe o resumo é o do setor inteiro (as equipes somadas).
-  const total = ranking.disputa === 'equipe'
-    ? ranking.disputas.reduce((s, x) => ({ v: s.v + x.valor_total, q: s.q + x.quitacoes_total }), { v: 0, q: 0 })
-    : { v: d?.valor_total ?? 0, q: d?.quitacoes_total ?? 0 };
+/**
+ * Três números do mês, discretos: o pódio é o protagonista. Por equipe, os da
+ * equipe na tela — o placar de equipes, mais abaixo, compara com as outras.
+ */
+function Resumo({ ranking, disputa }: { ranking: RankingQuitacao; disputa: DisputaRanking | null }) {
+  const daEquipe = ranking.disputa === 'equipe';
+  const total = { v: disputa?.valor_total ?? 0, q: disputa?.quitacoes_total ?? 0 };
   // Pacote antigo (antes de 20261111150500) não traz os totais.
   if (total.q <= 0) return null;
+  const pessoas = daEquipe ? disputa?.participantes ?? 0 : ranking.participantes;
   const itens = [
-    { rotulo: 'Quitado no mês', valor: formatBRL(total.v) },
+    { rotulo: daEquipe ? 'Quitado na equipe' : 'Quitado no mês', valor: formatBRL(total.v) },
     { rotulo: 'Quitações', valor: total.q.toLocaleString('pt-BR') },
     { rotulo: 'Ticket médio', valor: formatBRL(total.q ? total.v / total.q : 0) },
-    { rotulo: 'No ranking', valor: `${ranking.participantes} ${ranking.participantes === 1 ? 'pessoa' : 'pessoas'}` },
+    { rotulo: 'No ranking', valor: `${pessoas} ${pessoas === 1 ? 'pessoa' : 'pessoas'}` },
   ];
   return (
     <dl className="rq-resumo grid grid-cols-2 overflow-hidden sm:grid-cols-4">
@@ -552,11 +601,16 @@ function LinhaRanking({ p, criterio, fracao, eu, lembranca, falta, minimo }: {
   );
 }
 
-/** Quem está olhando e ficou fora da lista: onde está e quanto falta. */
-function MinhaPosicao({ ranking, posicoesNaTela }: { ranking: RankingQuitacao; posicoesNaTela: number }) {
+/**
+ * Quem está olhando e ficou fora da lista: onde está e quanto falta. Por
+ * equipe, só na disputa da própria equipe — olhando outra, a posição dele não
+ * é daquela lista.
+ */
+function MinhaPosicao({ ranking, disputa, posicoesNaTela }: { ranking: RankingQuitacao; disputa: DisputaRanking | null; posicoesNaTela: number }) {
   const eu = ranking.eu;
   if (!eu || eu.posicao <= posicoesNaTela) return null;
-  const total = escolherDisputa(ranking, eu.equipe_id)?.participantes ?? ranking.participantes;
+  if (ranking.disputa === 'equipe' && eu.equipe_id !== (disputa?.equipe_id ?? null)) return null;
+  const total = disputa?.participantes ?? ranking.participantes;
   const falta = eu.acima ? faltaParaPassar(ranking.criterio, eu.acima, eu) : null;
   const fracao = eu.acima ? Math.min(1, metrica(ranking.criterio, eu) / Math.max(1e-9, metrica(ranking.criterio, eu.acima))) : 1;
   return (

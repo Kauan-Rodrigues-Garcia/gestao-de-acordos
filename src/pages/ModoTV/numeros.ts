@@ -22,7 +22,7 @@
  */
 import { hoPercentualDaConfig } from '@/lib/hoPercentual';
 import {
-  escolherDisputa, faltaParaPassar, normalizarRanking, temPremio,
+  categoriasDaDisputa, escolherDisputa, faltaParaPassar, normalizarRanking, temPremio,
   type CategoriaRanking, type Criterio,
 } from '@/services/rankingQuitacao/ranking';
 import type { NumerosTv, PessoaRanking, QuitacaoTv, TelaDoPainel, Unidade } from './tipos';
@@ -410,7 +410,7 @@ export function quitacaoDaTela(
   }));
   if (!linhas.length) {
     const mes = MESES_TV[Number(v.mesIso.slice(5, 7)) - 1];
-    if (r.importado_em && d?.nome) return { ...vazio(`Ninguém da ${d.nome} quitou acordo${mes ? ` em ${mes}` : ''} ainda.`), categorias: r.categorias };
+    if (r.importado_em && d?.nome) return { ...vazio(`Ninguém da ${d.nome} quitou acordo${mes ? ` em ${mes}` : ''} ainda.`), categorias: categoriasDaDisputa(r, d) };
     return vazio(`O Ranking de quitação${mes ? ` de ${mes}` : ''} ainda não foi importado.`);
   }
   const porPosicao = new Map(linhas.map(l => [l.posicao, l]));
@@ -428,7 +428,7 @@ export function quitacaoDaTela(
     }),
     premiadas: r.posicoes_premiadas,
     participantes: Math.max(linhas.length, d?.participantes ?? 0, r.disputa === 'setor' ? r.participantes : 0),
-    categorias: r.categorias,
+    categorias: categoriasDaDisputa(r, d),
   };
 }
 

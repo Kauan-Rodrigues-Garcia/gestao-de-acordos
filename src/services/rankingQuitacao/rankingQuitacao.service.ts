@@ -84,6 +84,36 @@ export async function buscarRanking(empresaId: string, setorId: string, mes: str
   return normalizarRanking(data);
 }
 
+export interface SetorNaPrevia {
+  setor_id: string;
+  setor_nome: string;
+  /** Quitações do setor já gravadas no mês. */
+  no_banco: number;
+  /** Quitações do setor no arquivo escolhido. */
+  no_arquivo: number;
+}
+
+/**
+ * Por setor, o que o mês tem gravado e o que o arquivo traz
+ * (`fn_ranking_quitacao_previa`, 20261112210000). `null` quando a função
+ * ainda não existe no banco: a importação continua, sem a conferência.
+ */
+export async function previaDaImportacao(
+  empresaId: string, mes: string, operadores: (string | null)[],
+): Promise<SetorNaPrevia[] | null> {
+  const { data, error } = await rpcSemTipo<{ setor_id: string; setor_nome: string; no_banco: number | string; no_arquivo: number | string }[]>(
+    'fn_ranking_quitacao_previa',
+    { p_empresa_id: empresaId, p_mes: mes, p_operadores: operadores.filter((x): x is string => !!x) },
+  );
+  if (error) {
+    if (semMigrationDoRanking(error)) return null;
+    throw new Error(error.message);
+  }
+  return (data ?? []).map(s => ({
+    setor_id: s.setor_id, setor_nome: s.setor_nome, no_banco: Number(s.no_banco) || 0, no_arquivo: Number(s.no_arquivo) || 0,
+  }));
+}
+
 /** Grava os acordos quitados do mês (substitui a importação anterior). Devolve quantos entraram. */
 export async function importarRanking(
   empresaId: string,

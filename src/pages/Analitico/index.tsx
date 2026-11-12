@@ -618,6 +618,7 @@ export default function PaginaAnalitico() {
           setorId={setorDoRanking}
           setorNome={setores.find(s => s.id === setorDoRanking)?.nome ?? ''}
           podeImportar={temPermissao('ranking_quitacao_importar')}
+          podeConfigurar={temPermissao('ranking_quitacao_configurar') || temPermissao('ranking_quitacao_configurar_setor')}
           operadorId={perfil.id}
           onMudarMes={m => setRecorte({ modo: 'mes', mes: m })}
         />

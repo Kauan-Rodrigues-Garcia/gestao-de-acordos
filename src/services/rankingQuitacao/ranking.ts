@@ -15,6 +15,12 @@
 
 export type Criterio = 'valor' | 'quantidade';
 export type Disputa = 'setor' | 'equipe';
+/**
+ * O que conta como quitação no setor (20261112230000): tudo o que fecha o
+ * contrato (Quitação, Junção/troca de plano, saldo zerado) ou só o acordo de
+ * Quitação. O Play 2 quer só Quitação; o Play 3, tudo.
+ */
+export type Aceita = 'todas' | 'so_quitacao';
 export type CategoriaId = 'mais_quitacoes' | 'maior_valor' | 'maior_quitacao' | 'equipe_campea';
 
 /** A ordem em que os destaques aparecem na configuração. */
@@ -48,6 +54,7 @@ export interface CategoriaConfig {
 export interface ConfigRanking {
   criterio: Criterio;
   disputa: Disputa;
+  aceita: Aceita;
   equipes_fora: string[];
   minimo_quitacoes: number;
   /** O brinde de cada posição, ao lado do valor de `premios`. Mesmo tamanho. */
@@ -58,6 +65,7 @@ export interface ConfigRanking {
 export const CONFIG_PADRAO: ConfigRanking = {
   criterio: 'valor',
   disputa: 'setor',
+  aceita: 'todas',
   equipes_fora: [],
   minimo_quitacoes: 0,
   premios_texto: [],
@@ -73,6 +81,7 @@ export function lerConfig(bruto: unknown): ConfigRanking {
   return {
     criterio: c.criterio === 'quantidade' ? 'quantidade' : 'valor',
     disputa: c.disputa === 'equipe' ? 'equipe' : 'setor',
+    aceita: c.aceita === 'so_quitacao' ? 'so_quitacao' : 'todas',
     equipes_fora: lista(c.equipes_fora).filter((x): x is string => typeof x === 'string'),
     minimo_quitacoes: Math.max(0, Math.trunc(num(c.minimo_quitacoes))),
     premios_texto: lista(c.premios_texto).map(x => (typeof x === 'string' ? x : '')),
@@ -96,6 +105,7 @@ export function configParaGravar(c: ConfigRanking, posicoesPremiadas: number): R
   return {
     criterio: c.criterio,
     disputa: c.disputa,
+    aceita: c.aceita,
     equipes_fora: [...new Set(c.equipes_fora)],
     minimo_quitacoes: Math.max(0, Math.min(999, Math.trunc(c.minimo_quitacoes) || 0)),
     premios_texto: textos.some(Boolean) ? textos : [],
@@ -113,6 +123,7 @@ export function resumoDaConfig(c: ConfigRanking, posicoesPremiadas: number): str
   const partes = [
     c.disputa === 'equipe' ? 'Cada equipe disputa' : 'Setor inteiro',
     c.criterio === 'quantidade' ? 'por quantidade' : 'por valor',
+    ...(c.aceita === 'so_quitacao' ? ['só acordo de Quitação'] : []),
     posicoesPremiadas === 0 ? 'sem prêmio por posição' : `${posicoesPremiadas} ${posicoesPremiadas === 1 ? 'posição premiada' : 'posições premiadas'}`,
   ];
   const destaques = c.categorias.filter(k => k.ativo).length;
@@ -149,6 +160,11 @@ export interface DisputaRanking {
   quitacoes_total: number;
   valor_total: number;
   posicoes: PosicaoRanking[];
+  /**
+   * Os destaques calculados só com a gente desta disputa (20261112200000),
+   * sem a Equipe campeã. Nulo no pacote de antes — aí valem os do setor.
+   */
+  categorias: CategoriaRanking[] | null;
 }
 
 export interface EquipeDoRanking {
@@ -192,6 +208,7 @@ export interface RankingQuitacao {
   habilitado: boolean;
   criterio: Criterio;
   disputa: Disputa;
+  aceita: Aceita;
   minimo_quitacoes: number;
   premios: number[];
   premios_texto: string[];
@@ -206,7 +223,7 @@ export interface RankingQuitacao {
 }
 
 export const RANKING_DESLIGADO: RankingQuitacao = {
-  habilitado: false, criterio: 'valor', disputa: 'setor', minimo_quitacoes: 0,
+  habilitado: false, criterio: 'valor', disputa: 'setor', aceita: 'todas', minimo_quitacoes: 0,
   premios: [], premios_texto: [], posicoes_premiadas: 0, participantes: 0, importado_em: null,
   disputas: [], equipes: [], categorias: [], eu: null,
 };
@@ -253,6 +270,25 @@ export function posicoesComPremio(premios: number[], textos: string[]): number {
   return 0;
 }
 
+/** Os destaques como vieram do banco (do setor ou de uma disputa). */
+function lerCategorias(bruto: unknown): CategoriaRanking[] {
+  return (Array.isArray(bruto) ? bruto : []).map(c => {
+    const x = obj(c);
+    const v = x.vencedor ? obj(x.vencedor) : null;
+    return {
+      id: x.id as CategoriaId,
+      titulo: titulosDasCategorias[x.id as CategoriaId] ?? String(x.id ?? ''),
+      premio: x.premio == null || num(x.premio) <= 0 ? null : num(x.premio),
+      premio_texto: texto(x.premio_texto),
+      vencedor: v && (v.id || v.nome) ? {
+        id: String(v.id ?? ''), nome: String(v.nome ?? ''), foto_url: texto(v.foto_url ?? v.foto),
+        equipe_nome: texto(v.equipe_nome), quitacoes: Math.trunc(num(v.quitacoes)), valor: num(v.valor),
+        equipe: v.equipe === true,
+      } : null,
+    };
+  }).filter(c => ehCategoria(c.id));
+}
+
 /** O pacote do banco (aba ou TV, novo ou antigo) → o ranking completo. */
 export function normalizarRanking(bruto: unknown): RankingQuitacao {
   const r = obj(bruto);
@@ -271,7 +307,7 @@ export function normalizarRanking(bruto: unknown): RankingQuitacao {
     ? [{
         equipe_id: null, nome: null,
         participantes: Math.trunc(num(r.participantes)),
-        quitacoes_total: 0, valor_total: 0,
+        quitacoes_total: 0, valor_total: 0, categorias: null,
         posicoes: ordenar((Array.isArray(r.posicoes) ? r.posicoes : []).map(p => lerPosicao(p, premios, premiosTexto, true))),
       }]
     : (r.disputas as unknown[]).map(d => {
@@ -282,6 +318,7 @@ export function normalizarRanking(bruto: unknown): RankingQuitacao {
           participantes: Math.trunc(num(x.participantes)),
           quitacoes_total: Math.trunc(num(x.quitacoes_total)),
           valor_total: num(x.valor_total),
+          categorias: Array.isArray(x.categorias) ? lerCategorias(x.categorias) : null,
           posicoes: ordenar((Array.isArray(x.posicoes) ? x.posicoes : []).map(p => lerPosicao(p, premios, premiosTexto, false))),
         };
       });
@@ -291,6 +328,7 @@ export function normalizarRanking(bruto: unknown): RankingQuitacao {
     habilitado: true,
     criterio: r.criterio === 'quantidade' ? 'quantidade' : 'valor',
     disputa: r.disputa === 'equipe' ? 'equipe' : 'setor',
+    aceita: r.aceita === 'so_quitacao' ? 'so_quitacao' : 'todas',
     minimo_quitacoes: Math.max(0, Math.trunc(num(r.minimo_quitacoes))),
     premios,
     premios_texto: premiosTexto,
@@ -302,21 +340,7 @@ export function normalizarRanking(bruto: unknown): RankingQuitacao {
       const x = obj(e);
       return { id: String(x.id ?? ''), nome: String(x.nome ?? ''), quitacoes: Math.trunc(num(x.quitacoes)), valor: num(x.valor), pessoas: Math.trunc(num(x.pessoas)) };
     }).filter(e => e.id),
-    categorias: (Array.isArray(r.categorias) ? r.categorias : []).map(c => {
-      const x = obj(c);
-      const v = x.vencedor ? obj(x.vencedor) : null;
-      return {
-        id: x.id as CategoriaId,
-        titulo: titulosDasCategorias[x.id as CategoriaId] ?? String(x.id ?? ''),
-        premio: x.premio == null || num(x.premio) <= 0 ? null : num(x.premio),
-        premio_texto: texto(x.premio_texto),
-        vencedor: v && (v.id || v.nome) ? {
-          id: String(v.id ?? ''), nome: String(v.nome ?? ''), foto_url: texto(v.foto_url ?? v.foto),
-          equipe_nome: texto(v.equipe_nome), quitacoes: Math.trunc(num(v.quitacoes)), valor: num(v.valor),
-          equipe: v.equipe === true,
-        } : null,
-      };
-    }).filter(c => ehCategoria(c.id)),
+    categorias: lerCategorias(r.categorias),
     eu: eu ? {
       posicao: Math.trunc(num(eu.posicao)),
       quitacoes: Math.trunc(num(eu.quitacoes)),
@@ -341,6 +365,18 @@ export function escolherDisputa(r: RankingQuitacao, equipeId: string | null | un
   return r.disputas.find(d => d.equipe_id === equipeId)
     ?? (r.eu ? r.disputas.find(d => d.equipe_id === r.eu?.equipe_id) : undefined)
     ?? r.disputas[0];
+}
+
+/**
+ * Os destaques a mostrar com a disputa na tela. Por equipe, os da equipe
+ * (quem fez mais quitações NA equipe); a Equipe campeã é sempre do setor, na
+ * ordem da configuração. Pacote de antes (sem destaques por disputa): os do
+ * setor.
+ */
+export function categoriasDaDisputa(r: RankingQuitacao, d: DisputaRanking | null): CategoriaRanking[] {
+  if (r.disputa !== 'equipe' || !d?.categorias) return r.categorias;
+  const daEquipe = new Map(d.categorias.map(c => [c.id, c]));
+  return r.categorias.map(c => (c.id === 'equipe_campea' ? c : daEquipe.get(c.id) ?? c));
 }
 
 /** Há prêmio na posição (valor ou brinde)? */
@@ -380,6 +416,18 @@ export function premioTexto(p: { premio: number | null; premio_texto: string | n
 /** O valor que ordena, como texto: «R$ 1.234,56» ou «12 quitações». */
 export function falaDoCriterio(criterio: Criterio, falta: number, formatarReais: (v: number) => string): string {
   return criterio === 'quantidade' ? quitacoesTexto(falta) : formatarReais(falta);
+}
+
+// ── A prévia da importação ──────────────────────────────────────────────────
+
+/**
+ * Os setores que têm quitação gravada no mês e ficam sem NENHUMA com o
+ * arquivo — importar substitui o mês da empresa inteira. Foi o que apagou o
+ * novembro do Play 3, do Play 5 e do Play Mix Marília em 12/11/2026 (arquivo
+ * só com o Play 2).
+ */
+export function setoresQueFicamSemQuitacao<T extends { no_banco: number; no_arquivo: number }>(setores: T[]): T[] {
+  return setores.filter(s => s.no_banco > 0 && s.no_arquivo === 0);
 }
 
 // ── Subiu / desceu desde a última importação vista ─────────────────────────

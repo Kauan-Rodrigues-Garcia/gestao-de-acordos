@@ -64,7 +64,7 @@ describe('relatório mensal de parcelas pagas → acordos quitados no mês', () 
         // Junção ainda pagando.
         j('12', '902', 'TAIS', 1481.55, 781.55, 'Junção', null),
       ]);
-      expect(r.acordos).toEqual([{ cod_acordo: '10', operador_usuario: 'TAIS', valor_acordo: 1671.6, data_quitacao: '2026-10-08' }]);
+      expect(r.acordos).toEqual([{ cod_acordo: '10', operador_usuario: 'TAIS', valor_acordo: 1671.6, data_quitacao: '2026-10-08', tipo: 'juncao' }]);
       expect(r.quitadosPorJuncao).toBe(1);
     });
 
@@ -75,7 +75,7 @@ describe('relatório mensal de parcelas pagas → acordos quitados no mês', () 
         j('5846977', '13008491', 'TAIS', 2800, 0, 'Junção', '2026-10-07', 1400),
         j('5847011', '13008491', 'TAIS', 700, 0, 'Quitação', '2026-10-07'),
       ]);
-      expect(r.acordos).toEqual([{ cod_acordo: '5847011', operador_usuario: 'TAIS', valor_acordo: 3500, data_quitacao: '2026-10-07' }]);
+      expect(r.acordos).toEqual([{ cod_acordo: '5847011', operador_usuario: 'TAIS', valor_acordo: 3500, data_quitacao: '2026-10-07', tipo: 'quitacao' }]);
       expect(resumoPorOperador(r.acordos)).toEqual([{ operador: 'TAIS', quitacoes: 1, valor: 3500 }]);
     });
 
@@ -103,7 +103,7 @@ describe('relatório mensal de parcelas pagas → acordos quitados no mês', () 
         p('5863434', '12800154', 50, 0, 'Parcela única'),
         p('5863389', '12800154', 1793, 698, 'Parcelamento'),
       ]);
-      expect(r.acordos).toEqual([{ cod_acordo: '5863453', operador_usuario: 'LUIZ', valor_acordo: 1793, data_quitacao: '2026-10-20' }]);
+      expect(r.acordos).toEqual([{ cod_acordo: '5863453', operador_usuario: 'LUIZ', valor_acordo: 1793, data_quitacao: '2026-10-20', tipo: 'quitacao' }]);
       expect(r.quitadosCompletandoParcelamento).toBe(1);
     });
 
@@ -143,7 +143,7 @@ describe('relatório mensal de parcelas pagas → acordos quitados no mês', () 
         p('5881970', '13022960', 936.8, 0, 'Junção', '2026-10-20'),
         p('5881442', '13022960', 1000, 0, 'Parcelamento', '2026-10-20'),
       ]);
-      expect(r.acordos).toEqual([{ cod_acordo: '5881970', operador_usuario: 'LUIZ', valor_acordo: 1936.8, data_quitacao: '2026-10-20' }]);
+      expect(r.acordos).toEqual([{ cod_acordo: '5881970', operador_usuario: 'LUIZ', valor_acordo: 1936.8, data_quitacao: '2026-10-20', tipo: 'juncao' }]);
     });
 
     it('peça paga só em parte no mês soma só o que recebeu no mês', () => {
@@ -173,7 +173,7 @@ describe('relatório mensal de parcelas pagas → acordos quitados no mês', () 
 
     it('NR 12552080: Parcelamento 1/1, saldo 0 e data da quitação — conta', () => {
       const r = extrairQuitacoes([CAB_NR, s('5871579', '12552080', 955.8, 0, 'Parcelamento')]);
-      expect(r.acordos).toEqual([{ cod_acordo: '5871579', operador_usuario: 'TAIS', valor_acordo: 955.8, data_quitacao: '2026-10-27' }]);
+      expect(r.acordos).toEqual([{ cod_acordo: '5871579', operador_usuario: 'TAIS', valor_acordo: 955.8, data_quitacao: '2026-10-27', tipo: 'saldo_zerado' }]);
     });
 
     it('sem a data da quitação, ou com saldo, não conta', () => {
@@ -225,6 +225,51 @@ describe('relatório mensal de parcelas pagas → acordos quitados no mês', () 
   it('aceita datas como número serial do Excel e valor em texto pt-BR', () => {
     // 46267 = 2026-09-02.
     const r = extrairQuitacoes([CAB, ['9', 1, 'ANA', 46267, '1.234,50', 'Quitação', '1.234,50', 'Quitação', 46267]]);
-    expect(r.acordos).toEqual([{ cod_acordo: '9', operador_usuario: 'ANA', valor_acordo: 1234.5, data_quitacao: '2026-09-02' }]);
+    expect(r.acordos).toEqual([{ cod_acordo: '9', operador_usuario: 'ANA', valor_acordo: 1234.5, data_quitacao: '2026-09-02', tipo: 'quitacao' }]);
+  });
+});
+
+describe('última parcela de carnê não é quitação (12/11/2026)', () => {
+  const CAB_CARNE = ['Cód. Acordo', 'Num. Parc. Acordo', 'Tp. Doc', 'Nr. Documento', 'Operador', 'Dt. Pgto', 'Recebido',
+    'Valor Acordo', 'Qtd. Parcelas Acordo', 'Valor Restante', 'Situação Atual', 'Data da quitação'];
+  const c = (cod: string, nr: string, tp: string, parc: number, de: number, valor: number, recebido: number, atual = 'Quitação', restante = 0) =>
+    [cod, parc, tp, nr, 'ANA', d('2026-11-03'), recebido, valor, de, restante, atual, d('2026-11-03')];
+
+  it('boleto 18/18 e recorrente 20/20 saem; boleto à vista, cartão parcelado e Pix ficam', () => {
+    const r = extrairQuitacoes([
+      CAB_CARNE,
+      // NR 12696562: o fim de um boleto de 18 — entrou R$ 275 de R$ 4.950.
+      c('5115699', '12696562', 'Boleto', 18, 18, 4950, 275),
+      c('5062373', '12852536', 'Recorrente', 20, 20, 2975, 148.75),
+      // Boleto à vista: o boleto paga tudo.
+      c('5895010', '12779516', 'Boleto', 1, 1, 275, 275),
+      // Cartão em 15x: o cartão paga o acordo inteiro de uma vez.
+      c('5883991', '12918254', 'Cartão', 15, 15, 2448, 2448),
+      c('5898644', '12783104', 'Pix', 1, 1, 800, 800),
+    ]);
+    expect(r.acordos.map(a => a.cod_acordo).sort()).toEqual(['5883991', '5895010', '5898644']);
+    expect(r.ultimasParcelasDeCarne).toBe(2);
+  });
+
+  it('o carnê que terminou não vira quitação pelo saldo zerado nem soma em outra', () => {
+    const r = extrairQuitacoes([
+      CAB_CARNE,
+      // Rotulado Parcelamento, saldo 0 e data: seria «saldo zerado quita».
+      c('1', '900', 'Boleto', 6, 6, 1200, 200, 'Parcelamento'),
+      // Mesmo contrato, Pix Quitação no mesmo dia: conta sozinha, sem o boleto.
+      c('2', '901', 'Boleto', 4, 4, 800, 200),
+      c('3', '901', 'Pix', 1, 1, 300, 300),
+    ]);
+    expect(r.acordos).toEqual([{ cod_acordo: '3', operador_usuario: 'ANA', valor_acordo: 300, data_quitacao: '2026-11-03', tipo: 'quitacao' }]);
+    expect(r.ultimasParcelasDeCarne).toBe(2);
+  });
+
+  it('sem «Tp. Doc» e «Qtd. Parcelas Acordo»: lê como antes e avisa (null)', () => {
+    const r = extrairQuitacoes([
+      CAB,
+      linha('5115699', 'ANA', '2026-11-03', 4950, 'Quitação', '2026-11-03', 18, 275),
+    ]);
+    expect(r.acordos.map(a => a.cod_acordo)).toEqual(['5115699']);
+    expect(r.ultimasParcelasDeCarne).toBeNull();
   });
 });

@@ -4,7 +4,8 @@
  *
  * Por setor: ligar/desligar e, numa janela, em seções numeradas:
  *   1. quem disputa — o setor inteiro, ou cada equipe com o seu ranking;
- *   2. o que conta — valor quitado ou quantidade de quitações;
+ *   2. o que conta — valor quitado ou quantidade de quitações, e se vale
+ *      tudo o que fecha o contrato ou só o acordo de Quitação (20261112230000);
  *   3. equipes de fora (ex.: Treinamento);
  *   4. prêmios por posição — de 0 a 10, valor e/ou brinde, e o mínimo de
  *      quitações para levar;
@@ -14,6 +15,10 @@
  * Grava por `fn_ranking_quitacao_definir_setor`, que confere a chave
  * `ranking_quitacao_configurar` e valida tudo de novo no banco. Salvar avisa
  * as TVs e a aba aberta: a mudança aparece na hora nos dois.
+ *
+ * A janela de um setor (`EditorDoSetor`) também abre na própria aba do
+ * ranking, para o líder configurar o do setor dele
+ * (`ranking_quitacao_configurar_setor`, 20261112220000).
  */
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Loader2, Medal, Plus, Settings2, Trash2 } from 'lucide-react';
@@ -36,7 +41,8 @@ import {
 } from '@/services/rankingQuitacao/ranking';
 
 type Setor = { id: string; nome: string; ativo?: boolean | null; tipo?: string | null };
-type Equipe = { id: string; nome: string; setor_id: string; treinamento?: boolean | null };
+export type EquipeDoEditor = { id: string; nome: string; setor_id: string; treinamento?: boolean | null };
+type Equipe = EquipeDoEditor;
 
 export default function RankingQuitacaoConfig() {
   const { empresa } = useEmpresa();
@@ -143,9 +149,9 @@ const valorDoTexto = (t: string) => {
   return Number(limpo.replace(/\./g, '').replace(',', '.'));
 };
 
-function EditorDoSetor({ empresaId, setor, atual, equipes, onFechar, onSalvo }: {
+export function EditorDoSetor({ empresaId, setor, atual, equipes, onFechar, onSalvo }: {
   empresaId: string;
-  setor: Setor;
+  setor: Pick<Setor, 'id' | 'nome'>;
   atual: SetorDoRanking | undefined;
   equipes: Equipe[];
   onFechar: () => void;
@@ -238,6 +244,16 @@ function EditorDoSetor({ empresaId, setor, atual, equipes, onFechar, onSalvo }: 
                 { valor: 'quantidade', rotulo: 'Quantidade', dica: 'Número de quitações no mês. Desempata pelo valor.' },
               ]}
             />
+            <p className="pt-2 text-xs font-medium text-foreground">O que conta como quitação</p>
+            <Escolhas
+              valor={cfg.aceita}
+              onMudar={v => setCfg(c => ({ ...c, aceita: v }))}
+              opcoes={[
+                { valor: 'todas', rotulo: 'Tudo o que quita o contrato', dica: 'Acordo de Quitação, Junção que fechou o contrato (troca de plano) e acordo que ficou com saldo zero.' },
+                { valor: 'so_quitacao', rotulo: 'Só acordo de Quitação', dica: 'Só o que foi negociado como Quitação. Troca de plano e saldo zerado ficam de fora.' },
+              ]}
+            />
+            <p className="text-[11px] text-muted-foreground">A última parcela de boleto parcelado nunca conta. Mudar aqui vale na hora para o que foi importado a partir de 12/11/2026.</p>
           </Secao>
 
           <Secao numero={3} titulo="Equipes que ficam de fora" dica="Quem é dessas equipes não aparece no ranking nem nos destaques.">
@@ -333,7 +349,7 @@ function EditorDoSetor({ empresaId, setor, atual, equipes, onFechar, onSalvo }: 
             </div>
           </Secao>
 
-          <Secao numero={5} titulo="Destaques do mês" dica="Prêmios à parte, para o setor inteiro. Aparecem acima do pódio, na aba e na TV.">
+          <Secao numero={5} titulo="Destaques do mês" dica="Prêmios à parte, acima do pódio, na aba e na TV. Quando cada equipe disputa, cada equipe tem os seus (a Equipe campeã é do setor).">
             <ul className="divide-y divide-border rounded-lg border border-border">
               {CATEGORIAS.map(c => {
                 const k = categorias.find(x => x.id === c.id)!;
