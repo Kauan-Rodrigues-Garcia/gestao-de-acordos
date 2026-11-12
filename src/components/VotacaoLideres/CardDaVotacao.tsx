@@ -57,7 +57,9 @@ export function CardDaVotacao({ tipo, titulo, minimizado, onAbrir, onMinimizar, 
   const t = tipoDaVotacao === 'lideranca' ? base : {
     ...base,
     pilula: tipo === 'votar' ? tv.nome : base.pilula,
-    texto: base.texto.replace('o líder', `o ${tv.pessoa}`).replace('para os líderes', 'para todos'),
+    texto: tipo === 'votar' ? ': marque a opção que mais se encaixa com o seu gerente. Leva menos de um minuto e o voto é secreto.'
+      : tipo === 'apurar' ? ': a votação encerrou. Confira o perfil de cada gerente e libere o resultado.'
+      : base.texto,
   };
   const Icone = tipo === 'votar' ? Vote : tipo === 'apurar' ? Scale : Trophy;
   return (

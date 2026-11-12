@@ -19,6 +19,7 @@ import {
 } from './banco';
 import { textosDo } from './textos';
 import { VisaoDiretoria } from './VisaoDiretoria';
+import { PerfilDosGerentes } from './PerfilDosGerentes';
 import { baixarCampeoes } from './baixarCampeoes';
 
 interface Props {
@@ -134,7 +135,11 @@ export function ApuracaoDiretoria({ votacaoId, titulo, onFechar, onLiberado }: P
             Esta votação está guardada: dá para conferir a apuração, mas para decidir ou liberar é preciso tirar da gaveta (Configurações › Votação da Liderança).
           </p>
         )}
-        {montado && (
+        {montado && montado.tipo === 'gerentes' && (
+          <PerfilDosGerentes resultados={montado.resultados} pessoas={montado.pessoas} selo="Só a diretoria vê"
+            onLiberar={() => { if (guardada) { toast.error('A votação está guardada', { description: 'Tire da gaveta antes de liberar.' }); return; } void aoLiberar(); }} />
+        )}
+        {montado && montado.tipo !== 'gerentes' && (
           <VisaoDiretoria resultados={montado.resultados} pessoas={montado.pessoas} desempates={montado.desempates}
             umTitulo={montado.umTitulo} tipo={montado.tipo}
             onDesempatar={(pid, id) => { if (guardada) { toast.error('A votação está guardada', { description: 'Tire da gaveta antes de decidir.' }); return; } void aoDesempatar(pid, id); }}

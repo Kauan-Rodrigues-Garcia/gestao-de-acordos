@@ -3,10 +3,12 @@
 //   ?claro  tema claro      ?n=30  quantos líderes     ?fotos  rostos de mentira (desenhos)
 //   ?uma    uma pergunta por vez
 //   ?card   o card do canto (votar); ?card=resultado o de resultado
+//   ?gerentes  a votação dos GERENTES (12/11/2026): a cédula de opções com 1
+//              gerente; ?gerentes=2 com dois (setor com 2 gerentes)
 import { StrictMode, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import '@/index.css';
-import { PERGUNTAS_PADRAO, cedulaComTodos, type Candidato } from './cedula';
+import { PERGUNTAS_PADRAO, PERGUNTAS_PADRAO_GERENTES, cedulaComTodos, type Candidato } from './cedula';
 import { CardDaVotacao } from './CardDaVotacao';
 import { TelaVotacao } from './TelaVotacao';
 
@@ -33,10 +35,20 @@ const cedula = cedulaComTodos(PERGUNTAS_PADRAO, lideres);
 
 if (!busca.has('claro')) document.documentElement.classList.add('dark');
 
+// Gerentes: 1 ou 2 da lista, e 40 operadores fictícios votando (os votos sorteados da demonstração).
+const nGerentes = busca.get('gerentes') === '2' ? 2 : 1;
+const gerentes = lideres.slice(0, nGerentes).map(l => ({ ...l, perfil: 'gerencia', setor: 'Play 1' }));
+const operadores = Array.from({ length: 40 }, (_, i) => `op${i}`);
+
 function Lab() {
   const comCard = busca.has('card');
   const [votando, setVotando] = useState(!comCard);
   const [minimizado, setMinimizado] = useState(false);
+  if (busca.has('gerentes')) {
+    return <TelaVotacao tipo="gerentes" cedula={cedulaComTodos(PERGUNTAS_PADRAO_GERENTES, gerentes)} pessoas={new Map(gerentes.map(g => [g.id, g]))}
+      eleitorId="op0" nomeEleitor="Olga Operadora" semente={2026} umPorCandidato eleitoresSimulados={operadores}
+      onFechar={() => location.reload()} />;
+  }
   if (votando) {
     return <TelaVotacao cedula={cedula} pessoas={mapa} eleitorId="f0" semente={2026}
       formato={busca.has('uma') ? 'uma_por_vez' : 'categorias'} onFechar={() => location.reload()} />;

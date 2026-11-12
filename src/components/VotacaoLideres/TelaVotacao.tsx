@@ -35,6 +35,8 @@ import { GradeDeLideres } from './GradeDeLideres';
 import { QuadroDeCategorias } from './QuadroDeCategorias';
 import { ResultadoVotacao } from './ResultadoVotacao';
 import { VisaoDiretoria } from './VisaoDiretoria';
+import { SeloDemonstracao } from './SeloDemonstracao';
+import { VotoNoGerente } from './VotoNoGerente';
 
 interface Props {
   cedula: ItemDaCedula[];
@@ -80,16 +82,21 @@ export type FormatoDaVotacao = 'categorias' | 'uma_por_vez';
 
 type Etapa = 'abertura' | 'categorias' | 'pergunta' | 'revisao' | 'enviado' | 'diretoria' | 'resultado';
 
-export function SeloDemonstracao() {
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-warning/50 bg-warning/15 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-warning">
-      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-warning" aria-hidden="true" />
-      Demonstração · nada é gravado
-    </span>
-  );
+export { SeloDemonstracao };
+
+/**
+ * Votação dos gerentes (12/11/2026): a cédula é outra — o operador marca a
+ * opção que mais se encaixa com o gerente dele (`VotoNoGerente`).
+ */
+export function TelaVotacao(props: Props) {
+  if (props.tipo === 'gerentes') {
+    const { cedula, pessoas, eleitorId, nomeEleitor, semente, modo, onEnviar, rascunhoChave, eleitoresSimulados, onFechar } = props;
+    return <VotoNoGerente {...{ cedula, pessoas, eleitorId, nomeEleitor, semente, modo, onEnviar, rascunhoChave, eleitoresSimulados, onFechar }} />;
+  }
+  return <TelaVotacaoLideranca {...props} />;
 }
 
-export function TelaVotacao({
+function TelaVotacaoLideranca({
   cedula, pessoas, eleitorId, semente, formato = 'categorias', modo = 'demo', onEnviar, rascunhoChave,
   tipo = 'lideranca', umPorCandidato = true, umTitulo = true, nomeEleitor, eleitoresSimulados, onFechar,
 }: Props) {

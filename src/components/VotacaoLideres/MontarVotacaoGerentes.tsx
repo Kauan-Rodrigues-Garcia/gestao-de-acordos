@@ -12,9 +12,10 @@
  *      as EQUIPES; depois, pessoa por pessoa (tirar e incluir à mão);
  *      CADA SETOR VOTA NO SEU GERENTE: a ligação setor → gerentes vem do
  *      cadastro e muda à mão (um gerente pode valer para mais setores);
- *   4. as regras: «cada gerente uma vez por eleitor» e «um título por
- *      gerente» (as duas desligadas por padrão: são poucos gerentes);
- *   5. as perguntas (mínimo 3);
+ *   4. as OPÇÕES (mínimo 3): o operador vê o gerente dele e marca a que mais
+ *      se encaixa («Mais resolve problemas», «Mais inspirador»…), 12/11/2026;
+ *      com 2 gerentes no setor, uma para cada (opções diferentes). O
+ *      resultado é o perfil de cada gerente (`PerfilDosGerentes`);
  *   6. ver como fica (demonstração) e «Liberar para a operação».
  *
  * O rascunho fica neste navegador; só vai para o banco ao liberar
@@ -29,13 +30,12 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { PERFIL_LABELS } from '@/lib/index';
 import { ehProduto, type Produto } from '@/lib/produto';
 import { faltaMigration, liberarVotacao, mensagemDoErro } from './banco';
 import {
-  MIN_GERENTES, MIN_PERGUNTAS_GERENTES, PERGUNTAS_PADRAO_GERENTES, cedulaComTodos, nomeCurto, respostasExigidas,
+  MIN_GERENTES, MIN_PERGUNTAS_GERENTES, PERGUNTAS_PADRAO_GERENTES, cedulaComTodos, nomeCurto,
   type Candidato,
 } from './cedula';
 import { CARGOS_QUE_VOTAM, gerentesPorOperacao, montarGerentes, rascunhoGerentesPadrao, semEquipe, type RascunhoGerentes } from './gerentes';
@@ -61,7 +61,9 @@ function lerRascunho(): RascunhoGerentes {
       cargosEleitores: listaDeTexto(r.cargosEleitores) && r.cargosEleitores.length ? r.cargosEleitores : base.cargosEleitores,
       setores: lista('setores'), equipesFora: lista('equipesFora'),
       eleitoresFora: lista('eleitoresFora'), eleitoresVoltaram: lista('eleitoresVoltaram'), eleitoresIncluidos: lista('eleitoresIncluidos'),
-      perguntas: Array.isArray(r.perguntas) && r.perguntas.length ? r.perguntas : base.perguntas,
+      // Rascunho de uma lista-base antiga (as 24 da liderança, 12/11): entram as 11 de gerente.
+      perguntas: r.versaoPerguntas === base.versaoPerguntas && Array.isArray(r.perguntas) && r.perguntas.length ? r.perguntas : base.perguntas,
+      versaoPerguntas: base.versaoPerguntas,
       umPorCandidato: typeof r.umPorCandidato === 'boolean' ? r.umPorCandidato : base.umPorCandidato,
       umTitulo: typeof r.umTitulo === 'boolean' ? r.umTitulo : base.umTitulo,
       ligacoes: r.ligacoes && typeof r.ligacoes === 'object' && !Array.isArray(r.ligacoes)
@@ -167,9 +169,8 @@ export function MontarVotacaoGerentes({ dados, onLiberada }: Props) {
     const ids = eleitorDemo ? new Set(m.cedulaPorEleitor.get(eleitorDemo.id) ?? []) : null;
     return cedulaComTodos(perguntas, ids ? m.candidatos.filter(g => ids.has(g.id)) : m.candidatos);
   }, [perguntas, m.candidatos, m.cedulaPorEleitor, eleitorDemo]);
-  /** Quantos gerentes cada um tem na cédula (maior), para o texto das regras. */
+  /** Quantos gerentes tem a maior cédula: precisa de pelo menos uma opção para cada. */
   const maiorCedula = useMemo(() => Math.max(0, ...[...m.cedulaPorEleitor.values()].map(c => c.length)), [m.cedulaPorEleitor]);
-  const exigidas = respostasExigidas({ candidatos: maiorCedula, perguntas: perguntas.length, eleitorConcorre: false, umPorCandidato: r.umPorCandidato });
   /** Os setores de quem vota (marcados + de quem entrou à mão), para ligar os gerentes. */
   const setoresQueVotam = useMemo(() => [...new Set(m.eleitores.map(e => e.setorId).filter((s): s is string => !!s))]
     .sort((a, b) => (nomeDoSetor.get(a) ?? '').localeCompare(nomeDoSetor.get(b) ?? '', 'pt-BR', { numeric: true })), [m.eleitores, nomeDoSetor]);
@@ -182,8 +183,9 @@ export function MontarVotacaoGerentes({ dados, onLiberada }: Props) {
   const problemas: string[] = [];
   if (m.candidatos.length < MIN_GERENTES) problemas.push(`Precisa de pelo menos ${MIN_GERENTES} gerentes concorrendo.`);
   if (m.eleitores.length < 1) problemas.push('Escolha quem vota: marque setores (e equipes) ou inclua pessoas à mão.');
-  if (perguntas.length < MIN_PERGUNTAS_GERENTES) problemas.push(`São ${perguntas.length} perguntas; o mínimo é ${MIN_PERGUNTAS_GERENTES}.`);
-  if (new Set(perguntas.map(p => p.id)).size !== perguntas.length) problemas.push('Há perguntas repetidas.');
+  if (perguntas.length < MIN_PERGUNTAS_GERENTES) problemas.push(`São ${perguntas.length} opções; o mínimo é ${MIN_PERGUNTAS_GERENTES}.`);
+  if (new Set(perguntas.map(p => p.id)).size !== perguntas.length) problemas.push('Há opções repetidas.');
+  if (maiorCedula > perguntas.length) problemas.push(`Há setor com ${maiorCedula} gerentes e só ${perguntas.length} opções: cada gerente precisa de uma opção diferente.`);
   if (m.semGerente.length) problemas.push(`${m.semGerente.length} ${m.semGerente.length === 1 ? 'pessoa vota' : 'pessoas votam'} sem gerente na cédula: ligue um gerente ao setor delas (bloco «Cada setor vota no seu gerente») ou tire-as.`);
   const tituloLimpo = r.titulo.trim();
   const paraLiberar = [...problemas, ...(tituloLimpo ? [] : ['Dê um título para a votação.'])];
@@ -197,7 +199,8 @@ export function MontarVotacaoGerentes({ dados, onLiberada }: Props) {
           .filter(c => !c.startsWith('sem:') && !r.equipesFora.includes(c)),
         cargos: ['gerencia'], cargosEleitores: r.cargosEleitores,
         perguntas, participantes: m.candidatos.map(p => p.id), eleitores: m.eleitores.map(p => p.id),
-        umPorCandidato: r.umPorCandidato, umTitulo: r.umTitulo,
+        // A cédula do gerente: uma opção por gerente, cada opção para um só.
+        umPorCandidato: true, umTitulo: false,
         cedulaPorEleitor: Object.fromEntries(m.cedulaPorEleitor),
       });
       toast.success('Votação dos gerentes liberada', { description: `${m.eleitores.length} pessoas já podem votar pelo card no canto da tela.` });
@@ -474,12 +477,6 @@ export function MontarVotacaoGerentes({ dados, onLiberada }: Props) {
             {m.semGerente.length > 12 ? '…' : ''}. Ligue um gerente ao setor delas ou tire-as de quem vota.
           </p>
         )}
-        {m.setoresComUm.length > 0 && (
-          <p className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
-            Com um gerente só, o voto é automático (ele vem marcado em todas as categorias):{' '}
-            {m.setoresComUm.map(s => nomeDoSetor.get(s) ?? 'Setor').join(', ')}. Se outro gerente também cuida desse setor, ligue-o acima.
-          </p>
-        )}
         {m.gerentesSemEleitor.length > 0 && (
           <p className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
             Ninguém vota em: {m.gerentesSemEleitor.map(g => nomeCurto(g.nome)).join(', ')}. Ligue ao setor que ele cuida, ou tire da votação.
@@ -487,42 +484,14 @@ export function MontarVotacaoGerentes({ dados, onLiberada }: Props) {
         )}
       </section>
 
-      {/* 4. Regras */}
-      <section className="space-y-2.5">
-        <h3 className={titulo3}>4. Regras</h3>
-        <label className="flex items-start gap-3 rounded-lg border p-2.5">
-          <Switch checked={r.umPorCandidato} onCheckedChange={v => mudar({ umPorCandidato: v })} aria-label="Cada gerente só uma vez por eleitor" />
-          <span className="text-xs">
-            <strong className="block text-sm">Cada gerente só pode ser escolhido uma vez por quem vota</strong>
-            {r.umPorCandidato
-              ? <>Ligado: num setor com {maiorCedula} gerentes, cada pessoa responde {exigidas} das {perguntas.length} perguntas.</>
-              : <>Desligado: o mesmo gerente pode ser escolhido em várias categorias, e cada pessoa responde todas as {perguntas.length}.</>}
-          </span>
-        </label>
-        <label className="flex items-start gap-3 rounded-lg border p-2.5">
-          <Switch checked={r.umTitulo} onCheckedChange={v => mudar({ umTitulo: v })} aria-label="Um título por gerente" />
-          <span className="text-xs">
-            <strong className="block text-sm">Cada gerente leva no máximo uma categoria</strong>
-            {r.umTitulo
-              ? <>Ligado: quando o mesmo gerente fica em 1º em mais de uma, a diretoria decide quem leva cada uma antes de liberar.</>
-              : <>Desligado: quem ficar em 1º leva, mesmo que seja em várias. A diretoria só decide os empates.</>}
-          </span>
-        </label>
-        {r.umTitulo && perguntas.length > m.candidatos.length && m.candidatos.length > 0 && (
-          <p className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
-            São {perguntas.length} categorias para {m.candidatos.length} gerentes: com «uma categoria por gerente» a diretoria vai ter de decidir quase todas.
-          </p>
-        )}
-      </section>
-
-      {/* 5. Perguntas */}
+      {/* 4. Opções */}
       <section className="space-y-2.5">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h3 className={titulo3}>5. Perguntas <span className={cn('font-normal', perguntas.length < MIN_PERGUNTAS_GERENTES ? 'text-warning' : 'text-muted-foreground')}>· {perguntas.length} (mínimo {MIN_PERGUNTAS_GERENTES})</span></h3>
+          <h3 className={titulo3}>4. Opções <span className={cn('font-normal', perguntas.length < MIN_PERGUNTAS_GERENTES ? 'text-warning' : 'text-muted-foreground')}>· {perguntas.length} (mínimo {MIN_PERGUNTAS_GERENTES})</span></h3>
           <div className="flex gap-1.5">
             <Button type="button" size="sm" variant="outline" className="h-7 gap-1 text-xs"
               onClick={() => mudar({ perguntas: [...r.perguntas, { id: `nova-${Date.now()}`, emoji: '⭐', texto: '' }] })}>
-              <Plus className="h-3 w-3" /> Pergunta
+              <Plus className="h-3 w-3" /> Opção
             </Button>
             <Button type="button" size="sm" variant="ghost" className="h-7 gap-1 text-xs"
               onClick={() => mudar({ perguntas: PERGUNTAS_PADRAO_GERENTES.map(p => ({ ...p })) })}>
@@ -530,15 +499,19 @@ export function MontarVotacaoGerentes({ dados, onLiberada }: Props) {
             </Button>
           </div>
         </div>
+        <p className="text-xs text-muted-foreground">
+          O operador vê o gerente dele e a pergunta «Selecione a opção que mais se encaixa com seu gerente», e marca UMA destas. Com 2 gerentes no
+          setor, marca uma para cada (opções diferentes). O resultado mostra o perfil de cada gerente: o que a equipe dele mais marcou, em %.
+        </p>
         <ol className="grid gap-1.5 sm:grid-cols-2">
           {r.perguntas.map((p, n) => (
             <li key={p.id} className="flex items-center gap-1.5">
               <span className="w-5 text-right text-[11px] tabular-nums text-muted-foreground">{n + 1}</span>
               <Input value={p.emoji} onChange={e => mudar({ perguntas: r.perguntas.map((q, i) => (i === n ? { ...q, emoji: e.target.value } : q)) })}
-                className="h-8 w-11 px-1 text-center" aria-label={`Emoji da pergunta ${n + 1}`} maxLength={4} />
+                className="h-8 w-11 px-1 text-center" aria-label={`Emoji da opção ${n + 1}`} maxLength={4} />
               <Input value={p.texto} onChange={e => mudar({ perguntas: r.perguntas.map((q, i) => (i === n ? { ...q, texto: e.target.value } : q)) })}
-                placeholder="Quem é o gerente mais…?" className="h-8 flex-1 text-sm" aria-label={`Pergunta ${n + 1}`} />
-              <Button type="button" size="icon" variant="ghost" className="h-8 w-8 shrink-0" aria-label={`Apagar a pergunta ${n + 1}`}
+                placeholder="Mais …" className="h-8 flex-1 text-sm" aria-label={`Opção ${n + 1}`} />
+              <Button type="button" size="icon" variant="ghost" className="h-8 w-8 shrink-0" aria-label={`Apagar a opção ${n + 1}`}
                 onClick={() => mudar({ perguntas: r.perguntas.filter((_, i) => i !== n) })}>
                 <Trash2 className="h-3.5 w-3.5" />
               </Button>
@@ -578,13 +551,9 @@ export function MontarVotacaoGerentes({ dados, onLiberada }: Props) {
               <div className="space-y-2 text-sm text-muted-foreground">
                 <p>
                   <strong className="text-foreground">{m.eleitores.length} pessoas votam</strong> em <strong className="text-foreground">{m.candidatos.length} gerentes</strong> ·
-                  {' '}{perguntas.length} perguntas · {NOME_DO_PRODUTO[r.produto]}.
+                  {' '}{perguntas.length} opções · {NOME_DO_PRODUTO[r.produto]}.
                 </p>
-                <p>
-                  {r.umPorCandidato ? `Cada gerente só uma vez por pessoa (${exigidas} respostas cada).` : 'O mesmo gerente pode ser escolhido em várias categorias.'}
-                  {' '}{r.umTitulo ? 'Gerente em 1º em mais de uma: a diretoria decide.' : 'Quem ficar em 1º leva, mesmo em várias.'}
-                </p>
-                <p>Cada pessoa vota só nos gerentes do próprio setor. Depois de liberada, quem vota, os gerentes e as perguntas não mudam. O voto é secreto.</p>
+                <p>Cada pessoa marca, para o gerente do próprio setor, a opção que mais se encaixa com ele. Depois de liberada, quem vota, os gerentes e as perguntas não mudam. O voto é secreto.</p>
                 <p className="max-h-24 overflow-y-auto rounded-md bg-muted px-2.5 py-1.5 text-xs">
                   <strong>Cédula por setor:</strong>{' '}
                   {setoresQueVotam.map(s => `${nomeDoSetor.get(s) ?? 'Setor'} → ${m.gerentesDoSetor(s).map(g => nomeCurto(g.nome)).join(' e ') || '—'}`).join(' · ')}
@@ -605,7 +574,7 @@ export function MontarVotacaoGerentes({ dados, onLiberada }: Props) {
 
       {demo !== null && (
         <TelaVotacao cedula={cedula} pessoas={pessoasDaCedula} eleitorId={eleitorDemo?.id ?? null} nomeEleitor={eleitorDemo?.nome}
-          semente={demo} tipo="gerentes" umPorCandidato={r.umPorCandidato} umTitulo={r.umTitulo}
+          semente={demo} tipo="gerentes"
           eleitoresSimulados={m.eleitores.map(p => p.id)} onFechar={() => setDemo(null)} />
       )}
     </div>

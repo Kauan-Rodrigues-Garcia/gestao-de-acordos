@@ -9,7 +9,8 @@ import { Trophy, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { Candidato, ItemDaCedula, ResultadoDaPergunta } from './cedula';
 import { ResultadoVotacao } from './ResultadoVotacao';
-import { SeloDemonstracao } from './TelaVotacao';
+import { SeloDemonstracao } from './SeloDemonstracao';
+import { PerfilDosGerentes } from './PerfilDosGerentes';
 import { textosDo, type TipoDaVotacao } from './textos';
 
 interface Props {
@@ -47,7 +48,10 @@ export function TelaResultado({ titulo, cedula, resultados, pessoas, demo, tipo 
         </div>
       </header>
       <main className="min-h-0 flex-1 overflow-y-auto">
-        <ResultadoVotacao cedula={cedula} resultados={resultados} pessoas={pessoas} meus={{}} demo={demo} tipo={tipo} />
+        {/* Gerentes (12/11/2026): o perfil de cada um, não a revelação por categoria. */}
+        {tipo === 'gerentes'
+          ? <PerfilDosGerentes resultados={resultados} pessoas={pessoas} />
+          : <ResultadoVotacao cedula={cedula} resultados={resultados} pessoas={pessoas} meus={{}} demo={demo} tipo={tipo} />}
       </main>
     </div>,
     document.body,

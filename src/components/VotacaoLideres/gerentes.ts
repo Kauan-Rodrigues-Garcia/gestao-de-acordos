@@ -18,7 +18,7 @@
  * Sem banco: recebe o que `lerParticipantes` leu e o rascunho da tela.
  */
 import type { Produto } from '@/lib/produto';
-import { PERGUNTAS_PADRAO_GERENTES, type Pergunta } from './cedula';
+import { PERGUNTAS_PADRAO_GERENTES, VERSAO_PERGUNTAS_GERENTES, type Pergunta } from './cedula';
 import { motivoDeConta, type EquipeDaVotacao, type GrupoDaVotacao, type Participante } from './participantes';
 
 export const CARGOS_QUE_VOTAM = ['operador', 'lider', 'elite'] as const;
@@ -42,6 +42,8 @@ export interface RascunhoGerentes {
   eleitoresVoltaram: string[];
   eleitoresIncluidos: string[];
   perguntas: Pergunta[];
+  /** De que lista-base vieram as perguntas: mudou a base, o rascunho troca. */
+  versaoPerguntas: number;
   /** Cada gerente só pode ser escolhido uma vez por quem vota. Padrão: não (costuma haver poucos gerentes). */
   umPorCandidato: boolean;
   /** O mesmo gerente em 1º em mais de uma categoria pede decisão da diretoria. Padrão: não. */
@@ -58,7 +60,7 @@ export const rascunhoGerentesPadrao = (): RascunhoGerentes => ({
   gerentesFora: [], gerentesVoltaram: [], gerentesIncluidos: [],
   cargosEleitores: ['operador'], setores: [], equipesFora: [],
   eleitoresFora: [], eleitoresVoltaram: [], eleitoresIncluidos: [],
-  perguntas: PERGUNTAS_PADRAO_GERENTES.map(p => ({ ...p })),
+  perguntas: PERGUNTAS_PADRAO_GERENTES.map(p => ({ ...p })), versaoPerguntas: VERSAO_PERGUNTAS_GERENTES,
   umPorCandidato: false, umTitulo: false, ligacoes: {},
 });
 

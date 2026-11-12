@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   PERGUNTAS_PADRAO_GERENTES, apurar, respostasExigidas, simularCedulas, situacaoDasDecisoes, cedulaComTodos,
+  opcoesPorGerente, perfilDosGerentes, simularVotosNoGerente, votoDosGerentes,
 } from './cedula';
 import { montarGerentes, rascunhoGerentesPadrao, semEquipe, type RascunhoGerentes } from './gerentes';
 import { montarAcompanhamento } from './acompanhamento';
@@ -108,7 +109,9 @@ describe('regras da cédula', () => {
   });
 
   it('perguntas-base dos gerentes falam de gerente', () => {
-    expect(PERGUNTAS_PADRAO_GERENTES[0].texto).toBe('Quem é o gerente mais comunicativo?');
+    expect(PERGUNTAS_PADRAO_GERENTES).toHaveLength(10);
+    expect(new Set(PERGUNTAS_PADRAO_GERENTES.map(p => p.id)).size).toBe(10);
+    expect(PERGUNTAS_PADRAO_GERENTES.map(p => p.texto)).toEqual(expect.arrayContaining(['Mais resolve problemas', 'Mais inspirador', 'Referência para todos', 'Mais ético']));
     expect(PERGUNTAS_PADRAO_GERENTES.every(p => !p.texto.includes('líder'))).toBe(true);
   });
 
@@ -126,6 +129,35 @@ describe('regras da cédula', () => {
     const c = simularCedulas(cedula, ['x', 'y'], 7, false);
     expect(Object.keys(c.x)).toHaveLength(6);
     expect(Object.keys(simularCedulas(cedula, ['x'], 7, true).x)).toHaveLength(2);
+  });
+});
+
+describe('cédula de opções (o operador marca a que se encaixa com o gerente)', () => {
+  const ps = PERGUNTAS_PADRAO_GERENTES.slice(0, 4);
+  const g = (id: string) => ({ id, nome: id.toUpperCase(), foto: null, setor: '', perfil: 'gerencia' });
+
+  it('voto ⇄ escolhas: {opção: gerente} e gerente → opção', () => {
+    const escolhas = new Map([['g1', ps[2].id], ['g2', ps[0].id]]);
+    const voto = votoDosGerentes(escolhas);
+    expect(voto).toEqual({ [ps[2].id]: 'g1', [ps[0].id]: 'g2' });
+    expect(opcoesPorGerente(voto)).toEqual(escolhas);
+  });
+
+  it('perfil: % dos votos de cada gerente, destaque com empate', () => {
+    const cedula = cedulaComTodos(ps, [g('g1'), g('g2')]);
+    const r = apurar(cedula, { [ps[0].id]: { g1: 3 }, [ps[1].id]: { g1: 1, g2: 2 }, [ps[2].id]: { g2: 2 } });
+    const [p1, p2] = perfilDosGerentes(r, ['g1', 'g2']);
+    expect(p1).toMatchObject({ total: 4 });
+    expect(p1.destaque.map(d => d.id)).toEqual([ps[0].id]);
+    expect(p1.opcoes[0].pct).toBe(75);
+    expect(p2.destaque.map(d => d.id).sort()).toEqual([ps[1].id, ps[2].id].sort());
+  });
+
+  it('simulação: cada eleitor dá uma opção diferente para cada gerente', () => {
+    const cedula = cedulaComTodos(ps, [g('g1'), g('g2')]);
+    const votos = simularVotosNoGerente(cedula, ['e1', 'e2', 'e3'], 9);
+    const total = Object.values(votos).reduce((a, c) => a + Object.values(c).reduce((x, y) => x + y, 0), 0);
+    expect(total).toBe(6);
   });
 });
 

@@ -91,9 +91,36 @@ describe('Votação dos Gerentes (montagem)', () => {
     await waitFor(() => expect(banco.liberar).toHaveBeenCalledTimes(1));
     expect(banco.liberar.mock.calls[0][0]).toMatchObject({
       tipo: 'gerentes', produto: 'cobranca', participantes: ['g1', 'g2'], eleitores: ['o1'],
-      setorIds: ['s1'], equipeIds: ['e1'], umPorCandidato: false, umTitulo: false,
+      setorIds: ['s1'], equipeIds: ['e1'], umPorCandidato: true, umTitulo: false,
       cedulaPorEleitor: { o1: ['g1'] },
     });
+  });
+
+  it('demonstração inteira: cédula de opções → enviado → o que a diretoria vê → liberar → resultado', async () => {
+    await abrirGerentes();
+    const setores = screen.getByRole('group', { name: 'Setores de BookPlay · Birigui' });
+    fireEvent.click(within(setores).getByRole('button', { name: /Play 1/ }));
+    const demo = screen.getByRole('button', { name: /Abrir a demonstração/ }) as HTMLButtonElement;
+    await waitFor(() => expect(demo.disabled).toBe(false));
+    fireEvent.click(demo);
+    expect(await screen.findByText('Como você vê o seu gerente?')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Começar/ }));
+    const tela = screen.getByRole('dialog', { name: 'Votação dos Gerentes' });
+    expect(within(tela).getByText(/Selecione a opção que mais se encaixa com seu gerente/)).toBeTruthy();
+    expect(within(tela).getByText('Gabi Souza')).toBeTruthy();
+    fireEvent.click(within(tela).getByRole('radio', { name: /Mais inspirador/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Enviar meu voto/ }));
+    expect(await screen.findByText('Voto enviado!')).toBeTruthy();
+    expect(screen.getByText(/demonstração: o voto ficou só nesta tela/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Ver o que a diretoria vê/ }));
+    expect(await screen.findByText('Só a diretoria vê')).toBeTruthy();
+    expect(screen.getByText('Como a equipe vê o seu gerente')).toBeTruthy();
+    expect(screen.getByText(/A equipe vê como/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Liberar o resultado/ }));
+    expect(screen.queryByText('Só a diretoria vê')).toBeNull();
+    expect(screen.getByText('Como a equipe vê o seu gerente')).toBeTruthy();
+    // Nada foi para o banco.
+    expect(banco.liberar).not.toHaveBeenCalled();
   });
 
   it('cada setor vota no seu gerente: sem gerente trava; ligar à mão destrava', async () => {

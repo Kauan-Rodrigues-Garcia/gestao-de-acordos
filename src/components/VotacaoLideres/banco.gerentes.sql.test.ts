@@ -87,6 +87,9 @@ beforeAll(async () => {
   const nova = ler('20261112160000_votacao_gerentes_e_guardar.sql');
   await db.exec(nova);
   await db.exec(nova); // reexecutável
+  const perfil = ler('20261112180000_votacao_gerentes_perfil.sql');
+  await db.exec(perfil);
+  await db.exec(perfil); // reexecutável
 });
 
 beforeEach(async () => { await db.exec('delete from public.votacao_lideranca;'); });
@@ -167,12 +170,24 @@ describe('votação dos gerentes', () => {
     expect(r.contagem.length).toBeGreaterThan(0);
   });
 
-  it('com «um título», o gerente em 1º em várias pede decisão', async () => {
-    const id = await gravar({ um_titulo: true });
+  it('gerentes: resultado é perfil — empate e «repetido» não travam o liberar (20261112180000)', async () => {
+    const id = await gravar({ um_titulo: true, um_por_candidato: true });
     await mudar(id, 'abrir');
-    await votar(O1, id, tudo(G1));
+    // Cédula de opções: cada um marca uma opção diferente para cada gerente.
+    await votar(O1, id, { q1: G1, q2: G2, q3: G3 });
+    await votar(O2, id, { q1: G2, q2: G1, q3: G3 });
     await mudar(id, 'encerrar', DIR);
-    await expect(como(DIR, 'select public.fn_votacao_lideranca_liberar($1) v', [id])).rejects.toThrow(/Falta decidir 3/);
+    await como(DIR, 'select public.fn_votacao_lideranca_liberar($1) v', [id]);
+    expect((await listar()).find(v => v.id === id)?.estado).toBe('liberada');
+  });
+
+  it('liderança continua: empate pede a diretoria', async () => {
+    const id = await salvarLideranca();
+    await mudar(id, 'abrir');
+    await votar(L1, id, { q1: L2, q2: L3, q3: L4 });
+    await votar(L2, id, { q1: L1, q2: L3, q3: L4 });
+    await mudar(id, 'encerrar', DIR);
+    await expect(como(DIR, 'select public.fn_votacao_lideranca_liberar($1) v', [id])).rejects.toThrow(/Falta decidir/);
   });
 
   it('a apuração traz quem vota, com setor e equipe', async () => {

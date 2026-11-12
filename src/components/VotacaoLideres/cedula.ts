@@ -78,10 +78,97 @@ export const PERGUNTAS_PADRAO: readonly Pergunta[] = [
  */
 export const MIN_PERGUNTAS_GERENTES = 3;
 export const MIN_GERENTES = 2;
-/** As mesmas perguntas-base, escritas para gerente. */
-export const PERGUNTAS_PADRAO_GERENTES: readonly Pergunta[] = PERGUNTAS_PADRAO.map(p => ({
-  ...p, texto: p.texto.replace(/líder/g, 'gerente'),
-}));
+/**
+ * As OPÇÕES da votação dos gerentes (12/11/2026). Ali não se escolhe um
+ * gerente por pergunta: o operador vê o gerente DELE e marca a opção que mais
+ * se encaixa com ele («Selecione a opção que mais se encaixa com seu
+ * gerente»). Por isso o texto é curto, uma característica, e não pergunta.
+ * Mudou a lista? Suba `VERSAO_PERGUNTAS_GERENTES`: o rascunho salvo troca.
+ */
+export const VERSAO_PERGUNTAS_GERENTES = 4;
+export const PERGUNTAS_PADRAO_GERENTES: readonly Pergunta[] = [
+  { id: 'comunicativo', emoji: '🗣️', texto: 'Mais comunicativo' },
+  { id: 'justo', emoji: '⚖️', texto: 'Mais justo' },
+  { id: 'estrategico', emoji: '♟️', texto: 'Mais estratégico' },
+  { id: 'visionario', emoji: '🔭', texto: 'Mais visionário' },
+  { id: 'solucionador', emoji: '🧩', texto: 'Mais resolve problemas' },
+  { id: 'reconhece', emoji: '🏆', texto: 'Mais reconhece o trabalho da equipe' },
+  { id: 'desenvolve', emoji: '🌱', texto: 'Mais desenvolve as pessoas' },
+  { id: 'inspirador', emoji: '✨', texto: 'Mais inspirador' },
+  { id: 'referencia', emoji: '🌟', texto: 'Referência para todos' },
+  { id: 'etico', emoji: '🧭', texto: 'Mais ético' },
+];
+
+/**
+ * O voto da votação dos gerentes, no formato de sempre ({opção: gerente}): cada
+ * gerente da cédula recebe UMA opção, e uma opção vale para um gerente só (com
+ * 2 gerentes no setor, opções diferentes). Gerente → opção escolhida.
+ */
+export function opcoesPorGerente(meus: MeusVotos): Map<string, string> {
+  return new Map(Object.entries(meus).map(([opcao, gerente]) => [gerente, opcao]));
+}
+
+/** O contrário: gerente → opção vira o voto que vai ao banco. */
+export function votoDosGerentes(escolhas: ReadonlyMap<string, string>): MeusVotos {
+  return Object.fromEntries([...escolhas].map(([gerente, opcao]) => [opcao, gerente]));
+}
+
+/**
+ * Só a demonstração dos gerentes: cada eleitor marca, para cada gerente da
+ * cédula, uma opção diferente — com pesos concentrados por gerente (a equipe
+ * costuma concordar), para o perfil sair com cara de votação de verdade.
+ */
+export function simularVotosNoGerente(cedula: readonly ItemDaCedula[], eleitores: readonly string[], semente: number): Votos {
+  const rng = aleatorio(semente ^ 0x1b873593);
+  const gerentes = cedula[0]?.candidatos ?? [];
+  const opcoes = cedula.map(c => c.pergunta.id);
+  const pesos = new Map(gerentes.map(g => [g, opcoes.map(() => 0.03 + rng() ** 4)]));
+  const cedulas: Record<string, MeusVotos> = {};
+  for (const e of eleitores) {
+    const usadas = new Set<string>();
+    const meus: MeusVotos = {};
+    for (const g of gerentes) {
+      if (g === e) continue;
+      const w = pesos.get(g)!.map((p, i) => (usadas.has(opcoes[i]) ? 0 : p));
+      const total = w.reduce((a, b) => a + b, 0);
+      if (total <= 0) break;
+      let sorteio = rng() * total;
+      let i = w.findIndex(p => (sorteio -= p) < 0);
+      if (i < 0) i = w.findIndex(p => p > 0);
+      meus[opcoes[i]] = g;
+      usadas.add(opcoes[i]);
+    }
+    cedulas[e] = meus;
+  }
+  return contarCedulas(cedula, cedulas);
+}
+
+export interface PerfilDoGerente {
+  id: string;
+  /** Quantos marcaram alguma opção para ele. */
+  total: number;
+  /** As opções, da mais marcada para a menos; pct cortado em uma casa. */
+  opcoes: Array<{ pergunta: Pergunta; votos: number; pct: number }>;
+  /** As mais marcadas (mais de uma quando empata). Vazio sem votos. */
+  destaque: Pergunta[];
+}
+
+/**
+ * O resultado da votação dos gerentes: o PERFIL de cada um — o que a equipe
+ * dele mais marcou. Em porcentagem dos votos que ELE recebeu, então setor
+ * grande e setor pequeno se comparam do mesmo jeito.
+ */
+export function perfilDosGerentes(resultados: readonly ResultadoDaPergunta[], gerentes: readonly string[]): PerfilDoGerente[] {
+  return gerentes.map(id => {
+    const brutas = resultados.map(r => ({ pergunta: r.pergunta, votos: r.linhas.find(l => l.id === id)?.votos ?? 0 }));
+    const total = brutas.reduce((a, b) => a + b.votos, 0);
+    const opcoes = brutas
+      .map(o => ({ ...o, pct: total ? Math.floor((o.votos / total) * 1000) / 10 : 0 }))
+      .sort((a, b) => b.votos - a.votos);
+    const topo = opcoes[0]?.votos ?? 0;
+    return { id, total, opcoes, destaque: topo > 0 ? opcoes.filter(o => o.votos === topo).map(o => o.pergunta) : [] };
+  });
+}
 
 /** Gerador com semente (mulberry32): a mesma semente dá os mesmos votos sorteados. */
 export function aleatorio(semente: number): () => number {
