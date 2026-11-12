@@ -25,7 +25,7 @@ export interface InfoDoSetorApp {
   alternativo: boolean;
 }
 
-type Fontes = Pick<FontesEquipe, 'resumos' | 'operadorEquipeMap' | 'equipesExtrasPorOperador' | 'equipes'>;
+export type FontesDoTotalDoSetor = Pick<FontesEquipe, 'resumos' | 'operadorEquipeMap' | 'equipesExtrasPorOperador' | 'equipes'>;
 
 export async function carregarTotalDoSetor(e: {
   empresaId: string;
@@ -33,7 +33,7 @@ export async function carregarTotalDoSetor(e: {
   setor: InfoDoSetorApp;
   /** `tenant.isPaguePlay` — o mesmo `setorSomaMembros` do Painel do Líder. */
   isPaguePlay: boolean;
-  fontes: Fontes;
+  fontes: FontesDoTotalDoSetor;
 }): Promise<SomaDoSetor> {
   const { empresaId, mes, setor, isPaguePlay, fontes } = e;
   if (setor.cofen) {

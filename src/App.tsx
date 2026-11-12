@@ -19,6 +19,7 @@ import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useModoLeve } from '@/lib/modoLeve';
 import { Skeleton } from '@/components/ui/skeleton';
 import { RealtimeAcordosProvider } from '@/providers/RealtimeAcordosProvider';
+import { SincronizarDashboard } from '@/components/SincronizarDashboard';
 import { PresenceProvider } from '@/providers/PresenceProvider';
 import { RegistroAppInstalado } from '@/components/RegistroAppInstalado';
 import { TrocaDeSenhaObrigatoria } from '@/components/TrocaDeSenhaObrigatoria';
@@ -395,6 +396,8 @@ export default function App() {
               sistema inteiro, e não pode se perder ao trocar de página. */}
           <MesProvider>
           <RealtimeAcordosProvider>
+          {/* O cache do Dashboard segue o banco com ou sem a tela aberta. */}
+          <SincronizarDashboard />
           <PresenceProvider>
           {/* Acima do Router: o sino do header (Layout) e o painel
               (ChatNotificacoes) precisam do MESMO estado de notificações. */}

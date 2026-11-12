@@ -40,6 +40,12 @@ vi.mock('@/hooks/useAnaliticoDashboard', async () => {
   return { ...real, useAnaliticoDashboard: () => analiticoRef.current };
 });
 
+// O total do setor pelo caminho do Painel do Líder tem teste próprio; aqui os
+// dois painéis concordam sobre o MESMO analítico (sem acesso ao Painel).
+vi.mock('@/hooks/useSetorDoDashboard', () => ({
+  useSetorDoDashboard: () => ({ dados: null, pendente: false }),
+}));
+
 vi.mock('@/services/metas/metasConfig.service', () => ({
   getMetasConfig: () => Promise.resolve({ data: configRef.current, dbAtiva: true }),
 }));

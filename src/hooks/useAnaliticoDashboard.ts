@@ -25,10 +25,9 @@
  *     fetch por conta própria.
  */
 
-import { useEffect, useCallback, useMemo } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import type { AnaliticoDashboardLinha } from '@/lib/supabase';
-import { assinarSinal } from '@/lib/sinais';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { normalizarMes } from '@/lib/mesReferencia';
 import { rotuloDaForma } from '@/lib/formasPagamento';
@@ -129,18 +128,16 @@ export function agregarAnalitico(
 }
 
 
-// ── Realtime compartilhado ───────────────────────────────────────────────────
-// A dedução por tópico e a contagem de referências que existiam aqui viraram
-// `assinarTabela` (src/lib/realtime.ts), que faz o mesmo para todo o app e ainda
-// reconecta. O analítico chega por SINAL do banco (`assinarSinal`, um aviso por
-// comando), mas a importação ainda manda alguns seguidos — apagar, inserir,
-// atualizar —, e o debounce junta tudo num disparo só.
-const DEBOUNCE_IMPORTACAO_MS = 1_500;
+// ── Realtime ─────────────────────────────────────────────────────────────────
+// Quem invalida esta chave é `SincronizarDashboard` (montado uma vez no App):
+// o sinal `analitico` (importação) e o `ajustes` (ajuste de recebimento e o
+// relatório do setor, o 1017), com o Dashboard aberto ou não. Até 12/11/2026
+// o ouvinte morava aqui: só valia com a tela montada e não ouvia `ajustes`.
 
-/**
- * Tabulação é UPDATE e não muda valor, só o card de «não tabulado». Reler o mês
- * inteiro a cada uma era 68% do tempo do banco (ver «Só UPDATE» em sinais.ts).
- */
+/** Prefixo da chave do mês — `SincronizarDashboard` invalida por ele. */
+export const CHAVE_ANALITICO_DASHBOARD = 'analitico-dashboard';
+
+/** Tabulação é UPDATE e não muda valor (ver «Só UPDATE» em sinais.ts). */
 const MINIMO_SO_UPDATE_MS = 5 * 60_000;
 
 /**
@@ -167,7 +164,6 @@ const SEM_LINHAS: AnaliticoDashboardLinha[] = [];
  */
 export function useAnaliticoDashboard(ativo: boolean, mesRef?: string | null) {
   const { empresa }  = useEmpresa();
-  const queryClient  = useQueryClient();
   const mes          = normalizarMes(mesRef);
   const empresaId    = empresa?.id ?? null;
   const habilitado   = ativo && !!empresaId;
@@ -175,7 +171,7 @@ export function useAnaliticoDashboard(ativo: boolean, mesRef?: string | null) {
   // Chave compartilhada: os dois consumidores caem na MESMA entrada de cache,
   // então a busca paginada do mês acontece uma vez só.
   const chave = useMemo(
-    () => ['analitico-dashboard', empresaId, mes] as const,
+    () => [CHAVE_ANALITICO_DASHBOARD, empresaId, mes] as const,
     [empresaId, mes],
   );
 
@@ -193,29 +189,6 @@ export function useAnaliticoDashboard(ativo: boolean, mesRef?: string | null) {
   });
 
   const dbAtiva = query.data?.dbAtiva ?? true;
-
-  // Novo relatório importado → invalida a chave. Quem estiver montado refaz UMA
-  // busca (o React Query agrupa), em vez de uma por componente.
-  useEffect(() => {
-    if (!habilitado || !empresaId || !dbAtiva) return;
-
-    let debounce: ReturnType<typeof setTimeout> | null = null;
-    const invalidar = () => { void queryClient.invalidateQueries({ queryKey: chave }); };
-
-    const cancelar = assinarSinal('analitico', empresaId, {
-      onMudou: () => {
-        if (debounce) clearTimeout(debounce);
-        debounce = setTimeout(() => { debounce = null; invalidar(); }, DEBOUNCE_IMPORTACAO_MS);
-      },
-      // Já é uma invalidação — sem debounce, é evento único.
-      onReconectado: invalidar,
-    }, { minimoSoUpdateMs: MINIMO_SO_UPDATE_MS });
-
-    return () => {
-      if (debounce) clearTimeout(debounce);
-      cancelar();
-    };
-  }, [habilitado, empresaId, dbAtiva, queryClient, chave]);
 
   const linhas = query.data?.linhas ?? SEM_LINHAS;
   const total  = useMemo(() => agregarAnalitico(linhas), [linhas]);

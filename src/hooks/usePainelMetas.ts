@@ -42,6 +42,7 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { useTenant } from '@/lib/tenant-config';
 import { useAnaliticoDashboard, agregarAnalitico } from '@/hooks/useAnaliticoDashboard';
 import { useEscopoAnalitico } from '@/hooks/useEscopoAnalitico';
+import { useSetorDoDashboard } from '@/hooks/useSetorDoDashboard';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { veAlemDeSi } from '@/lib/permissoes-escopo';
 import { ESCOPO_EMPRESA } from '@/services/analitico/escopoAnalitico';
@@ -385,6 +386,22 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
     [analitico.linhas, escopo],
   );
 
+  /*
+   * Setor inteiro na tela: o total é o do card do setor no Painel do Líder
+   * (12/11/2026) — Cofen pela conciliação, os demais pelo acumulado do setor
+   * (origens excluídas fora, Receptivo digitado dentro). Ver
+   * `pages/Dashboard/setorDoDashboard.ts`. Divisão, equipe e pessoa seguem
+   * pelo analítico, como no Painel. Sem acesso à conciliação, `dados` é nulo e
+   * o analítico responde.
+   */
+  const setorDoPainel = useSetorDoDashboard(
+    modo === 'setor' && !divisaoEmFoco ? (setorId ?? null) : null,
+    mes,
+  );
+  const totalDoPainel = setorDoPainel.dados;
+  /** O dia a dia do gráfico: a conciliação no Cofen, o analítico nos demais. */
+  const porDiaEfetivo = totalDoPainel?.porDia ?? agregado.porDia;
+
   /** Os operadores que o escopo abrange — para recortar a busca de Direto/Extra. */
   const operadoresDoEscopo = useMemo<string[] | null>(() => {
     if (!escopo) return null;
@@ -671,8 +688,10 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
   // Recebido: campo já agregado, nunca convertido — `ho` vem do relatório.
   // Meta: convertida, porque só existe gravada em bruto — pelo percentual da
   // aba Metas, ao centavo, para ser o mesmo número de lá. Ver `metaNaUnidade`.
-  const recebidoNaUnidade = unidade === 'ho' ? agregado.ho : agregado.bruto;
-  const recebidoOposto    = unidade === 'ho' ? agregado.bruto : agregado.ho;
+  const brutoEfetivo = totalDoPainel ? totalDoPainel.bruto : agregado.bruto;
+  const hoEfetivo    = totalDoPainel ? totalDoPainel.ho    : agregado.ho;
+  const recebidoNaUnidade = unidade === 'ho' ? hoEfetivo : brutoEfetivo;
+  const recebidoOposto    = unidade === 'ho' ? brutoEfetivo : hoEfetivo;
   const metaNaUnidadeAtiva = metaNaUnidade(meta, unidade);
   const metaOposta         = metaNaUnidade(meta, unidade === 'ho' ? 'bruto' : 'ho');
   const metasExtras = metasExtrasBrutas
@@ -762,10 +781,10 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
    * H.O. faria o card apontar um dia diferente do que o gráfico ao lado destaca.
    */
   const baixaAnterior = useMemo(() => {
-    const dia = ultimoDiaComRecebimento(agregado.porDia, hojeDia);
+    const dia = ultimoDiaComRecebimento(porDiaEfetivo, hojeDia);
     if (!dia || unidade === 'bruto') return dia;
-    return { ...dia, bruto: agregado.porDia[dia.dia]?.ho ?? 0 };
-  }, [agregado.porDia, hojeDia, unidade]);
+    return { ...dia, bruto: porDiaEfetivo[dia.dia]?.ho ?? 0 };
+  }, [porDiaEfetivo, hojeDia, unidade]);
 
   /**
    * Segura a tela enquanto QUALQUER peça do número faltar.
@@ -783,7 +802,7 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
    */
   const faltaAlgumaPeca = !analitico.carregado || escopoPendente || !configCarregada
     || !metaCarregada || !dxCarregado || !extraCarregado || !equipesCarregadas
-    || !agendadoCarregado;
+    || !agendadoCarregado || setorDoPainel.pendente;
 
   /*
    * `carregando` é a PRIMEIRA pintura deste recorte, não "há busca em curso".
@@ -855,7 +874,7 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
     projecao,
     projecoesMetasExtras,
 
-    porDia: agregado.porDia,
+    porDia: porDiaEfetivo,
     agendadoPorDia,
     baixaAnterior,
 

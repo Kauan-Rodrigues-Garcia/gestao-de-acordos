@@ -18,6 +18,7 @@ import { permissoesDoCargo } from '@/test/permissoesDoCargo';
 const {
   perfilRef, empresaRef, tenantRef,
   analiticoRef, escopoRef, configRef, rankingRef, diretoExtraSpy, agendadoSpy, rpcSpy,
+  setorPainelRef, setorPainelSpy,
 } = vi.hoisted(() => ({
   perfilRef:   { current: null as unknown },
   empresaRef:  { current: null as unknown },
@@ -29,6 +30,8 @@ const {
   diretoExtraSpy: vi.fn(),
   agendadoSpy:    vi.fn(),
   rpcSpy:         vi.fn(),
+  setorPainelRef: { current: { dados: null as unknown, pendente: false } },
+  setorPainelSpy: vi.fn(),
 }));
 
 // ─"?─"? Mocks ─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?
@@ -50,6 +53,15 @@ vi.mock('@/hooks/useAnaliticoDashboard', async () => {
 
 vi.mock('@/hooks/useEscopoAnalitico', () => ({
   useEscopoAnalitico: () => escopoRef.current,
+}));
+
+// O total do setor pelo caminho do Painel do Líder tem teste próprio
+// (`setorDoDashboard.test.ts`); aqui importa QUANDO o hook o usa.
+vi.mock('@/hooks/useSetorDoDashboard', () => ({
+  useSetorDoDashboard: (setorId: string | null, mes: string) => {
+    setorPainelSpy(setorId, mes);
+    return setorId ? setorPainelRef.current : { dados: null, pendente: false };
+  },
 }));
 
 vi.mock('@/services/metas/metasConfig.service', () => ({
@@ -151,6 +163,8 @@ beforeEach(() => {
   diretoExtraSpy.mockClear();
   agendadoSpy.mockClear();
   rpcSpy.mockClear();
+  setorPainelSpy.mockClear();
+  setorPainelRef.current = { dados: null, pendente: false };
 
   empresaRef.current = { id: EMPRESA, nome: 'Empresa' };
   perfilRef.current  = { id: EU, perfil: 'operador', setor_id: 'set-1', equipe_id: null };
@@ -452,6 +466,69 @@ describe('usePainelMetas — total e baixa anterior', () => {
     await waitFor(() => expect(result.current.carregando).toBe(false));
     expect(result.current.totalRecebido).toBe(1_400);
     expect(result.current.naoTabulado).toBe(400);
+  });
+});
+
+describe('usePainelMetas — setor inteiro = card do setor no Painel do Líder', () => {
+  function liderNoSetor() {
+    perfilRef.current = { id: 'lid-1', perfil: 'lider', setor_id: 'set-1', equipe_id: null };
+    enfileirar('equipes', { data: [], error: null });
+  }
+
+  it('no setor, o total é o do Painel, não a soma do analítico', async () => {
+    liderNoSetor();
+    setorPainelRef.current = {
+      dados: { bruto: 99_000, ho: 0, porDia: null, fonte: 'acumulado', cofen: false },
+      pendente: false,
+    };
+    const { result } = renderHook(() => usePainelMetas(paramsBase({ setorId: 'set-1' })));
+    await waitFor(() => expect(result.current.carregando).toBe(false));
+    expect(setorPainelSpy).toHaveBeenLastCalledWith('set-1', '2026-08');
+    expect(result.current.totalRecebido).toBe(99_000);
+  });
+
+  it('Cofen: H.O. e dia a dia da conciliação', async () => {
+    liderNoSetor();
+    tenantRef.current = { slug: 'pagueplay', isPaguePlay: true };
+    setorPainelRef.current = {
+      dados: {
+        bruto: 2_000, ho: 500, fonte: 'conciliacao', cofen: true,
+        porDia: { 3: { bruto: 1_200, ho: 300, qtd: 4 }, 7: { bruto: 800, ho: 200, qtd: 2 } },
+      },
+      pendente: false,
+    };
+    const { result } = renderHook(() => usePainelMetas(paramsBase({ setorId: 'set-1', unidade: 'ho' })));
+    await waitFor(() => expect(result.current.carregando).toBe(false));
+    expect(result.current.totalRecebido).toBe(500);
+    expect(result.current.totalRecebidoOposto).toBe(2_000);
+    expect(result.current.porDia[3]).toEqual({ bruto: 1_200, ho: 300, qtd: 4 });
+    expect(result.current.baixaAnterior).toEqual({ dia: 7, bruto: 200, qtd: 2 });
+  });
+
+  it('sem o total do Painel (sem acesso à conciliação), o analítico responde', async () => {
+    liderNoSetor();
+    const { result } = renderHook(() => usePainelMetas(paramsBase({ setorId: 'set-1' })));
+    await waitFor(() => expect(result.current.carregando).toBe(false));
+    expect(result.current.totalRecebido).toBeCloseTo(34_452.54, 2);
+  });
+
+  it('equipe e operador não pedem o total do setor', () => {
+    liderNoSetor();
+    renderHook(() => usePainelMetas(paramsBase({ setorId: 'set-1', equipeId: EQUIPE })));
+    expect(setorPainelSpy).toHaveBeenLastCalledWith(null, '2026-08');
+    // O operador (beforeEach) fica no próprio número mesmo com o setor travado.
+    perfilRef.current = { id: EU, perfil: 'operador', setor_id: 'set-1', equipe_id: null };
+    setorPainelSpy.mockClear();
+    renderHook(() => usePainelMetas(paramsBase({ setorId: 'set-1' })));
+    expect(setorPainelSpy).toHaveBeenLastCalledWith(null, '2026-08');
+  });
+
+  it('segura a tela enquanto o total do setor não chegou', async () => {
+    liderNoSetor();
+    setorPainelRef.current = { dados: null, pendente: true };
+    const { result } = renderHook(() => usePainelMetas(paramsBase({ setorId: 'set-1' })));
+    await new Promise(r => setTimeout(r, 50));
+    expect(result.current.carregando).toBe(true);
   });
 });
 

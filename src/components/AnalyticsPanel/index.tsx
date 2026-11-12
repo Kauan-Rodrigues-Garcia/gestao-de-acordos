@@ -18,6 +18,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useEscopoAnalitico } from '@/hooks/useEscopoAnalitico';
+import { useSetorDoDashboard } from '@/hooks/useSetorDoDashboard';
 import { useLugarNoMes } from '@/hooks/useLugarNoMes';
 import { ESCOPO_EMPRESA } from '@/services/analitico/escopoAnalitico';
 import { niveisLiberados, veAlemDeSi } from '@/lib/permissoes-escopo';
@@ -310,6 +311,18 @@ export function AnalyticsPanel({
    * "não tabulado" cita, porque só o que veio no arquivo pode ser tabulado.
    */
   const brutoComReceptivo = anal.bruto + receptivoNoEscopo;
+
+  /*
+   * Setor inteiro na tela: o total do card do setor no Painel do Líder — o
+   * mesmo que o `PainelMetas` logo abaixo mostra (Cofen pela conciliação).
+   * Só para quem vê além de si: o escopo do operador fica travado no setor
+   * dele, e ali o número tem de ser o próprio.
+   */
+  const setorDoPainel = useSetorDoDashboard(
+    veDadosDeOutros && escopo?.tipo === 'setor' ? setorEmFoco : null,
+    mesAnalise,
+  );
+  const recebidoDoEscopo = setorDoPainel.dados?.bruto ?? brutoComReceptivo;
   // O H.O./Bruto, a % da meta e o ritmo que viviam aqui eram da faixa «Dados
   // Analíticos», removida em 05/11/2026: o PainelMetas já mostra os três.
 
@@ -364,7 +377,7 @@ export function AnalyticsPanel({
    * A base é a mesma do card "Recebido no mês" — projetar a tabulação enquanto
    * a tela toda fala do analítico dava uma projeção sistematicamente menor.
    */
-  const baseProjecao = usarAnalitico ? brutoComReceptivo : valorRecebidoMes;
+  const baseProjecao = usarAnalitico ? recebidoDoEscopo : valorRecebidoMes;
   const projecaoMes = useMemo(() => {
     const decorridos = diasDecorridos(mesAnalise);
     if (decorridos <= 0) return 0;
