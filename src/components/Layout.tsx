@@ -139,6 +139,9 @@ const RevoadaNatal      = lazy(() => carregarNatal().then(m => ({ default: m.Rev
 // A abertura do Natal (o presente, o vídeo e a mensagem): só desce para quem ainda não abriu.
 const AberturaNatal     = lazy(() => comNovaTentativa(() => import('@/components/Natal/presente/AberturaNatal'))()
   .then(m => ({ default: m.AberturaNatal })));
+// Os quebra-nozes (o diretor e o head da cidade no pé da janela): a agenda fica leve; os bonecos só descem na hora.
+const QuebraNozesNoSistema = lazy(() => comNovaTentativa(() => import('@/components/Natal/quebraNozes/sistema'))()
+  .then(m => ({ default: m.QuebraNozesNoSistema })));
 const carregarBotaoMusica = comNovaTentativa(() => import('@/components/Natal/BotaoMusicaNatal'));
 const BotaoMusicaNatal  = lazy(() => carregarBotaoMusica().then(m => ({ default: m.BotaoMusicaNatal })));
 // O trenzinho: a camada (trilho e trem) e as faixas do alto e do pé da aba.
@@ -1102,6 +1105,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           {natal && <Suspense fallback={null}><RevoadaNatal ativo={natal === 'detalhado' && !leve} /></Suspense>}
         </div>
         {/* A prévia (e os botões de teste da abertura) fica à mão mesmo antes de abrir o presente. */}
+        {/* Os quebra-nozes: em qualquer aba, para a cidade inteira ao mesmo tempo (`Natal/quebraNozes/sistema.tsx`). No modo leve, em quadrinhos. */}
+        {natal && perfil?.id && (
+          <Suspense fallback={null}>
+            <QuebraNozesNoSistema pessoaId={perfil.id} setorId={perfil.setor_id ?? null} empresaId={empresa?.id ?? null} leve={leve} />
+          </Suspense>
+        )}
         {previaNatal && <PreviaNatal estilo={natal} presenteAberto={natalAberto} presenteOculto={presenteOculto} video={videoNatal} />}
         {/* O presente do Natal: uma vez por pessoa, depois do termo e do tutorial,
             e nunca na impersonação. `?natal=presente` (ou a prévia) devolve.

@@ -25,6 +25,7 @@ import AdminTags from '@/components/admin/AdminTags';
 import AcessoMultiempresa from '@/components/admin/AcessoMultiempresa';
 import LiberacaoChat from '@/components/admin/LiberacaoChat';
 import NatalLiberacaoConfig from '@/components/admin/NatalLiberacaoConfig';
+import QuebraNozesConfig from '@/components/admin/QuebraNozesConfig';
 import SenhaInicialLiberacaoConfig from '@/components/admin/SenhaInicialLiberacaoConfig';
 import CrachaPedidoConfig from '@/components/admin/CrachaPedidoConfig';
 import AdminDocumentacoes from '@/pages/AdminDocumentacoes';
@@ -289,6 +290,11 @@ export default function AdminConfiguracoes() {
               abriu o presente em Birigui e em Marília. Só super_admin — as
               funções `fn_natal_*` conferem de novo no banco. */}
           {ehSuperAdmin && <NatalLiberacaoConfig />}
+
+          {/* ── Quebra-nozes do Natal (12/11/2026): ligar as aparições e a chamada
+              das 10h, ver a agenda do dia e chamar na hora. Só super_admin — as
+              funções `fn_natal_quebra_nozes_*` conferem de novo no banco. */}
+          {ehSuperAdmin && <QuebraNozesConfig />}
 
           {/* ── Senha inicial (10/11/2026): a hora em que a troca passa a ser
               obrigatória para quem ainda estava com a senha igual para todo

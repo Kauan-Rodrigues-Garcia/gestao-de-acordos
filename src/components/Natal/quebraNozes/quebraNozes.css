@@ -1,0 +1,554 @@
+/*
+ * Os quebra-nozes (`QuebraNozes.tsx`) e o palco deles (`Palco.tsx`).
+ *
+ * Boneco articulado de frente. Cada junta (`.qn-j`) é uma caixa de tamanho zero
+ * no ponto do encaixe, girada por `transform`. Uma POSE é um conjunto de
+ * ângulos, dado em variáveis no `.qn[data-pose]`; trocar de pose é transição de
+ * `transform` — a placa de vídeo faz sozinha. Quem troca, na hora certa, é o
+ * espetáculo (`deixas.ts`).
+ *
+ * Ângulo positivo gira no sentido do relógio: um braço pendurado vai para a
+ * ESQUERDA da tela. Por isso o braço da esquerda (`e`) abre com ângulo
+ * positivo e o da direita (`d`), com negativo.
+ *
+ *   --tr tronco   --cb cabeça   --dy o quadril desce   --curva o tronco encolhe (reverência)
+ *   --be --ae --me   braço, antebraço e mão da esquerda da tela
+ *   --bd --ad --md   os da direita
+ *   --pe --pd        as pernas (abrem para o lado)
+ *   --mx             a mandíbula aberta, em px
+ *   --olha           -1, 0, 1: para que lado ele se volta
+ *
+ * As variáveis ficam só nas regras — nunca dentro de `@keyframes` (animação com
+ * variável nos quadros-chave não vai para a placa). O movimento que se repete
+ * (marcha, fala, aceno) mora numa caixa «-m» DENTRO da junta, para não apagar a
+ * pose. Uma animação da família `transform` por elemento, nenhuma dentro de SVG.
+ *
+ * As juntas trocam de pose todas com a MESMA duração (medido em 12/11/2026):
+ * cada transição que termina acorda a página para um recálculo de estilo, e com
+ * nove durações diferentes cada troca de pose acordava nove vezes. O atraso da
+ * ponta (o braço puxa o antebraço, que puxa a mão) vem da curva de cada peça,
+ * não do tempo. As peças soltas (chapéu, pluma, medalha, franjas) têm outra
+ * duração, também uma só.
+ */
+/* Uma mola: passa do ponto, volta, passa de novo, e para. Vale para o boneco e para o cenário. */
+.qn, .qn-palco, .qn-controles {
+  --qn-mola: linear(0, .3 6%, .82 13%, 1.16 20%, 1.24 26%, 1.12 33%, .97 41%, .91 48%, .95 56%, 1.02 65%, 1.04 73%, 1.01 83%, .99 91%, 1);
+  /* A mesma mola, mais preguiçosa: sai depois e balança mais largo (a pluma). */
+  --qn-mola-lenta: linear(0, .12 7%, .5 15%, .96 24%, 1.22 32%, 1.3 39%, 1.16 48%, .97 57%, .88 65%, .93 74%, 1.03 83%, 1.04 91%, 1);
+}
+.qn {
+  position: absolute; left: 0; top: -24px; width: 0; height: 0; z-index: 2; visibility: hidden;
+  transition-property: transform; will-change: transform;
+  --tr: 0deg; --cb: 0deg; --dy: 0px; --curva: 1; --olha: 0; --mx: 0px; --vel: 1;
+  --be: 5deg; --ae: -4deg; --me: 0deg; --bd: -5deg; --ad: 4deg; --md: 0deg; --pe: 0deg; --pd: 0deg;
+}
+.qn[data-visivel] { visibility: visible; }
+.qn[data-olha="1"] { --olha: 1; }
+.qn[data-olha="-1"] { --olha: -1; }
+.qn[data-ritmo="lento"] { --vel: 2.6; }
+.qn[data-ritmo="rapido"] { --vel: .5; }
+
+.qn-m, .qn-item { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+.qn-item { display: none; }
+.qn-s { position: absolute; left: 0; top: 0; display: block; overflow: visible; }
+
+/* ── As juntas. Cada peça mais na ponta demora um pouco mais: o braço puxa o antebraço, que puxa a mão. */
+.qn-j { position: absolute; width: 0; height: 0; transition: transform calc(.46s * var(--vel)) cubic-bezier(.22, 1.5, .42, 1); }
+.qn-j.tronco { transform: rotate(calc(var(--tr) + var(--olha) * 2deg)); transition-timing-function: cubic-bezier(.34, 1.3, .56, 1); }
+.qn-j.cab { transform: rotate(calc(var(--cb) + var(--olha) * 6deg)); transition-timing-function: cubic-bezier(.28, 1.4, .5, 1); }
+.qn-j.braco.e { transform: rotate(var(--be)); }
+.qn-j.braco.d { transform: rotate(var(--bd)); }
+.qn-j.ante.e { transform: rotate(var(--ae)); transition-timing-function: cubic-bezier(.36, 1.5, .54, 1); }
+.qn-j.ante.d { transform: rotate(var(--ad)); transition-timing-function: cubic-bezier(.36, 1.5, .54, 1); }
+.qn-j.mao.e { transform: rotate(var(--me)); transition-timing-function: cubic-bezier(.5, 1.55, .64, 1); }
+.qn-j.mao.d { transform: rotate(var(--md)); transition-timing-function: cubic-bezier(.5, 1.55, .64, 1); }
+.qn-j.perna.e { transform: rotate(var(--pe)); }
+.qn-j.perna.d { transform: rotate(var(--pd)); }
+/* As peças soltas: seguem com atraso e balançam até parar. */
+.qn-j.chapeu { transform: rotate(calc((var(--cb) + var(--olha) * 6deg) * -.25 + var(--tr) * -.3)); transition: transform 1.2s var(--qn-mola); }
+.qn-j.pluma { transform: rotate(calc(var(--cb) * -.6 + var(--tr) * -.7 + var(--olha) * -10deg)); transition: transform 1.2s var(--qn-mola-lenta); }
+.qn-j.medalha { transform: rotate(calc(var(--tr) * -1 + var(--olha) * -2deg)); transition: transform 1.2s var(--qn-mola); }
+.qn-j.franja.e { transform: rotate(calc(var(--be) * .1)); transition: transform 1.2s var(--qn-mola); }
+.qn-j.franja.d { transform: rotate(calc(var(--bd) * .1)); transition: transform 1.2s var(--qn-mola); }
+
+.qn-bob { transform: translateY(var(--dy)); transition: transform calc(.46s * var(--vel)) cubic-bezier(.1, .9, .3, 1); }
+.qn-curva { transform: scaleY(var(--curva)); transition: transform calc(.46s * var(--vel)) cubic-bezier(.3, 1.3, .5, 1); }
+.qn-queixo { transform: translateY(var(--mx)); transition: transform .09s ease-out; }
+
+/* ── A foto do perfil, redonda, por cima do rosto de madeira. */
+.qn-foto { position: absolute; left: -25px; top: -53px; width: 50px; height: 50px; border-radius: 50%; overflow: hidden; background: #E7BE93; }
+.qn-foto img { display: block; width: 100%; height: 100%; max-width: none; object-fit: cover; object-position: 50% 30%; user-select: none; }
+
+/* ── As poses ──────────────────────────────────────────────────────────── */
+/* À vontade: as pernas abertas, as mãos na fivela. */
+.qn[data-pose="descanso"] { --pe: 6deg; --pd: -6deg; --be: 17deg; --ae: -58deg; --bd: -17deg; --ad: 58deg; --dy: 1px; }
+/* A continência: a mão direita na têmpora. */
+.qn[data-pose="continencia"] { --bd: -164deg; --ad: -24deg; --md: 30deg; --be: 3deg; --ae: -2deg; --cb: -2deg; }
+/* As mãos na cintura. */
+.qn[data-pose="cintura"] { --be: 40deg; --ae: -96deg; --bd: -40deg; --ad: 96deg; }
+.qn[data-pose="bracos-cima"] { --be: 152deg; --ae: 16deg; --bd: -152deg; --ad: -16deg; --dy: -1px; }
+/* As mãos juntas na frente do peito (o aplauso bate a partir daqui). */
+.qn[data-pose="aplaude"] { --be: 24deg; --ae: -112deg; --bd: -24deg; --ad: 112deg; }
+/* Segurando o pergaminho aberto. */
+.qn[data-pose="le"] { --be: 22deg; --ae: -72deg; --bd: -22deg; --ad: 72deg; --cb: 3deg; }
+/* Segurando alguma coisa na frente, com as duas mãos. */
+.qn[data-pose="segura"] { --be: 19deg; --ae: -98deg; --bd: -19deg; --ad: 98deg; }
+.qn[data-pose="aponta-e"] { --be: 84deg; --ae: 5deg; --cb: -4deg; --tr: -2deg; }
+.qn[data-pose="aponta-d"] { --bd: -84deg; --ad: -5deg; --cb: 4deg; --tr: 2deg; }
+.qn[data-pose="aponta-cima"] { --bd: -162deg; --ad: -8deg; --md: 170deg; --cb: -5deg; }
+/* O dedo levantado de quem está de olho. */
+.qn[data-pose="dedo"] { --bd: -54deg; --ad: -104deg; --be: 36deg; --ae: -92deg; --cb: 3deg; }
+/* A mão no queixo, a outra atravessada. */
+.qn[data-pose="pensa"] { --bd: -30deg; --ad: -136deg; --be: 20deg; --ae: -96deg; --cb: 8deg; --tr: 2deg; }
+.qn[data-pose="ombros"] { --be: 36deg; --ae: -58deg; --me: -50deg; --bd: -36deg; --ad: 58deg; --md: 50deg; --cb: 7deg; --dy: -1px; }
+.qn[data-pose="luneta"] { --bd: -66deg; --ad: -116deg; --md: 96deg; --be: 34deg; --ae: -90deg; --cb: -3deg; --tr: -2deg; }
+.qn[data-pose="corneta"] { --bd: -60deg; --ad: -126deg; --md: 110deg; --be: 38deg; --ae: -94deg; --cb: -8deg; --tr: -3deg; }
+.qn[data-pose="brinda"] { --bd: -124deg; --ad: -34deg; --md: 158deg; --be: 8deg; --cb: -3deg; }
+.qn[data-pose="tchau"] { --bd: -150deg; --ad: 24deg; --be: 6deg; --cb: -3deg; }
+/* Os braços abertos de quem se equilibra. */
+.qn[data-pose="equilibra"] { --be: 76deg; --ae: 12deg; --bd: -76deg; --ad: -12deg; --pe: 7deg; --pd: -7deg; --dy: 2px; }
+/* Esticando o corpo para espiar de lado. */
+.qn[data-pose="espia-e"] { --tr: -17deg; --cb: 6deg; --bd: -26deg; --ad: 20deg; --pd: -5deg; }
+.qn[data-pose="espia-d"] { --tr: 17deg; --cb: -6deg; --be: 26deg; --ae: -20deg; --pe: 5deg; }
+/* A corda acabou: murcha, a cabeça caída. */
+.qn[data-pose="sem-corda"] { --curva: .86; --cb: 15deg; --tr: 3deg; --be: 1deg; --ae: 0deg; --bd: -1deg; --ad: 0deg; --dy: 2px; }
+.qn[data-pose="reverencia"] { --curva: .78; --cb: 2deg; --dy: 2px; --be: 22deg; --ae: -104deg; --bd: -34deg; --ad: 8deg; }
+.qn[data-pose="cobre-rosto"] { --be: 26deg; --ae: -152deg; --bd: -26deg; --ad: 152deg; --cb: 4deg; --dy: 1px; }
+.qn[data-pose="tambor"] { --be: 15deg; --ae: -66deg; --me: 40deg; --bd: -15deg; --ad: 66deg; --md: -40deg; }
+/* Um punho para o alto, a outra mão na cintura. */
+.qn[data-pose="vitoria"] { --bd: -160deg; --ad: -4deg; --md: 164deg; --be: 40deg; --ae: -96deg; --cb: -4deg; --dy: -1px; }
+/* Ajeitando o chapéu. */
+.qn[data-pose="chapeu"] { --bd: -170deg; --ad: -30deg; --cb: 3deg; }
+/* A mão debaixo do queixo, para fechar a mandíbula na noz. */
+.qn[data-pose="queixo"] { --be: 14deg; --ae: -148deg; --cb: -3deg; }
+/* Olhando o relógio de bolso. */
+.qn[data-pose="relogio"] { --be: 20deg; --ae: -108deg; --me: -70deg; --cb: 9deg; --tr: -1deg; }
+/* Dando corda no outro: o braço esticado para o lado dele. */
+.qn[data-pose="da-corda-e"] { --be: 78deg; --ae: 14deg; --tr: -5deg; --cb: -5deg; }
+.qn[data-pose="da-corda-d"] { --bd: -78deg; --ad: -14deg; --tr: 5deg; --cb: 5deg; }
+
+
+/* ── Vivo, mesmo parado: respira, e a pluma pega uma brisa. Cada boneco no seu tempo. */
+.qn[data-visivel] .qn-resp { animation: qn-resp var(--qn-resp, 3.4s) ease-in-out infinite alternate; }
+@keyframes qn-resp { from { transform: scale(1, 1); } to { transform: scale(1.012, 1.02); } }
+.qn[data-visivel] .qn-pluma-m { animation: qn-brisa var(--qn-brisa, 4.3s) ease-in-out infinite alternate; }
+@keyframes qn-brisa { from { transform: rotate(-4deg); } to { transform: rotate(5deg); } }
+
+/* ── A marcha, de frente: a perna que avança encolhe, o corpo gangorra, o chapéu quica atrasado. */
+.qn[data-anda] { --passo: .64s; }
+.qn[data-anda="2"] { --passo: .4s; }
+.qn[data-anda] .qn-perna-m { animation: qn-passo var(--passo) ease-in-out infinite; }
+.qn[data-anda] .qn-perna-m.d { animation-delay: calc(var(--passo) / -2); }
+@keyframes qn-passo {
+  0%, 52%, 100% { transform: translateY(0) scaleY(1); }
+  16% { transform: translateY(-1px) scaleY(.7); }
+  30% { transform: translateY(-.6px) scaleY(.78); }
+  44% { transform: translateY(0) scaleY(1.03); }
+}
+.qn[data-anda] .qn-bob { animation: qn-bob calc(var(--passo) / 2) ease-in-out infinite alternate; }
+@keyframes qn-bob { from { transform: translateY(0); } to { transform: translateY(-2.6px); } }
+.qn[data-anda] .qn-rock { animation: qn-rock var(--passo) ease-in-out infinite; }
+@keyframes qn-rock { 0%, 100% { transform: rotate(-2.6deg); } 50% { transform: rotate(2.6deg); } }
+.qn[data-anda]:not([data-firme]) .qn-bal { animation: qn-bal var(--passo) ease-in-out infinite; }
+.qn[data-anda]:not([data-firme]) .qn-bal.d { animation-delay: calc(var(--passo) / -2); }
+@keyframes qn-bal { 0%, 100% { transform: rotate(-7deg) scaleY(.9); } 50% { transform: rotate(7deg) scaleY(1.04); } }
+.qn[data-anda] .qn-chapeu-m { animation: qn-chapeu-anda calc(var(--passo) / 2) ease-in-out .07s infinite alternate; }
+@keyframes qn-chapeu-anda { from { transform: translateY(0) rotate(-1.2deg); } to { transform: translateY(-1.9px) rotate(1.2deg); } }
+.qn[data-anda] .qn-pluma-m { animation: qn-pluma-anda var(--passo) ease-in-out .12s infinite; }
+@keyframes qn-pluma-anda { 0%, 100% { transform: rotate(-11deg); } 50% { transform: rotate(11deg); } }
+
+/* ── Falando: três jeitos de bater a mandíbula, e a cabeça acompanha. */
+.qn[data-fala="1"] .qn-queixo-m { animation: qn-fala-1 .56s ease-in-out infinite; }
+.qn[data-fala="2"] .qn-queixo-m { animation: qn-fala-2 .78s ease-in-out infinite; }
+.qn[data-fala="3"] .qn-queixo-m { animation: qn-fala-3 .44s ease-in-out infinite; }
+@keyframes qn-fala-1 { 0%, 100% { transform: translateY(0); } 16% { transform: translateY(4.6px); } 32% { transform: translateY(1.2px); } 52% { transform: translateY(5.4px); } 70% { transform: translateY(.4px); } 86% { transform: translateY(3px); } }
+@keyframes qn-fala-2 { 0%, 100% { transform: translateY(0); } 22% { transform: translateY(6px); } 44% { transform: translateY(2px); } 60% { transform: translateY(5px); } 82% { transform: translateY(0); } }
+@keyframes qn-fala-3 { 0%, 100% { transform: translateY(.4px); } 25% { transform: translateY(4px); } 50% { transform: translateY(.8px); } 75% { transform: translateY(5px); } }
+.qn[data-fala] .qn-nod { animation: qn-fala-cab 1.16s ease-in-out infinite alternate; }
+@keyframes qn-fala-cab { from { transform: rotate(-1.8deg) translateY(0); } to { transform: rotate(2.2deg) translateY(.7px); } }
+/* Escutando: concorda devagar. */
+.qn[data-ouve]:not([data-fala]) .qn-nod { animation: qn-ouve 2.3s ease-in-out infinite; }
+@keyframes qn-ouve { 0%, 60%, 100% { transform: rotate(0); } 72% { transform: rotate(3.4deg) translateY(1px); } 84% { transform: rotate(-.6deg); } 92% { transform: rotate(2.2deg) translateY(.6px); } }
+
+/* ── A chave de corda: girando em volta do próprio eixo. */
+.qn[data-chave="1"] .qn-chave-m { animation: qn-chave 1.3s linear infinite; }
+.qn[data-chave="2"] .qn-chave-m { animation: qn-chave .34s linear infinite; }
+@keyframes qn-chave { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(-1); } }
+
+/* Batendo o pé. */
+.qn[data-pe] .qn-perna-m.d { animation: qn-pe .25s ease-in-out infinite alternate; }
+@keyframes qn-pe { from { transform: scaleY(1); } to { transform: scaleY(.94) translateY(-1px); } }
+
+/* ── Os movimentos que se repetem (na caixa de dentro do antebraço ou da mão). */
+.qn[data-mexe="aceno"] .qn-ante-m.d { animation: qn-aceno .3s ease-in-out infinite alternate; }
+@keyframes qn-aceno { from { transform: rotate(-24deg); } to { transform: rotate(22deg); } }
+.qn[data-mexe="aplauso"] .qn-ante-m.e { animation: qn-palma-e .17s ease-in-out infinite alternate; }
+.qn[data-mexe="aplauso"] .qn-ante-m.d { animation: qn-palma-d .17s ease-in-out infinite alternate; }
+@keyframes qn-palma-e { from { transform: rotate(14deg); } to { transform: rotate(-3deg); } }
+@keyframes qn-palma-d { from { transform: rotate(-14deg); } to { transform: rotate(3deg); } }
+.qn[data-mexe="tambor"] .qn-ante-m { animation: qn-batuque .2s ease-in infinite alternate; }
+.qn[data-mexe="tambor"] .qn-ante-m.d { animation-delay: -.2s; }
+@keyframes qn-batuque { from { transform: rotate(0); } to { transform: rotate(0) translateY(-5px); } }
+.qn[data-mexe="dedo"] .qn-ante-m.d { animation: qn-dedo .22s ease-in-out infinite alternate; }
+@keyframes qn-dedo { from { transform: rotate(-11deg); } to { transform: rotate(11deg); } }
+.qn[data-mexe="sino"] .qn-mao-m.d { animation: qn-sino .2s ease-in-out infinite alternate; }
+@keyframes qn-sino { from { transform: rotate(-32deg); } to { transform: rotate(32deg); } }
+.qn[data-mexe="cutuca"] .qn-ante-m { animation: qn-cutuca .32s ease-in-out infinite alternate; }
+@keyframes qn-cutuca { from { transform: translateY(-4px); } to { transform: translateY(3px); } }
+.qn[data-mexe="regencia"] .qn-ante-m.d { animation: qn-regencia 1.1s ease-in-out infinite; }
+@keyframes qn-regencia { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-26deg); } 50% { transform: rotate(8deg); } 75% { transform: rotate(-16deg); } }
+.qn[data-mexe="corda"] .qn-ante-m { animation: qn-corda .36s linear infinite; }
+@keyframes qn-corda { 0%, 100% { transform: rotate(-16deg); } 50% { transform: rotate(16deg); } }
+.qn[data-mexe="gole"] .qn-nod { animation: qn-gole 1.5s ease-in-out infinite; }
+@keyframes qn-gole { 0%, 100% { transform: rotate(0); } 40%, 62% { transform: rotate(-9deg); } }
+
+/* ── As reações, de uma vez só, no corpo inteiro. */
+.qn[data-reacao="susto"] .qn-reage { animation: qn-susto .6s cubic-bezier(.3, 0, .5, 1) both; }
+@keyframes qn-susto {
+  0% { transform: translateY(0) scale(1); }
+  12% { transform: translateY(0) scale(1.07, .9); }
+  36% { transform: translateY(-13px) scale(.95, 1.09); }
+  66% { transform: translateY(0) scale(1.06, .93); }
+  100% { transform: translateY(0) scale(1); }
+}
+/* No susto, o chapéu sai da cabeça e cai de volta. */
+.qn[data-reacao="susto"] .qn-chapeu-m { animation: qn-chapeu-salta .86s cubic-bezier(.3, 0, .5, 1) both; }
+@keyframes qn-chapeu-salta {
+  0% { transform: translateY(0) rotate(0); }
+  34% { transform: translateY(-17px) rotate(-9deg); }
+  70% { transform: translateY(1.6px) rotate(3deg); }
+  84% { transform: translateY(-2px) rotate(-1deg); }
+  100% { transform: translateY(0) rotate(0); }
+}
+.qn[data-reacao="riso"] .qn-reage { animation: qn-riso .13s ease-in-out 12 alternate both; }
+@keyframes qn-riso { from { transform: translateY(0); } to { transform: translateY(-2.4px); } }
+.qn[data-reacao="riso"] .qn-queixo-m { animation: qn-fala-3 .22s ease-in-out 7; }
+.qn[data-reacao="riso"] .qn-chapeu-m { animation: qn-chapeu-ri .26s ease-in-out 6 alternate; }
+@keyframes qn-chapeu-ri { from { transform: rotate(-3deg); } to { transform: rotate(3deg) translateY(-1px); } }
+.qn[data-reacao="pulinho"] .qn-reage { animation: qn-pulinho .92s cubic-bezier(.3, 0, .6, 1) both; }
+@keyframes qn-pulinho {
+  0%, 46%, 100% { transform: translateY(0) scale(1); }
+  8%, 54% { transform: translateY(0) scale(1.06, .92); }
+  26% { transform: translateY(-15px) scale(.97, 1.05); }
+  40%, 92% { transform: translateY(0) scale(1.05, .94); }
+  74% { transform: translateY(-10px) scale(.98, 1.04); }
+}
+.qn[data-reacao="pulinho"] .qn-chapeu-m { animation: qn-chapeu-salta .5s ease-in-out .08s 2 both; }
+/* A pirueta: de frente não dá para girar, então ele some de perfil e volta. */
+.qn[data-reacao="giro"] .qn-reage { animation: qn-giro .78s cubic-bezier(.4, 0, .6, 1) both; }
+@keyframes qn-giro {
+  0% { transform: translateY(0) scaleX(1); }
+  14% { transform: translateY(1px) scale(1.05, .93); }
+  32% { transform: translateY(-9px) scaleX(.08); }
+  50% { transform: translateY(-11px) scaleX(-1); }
+  68% { transform: translateY(-8px) scaleX(-.08); }
+  86% { transform: translateY(0) scale(1.05, .93); }
+  100% { transform: translateY(0) scaleX(1); }
+}
+/* O peito estufa de orgulho. */
+.qn[data-reacao="estufa"] .qn-reage { animation: qn-estufa 1.5s ease-in-out both; }
+@keyframes qn-estufa { 0%, 100% { transform: scale(1); } 22%, 76% { transform: scale(1.07, 1.04) translateY(-1px); } }
+.qn[data-reacao="tremor"] .qn-reage { animation: qn-tremor .08s linear 16 alternate both; }
+@keyframes qn-tremor { from { transform: rotate(-1.5deg); } to { transform: rotate(1.5deg); } }
+.qn[data-reacao="tropeco"] .qn-reage { animation: qn-tropeco .9s cubic-bezier(.3, 0, .4, 1) both; }
+@keyframes qn-tropeco {
+  0% { transform: rotate(0); }
+  22% { transform: rotate(19deg) translateY(2px); }
+  44% { transform: rotate(-9deg); }
+  64% { transform: rotate(6deg); }
+  82% { transform: rotate(-2deg); }
+  100% { transform: rotate(0); }
+}
+.qn[data-reacao="tropeco"] .qn-chapeu-m { animation: qn-chapeu-salta .9s ease-in-out .1s both; }
+/* «Alto!»: a batida de pé do fim da marcha. */
+.qn[data-reacao="alto"] .qn-reage { animation: qn-alto .36s ease-out both; }
+@keyframes qn-alto { 0% { transform: translateY(0); } 30% { transform: translateY(-5px); } 62% { transform: translateY(0) scale(1.05, .94); } 100% { transform: translateY(0) scale(1); } }
+/* Recebeu corda: estica de uma vez, como mola. */
+.qn[data-reacao="mola"] .qn-reage { animation: qn-mola 1s var(--qn-mola) both; }
+@keyframes qn-mola { from { transform: scale(1.08, .84); } to { transform: scale(1); } }
+
+/* ── Os gestos de cabeça, de uma vez só. */
+.qn[data-gesto="sim"] .qn-gesto { animation: qn-sim .34s ease-in-out 3 alternate both; }
+@keyframes qn-sim { from { transform: rotate(0); } to { transform: rotate(4deg) translateY(2.4px); } }
+.qn[data-gesto="nao"] .qn-gesto { animation: qn-nao .9s ease-in-out both; }
+@keyframes qn-nao { 0%, 100% { transform: translateX(0) rotate(0); } 18%, 54% { transform: translateX(-3px) rotate(-5deg); } 36%, 72% { transform: translateX(3px) rotate(5deg); } }
+.qn[data-gesto="inclina"] .qn-gesto { animation: qn-inclina 1.5s ease-in-out both; }
+@keyframes qn-inclina { 0%, 100% { transform: rotate(0); } 22%, 78% { transform: rotate(11deg); } }
+.qn[data-gesto="olha-cima"] .qn-gesto { animation: qn-olha-cima 1.6s ease-in-out both; }
+@keyframes qn-olha-cima { 0%, 100% { transform: translateY(0); } 22%, 78% { transform: translateY(-3px) scaleY(.96); } }
+/* O espirro: a cabeça vai para trás devagar, estala para a frente, e o chapéu voa. */
+.qn[data-gesto="espirro"] .qn-gesto { animation: qn-espirro 1.7s cubic-bezier(.4, 0, .4, 1) both; }
+@keyframes qn-espirro {
+  0%, 100% { transform: translateY(0) scaleY(1); }
+  38% { transform: translateY(-4px) scaleY(1.03); }
+  46% { transform: translateY(-4.6px) scaleY(1.03); }
+  54% { transform: translateY(5px) scaleY(.92); }
+  72% { transform: translateY(-1px) scaleY(1.01); }
+}
+.qn[data-gesto="espirro"] .qn-chapeu-m { animation: qn-chapeu-voa 1.7s cubic-bezier(.4, 0, .4, 1) both; }
+@keyframes qn-chapeu-voa {
+  0%, 46% { transform: translateY(0) rotate(0); }
+  64% { transform: translateY(-40px) rotate(34deg); }
+  84% { transform: translateY(2px) rotate(-5deg); }
+  92% { transform: translateY(-2.4px) rotate(2deg); }
+  100% { transform: translateY(0) rotate(0); }
+}
+
+/* ── Entradas e saídas no ar e por baixo do palco (na caixa `.qn-y`). */
+.qn[data-salto="sobe"] .qn-y { animation: qn-sobe .95s var(--qn-mola) both; }
+@keyframes qn-sobe { from { transform: translateY(170px); } to { transform: translateY(0); } }
+.qn[data-salto="desce"] .qn-y { animation: qn-desce .62s cubic-bezier(.5, -.3, .8, .4) both; }
+@keyframes qn-desce { from { transform: translateY(0); } to { transform: translateY(260px); } }
+.qn[data-salto="pulo"] .qn-y { animation: qn-pulo .6s cubic-bezier(.3, 0, .7, 1) both; }
+@keyframes qn-pulo { 0%, 100% { transform: translateY(0) scale(1); } 12% { transform: translateY(0) scale(1.07, .9); } 50% { transform: translateY(-34px) scale(.96, 1.06); } 88% { transform: translateY(0) scale(1.08, .88); } }
+/* De paraquedas: desce balançando e amassa na chegada. */
+.qn[data-salto="paraquedas"] .qn-y { animation: qn-paraquedas 3.2s cubic-bezier(.2, .5, .5, 1) both; }
+@keyframes qn-paraquedas {
+  0% { transform: translateY(-780px) rotate(-7deg); }
+  22% { transform: translateY(-560px) rotate(7deg); }
+  44% { transform: translateY(-350px) rotate(-6deg); }
+  66% { transform: translateY(-170px) rotate(5deg); }
+  86% { transform: translateY(-34px) rotate(-2deg); }
+  94% { transform: translateY(0) scale(1.08, .88); }
+  100% { transform: translateY(0) scale(1); }
+}
+.qn-paraquedas { position: absolute; left: 0; top: 0; width: 0; height: 0; opacity: 0; }
+.qn[data-salto="paraquedas"] .qn-paraquedas { animation: qn-paraquedas-some 3.5s linear both; }
+@keyframes qn-paraquedas-some { 0%, 88% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; transform: translateY(24px) scale(1.1, .5); } }
+
+/* ── O sinal em cima do chapéu («!», «?», «♪»…). */
+.qn-emote {
+  position: absolute; left: 22px; top: -196px; min-width: 26px; height: 26px; padding: 0 5px; box-sizing: border-box;
+  display: flex; align-items: center; justify-content: center; border-radius: 13px;
+  background: #FFFFFF; border: 1.4px solid #2B1B12; color: #C2261C; font: 800 16px/1 system-ui, 'Segoe UI Emoji', sans-serif;
+  opacity: 0; white-space: nowrap;
+}
+/* Quem faz subir e sumir é `aplicarNoBoneco` (WAAPI). */
+
+/* ── O balão: HTML, surge com um pulinho. A caixa de fora só posiciona. */
+.qn-balao { position: absolute; left: 0; bottom: 200px; width: 0; height: 0; z-index: 6; --lado: -50%; --cauda: 50%; }
+.qn[data-quem="a"] .qn-balao { --lado: -64%; --cauda: 64%; }
+.qn[data-quem="b"] .qn-balao { --lado: -36%; --cauda: 36%; }
+.qn-palco[data-troca] .qn[data-quem="a"] .qn-balao { --lado: -36%; --cauda: 36%; }
+.qn-palco[data-troca] .qn[data-quem="b"] .qn-balao { --lado: -64%; --cauda: 64%; }
+.qn-palco[data-solo] .qn .qn-balao { --lado: -50%; --cauda: 50%; }
+.qn-balao-p { position: absolute; left: 0; bottom: 0; width: max-content; max-width: 268px; transform: translateX(var(--lado)); }
+.qn-balao-c {
+  position: relative; display: none; transform-origin: var(--cauda) 100%;
+  padding: 8px 12px; border-radius: 12px; background: #FFFFFF; border: 1.5px solid #2B1B12;
+  color: #1F2937; font: 650 14px/1.28 system-ui, -apple-system, 'Segoe UI', sans-serif; text-align: center; text-wrap: balance;
+}
+.qn-balao-c::after {
+  content: ''; position: absolute; left: var(--cauda); bottom: -6.4px; width: 10px; height: 10px; margin-left: -5px; background: #FFFFFF;
+  border-right: 1.5px solid #2B1B12; border-bottom: 1.5px solid #2B1B12; transform: rotate(45deg);
+}
+/* O pulinho de abrir é do `Palco` (WAAPI): recomeçar animação de CSS pedia um leiaute forçado a cada fala. */
+.qn-balao-c.aberto { display: block; }
+/* No palco pequeno o balão cresce de volta (a ponta fica onde estava) e abre mais para o lado: os dois estão mais perto. */
+.qn-palco[data-mini] .qn-balao-p { transform: translateX(var(--lado)) scale(1.5); transform-origin: var(--cauda) 100%; }
+.qn-palco[data-mini] .qn[data-quem="a"] .qn-balao, .qn-palco[data-mini][data-troca] .qn[data-quem="b"] .qn-balao { --lado: -76%; --cauda: 76%; }
+.qn-palco[data-mini] .qn[data-quem="b"] .qn-balao, .qn-palco[data-mini][data-troca] .qn[data-quem="a"] .qn-balao { --lado: -24%; --cauda: 24%; }
+.qn-palco[data-mini][data-solo] .qn .qn-balao { --lado: -50%; --cauda: 50%; }
+
+/* Para o clique: as caixas do boneco têm tamanho zero. */
+.qn-toque { position: absolute; left: -30px; top: -172px; width: 60px; height: 172px; padding: 0; border: 0; background: none; cursor: pointer; pointer-events: auto; }
+
+/* ══ O palco ═══════════════════════════════════════════════════════════════
+ * Preso ao pé da janela, no meio. O 0,0 é o centro do pé; tudo é medido dali e
+ * a caixa inteira encolhe em tela pequena e no palco pequeno (`--qn-escala`,
+ * posta pelo `Palco`). Os pés ficam 24 px acima do pé da janela.
+ */
+.qn-palco {
+  position: fixed; left: 50%; bottom: 0; width: 0; height: 0; z-index: 60; pointer-events: none;
+  transform: scale(var(--qn-escala, 1)); transform-origin: 0 0; transition: transform .4s cubic-bezier(.3, 1.2, .5, 1);
+  --qn-neve: #F7FAFF; --qn-neve-funda: #DCE8F6; --qn-neve-linha: #B4C8E0; --qn-neve-brilho: #C6D8EE;
+}
+.dark .qn-palco { --qn-neve: #DDE6F2; --qn-neve-funda: #B3C3D8; --qn-neve-linha: #8497B1; --qn-neve-brilho: #9FB2CB; }
+
+/*
+ * O chão: um montinho de neve baixo, de ponta a ponta (eles entram andando da
+ * coxia). Só fundo pintado: duas fileiras de montes, a linha de cada uma, o
+ * corpo e uns pontinhos de brilho.
+ */
+.qn-chao {
+  position: absolute; left: calc(var(--qn-meia, 1500px) * -1); top: -33px; width: calc(var(--qn-meia, 1500px) * 2); height: 66px;
+  background:
+    radial-gradient(ellipse 50% 100% at 50% 100%, var(--qn-neve) 98%, transparent) 0 2.5px / 88px 9px repeat-x,
+    radial-gradient(ellipse 50% 100% at 50% 100%, var(--qn-neve-linha) 98%, transparent) 0 1px / 88px 9px repeat-x,
+    radial-gradient(ellipse 50% 100% at 50% 100%, var(--qn-neve-funda) 98%, transparent) 37px 0 / 134px 9px repeat-x,
+    radial-gradient(circle, var(--qn-neve-brilho) 1px, transparent 1.6px) 9px 17px / 61px 23px repeat-x,
+    radial-gradient(circle, var(--qn-neve-brilho) .8px, transparent 1.4px) 37px 24px / 97px 23px repeat-x,
+    linear-gradient(var(--qn-neve), var(--qn-neve-funda) 60%) 0 9px / 100% 100% no-repeat;
+  transform: translateY(70px); transition: transform .8s cubic-bezier(.3, 1.2, .5, 1);
+}
+.qn-chao.aceso { transform: translateY(0); }
+
+/*
+ * O tablado: um palquinho de madeira no meio da neve, visto um pouco de cima —
+ * o tampo de tábuas onde eles pisam e a frente com o friso dourado, onde ficam
+ * as faixas com os nomes.
+ */
+.qn-tablado { position: absolute; left: -210px; top: -33px; width: 420px; height: 66px; transform: translateY(70px); transition: transform .9s var(--qn-mola) .12s; }
+.qn-tablado.aceso { transform: translateY(0); }
+.qn-tampo, .qn-frente { position: absolute; left: 0; right: 0; display: block; }
+.qn-tampo { top: 0; height: 13px; background: #2B1B12; clip-path: polygon(13px 0, calc(100% - 13px) 0, 100% 100%, 0 100%); }
+.qn-tampo::before {
+  content: ''; position: absolute; inset: 1.5px 2.4px 0;
+  background: repeating-linear-gradient(90deg, #E2AE74 0 50px, #B98249 50px 51.5px), #E2AE74;
+  clip-path: polygon(11.6px 0, calc(100% - 11.6px) 0, 100% 100%, 0 100%);
+}
+.qn-frente {
+  top: 13px; bottom: 0; box-sizing: border-box; border: 1.5px solid #2B1B12; border-top-width: 1.2px;
+  background:
+    linear-gradient(#FFE596, #F2C04E 55%, #B98522) 0 0 / 100% 3.2px no-repeat,
+    linear-gradient(#2B1B12, #2B1B12) 0 3.2px / 100% 1px no-repeat,
+    radial-gradient(circle, #F2C04E 1.5px, #8A5A1A 1.6px 2.1px, transparent 2.3px) 3px 5px / 28px 14px repeat-x,
+    linear-gradient(#9C5F2D, #6B3D1B 22px);
+}
+
+/* O tapete vermelho, que desenrola por cima do tampo. */
+.qn-tapete {
+  position: absolute; left: -360px; top: -32px; width: 720px; height: 12px; border-radius: 3px; z-index: 1;
+  background: linear-gradient(#E4393D, #A51F27); border-top: 2px solid #F2C04E; border-bottom: 2px solid #B98522; box-sizing: border-box;
+  transform: scaleX(0); transform-origin: 0 50%; transition: transform .95s cubic-bezier(.3, 0, .2, 1);
+}
+.qn-tapete.aberto { transform: scaleX(1); }
+.qn-tapete.da-direita { transform-origin: 100% 50%; }
+
+/*
+ * A faixa com o nome, na frente do tablado: na cor da farda de cada um, letra
+ * branca, o nome e o cargo numa linha só (Cleber, 12/11/2026).
+ */
+.qn-placa {
+  position: absolute; top: -19px; left: 0; width: max-content; padding: 1.5px 10px 2.5px; box-sizing: border-box; border-radius: 999px; text-align: center; z-index: 4;
+  background: linear-gradient(#E4393D, #A51F27); border: 1.4px solid #2B1B12; color: #FFFFFF; white-space: nowrap;
+  font: 800 11px/1.1 system-ui, 'Segoe UI', sans-serif; letter-spacing: .01em;
+  transform: translate(-50%, 46px); transition: transform .5s cubic-bezier(.3, 1.5, .5, 1);
+}
+.qn-placa[data-farda="verde"] { background: linear-gradient(#27A56A, #12633D); }
+.qn-placa[data-farda="azul"] { background: linear-gradient(#3B7BDC, #1A4588); }
+.qn-placa small { margin-left: 6px; padding-left: 6px; border-left: 1px solid rgba(255, 255, 255, .5); font: 700 8px/1.1 system-ui, 'Segoe UI', sans-serif; letter-spacing: .07em; text-transform: uppercase; color: rgba(255, 255, 255, .88); }
+.qn-placa.sobe { transform: translate(-50%, 0); }
+/* No palco pequeno, só o nome, maior. */
+.qn-palco[data-mini] .qn-placa { top: -21px; padding: 1px 9px 1.5px; font-size: 14px; }
+.qn-palco[data-mini] .qn-placa small { display: none; }
+
+/* A caixa de presente de onde o boneco pula. Fica na frente dele. */
+.qn-caixa { position: absolute; top: -88px; left: 0; width: 0; height: 0; z-index: 5; }
+.qn-caixa-y { position: absolute; left: -42px; top: 0; width: 84px; height: 132px; }
+.qn-caixa[data-estado="cai"] .qn-caixa-y { animation: qn-caixa-cai .78s cubic-bezier(.5, 0, .8, .5) both; }
+@keyframes qn-caixa-cai {
+  0% { transform: translateY(-900px) rotate(-8deg); }
+  62% { transform: translateY(0) rotate(0) scale(1.1, .86); }
+  78% { transform: translateY(-14px) scale(.97, 1.04); }
+  100% { transform: translateY(0) scale(1); }
+}
+.qn-caixa[data-estado="some"] .qn-caixa-y { animation: qn-caixa-some .6s cubic-bezier(.5, -.2, .8, .4) both; }
+@keyframes qn-caixa-some { from { transform: translateY(0); } to { transform: translateY(160px); } }
+.qn-caixa-corpo { position: absolute; inset: 14px 0 0 0; border-radius: 4px; border: 1.5px solid #2B1B12; background: linear-gradient(90deg, #36B279, #1F8F5A 40%, #12633D); }
+.qn-caixa[data-quem="a"] .qn-caixa-corpo { background: linear-gradient(90deg, #F36A5E, #D42C30 40%, #9E1D25); }
+.qn-caixa-corpo::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 14px; margin-left: -7px; background: linear-gradient(90deg, #FFE596, #F2C04E, #B98522); }
+.qn-caixa-tampa { position: absolute; left: -5px; right: -5px; top: 0; height: 20px; border-radius: 4px; border: 1.5px solid #2B1B12; background: linear-gradient(90deg, #4DCB90, #27A56A 40%, #16794B); transform-origin: 6% 100%; }
+.qn-caixa[data-quem="a"] .qn-caixa-tampa { background: linear-gradient(90deg, #FF8A7C, #E5403A 40%, #B02A2A); }
+.qn-caixa-tampa::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 14px; margin-left: -7px; background: linear-gradient(90deg, #FFE596, #F2C04E, #B98522); }
+.qn-caixa-tampa::after { content: ''; position: absolute; left: 50%; top: -12px; width: 30px; height: 13px; margin-left: -15px; border-radius: 50% 50% 4px 4px; border: 1.5px solid #2B1B12; background: #F2C04E; }
+.qn-caixa[data-estado="abre"] .qn-caixa-tampa, .qn-caixa[data-estado="some"] .qn-caixa-tampa { animation: qn-tampa .7s cubic-bezier(.3, 0, .4, 1) both; }
+@keyframes qn-tampa {
+  0% { transform: translate(0, 0) rotate(0); opacity: 1; }
+  40% { transform: translate(-36px, -70px) rotate(-70deg); opacity: 1; }
+  100% { transform: translate(-96px, 60px) rotate(-190deg); opacity: 0; }
+}
+.qn-caixa[data-estado="cai"] .qn-caixa-tampa { animation: qn-tampa-treme .13s linear .86s 9 alternate; }
+@keyframes qn-tampa-treme { from { transform: rotate(-3deg) translateY(0); } to { transform: rotate(3deg) translateY(-3px); } }
+
+/* O que voa: confete, cascas de noz e a surpresa. Quem anima é o `Palco` (WAAPI). */
+.qn-voa { position: absolute; left: 0; top: 0; width: 0; height: 0; z-index: 7; }
+.qn-voa i { position: absolute; display: block; will-change: transform, opacity; }
+.qn-voa .papel { width: 7px; height: 10px; margin: -5px 0 0 -3.5px; border-radius: 1.5px; }
+.qn-voa .casca { width: 13px; height: 11px; margin: -5.5px 0 0 -6.5px; border-radius: 60% 60% 30% 30%; background: #A9773F; border: 1.2px solid #2B1B12; box-sizing: border-box; }
+.qn-voa .surpresa { margin: -15px 0 0 -15px; width: 30px; height: 30px; font: 800 26px/30px system-ui, 'Segoe UI Emoji', sans-serif; text-align: center; font-style: normal; }
+
+/*
+ * ── Os destaques: a faixa e, embaixo dela, os cartões — tudo acima dos balões.
+ * Uma coluna só, para a faixa ficar sempre em cima da última fileira. No palco
+ * pequeno o quadro cresce de volta, para dar para ler.
+ */
+.qn-quadro { position: absolute; left: 0; bottom: 308px; width: 0; height: 0; }
+.qn-palco[data-mini] .qn-quadro { bottom: 350px; --qn-quadro: 1.3; }
+.qn-quadro-c {
+  position: absolute; left: 0; bottom: 0; width: max-content; display: flex; flex-direction: column; align-items: center; gap: 16px;
+  transform: translateX(-50%) scale(var(--qn-quadro, 1)); transform-origin: 50% 100%;
+}
+.qn-letreiro-c {
+  width: max-content; padding: 6px 26px 7px; border-radius: 5px; text-align: center;
+  background: linear-gradient(#E4393D, #B4232A); border: 1.5px solid #2B1B12; box-shadow: inset 0 0 0 2px #F2C04E;
+  color: #FFF6DC; font: 800 17px/1.15 system-ui, 'Segoe UI', sans-serif; letter-spacing: .02em;
+  transform: translateY(-70px); opacity: 0; transition: transform .7s cubic-bezier(.3, 1.5, .5, 1), opacity .3s ease;
+}
+.qn-letreiro-c small { display: block; font: 600 11px/1.2 system-ui, 'Segoe UI', sans-serif; letter-spacing: .08em; text-transform: uppercase; color: #FFD98A; }
+.qn-letreiro-c.desce { transform: translateY(0); opacity: 1; }
+
+.qn-cartoes-c { width: max-content; max-width: var(--qn-largura, 1100px); display: flex; flex-wrap: wrap-reverse; justify-content: center; gap: 10px; transform: scale(var(--qn-cartoes, 1)); transform-origin: 50% 100%; }
+.qn-cartao {
+  position: relative; width: 112px; padding: 0 6px 8px; box-sizing: border-box; border-radius: 9px; text-align: center; overflow: hidden;
+  background: linear-gradient(#FFFDF6, #F6ECD2); border: 1.5px solid #2B1B12; color: #2B1B12;
+  opacity: 0; transform: translateY(38px) scale(.4) rotate(-8deg);
+}
+.qn-cartao.revelado { animation: qn-cartao .62s var(--qn-mola) both; }
+@keyframes qn-cartao { from { opacity: 0; transform: translateY(38px) scale(.4) rotate(-8deg); } 20% { opacity: 1; } to { opacity: 1; transform: translateY(0) scale(1) rotate(0); } }
+.qn-cartao.sai { animation: qn-cartao-sai .5s ease-in both; }
+@keyframes qn-cartao-sai { from { opacity: 1; transform: translateY(0) scale(1); } to { opacity: 0; transform: translateY(-46px) scale(.8); } }
+.qn-cartao.meu { border-color: #B98522; box-shadow: 0 0 0 2.5px #F2C04E; }
+.qn-cartao-setor { margin: 0 -6px 7px; padding: 4px 4px 4px; background: linear-gradient(#1F8F5A, #12633D); color: #FFFFFF; font: 800 10.5px/1.15 system-ui, 'Segoe UI', sans-serif; letter-spacing: .03em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.qn-palco[data-cidade="birigui"] .qn-cartao-setor { background: linear-gradient(#2B66C0, #1A4588); }
+.qn-cartao-foto { width: 58px; height: 58px; margin: 0 auto 5px; border-radius: 50%; border: 2.5px solid #F2C04E; outline: 1.2px solid #2B1B12; overflow: hidden; background: #D9E2EC; display: flex; align-items: center; justify-content: center; font: 800 22px/1 system-ui, sans-serif; color: #5B6B7E; }
+.qn-cartao-foto img { display: block; width: 100%; height: 100%; max-width: none; object-fit: cover; }
+.qn-cartao-nome { font: 800 12.5px/1.15 system-ui, 'Segoe UI', sans-serif; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.qn-cartao-feito { margin-top: 2px; font: 600 9.5px/1.2 system-ui, 'Segoe UI', sans-serif; color: #8A6A1E; }
+/* O brilho que passa por cima do cartão quando ele chega. */
+.qn-cartao::after { content: ''; position: absolute; top: 0; bottom: 0; left: 0; width: 34px; background: linear-gradient(100deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, .8), rgba(255, 255, 255, 0)); transform: translateX(-60px) skewX(-14deg); }
+.qn-cartao.revelado::after { animation: qn-brilho .8s ease-out .45s both; }
+@keyframes qn-brilho { from { transform: translateX(-60px) skewX(-14deg); } to { transform: translateX(160px) skewX(-14deg); } }
+
+/*
+ * ── As duas bolinhas de Natal ao lado do tablado: o som e o tamanho do palco.
+ * Ficam fora do `.qn-palco` (não encolhem com ele) e só enquanto eles estão em cena.
+ */
+.qn-controles {
+  position: fixed; left: calc(50% + var(--qn-x, 240px)); bottom: 5px; z-index: 61; display: flex; gap: 8px;
+  opacity: 0; pointer-events: none; transform: translateY(46px); transition: transform .7s var(--qn-mola) .5s, opacity .2s ease .5s;
+}
+.qn-controles.aceso { opacity: 1; pointer-events: auto; transform: translateY(0); }
+.qn-bola {
+  position: relative; width: 28px; height: 28px; padding: 0; border-radius: 50%; display: grid; place-items: center; cursor: pointer;
+  border: 1.5px solid #2B1B12; color: #FFFFFF; background: radial-gradient(circle at 34% 28%, #FF9A8C, #DB3236 46%, #9E1D25);
+  box-shadow: inset 0 0 0 1.5px rgba(255, 229, 150, .8); transition: transform .18s cubic-bezier(.3, 1.6, .5, 1);
+}
+/* A tampinha dourada de onde a bolinha penduraria. */
+.qn-bola::before {
+  content: ''; position: absolute; left: 50%; top: -6.5px; width: 10px; height: 6.5px; margin-left: -5px; box-sizing: border-box;
+  border: 1.3px solid #2B1B12; border-bottom: 0; border-radius: 2.5px 2.5px 0 0; background: linear-gradient(90deg, #FFE596, #F2C04E 50%, #B98522);
+}
+.qn-bola.tamanho { background: radial-gradient(circle at 34% 28%, #6FDDA6, #23975F 46%, #12633D); }
+.qn-bola.som[data-mudo] { background: radial-gradient(circle at 34% 28%, #D3DAE4, #8E9BAD 46%, #5B6B7E); }
+.qn-bola:hover, .qn-bola:focus-visible { transform: translateY(-2px) scale(1.1); outline: none; }
+.qn-bola:focus-visible { box-shadow: inset 0 0 0 1.5px rgba(255, 229, 150, .8), 0 0 0 2.5px #F2C04E; }
+.qn-bola:active { transform: scale(.92); }
+
+/*
+ * ══ Em quadrinhos (o modo leve; `quadrinho.ts`) ════════════════════════════
+ * Uma pose por fala. Nada se repete e nada desliza: os bonecos trocam de pose
+ * de uma vez, sem transição, e não respiram. Sobram quatro movimentos, todos
+ * de uma vez só e na placa de vídeo: o chão e as faixas subindo, o pulinho de
+ * quem fala e o balão abrindo (os dois postos pelo JS, em `deixas.ts` e no
+ * `Palco`) e o cartão chegando.
+ *
+ * O palco leva `data-anima-sempre`, que o tira da regra geral do modo leve
+ * (`index.css`): quem decide o que anima é isto aqui.
+ */
+.qn-palco[data-quadrinho] .qn, .qn-palco[data-quadrinho] .qn * { animation: none !important; transition: none !important; }
+.qn-palco[data-quadrinho] .qn { will-change: auto; }
+.qn-palco[data-quadrinho] .qn-cartao.revelado { animation-duration: .36s; }
+.qn-palco[data-quadrinho] .qn-cartao::after { display: none; }
+.qn-palco[data-quadrinho] .qn-caixa, .qn-palco[data-quadrinho] .qn-voa, .qn-palco[data-quadrinho] .qn-emote { display: none; }
+.qn-palco[data-quadrinho] .qn-tapete { transition-duration: .3s; }
