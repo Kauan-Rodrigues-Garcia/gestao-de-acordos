@@ -9,6 +9,11 @@
  *   votam      quem tem os cargos escolhidos (padrão: Operador) nos SETORES
  *              marcados, separados por EQUIPE — a equipe desmarcada sai inteira;
  *              depois dá para tirar e incluir pessoa por pessoa.
+ *   cédula     CADA SETOR VOTA NO SEU GERENTE (12/11/2026): cada pessoa só vê
+ *              os gerentes ligados ao setor dela. A ligação vem do cadastro
+ *              (o setor do gerente) e quem organiza muda à mão — um gerente
+ *              pode ser ligado a mais setores. Num setor com 2 gerentes, a
+ *              pessoa escolhe em cada categoria qual dos dois combina mais.
  *
  * Sem banco: recebe o que `lerParticipantes` leu e o rascunho da tela.
  */
@@ -41,6 +46,11 @@ export interface RascunhoGerentes {
   umPorCandidato: boolean;
   /** O mesmo gerente em 1º em mais de uma categoria pede decisão da diretoria. Padrão: não. */
   umTitulo: boolean;
+  /**
+   * Setor → gerentes em quem ele vota, quando quem organiza mudou à mão. Setor
+   * fora daqui segue o cadastro (os gerentes com aquele setor).
+   */
+  ligacoes: Record<string, string[]>;
 }
 
 export const rascunhoGerentesPadrao = (): RascunhoGerentes => ({
@@ -49,7 +59,7 @@ export const rascunhoGerentesPadrao = (): RascunhoGerentes => ({
   cargosEleitores: ['operador'], setores: [], equipesFora: [],
   eleitoresFora: [], eleitoresVoltaram: [], eleitoresIncluidos: [],
   perguntas: PERGUNTAS_PADRAO_GERENTES.map(p => ({ ...p })),
-  umPorCandidato: false, umTitulo: false,
+  umPorCandidato: false, umTitulo: false, ligacoes: {},
 });
 
 export const semEquipe = (setorId: string) => `sem:${setorId}`;
@@ -75,6 +85,18 @@ export interface MontagemGerentes {
   equipeDe: (p: Participante) => string;
   /** Setores marcados que ainda valem nesta operação. */
   marcados: Set<string>;
+  /** Os gerentes (concorrendo) em quem um setor vota. */
+  gerentesDoSetor: (setorId: string) => Participante[];
+  /** A ligação do setor foi mudada à mão (não é a do cadastro). */
+  ligadoAMao: (setorId: string) => boolean;
+  /** Eleitor → os gerentes da cédula dele (ids). */
+  cedulaPorEleitor: Map<string, string[]>;
+  /** Quem votaria sem nenhum gerente na cédula (sem setor, ou setor sem gerente ligado). */
+  semGerente: Participante[];
+  /** Setores de quem vota que têm um gerente só: ali o voto é automático. */
+  setoresComUm: string[];
+  /** Gerentes concorrendo que nenhum eleitor vê. */
+  gerentesSemEleitor: Participante[];
 }
 
 /** Quantos gerentes cada operação tem (os botões de operação). Filtro de dado, não de acesso. */
@@ -150,5 +172,31 @@ export function montarGerentes(
     ...incluidosE,
   ].sort(porNome);
 
-  return { gerentesDaOperacao, contasGerentes, candidatos, grupos, porSetor, equipesPorSetor, doFiltro, contasEleitores, eleitores, equipeDe, marcados };
+  // ── A cédula: cada setor vota no seu gerente ──
+  const idsCandidatos = new Set(candidatos.map(p => p.id));
+  const ligadoAMao = (setorId: string) => Object.prototype.hasOwnProperty.call(r.ligacoes ?? {}, setorId);
+  const gerentesDoSetor = (setorId: string): Participante[] => {
+    const ids = ligadoAMao(setorId)
+      ? (r.ligacoes[setorId] ?? []).filter(id => idsCandidatos.has(id))
+      : candidatos.filter(g => g.setorId === setorId).map(g => g.id);
+    return ids.map(id => porId.get(id)).filter((g): g is Participante => !!g).sort(porNome);
+  };
+  const cedulaPorEleitor = new Map<string, string[]>();
+  const semGerente: Participante[] = [];
+  const vistos = new Set<string>();
+  const setoresDeQuemVota = new Set<string>();
+  for (const e of eleitores) {
+    const ids = e.setorId ? gerentesDoSetor(e.setorId).map(g => g.id).filter(id => id !== e.id) : [];
+    cedulaPorEleitor.set(e.id, ids);
+    if (!ids.length) semGerente.push(e);
+    if (e.setorId) setoresDeQuemVota.add(e.setorId);
+    ids.forEach(id => vistos.add(id));
+  }
+  const setoresComUm = [...setoresDeQuemVota].filter(s => gerentesDoSetor(s).length === 1);
+  const gerentesSemEleitor = candidatos.filter(g => !vistos.has(g.id));
+
+  return {
+    gerentesDaOperacao, contasGerentes, candidatos, grupos, porSetor, equipesPorSetor, doFiltro, contasEleitores, eleitores, equipeDe, marcados,
+    gerentesDoSetor, ligadoAMao, cedulaPorEleitor, semGerente, setoresComUm, gerentesSemEleitor,
+  };
 }

@@ -115,11 +115,34 @@ describe('votação dos gerentes', () => {
 
     await expect(votar(G1, id, tudo(G2))).rejects.toThrow(/NAO_AUTORIZADO/);
     await expect(votar(O1, id, { q1: G1, q2: G1 })).rejects.toThrow(/faltam 1/);
-    await expect(votar(O1, id, { ...tudo(G1), q1: O2 })).rejects.toThrow(/não participa/);
+    await expect(votar(O1, id, { ...tudo(G1), q1: O2 })).rejects.toThrow(/não está na sua cédula/);
     await votar(O1, id, tudo(G1));
     await votar(O2, id, tudo(G1));
     const l = (await listar()).find(v => v.id === id)!;
     expect(l).toMatchObject({ tipo: 'gerentes', eleitores: 3, participantes: 3, votaram: 2 });
+  });
+
+  it('cada setor vota no seu gerente: a cédula de cada um tem só os dele', async () => {
+    // O1 e O2 (setor com 2 gerentes) escolhem entre G1 e G3; O3 só tem o G2.
+    const cedula = { [O1]: [G1, G3], [O2]: [G1, G3], [O3]: [G2] };
+    await expect(gravar({ cedula_por_eleitor: { ...cedula, [O3]: [] } })).rejects.toThrow(/1 pessoa\(s\) votariam sem nenhum gerente/);
+    // Quem não é candidato some da cédula; quem não é eleitor, também.
+    const id = await gravar({ cedula_por_eleitor: { ...cedula, [O3]: [G2, O1], [L1]: [G1] } });
+    await mudar(id, 'abrir');
+    const deO1 = await como<Array<{ participantes: { id: string }[] }>>(O1, 'select public.fn_votacao_lideranca_minha() v');
+    expect(deO1[0].participantes.map(p => p.id).sort()).toEqual([G1, G3].sort());
+    const deO3 = await como<Array<{ participantes: { id: string }[] }>>(O3, 'select public.fn_votacao_lideranca_minha() v');
+    expect(deO3[0].participantes.map(p => p.id)).toEqual([G2]);
+
+    await expect(votar(O1, id, tudo(G2))).rejects.toThrow(/não está na sua cédula/);
+    await votar(O1, id, { q1: G1, q2: G3, q3: G1 });
+    await votar(O3, id, tudo(G2));
+    // A apuração vê todos os gerentes, com os votos de cada setor.
+    await mudar(id, 'encerrar', DIR);
+    const a = await como<{ participantes: { id: string }[]; contagem: Array<{ candidato_id: string; votos: number }> }>(
+      DIR, 'select public.fn_votacao_lideranca_apuracao($1) v', [id]);
+    expect(a.participantes).toHaveLength(3);
+    expect(a.contagem.filter(c => c.candidato_id === G2).reduce((s, c) => s + c.votos, 0)).toBe(3);
   });
 
   it('com «um por candidato» ligado, cada gerente vale uma pergunta', async () => {

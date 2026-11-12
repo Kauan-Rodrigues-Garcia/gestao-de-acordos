@@ -92,6 +92,25 @@ describe('Votação dos Gerentes (montagem)', () => {
     expect(banco.liberar.mock.calls[0][0]).toMatchObject({
       tipo: 'gerentes', produto: 'cobranca', participantes: ['g1', 'g2'], eleitores: ['o1'],
       setorIds: ['s1'], equipeIds: ['e1'], umPorCandidato: false, umTitulo: false,
+      cedulaPorEleitor: { o1: ['g1'] },
     });
+  });
+
+  it('cada setor vota no seu gerente: sem gerente trava; ligar à mão destrava', async () => {
+    await abrirGerentes();
+    const setores = screen.getByRole('group', { name: 'Setores de BookPlay · Birigui' });
+    fireEvent.click(within(setores).getByRole('button', { name: /Play 2/ }));
+    // O Play 2 não tem gerente no cadastro.
+    expect(screen.getByText(/Sem gerente na cédula \(1\)/)).toBeTruthy();
+    expect((screen.getByRole('button', { name: /Liberar para a operação/ }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText('Ligar gerente a Play 2'), { target: { value: 'g1' } });
+    fireEvent.change(screen.getByLabelText('Ligar gerente a Play 2'), { target: { value: 'g2' } });
+    expect(screen.queryByText(/Sem gerente na cédula/)).toBeNull();
+    const liberar = screen.getByRole('button', { name: /Liberar para a operação/ }) as HTMLButtonElement;
+    await waitFor(() => expect(liberar.disabled).toBe(false));
+    fireEvent.click(liberar);
+    fireEvent.click(await screen.findByRole('button', { name: /Liberar agora/ }));
+    await waitFor(() => expect(banco.liberar).toHaveBeenCalledTimes(1));
+    expect(banco.liberar.mock.calls[0][0].cedulaPorEleitor).toEqual({ o3: ['g1', 'g2'] });
   });
 });

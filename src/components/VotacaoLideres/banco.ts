@@ -156,6 +156,8 @@ export interface VotacaoCompleta extends NovaVotacao {
   eleitores: string[];
   umPorCandidato: boolean;
   umTitulo: boolean;
+  /** Gerentes: em quem cada eleitor vota (os do setor dele). Ausente = todos em todos. */
+  cedulaPorEleitor?: Record<string, string[]>;
 }
 
 export async function liberarVotacao(v: VotacaoCompleta): Promise<string> {
@@ -168,6 +170,7 @@ export async function liberarVotacao(v: VotacaoCompleta): Promise<string> {
       perguntas: v.perguntas.map(p => ({ id: p.id, emoji: p.emoji, texto: p.texto })),
       participantes: v.participantes, eleitores: v.tipo === 'lideranca' ? null : v.eleitores,
       um_por_candidato: v.umPorCandidato, um_titulo: v.umTitulo,
+      cedula_por_eleitor: v.tipo === 'lideranca' ? null : v.cedulaPorEleitor ?? null,
     },
   });
   try {

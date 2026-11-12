@@ -10,6 +10,8 @@
  *      e dá para incluir à mão;
  *   3. quem vota — cargos (padrão Operador), SETORES e, dentro de cada setor,
  *      as EQUIPES; depois, pessoa por pessoa (tirar e incluir à mão);
+ *      CADA SETOR VOTA NO SEU GERENTE: a ligação setor → gerentes vem do
+ *      cadastro e muda à mão (um gerente pode valer para mais setores);
  *   4. as regras: «cada gerente uma vez por eleitor» e «um título por
  *      gerente» (as duas desligadas por padrão: são poucos gerentes);
  *   5. as perguntas (mínimo 3);
@@ -62,6 +64,9 @@ function lerRascunho(): RascunhoGerentes {
       perguntas: Array.isArray(r.perguntas) && r.perguntas.length ? r.perguntas : base.perguntas,
       umPorCandidato: typeof r.umPorCandidato === 'boolean' ? r.umPorCandidato : base.umPorCandidato,
       umTitulo: typeof r.umTitulo === 'boolean' ? r.umTitulo : base.umTitulo,
+      ligacoes: r.ligacoes && typeof r.ligacoes === 'object' && !Array.isArray(r.ligacoes)
+        ? Object.fromEntries(Object.entries(r.ligacoes).filter((e): e is [string, string[]] => listaDeTexto(e[1])))
+        : base.ligacoes,
     };
   } catch { return base; }
 }
@@ -155,8 +160,21 @@ export function MontarVotacaoGerentes({ dados, onLiberada }: Props) {
   const pessoasDaCedula = useMemo(() => new Map<string, Candidato>(m.candidatos.map(p => [
     p.id, p.setorId ? p : { ...p, setor: PERFIL_LABELS[p.perfil] ?? 'Sem setor' },
   ])), [m.candidatos]);
-  const cedula = useMemo(() => cedulaComTodos(perguntas, m.candidatos), [perguntas, m.candidatos]);
-  const exigidas = respostasExigidas({ candidatos: m.candidatos.length, perguntas: perguntas.length, eleitorConcorre: false, umPorCandidato: r.umPorCandidato });
+  // A demonstração vota como alguém de um setor com 2+ gerentes (se houver): é o caso de escolher.
+  const eleitorDemo = useMemo(() => m.eleitores.find(e => (m.cedulaPorEleitor.get(e.id)?.length ?? 0) > 1) ?? m.eleitores[0],
+    [m.eleitores, m.cedulaPorEleitor]);
+  const cedula = useMemo(() => {
+    const ids = eleitorDemo ? new Set(m.cedulaPorEleitor.get(eleitorDemo.id) ?? []) : null;
+    return cedulaComTodos(perguntas, ids ? m.candidatos.filter(g => ids.has(g.id)) : m.candidatos);
+  }, [perguntas, m.candidatos, m.cedulaPorEleitor, eleitorDemo]);
+  /** Quantos gerentes cada um tem na cédula (maior), para o texto das regras. */
+  const maiorCedula = useMemo(() => Math.max(0, ...[...m.cedulaPorEleitor.values()].map(c => c.length)), [m.cedulaPorEleitor]);
+  const exigidas = respostasExigidas({ candidatos: maiorCedula, perguntas: perguntas.length, eleitorConcorre: false, umPorCandidato: r.umPorCandidato });
+  /** Os setores de quem vota (marcados + de quem entrou à mão), para ligar os gerentes. */
+  const setoresQueVotam = useMemo(() => [...new Set(m.eleitores.map(e => e.setorId).filter((s): s is string => !!s))]
+    .sort((a, b) => (nomeDoSetor.get(a) ?? '').localeCompare(nomeDoSetor.get(b) ?? '', 'pt-BR', { numeric: true })), [m.eleitores, nomeDoSetor]);
+  const ligar = (setorId: string, ids: string[]) => mudar({ ligacoes: { ...r.ligacoes, [setorId]: ids } });
+  const voltarAoCadastro = (setorId: string) => { const { [setorId]: _fora, ...resto } = r.ligacoes; mudar({ ligacoes: resto }); };
 
   const idsCandidatos = useMemo(() => new Set(m.candidatos.map(p => p.id)), [m.candidatos]);
   const idsEleitores = useMemo(() => new Set(m.eleitores.map(p => p.id)), [m.eleitores]);
@@ -166,6 +184,7 @@ export function MontarVotacaoGerentes({ dados, onLiberada }: Props) {
   if (m.eleitores.length < 1) problemas.push('Escolha quem vota: marque setores (e equipes) ou inclua pessoas à mão.');
   if (perguntas.length < MIN_PERGUNTAS_GERENTES) problemas.push(`São ${perguntas.length} perguntas; o mínimo é ${MIN_PERGUNTAS_GERENTES}.`);
   if (new Set(perguntas.map(p => p.id)).size !== perguntas.length) problemas.push('Há perguntas repetidas.');
+  if (m.semGerente.length) problemas.push(`${m.semGerente.length} ${m.semGerente.length === 1 ? 'pessoa vota' : 'pessoas votam'} sem gerente na cédula: ligue um gerente ao setor delas (bloco «Cada setor vota no seu gerente») ou tire-as.`);
   const tituloLimpo = r.titulo.trim();
   const paraLiberar = [...problemas, ...(tituloLimpo ? [] : ['Dê um título para a votação.'])];
 
@@ -179,6 +198,7 @@ export function MontarVotacaoGerentes({ dados, onLiberada }: Props) {
         cargos: ['gerencia'], cargosEleitores: r.cargosEleitores,
         perguntas, participantes: m.candidatos.map(p => p.id), eleitores: m.eleitores.map(p => p.id),
         umPorCandidato: r.umPorCandidato, umTitulo: r.umTitulo,
+        cedulaPorEleitor: Object.fromEntries(m.cedulaPorEleitor),
       });
       toast.success('Votação dos gerentes liberada', { description: `${m.eleitores.length} pessoas já podem votar pelo card no canto da tela.` });
       setConfirmando(false);
@@ -402,6 +422,71 @@ export function MontarVotacaoGerentes({ dados, onLiberada }: Props) {
         )}
       </section>
 
+      {/* 3b. Cada setor vota no seu gerente */}
+      <section className="space-y-2.5">
+        <h3 className={titulo3}>Cada setor vota no seu gerente</h3>
+        <p className="text-xs text-muted-foreground">
+          Quem vota só vê os gerentes ligados ao setor dele. A ligação vem do cadastro (o setor do gerente); mude aqui quando um gerente cuida de
+          mais de um setor. Com 2 gerentes no setor, a pessoa escolhe em cada categoria qual dos dois combina mais.
+        </p>
+        <div className="divide-y rounded-lg border">
+          {setoresQueVotam.length === 0 && <p className="px-3 py-3 text-center text-xs text-muted-foreground">Marque quem vota acima.</p>}
+          {setoresQueVotam.map(setorId => {
+            const ligados = m.gerentesDoSetor(setorId);
+            const idsLigados = ligados.map(g => g.id);
+            const livres = m.candidatos.filter(g => !idsLigados.includes(g.id));
+            const quantos = m.eleitores.filter(e => e.setorId === setorId).length;
+            return (
+              <div key={setorId} className="flex flex-wrap items-center gap-1.5 px-3 py-2">
+                <span className="min-w-[120px] text-xs font-medium">
+                  {nomeDoSetor.get(setorId) ?? m.eleitores.find(e => e.setorId === setorId)?.setor ?? 'Setor'}
+                  <span className="ml-1 font-normal text-muted-foreground">· {quantos} votam</span>
+                </span>
+                <span className="text-[11px] text-muted-foreground">votam em</span>
+                {ligados.length === 0 && <span className="rounded-full border border-destructive/40 bg-destructive/10 px-2 py-0.5 text-[11px] text-destructive">nenhum gerente</span>}
+                {ligados.map(g => (
+                  <span key={g.id} className="flex items-center gap-1 rounded-full border border-primary/50 bg-primary/10 py-0.5 pl-0.5 pr-1 text-xs" title={dica(g)}>
+                    <FotoLider lider={g} className="h-5 w-5 text-[8px]" /> {nomeCurto(g.nome)}
+                    <button type="button" onClick={() => ligar(setorId, idsLigados.filter(id => id !== g.id))} aria-label={`Desligar ${g.nome} de ${nomeDoSetor.get(setorId) ?? 'este setor'}`}
+                      className="rounded-full p-0.5 text-muted-foreground hover:bg-destructive/15 hover:text-destructive"><X className="h-3 w-3" /></button>
+                  </span>
+                ))}
+                {livres.length > 0 && (
+                  <select value="" aria-label={`Ligar gerente a ${nomeDoSetor.get(setorId) ?? 'este setor'}`}
+                    onChange={e => { if (e.target.value) ligar(setorId, [...idsLigados, e.target.value]); }}
+                    className="h-7 rounded-md border bg-background px-1.5 text-xs">
+                    <option value="">+ ligar gerente</option>
+                    {livres.map(g => <option key={g.id} value={g.id}>{g.nome}{g.setorId ? ` · ${g.setor}` : ''}</option>)}
+                  </select>
+                )}
+                {m.ligadoAMao(setorId) && (
+                  <button type="button" onClick={() => voltarAoCadastro(setorId)} className="text-[11px] font-medium text-primary hover:underline">
+                    voltar ao cadastro
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        {m.semGerente.length > 0 && (
+          <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            Sem gerente na cédula ({m.semGerente.length}): {m.semGerente.slice(0, 12).map(p => `${nomeCurto(p.nome)} (${p.setor})`).join(', ')}
+            {m.semGerente.length > 12 ? '…' : ''}. Ligue um gerente ao setor delas ou tire-as de quem vota.
+          </p>
+        )}
+        {m.setoresComUm.length > 0 && (
+          <p className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
+            Com um gerente só, o voto é automático (ele vem marcado em todas as categorias):{' '}
+            {m.setoresComUm.map(s => nomeDoSetor.get(s) ?? 'Setor').join(', ')}. Se outro gerente também cuida desse setor, ligue-o acima.
+          </p>
+        )}
+        {m.gerentesSemEleitor.length > 0 && (
+          <p className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
+            Ninguém vota em: {m.gerentesSemEleitor.map(g => nomeCurto(g.nome)).join(', ')}. Ligue ao setor que ele cuida, ou tire da votação.
+          </p>
+        )}
+      </section>
+
       {/* 4. Regras */}
       <section className="space-y-2.5">
         <h3 className={titulo3}>4. Regras</h3>
@@ -410,7 +495,7 @@ export function MontarVotacaoGerentes({ dados, onLiberada }: Props) {
           <span className="text-xs">
             <strong className="block text-sm">Cada gerente só pode ser escolhido uma vez por quem vota</strong>
             {r.umPorCandidato
-              ? <>Ligado: com {m.candidatos.length} gerentes, cada pessoa responde {exigidas} das {perguntas.length} perguntas.</>
+              ? <>Ligado: num setor com {maiorCedula} gerentes, cada pessoa responde {exigidas} das {perguntas.length} perguntas.</>
               : <>Desligado: o mesmo gerente pode ser escolhido em várias categorias, e cada pessoa responde todas as {perguntas.length}.</>}
           </span>
         </label>
@@ -499,7 +584,11 @@ export function MontarVotacaoGerentes({ dados, onLiberada }: Props) {
                   {r.umPorCandidato ? `Cada gerente só uma vez por pessoa (${exigidas} respostas cada).` : 'O mesmo gerente pode ser escolhido em várias categorias.'}
                   {' '}{r.umTitulo ? 'Gerente em 1º em mais de uma: a diretoria decide.' : 'Quem ficar em 1º leva, mesmo em várias.'}
                 </p>
-                <p>Depois de liberada, quem vota, os gerentes e as perguntas não mudam. O voto é secreto.</p>
+                <p>Cada pessoa vota só nos gerentes do próprio setor. Depois de liberada, quem vota, os gerentes e as perguntas não mudam. O voto é secreto.</p>
+                <p className="max-h-24 overflow-y-auto rounded-md bg-muted px-2.5 py-1.5 text-xs">
+                  <strong>Cédula por setor:</strong>{' '}
+                  {setoresQueVotam.map(s => `${nomeDoSetor.get(s) ?? 'Setor'} → ${m.gerentesDoSetor(s).map(g => nomeCurto(g.nome)).join(' e ') || '—'}`).join(' · ')}
+                </p>
                 <p className="max-h-20 overflow-y-auto rounded-md bg-muted px-2.5 py-1.5 text-xs"><strong>Gerentes:</strong> {m.candidatos.map(p => p.nome).join(', ')}</p>
                 <p className="max-h-28 overflow-y-auto rounded-md bg-muted px-2.5 py-1.5 text-xs"><strong>Votam:</strong> {m.eleitores.map(p => p.nome).join(', ')}</p>
               </div>
@@ -515,7 +604,7 @@ export function MontarVotacaoGerentes({ dados, onLiberada }: Props) {
       </AlertDialog>
 
       {demo !== null && (
-        <TelaVotacao cedula={cedula} pessoas={pessoasDaCedula} eleitorId={m.eleitores[0]?.id ?? null} nomeEleitor={m.eleitores[0]?.nome}
+        <TelaVotacao cedula={cedula} pessoas={pessoasDaCedula} eleitorId={eleitorDemo?.id ?? null} nomeEleitor={eleitorDemo?.nome}
           semente={demo} tipo="gerentes" umPorCandidato={r.umPorCandidato} umTitulo={r.umTitulo}
           eleitoresSimulados={m.eleitores.map(p => p.id)} onFechar={() => setDemo(null)} />
       )}

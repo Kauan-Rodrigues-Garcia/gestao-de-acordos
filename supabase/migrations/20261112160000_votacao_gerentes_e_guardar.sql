@@ -18,6 +18,12 @@
 --    A trava `vl_um_por_colega` sai da tabela: quem confere é
 --    fn_votacao_lideranca_votar, pela regra da votação.
 --
+--    CADA SETOR VOTA NO SEU GERENTE (12/11/2026): `cedula_por_eleitor` guarda,
+--    para cada eleitor, os gerentes em quem ele pode votar — os ligados ao
+--    setor dele (pelo cadastro, e quem organiza liga um gerente a mais setores
+--    à mão). Num setor com 2 gerentes a pessoa escolhe, em cada categoria, qual
+--    dos dois combina mais. Nulo = todos votam em todos (a liderança).
+--
 -- 2. Guardar. Uma votação ENCERRADA pode ir para a gaveta: o resultado não sai,
 --    ninguém decide nem libera, o card «Apurar» some da diretoria — e tudo fica
 --    gravado. «Tirar da gaveta» volta ao encerrada, do jeito que estava.
@@ -51,6 +57,7 @@ ALTER TABLE public.votacao_lideranca
   ADD COLUMN IF NOT EXISTS cargos_eleitores  TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   ADD COLUMN IF NOT EXISTS um_por_candidato  BOOLEAN NOT NULL DEFAULT TRUE,
   ADD COLUMN IF NOT EXISTS um_titulo         BOOLEAN NOT NULL DEFAULT TRUE,
+  ADD COLUMN IF NOT EXISTS cedula_por_eleitor JSONB,
   ADD COLUMN IF NOT EXISTS guardada_em       TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS guardada_por      UUID;
 
@@ -68,6 +75,8 @@ COMMENT ON COLUMN public.votacao_lideranca.um_por_candidato IS
   'Cada pessoa só pode ser escolhida uma vez por eleitor. 20261112160000.';
 COMMENT ON COLUMN public.votacao_lideranca.um_titulo IS
   'A mesma pessoa em 1º em mais de uma categoria pede decisão da diretoria. 20261112160000.';
+COMMENT ON COLUMN public.votacao_lideranca.cedula_por_eleitor IS
+  '{eleitor_id: [candidato_id]}: em quem cada eleitor pode votar (os gerentes do setor dele). Nulo = todos os participantes. 20261112160000.';
 COMMENT ON COLUMN public.votacao_lideranca.guardada_em IS
   'Encerrada e guardada sem liberar: não decide, não libera, não avisa. 20261112160000.';
 
@@ -93,6 +102,22 @@ AS $$
   SELECT COALESCE(array_agg(DISTINCT x::uuid), ARRAY[]::UUID[])
     FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(p) = 'array' THEN p ELSE '[]'::jsonb END) x
    WHERE x ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
+$$;
+
+-- Em quem esta pessoa pode votar: a cédula dela, ou todos os participantes.
+CREATE OR REPLACE FUNCTION public.fn_vl_cedula_de(p_id UUID, p_eleitor UUID)
+RETURNS UUID[]
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path TO ''
+AS $$
+  SELECT CASE WHEN v.cedula_por_eleitor IS NULL THEN v.participantes
+              ELSE ARRAY(SELECT x::uuid FROM jsonb_array_elements_text(
+                           COALESCE(v.cedula_por_eleitor->(p_eleitor::text), '[]'::jsonb)) x
+                         WHERE x::uuid = ANY (v.participantes)) END
+    FROM public.votacao_lideranca v
+   WHERE v.id = p_id;
 $$;
 
 -- O retrato: agora com o tipo, as regras, a gaveta e — para quem acompanha
@@ -214,6 +239,7 @@ COMMENT ON FUNCTION public.fn_vl_pendentes(UUID) IS
   '1º colocado que também leva outra categoria. 20261112160000.';
 
 REVOKE ALL ON FUNCTION public.fn_vl_uuids(JSONB)                   FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.fn_vl_cedula_de(UUID, UUID)          FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.fn_vl_montar(UUID, BOOLEAN, BOOLEAN) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.fn_vl_pendentes(UUID)                FROM PUBLIC, anon, authenticated;
 
@@ -223,9 +249,11 @@ REVOKE ALL ON FUNCTION public.fn_vl_pendentes(UUID)                FROM PUBLIC, 
 --
 -- p_dados: titulo, produto, tipo, setor_ids, equipe_ids, cargos,
 -- cargos_eleitores, perguntas, participantes, eleitores, um_por_candidato,
--- um_titulo. Liderança: mínimo 15 perguntas e 3 participantes; os eleitores
--- são os próprios participantes. Gerentes: mínimo 3 perguntas, 2 candidatos e
--- 1 eleitor. Cria (p_id nulo) ou edita um rascunho.
+-- um_titulo, cedula_por_eleitor. Liderança: mínimo 15 perguntas e 3
+-- participantes; os eleitores são os próprios participantes. Gerentes: mínimo
+-- 3 perguntas, 2 candidatos e 1 eleitor; com `cedula_por_eleitor`, cada
+-- eleitor precisa de pelo menos 1 gerente na cédula. Cria (p_id nulo) ou edita
+-- um rascunho.
 
 CREATE OR REPLACE FUNCTION public.fn_votacao_lideranca_gravar(p_id UUID, p_dados JSONB)
 RETURNS UUID
@@ -242,6 +270,8 @@ DECLARE
   v_um_cand       BOOLEAN := COALESCE((p_dados->>'um_por_candidato')::boolean, TRUE);
   v_um_tit        BOOLEAN := COALESCE((p_dados->>'um_titulo')::boolean, TRUE);
   v_textos        TEXT[];
+  v_cedulas       JSONB;
+  v_sem_cedula    INTEGER;
   v_id            UUID;
 BEGIN
   IF NOT (SELECT public.fn_user_is_super_admin()) THEN
@@ -290,6 +320,19 @@ BEGIN
     IF cardinality(v_eleitores) < 1 THEN
       RAISE EXCEPTION 'Escolha quem vota (setores, equipes ou pessoas).' USING ERRCODE = '22023';
     END IF;
+    -- Cada setor vota no seu gerente: só eleitores da votação, só candidatos dela.
+    IF jsonb_typeof(p_dados->'cedula_por_eleitor') = 'object' THEN
+      SELECT COALESCE(jsonb_object_agg(e::text, c), '{}'::jsonb) INTO v_cedulas
+        FROM unnest(v_eleitores) e,
+             LATERAL (SELECT COALESCE(jsonb_agg(DISTINCT x), '[]'::jsonb) AS c
+                        FROM unnest(public.fn_vl_uuids(p_dados->'cedula_por_eleitor'->(e::text))) x
+                       WHERE x = ANY (v_participantes)) l;
+      SELECT count(*) INTO v_sem_cedula FROM jsonb_each(v_cedulas) WHERE jsonb_array_length(value) = 0;
+      IF v_sem_cedula > 0 THEN
+        RAISE EXCEPTION '% pessoa(s) votariam sem nenhum gerente na cédula: ligue um gerente ao setor delas ou tire-as.', v_sem_cedula
+          USING ERRCODE = '22023';
+      END IF;
+    END IF;
   END IF;
 
   SELECT COALESCE(array_agg(DISTINCT x), ARRAY[]::TEXT[]) INTO v_textos
@@ -299,13 +342,13 @@ BEGIN
   IF p_id IS NULL THEN
     INSERT INTO public.votacao_lideranca (
       titulo, produto, tipo, setor_ids, equipe_ids, cargos, cargos_eleitores, perguntas,
-      participantes, eleitores, um_por_candidato, um_titulo, criada_por)
+      participantes, eleitores, um_por_candidato, um_titulo, cedula_por_eleitor, criada_por)
     VALUES (
       btrim(COALESCE(p_dados->>'titulo', '')), p_dados->>'produto', v_tipo,
       public.fn_vl_uuids(p_dados->'setor_ids'), public.fn_vl_uuids(p_dados->'equipe_ids'),
       COALESCE(ARRAY(SELECT jsonb_array_elements_text(CASE WHEN jsonb_typeof(p_dados->'cargos') = 'array'
                                                            THEN p_dados->'cargos' ELSE '[]'::jsonb END)), ARRAY[]::TEXT[]),
-      v_textos, v_perguntas, v_participantes, v_eleitores, v_um_cand, v_um_tit, auth.uid())
+      v_textos, v_perguntas, v_participantes, v_eleitores, v_um_cand, v_um_tit, v_cedulas, auth.uid())
     RETURNING id INTO v_id;
     PERFORM public.fn_vl_registrar(v_id, 'criada', jsonb_build_object(
       'tipo', v_tipo, 'perguntas', jsonb_array_length(v_perguntas), 'participantes', cardinality(v_participantes),
@@ -317,7 +360,8 @@ BEGIN
            cargos = COALESCE(ARRAY(SELECT jsonb_array_elements_text(CASE WHEN jsonb_typeof(p_dados->'cargos') = 'array'
                                                                          THEN p_dados->'cargos' ELSE '[]'::jsonb END)), ARRAY[]::TEXT[]),
            cargos_eleitores = v_textos, perguntas = v_perguntas, participantes = v_participantes,
-           eleitores = v_eleitores, um_por_candidato = v_um_cand, um_titulo = v_um_tit, atualizada_em = NOW()
+           eleitores = v_eleitores, um_por_candidato = v_um_cand, um_titulo = v_um_tit,
+           cedula_por_eleitor = v_cedulas, atualizada_em = NOW()
      WHERE id = p_id AND estado = 'rascunho'
     RETURNING id INTO v_id;
     IF v_id IS NULL THEN
@@ -426,9 +470,10 @@ BEGIN
   END IF;
   INSERT INTO public.votacao_lideranca (
     titulo, produto, tipo, setor_ids, equipe_ids, cargos, cargos_eleitores, perguntas,
-    participantes, eleitores, um_por_candidato, um_titulo, copiada_de, criada_por)
+    participantes, eleitores, um_por_candidato, um_titulo, cedula_por_eleitor, copiada_de, criada_por)
   SELECT left(v.titulo || ' (repetição)', 120), v.produto, v.tipo, v.setor_ids, v.equipe_ids, v.cargos,
-         v.cargos_eleitores, v.perguntas, v.participantes, v.eleitores, v.um_por_candidato, v.um_titulo, v.id, auth.uid()
+         v.cargos_eleitores, v.perguntas, v.participantes, v.eleitores, v.um_por_candidato, v.um_titulo,
+         v.cedula_por_eleitor, v.id, auth.uid()
   FROM public.votacao_lideranca v WHERE v.id = p_id
   RETURNING id INTO v_id;
   IF v_id IS NULL THEN
@@ -451,14 +496,20 @@ STABLE
 SECURITY DEFINER
 SET search_path TO ''
 AS $$
+  -- Cada um recebe só quem está na cédula dele (o gerente do próprio setor).
   SELECT COALESCE(jsonb_agg(
-           public.fn_vl_montar(v.id, FALSE, FALSE)
+           jsonb_set(r.m, '{participantes}', COALESCE((
+             SELECT jsonb_agg(p) FROM jsonb_array_elements(r.m->'participantes') p
+              WHERE (p->>'id')::uuid = ANY (public.fn_vl_cedula_de(r.id, (SELECT auth.uid())))), '[]'::jsonb))
            || jsonb_build_object('enviado_em', (
                 SELECT e.enviado_em FROM public.votacao_lideranca_envios e
-                WHERE e.votacao_id = v.id AND e.eleitor_id = (SELECT auth.uid())))
-           ORDER BY v.aberta_em), '[]'::jsonb)
-  FROM public.votacao_lideranca v
-  WHERE v.estado = 'aberta' AND (SELECT auth.uid()) = ANY (COALESCE(v.eleitores, v.participantes));
+                WHERE e.votacao_id = r.id AND e.eleitor_id = (SELECT auth.uid())))
+           ORDER BY r.aberta_em), '[]'::jsonb)
+  FROM (
+    SELECT v.id, v.aberta_em, public.fn_vl_montar(v.id, FALSE, FALSE) AS m
+      FROM public.votacao_lideranca v
+     WHERE v.estado = 'aberta' AND (SELECT auth.uid()) = ANY (COALESCE(v.eleitores, v.participantes))
+  ) r;
 $$;
 
 CREATE OR REPLACE FUNCTION public.fn_votacao_lideranca_votar(p_id UUID, p_votos JSONB, p_comecou_em TIMESTAMPTZ DEFAULT NULL)
@@ -473,6 +524,7 @@ DECLARE
   v_n INTEGER := 0;
   v_disponiveis INTEGER;
   v_exigidas INTEGER;
+  v_cedula UUID[];
   r RECORD;
 BEGIN
   SELECT * INTO v FROM public.votacao_lideranca WHERE id = p_id FOR SHARE;
@@ -485,6 +537,8 @@ BEGIN
   IF EXISTS (SELECT 1 FROM public.votacao_lideranca_envios e WHERE e.votacao_id = p_id AND e.eleitor_id = v_eu) THEN
     RAISE EXCEPTION 'Você já enviou os seus votos.' USING ERRCODE = '22023';
   END IF;
+  -- Em quem esta pessoa pode votar (os gerentes do setor dela, ou todos).
+  v_cedula := public.fn_vl_cedula_de(p_id, v_eu);
   IF jsonb_typeof(p_votos) IS DISTINCT FROM 'object' THEN
     RAISE EXCEPTION 'Os votos vieram num formato errado.' USING ERRCODE = '22023';
   END IF;
@@ -500,8 +554,8 @@ BEGIN
     IF r.candidato !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
       RAISE EXCEPTION 'Voto em quem não participa.' USING ERRCODE = '22023';
     END IF;
-    IF NOT (r.candidato::uuid = ANY (v.participantes)) THEN
-      RAISE EXCEPTION 'Voto em quem não participa.' USING ERRCODE = '22023';
+    IF NOT (r.candidato::uuid = ANY (v_cedula)) THEN
+      RAISE EXCEPTION 'Voto em quem não está na sua cédula.' USING ERRCODE = '22023';
     END IF;
     IF r.candidato::uuid = v_eu THEN
       RAISE EXCEPTION 'Não dá para votar em si mesmo.' USING ERRCODE = '22023';
@@ -511,10 +565,10 @@ BEGIN
     v_n := v_n + 1;
   END LOOP;
 
-  -- Só com tudo preenchido. Em quem dá para votar: os candidatos, menos a
+  -- Só com tudo preenchido. Em quem dá para votar: a cédula dela, menos a
   -- própria pessoa se ela também concorre. Com «um por candidato», no máximo
   -- um candidato por pergunta; sem, todas as perguntas.
-  v_disponiveis := cardinality(v.participantes) - CASE WHEN v_eu = ANY (v.participantes) THEN 1 ELSE 0 END;
+  v_disponiveis := cardinality(v_cedula) - CASE WHEN v_eu = ANY (v_cedula) THEN 1 ELSE 0 END;
   v_exigidas := CASE
     WHEN v_disponiveis <= 0 THEN 0
     WHEN v.um_por_candidato THEN least(jsonb_array_length(v.perguntas), v_disponiveis)
@@ -706,7 +760,8 @@ DO $$
 BEGIN
   IF has_function_privilege('authenticated', 'public.fn_vl_pendentes(uuid)', 'EXECUTE')
      OR has_function_privilege('authenticated', 'public.fn_vl_montar(uuid,boolean,boolean)', 'EXECUTE')
-     OR has_function_privilege('authenticated', 'public.fn_vl_uuids(jsonb)', 'EXECUTE') THEN
+     OR has_function_privilege('authenticated', 'public.fn_vl_uuids(jsonb)', 'EXECUTE')
+     OR has_function_privilege('authenticated', 'public.fn_vl_cedula_de(uuid,uuid)', 'EXECUTE') THEN
     RAISE EXCEPTION 'Um ajudante interno ficou aberto para o app.';
   END IF;
   IF NOT has_function_privilege('authenticated', 'public.fn_votacao_lideranca_gravar(uuid,jsonb)', 'EXECUTE')

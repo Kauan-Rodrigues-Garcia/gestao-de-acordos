@@ -101,7 +101,12 @@ export function TelaVotacao({
     // Só vale o rascunho que ainda cabe nesta cédula (pergunta e pessoa que existem).
     const salvo = lerRascunhoDoVoto(rascunhoChave);
     const validas = new Map(cedula.map(c => [c.pergunta.id, new Set(c.candidatos)]));
-    return Object.fromEntries(Object.entries(salvo).filter(([pid, cid]) => validas.get(pid)?.has(cid) && cid !== eleitorId));
+    const meusSalvos = Object.fromEntries(Object.entries(salvo).filter(([pid, cid]) => validas.get(pid)?.has(cid) && cid !== eleitorId));
+    // Votação dos gerentes (12/11/2026): setor com UM gerente só — não há o que
+    // escolher, então ele já vem marcado em todas (a pessoa só confere e envia).
+    const opcoes = (cedula[0]?.candidatos ?? []).filter(id => id !== eleitorId);
+    if (!umPorCandidato && opcoes.length === 1) return Object.fromEntries(cedula.map(c => [c.pergunta.id, opcoes[0]]));
+    return meusSalvos;
   });
   useEffect(() => {
     if (!rascunhoChave) return;

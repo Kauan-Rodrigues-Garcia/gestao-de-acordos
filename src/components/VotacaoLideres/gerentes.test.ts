@@ -73,6 +73,32 @@ describe('montarGerentes', () => {
   });
 });
 
+describe('cada setor vota no seu gerente', () => {
+  it('pelo cadastro: cada um vê só o gerente do próprio setor', () => {
+    const m = montarGerentes(dados, com({ setores: ['s1', 's2'] }));
+    expect(m.cedulaPorEleitor.get('o1')).toEqual(['g1']);
+    // O Play 2 não tem gerente no cadastro: quem é de lá fica sem cédula.
+    expect(m.semGerente.map(p => p.id)).toEqual(['o4']);
+    expect(m.setoresComUm).toEqual(['s1']);
+    expect(m.gerentesSemEleitor.map(g => g.id)).toEqual(['g2']);
+  });
+
+  it('à mão: um gerente vale para outro setor, e um setor pode ter dois', () => {
+    const m = montarGerentes(dados, com({ setores: ['s1', 's2'], ligacoes: { s2: ['g1'], s1: ['g1', 'g2'] } }));
+    expect(m.cedulaPorEleitor.get('o4')).toEqual(['g1']);
+    expect(m.cedulaPorEleitor.get('o1')?.sort()).toEqual(['g1', 'g2']);
+    expect(m.semGerente).toEqual([]);
+    expect(m.setoresComUm).toEqual(['s2']);
+    expect(m.ligadoAMao('s1')).toBe(true);
+    expect(m.ligadoAMao('s3')).toBe(false);
+  });
+
+  it('gerente tirado da votação some da ligação', () => {
+    const m = montarGerentes(dados, com({ setores: ['s1'], ligacoes: { s1: ['g1', 'g2'] }, gerentesFora: ['g2'] }));
+    expect(m.cedulaPorEleitor.get('o1')).toEqual(['g1']);
+  });
+});
+
 describe('regras da cédula', () => {
   it('respostas exigidas iguais às do banco', () => {
     expect(respostasExigidas({ candidatos: 25, perguntas: 25, eleitorConcorre: true, umPorCandidato: true })).toBe(24);
