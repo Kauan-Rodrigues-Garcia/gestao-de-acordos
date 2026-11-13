@@ -19,7 +19,7 @@
  * recebeu na cidade até aquela hora.
  *
  * O super_admin pode trocar a hora de qualquer sessão, uma por uma (`ajustes`,
- * migration 20261112210000): a sessão é a mesma — o mesmo espetáculo —, só
+ * migration 20261112210100): a sessão é a mesma — o mesmo espetáculo —, só
  * sobe no minuto escolhido.
  *
  * O dia é o de Brasília, contado da `EPOCA` do Natal (1º de novembro, meia-noite).

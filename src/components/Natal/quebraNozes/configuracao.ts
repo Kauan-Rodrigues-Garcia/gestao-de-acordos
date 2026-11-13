@@ -1,9 +1,9 @@
 /**
  * configuracao.ts — os interruptores dos quebra-nozes e a chamada na hora.
  *
- * Uma linha em `natal_quebra_nozes` (migration 20261112180000): as aparições
+ * Uma linha em `natal_quebra_nozes` (migration 20261112180100): as aparições
  * sorteadas ligadas ou não, a chamada das dez, os sons, e a última chamada
- * que o super_admin fez pelo card de Configurações › Geral. A 20261112210000
+ * que o super_admin fez pelo card de Configurações › Geral. A 20261112210100
  * acrescenta o boletim e os horários trocados à mão (`ajustes`); sem ela, o
  * boletim fica desligado e os horários não se mexem. Mudou a linha, o
  * banco manda um sinal no tópico `permissoes` de cada empresa, e quem está
@@ -39,7 +39,7 @@ export interface ConfiguracaoDosQuebraNozes {
   chamada: ChamadaNaHora | null;
   /** A linha foi lida do banco (falso = migration pendente ou ainda carregando). */
   lida: boolean;
-  /** A linha tem o boletim e os horários (falso = falta a migration 20261112210000). */
+  /** A linha tem o boletim e os horários (falso = falta a migration 20261112210100). */
   completa: boolean;
 }
 
@@ -79,7 +79,7 @@ export function daLinha(l: Linha | null): ConfiguracaoDosQuebraNozes {
     automaticas: l.automaticas === true,
     chamada10h: l.chamada_10h === true,
     sons: l.sons !== false,
-    // Sem a coluna (migration 20261112210000 pendente) não há de onde ler o líder: desligado.
+    // Sem a coluna (migration 20261112210100 pendente) não há de onde ler o líder: desligado.
     boletim: l.boletim === true,
     ajustes: ajustesDaLinha(l.ajustes),
     completa: typeof l.boletim === 'boolean',
@@ -130,7 +130,7 @@ async function ler(forcar: boolean): Promise<void> {
   const guardada = forcar ? null : lerGuardada();
   if (guardada) { trocar(guardada); return; }
   // Todas as colunas, sem dizer o nome: a linha é pequena, e assim a leitura
-  // serve com e sem as colunas da 20261112210000.
+  // serve com e sem as colunas da 20261112210100.
   const { data, error } = await tabela().select('*').limit(1).maybeSingle();
   if (error) return;
   guardar(data);
@@ -168,7 +168,7 @@ export function useConfiguracaoDosQuebraNozes(empresaId: string | null | undefin
 export async function configurarQuebraNozes(p: { automaticas?: boolean; chamada10h?: boolean; sons?: boolean; boletim?: boolean }): Promise<{ erro: string | null }> {
   const { error } = await rpcSemTipo<null>('fn_natal_quebra_nozes_configurar', {
     p_automaticas: p.automaticas ?? null, p_chamada_10h: p.chamada10h ?? null, p_sons: p.sons ?? null,
-    // Só vai quando é ele que muda: a função de antes da 20261112210000 não tem o parâmetro.
+    // Só vai quando é ele que muda: a função de antes da 20261112210100 não tem o parâmetro.
     ...(p.boletim === undefined ? {} : { p_boletim: p.boletim }),
   });
   if (error) return { erro: error.message };

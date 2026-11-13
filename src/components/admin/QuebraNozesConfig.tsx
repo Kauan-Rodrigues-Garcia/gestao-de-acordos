@@ -12,8 +12,8 @@
  *     uma cidade ou as duas. «Para todos» começa em 15 s na tela de quem está
  *     logado; «Ver só aqui» toca só nesta tela, sem avisar ninguém.
  *
- * Regras e banco: `Natal/quebraNozes/` e as migrations 20261112180000 e
- * 20261112210000 (o boletim e os horários).
+ * Regras e banco: `Natal/quebraNozes/` e as migrations 20261112180100 e
+ * 20261112210100 (o boletim e os horários).
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Check, ChevronDown, Drum, Loader2, Pencil, RotateCcw, X } from 'lucide-react';
@@ -223,14 +223,14 @@ export default function QuebraNozesConfig() {
           {!config.lida && (
             <p className="rounded-lg border border-warning/40 bg-warning/10 p-3 text-xs text-foreground">
               Não deu para ler a configuração. Falta aplicar a migration
-              {' '}<code className="font-mono">20261112180000_natal_quebra_nozes.sql</code> no banco.
+              {' '}<code className="font-mono">20261112180100_natal_quebra_nozes.sql</code> no banco.
               Até lá, só «Ver só aqui» funciona.
             </p>
           )}
           {config.lida && !config.completa && (
             <p className="rounded-lg border border-warning/40 bg-warning/10 p-3 text-xs text-foreground">
               Para ligar o boletim de quem mais recebeu e trocar o horário das aparições, falta aplicar a migration
-              {' '}<code className="font-mono">20261112210000_natal_quebra_nozes_horarios_e_lider.sql</code> no banco.
+              {' '}<code className="font-mono">20261112210100_natal_quebra_nozes_horarios_e_lider.sql</code> no banco.
               O resto já funciona.
             </p>
           )}

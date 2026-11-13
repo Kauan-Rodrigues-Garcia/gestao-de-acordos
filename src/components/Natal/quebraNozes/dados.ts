@@ -1,6 +1,6 @@
 /**
  * O que os quebra-nozes leem do banco: a cidade de quem está logado, a foto de
- * cada boneco e os destaques de ontem (migration 20261112180000).
+ * cada boneco e os destaques de ontem (migration 20261112180100).
  *
  * ## A foto
  *
@@ -18,7 +18,7 @@
  *
  * ## Quem mais recebeu até agora
  *
- * O boletim (migration 20261112210000): o primeiro de hoje no Destaque do Modo
+ * O boletim (migration 20261112210100): o primeiro de hoje no Destaque do Modo
  * TV, o maior entre os setores da cidade. O banco calcula uma vez por sessão,
  * e a cidade inteira lê o mesmo nome.
  *
