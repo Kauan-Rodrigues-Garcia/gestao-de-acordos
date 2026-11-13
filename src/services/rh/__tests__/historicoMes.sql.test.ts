@@ -29,6 +29,28 @@ const EQ_B = '00000000-0000-4000-8000-00000000eaa2';
 
 const p = (n: number) => `00000000-0000-4000-8000-0000000001${String(n).padStart(2, '0')}`;
 const ANA = p(1), BIA = p(2), CAIO = p(3), DUDA = p(4), EDU = p(5), FABI = p(6), GABI = p(7), ROBO = p(8), DIR = p(9), HUGO = p(10);
+const IVO = p(11), JOANA = p(12), KAUE = p(13);
+
+/** Cenários achados na conferência com o banco (13/11/2026). */
+const DADOS_CONFERENCIA = `
+  INSERT INTO perfis (id, nome, perfil, empresa_id, setor_id, situacao) VALUES
+    ('${IVO}',   'Ivo',   'operador', '${EMP}', '${PLAY2}', 'ativo'),
+    ('${JOANA}', 'Joana', 'operador', '${EMP}', '${MIX}',   'ferias'),
+    ('${KAUE}',  'Kauê',  'operador', '${EMP}', '${PLAY1}', 'ativo');
+  INSERT INTO logs_sistema (usuario_nome, acao, tabela, registro_id, criado_em, empresa_id, antes, depois, campos) VALUES
+    -- Ivo nasce sem setor e ganha o Play 2 no mesmo dia: entrada no Play 2, sem «transferência»
+    ('Cleber', 'usuario_criado', 'perfis', '${IVO}', '2026-11-04 08:00-03', '${EMP}', NULL, '{"nome":"Ivo"}', NULL),
+    ('Cleber', 'usuario_alterado', 'perfis', '${IVO}', '2026-11-04 08:05-03', '${EMP}',
+      '{"setor_id":null}', '{"setor_id":"${PLAY2}"}', ARRAY['setor_id']),
+    -- Joana: férias do jeito antigo desde 25/10, ainda de férias
+    ('Fulano', 'usuario_alterado', 'perfis', '${JOANA}', '2026-10-25 09:00-03', '${EMP}',
+      '{"situacao":"ativo"}', '{"situacao":"ferias"}', ARRAY['situacao']),
+    -- Kauê: férias do jeito antigo em setembro, voltou em 30/09 — fora de novembro
+    ('Fulano', 'usuario_alterado', 'perfis', '${KAUE}', '2026-09-10 09:00-03', '${EMP}',
+      '{"situacao":"ativo"}', '{"situacao":"ferias"}', ARRAY['situacao']),
+    ('Fulano', 'usuario_alterado', 'perfis', '${KAUE}', '2026-09-30 09:00-03', '${EMP}',
+      '{"situacao":"ferias"}', '{"situacao":"ativo"}', ARRAY['situacao']);
+`;
 
 const ESQUELETO = `
   CREATE ROLE anon; CREATE ROLE authenticated;
@@ -142,6 +164,7 @@ beforeAll(async () => {
   await db.exec(ESQUELETO);
   await db.exec(MIGRATION);
   await db.exec(DADOS);
+  await db.exec(DADOS_CONFERENCIA);
 });
 
 afterAll(async () => { await db.close(); });
@@ -188,9 +211,23 @@ describe('fn_rh_historico_mes', () => {
   });
 
   it('férias só do cadastro entram; férias de dezembro não', async () => {
-    const ferias = (await historico()).filter(e => e.tipo === 'ferias');
-    expect(ferias.map(e => e.pessoa_nome)).toEqual(['Gabi']);
+    const ferias = (await historico()).filter(e => e.tipo === 'ferias' && e.pessoa_nome === 'Gabi');
+    expect(ferias).toHaveLength(1);
     expect(ferias[0]).toMatchObject({ inicio: '2026-11-17', fim: '2026-12-01', cidade_para: 'Marília' });
+    expect((await historico()).some(e => e.tipo === 'ferias' && e.pessoa_nome === 'Duda')).toBe(false);
+  });
+
+  it('férias do jeito antigo (só situação) saem do log, com o período em aberto', async () => {
+    const ferias = (await historico()).filter(e => e.tipo === 'ferias').map(e => e.pessoa_nome);
+    expect(ferias).toEqual(['Joana', 'Gabi']);
+    const joana = (await historico()).find(e => e.pessoa_nome === 'Joana');
+    expect(joana).toMatchObject({ dia: '2026-11-01', inicio: '2026-10-25', fim: '9999-12-31', feito_por: 'Fulano' });
+  });
+
+  it('cadastro sem setor que ganha um depois: entrada nesse setor, e não transferência', async () => {
+    const ivo = (await historico()).filter(e => e.pessoa_nome === 'Ivo');
+    expect(ivo.map(e => e.tipo)).toEqual(['entrada']);
+    expect(ivo[0]).toMatchObject({ setor_para_nome: 'Play 2', cidade_para: 'Birigui' });
   });
 
   it('deixa de fora robô, diretoria, outro mês, outra empresa e campo sem interesse', async () => {
@@ -200,7 +237,7 @@ describe('fn_rh_historico_mes', () => {
     expect(nomes).not.toContain('Dir');
     expect(nomes).not.toContain('Hugo');
     expect(evs.filter(e => e.pessoa_nome === 'Ana')).toHaveLength(1);
-    expect(evs).toHaveLength(8);
+    expect(evs).toHaveLength(10);
   });
 
   it('empresa que a pessoa não alcança é ignorada', async () => {

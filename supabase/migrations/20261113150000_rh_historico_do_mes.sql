@@ -113,6 +113,7 @@ AS $fn$
            p.nome         AS nome_hoje,
            p.robo         AS robo,
            p.desligado_em AS desligado_hoje,
+           p.setor_id     AS setor_hoje,
            CASE WHEN m.depois ? 'setor_id' THEN m.depois -> 'setor_id'
                 ELSE COALESCE(
                   (SELECT l2.antes -> 'setor_id'
@@ -143,21 +144,35 @@ AS $fn$
 
   -- Um evento por tipo de mudança: um mesmo UPDATE pode virar dois.
   eventos_log AS (
-    -- Entrada
+    -- Entrada. Cadastro costuma nascer sem setor e ganhar um logo depois: vale
+    -- o primeiro setor que a pessoa recebeu, senão o de hoje.
     SELECT 'entrada'::text AS ev_tipo, e.dia_log AS ev_dia, e.*,
-           NULL::text AS de_txt, e.setor_txt AS para_txt,
+           NULL::text AS de_txt,
+           COALESCE(
+             e.setor_txt,
+             (SELECT l2.depois #>> '{setor_id}'
+                FROM public.logs_sistema l2
+               WHERE l2.registro_id = e.registro_id
+                 AND l2.tabela = 'perfis'
+                 AND l2.criado_em > e.criado_em
+                 AND l2.depois #>> '{setor_id}' IS NOT NULL
+               ORDER BY l2.criado_em
+               LIMIT 1),
+             e.setor_hoje::text) AS para_txt,
            NULL::text AS v_de, NULL::text AS v_para
       FROM com_estado e
      WHERE e.acao LIKE '%\_criado'
 
     UNION ALL
-    -- Transferência de setor
+    -- Transferência de setor. Sem setor de origem não é transferência: é o
+    -- cadastro recebendo o primeiro setor (a entrada já conta isso).
     SELECT 'transferencia', e.dia_log, e.*,
            e.antes #>> '{setor_id}', e.depois #>> '{setor_id}',
            NULL, NULL
       FROM com_estado e
      WHERE e.acao NOT LIKE '%\_criado'
        AND 'setor_id' = ANY (e.campos)
+       AND e.antes #>> '{setor_id}' IS NOT NULL
 
     UNION ALL
     -- Troca de equipe no mesmo setor. A saída da equipe de quem foi desligado
@@ -249,6 +264,49 @@ AS $fn$
                 AND a2.tipo = 'ferias'
                 AND a2.inicio <= COALESCE(p.ferias_ate, DATE '9999-12-31')
                 AND a2.fim    >= p.ferias_desde)
+
+    UNION ALL
+    -- Férias do jeito antigo: só `situacao = 'ferias'`, sem data no cadastro.
+    -- O período sai do log: do dia em que a situação virou «ferias» até a
+    -- próxima mudança de situação (ou em aberto, se ainda está de férias).
+    SELECT 'ferias', GREATEST(f.desde, j.ini), p.id,
+           p.nome, p.perfil, p.robo,
+           f.emp, p.setor_id::text,
+           'ferias', 'Férias',
+           f.desde,
+           COALESCE(f.ate, p.ferias_ate, DATE '9999-12-31'),
+           f.autor
+      FROM (
+        SELECT l.registro_id,
+               l.empresa_id AS emp,
+               (l.criado_em AT TIME ZONE 'America/Sao_Paulo')::date AS desde,
+               (SELECT (min(l3.criado_em) AT TIME ZONE 'America/Sao_Paulo')::date
+                  FROM public.logs_sistema l3
+                 WHERE l3.registro_id = l.registro_id
+                   AND l3.tabela = 'perfis'
+                   AND l3.criado_em > l.criado_em
+                   AND 'situacao' = ANY (l3.campos)) AS ate,
+               l.usuario_nome AS autor
+          FROM public.logs_sistema l, janela j0
+         WHERE l.empresa_id = ANY (p_empresas)
+           AND l.tabela = 'perfis'
+           AND l.criado_em < j0.fim_ts
+           AND 'situacao' = ANY (l.campos)
+           AND l.depois #>> '{situacao}' = 'ferias'
+           AND l.registro_id ~* '^[0-9a-f-]{36}$'
+      ) f
+      CROSS JOIN janela j
+      JOIN public.perfis p ON p.id::text = f.registro_id
+     WHERE COALESCE(f.ate, DATE '9999-12-31') >= j.ini
+       AND NOT EXISTS (
+             SELECT 1 FROM public.ausencias a3
+              WHERE a3.operador_id = p.id
+                AND a3.tipo = 'ferias'
+                AND a3.inicio <= COALESCE(f.ate, DATE '9999-12-31')
+                AND a3.fim    >= f.desde)
+       AND NOT (p.ferias_desde IS NOT NULL
+                AND p.ferias_desde <= COALESCE(f.ate, DATE '9999-12-31')
+                AND COALESCE(p.ferias_ate, DATE '9999-12-31') >= f.desde)
   ),
 
   todos AS (

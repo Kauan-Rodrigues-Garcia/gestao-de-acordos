@@ -48,9 +48,10 @@ tela, não helper embutido). Sem escrita.
 | `cargo` | idem | `perfil` mudou; `sentido` = `promocao`/`rebaixamento` por `cargos.nivel`; `NULL` quando um dos cargos não tem nível (`rh`, `assistente_adm`) |
 | `desligamento` | idem | `situacao` passou para `desligado`; dia = `desligado_em` quando houver, senão o do log |
 | `reativacao` | idem | `situacao` saiu de `desligado` |
-| `entrada` | `logs_sistema` (`tabela='perfis'`, INSERT) | pessoa criada no mês |
+| `entrada` | `logs_sistema` (`tabela='perfis'`, INSERT) | pessoa criada no mês; setor = o do cadastro, senão o primeiro que recebeu depois, senão o de hoje. Receber o primeiro setor NÃO é transferência |
 | `afastamento` | `ausencias` | `tipo <> 'ferias'` e `[inicio, fim]` cruza o mês; `fim = '9999-12-31'` = sem data de volta |
 | `ferias` | `ausencias` `tipo='ferias'` | período cruza o mês; `perfis.ferias_desde/ferias_ate` só cobrem quem tem férias sem linha em `ausencias` |
+| `ferias` (jeito antigo) | log de `perfis` | `situacao` virou `ferias` sem data no cadastro: do dia do log até a próxima mudança de situação, ou em aberto |
 
 Ler o log com `antes->'campo'` (jsonb), nunca `->>` — ver memória «logs reconstroem o passado».
 Desligamento lançado por `fn_arquivar_desligados_*` (cron) não é evento novo: só a
