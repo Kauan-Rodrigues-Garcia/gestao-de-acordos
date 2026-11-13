@@ -994,11 +994,12 @@ export function AnaliticoLider({
     return m;
   }, [destaquesPorGrupo]);
 
-  /** Há divisão de verdade? Um grupo só por dia não justifica mudar o desenho. */
-  const temDestaquePorGrupo = useMemo(
-    () => [...destaquesGrupoMap.values()].some(l => l.length > 1),
-    [destaquesGrupoMap],
-  );
+  /**
+   * Por equipe SEMPRE que a RPC por grupo respondeu (13/11/2026): o dia mostra
+   * o destaque de cada equipe, em ranking. Antes só mudava quando algum dia
+   * tinha dois grupos — e aí aparecia um nome só. Sem a RPC, o destaque único.
+   */
+  const temDestaquePorGrupo = destaquesPorGrupo.length > 0;
 
   /*
    * Quebra por forma de cada operador. Mesma fonte da aba Formas de pagamento —
@@ -1463,6 +1464,36 @@ export function AnaliticoLider({
     return () => { vivo = false; };
   }, [idsSemFoto, visaoOperadores]);
   const fotosNoMapa = useMemo(() => ({ ...fotosDoMapa, ...fotos }), [fotosDoMapa, fotos]);
+
+  /*
+   * Fotos dos destaques do dia (13/11/2026). Quase todos já estão em `fotos`
+   * (o resumo do mês); só os que faltam vão numa consulta, com `.in()`.
+   */
+  const [fotosDosDestaques, setFotosDosDestaques] = useState<Record<string, string | null>>({});
+  const idsDestaqueSemFoto = useMemo(() => {
+    const ids = new Set<string>();
+    for (const d of destaquesPorGrupo) if (d.operador_id && !(d.operador_id in fotos)) ids.add(d.operador_id);
+    for (const d of destaques) if (d.operador_id && !(d.operador_id in fotos)) ids.add(d.operador_id);
+    return [...ids].sort().join(',');
+  }, [destaquesPorGrupo, destaques, fotos]);
+  useEffect(() => {
+    if (!idsDestaqueSemFoto || abaVisivel !== 'destaques') return;
+    let vivo = true;
+    void supabase
+      .from('perfis')
+      .select('id, foto_url')
+      .in('id', idsDestaqueSemFoto.split(','))
+      .then(({ data }) => {
+        if (!vivo) return;
+        setFotosDosDestaques(atual => {
+          const m = { ...atual };
+          for (const p of ((data ?? []) as { id: string; foto_url: string | null }[])) m[p.id] = p.foto_url;
+          return m;
+        });
+      });
+    return () => { vivo = false; };
+  }, [idsDestaqueSemFoto, abaVisivel]);
+  const fotosDestaques = useMemo(() => ({ ...fotosDosDestaques, ...fotos }), [fotosDosDestaques, fotos]);
   const equipeDoOperadorNoMapa = useCallback(
     (id: string) => operadorEquipeMap[id]?.equipe_nome ?? null,
     [operadorEquipeMap],
@@ -2397,6 +2428,7 @@ export function AnaliticoLider({
               porGrupo={destaquesGrupoMap}
               unico={destaquesMap}
               usarGrupos={temDestaquePorGrupo}
+              fotos={fotosDestaques}
             />
           )}
         </div>
