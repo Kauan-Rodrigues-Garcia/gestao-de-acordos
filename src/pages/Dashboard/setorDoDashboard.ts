@@ -61,6 +61,16 @@ export async function lerSetorDoMes(empresaId: string, setorId: string, mes: str
   };
 }
 
+/**
+ * A RLS de `analitico_recebimentos` deixa esta pessoa ler o setor inteiro?
+ * Mesma função da policy (`fn_user_escopo('analitico') >= 2`). Na dúvida (erro),
+ * não: um total menor rotulado «setor» é pior que o analítico do Dashboard.
+ */
+async function leSetorNoAnalitico(): Promise<boolean> {
+  const { data, error } = await rpcSemTipo<number>('fn_user_escopo', { p_aba: 'analitico' });
+  return !error && Number(data) >= 2;
+}
+
 /** A conciliação dia a dia; `null` se a função não responde (o gráfico fica no analítico). */
 async function conciliacaoPorDia(empresaId: string, mes: string): Promise<Record<number, PontoDoSetor> | null> {
   const { data, error } = await rpcSemTipo<{ dia: number; bruto: number; ho: number; qtd: number }[]>(
@@ -75,6 +85,18 @@ async function conciliacaoPorDia(empresaId: string, mes: string): Promise<Record
 
 /**
  * O total do setor pelo caminho do Painel do Líder.
+ *
+ * ## Só para quem lê o setor no Analítico (13/11/2026)
+ *
+ * Fora do Cofen, o caminho do Painel lê `analitico_recebimentos` direto, e a
+ * RLS (`analitico_select`) só entrega linha de outra pessoa com
+ * `fn_user_escopo('analitico') >= 2`. O Dashboard, porém, libera «Meu setor»
+ * pelo alcance do DASHBOARD. Quem tinha o setor no Dashboard e só o próprio no
+ * Analítico via, no card «Total recebido» do setor, o PRÓPRIO total — R$ 21 mil
+ * no Play 3, com o gráfico ao lado (que vem do analítico do Dashboard) mostrando
+ * R$ 60–80 mil por dia. A pergunta vai ao banco, na mesma função da RLS, para
+ * as duas regras não discordarem; sem o alcance, erro — e o analítico do
+ * Dashboard, que já traz o setor inteiro, responde.
  *
  * @param carregarFontes só é chamado quando o setor soma as pessoas (alternativo,
  *   ou a regra da sessão é Cofen): é a leitura pesada do Painel, e nos outros
@@ -96,6 +118,9 @@ export async function carregarSetorDoDashboard(p: {
       conciliacaoPorDia(empresaId, mes),
     ]);
     return { bruto: c.bruto, ho: c.ho, porDia, fonte: 'conciliacao', cofen: true };
+  }
+  if (!(await leSetorNoAnalitico())) {
+    throw new Error('Sem alcance de setor no Analítico: a leitura traria só as próprias linhas');
   }
   const usarSoma = setorSomaPorUsuarios({ isPaguePlay, alternativo: setor.alternativo });
   const fontes = usarSoma ? await p.carregarFontes() : SEM_FONTES;
