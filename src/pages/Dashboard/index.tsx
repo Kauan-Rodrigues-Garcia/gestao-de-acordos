@@ -45,9 +45,32 @@ export default function Dashboard() {
   // mesmo hook, então a tela fazia a varredura duas vezes. Pior: esta instância
   // rodava sem mês, presa ao corrente, enquanto o painel usa o mês do seletor.
   const {
-    setores: setoresList, setorFiltro, setSetorFiltro, equipesDoSetor, niveis,
-    podeTodasEquipes,
+    setores: setoresList, setorFiltro: setorDoHook, setSetorFiltro: setSetorDoHook,
+    equipesDoSetor, niveis, podeTodasEquipes,
   } = useSetoresEquipes(mesFiltro);
+
+  /*
+   * Quem enxerga todos os setores abre no PRÓPRIO setor (13/11/2026).
+   *
+   * O setor escolhido nascia `null` — «Todos os setores» — e a tela abre em
+   * «Meu setor» para quem responde por um grupo. A gerência do Play 3 via o
+   * degrau «Meu setor» aceso com o total da empresa embaixo. Agora, enquanto
+   * a pessoa não escolhe um setor na linha «Setor», vale o dela no mês olhado
+   * (o do retrato no mês fechado). Sem setor próprio (diretoria), segue
+   * «Todos os setores». Derivado, e não posto por efeito: assim o painel não
+   * mostra a empresa num quadro e o setor no seguinte.
+   */
+  const setorPadrao = niveis.includes('todos_setores') ? lugar.setorId : null;
+  const [setorEscolhido, setSetorEscolhido] = useState(false);
+  const setorFiltro = setorEscolhido ? setorDoHook : setorPadrao;
+  const setSetorFiltro = (id: string | null) => {
+    setSetorEscolhido(true);
+    setSetorDoHook(id);
+  };
+  // A lista de equipes do hook segue o setor em foco também antes da escolha.
+  useEffect(() => {
+    if (!setorEscolhido && setorDoHook !== setorPadrao) setSetorDoHook(setorPadrao);
+  }, [setorEscolhido, setorDoHook, setorPadrao, setSetorDoHook]);
   // Os quatro testes por cargo que moravam aqui (`isAdmin`, `isLiderOuElite`,
   // `isElite`, `isLider`) decidiam quem via cada filtro. Quem decide agora sao
   // os niveis da aba, resolvidos em `useSetoresEquipes` e lidos por

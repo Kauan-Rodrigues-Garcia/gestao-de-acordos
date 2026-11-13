@@ -63,7 +63,7 @@ function montar(over: {
     podeTodasEquipes: over.podeTodasEquipes ?? true,
     visao: over.visao ?? ('setor' as VisaoEscopo),
     onVisao: over.onVisao ?? vi.fn(),
-    setorDoPerfil: over.setorDoPerfil ?? 's-1',
+    setorDoPerfil: over.setorDoPerfil === undefined ? 's-1' : over.setorDoPerfil,
     equipeDoPerfil: over.equipeDoPerfil === undefined ? 'e-1' : over.equipeDoPerfil,
   };
   return render(<FiltroEscopo {...props} />);
@@ -147,6 +147,48 @@ describe('FiltroEscopo — a régua de visões', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /Meu setor/ }));
     expect(onVisao).toHaveBeenCalledWith('setor');
+  });
+
+  it('quem escolhe setor: «Meu setor» escolhe o PRÓPRIO setor, não «todos» (13/11/2026)', async () => {
+    const onVisao = vi.fn();
+    const onSetor = vi.fn();
+    montar({
+      niveis: TUDO, setorFiltro: null, setorDoPerfil: 's-2', visao: 'individual', onVisao, onSetor,
+    });
+    await userEvent.click(screen.getByRole('button', { name: /Meu setor/ }));
+    expect(onSetor).toHaveBeenCalledWith('s-2');
+    expect(onVisao).toHaveBeenCalledWith('setor');
+  });
+
+  it('«Meu setor» não fica aceso com «Todos os setores» nem com outro setor', () => {
+    const a = montar({ niveis: TUDO, setorFiltro: null, setorDoPerfil: 's-1', visao: 'setor' });
+    expect(screen.getByRole('button', { name: /Meu setor/ })).toHaveAttribute('aria-pressed', 'false');
+    a.unmount();
+
+    const b = montar({ niveis: TUDO, setorFiltro: 's-2', setorDoPerfil: 's-1', visao: 'setor' });
+    expect(screen.getByRole('button', { name: /Meu setor/ })).toHaveAttribute('aria-pressed', 'false');
+    b.unmount();
+
+    montar({ niveis: TUDO, setorFiltro: 's-1', setorDoPerfil: 's-1', visao: 'setor' });
+    expect(screen.getByRole('button', { name: /Meu setor/ })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('quem só alcança o próprio setor: o degrau não mexe no setor', async () => {
+    const onSetor = vi.fn();
+    montar({ niveis: ['individual', 'setor'], setorDoPerfil: 's-1', visao: 'individual', onSetor });
+    await userEvent.click(screen.getByRole('button', { name: /Meu setor/ }));
+    expect(onSetor).not.toHaveBeenCalled();
+  });
+
+  it('sem setor próprio (diretoria), o degrau é «Setores» e a linha de baixo escolhe', async () => {
+    const onSetor = vi.fn();
+    montar({
+      niveis: ['individual', 'todos_setores'], setorDoPerfil: null, equipeDoPerfil: null,
+      visao: 'individual', onSetor,
+    });
+    expect(degraus()).toEqual(['Minha visão', 'Setores']);
+    await userEvent.click(screen.getByRole('button', { name: /Setores/ }));
+    expect(onSetor).not.toHaveBeenCalled();
   });
 
   it('o interruptor «Só os meus números» não existe mais', () => {

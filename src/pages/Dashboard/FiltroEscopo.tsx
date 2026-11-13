@@ -175,6 +175,19 @@ export function FiltroEscopo({
   const minhaEquipeDisponivel = podeEquipe && equipeDoPerfil !== null;
   const meuSetorDisponivel = niveis.includes('setor') || podeEscolherSetor;
 
+  /*
+   * «Meu setor» é o setor DA PESSOA — também para quem enxerga todos (13/11/2026).
+   *
+   * Até aqui o degrau só trocava a visão para 'setor' e deixava o setor
+   * escolhido como estava. Para a gerência, que escolhe setor, o estado era
+   * «Todos os setores» (`null`): o degrau aceso dizia «Meu setor» e o painel
+   * somava a empresa inteira — a queixa do Play 3. Agora, com setor próprio, o
+   * degrau leva ao próprio setor e só fica aceso nele; a linha «Setor» continua
+   * oferecendo «Todos os setores» e os outros. Sem setor próprio (diretoria),
+   * não há «meu» para apontar: o degrau vira «Setores» e a linha de baixo manda.
+   */
+  const meuSetorProprio = podeEscolherSetor ? setorDoPerfil : null;
+
   const degraus = [
     minhaVisaoDisponivel && {
       key: 'individual' as const,
@@ -194,15 +207,20 @@ export function FiltroEscopo({
     },
     meuSetorDisponivel && {
       key: 'setor' as const,
-      rotulo: 'Meu setor',
-      titulo: 'Ver os números consolidados do setor',
+      rotulo: podeEscolherSetor && !setorDoPerfil ? 'Setores' : 'Meu setor',
+      titulo: podeEscolherSetor && !setorDoPerfil
+        ? 'Ver os números por setor — escolha o setor na linha abaixo'
+        : 'Ver os números consolidados do seu setor',
       Icone: Building2,
       alvo: 'setor' as VisaoEscopo,
-      ativo: visao === 'setor',
+      setor: meuSetorProprio,
+      ativo: visao === 'setor' && (!meuSetorProprio || setorFiltro === meuSetorProprio),
     },
   ].filter(Boolean) as {
     key: string; rotulo: string; titulo: string;
     Icone: typeof User; alvo: VisaoEscopo; ativo: boolean;
+    /** Setor que o degrau escolhe junto com a visão. Só em «Meu setor» de quem escolhe setor. */
+    setor?: string | null;
   }[];
 
   // Um degrau sozinho não é escada — é a legenda do que a pessoa já vê.
@@ -277,11 +295,14 @@ export function FiltroEscopo({
               role="group"
               aria-label="Nível de visualização"
             >
-              {degraus.map(({ key, rotulo, titulo, Icone, alvo, ativo }) => (
+              {degraus.map(({ key, rotulo, titulo, Icone, alvo, ativo, setor }) => (
                 <button
                   key={key}
                   type="button"
-                  onClick={() => onVisao(alvo)}
+                  onClick={() => {
+                    if (setor) onSetor(setor);
+                    onVisao(alvo);
+                  }}
                   title={titulo}
                   aria-pressed={ativo}
                   className={cn(
