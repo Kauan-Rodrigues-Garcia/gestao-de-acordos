@@ -44,6 +44,7 @@ import { CARGOS_ACESSO_TOTAL } from '@/lib/permissoes-catalogo';
 import { reconciliarLista, iguaisProfundo } from '@/lib/dadosVivos';
 import { assinarSinal } from '@/lib/sinais';
 import { espiarCache, invalidarCache, lerComCache } from '@/lib/cacheCurto';
+import { rpcSemTipo } from '@/lib/supabaseSemTipo';
 
 export type PermissoesMap = Record<string, boolean>;
 
@@ -335,7 +336,30 @@ export function useCargoPermissoes(): UseCargoPermissoesReturn {
     return ouvirMudancas(empresa.id, () => { void carregar(false); });
   }, [empresa?.id, cargo, carregar]);
 
-  const setorId = perfil?.setor_id ?? null;
+  /*
+   * O setor cujo mapa vale (13/11/2026, regra do Cleber): quem é CLONE num
+   * setor alternativo segue o mapa do alternativo; quem tem um setor só, o
+   * dele. O banco decide (`fn_meu_setor_das_permissoes`, 20261113230000) — o
+   * mesmo que `fn_user_tem` usa, para a tela e a RLS responderem igual.
+   * Até a resposta chegar vale o do cadastro, que é o caso de quase todos.
+   */
+  const chaveSetor = perfil?.id ? `setor-das-permissoes:${perfil.id}:${perfil.setor_id ?? ''}` : null;
+  const [setorDasPermissoes, setSetorDasPermissoes] = useState<string | null | undefined>(
+    () => (chaveSetor ? espiarCache<string | null>(chaveSetor, VALIDADE_PERMISSOES_MS) : undefined));
+  useEffect(() => {
+    if (!chaveSetor) { setSetorDasPermissoes(undefined); return; }
+    let vivo = true;
+    void lerComCache(chaveSetor, VALIDADE_PERMISSOES_MS, async () => {
+      const { data, error } = await rpcSemTipo<string | null>('fn_meu_setor_das_permissoes', {});
+      if (error) throw error;
+      return data ?? null;
+    })
+      .then(s => { if (vivo) setSetorDasPermissoes(s); })
+      .catch(() => { /* sem a função ainda: segue o setor do cadastro */ });
+    return () => { vivo = false; };
+  }, [chaveSetor]);
+
+  const setorId = setorDasPermissoes ?? perfil?.setor_id ?? null;
   const permissoes = useMemo(
     () => mapaDoCargoNoSetor(todasPermissoes, todasPermissoesSetor, cargo, setorId),
     [todasPermissoes, todasPermissoesSetor, cargo, setorId],
