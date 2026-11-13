@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  agruparPorTipo, cidadesDoMes, contarPorCidade, cruzaCidades, filtrar, linhasDoHistorico,
+  agruparPorTipo, cidadesDoMes, contarPorCidade, contarTipos, cruzaCidades, filtrar, linhasDoHistorico, porDia,
   rotuloMes, setoresDoMes, somarMes, type EventoRh,
 } from './historicoMes';
 
@@ -83,5 +83,28 @@ describe('historicoMes', () => {
       'Setor de origem': 'Play Mix Marília', 'Cidade de origem': 'Marília', 'Setor de destino': 'Play 1',
     });
     expect(abas.Afastamentos[0]).toMatchObject({ Tipo: 'INSS', 'Início': '20/10/2026', Fim: 'sem data de volta', Cargo: 'OPERADOR' });
+  });
+});
+
+describe('historicoMes — resumo e ritmo', () => {
+  it('contarTipos soma cada tipo uma vez, sem olhar cidade', () => {
+    const c = contarTipos(TODOS);
+    expect(c.transferencia).toBe(1);
+    expect(c.desligamento).toBe(1);
+    expect(c.entrada).toBe(1);
+    expect(c.ferias).toBe(0);
+  });
+
+  it('porDia traz todos os dias do mês, com fim de semana marcado', () => {
+    const dias = porDia(TODOS, '2026-11');
+    expect(dias).toHaveLength(30);
+    expect(dias[0]).toMatchObject({ dia: '2026-11-01', fimDeSemana: true, total: 1 }); // domingo; o afastamento
+    expect(dias[4]).toMatchObject({ dia: '2026-11-05', total: 2 }); // transferência + entrada
+    expect(dias[11].porTipo.desligamento).toBe(1);
+    expect(dias.reduce((s, d) => s + d.total, 0)).toBe(TODOS.length);
+  });
+
+  it('porDia ignora evento de outro mês', () => {
+    expect(porDia([ev({ tipo: 'entrada', dia: '2026-10-31' })], '2026-11').every(d => d.total === 0)).toBe(true);
   });
 });

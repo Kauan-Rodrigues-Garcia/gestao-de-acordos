@@ -32,8 +32,8 @@ import { AbasSegmentadas, type AbaSegmentada } from '@/components/AbasSegmentada
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useAuth } from '@/hooks/useAuth';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
+import { useVeQuadroPessoal } from '@/hooks/useVeQuadroPessoal';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { produtoDaEmpresa } from '@/lib/produto';
 import type { Empresa } from '@/lib/supabase';
@@ -42,7 +42,7 @@ import { fetchEmpresasLiberadas } from '@/services/empresas.service';
 import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { registrarLog } from '@/services/logs.service';
 import {
-  conferirPlanilha, linhasDaConferencia, linhasDaPlanilha, montarQuadro, normalizar,
+  conferirPlanilha, linhasDaConferencia, linhasDaPlanilha, montarQuadro, normalizar, pessoasPorCidade, recortarPorCidade,
   type DadosBrutos, type Numeros, type Pessoa, type Quadro, type SetorQuadro,
 } from '@/services/rh/quadroPessoal';
 import { carregarQuadro, carregarQuadroDeVarias } from '@/services/rh/quadroPessoal.service';
@@ -53,15 +53,13 @@ import AbaConferencia from './AbaConferencia';
 import AbaHistorico from './AbaHistorico';
 import PainelSetor from './PainelSetor';
 import { Foto } from './partes';
-import { SeletorFiltro } from './SeletorFiltro';
+import { FiltroCidade } from './FiltroCidade';
 import { lugarTexto, rotuloCargo } from './formato';
 
 type Aba = 'setores' | 'equipes' | 'historico' | 'conferencia';
 const ABAS_VALIDAS: readonly Aba[] = ['setores', 'equipes', 'historico', 'conferencia'];
 
 const SEM_SETOR = '__sem_setor__';
-/** Valor do seletor de empresa para «todas as operações». */
-const TODAS = '__todas__';
 
 /** «Receptivo Play 3» → «receptivo_play_3», para o nome do arquivo. */
 function paraArquivo(t: string): string {
@@ -96,23 +94,18 @@ function baldeSemSetor(quadro: Quadro): SetorQuadro | null {
 }
 
 export default function RhQuadro() {
-  const { empresa, tenantSlug } = useEmpresa();
-  const { perfil } = useAuth();
-  const { temPermissao, temPermissaoExplicita, loading: permCarregando } = useCargoPermissoes();
-  /*
-   * Chave própria e EXPLÍCITA (13/11/2026): o acesso total do administrador
-   * não abre o Quadro. De fábrica, só o RH e o super_admin; o resto, por
-   * concessão em Configurações › Permissões.
-   */
-  const podeVer = perfil?.perfil === 'super_admin' || temPermissaoExplicita('ver_quadro_pessoal');
+  const { empresa } = useEmpresa();
+  const { temPermissao } = useCargoPermissoes();
+  /* Chave própria e EXPLÍCITA (13/11/2026) — ver `useVeQuadroPessoal`. */
+  const { podeVer, carregando: permCarregando } = useVeQuadroPessoal();
   const podeEditarCracha = temPermissao('rh_editar_cracha');
   const empresaId = empresa?.id ?? null;
   /*
-   * Entrando pela empresa Recursos Humanos, não há setor nem equipe dela para
-   * mostrar: o que o RH olha é a gente das operações. Ali o quadro abre com
-   * TODAS as empresas que a pessoa alcança; numa operação, com a própria.
+   * O quadro lê SEMPRE todas as operações que a pessoa alcança (cobrança e
+   * Comercial), de qualquer empresa em que ela esteja. O seletor de empresa
+   * saiu em 13/11/2026 (pedido do Cleber): BookPlay/PaguePlay/Comercial é
+   * cadastro, e a divisão que o RH usa é a cidade — o filtro do topo.
    */
-  const noRh = produtoDaEmpresa(empresa, tenantSlug) === 'rh';
 
   /** As operações que o quadro pode mostrar (cobrança e Comercial). `null` = carregando. */
   const [operacoes, setOperacoes] = useState<Empresa[] | null>(null);
@@ -134,18 +127,20 @@ export default function RhQuadro() {
     return () => { vivo = false; };
   }, [podeVer, empresa]);
 
-  const [alvo, setAlvo] = useState<string | null>(null);
-  const alvoEfetivo = alvo ?? (noRh ? TODAS : empresaId);
-  const empresasDoAlvo = useMemo(() => {
-    if (!operacoes) return null;
-    if (alvoEfetivo === TODAS) return operacoes;
-    return operacoes.filter(e => e.id === alvoEfetivo);
-  }, [operacoes, alvoEfetivo]);
-  const rotuloAlvo = alvoEfetivo === TODAS
-    ? 'Todas as empresas'
-    : empresasDoAlvo?.[0]?.nome ?? empresa?.nome ?? 'Empresa';
+  const empresasDoAlvo = operacoes;
 
   const [params, setParams] = useSearchParams();
+  /** A cidade do recorte (`?cidade=`), ou null = todas. `~` = «Sem cidade». */
+  const cidadeUrl = params.get('cidade');
+  const cidade = cidadeUrl === null ? null : cidadeUrl === '~' ? '' : cidadeUrl;
+  const setCidade = useCallback((c: string | null) => {
+    setParams(p => {
+      const n = new URLSearchParams(p);
+      if (c === null) n.delete('cidade'); else n.set('cidade', c === '' ? '~' : c);
+      n.delete('setor');
+      return n;
+    }, { replace: true });
+  }, [setParams]);
   const abaUrl = params.get('aba') as Aba | null;
   const aba: Aba = abaUrl && ABAS_VALIDAS.includes(abaUrl) ? abaUrl : 'setores';
   const setAba = useCallback((a: Aba) => {
@@ -197,7 +192,7 @@ export default function RhQuadro() {
     }
     if (silencioso) setAtualizando(true); else setCarregando(true);
     try {
-      const dados = empresasDoAlvo.length === 1 && alvoEfetivo !== TODAS
+      const dados = empresasDoAlvo.length === 1
         ? await carregarQuadro(empresasDoAlvo[0].id)
         : await carregarQuadroDeVarias(empresasDoAlvo.map(e => ({ id: e.id, nome: e.nome })));
       dadosRef.current = dados;
@@ -212,9 +207,9 @@ export default function RhQuadro() {
       setCarregando(false);
       setAtualizando(false);
     }
-  }, [empresasDoAlvo, alvoEfetivo]);
+  }, [empresasDoAlvo]);
 
-  // Trocar de empresa relê sem apagar a tela: o quadro anterior fica até o novo chegar.
+  // Relê sem apagar a tela: o quadro anterior fica até o novo chegar.
   const jaCarregou = useRef(false);
   useEffect(() => {
     if (!podeVer || !empresasDoAlvo) return;
@@ -222,17 +217,14 @@ export default function RhQuadro() {
     jaCarregou.current = true;
   }, [carregar, podeVer, empresasDoAlvo]);
 
-  const trocarEmpresa = useCallback((id: string) => {
-    setAlvo(id);
-    abrirSetor(null);
-    setSetorEquipes(null);
-    setDestaque(null);
-  }, [abrirSetor]);
+  /** O que as abas mostram: o quadro recortado pela cidade do topo. */
+  const vista = useMemo(() => (quadro ? recortarPorCidade(quadro, cidade) : null), [quadro, cidade]);
+  const rotuloAlvo = cidade === null ? 'Todas as cidades' : (vista?.cidades[0]?.nome ?? 'Sem cidade');
 
-  const semSetor = useMemo(() => (quadro ? baldeSemSetor(quadro) : null), [quadro]);
+  const semSetor = useMemo(() => (vista ? baldeSemSetor(vista) : null), [vista]);
   const setoresComBalde = useMemo(
-    () => (quadro ? [...quadro.setores, ...(semSetor ? [semSetor] : [])] : []),
-    [quadro, semSetor],
+    () => (vista ? [...vista.setores, ...(semSetor ? [semSetor] : [])] : []),
+    [vista, semSetor],
   );
   const setorDoPainel = setoresComBalde.find(s => s.id === setorAberto) ?? null;
 
@@ -244,9 +236,9 @@ export default function RhQuadro() {
   // ── Exportar ───────────────────────────────────────────────────────────────
 
   const exportar = useCallback(async (setor?: SetorQuadro) => {
-    if (!quadro) return;
+    if (!vista) return;
     try {
-      const abas = linhasDaPlanilha(quadro, rotuloCargo, setor ? new Set([setor.id]) : undefined);
+      const abas = linhasDaPlanilha(vista, rotuloCargo, setor ? new Set([setor.id]) : undefined);
       const nome = `quadro_pessoal_${paraArquivo(setor?.nome ?? rotuloAlvo)}_${hojeIso()}.xlsx`;
       await baixarPlanilha(abas, nome);
       toast.success(setor ? `Planilha de ${setor.nome} baixada.` : 'Quadro de pessoal baixado.');
@@ -264,7 +256,7 @@ export default function RhQuadro() {
     } catch (e) {
       toast.error('Não foi possível gerar a planilha: ' + (e instanceof Error ? e.message : String(e)));
     }
-  }, [quadro, rotuloAlvo, empresaId]);
+  }, [vista, rotuloAlvo, empresaId]);
 
   const exportarConferencia = useCallback(async () => {
     if (!conferencia) return;
@@ -312,10 +304,13 @@ export default function RhQuadro() {
   const irParaPessoa = useCallback((p: Pessoa) => {
     if (!quadro) return;
     const onde = quadro.local.get(p.id);
+    // Pessoa de outra cidade: o recorte acompanha, senão o setor dela não aparece.
+    const setorDela = quadro.setores.find(s => s.id === onde?.setorId);
+    if (cidade !== null && setorDela?.cidade.chave !== cidade) setCidade(null);
     setSetorEquipes(onde?.setorId ?? SEM_SETOR);
     setDestaque(p.id);
     setAba('equipes');
-  }, [quadro, setAba]);
+  }, [quadro, setAba, cidade, setCidade]);
 
   const crachaSalvo = useCallback((pessoaId: string, cracha: string | null) => {
     const dados = dadosRef.current;
@@ -366,9 +361,11 @@ export default function RhQuadro() {
     );
   }
 
-  if (!quadro) return null;
+  if (!quadro || !vista) return null;
 
-  const n = quadro.numeros;
+  const n = vista.numeros;
+  const fotoPorId = new Map(quadro.todas.map(p => [p.id, p.fotoUrl]));
+  const porCidade = pessoasPorCidade(quadro);
   const abas: AbaSegmentada<Aba>[] = [
     { key: 'setores', label: 'Setores', Icon: Building2 },
     { key: 'equipes', label: 'Equipes', Icon: Network },
@@ -392,31 +389,16 @@ export default function RhQuadro() {
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">Quadro de Pessoal</h1>
             <span className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-              <Eye className="size-3" /> Somente leitura
+              <Eye className="size-3" /> Visão do RH
             </span>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            {rotuloAlvo} · retrato de {retratoEm
+            Todas as operações · retrato de {retratoEm
               ? retratoEm.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
               : 'agora'}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {operacoes && operacoes.length > 1 && (
-            <SeletorFiltro
-              valor={alvoEfetivo === TODAS ? null : alvoEfetivo}
-              onTrocar={v => trocarEmpresa(v ?? TODAS)}
-              Icone={Building2}
-              rotulo="Empresa do quadro"
-              rotuloTodos="Todas as empresas"
-              largura="w-72"
-              opcoes={operacoes.map(e => ({
-                valor: e.id,
-                rotulo: e.nome,
-                detalhe: produtoDaEmpresa(e) === 'comercial' ? 'Comercial' : 'Cobrança',
-              }))}
-            />
-          )}
           <Button variant="ghost" size="sm" className="h-9 gap-1.5" onClick={() => { setVersao(v => v + 1); void carregar(true); }} disabled={atualizando}>
             <RefreshCw className={cn('size-4', atualizando && 'animate-spin')} />
             <span className="hidden sm:inline">Atualizar</span>
@@ -430,10 +412,19 @@ export default function RhQuadro() {
         </div>
       </header>
 
+      {/* A cidade: o único recorte do topo, vale para todas as abas. */}
+      <FiltroCidade
+        cidades={quadro.cidades}
+        porCidade={porCidade}
+        total={quadro.numeros.pessoas}
+        ativa={cidade}
+        onTrocar={c => { setCidade(c); setSetorEquipes(null); setDestaque(null); }}
+      />
+
       {/* Os números */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-9">
         <Numero Icone={Users} valor={n.pessoas} rotulo="Pessoas" destaque />
-        <Numero Icone={Building2} valor={quadro.setores.length} rotulo="Setores" />
+        <Numero Icone={Building2} valor={vista.setores.length} rotulo="Setores" />
         <Numero Icone={UsersRound} valor={n.equipes} rotulo="Equipes" />
         <Numero Icone={Crown} valor={n.lideres} rotulo="Líderes de equipe" />
         <Numero Icone={AlertTriangle} valor={n.semEquipe} rotulo="Sem equipe" tom={n.semEquipe > 0 ? 'warning' : undefined} />
@@ -453,7 +444,7 @@ export default function RhQuadro() {
         ? (
           <PainelSetor
             key={setorDoPainel.id}
-            quadro={quadro}
+            quadro={vista}
             setor={setorDoPainel}
             onVoltar={() => abrirSetor(null)}
             onVerOrganograma={verOrganograma}
@@ -462,10 +453,10 @@ export default function RhQuadro() {
             onCrachaSalvo={crachaSalvo}
           />
         )
-        : <AbaSetores quadro={quadro} semSetor={semSetor} onAbrir={abrirSetor} />)}
+        : <AbaSetores quadro={vista} semSetor={semSetor} onAbrir={abrirSetor} />)}
       {aba === 'equipes' && (
         <AbaEquipes
-          quadro={quadro}
+          quadro={vista}
           setores={setoresComBalde}
           setorId={setorEquipes}
           onSetor={id => { setSetorEquipes(id); setDestaque(null); }}
@@ -476,6 +467,9 @@ export default function RhQuadro() {
         <AbaHistorico
           empresas={(empresasDoAlvo ?? []).map(e => e.id)}
           rotuloAlvo={rotuloAlvo}
+          cidade={cidade === null ? null : cidade === '' ? '~' : cidade}
+          onCidade={c => setCidade(c === '~' ? '' : c)}
+          fotoDe={id => fotoPorId.get(id) ?? null}
           versao={versao}
           previa={previaHistorico}
           onPessoa={irParaPessoaPorId}

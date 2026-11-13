@@ -122,10 +122,14 @@ const COBRANCA_E_COMERCIAL: readonly Produto[] = ['cobranca', 'comercial'];
  */
 const COBRANCA_E_RH: readonly Produto[] = ['cobranca', 'rh'];
 
+/** Só o sistema do RH (a empresa Recursos Humanos). Nasceu com os Usuários do RH, 13/11/2026. */
+const SO_RH: readonly Produto[] = ['rh'];
+
 export const NAV_ITEMS: NavItem[] = [
   // A única aba que existe em todo produto por necessidade: é a rota `/`, a
   // porta de entrada. O que ela DESENHA muda por produto — ver `Dashboard`.
-  { label: 'Dashboard',        icon: LayoutDashboard, to: ROUTE_PATHS.DASHBOARD,           produtos: TODOS_OS_PRODUTOS, permissaoKey: 'ver_dashboard' },
+  // O RH não tem Dashboard (13/11/2026): a `/` dele é o Quadro de Pessoal.
+  { label: 'Dashboard',        icon: LayoutDashboard, to: ROUTE_PATHS.DASHBOARD,           produtos: COBRANCA_E_COMERCIAL, permissaoKey: 'ver_dashboard' },
   // Dashboard – ADM — o painel do Núcleo de Inteligência e Gestão, separado do
   // da cobrança. `hiddenForPaguePay` porque o Núcleo existe só na BookPlay. Quem
   // abre é a chave, que nasce só no Assistente ADM; para ele é também a tela
@@ -155,6 +159,9 @@ export const NAV_ITEMS: NavItem[] = [
   // «todos os setores» daquela aba: é ele que faz do cargo «o RH», e não o
   // líder que preenche a premiação da própria equipe.
   { label: 'Quadro de Pessoal', icon: Network,        to: ROUTE_PATHS.RH_QUADRO,           produtos: COBRANCA_E_RH, permissaoKey: 'ver_quadro_pessoal', depoisDe: ROUTE_PATHS.RH_GESTAO },
+  // Usuários do RH (13/11/2026): todas as operações, com o online por cidade.
+  // Não é a aba de administrar cadastro — essa é das operações.
+  { label: 'Usuários',         icon: Users,           to: ROUTE_PATHS.RH_USUARIOS,         produtos: SO_RH, permissaoKey: 'ver_quadro_pessoal', depoisDe: ROUTE_PATHS.RH_QUADRO },
   // Fechamento — a planilha de fechamento da gerência. Só BookPlay. A chave
   // nasce desligada para todo cargo configurável: hoje o item aparece só para
   // quem tem acesso total, e a gerência entra quando alguém ligar no painel.
@@ -261,7 +268,8 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'Painel Diretoria', icon: TrendingUp,      to: ROUTE_PATHS.PAINEL_DIRETORIA,    produtos: SO_COBRANCA, roles: ['diretoria','administrador'], permissaoKey: 'ver_painel_diretoria' },
   // Cadastrar gente é necessidade de qualquer operação, e a tela é sobre
   // pessoa, setor e equipe — vocabulário que Vendas e RH também usam.
-  { label: 'Usuários',         icon: Users,           to: ROUTE_PATHS.ADMIN_USUARIOS,      produtos: TODOS_OS_PRODUTOS, roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_usuarios' },
+  // No RH, Usuários é a visão de leitura (RH_USUARIOS, acima).
+  { label: 'Usuários',         icon: Users,           to: ROUTE_PATHS.ADMIN_USUARIOS,      produtos: COBRANCA_E_COMERCIAL, roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_usuarios' },
   // Metas é aba dentro de Usuários. O item avulso que ficava aqui estava
   // escondido nas duas empresas de cobrança e saiu em 12/11/2026; a rota
   // `/admin/metas` redireciona para a aba (App.tsx).
@@ -390,7 +398,7 @@ export function abasDoMenu(ctx: ContextoMenu): NavItem[] {
 
     // Quadro de Pessoal: chave própria e explícita (só RH e super_admin de
     // fábrica). A tela confere o mesmo por dentro, e o banco na RPC.
-    if (item.to === ROUTE_PATHS.RH_QUADRO) {
+    if (item.to === ROUTE_PATHS.RH_QUADRO || item.to === ROUTE_PATHS.RH_USUARIOS) {
       if (ctx.quadroPessoal !== undefined) return ctx.quadroPessoal;
       if (ctx.cargo === 'super_admin') return true;
       return ctx.cargo !== 'administrador' && ctx.temPermissao('ver_quadro_pessoal');

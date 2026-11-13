@@ -463,6 +463,42 @@ export function montarQuadro(dados: DadosBrutos, hoje: Date = new Date()): Quadr
   return { setores, semSetor, cidades, todas: pessoasTodas, empresas, numeros: totais, local };
 }
 
+/**
+ * O quadro de UMA cidade (13/11/2026). O Cleber tirou o seletor de empresa:
+ * BookPlay, PaguePlay e Comercial são cadastro, não divisão que o RH usa — a
+ * divisão é Birigui × Marília, e ela vale para todas as abas ao mesmo tempo.
+ *
+ * `todas` e `local` ficam inteiros: a busca «onde está fulano?» acha qualquer
+ * pessoa, e quem abre uma pessoa de outra cidade troca o recorte.
+ * `chave` null = todas as cidades (o quadro como veio).
+ */
+export function recortarPorCidade(q: Quadro, chave: string | null): Quadro {
+  if (chave === null) return q;
+  const setores = q.setores.filter(s => s.cidade.chave === chave);
+  const ids = new Set(setores.map(s => s.id));
+  const pessoas = q.todas.filter(p => p.setorId !== null && ids.has(p.setorId));
+  const numeros = contar(
+    pessoas, setores.flatMap(s => s.equipes),
+    setores.reduce((acc, s) => acc + s.semEquipe.length, 0),
+  );
+  numeros.clones = setores.reduce((acc, s) => acc + s.numeros.clones, 0);
+  return {
+    ...q,
+    setores,
+    semSetor: [],
+    cidades: q.cidades.filter(c => c.chave === chave),
+    empresas: [...new Set(setores.map(s => s.empresa).filter((e): e is string => !!e))],
+    numeros,
+  };
+}
+
+/** Quantas pessoas cada cidade tem (o número ao lado do filtro). */
+export function pessoasPorCidade(q: Quadro): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const s of q.setores) m.set(s.cidade.chave, (m.get(s.cidade.chave) ?? 0) + s.numeros.pessoas);
+  return m;
+}
+
 // ── Exportação ───────────────────────────────────────────────────────────────
 
 export type LinhaPlanilha = Record<string, string | number>;

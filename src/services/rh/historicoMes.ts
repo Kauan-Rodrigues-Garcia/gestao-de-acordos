@@ -155,6 +155,48 @@ export function agruparPorTipo(eventos: readonly EventoRh[]): { tipo: TipoEvento
     .filter(g => g.eventos.length > 0);
 }
 
+/** Quantos de cada tipo, sem separar cidade (o cartão do resumo). */
+export function contarTipos(eventos: readonly EventoRh[]): Contagem {
+  const c = zerada();
+  for (const e of eventos) c[e.tipo] += 1;
+  return c;
+}
+
+export interface DiaDoMes {
+  /** «2026-11-05». */
+  dia: string;
+  total: number;
+  porTipo: Contagem;
+  /** Sábado ou domingo. */
+  fimDeSemana: boolean;
+}
+
+/**
+ * O mês dia a dia, para o gráfico do ritmo. Todos os dias aparecem, com ou sem
+ * evento — o buraco também é informação. Afastamento e férias contam no dia em
+ * que começam a valer no mês (`dia` da linha), não em todos os dias do período.
+ */
+export function porDia(eventos: readonly EventoRh[], mes: string): DiaDoMes[] {
+  const [a, m] = mes.split('-').map(Number);
+  const dias = new Date(a, m, 0).getDate();
+  const lista: DiaDoMes[] = Array.from({ length: dias }, (_, i) => {
+    const d = new Date(a, m - 1, i + 1);
+    return {
+      dia: `${mes}-${String(i + 1).padStart(2, '0')}`,
+      total: 0,
+      porTipo: zerada(),
+      fimDeSemana: d.getDay() === 0 || d.getDay() === 6,
+    };
+  });
+  for (const e of eventos) {
+    const i = Number(e.dia.slice(8, 10)) - 1;
+    if (e.dia.slice(0, 7) !== mes || !lista[i]) continue;
+    lista[i].total += 1;
+    lista[i].porTipo[e.tipo] += 1;
+  }
+  return lista;
+}
+
 // ── Mês ─────────────────────────────────────────────────────────────────────
 
 /** O primeiro mês com log de pessoas (12/08/2026). */

@@ -66,7 +66,6 @@ export default function AbaSetores({
   semSetor: SetorQuadro | null;
   onAbrir: (setorId: string) => void;
 }) {
-  const [cidade, setCidade] = useState<string | null>(null);
   const [ordem, setOrdem] = useState<Ordem>('sistema');
   const [busca, setBusca] = useState('');
   const [modo, setModoBruto] = useState<Modo>(() => lerPreferencia('setores-modo', 'cartoes') as Modo);
@@ -74,39 +73,34 @@ export default function AbaSetores({
 
   const filtrados = useMemo(() => {
     const b = normalizar(busca);
-    let lista = quadro.setores.filter(s =>
-      (cidade === null || s.cidade.chave === cidade) && (!b || normalizar(s.nome).includes(b)));
+    // A cidade já vem recortada pelo topo do Quadro; aqui só a busca.
+    let lista = quadro.setores.filter(s => !b || normalizar(s.nome).includes(b));
     if (ordem === 'pessoas') lista = [...lista].sort((a, z) => z.numeros.pessoas - a.numeros.pessoas);
     if (ordem === 'nome') lista = [...lista].sort((a, z) => a.nome.localeCompare(z.nome, 'pt-BR'));
     return lista;
-  }, [quadro.setores, cidade, ordem, busca]);
+  }, [quadro.setores, ordem, busca]);
 
   const grupos = useMemo(() => quadro.cidades
     .map(c => ({ cidade: c, setores: filtrados.filter(s => s.cidade.chave === c.chave) }))
     .filter(g => g.setores.length > 0), [quadro.cidades, filtrados]);
 
-  const mostrarSemSetor = !!semSetor && cidade === null && !busca;
+  const mostrarSemSetor = !!semSetor && !busca;
 
   return (
     <div className="space-y-5">
       {/* Barra de ferramentas */}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Cidade">
-          <Chip ativo={cidade === null} onClick={() => setCidade(null)}>Todas as cidades</Chip>
-          {quadro.cidades.map(c => (
-            <Chip key={c.chave} ativo={cidade === c.chave} onClick={() => setCidade(c.chave)}>
-              {c.nome}
-            </Chip>
-          ))}
-        </div>
+        <p className="text-sm text-muted-foreground">
+          {plural(filtrados.length, 'setor', 'setores')}{busca && ' com esse nome'}
+        </p>
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <div className="relative">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={busca}
               onChange={e => setBusca(e.target.value)}
-              placeholder="Filtrar setor…"
-              className="h-8 w-44 pl-8 text-xs"
+              placeholder="Buscar setor pelo nome…"
+              className="h-8 w-52 pl-8 text-xs"
             />
           </div>
           <SeletorFiltro
@@ -177,24 +171,6 @@ export default function AbaSetores({
         </>
       )}
     </div>
-  );
-}
-
-function Chip({ ativo, onClick, children }: { ativo: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={ativo}
-      className={cn(
-        'h-8 rounded-full border px-3 text-xs font-medium transition',
-        ativo
-          ? 'border-primary bg-primary text-primary-foreground'
-          : 'border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground',
-      )}
-    >
-      {children}
-    </button>
   );
 }
 

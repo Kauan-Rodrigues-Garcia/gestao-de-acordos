@@ -274,6 +274,19 @@ describe('abasDoMenu — por produto', () => {
    * 20/10 ele nasceu só na cobrança, e quem entrava pela empresa Recursos
    * Humanos não o achava nem pelo link: a rota devolvia ao Dashboard.
    */
+  /*
+   * 13/11/2026: o sistema do RH é só Quadro de Pessoal e Usuários (a visão de
+   * leitura de todas as operações). Sem Dashboard e sem a Usuários de
+   * administrar cadastro — essa é das operações.
+   */
+  it('o sistema do RH mostra só Quadro de Pessoal e Usuários do RH', () => {
+    const rh = rotas(abasDoMenu(ctx({ produto: 'rh', isBookplay: false, cargo: 'rh', temPermissao: k => k === 'ver_quadro_pessoal' || k === 'ver_dashboard' || k === 'ver_usuarios', quadroPessoal: true })));
+    expect(rh).toEqual([ROUTE_PATHS.RH_QUADRO, ROUTE_PATHS.RH_USUARIOS]);
+    const cobranca = rotas(abasDoMenu(ctx({ produto: 'cobranca' })));
+    expect(cobranca).not.toContain(ROUTE_PATHS.RH_USUARIOS);
+    expect(cobranca).toContain(ROUTE_PATHS.ADMIN_USUARIOS);
+  });
+
   it('o Quadro de Pessoal existe no RH e na cobrança, e não no Comercial', () => {
     const noRh = rotas(abasDoMenu(ctx({ produto: 'rh', isBookplay: false })));
     const naCobranca = rotas(abasDoMenu(ctx({ produto: 'cobranca' })));

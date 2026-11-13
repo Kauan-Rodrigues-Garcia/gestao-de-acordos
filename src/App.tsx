@@ -132,6 +132,7 @@ const VendasLixeira      = lazy(() => import('@/pages/Vendas/LixeiraVendas'));
 const VendasIndicacoes  = lazy(() => import('@/pages/Vendas/Indicacoes'));
 const RhGestao          = lazy(() => import('@/pages/RhGestao'));
 const RhQuadro          = lazy(() => import('@/pages/RhQuadro'));
+const RhUsuarios        = lazy(() => import('@/pages/RhUsuarios'));
 const Fechamento        = lazy(() => import('@/pages/Fechamento'));
 const ControleNumeros   = lazy(() => import('@/pages/ControleNumeros'));
 const MeusChips         = lazy(() => import('@/pages/MeusChips'));
@@ -229,9 +230,9 @@ function TemaDoApp({ onMudar }: { onMudar: (soClaro: boolean) => void }): null {
  * isso `/` escolhe o painel pelo produto, e não mostra o mesmo para todos.
  *
  * Desde a Fase 9 (15/09/2026) o Comercial tem o dele: `DashboardComercial`, que
- * é o rodapé da planilha mensal escrito uma vez. O RH ainda não, e continua
- * caindo em `ProdutoEmMontagem` — avisar que a operação está sendo montada é
- * melhor do que abrir uma tela de recebimento vazia para um vendedor.
+ * é o rodapé da planilha mensal escrito uma vez. O RH não tem Dashboard
+ * (13/11/2026, pedido do Cleber): a `/` dele é o Quadro de Pessoal — ver
+ * `EntradaDoRh`, que decide antes da chave `ver_dashboard`.
  *
  * ## O Núcleo não passa mais por aqui
  *
@@ -243,6 +244,19 @@ function TemaDoApp({ onMudar }: { onMudar: (soClaro: boolean) => void }): null {
  * chegar a esta função. Administrador e super_admin têm as duas chaves e
  * continuam abrindo no Dashboard.
  */
+/**
+ * No produto RH a `/` abre o Quadro de Pessoal (13/11/2026). Fica POR FORA do
+ * `ProtectedRoute` do Dashboard: o RH não tem `ver_dashboard`, e a rota
+ * mostraria «aba não liberada» antes de qualquer desvio.
+ */
+function EntradaDoRh({ children }: { children: React.ReactElement }): React.ReactElement {
+  const { empresa, tenantSlug, loading } = useEmpresa();
+  if (!loading && produtoDaEmpresa(empresa, tenantSlug) === 'rh') {
+    return <Navigate to={ROUTE_PATHS.RH_QUADRO} replace />;
+  }
+  return children;
+}
+
 function PainelDeEntrada(): React.ReactElement {
   const { empresa, tenantSlug, loading } = useEmpresa();
   const { perfil } = useAuth();
@@ -439,12 +453,14 @@ export default function App() {
                   em vez de ler «aba não liberada» na tela inicial. */}
               <Route path={ROUTE_PATHS.DASHBOARD} element={
                 <LayoutWrapper>
+                  <EntradaDoRh>
                   <ProtectedRoute
                     requiredPermissao="ver_dashboard" mostrarSemAcesso
                     alternativa={{ permissao: 'ver_dashboard_adm', rota: ROUTE_PATHS.DASHBOARD_ADM }}
                   >
                     <PainelDeEntrada />
                   </ProtectedRoute>
+                  </EntradaDoRh>
                 </LayoutWrapper>
               } />
               {/* Tela mínima do celular (PWA). Sem `LayoutWrapper`: ela toma a
@@ -803,6 +819,15 @@ export default function App() {
                 <LayoutWrapper>
                   <ProtectedRoute produtos={COBRANCA_E_RH} requiredPermissao="ver_quadro_pessoal">
                     <RhQuadro />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+              {/* Usuários do sistema do RH (13/11/2026): todas as operações, com
+                  quem está online por cidade. Só leitura; a mesma chave do Quadro. */}
+              <Route path={ROUTE_PATHS.RH_USUARIOS} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={['rh']} requiredPermissao="ver_quadro_pessoal">
+                    <RhUsuarios />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />

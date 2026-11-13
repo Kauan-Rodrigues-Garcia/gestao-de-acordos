@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  conferirPlanilha, detectarColunas, linhasDaPlanilha, montarQuadro, setoresDoQuadro,
+  conferirPlanilha, detectarColunas, linhasDaPlanilha, montarQuadro, pessoasPorCidade, recortarPorCidade, setoresDoQuadro,
   type DadosBrutos, type PessoaBruta,
 } from './quadroPessoal';
 
@@ -172,5 +172,58 @@ describe('conferência', () => {
   it('«Sem equipe» escrito é o mesmo que célula vazia', () => {
     const c = conferirPlanilha(q, [{ Nome: 'Pedro Solto', Setor: 'Receptivo', Equipe: 'Sem equipe' }], rotulo);
     expect(c.itens[0].tipo).toBe('igual');
+  });
+});
+
+describe('setor alternativo, crachá e situação (13/11/2026)', () => {
+  const base = dados({
+    setores: [
+      { id: 's1', nome: 'Receptivo', ativo: true, cidade_id: 'c1' },
+      { id: 'alt', nome: 'Marília Digital', ativo: true, cidade_id: 'c2', alternativo: true },
+    ],
+    equipes: [
+      { id: 'e1', nome: 'Equipe Ana', setor_id: 's1' },
+      { id: 'ea', nome: 'Digital A', setor_id: 'alt' },
+    ],
+    pessoas: [
+      pessoa('joao', 'João Silva'),
+      pessoa('bia', 'Bia Afastada', { situacao: 'afastado' }),
+      pessoa('dona', 'Dona do Digital', { setor_id: 'alt', equipe_id: 'ea' }),
+    ],
+    lideres: [],
+    clones: [{ equipe_id: 'ea', operador_id: 'joao' }, { equipe_id: 'ea', operador_id: 'bia' }],
+    crachas: { joao: '1234', dona: ' ' },
+  });
+  const q = montarQuadro(base, HOJE);
+  const alt = q.setores.find(s => s.id === 'alt')!;
+
+  it('o alternativo traz os clones com o setor de origem, à parte do cadastro', () => {
+    expect(alt.alternativo).toBe(true);
+    expect(alt.clones.map(c => [c.pessoa.nome, c.origem, c.equipes])).toEqual([
+      ['Bia Afastada', 'Receptivo', ['Digital A']],
+      ['João Silva', 'Receptivo', ['Digital A']],
+    ]);
+    expect(alt.numeros.clones).toBe(2);
+    // O número do setor é do cadastro: o clone já conta na origem.
+    expect(alt.numeros.pessoas).toBe(1);
+    expect(q.numeros.pessoas).toBe(3);
+  });
+
+  it('crachá vazio conta como sem crachá; afastado é contado', () => {
+    expect(q.todas.find(p => p.id === 'joao')?.cracha).toBe('1234');
+    expect(q.todas.find(p => p.id === 'dona')?.cracha).toBeNull();
+    expect(q.numeros.semCracha).toBe(2);
+    expect(q.numeros.afastados).toBe(1);
+  });
+
+  it('recortarPorCidade deixa só a cidade e refaz os números, mas a busca continua inteira', () => {
+    const marilia = recortarPorCidade(q, 'marilia');
+    expect(marilia.setores.map(s => s.id)).toEqual(['alt']);
+    expect(marilia.numeros.pessoas).toBe(1);
+    expect(marilia.numeros.clones).toBe(2);
+    expect(marilia.semSetor).toEqual([]);
+    expect(marilia.todas).toHaveLength(3);
+    expect(recortarPorCidade(q, null)).toBe(q);
+    expect(Object.fromEntries(pessoasPorCidade(q))).toEqual({ birigui: 2, marilia: 1 });
   });
 });

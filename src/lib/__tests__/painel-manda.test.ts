@@ -151,7 +151,7 @@ const EXCECOES: Record<string, Excecao> = {
       + 'explícita, então o administrador não a herda (por isso sai) e o super_admin é a chave-mestra (por isso entra). '
       + 'No menu real quem manda é a resposta da pessoa (ctx.quadroPessoal, de temPermissaoExplicita).',
   },
-  'pages/RhQuadro/index.tsx': {
+  'hooks/useVeQuadroPessoal.ts': {
     linhas: 1, familia: 'chave-mestra',
     motivo: 'Quadro de Pessoal (13/11/2026): a chave ver_quadro_pessoal é EXPLÍCITA — o acesso total não a concede, '
       + 'e a semeadura não a liga em cargo de acesso total. O Cleber quer o super_admin sempre dentro (é quem libera '

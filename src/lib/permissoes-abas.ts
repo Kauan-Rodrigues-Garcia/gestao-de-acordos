@@ -23,6 +23,7 @@ export type ModuloPermissaoId =
   | 'tickets'
   | 'calendario'
   | 'rh'
+  | 'quadro_pessoal'
   | 'acordos'
   | 'pix'
   | 'jornada_acesso'

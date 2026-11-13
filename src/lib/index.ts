@@ -64,6 +64,8 @@ export const ROUTE_PATHS = {
   OUVIDORIA: '/ouvidoria',
   /** Quadro de Pessoal — a visão do RH sobre setores e equipes, só leitura (20/10/2026). */
   RH_QUADRO: '/quadro-pessoal',
+  /** Usuários do sistema do RH: todas as operações, online por cidade (13/11/2026). */
+  RH_USUARIOS: '/rh/usuarios',
   /**
    * O fechamento mensal por operador — a planilha de fechamento da gerência.
    * Não confundir com o relatório de fechamento (`BotaoFechamento`), que é um
