@@ -98,7 +98,9 @@ export default function RhQuadro() {
   const { temPermissao } = useCargoPermissoes();
   /* Chave própria e EXPLÍCITA (13/11/2026) — ver `useVeQuadroPessoal`. */
   const { podeVer, carregando: permCarregando } = useVeQuadroPessoal();
-  const podeEditarCracha = temPermissao('rh_editar_cracha');
+  // O crachá oficial é o do Quadro: quem tem o sistema do RH grava (o banco
+  // aceita pelo mesmo motivo, 20261113210000); rh_editar_cracha segue valendo.
+  const podeEditarCracha = temPermissao('rh_editar_cracha') || podeVer;
   const empresaId = empresa?.id ?? null;
   /*
    * O quadro lê SEMPRE todas as operações que a pessoa alcança (cobrança e
