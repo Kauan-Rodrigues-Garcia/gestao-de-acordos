@@ -407,6 +407,8 @@ export function descansarSonsDosQuebraNozes() {
 // pergunta; a exclamação sobe e fica mais forte. O tagarelar dura o tempo da
 // boca mexendo (a fala inteira, menos o finzinho de leitura).
 
+/** DESLIGADA a pedido do Cleber (13/11/2026: «tira a voz dos quebra-nozes, urgente»). Para voltar, `true`. */
+const VOZINHA_LIGADA = false;
 /** Uma em cada quantas falas tagarela, mais ou menos (o resto fica só no balão). */
 const CHANCE_DA_VOZINHA = 0.6;
 /** O volume da vozinha sobre os outros sons (ela tem de se ouvir por cima da música). */
@@ -558,7 +560,7 @@ export function desenharVozinha(c: BaseAudioContext, texto: string, voz: number,
 
 /** A vozinha de uma fala, se for das que tagarelam e as três chaves deixarem. `duracao`: quanto o balão fica. */
 export function tocarVozinha(texto: string, voz: number, x = 0, duracao = 3) {
-  if (!falaTagarela(texto)) return;
+  if (!VOZINHA_LIGADA || !falaTagarela(texto)) return;
   window.clearTimeout(descanso);
   const c = ctx();
   if (!c) return;
