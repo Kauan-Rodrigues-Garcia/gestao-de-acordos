@@ -1108,7 +1108,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         {/* Os quebra-nozes: em qualquer aba, para a cidade inteira ao mesmo tempo (`Natal/quebraNozes/sistema.tsx`). No modo leve, em quadrinhos. */}
         {natal && perfil?.id && (
           <Suspense fallback={null}>
-            <QuebraNozesNoSistema pessoaId={perfil.id} setorId={perfil.setor_id ?? null} empresaId={empresa?.id ?? null} leve={leve} />
+            <QuebraNozesNoSistema pessoaId={perfil.id} setorId={perfil.setor_id ?? null} empresaId={empresa?.id ?? null} leve={leve} todasAsCidades={userRole === 'super_admin'} />
           </Suspense>
         )}
         {previaNatal && <PreviaNatal estilo={natal} presenteAberto={natalAberto} presenteOculto={presenteOculto} video={videoNatal} />}

@@ -30,6 +30,12 @@
  * e os destaques são lidos antes, num momento sorteado dos minutos que
  * antecedem a sessão.
  *
+ * O super_admin acompanha as duas cidades (Cleber, 13/11/2026: «tudo tem que
+ * aparecer para nós também»): a agenda de Birigui e a de Marília, a chamada
+ * das dez e as chamadas na hora. Uma de cada vez: se as duas cidades sobem
+ * juntas (as dez, ou «Chamar agora» para todas), a segunda espera a primeira
+ * acabar e sobe do começo.
+ *
  * A chamada local (`chamada.ts`: a prévia do `npm run dev` e o «Ver só aqui»
  * do card) sobe só nesta tela, na cidade pedida, e sem destaques de verdade
  * usa os de exemplo.
@@ -61,7 +67,11 @@ interface Pedido {
   inicio: number | null;
   /** Chamada local: pergunta pela cidade pedida e, sem destaques, usa os de exemplo. */
   local: boolean;
+  /** Pergunta ao banco pela cidade do pedido, não pela de quem está logado (o super_admin acompanhando). */
+  forcarCidade?: boolean;
 }
+
+const CIDADES: readonly Cidade[] = ['birigui', 'marilia'];
 
 /** Com quanta antecedência a foto e os destaques começam a ser lidos. */
 const PREPARO_MS = 9 * 60_000;
@@ -120,10 +130,12 @@ async function lerLiderComCalma(cidade: Cidade, sessao: string, setorId: string 
   return null;
 }
 
-export function QuebraNozesNoSistema({ pessoaId, setorId, empresaId, leve = false }: {
+export function QuebraNozesNoSistema({ pessoaId, setorId, empresaId, leve = false, todasAsCidades = false }: {
   pessoaId: string;
   setorId: string | null;
   empresaId: string | null;
+  /** O super_admin: vê as aparições das duas cidades, seja qual for o setor. */
+  todasAsCidades?: boolean;
   /** O modo leve deste computador: o espetáculo sobe em quadrinhos. */
   leve?: boolean;
 }) {
@@ -163,7 +175,7 @@ export function QuebraNozesNoSistema({ pessoaId, setorId, empresaId, leve = fals
       let deExemplo = false;
       let lider: Destaque | null = null;
       if (p.tipo === 'boletim') {
-        lider = await lerLiderComCalma(p.cidade, p.chave, quem.current.setorId, p.local);
+        lider = await lerLiderComCalma(p.cidade, p.chave, quem.current.setorId, p.local || !!p.forcarCidade);
         if (!lider && p.local) {
           lider = { ...montagem.destaquesDeExemplo(p.cidade)[0], feito: '★ na frente hoje' };
           deExemplo = true;
@@ -171,7 +183,7 @@ export function QuebraNozesNoSistema({ pessoaId, setorId, empresaId, leve = fals
       }
       if (p.tipo === 'parabens') {
         const hoje = dataDeBrasilia(relogioNatal());
-        const lidos = await lerDestaquesComCalma(p.cidade, hoje, quem.current.setorId, p.local);
+        const lidos = await lerDestaquesComCalma(p.cidade, hoje, quem.current.setorId, p.local || !!p.forcarCidade);
         if (lidos && lidos.destaques.length > 0) {
           destaques = lidos.destaques;
           titulo = tituloDosDestaques(lidos.dia, hoje);
@@ -224,23 +236,26 @@ export function QuebraNozesNoSistema({ pessoaId, setorId, empresaId, leve = fals
   const textoDosAjustes = JSON.stringify(config.ajustes);
   const ajustes = useMemo(() => JSON.parse(textoDosAjustes) as Ajustes, [textoDosAjustes]);
   const palcoLivre = noPalco === null;
+  // As cidades que esta tela acompanha: a de quem está logado, ou as duas (super_admin).
+  const cidades = useMemo<readonly Cidade[]>(() => (todasAsCidades ? CIDADES : cidade ? [cidade] : []), [todasAsCidades, cidade]);
   useEffect(() => {
-    if (!cidade || !palcoLivre) return;
+    if (cidades.length === 0 || !palcoLivre) return;
     let vivo = true;
     let relogio = 0;
     const relogiosDoPreparo: number[] = [];
 
     /** Lê antes, num momento sorteado, o que a sessão vai precisar. */
-    const preparar = (s: Sessao, falta: number) => {
-      if (falta > PREPARO_MS || preparadas.current.has(s.chave)) return;
-      preparadas.current.add(s.chave);
+    const preparar = (s: Sessao, daCidade: Cidade, falta: number) => {
+      const marca = `${daCidade}|${s.chave}`;
+      if (falta > PREPARO_MS || preparadas.current.has(marca)) return;
+      preparadas.current.add(marca);
       const quando = Math.random() * Math.max(0, falta - FOLGA_DO_PREPARO_MS);
       relogiosDoPreparo.push(window.setTimeout(() => {
         if (document.hidden) return;
         void carregarMontagem();
         void lerElenco(quem.current.pessoaId, quem.current.setorId);
-        if (s.tipo === 'parabens') void lerDestaques(cidade, dataDeBrasilia(relogioNatal()), quem.current.setorId).catch((): null => null);
-        if (s.tipo === 'boletim') void lerLider(cidade, s.chave, quem.current.setorId).catch((): null => null);
+        if (s.tipo === 'parabens') void lerDestaques(daCidade, dataDeBrasilia(relogioNatal()), quem.current.setorId, todasAsCidades).catch((): null => null);
+        if (s.tipo === 'boletim') void lerLider(daCidade, s.chave, quem.current.setorId, todasAsCidades).catch((): null => null);
       }, quando));
     };
 
@@ -248,11 +263,20 @@ export function QuebraNozesNoSistema({ pessoaId, setorId, empresaId, leve = fals
       window.clearTimeout(relogio);
       if (!vivo || ocupado.current) return;
       const agora = relogioNatal();
-      const s = proximaSessao(cidade, agora, { automaticas, chamada10h, boletim, ajustes, chamada }, feitas.current);
-      if (!s) { relogio = window.setTimeout(planejar, 6 * ESPIADA_MS); return; }
+      // A próxima de cada cidade acompanhada; vale a que vem primeiro. `feitas` guarda «cidade|chave»:
+      // a chamada para todas tem a mesma chave nas duas cidades.
+      const proximas = cidades.flatMap(c => {
+        const daqui = new Set([...feitas.current].filter(m => m.startsWith(`${c}|`)).map(m => m.slice(c.length + 1)));
+        const s = proximaSessao(c, agora, { automaticas, chamada10h, boletim, ajustes, chamada }, daqui);
+        return s ? [{ c, s }] : [];
+      }).sort((x, y) => x.s.inicio - y.s.inicio);
+      if (proximas.length === 0) { relogio = window.setTimeout(planejar, 6 * ESPIADA_MS); return; }
+      const { c: daCidade, s } = proximas[0];
+      // A outra cidade também se prepara (às dez as duas sobem juntas).
+      for (const o of proximas.slice(1)) preparar(o.s, o.c, o.s.inicio - agora);
       const falta = s.inicio - agora;
       if (falta > ANTECEDENCIA_MS) {
-        preparar(s, falta);
+        preparar(s, daCidade, falta);
         relogio = window.setTimeout(planejar, Math.min(falta - ANTECEDENCIA_MS, ESPIADA_MS));
         return;
       }
@@ -260,8 +284,13 @@ export function QuebraNozesNoSistema({ pessoaId, setorId, empresaId, leve = fals
       // Com a aba escondida não sobe: se a pessoa voltar a tempo, entra no
       // meio; senão a sessão vence sozinha.
       if (document.hidden) { relogio = window.setTimeout(planejar, falta > 0 ? falta : 30_000); return; }
-      feitas.current.add(s.chave);
-      void subir({ chave: s.chave, tipo: s.tipo, cidade, dia: s.dia, indice: s.indice, inicio: s.inicio, local: false });
+      feitas.current.add(`${daCidade}|${s.chave}`);
+      // Quem acompanha as duas cidades e pegou esta já andando (estava vendo a outra) vê do começo.
+      const doComeco = todasAsCidades && agora - s.inicio > 3_000;
+      void subir({
+        chave: s.chave, tipo: s.tipo, cidade: daCidade, dia: s.dia, indice: s.indice,
+        inicio: doComeco ? null : s.inicio, local: false, forcarCidade: todasAsCidades,
+      });
     };
 
     planejar();
@@ -273,7 +302,7 @@ export function QuebraNozesNoSistema({ pessoaId, setorId, empresaId, leve = fals
       relogiosDoPreparo.forEach(t => window.clearTimeout(t));
       document.removeEventListener('visibilitychange', aoVoltar);
     };
-  }, [cidade, automaticas, chamada10h, boletim, ajustes, chamada, palcoLivre, rodada, subir]);
+  }, [cidades, todasAsCidades, automaticas, chamada10h, boletim, ajustes, chamada, palcoLivre, rodada, subir]);
 
   // ── A chamada local (a prévia e o «Ver só aqui» do card) ───────────────────
   useEffect(() => {

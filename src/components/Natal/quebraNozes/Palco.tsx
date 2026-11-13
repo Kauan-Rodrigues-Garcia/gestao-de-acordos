@@ -128,9 +128,9 @@ export interface PropsDoPalco {
 const ENTRE_TEMPOS_MS = 70;
 
 /** A voz de cada um na vozinha (Hz): o diretor mais grave, a head mais aguda. */
-const VOZ_DO_DIRETOR = 520;
-const VOZ_DO_HEAD = 600;
-const VOZ_DA_HEAD = 740;
+const VOZ_DO_DIRETOR = 470;
+const VOZ_DO_HEAD = 560;
+const VOZ_DA_HEAD = 700;
 /** A musiquinha entra depois da fanfarra da faixa. */
 const MUSICA_DEPOIS_DA_FAIXA_MS = 1_400;
 
@@ -243,6 +243,14 @@ export function PalcoDosQuebraNozes({ cidade, elenco, espetaculo, destaques = []
     if (tempo < 3) return;
     let vivo = true;
     let entradaDaMusica = 0;
+    // Quanto cada balão fica aberto (até o mesmo boneco fechar o balão): a vozinha dura o tempo da boca mexendo.
+    const abertoPor = new Map<string, number>();
+    espetaculo.deixas.forEach((d, i) => {
+      if (!('balao' in d) || !d.balao.texto) return;
+      const fecha = espetaculo.deixas.slice(i + 1).find(e => 'balao' in e && e.balao.q === d.balao.q);
+      const chave = d.balao.q + '|' + d.balao.texto;
+      if (fecha && !abertoPor.has(chave)) abertoPor.set(chave, fecha.t - d.t);
+    });
     const voz = (q: Quem) => (q === 'a' ? VOZ_DO_DIRETOR : elenco.b.artigo === 'a' ? VOZ_DA_HEAD : VOZ_DO_HEAD);
     // De que lado cada um está (o da esquerda soa à esquerda).
     const ladoDe = (q: Quem) => ((q === 'a') !== !!espetaculo.troca ? -90 : 90);
@@ -256,7 +264,7 @@ export function PalcoDosQuebraNozes({ cidade, elenco, espetaculo, destaques = []
         c.textContent = texto;
         c.classList.add('aberto');
         // De vez em quando, o tagarelar de bichinho (`sons.ts`).
-        if (!passado) tocarVozinha(texto, voz(q), ladoDe(q));
+        if (!passado) tocarVozinha(texto, voz(q), ladoDe(q), abertoPor.get(q + '|' + texto) ?? 3);
         // O pulinho do balão vai direto para a placa (recomeçar por classe pedia um leiaute forçado a cada fala).
         c.animate?.([{ transform: 'scale(.3)', opacity: 0 }, { transform: 'scale(1)', opacity: 1 }],
           { duration: quadrinho ? 220 : 320, easing: 'cubic-bezier(.3, 1.6, .5, 1)' });

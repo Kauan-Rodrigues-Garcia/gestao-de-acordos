@@ -182,7 +182,7 @@ function Lab() {
               <button key={s} type="button" className="h-7 rounded border px-2 text-xs" onClick={() => tocarSom(s, { dur: 1.6, n: 2 })}>{s}</button>
             ))}
             {/* A vozinha só toca nas falas sorteadas: estas três são das que tagarelam. */}
-            {([['vozinha diretor', 520], ['vozinha Robson', 600], ['vozinha Jessica', 740]] as const).map(([rotulo, voz]) => (
+            {([['vozinha diretor', 470], ['vozinha Robson', 560], ['vozinha Jessica', 700]] as const).map(([rotulo, voz]) => (
               <button key={rotulo} type="button" className="h-7 rounded border px-2 text-xs" onClick={() => tocarVozinha(FALA_DE_TESTE, voz)}>{rotulo}</button>
             ))}
             <button type="button" className="h-7 rounded border px-2 text-xs" onClick={() => tocarMusicaDosDestaques()}>música ▶</button>

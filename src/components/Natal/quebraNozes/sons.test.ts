@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { montarEspetaculo } from './diretor';
 import { destaquesDeExemplo } from './exemplos';
-import { falaTagarela } from './sons';
+import { falaTagarela, silabasDoTexto, tempoDeFalar } from './sons';
 
 /** As falas de verdade de um mês de aparições e chamadas, nas duas cidades. */
 function falasDoMes(): string[] {
@@ -29,6 +29,23 @@ describe('a vozinha dos quebra-nozes', () => {
     const comVoz = falas.filter(falaTagarela).length / falas.length;
     expect(comVoz).toBeGreaterThan(0.45);
     expect(comVoz).toBeLessThan(0.75);
+  });
+
+  it('cada sílaba do texto vira um pio com a vogal dela', () => {
+    expect(silabasDoTexto('Bom dia, Cobrança!').map(s => s.vogal).join('')).toBe('oioaa');
+    expect(silabasDoTexto('Bom dia')[0].consoante).toBe('estalo');
+    expect(silabasDoTexto('Sorte')[0].consoante).toBe('sopro');
+    expect(silabasDoTexto('…')).toEqual([]);
+    // Respiro curto entre palavras, maior na vírgula.
+    expect(silabasDoTexto('Bom dia, Cobrança!').map(s => s.depois)).toEqual(['palavra', 'virgula', 0, 0, 'virgula']);
+  });
+
+  it('o tagarelar dura o tempo da boca mexendo, sem passar do balão', () => {
+    for (const f of falas.slice(0, 200)) {
+      const falando = tempoDeFalar(f, 3);
+      expect(falando).toBeGreaterThanOrEqual(0.45);
+      expect(falando).toBeLessThanOrEqual(3 - 0.35);
+    }
   });
 
   it('a mesma fala tagarela igual em todo computador', () => {

@@ -100,7 +100,8 @@ function ctx(): AudioContext | null {
 
 // ── A mesa ──────────────────────────────────────────────────────────────────
 
-interface Mesa { entrada: AudioNode; sala: AudioNode; chiado: AudioBuffer }
+/** `voz`: a vozinha tem canal próprio (o compressor do resto a segurava baixa). */
+interface Mesa { entrada: AudioNode; voz: AudioNode; sala: AudioNode; chiado: AudioBuffer }
 const mesas = new WeakMap<BaseAudioContext, Mesa>();
 
 /** Um ruído que não depende de `Math.random`: o mesmo em toda máquina. */
@@ -155,7 +156,22 @@ function mesaDe(c: BaseAudioContext): Mesa {
   volta.gain.value = 0.55;
   sala.connect(volta).connect(compressor);
 
-  const mesa: Mesa = { entrada: compressor, sala, chiado: ruido(c, 1) };
+  // O canal da vozinha: um limitador só para ela, e o mesmo corte de agudos, direto na saída.
+  const limitador = c.createDynamicsCompressor();
+  limitador.threshold.value = -8;
+  limitador.knee.value = 6;
+  limitador.ratio.value = 8;
+  limitador.attack.value = 0.002;
+  limitador.release.value = 0.12;
+  const volumeDaVoz = c.createGain();
+  // Mais alta que o resto: a fala tem de se ouvir (Cleber, 13/11/2026: «tá muito baixo»).
+  volumeDaVoz.gain.value = VOLUME * 1.8;
+  const brilhoDaVoz = c.createBiquadFilter();
+  brilhoDaVoz.type = 'lowpass';
+  brilhoDaVoz.frequency.value = 9000;
+  limitador.connect(brilhoDaVoz).connect(volumeDaVoz).connect(c.destination);
+
+  const mesa: Mesa = { entrada: compressor, voz: limitador, sala, chiado: ruido(c, 1) };
   mesas.set(c, mesa);
   return mesa;
 }
@@ -380,12 +396,21 @@ export function descansarSonsDosQuebraNozes() {
 //
 // Pedido do Cleber (13/11/2026): de vez em quando, enquanto o balão abre, um
 // «bichinho falando», como nos jogos em que o diálogo vem com um tagarelar e
-// não com voz de verdade. Bem fofo: bipes redondos, curtos, que sobem um tico
-// no começo de cada sílaba, numa escala que nunca desafina.
+// não com voz de verdade. Na segunda rodada (mesmo dia): «mais fofinho, mais
+// sincronizado e mais alto».
+//
+// O jeito escolhido é o do «animalese» (Animal Crossing): cada sílaba do
+// próprio texto vira um pio curto, bem agudo, com o timbre da vogal dela — o
+// «a» aberto, o «i» fininho, o «u» fechadinho —, como uma boca pequena
+// falando rápido. Consoante de estalo (p, t, k…) ganha um tique; de sopro
+// (s, x, f…), um chiadinho. A frase desce de leve e termina subindo na
+// pergunta; a exclamação sobe e fica mais forte. O tagarelar dura o tempo da
+// boca mexendo (a fala inteira, menos o finzinho de leitura).
 
 /** Uma em cada quantas falas tagarela, mais ou menos (o resto fica só no balão). */
 const CHANCE_DA_VOZINHA = 0.6;
-const SILABAS = [1, 9 / 8, 5 / 4, 3 / 2, 5 / 3, 2];
+/** O volume da vozinha sobre os outros sons (ela tem de se ouvir por cima da música). */
+const VOLUME_DA_VOZINHA = 2.4;
 
 /** Um número do texto: a mesma fala tagarela igual em todo computador. */
 function numeroDoTexto(texto: string): number {
@@ -399,65 +424,147 @@ export function falaTagarela(texto: string): boolean {
   return (numeroDoTexto(texto) % 1000) / 1000 < CHANCE_DA_VOZINHA;
 }
 
-/** Uma sílaba: seno redondo com um fio de triângulo por cima, que escorrega para a nota. */
-function silaba(c: BaseAudioContext, saida: AudioNode, freq: number, quando: number, forca: number) {
+type Vogal = 'a' | 'e' | 'i' | 'o' | 'u';
+/** Os dois formantes de cada vogal, já numa «boca pequena» (uns 35% acima da voz adulta). */
+const FORMANTES: Record<Vogal, readonly [number, number]> = {
+  a: [1080, 1650], e: [680, 2500], i: [420, 3000], o: [700, 1250], u: [480, 1080],
+};
+const ESTALO = /[pbtdkgcq]/;
+const SOPRO = /[szxfjvh]/;
+
+export interface Silaba {
+  vogal: Vogal;
+  consoante: 'estalo' | 'sopro' | null;
+  /** O respiro depois dela: fim de palavra (curto) ou vírgula/ponto (maior). */
+  depois: 0 | 'palavra' | 'virgula';
+}
+
+/** O texto em sílabas faladas (uma por grupo de vogais), com os respiros entre palavras. Exportada para os testes. */
+export function silabasDoTexto(texto: string): Silaba[] {
+  const limpo = texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const silabas: Silaba[] = [];
+  for (const parte of limpo.split(/(\s+|[,.;:!?…]+)/)) {
+    if (!parte) continue;
+    const ultima = silabas[silabas.length - 1];
+    if (/[,.;:!?…]/.test(parte)) { if (ultima) ultima.depois = 'virgula'; continue; }
+    if (/^\s+$/.test(parte)) { if (ultima && !ultima.depois) ultima.depois = 'palavra'; continue; }
+    for (const m of parte.replace(/[^a-z]+/g, '').matchAll(/([^aeiouy]*)([aeiouy]+)/g)) {
+      const antes = m[1];
+      const v = (m[2][0] === 'y' ? 'i' : m[2][0]) as Vogal;
+      silabas.push({ vogal: v, consoante: ESTALO.test(antes) ? 'estalo' : SOPRO.test(antes) ? 'sopro' : null, depois: 0 });
+    }
+  }
+  return silabas;
+}
+
+/** Quanto tempo a boca mexe numa fala de `duracao` s: quase o balão inteiro (sobra um respiro no fim). */
+export function tempoDeFalar(texto: string, duracao: number): number {
+  return Math.max(0.45, duracao - 0.35);
+}
+
+/** Quanto pesa cada respiro, em sílabas. */
+const RESPIRO = { palavra: 0.45, virgula: 1.6 } as const;
+
+/**
+ * Um pio: dente de serra na altura da voz, passando por dois filtros nos
+ * formantes da vogal (é isso que dá o «a», o «i»), com um seno por baixo para
+ * ficar redondo. Começa um tico acima e escorrega para a nota.
+ */
+function pio(c: BaseAudioContext, saida: AudioNode, f0: number, s: Silaba, quando: number, dura: number, forca: number) {
   const g = c.createGain();
   g.gain.setValueAtTime(0, quando);
-  g.gain.linearRampToValueAtTime(0.3 * forca, quando + 0.008);
-  g.gain.exponentialRampToValueAtTime(0.0001, quando + 0.075);
+  g.gain.linearRampToValueAtTime(forca, quando + 0.012);
+  g.gain.setValueAtTime(forca, quando + dura * 0.55);
+  g.gain.exponentialRampToValueAtTime(0.0001, quando + dura);
   g.connect(saida);
-  for (const [tipo, mult, ganho] of [['sine', 1, 1], ['triangle', 2, 0.12]] as const) {
-    const o = c.createOscillator();
-    o.type = tipo;
-    o.frequency.setValueAtTime(freq * mult * 0.9, quando);
-    o.frequency.exponentialRampToValueAtTime(freq * mult, quando + 0.018);
+
+  const fonte = c.createOscillator();
+  fonte.type = 'sawtooth';
+  fonte.frequency.setValueAtTime(f0 * 1.07, quando);
+  fonte.frequency.exponentialRampToValueAtTime(f0, quando + 0.035);
+  const [f1, f2] = FORMANTES[s.vogal];
+  for (const [freq, ganho] of [[f1, 0.55], [f2, 0.32]] as const) {
+    const filtro = c.createBiquadFilter();
+    filtro.type = 'bandpass';
+    filtro.frequency.value = freq;
+    filtro.Q.value = 5;
     const v = c.createGain();
     v.gain.value = ganho;
-    o.connect(v).connect(g);
-    o.start(quando);
-    o.stop(quando + 0.1);
+    fonte.connect(filtro).connect(v).connect(g);
   }
+  const corpo = c.createOscillator();
+  corpo.type = 'sine';
+  corpo.frequency.setValueAtTime(f0 * 1.07, quando);
+  corpo.frequency.exponentialRampToValueAtTime(f0, quando + 0.035);
+  const cv = c.createGain();
+  cv.gain.value = 0.22;
+  corpo.connect(cv).connect(g);
+  for (const o of [fonte, corpo]) { o.start(quando); o.stop(quando + dura + 0.02); }
+
+  if (s.consoante === 'estalo') sopro(c, saida, Math.max(0, quando - 0.004), 0.32 * forca, 0.009, 'bandpass', 3200, 1.2);
+  if (s.consoante === 'sopro') sopro(c, saida, Math.max(0, quando - 0.018), 0.16 * forca, 0.024, 'highpass', 5200);
 }
 
 /**
- * O tagarelar de uma fala: umas sílabas (pelo tamanho do texto, no máximo 10),
- * na voz de quem fala (`voz`, em Hz). Pergunta e exclamação terminam subindo.
+ * O tagarelar de uma fala, na voz de quem fala (`voz`, em Hz), espalhado pelos
+ * `falando` segundos em que a boca mexe. Sílaba demais para o tempo: fala mais
+ * rápido, até um limite, e daí pula algumas.
  */
-export function desenharVozinha(c: BaseAudioContext, texto: string, voz: number, t: number, x = 0) {
+export function desenharVozinha(c: BaseAudioContext, texto: string, voz: number, t: number, x = 0, falando = tempoDeFalar(texto, 3)) {
   const mesa = mesaDe(c);
   const lado = c.createStereoPanner();
   lado.pan.value = Math.max(-0.5, Math.min(0.5, x / 420));
+  const volume = c.createGain();
+  volume.gain.value = VOLUME_DA_VOZINHA;
   const paraSala = c.createGain();
-  paraSala.gain.value = SALA * 0.6;
-  lado.connect(mesa.entrada);
+  paraSala.gain.value = SALA * 0.5;
+  volume.connect(lado);
+  lado.connect(mesa.voz);
   lado.connect(paraSala).connect(mesa.sala);
 
   let semente = numeroDoTexto(texto) || 1;
   const proximo = () => { semente = (Math.imul(semente, 1664525) + 1013904223) >>> 0; return semente / 4294967296; };
-  const n = Math.max(3, Math.min(10, Math.round(texto.replace(/\s+/g, '').length / 5)));
-  const sobe = /[!?]\s*$/.test(texto);
-  let quando = t;
-  let anterior = -1;
-  for (let i = 0; i < n; i++) {
-    let k = Math.floor(proximo() * 4);
-    if (k === anterior) k = (k + 1) % 4;
-    anterior = k;
-    const ultima = i === n - 1;
-    const freq = voz * (ultima && sobe ? SILABAS[5] : SILABAS[k]);
-    silaba(c, lado, freq, quando, ultima ? 0.85 : 0.6 + proximo() * 0.3);
-    quando += 0.068 + proximo() * 0.03;
+  let silabas = silabasDoTexto(texto);
+  if (silabas.length === 0) silabas = [{ vogal: 'a', consoante: null, depois: 0 }];
+  // As sílabas e os respiros enchem o tempo da boca mexendo. Mais de uns 13 pios
+  // por segundo vira chiado: sobrando sílaba, pula algumas.
+  const peso = (lista: readonly Silaba[]) => lista.reduce((t, x, i) => t + 1 + (x.depois && i < lista.length - 1 ? RESPIRO[x.depois] : 0), 0);
+  const cabem = Math.max(2, Math.floor(falando / 0.077));
+  if (peso(silabas) > cabem) {
+    const todas = silabas;
+    const n = Math.max(2, Math.round(todas.length * cabem / peso(todas)));
+    silabas = Array.from({ length: n }, (_, i) => todas[Math.floor(i * todas.length / n)]);
   }
+  // Nem arrastado demais: no máximo 0,16 s por sílaba.
+  const passo = Math.min(0.16, falando / peso(silabas));
+  let quando = t;
+  const pergunta = /\?\s*$/.test(texto);
+  const exclama = /!\s*$/.test(texto);
+  // Uma melodia de fala: degraus pequenos, que nunca desafinam.
+  const DEGRAUS = [0, 2, 4, 2, 5, 0, 7, 4];
+  silabas.forEach((s, i) => {
+    const ultima = i === silabas.length - 1;
+    const desce = 1 - 0.06 * (i / silabas.length);
+    let semitom = DEGRAUS[Math.floor(proximo() * DEGRAUS.length)];
+    if (ultima && pergunta) semitom = 9;
+    if (ultima && exclama) semitom = 7;
+    const f0 = voz * desce * Math.pow(2, semitom / 12);
+    const forca = ultima && exclama ? 0.95 : 0.62 + proximo() * 0.28;
+    pio(c, volume, f0, s, quando + (proximo() - 0.5) * passo * 0.15, Math.min(0.11, passo * 0.92), forca);
+    quando += passo * (1 + (s.depois && !ultima ? RESPIRO[s.depois] : 0));
+  });
   return lado;
 }
 
-/** A vozinha de uma fala, se for das que tagarelam e as três chaves deixarem. */
-export function tocarVozinha(texto: string, voz: number, x = 0) {
+/** A vozinha de uma fala, se for das que tagarelam e as três chaves deixarem. `duracao`: quanto o balão fica. */
+export function tocarVozinha(texto: string, voz: number, x = 0, duracao = 3) {
   if (!falaTagarela(texto)) return;
   window.clearTimeout(descanso);
   const c = ctx();
   if (!c) return;
-  const no = desenharVozinha(c, texto, voz, c.currentTime + 0.02, x);
-  window.setTimeout(() => no.disconnect(), 3_000);
+  const falando = tempoDeFalar(texto, duracao);
+  const no = desenharVozinha(c, texto, voz, c.currentTime + 0.03, x, falando);
+  window.setTimeout(() => no.disconnect(), (falando + 2) * 1000);
 }
 
 // ── A musiquinha dos destaques ─────────────────────────────────────────────
