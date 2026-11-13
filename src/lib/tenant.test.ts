@@ -42,10 +42,19 @@ describe('siteAceitaEmpresa — a cobrança é um produto só (06/10/2026)', () 
     expect(siteAceitaEmpresa('bookplay', empresa('pagueplay', null, 'PaguePlay'))).toBe(true);
   });
 
-  it('Comercial e RH continuam fora da cobrança, e a cobrança fora deles', () => {
+  it('o Comercial continua fora da cobrança, e a cobrança fora dele', () => {
     expect(siteAceitaEmpresa('bookplay', empresa('comercial', 'comercial', 'COMERCIAL'))).toBe(false);
-    expect(siteAceitaEmpresa('pagueplay', empresa('rh', 'rh', 'RH'))).toBe(false);
     expect(siteAceitaEmpresa('comercial', empresa('bookplay', 'cobranca', 'BookPlay'))).toBe(false);
+  });
+
+  /*
+   * 13/11/2026: o RH não tem site próprio e entra pelo da cobrança
+   * (gestaodeacordos.com.br), ficando na empresa dele. Pelo Comercial, não.
+   */
+  it('o RH entra pelo site da cobrança, e não pelo do Comercial', () => {
+    expect(siteAceitaEmpresa('bookplay', empresa('rh', 'rh', 'RH - Recursos Humanos'))).toBe(true);
+    expect(siteAceitaEmpresa('pagueplay', empresa('rh', 'rh', 'RH'))).toBe(true);
+    expect(siteAceitaEmpresa('comercial', empresa('rh', 'rh', 'RH'))).toBe(false);
   });
 
   it('empresa desconhecida não entra; site sem slug aceita todos', () => {

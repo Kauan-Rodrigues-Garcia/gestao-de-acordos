@@ -94,7 +94,13 @@ export function getConfiguredTenantSlug(): string {
  * (a cobrança), e o que muda a visão de cada pessoa é a regra do setor dela —
  * Nosso produto ou Cofen (Cleber, 06/10/2026). Então quem é de uma entra pelo
  * site da outra, e pelo `app.`, e continua na própria empresa. A trava só
- * separa produtos diferentes: Comercial e RH não entram pela cobrança.
+ * separa produtos diferentes: o Comercial não entra pela cobrança.
+ *
+ * O RH entra pelo site da cobrança (13/11/2026, decisão do Cleber): não há
+ * endereço próprio do RH, e o sistema dele É a visão das operações. Quem é da
+ * empresa Recursos Humanos fica na PRÓPRIA empresa (o menu do RH, o Quadro de
+ * Pessoal) — a mesma troca de `useEmpresa` que vale entre BookPlay e PaguePlay.
+ * O que ele enxerga continua decidido pela RLS e pela chave ver_quadro_pessoal.
  */
 export function siteAceitaEmpresa(
   siteSlug: string | null | undefined,
@@ -103,7 +109,10 @@ export function siteAceitaEmpresa(
   const site = normalizeSlug(siteSlug);
   const daEmpresa = normalizeSlug(empresa?.slug);
   if (!site || !daEmpresa || site === daEmpresa) return true;
-  return produtoDaEmpresa(empresa) === 'cobranca' && produtoDaEmpresa(null, site) === 'cobranca';
+  const produtoDoSite = produtoDaEmpresa(null, site);
+  const produtoDaPessoa = produtoDaEmpresa(empresa);
+  if (produtoDoSite !== 'cobranca') return false;
+  return produtoDaPessoa === 'cobranca' || produtoDaPessoa === 'rh';
 }
 
 export function getConfiguredSiteUrl(): string | null {
