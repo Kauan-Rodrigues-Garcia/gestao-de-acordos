@@ -13,7 +13,8 @@
  *
  * Só leitura, como o resto do Quadro.
  */
-import { useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import {
   AlertTriangle, ArrowLeft, ArrowUpDown, CheckCircle2, Copy, Crown, Download, GraduationCap, HeartPulse, IdCard, Network, Search,
   Sparkles, Sun, UsersRound, X, type LucideIcon,
@@ -60,7 +61,7 @@ export default function PainelSetor({
   const [busca, setBusca] = useState('');
   const [coluna, setColuna] = useState<Coluna>('nome');
   const [desc, setDesc] = useState(false);
-  const tabela = useRef<HTMLElement>(null);
+  const semMovimento = useReducedMotion();
 
   const lideresDoSetor = useMemo(
     () => [...new Map(setor.equipes.flatMap(e => e.lideres).map(l => [l.id, l])).values()],
@@ -128,7 +129,8 @@ export default function PainelSetor({
     if ('grupo' in f) setGrupo(f.grupo ?? null);
     if ('equipe' in f) setEquipe(f.equipe ?? null);
     if ('recorte' in f) setRecorte(f.recorte ?? null);
-    tabela.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // Sem rolar a página (13/11/2026, pedido do Cleber): a tabela troca no
+    // lugar, com animação, e quem decide ir até ela é a pessoa.
   };
   const ordenar = (c: Coluna) => {
     if (coluna === c) setDesc(d => !d); else { setColuna(c); setDesc(c === 'desde'); }
@@ -154,6 +156,8 @@ export default function PainelSetor({
       ativo: false, onClick: () => filtrar({ equipe: null, grupo: null, recorte: null }) },
   ]).filter(a => a.valor > 0);
 
+  /** Muda quando o recorte da tabela muda (não a busca: digitar não anima). */
+  const assinatura = `${grupo ?? ''}|${equipe ?? ''}|${recorte ?? ''}`;
   const nomeDaEquipe = equipe === SEM ? 'Sem equipe' : setor.equipes.find(e => e.id === equipe)?.nome;
 
   return (
@@ -422,21 +426,45 @@ export default function PainelSetor({
       </section>
 
       {/* Pessoas */}
-      <section ref={tabela} className="scroll-mt-4 rounded-2xl border border-border bg-card shadow-sm">
+      <section className="relative scroll-mt-4 overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+        {/* Um brilho rápido na borda quando o recorte muda: a tabela avisa que trocou. */}
+        <AnimatePresence>
+          {!semMovimento && assinatura !== '||' && (
+            <motion.span
+              key={assinatura}
+              aria-hidden
+              className="pointer-events-none absolute inset-0 rounded-2xl ring-2 ring-primary/50"
+              initial={{ opacity: 1 }}
+              animate={{ opacity: 0 }}
+              transition={{ duration: 1.1, ease: 'easeOut' }}
+            />
+          )}
+        </AnimatePresence>
         <header className="flex flex-wrap items-center gap-3 border-b border-border p-4 md:px-5">
           <div>
             <h3 className="text-base font-semibold text-foreground">{setor.alternativo ? 'Pessoas e clones do setor' : 'Pessoas do setor'}</h3>
-            <p className="text-sm text-muted-foreground">
-              {visiveis.length === linhas.length
-                ? plural(linhas.length, 'pessoa', 'pessoas')
-                : `${visiveis.length} de ${linhas.length}`}
-            </p>
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.p
+                key={visiveis.length}
+                className="text-sm text-muted-foreground"
+                initial={semMovimento ? false : { opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={semMovimento ? undefined : { opacity: 0, y: 4 }}
+                transition={{ duration: 0.18 }}
+              >
+                {visiveis.length === linhas.length
+                  ? plural(linhas.length, 'pessoa', 'pessoas')
+                  : `${visiveis.length} de ${linhas.length}`}
+              </motion.p>
+            </AnimatePresence>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {grupo && <Filtro onTirar={() => setGrupo(null)}>{GRUPO_META[grupo].rotulo}</Filtro>}
-            {equipe && <Filtro onTirar={() => setEquipe(null)}>{nomeDaEquipe}</Filtro>}
-            {recorte && <Filtro onTirar={() => setRecorte(null)}>{ROTULO_RECORTE[recorte]}</Filtro>}
-          </div>
+          <motion.div layout className="flex flex-wrap items-center gap-2">
+            <AnimatePresence initial={false}>
+              {grupo && <Filtro key="g" onTirar={() => setGrupo(null)}>{GRUPO_META[grupo].rotulo}</Filtro>}
+              {equipe && <Filtro key="e" onTirar={() => setEquipe(null)}>{nomeDaEquipe}</Filtro>}
+              {recorte && <Filtro key="r" onTirar={() => setRecorte(null)}>{ROTULO_RECORTE[recorte]}</Filtro>}
+            </AnimatePresence>
+          </motion.div>
           <div className="relative ml-auto w-full sm:w-64">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar nome, e-mail ou crachá…" className="h-9 pl-9" />
@@ -454,9 +482,16 @@ export default function PainelSetor({
                 <Cabeca ativo={coluna === 'desde'} desc={desc} onClick={() => ordenar('desde')}>No sistema desde</Cabeca>
               </tr>
             </thead>
-            <tbody>
-              {visiveis.map(({ p, lugar, lider, clone }) => (
-                <tr key={p.id} className={cn('border-b border-border/60 last:border-0 hover:bg-muted/40', clone && 'bg-info/[0.03]')}>
+            {/* A tabela troca no lugar: as linhas entram em cascata curta a cada recorte novo. */}
+            <tbody key={assinatura}>
+              {visiveis.map(({ p, lugar, lider, clone }, i) => (
+                <motion.tr
+                  key={p.id}
+                  className={cn('border-b border-border/60 last:border-0 hover:bg-muted/40', clone && 'bg-info/[0.03]')}
+                  initial={semMovimento ? false : { opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.22, delay: Math.min(i, 14) * 0.025, ease: 'easeOut' }}
+                >
                   <td className="px-4 py-2.5">
                     <div className="flex items-center gap-3">
                       <Foto pessoa={p} tamanho="md" />
@@ -485,7 +520,7 @@ export default function PainelSetor({
                   </td>
                   <td className="px-4 py-2.5"><Situacao pessoa={p} /></td>
                   <td className="px-4 py-2.5 tabular-nums text-foreground">{dataCurta(p.criadoEm) || '—'}</td>
-                </tr>
+                </motion.tr>
               ))}
               {visiveis.length === 0 && (
                 <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-muted-foreground">Ninguém com esse filtro.</td></tr>
@@ -570,14 +605,21 @@ function Destaque({ Icone, valor, rotulo }: { Icone: LucideIcon; valor: number; 
   );
 }
 
-function Filtro({ children, onTirar }: { children: React.ReactNode; onTirar: () => void }) {
+function Filtro({ children, onTirar }: { children: ReactNode; onTirar: () => void }) {
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 py-0.5 pl-2.5 pr-1 text-xs font-medium text-foreground ring-1 ring-primary/30">
+    <motion.span
+      layout
+      initial={{ opacity: 0, scale: 0.85 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.85 }}
+      transition={{ duration: 0.18 }}
+      className="inline-flex items-center gap-1 rounded-full bg-primary/10 py-0.5 pl-2.5 pr-1 text-xs font-medium text-foreground ring-1 ring-primary/30"
+    >
       {children}
       <button type="button" onClick={onTirar} className="rounded-full p-0.5 hover:bg-primary/20" aria-label="Tirar filtro">
         <X className="size-3" />
       </button>
-    </span>
+    </motion.span>
   );
 }
 
