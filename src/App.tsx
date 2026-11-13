@@ -132,7 +132,6 @@ const VendasLixeira      = lazy(() => import('@/pages/Vendas/LixeiraVendas'));
 const VendasIndicacoes  = lazy(() => import('@/pages/Vendas/Indicacoes'));
 const RhGestao          = lazy(() => import('@/pages/RhGestao'));
 const RhQuadro          = lazy(() => import('@/pages/RhQuadro'));
-const RhUsuarios        = lazy(() => import('@/pages/RhUsuarios'));
 const Fechamento        = lazy(() => import('@/pages/Fechamento'));
 const ControleNumeros   = lazy(() => import('@/pages/ControleNumeros'));
 const MeusChips         = lazy(() => import('@/pages/MeusChips'));
@@ -822,12 +821,14 @@ export default function App() {
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
-              {/* Usuários do sistema do RH (13/11/2026): todas as operações, com
-                  quem está online por cidade. Só leitura; a mesma chave do Quadro. */}
+              {/* Usuários do sistema do RH (13/11/2026): a MESMA aba Usuários, na
+                  visão geral (todas as operações, online de todas as empresas) e
+                  só de leitura — ver `visaoDoRh` em AdminUsuarios. A chave é a do
+                  Quadro; ver_usuarios fica para quem administra cadastro. */}
               <Route path={ROUTE_PATHS.RH_USUARIOS} element={
                 <LayoutWrapper>
                   <ProtectedRoute produtos={['rh']} requiredPermissao="ver_quadro_pessoal">
-                    <RhUsuarios />
+                    <AdminUsuarios />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />

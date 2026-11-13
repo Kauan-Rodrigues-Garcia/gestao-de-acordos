@@ -51,6 +51,7 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { produtoDaEmpresa } from '@/lib/produto';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { usePresence } from '@/hooks/usePresence';
+import { useVeQuadroPessoal } from '@/hooks/useVeQuadroPessoal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -64,7 +65,7 @@ import { ehMesAtual, rotuloDoMes } from '@/lib/mesReferencia';
 import { supabase, Perfil, Setor, Empresa, SituacaoUsuario } from '@/lib/supabase';
 import { definirSituacao, arquivarDesligadosAnteriores, encerrarFeriasVencidas } from '@/services/situacaoUsuario.service';
 import { AdminDesligadosAba } from '@/pages/AdminDesligadosAba';
-import { fetchEmpresas } from '@/services/empresas.service';
+import { fetchEmpresas, fetchEmpresasLiberadas } from '@/services/empresas.service';
 import { TODAS_EMPRESAS_SELECT_VALUE, ehEscopoEmpresa, PERFIL_LABELS, getTodayISO } from '@/lib/index';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -161,7 +162,21 @@ export default function AdminUsuarios() {
    * permissão diz quem pode; o produto diz se a coisa existe.
    */
   const ehCobranca = produtoDaEmpresa(empresaAtual, tenant.slug) === 'cobranca';
-  const podeVerUsuarios = temPermissao('usuarios_sub_usuarios');
+  /*
+   * ── A visão do RH (13/11/2026) ────────────────────────────────────────────
+   *
+   * Quem entra pelo sistema do RH (empresa Recursos Humanos, chave
+   * ver_quadro_pessoal) usa ESTA mesma aba, com a visão geral — todas as
+   * operações numa lista só, o online de todas as empresas, como o super admin
+   * vê — e SÓ DE LEITURA: nada de criar, editar, transferir, mudar situação ou
+   * pedir senha, e nenhuma manutenção que grave no banco. Pedido do Cleber:
+   * «a mesma aba de usuários, com a visão geral, sem a opção de editar».
+   */
+  const isSuperAdmin = perfilAtual?.perfil === 'super_admin';
+  const { podeVer: veQuadroPessoal } = useVeQuadroPessoal();
+  // O super admin na empresa RH continua com a tela inteira (ele administra).
+  const visaoDoRh = produtoDaEmpresa(empresaAtual, tenant.slug) === 'rh' && veQuadroPessoal && !isSuperAdmin;
+  const podeVerUsuarios = temPermissao('usuarios_sub_usuarios') || visaoDoRh;
   const podeVerComemoracoes = ehCobranca && temPermissao('ver_comemoracoes');
   /*
    * Dois eixos, duas chaves — e eles não são a mesma pergunta.
@@ -176,7 +191,7 @@ export default function AdminUsuarios() {
    * decisão — e ninguém conseguia separá-los sem mexer em código.
    */
   const podeVerAdministradores = temPermissao('usuarios_ver_administradores');
-  const podeAdministrarContas  = temPermissao('usuarios_administrar');
+  const podeAdministrarContas  = !visaoDoRh && temPermissao('usuarios_administrar');
 
   /*
    * ── O que se pode mexer na janela de edição ───────────────────────────────
@@ -193,12 +208,12 @@ export default function AdminUsuarios() {
    * RLS continua sendo quem manda no dado.
    */
   const podeNoUsuario: PodeNoUsuario = {
-    nome:    temPermissao('usuarios_editar_nome'),
-    login:   temPermissao('usuarios_editar_login'),
-    foto:    temPermissao('usuarios_editar_foto'),
-    cargo:   temPermissao('usuarios_editar_cargo'),
-    senha:   temPermissao('usuarios_redefinir_senha'),
-    excluir: temPermissao('usuarios_excluir'),
+    nome:    !visaoDoRh && temPermissao('usuarios_editar_nome'),
+    login:   !visaoDoRh && temPermissao('usuarios_editar_login'),
+    foto:    !visaoDoRh && temPermissao('usuarios_editar_foto'),
+    cargo:   !visaoDoRh && temPermissao('usuarios_editar_cargo'),
+    senha:   !visaoDoRh && temPermissao('usuarios_redefinir_senha'),
+    excluir: !visaoDoRh && temPermissao('usuarios_excluir'),
   };
   /*
    * Alcançar alguém sem poder mexer em nada não é edição.
@@ -218,13 +233,12 @@ export default function AdminUsuarios() {
    */
   const ehComercial = produtoDaEmpresa(empresaAtual, tenant.slug) === 'comercial';
   const mostrarRobo = ehComercial;
-  const isSuperAdmin = perfilAtual?.perfil === 'super_admin';
   /** A lista única da cobrança (BookPlay + PaguePlay) — quem vê todos os setores. */
   const listaDaCobranca = ehCobranca && (isSuperAdmin || veUsuariosDeTodosSetores);
   // Item 5: líder+ pode definir a situação (ativo/férias/desligado). A RLS ainda
   // limita o líder ao próprio setor; quem administra atinge qualquer usuário.
-  const podeGerenciarSituacao = podeAdministrarContas
-    || temPermissao('usuarios_editar_do_setor');
+  const podeGerenciarSituacao = !visaoDoRh && (podeAdministrarContas
+    || temPermissao('usuarios_editar_do_setor'));
   /*
    * O mês que está sendo olhado. `null` = o mês corrente, que é a tela de
    * sempre — com formulários, edição e tudo o que ela sempre teve.
@@ -382,7 +396,7 @@ export default function AdminUsuarios() {
    * lá a chave `usuarios_transferir` ficava inerte para líder e elite, que não
    * abrem a aba Setores.
    */
-  const podeTransferir = temPermissao('usuarios_transferir');
+  const podeTransferir = !visaoDoRh && temPermissao('usuarios_transferir');
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
   const [transferindo, setTransferindo] = useState<Perfil[] | null>(null);
   /*
@@ -408,7 +422,7 @@ export default function AdminUsuarios() {
    * O banco confere o setor (`fn_senha_pedir`); aqui só não se oferece o botão
    * para quem nunca poderia ser pedido.
    */
-  const podePedirSenha = !isSuperAdmin && !podeNoUsuario.senha && temPermissao('ver_usuarios');
+  const podePedirSenha = !visaoDoRh && !isSuperAdmin && !podeNoUsuario.senha && temPermissao('ver_usuarios');
   const [pedindoSenha, setPedindoSenha] = useState<Perfil | null>(null);
   const [senhasPedidas, setSenhasPedidas] = useState<Map<string, string>>(() => new Map());
   const releSenhasPedidas = useCallback(() => {
@@ -487,7 +501,9 @@ export default function AdminUsuarios() {
   const setorNucleoId = useSetorNucleo(form.empresa_id || empresaAtual?.id);
 
   // Online/Offline — lê do PresenceProvider (canal singleton global)
-  const { onlineIds } = usePresence();
+  // Na visão do RH, o online de TODAS as empresas (a lista que o chat usa).
+  const { onlineIds: onlineDaEmpresa, onlineIdsGlobal } = usePresence();
+  const onlineIds = visaoDoRh ? onlineIdsGlobal : onlineDaEmpresa;
   // Foto expandida
   const [fotoExpandida,   setFotoExpandida]   = useState<{ url: string; nome: string } | null>(null);
   // Upload de foto pelo líder/admin para outro operador
@@ -544,12 +560,25 @@ export default function AdminUsuarios() {
     const minhaLeitura = ++leituraAtual.current;
     setLoading(true);
     /*
+     * Visão do RH: as operações (cobrança e Comercial) que a pessoa alcança,
+     * numa lista só — o mesmo caminho da lista da cobrança.
+     */
+    let operacoesDoRh: Empresa[] = [];
+    if (visaoDoRh) {
+      try {
+        operacoesDoRh = (await fetchEmpresasLiberadas()).filter(e => {
+          const p = produtoDaEmpresa(e);
+          return p === 'cobranca' || p === 'comercial';
+        });
+      } catch { operacoesDoRh = []; }
+    }
+    /*
      * A lista da cobrança junta as empresas da cobrança que a pessoa alcança
      * (BookPlay e PaguePlay). Só para quem vê todos os setores: com alcance
      * de setor a lista é o setor dela, numa empresa só.
      */
-    let cobrancaDaLista: Empresa[] = [];
-    if (listaDaCobranca) {
+    let cobrancaDaLista: Empresa[] = operacoesDoRh;
+    if (!visaoDoRh && listaDaCobranca) {
       try { cobrancaDaLista = await empresasDaCobrancaQueVejo(); } catch { cobrancaDaLista = []; }
     }
     const idsDaLista = cobrancaDaLista.length
@@ -563,7 +592,8 @@ export default function AdminUsuarios() {
      * para a lista já vir com o resultado.
      */
     const hojeManutencao = getTodayISO();
-    const pendentes = idsDaLista.filter(id => !manutencaoFeita.has(`${id}:${hojeManutencao}`));
+    // A visão do RH só lê: a manutenção (arquivar, encerrar férias) grava.
+    const pendentes = visaoDoRh ? [] : idsDaLista.filter(id => !manutencaoFeita.has(`${id}:${hojeManutencao}`));
     await Promise.all(pendentes.map(async empAlvo => {
       manutencaoFeita.add(`${empAlvo}:${hojeManutencao}`);
       const [, voltaram] = await Promise.all([
@@ -674,7 +704,7 @@ export default function AdminUsuarios() {
   // preenchido na abertura e só causaria uma segunda leitura idêntica.
   const filtroQueMudaALista = isSuperAdmin ? filtroEmpresa : '';
   // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchDados é recriada a cada render; incluí-la causaria refetch em loop.
-  useEffect(() => { fetchDados(); }, [empresaAtual?.id, filtroQueMudaALista, isSuperAdmin, listaDaCobranca]);
+  useEffect(() => { fetchDados(); }, [empresaAtual?.id, filtroQueMudaALista, isSuperAdmin, listaDaCobranca, visaoDoRh]);
 
   function abrirCriar() {
     setEditando(null);
@@ -1435,9 +1465,16 @@ export default function AdminUsuarios() {
           <div>
             <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
               <Users className="w-5 h-5 text-primary" /> Usuários
+              {visaoDoRh && (
+                <span className="rounded-full border border-border px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                  Visão do RH · só leitura
+                </span>
+              )}
             </h1>
             <p className="text-sm text-muted-foreground mt-0.5">
-              {empresasDaLista.length > 1
+              {visaoDoRh
+                ? 'Todas as operações numa lista só · a marca é a cidade do setor (Birigui · BookPlay, Marília · PaguePlay)'
+                : empresasDaLista.length > 1
                 ? 'BookPlay e PaguePlay na mesma lista · a marca é a cidade do setor; o que muda o que cada um vê é a regra de negócio do setor'
                 : 'Gestão de usuários e equipes'}
             </p>
@@ -1670,7 +1707,7 @@ export default function AdminUsuarios() {
                 <ArrowRightLeft className="w-4 h-4" /> Trazer de outro setor
               </Button>
             )}
-            {temPermissao('usuarios_administrar') && (
+            {podeAdministrarContas && (
               <Button size="sm" className="h-9" onClick={abrirCriar}>
                 <Plus className="w-4 h-4 mr-2" /> Novo Usuário
               </Button>
