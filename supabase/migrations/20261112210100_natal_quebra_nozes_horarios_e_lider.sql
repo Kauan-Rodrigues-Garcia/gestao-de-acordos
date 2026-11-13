@@ -3,7 +3,7 @@
 -- recebeu até agora
 -- ============================================================================
 --
--- Pedido do Cleber, 12/11/2026, em cima da 20261112180000.
+-- Pedido do Cleber, 12/11/2026, em cima da 20261112180100.
 --
 -- ## O horário de cada aparição
 --
@@ -77,7 +77,7 @@ SET LOCAL statement_timeout = '60s';
 DO $antes$
 BEGIN
   IF to_regclass('public.natal_quebra_nozes') IS NULL THEN
-    RAISE EXCEPTION 'natal_quebra_nozes não existe: aplique antes a 20261112180000';
+    RAISE EXCEPTION 'natal_quebra_nozes não existe: aplique antes a 20261112180100';
   END IF;
 END
 $antes$;
@@ -89,7 +89,7 @@ ALTER TABLE public.natal_quebra_nozes
   ADD COLUMN IF NOT EXISTS ajustes JSONB   NOT NULL DEFAULT '{}'::jsonb;
 
 COMMENT ON COLUMN public.natal_quebra_nozes.ajustes IS
-  'Horários trocados à mão: {"<dia do Natal>:<cidade>:<indice>": <minuto do dia>}. Ver 20261112210000.';
+  'Horários trocados à mão: {"<dia do Natal>:<cidade>:<indice>": <minuto do dia>}. Ver 20261112210100.';
 
 -- Tudo desligado no lançamento. Só roda o UPDATE se houver algo ligado: o
 -- gatilho de aviso é por comando e dispararia mesmo sem mudar linha nenhuma.
@@ -303,7 +303,7 @@ CREATE TABLE IF NOT EXISTS public.natal_quebra_nozes_lider (
 );
 
 COMMENT ON TABLE public.natal_quebra_nozes_lider IS
-  'Quem mais recebeu hoje na cidade, por sessão dos quebra-nozes, calculado por fn_natal_quebra_nozes_lider. Ver 20261112210000.';
+  'Quem mais recebeu hoje na cidade, por sessão dos quebra-nozes, calculado por fn_natal_quebra_nozes_lider. Ver 20261112210100.';
 
 ALTER TABLE public.natal_quebra_nozes_lider ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.natal_quebra_nozes_lider FROM PUBLIC, anon, authenticated;
@@ -423,7 +423,7 @@ GRANT EXECUTE ON FUNCTION public.fn_natal_quebra_nozes_lider(TEXT, TEXT) TO auth
 
 COMMENT ON FUNCTION public.fn_natal_quebra_nozes_lider(TEXT, TEXT) IS
   'Quem mais recebeu hoje (o primeiro do dia no Destaque do Modo TV, o maior entre os setores) na cidade de quem pergunta. '
-  'Calcula uma vez por sessão e guarda em natal_quebra_nozes_lider. Ver 20261112210000.';
+  'Calcula uma vez por sessão e guarda em natal_quebra_nozes_lider. Ver 20261112210100.';
 
 -- ── Prova ───────────────────────────────────────────────────────────────────
 DO $prova$

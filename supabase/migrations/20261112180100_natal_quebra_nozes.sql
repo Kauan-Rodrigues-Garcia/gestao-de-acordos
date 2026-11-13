@@ -85,7 +85,7 @@ CREATE TABLE IF NOT EXISTS public.natal_quebra_nozes (
 
 COMMENT ON TABLE public.natal_quebra_nozes IS
   'Uma linha: os interruptores dos quebra-nozes do Natal e a chamada feita na hora. '
-  'Escrita só por fn_natal_quebra_nozes_configurar e fn_natal_quebra_nozes_chamar (super_admin). Ver 20261112180000.';
+  'Escrita só por fn_natal_quebra_nozes_configurar e fn_natal_quebra_nozes_chamar (super_admin). Ver 20261112180100.';
 
 INSERT INTO public.natal_quebra_nozes (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
 
@@ -259,7 +259,7 @@ CREATE TABLE IF NOT EXISTS public.natal_quebra_nozes_destaques (
 );
 
 COMMENT ON TABLE public.natal_quebra_nozes_destaques IS
-  'Os destaques de ontem por cidade, calculados uma vez por dia por fn_natal_quebra_nozes_destaques. Ver 20261112180000.';
+  'Os destaques de ontem por cidade, calculados uma vez por dia por fn_natal_quebra_nozes_destaques. Ver 20261112180100.';
 
 ALTER TABLE public.natal_quebra_nozes_destaques ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.natal_quebra_nozes_destaques FROM PUBLIC, anon, authenticated;
@@ -362,7 +362,7 @@ GRANT EXECUTE ON FUNCTION public.fn_natal_quebra_nozes_destaques(TEXT) TO authen
 
 COMMENT ON FUNCTION public.fn_natal_quebra_nozes_destaques(TEXT) IS
   'Os destaques de ontem (quem mais recebeu em cada setor, como no Modo TV) da cidade de quem pergunta. '
-  'Calcula uma vez por dia e guarda em natal_quebra_nozes_destaques. Ver 20261112180000.';
+  'Calcula uma vez por dia e guarda em natal_quebra_nozes_destaques. Ver 20261112180100.';
 
 -- ── Prova ───────────────────────────────────────────────────────────────────
 DO $prova$
