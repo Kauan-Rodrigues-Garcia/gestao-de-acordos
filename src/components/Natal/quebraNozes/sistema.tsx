@@ -147,6 +147,8 @@ export function QuebraNozesNoSistema({ pessoaId, setorId, empresaId, leve = fals
   const ocupado = useRef(false);
   const feitas = useRef(new Set<string>());
   const preparadas = useRef(new Set<string>());
+  /** Quando o último espetáculo desta tela acabou (relógio do Natal); 0 = nenhum ainda. */
+  const fimDoUltimo = useRef(0);
   const quem = useRef({ pessoaId, setorId, leve });
   quem.current = { pessoaId, setorId, leve };
 
@@ -286,7 +288,9 @@ export function QuebraNozesNoSistema({ pessoaId, setorId, empresaId, leve = fals
       if (document.hidden) { relogio = window.setTimeout(planejar, falta > 0 ? falta : 30_000); return; }
       feitas.current.add(`${daCidade}|${s.chave}`);
       // Quem acompanha as duas cidades e pegou esta já andando (estava vendo a outra) vê do começo.
-      const doComeco = todasAsCidades && agora - s.inicio > 3_000;
+      // Só a que ficou esperando o palco: recarregar a página NÃO recomeça nada (entra no ponto
+      // em que está, ou nem sobe se já acabou).
+      const doComeco = todasAsCidades && agora - s.inicio > 3_000 && fimDoUltimo.current > s.inicio;
       void subir({
         chave: s.chave, tipo: s.tipo, cidade: daCidade, dia: s.dia, indice: s.indice,
         inicio: doComeco ? null : s.inicio, local: false, forcarCidade: todasAsCidades,
@@ -339,7 +343,7 @@ export function QuebraNozesNoSistema({ pessoaId, setorId, empresaId, leve = fals
       key={chave}
       {...props}
       comSom={config.sons}
-      aoTerminar={() => { ocupado.current = false; setNoPalco(null); }}
+      aoTerminar={() => { fimDoUltimo.current = relogioNatal(); ocupado.current = false; setNoPalco(null); }}
     />
   );
 }
