@@ -41,9 +41,11 @@ import { CONVERSAS } from './falas';
 import { PalcoDosQuebraNozes } from './Palco';
 import { emQuadrinhos } from './quadrinho';
 import { DefsDoQuebraNozes, QuebraNozes } from './QuebraNozes';
-import { SONS, tocarSom } from './sons';
+import { SONS, pararMusicaDosDestaques, tocarMusicaDosDestaques, tocarSom, tocarVozinha } from './sons';
 
 const busca = new URLSearchParams(location.search);
+/** Uma fala das que tagarelam (`falaTagarela`), para os botões da vozinha. */
+const FALA_DE_TESTE = 'Bom dia, Cobrança! Vamos com tudo hoje!';
 if (busca.get('tema') === 'dark') document.documentElement.classList.add('dark');
 // ?leve=1: a página com o modo leve de verdade ligado (a regra geral de `index.css`), e o espetáculo em quadrinhos.
 if (busca.get('leve') === '1') document.documentElement.setAttribute('data-leve', '');
@@ -179,6 +181,12 @@ function Lab() {
             {SONS.map(s => (
               <button key={s} type="button" className="h-7 rounded border px-2 text-xs" onClick={() => tocarSom(s, { dur: 1.6, n: 2 })}>{s}</button>
             ))}
+            {/* A vozinha só toca nas falas sorteadas: estas três são das que tagarelam. */}
+            {([['vozinha diretor', 520], ['vozinha Robson', 600], ['vozinha Jessica', 740]] as const).map(([rotulo, voz]) => (
+              <button key={rotulo} type="button" className="h-7 rounded border px-2 text-xs" onClick={() => tocarVozinha(FALA_DE_TESTE, voz)}>{rotulo}</button>
+            ))}
+            <button type="button" className="h-7 rounded border px-2 text-xs" onClick={() => tocarMusicaDosDestaques()}>música ▶</button>
+            <button type="button" className="h-7 rounded border px-2 text-xs" onClick={() => pararMusicaDosDestaques()}>música ■</button>
           </div>
           <p className="mt-2 text-xs text-muted-foreground" data-resumo>
             {tocando ? '▶ ' : ''}{espetaculo.resumo.join(' · ')} · {espetaculo.duracao.toFixed(1)} s · {espetaculo.deixas.length} deixas
@@ -192,7 +200,7 @@ function Lab() {
       {rodada > 0 && (
         <PalcoDosQuebraNozes key={rodada} cidade={cidade} elenco={elenco} espetaculo={espetaculo}
           destaques={comBoletim && lider ? [lider] : destaques} titulo={comBoletim ? 'Quem mais recebeu até agora' : undefined}
-          quadrinho={quadrinho} desde={rodada === 1 && busca.has('t') ? numero('t', 0) : -numero('espera', 0)} aoTerminar={() => setTocando(false)} />
+          quadrinho={quadrinho} comMusica={tipo === 'parabens'} desde={rodada === 1 && busca.has('t') ? numero('t', 0) : -numero('espera', 0)} aoTerminar={() => setTocando(false)} />
       )}
     </div>
   );

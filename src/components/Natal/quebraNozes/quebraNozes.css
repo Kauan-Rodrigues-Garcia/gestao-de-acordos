@@ -31,7 +31,7 @@
  * duração, também uma só.
  */
 /* Uma mola: passa do ponto, volta, passa de novo, e para. Vale para o boneco e para o cenário. */
-.qn, .qn-palco, .qn-controles {
+.qn, .qn-palco, .qn-controles, .qn-canto {
   --qn-mola: linear(0, .3 6%, .82 13%, 1.16 20%, 1.24 26%, 1.12 33%, .97 41%, .91 48%, .95 56%, 1.02 65%, 1.04 73%, 1.01 83%, .99 91%, 1);
   /* A mesma mola, mais preguiçosa: sai depois e balança mais largo (a pluma). */
   --qn-mola-lenta: linear(0, .12 7%, .5 15%, .96 24%, 1.22 32%, 1.3 39%, 1.16 48%, .97 57%, .88 65%, .93 74%, 1.03 83%, 1.04 91%, 1);
@@ -500,7 +500,7 @@
 @keyframes qn-cartao-sai { from { opacity: 1; transform: translateY(0) scale(1); } to { opacity: 0; transform: translateY(-46px) scale(.8); } }
 .qn-cartao.meu { border-color: #B98522; box-shadow: 0 0 0 2.5px #F2C04E; }
 .qn-cartao-setor { margin: 0 -6px 7px; padding: 4px 4px 4px; background: linear-gradient(#1F8F5A, #12633D); color: #FFFFFF; font: 800 10.5px/1.15 system-ui, 'Segoe UI', sans-serif; letter-spacing: .03em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.qn-palco[data-cidade="birigui"] .qn-cartao-setor { background: linear-gradient(#2B66C0, #1A4588); }
+.qn-palco[data-cidade="birigui"] .qn-cartao-setor, .qn-canto[data-cidade="birigui"] .qn-cartao-setor { background: linear-gradient(#2B66C0, #1A4588); }
 .qn-cartao-foto { width: 58px; height: 58px; margin: 0 auto 5px; border-radius: 50%; border: 2.5px solid #F2C04E; outline: 1.2px solid #2B1B12; overflow: hidden; background: #D9E2EC; display: flex; align-items: center; justify-content: center; font: 800 22px/1 system-ui, sans-serif; color: #5B6B7E; }
 .qn-cartao-foto img { display: block; width: 100%; height: 100%; max-width: none; object-fit: cover; }
 .qn-cartao-nome { font: 800 12.5px/1.15 system-ui, 'Segoe UI', sans-serif; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
@@ -509,6 +509,27 @@
 .qn-cartao::after { content: ''; position: absolute; top: 0; bottom: 0; left: 0; width: 34px; background: linear-gradient(100deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, .8), rgba(255, 255, 255, 0)); transform: translateX(-60px) skewX(-14deg); }
 .qn-cartao.revelado::after { animation: qn-brilho .8s ease-out .45s both; }
 @keyframes qn-brilho { from { transform: translateX(-60px) skewX(-14deg); } to { transform: translateX(160px) skewX(-14deg); } }
+
+/*
+ * ── Os destaques no canto (Cleber, 13/11/2026): com o palco pequeno, a faixa e
+ * os cartões saem do meio da tela e ficam no canto de baixo à direita (acima da
+ * bolha do chat), pequenos
+ * — a foto, o nome e o setor —, quatro por fileira. Fora do `.qn-palco`: não
+ * encolhem com ele e não dependem do meio da janela.
+ */
+.qn-canto { position: fixed; right: 16px; bottom: 92px; z-index: 60; pointer-events: none; }
+.qn-canto .qn-quadro { position: static; width: auto; height: auto; }
+.qn-canto .qn-quadro-c { position: static; width: auto; transform: none; align-items: flex-end; gap: 6px; }
+.qn-canto .qn-letreiro-c { padding: 3px 12px 4px; border-radius: 4px; font-size: 12px; transform: translateY(-14px); box-shadow: inset 0 0 0 1.5px #F2C04E, 0 2px 6px rgba(0, 0, 0, .18); }
+.qn-canto .qn-letreiro-c.desce { transform: translateY(0); }
+.qn-canto .qn-letreiro-c small { font-size: 8.5px; }
+.qn-canto .qn-cartoes-c { max-width: 302px; flex-wrap: wrap; justify-content: flex-end; gap: 6px; transform: none; }
+.qn-canto .qn-cartao { width: 71px; padding: 0 4px 5px; border-radius: 7px; box-shadow: 0 2px 6px rgba(0, 0, 0, .16); }
+.qn-canto .qn-cartao-setor { margin: 0 -4px 4px; padding: 2px 3px; font-size: 7.5px; }
+.qn-canto .qn-cartao-foto { width: 40px; height: 40px; margin-bottom: 3px; border-width: 2px; font-size: 15px; }
+.qn-canto .qn-cartao-nome { font-size: 9.5px; }
+.qn-canto .qn-cartao-feito { display: none; }
+@media (max-width: 640px) { .qn-canto { right: 8px; bottom: 88px; } .qn-canto .qn-cartoes-c { max-width: 231px; } }
 
 /*
  * ── As duas bolinhas de Natal ao lado do tablado: o som e o tamanho do palco.
@@ -548,7 +569,7 @@
  */
 .qn-palco[data-quadrinho] .qn, .qn-palco[data-quadrinho] .qn * { animation: none !important; transition: none !important; }
 .qn-palco[data-quadrinho] .qn { will-change: auto; }
-.qn-palco[data-quadrinho] .qn-cartao.revelado { animation-duration: .36s; }
-.qn-palco[data-quadrinho] .qn-cartao::after { display: none; }
+.qn-palco[data-quadrinho] .qn-cartao.revelado, .qn-canto[data-quadrinho] .qn-cartao.revelado { animation-duration: .36s; }
+.qn-palco[data-quadrinho] .qn-cartao::after, .qn-canto[data-quadrinho] .qn-cartao::after { display: none; }
 .qn-palco[data-quadrinho] .qn-caixa, .qn-palco[data-quadrinho] .qn-voa, .qn-palco[data-quadrinho] .qn-emote { display: none; }
 .qn-palco[data-quadrinho] .qn-tapete { transition-duration: .3s; }

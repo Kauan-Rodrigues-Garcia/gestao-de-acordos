@@ -39,7 +39,10 @@ import { aplicarNoBoneco, reposicionar, tocar, type Cena, type Medidas, type Que
 import type { Destaque, EspetaculoMontado } from './diretor';
 import type { Artista, Cidade } from './elenco';
 import { DefsDoQuebraNozes, QuebraNozes } from './QuebraNozes';
-import { descansarSonsDosQuebraNozes, ligarSonsDosQuebraNozes, prepararSonsDosQuebraNozes, tocarSom, useSonsDosQuebraNozes } from './sons';
+import {
+  descansarSonsDosQuebraNozes, ligarSonsDosQuebraNozes, pararMusicaDosDestaques, prepararSonsDosQuebraNozes, tocarMusicaDosDestaques,
+  tocarSom, tocarVozinha, useSonsDosQuebraNozes,
+} from './sons';
 import { criarSorteio, sementeDe } from './sorteio';
 
 interface EstadoDaCena {
@@ -112,6 +115,8 @@ export interface PropsDoPalco {
   desde?: number;
   /** O espetáculo veio em quadrinhos (modo leve): nada se repete nem desliza. */
   quadrinho?: boolean;
+  /** A chamada dos destaques: a musiquinha toca enquanto a faixa está em cena. */
+  comMusica?: boolean;
   aoTerminar?: () => void;
 }
 
@@ -122,7 +127,14 @@ export interface PropsDoPalco {
 /** Entre um tempo e outro do nascimento do palco (ms): o bastante para a página respirar no meio. */
 const ENTRE_TEMPOS_MS = 70;
 
-export function PalcoDosQuebraNozes({ cidade, elenco, espetaculo, destaques = [], titulo = 'Destaques de ontem', comSom = true, desde = 0, quadrinho = false, aoTerminar }: PropsDoPalco) {
+/** A voz de cada um na vozinha (Hz): o diretor mais grave, a head mais aguda. */
+const VOZ_DO_DIRETOR = 520;
+const VOZ_DO_HEAD = 600;
+const VOZ_DA_HEAD = 740;
+/** A musiquinha entra depois da fanfarra da faixa. */
+const MUSICA_DEPOIS_DA_FAIXA_MS = 1_400;
+
+export function PalcoDosQuebraNozes({ cidade, elenco, espetaculo, destaques = [], titulo = 'Destaques de ontem', comSom = true, desde = 0, quadrinho = false, comMusica = false, aoTerminar }: PropsDoPalco) {
   const sons = useSonsDosQuebraNozes();
   // O palco nasce em quatro tempos: 0 o chão, 1 um boneco, 2 o outro, 3 os cartões — e aí toca.
   const [tempo, setTempo] = useState<0 | 1 | 2 | 3>(0);
@@ -230,15 +242,21 @@ export function PalcoDosQuebraNozes({ cidade, elenco, espetaculo, destaques = []
   useEffect(() => {
     if (tempo < 3) return;
     let vivo = true;
+    let entradaDaMusica = 0;
+    const voz = (q: Quem) => (q === 'a' ? VOZ_DO_DIRETOR : elenco.b.artigo === 'a' ? VOZ_DA_HEAD : VOZ_DO_HEAD);
+    // De que lado cada um está (o da esquerda soa à esquerda).
+    const ladoDe = (q: Quem) => ((q === 'a') !== !!espetaculo.troca ? -90 : 90);
     void tocar(espetaculo.deixas, {
       boneco: q => bonecos.current[q],
       medidas: () => medidas.current,
-      balao: (q, texto) => {
+      balao: (q, texto, passado) => {
         const c = bonecos.current[q]?.querySelector<HTMLElement>('.qn-balao-c');
         if (!c) return;
         if (texto === null) { c.classList.remove('aberto'); return; }
         c.textContent = texto;
         c.classList.add('aberto');
+        // De vez em quando, o tagarelar de bichinho (`sons.ts`).
+        if (!passado) tocarVozinha(texto, voz(q), ladoDe(q));
         // O pulinho do balão vai direto para a placa (recomeçar por classe pedia um leiaute forçado a cada fala).
         c.animate?.([{ transform: 'scale(.3)', opacity: 0 }, { transform: 'scale(1)', opacity: 1 }],
           { duration: quadrinho ? 220 : 320, easing: 'cubic-bezier(.3, 1.6, .5, 1)' });
@@ -248,6 +266,13 @@ export function PalcoDosQuebraNozes({ cidade, elenco, espetaculo, destaques = []
         if ('confete' in c) { if (!passado) { confete(c.confete); tocarSom('viva'); } return; }
         if ('noz' in c) { if (!passado) { noz(c.noz.x, c.noz.surpresa); tocarSom('noz'); } return; }
         if ('cartao' in c && !passado) tocarSom('cartao', { n: c.cartao });
+        // A musiquinha: entra com a faixa dos destaques e sai com os cartões.
+        if (comMusica && 'letreiro' in c) {
+          window.clearTimeout(entradaDaMusica);
+          if (c.letreiro) entradaDaMusica = window.setTimeout(() => { if (vivo) tocarMusicaDosDestaques(); }, passado ? 0 : MUSICA_DEPOIS_DA_FAIXA_MS);
+          else pararMusicaDosDestaques();
+        }
+        if ('cartoes' in c) pararMusicaDosDestaques();
         setCena(antes => {
           if ('veu' in c) return { ...antes, veu: c.veu };
           if ('tapete' in c) return { ...antes, tapete: c.tapete };
@@ -260,7 +285,7 @@ export function PalcoDosQuebraNozes({ cidade, elenco, espetaculo, destaques = []
       },
       // O tempo que o palco levou para nascer conta: quem chegou no meio continua no ponto certo.
     }, () => vivo, desde + (performance.now() - nascido.current) / 1000).then(() => { if (vivo) terminar.current?.(); });
-    return () => { vivo = false; };
+    return () => { vivo = false; window.clearTimeout(entradaDaMusica); pararMusicaDosDestaques(); };
     // Um palco, um espetáculo: quem troca de espetáculo troca a `key`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tempo]);
@@ -291,13 +316,29 @@ export function PalcoDosQuebraNozes({ cidade, elenco, espetaculo, destaques = []
   }, [mini]);
 
   const sozinho = espetaculo.formacao !== 'dupla';
+  // A faixa e os cartões dos destaques. No palco pequeno eles saem do meio e vão,
+  // pequenos, para o canto da tela: quem encolheu está trabalhando (Cleber, 13/11/2026).
+  const quadro = tempo >= 3 && destaques.length > 0 && (
+    <div className="qn-quadro">
+      <div className="qn-quadro-c">
+        <div className={cn('qn-letreiro-c', cena.letreiro && !cena.cartoesSaindo && 'desce')}>
+          <small>{cena.letreiro ?? ' '}</small>{titulo}
+        </div>
+        <div className="qn-cartoes-c">
+          {destaques.map((d, i) => <Cartao key={`${d.setor}:${d.nome}`} d={d} revelado={i <= cena.cartoes} saindo={cena.cartoesSaindo} />)}
+        </div>
+      </div>
+    </div>
+  );
   const rotuloDoSom = sons ? 'Calar os quebra-nozes' : 'Ligar o som dos quebra-nozes';
   const rotuloDoTamanho = mini ? 'Voltar os quebra-nozes ao tamanho normal' : 'Diminuir os quebra-nozes';
   return (
     <>
       <div ref={raiz} className="qn-palco" data-cidade={cidade} data-troca={espetaculo.troca ? '' : undefined} data-solo={sozinho ? '' : undefined} data-mini={mini ? '' : undefined}
         // Em quadrinhos quem manda no que anima é o CSS do palco, não a regra geral do modo leve (`index.css`).
-        data-quadrinho={quadrinho ? '' : undefined} data-anima-sempre={quadrinho ? '' : undefined}>
+        data-quadrinho={quadrinho ? '' : undefined} data-anima-sempre={quadrinho ? '' : undefined}
+        // Fora da pausa do «ninguém olhando» (`lib/atencao.ts`): o espetáculo segue com a janela de lado (Cleber, 13/11/2026).
+        data-nao-pausa="">
         <DefsDoQuebraNozes />
         <div className={cn('qn-chao', cena.veu && 'aceso')} />
         <div className={cn('qn-tablado', cena.veu && 'aceso')}><i className="qn-tampo" /><i className="qn-frente" /></div>
@@ -317,22 +358,16 @@ export function PalcoDosQuebraNozes({ cidade, elenco, espetaculo, destaques = []
             </div>
           );
         })}
-        {tempo >= 3 && destaques.length > 0 && (
-          <div className="qn-quadro">
-            <div className="qn-quadro-c">
-              <div className={cn('qn-letreiro-c', cena.letreiro && !cena.cartoesSaindo && 'desce')}>
-                <small>{cena.letreiro ?? ' '}</small>{titulo}
-              </div>
-              <div className="qn-cartoes-c">
-                {destaques.map((d, i) => <Cartao key={`${d.setor}:${d.nome}`} d={d} revelado={i <= cena.cartoes} saindo={cena.cartoesSaindo} />)}
-              </div>
-            </div>
-          </div>
-        )}
+        {!mini && quadro}
         <div ref={voa} className="qn-voa" />
       </div>
+      {mini && quadro && (
+        <div className="qn-canto" data-cidade={cidade} data-quadrinho={quadrinho ? '' : undefined} data-anima-sempre={quadrinho ? '' : undefined} data-nao-pausa="">
+          {quadro}
+        </div>
+      )}
       {/* Fora do palco, para não encolher com ele: tem de continuar dando para clicar. */}
-      <div ref={controles} className={cn('qn-controles', cena.veu && 'aceso')} data-anima-sempre={quadrinho ? '' : undefined}>
+      <div ref={controles} className={cn('qn-controles', cena.veu && 'aceso')} data-anima-sempre={quadrinho ? '' : undefined} data-nao-pausa="">
         {comSom && (
           <button type="button" className="qn-bola som" data-mudo={sons ? undefined : ''} onClick={() => ligarSonsDosQuebraNozes(!sons)} aria-label={rotuloDoSom} title={rotuloDoSom}>
             {sons ? <Volume2 size={14} strokeWidth={2.4} aria-hidden /> : <VolumeX size={14} strokeWidth={2.4} aria-hidden />}

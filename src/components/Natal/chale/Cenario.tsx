@@ -692,12 +692,12 @@ export const Prateleira = memo(function Prateleira() {
 // A tela da TV, no quadro: 16:9, do formato do vídeo (160 × 90, o «Mini filme.bat»).
 const TELA = { x: 398, y: 96, w: 72, h: 40.5 } as const;
 
-/** O vídeo que passa na TV (pedido do Cleber, 11/11/2026): o Grinch (2000), 160 × 90 a 10 fps. */
-const VIDEO_DA_TV = '/video/natal/tv-chale-grinch.mp4';
+/** O vídeo que passa na TV (pedido do Cleber, 13/11/2026): Esqueceram de Mim (1990), 160 × 90 a 10 fps. */
+const VIDEO_DA_TV = '/video/natal/tv-chale-esqueceram.mp4';
 /** O nome do filme, para o balão que abre ao clicar na TV. Trocou o vídeo, troque aqui. */
-const FILME_DA_TV = { nome: 'O Grinch', ano: 2000 } as const;
+const FILME_DA_TV = { nome: 'Esqueceram de Mim', ano: 1990 } as const;
 /** A duração do vídeo, em segundos — vale até os metadados chegarem. */
-const DURACAO_DA_TV = 6296.2;
+const DURACAO_DA_TV = 6174.1;
 /** Fora do ponto mais do que isto (em s), pula para o ponto certo. */
 const TOLERANCIA_DA_TV = 1.5;
 

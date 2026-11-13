@@ -153,10 +153,12 @@ export function useConfiguracaoDosQuebraNozes(empresaId: string | null | undefin
 
   useEffect(() => {
     if (!empresaId || !ativo) return;
+    // `mesmoSemOlhar`: a chamada na hora começa em 15 s e tem de chegar também
+    // a quem está com a janela de lado (Cleber, 13/11/2026).
     return assinarSinal('permissoes', empresaId, {
       onMudou: s => { if (s.tabela === 'natal_quebra_nozes') void carregar(true); },
       onReconectado: () => { void carregar(true); },
-    });
+    }, { mesmoSemOlhar: true });
   }, [empresaId, ativo]);
 
   return valor;

@@ -86,6 +86,12 @@ export interface OpcoesSinal {
    * `minimoMs` da regra. Ver «Só UPDATE» no cabeçalho.
    */
   minimoSoUpdateMs?: number;
+  /**
+   * Entrega mesmo com ninguém olhando (`lib/atencao.ts`). Para quem tem de
+   * agir na hora, com a janela de lado: a chamada dos quebra-nozes
+   * (Cleber, 13/11/2026). O intervalo mínimo e o sorteio continuam valendo.
+   */
+  mesmoSemOlhar?: boolean;
 }
 
 interface RegraPortao {
@@ -199,7 +205,7 @@ export function assinarSinal(
     timerEm = Infinity;
     const forcada = entregaForcada;
     entregaForcada = false;
-    if (!forcada && abaEscondida()) { devendo = true; return; }
+    if (!forcada && !opcoes.mesmoSemOlhar && abaEscondida()) { devendo = true; return; }
 
     const sinal = pendente;
     const releitura = reconectou;
@@ -215,7 +221,7 @@ export function assinarSinal(
 
   function agendar(forcar = false): void {
     if (forcar) entregaForcada = true;
-    else if (abaEscondida()) { devendo = true; return; }
+    else if (!opcoes.mesmoSemOlhar && abaEscondida()) { devendo = true; return; }
     const ate = Date.now() + falta();
     // A entrega já marcada sai a tempo (ou antes): ela leva este sinal junto.
     // Só remarca quem esperava pelo prazo longo do «só UPDATE» e agora não precisa.

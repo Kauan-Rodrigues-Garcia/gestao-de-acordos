@@ -17,6 +17,8 @@
  *   fanfarra     a faixa dos destaques descendo (celesta)
  *   cartao       uma nota por destaque, cada uma um degrau acima
  *   viva         o acorde do confete, com guizos por cima
+ *   vozinha      o tagarelar de bichinho de algumas falas (13/11)
+ *   música       a musiquinha animada da chamada dos destaques (13/11)
  *
  * Tudo sintetizado (Web Audio), sem arquivo. A mixagem: cada som sai de onde o
  * boneco está (um pouco para a esquerda ou para a direita), passa por um
@@ -57,6 +59,7 @@ const ouvintes = new Set<() => void>();
 export function ligarSonsDosQuebraNozes(v: boolean) {
   ligados = v;
   try { localStorage.setItem(CHAVE, v ? 'on' : 'off'); } catch { /* modo privado */ }
+  if (!v) pararMusicaDosDestaques();
   for (const f of ouvintes) f();
 }
 
@@ -371,6 +374,185 @@ export function prepararSonsDosQuebraNozes() {
 export function descansarSonsDosQuebraNozes() {
   window.clearTimeout(descanso);
   descanso = window.setTimeout(() => { if (contexto?.state === 'running') void contexto.suspend(); }, 6_000);
+}
+
+// ── A vozinha ───────────────────────────────────────────────────────────────
+//
+// Pedido do Cleber (13/11/2026): de vez em quando, enquanto o balão abre, um
+// «bichinho falando», como nos jogos em que o diálogo vem com um tagarelar e
+// não com voz de verdade. Bem fofo: bipes redondos, curtos, que sobem um tico
+// no começo de cada sílaba, numa escala que nunca desafina.
+
+/** Uma em cada quantas falas tagarela, mais ou menos (o resto fica só no balão). */
+const CHANCE_DA_VOZINHA = 0.6;
+const SILABAS = [1, 9 / 8, 5 / 4, 3 / 2, 5 / 3, 2];
+
+/** Um número do texto: a mesma fala tagarela igual em todo computador. */
+function numeroDoTexto(texto: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < texto.length; i++) h = Math.imul(h ^ texto.charCodeAt(i), 16777619);
+  return h >>> 0;
+}
+
+/** Se esta fala ganha a vozinha. Exportada para os testes. */
+export function falaTagarela(texto: string): boolean {
+  return (numeroDoTexto(texto) % 1000) / 1000 < CHANCE_DA_VOZINHA;
+}
+
+/** Uma sílaba: seno redondo com um fio de triângulo por cima, que escorrega para a nota. */
+function silaba(c: BaseAudioContext, saida: AudioNode, freq: number, quando: number, forca: number) {
+  const g = c.createGain();
+  g.gain.setValueAtTime(0, quando);
+  g.gain.linearRampToValueAtTime(0.3 * forca, quando + 0.008);
+  g.gain.exponentialRampToValueAtTime(0.0001, quando + 0.075);
+  g.connect(saida);
+  for (const [tipo, mult, ganho] of [['sine', 1, 1], ['triangle', 2, 0.12]] as const) {
+    const o = c.createOscillator();
+    o.type = tipo;
+    o.frequency.setValueAtTime(freq * mult * 0.9, quando);
+    o.frequency.exponentialRampToValueAtTime(freq * mult, quando + 0.018);
+    const v = c.createGain();
+    v.gain.value = ganho;
+    o.connect(v).connect(g);
+    o.start(quando);
+    o.stop(quando + 0.1);
+  }
+}
+
+/**
+ * O tagarelar de uma fala: umas sílabas (pelo tamanho do texto, no máximo 10),
+ * na voz de quem fala (`voz`, em Hz). Pergunta e exclamação terminam subindo.
+ */
+export function desenharVozinha(c: BaseAudioContext, texto: string, voz: number, t: number, x = 0) {
+  const mesa = mesaDe(c);
+  const lado = c.createStereoPanner();
+  lado.pan.value = Math.max(-0.5, Math.min(0.5, x / 420));
+  const paraSala = c.createGain();
+  paraSala.gain.value = SALA * 0.6;
+  lado.connect(mesa.entrada);
+  lado.connect(paraSala).connect(mesa.sala);
+
+  let semente = numeroDoTexto(texto) || 1;
+  const proximo = () => { semente = (Math.imul(semente, 1664525) + 1013904223) >>> 0; return semente / 4294967296; };
+  const n = Math.max(3, Math.min(10, Math.round(texto.replace(/\s+/g, '').length / 5)));
+  const sobe = /[!?]\s*$/.test(texto);
+  let quando = t;
+  let anterior = -1;
+  for (let i = 0; i < n; i++) {
+    let k = Math.floor(proximo() * 4);
+    if (k === anterior) k = (k + 1) % 4;
+    anterior = k;
+    const ultima = i === n - 1;
+    const freq = voz * (ultima && sobe ? SILABAS[5] : SILABAS[k]);
+    silaba(c, lado, freq, quando, ultima ? 0.85 : 0.6 + proximo() * 0.3);
+    quando += 0.068 + proximo() * 0.03;
+  }
+  return lado;
+}
+
+/** A vozinha de uma fala, se for das que tagarelam e as três chaves deixarem. */
+export function tocarVozinha(texto: string, voz: number, x = 0) {
+  if (!falaTagarela(texto)) return;
+  window.clearTimeout(descanso);
+  const c = ctx();
+  if (!c) return;
+  const no = desenharVozinha(c, texto, voz, c.currentTime + 0.02, x);
+  window.setTimeout(() => no.disconnect(), 3_000);
+}
+
+// ── A musiquinha dos destaques ─────────────────────────────────────────────
+//
+// Pedido do Cleber (13/11/2026): uma música animada enquanto os destaques vão
+// sendo anunciados. Composta aqui (nada de música conhecida), em Dó maior a
+// 126 batidas por minuto: baixo de «pom-pá», acordes leves nos tempos fracos,
+// a melodia na celesta e um chocalho bem baixinho. Oito compassos que se
+// repetem. Vai sendo marcada aos pouquinhos (um compasso à frente), então não
+// pesa nada, e cala na hora em que a pessoa desliga o som.
+
+const midi = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
+const BATIDA_S = 60 / 126;
+const COLCHEIA_S = BATIDA_S / 2;
+/** O volume da música, abaixo dos sons do espetáculo e da vozinha. */
+const VOLUME_DA_MUSICA = 0.32;
+
+/** Acorde de cada compasso: [baixo, terça, quinta] em MIDI (baixo na oitava 3). */
+const ACORDES: readonly (readonly [number, number, number])[] = [
+  [48, 64, 67], // Dó
+  [45, 60, 64], // Lá menor
+  [41, 57, 60], // Fá
+  [43, 59, 62], // Sol
+  [48, 64, 67], // Dó
+  [45, 60, 64], // Lá menor
+  [50, 62, 65], // Ré menor
+  [43, 59, 62], // Sol
+];
+/** A melodia, em colcheias (MIDI; `0` = pausa). */
+const MELODIA: readonly (readonly number[])[] = [
+  [76, 79, 84, 79, 76, 0, 79, 0],
+  [81, 84, 88, 84, 81, 0, 76, 0],
+  [77, 81, 84, 81, 77, 0, 81, 84],
+  [86, 0, 83, 0, 79, 0, 74, 0],
+  [76, 79, 84, 88, 86, 84, 79, 0],
+  [81, 0, 84, 0, 88, 86, 84, 0],
+  [86, 0, 89, 0, 88, 86, 84, 81],
+  [83, 0, 86, 0, 91, 0, 0, 0],
+];
+
+function desenharCompasso(c: BaseAudioContext, saida: AudioNode, k: number, t: number) {
+  const [baixo, terca, quinta] = ACORDES[k % ACORDES.length];
+  // O baixo: a fundamental no 1, a quinta no 3, de corda beliscada.
+  seno(c, saida, midi(baixo), t, 0.5, 0.32, 'triangle');
+  seno(c, saida, midi(baixo + 7), t + 2 * BATIDA_S, 0.42, 0.32, 'triangle');
+  // Os acordes nos tempos 2 e 4, curtinhos.
+  for (const b of [1, 3]) for (const m of [terca, quinta, terca + 12]) seno(c, saida, midi(m), t + b * BATIDA_S, 0.07, 0.16);
+  // A melodia.
+  MELODIA[k % MELODIA.length].forEach((m, i) => { if (m) celesta(c, saida, midi(m), t + i * COLCHEIA_S, 0.42, 0.42); });
+  // O chocalho, nos contratempos.
+  for (let i = 1; i < 8; i += 2) sopro(c, saida, t + i * COLCHEIA_S, 0.05, 0.035, 'highpass', 7000);
+}
+
+let musica: { parar: () => void } | null = null;
+
+/** Começa a musiquinha (se as três chaves deixarem); seguir chamando com ela tocando não faz nada. */
+export function tocarMusicaDosDestaques() {
+  if (musica) return;
+  const c = ctx();
+  if (!c) return;
+  window.clearTimeout(descanso);
+  const mesa = mesaDe(c);
+  const volume = c.createGain();
+  volume.gain.setValueAtTime(0, c.currentTime);
+  volume.gain.linearRampToValueAtTime(VOLUME_DA_MUSICA, c.currentTime + 0.6);
+  volume.connect(mesa.entrada);
+  const compasso = 4 * BATIDA_S;
+  let proximo = c.currentTime + 0.1;
+  let k = 0;
+  let relogio = 0;
+  const marcar = () => {
+    // Desligou o som no meio: para já.
+    if (!ligados || !permitidos) { parar(); return; }
+    while (proximo < c.currentTime + compasso + 0.3) {
+      desenharCompasso(c, volume, k++, proximo);
+      proximo += compasso;
+    }
+    relogio = window.setTimeout(marcar, compasso * 500);
+  };
+  const parar = () => {
+    window.clearTimeout(relogio);
+    musica = null;
+    const agora = c.currentTime;
+    volume.gain.cancelScheduledValues(agora);
+    volume.gain.setValueAtTime(volume.gain.value, agora);
+    volume.gain.linearRampToValueAtTime(0, agora + 0.8);
+    window.setTimeout(() => volume.disconnect(), 3_000);
+  };
+  musica = { parar };
+  marcar();
+}
+
+/** Acaba a musiquinha, com um sumiço suave. */
+export function pararMusicaDosDestaques() {
+  musica?.parar();
 }
 
 /** Toca um som do espetáculo, se as três chaves deixarem. */

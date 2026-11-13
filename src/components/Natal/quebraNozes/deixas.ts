@@ -230,7 +230,8 @@ export function reposicionar(el: HTMLElement, medidas: Medidas) {
 
 export interface Palco {
   boneco: (q: Quem) => HTMLElement | null;
-  balao: (q: Quem, texto: string | null) => void;
+  /** `passado`: a fala já tinha começado quando a pessoa chegou (sem som). */
+  balao: (q: Quem, texto: string | null, passado: boolean) => void;
   cena: (cena: Cena, passado: boolean) => void;
   medidas: () => Medidas;
 }
@@ -246,7 +247,7 @@ export function tocar(deixas: readonly Deixa[], palco: Palco, vivo: () => boolea
     let i = 0;
     const disparar = (d: Deixa, passado: boolean) => {
       if ('m' in d) { const el = palco.boneco(d.q); if (el) aplicarNoBoneco(el, d.m, palco.medidas(), passado); }
-      else if ('balao' in d) palco.balao(d.balao.q, d.balao.texto);
+      else if ('balao' in d) palco.balao(d.balao.q, d.balao.texto, passado);
       else palco.cena(d.cena, passado);
     };
     // O que já passou: só o estado.

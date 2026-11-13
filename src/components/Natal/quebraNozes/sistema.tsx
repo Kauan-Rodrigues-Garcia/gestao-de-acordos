@@ -207,7 +207,7 @@ export function QuebraNozesNoSistema({ pessoaId, setorId, empresaId, leve = fals
         Palco: montagem.PalcoDosQuebraNozes,
         props: lider
           ? { cidade: p.cidade, elenco, espetaculo, destaques: [lider], titulo: TITULO_DO_BOLETIM, desde, quadrinho }
-          : { cidade: p.cidade, elenco, espetaculo, destaques, titulo, desde, quadrinho },
+          : { cidade: p.cidade, elenco, espetaculo, destaques, titulo, desde, quadrinho, comMusica: p.tipo === 'parabens' && destaques.length > 0 },
       });
       return true;
     } catch (erro) {
