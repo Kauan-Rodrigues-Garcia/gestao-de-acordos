@@ -25,7 +25,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent }
 import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
-  AlertTriangle, Building2, Crown, Download, Eye, FileCheck2, FileUp, Network, RefreshCw, Search,
+  AlertTriangle, Building2, Crown, Download, Eye, FileCheck2, FileUp, History, Network, RefreshCw, Search,
   Sparkles, Sun, Users, UsersRound,
 } from 'lucide-react';
 import { AbasSegmentadas, type AbaSegmentada } from '@/components/AbasSegmentadas';
@@ -50,12 +50,13 @@ import { baixarPlanilha, lerPlanilha } from '@/services/rh/quadroPessoalPlanilha
 import AbaSetores from './AbaSetores';
 import AbaEquipes from './AbaEquipes';
 import AbaConferencia from './AbaConferencia';
+import AbaHistorico from './AbaHistorico';
 import PainelSetor from './PainelSetor';
 import { Foto } from './partes';
 import { lugarTexto, rotuloCargo } from './formato';
 
-type Aba = 'setores' | 'equipes' | 'conferencia';
-const ABAS_VALIDAS: readonly Aba[] = ['setores', 'equipes', 'conferencia'];
+type Aba = 'setores' | 'equipes' | 'historico' | 'conferencia';
+const ABAS_VALIDAS: readonly Aba[] = ['setores', 'equipes', 'historico', 'conferencia'];
 
 const SEM_SETOR = '__sem_setor__';
 /** Valor do seletor de empresa para «todas as operações». */
@@ -155,6 +156,10 @@ export default function RhQuadro() {
     topo.current?.scrollIntoView({ block: 'start' });
   }, [setParams]);
   useSubAbaUso(aba);
+  /** Prévia do Histórico com dados inventados, sem banco — só em desenvolvimento. */
+  const previaHistorico = import.meta.env.DEV && params.get('previa') === 'historico';
+  /** Sobe a cada «Atualizar»: o Histórico apaga a memória e relê. */
+  const [versao, setVersao] = useState(0);
 
   const [quadro, setQuadro] = useState<Quadro | null>(null);
   const [carregando, setCarregando] = useState(true);
@@ -297,6 +302,13 @@ export default function RhQuadro() {
     setAba('equipes');
   }, [quadro, setAba]);
 
+  const irParaPessoaPorId = useCallback((id: string): boolean => {
+    const p = quadro?.todas.find(x => x.id === id);
+    if (!p) return false;
+    irParaPessoa(p);
+    return true;
+  }, [quadro, irParaPessoa]);
+
   const verOrganograma = useCallback((setorId: string) => {
     setDestaque(null);
     setSetorEquipes(setorId);
@@ -338,6 +350,7 @@ export default function RhQuadro() {
   const abas: AbaSegmentada<Aba>[] = [
     { key: 'setores', label: 'Setores', Icon: Building2 },
     { key: 'equipes', label: 'Equipes', Icon: Network },
+    { key: 'historico', label: 'Histórico do mês', Icon: History },
     { key: 'conferencia', label: 'Conferir planilha', Icon: FileCheck2, badge: conferencia?.conferencia.contagem.diferente },
   ];
 
@@ -381,7 +394,7 @@ export default function RhQuadro() {
               </select>
             </label>
           )}
-          <Button variant="ghost" size="sm" className="h-9 gap-1.5" onClick={() => void carregar(true)} disabled={atualizando}>
+          <Button variant="ghost" size="sm" className="h-9 gap-1.5" onClick={() => { setVersao(v => v + 1); void carregar(true); }} disabled={atualizando}>
             <RefreshCw className={cn('size-4', atualizando && 'animate-spin')} />
             <span className="hidden sm:inline">Atualizar</span>
           </Button>
@@ -430,6 +443,15 @@ export default function RhQuadro() {
           setorId={setorEquipes}
           onSetor={id => { setSetorEquipes(id); setDestaque(null); }}
           destaque={destaque}
+        />
+      )}
+      {aba === 'historico' && (
+        <AbaHistorico
+          empresas={(empresasDoAlvo ?? []).map(e => e.id)}
+          rotuloAlvo={rotuloAlvo}
+          versao={versao}
+          previa={previaHistorico}
+          onPessoa={irParaPessoaPorId}
         />
       )}
       {aba === 'conferencia' && (
