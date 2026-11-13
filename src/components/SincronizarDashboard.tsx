@@ -20,6 +20,7 @@
  */
 import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { useAuthOpcional } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { assinarSinal } from '@/lib/sinais';
 import { invalidarSomasDeAjuste } from '@/services/analitico/ajusteManual.service';
@@ -32,7 +33,13 @@ const MINIMO_SO_UPDATE_MS = 5 * 60_000;
 export function SincronizarDashboard(): null {
   const { empresa } = useEmpresa();
   const queryClient = useQueryClient();
-  const empresaId = empresa?.id ?? null;
+  // Só depois do login e com a empresa da pessoa já lida (13/11/2026). Montado no
+  // app inteiro, ele assinava os canais na tela de login (sem sessão) e, para quem é
+  // da PaguePlay, com a empresa do SITE antes da dela: o Realtime recusava
+  // («Unauthorized») e o cliente tentava de novo sem parar — centenas de erros por hora.
+  const auth = useAuthOpcional();
+  const logado = !!auth?.perfil && !!auth?.empresa;
+  const empresaId = logado ? empresa?.id ?? null : null;
 
   useEffect(() => {
     if (!empresaId) return;
