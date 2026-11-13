@@ -11,36 +11,48 @@
  */
 import { useMemo, useRef, useState } from 'react';
 import {
-  AlertTriangle, ArrowLeft, ArrowUpDown, Crown, Download, GraduationCap, Network, Search,
+  AlertTriangle, ArrowLeft, ArrowUpDown, Copy, Crown, Download, GraduationCap, HeartPulse, IdCard, Network, Search,
   Sparkles, Sun, Users, UsersRound, X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import {
-  GRUPOS_CARGO, normalizar, type GrupoCargo, type Pessoa, type Quadro, type SetorQuadro,
+  GRUPOS_CARGO, normalizar, type CloneQuadro, type GrupoCargo, type Pessoa, type Quadro, type SetorQuadro,
 } from '@/services/rh/quadroPessoal';
-import { Foto, PilhaDeFotos } from './partes';
+import { CrachaEditavel } from './CrachaEditavel';
+import { Foto, PilhaDeFotos, SeloAlternativo, SeloClone } from './partes';
 import { GRUPO_META, dataCurta, lugarTexto, plural, rotuloCargo } from './formato';
 
 /** Filtro de equipe da tabela: id da equipe, `SEM` (sem equipe) ou `null` (todas). */
 const SEM = '__sem__';
 
-type Coluna = 'nome' | 'cargo' | 'equipe' | 'desde';
+type Coluna = 'nome' | 'cargo' | 'equipe' | 'cracha' | 'desde';
+
+/** Recortes rápidos da tabela, pelos números do topo. */
+type Recorte = 'semCracha' | 'afastados' | 'ferias' | 'clones';
+
+const ROTULO_RECORTE: Record<Recorte, string> = {
+  semCracha: 'Sem crachá', afastados: 'Afastados', ferias: 'De férias', clones: 'Clones',
+};
 
 export default function PainelSetor({
-  quadro, setor, onVoltar, onVerOrganograma, onExportar,
+  quadro, setor, onVoltar, onVerOrganograma, onExportar, podeEditarCracha, onCrachaSalvo,
 }: {
   quadro: Quadro;
   setor: SetorQuadro;
   onVoltar: () => void;
   onVerOrganograma: (setorId: string) => void;
   onExportar: (setor: SetorQuadro) => void;
+  /** Chave `rh_editar_cracha`: sem ela, o crachá aparece mas não edita. */
+  podeEditarCracha: boolean;
+  onCrachaSalvo: (pessoaId: string, cracha: string | null) => void;
 }) {
   const n = setor.numeros;
   const ehBalde = setor.id === '__sem_setor__';
   const [grupo, setGrupo] = useState<GrupoCargo | null>(null);
   const [equipe, setEquipe] = useState<string | null>(null);
+  const [recorte, setRecorte] = useState<Recorte | null>(null);
   const [busca, setBusca] = useState('');
   const [coluna, setColuna] = useState<Coluna>('nome');
   const [desc, setDesc] = useState(false);
@@ -50,25 +62,54 @@ export default function PainelSetor({
     () => [...new Map(setor.equipes.flatMap(e => e.lideres).map(l => [l.id, l])).values()],
     [setor.equipes],
   );
-  const maiorEquipe = Math.max(1, ...setor.equipes.map(e => e.membros.length), setor.semEquipe.length);
+  /** No alternativo, a equipe é feita de clones: eles contam no tamanho dela. */
+  const tamanho = (e: SetorQuadro['equipes'][number]) => e.membros.length + (setor.alternativo ? e.apoio.length : 0);
+  const maiorEquipe = Math.max(1, ...setor.equipes.map(tamanho), setor.semEquipe.length);
 
-  /** Cada pessoa com o lugar dela já resolvido, para a tabela filtrar e ordenar. */
-  const linhas = useMemo(() => setor.pessoas.map(p => {
-    const lugar = lugarTexto(quadro, p);
-    const eq = setor.equipes.find(e => e.id === quadro.local.get(p.id)?.equipeId) ?? null;
-    return { p, lugar, equipeId: eq?.id ?? null, lider: !!eq?.lideres.some(l => l.id === p.id) };
-  }), [quadro, setor]);
+  /**
+   * Cada pessoa com o lugar dela já resolvido, para a tabela filtrar e ordenar.
+   * No alternativo entram também os clones, marcados com o setor de origem.
+   */
+  const linhas = useMemo(() => {
+    const doCadastro = setor.pessoas.map(p => {
+      const lugar = lugarTexto(quadro, p);
+      const eq = setor.equipes.find(e => e.id === quadro.local.get(p.id)?.equipeId) ?? null;
+      return {
+        p, lugar: { equipe: lugar.equipe, subgrupo: lugar.subgrupo },
+        equipeIds: eq ? [eq.id] : [], lider: !!eq?.lideres.some(l => l.id === p.id), clone: null as CloneQuadro | null,
+      };
+    });
+    const clones = setor.clones.map(c => ({
+      p: c.pessoa,
+      lugar: { equipe: c.equipes.join(', ') as string | null, subgrupo: null as string | null },
+      equipeIds: setor.equipes.filter(e => e.apoio.some(a => a.id === c.pessoa.id)).map(e => e.id),
+      lider: false,
+      clone: c as CloneQuadro | null,
+    }));
+    return [...doCadastro, ...clones];
+  }, [quadro, setor]);
 
   const visiveis = useMemo(() => {
     const b = normalizar(busca);
+    const noRecorte = (l: typeof linhas[number]): boolean => {
+      switch (recorte) {
+        case 'semCracha': return !l.p.cracha;
+        case 'afastados': return l.p.afastado;
+        case 'ferias': return l.p.emFerias;
+        case 'clones': return !!l.clone;
+        default: return true;
+      }
+    };
     const lista = linhas.filter(l =>
       (grupo === null || l.p.grupo === grupo)
-      && (equipe === null || (equipe === SEM ? !l.equipeId : l.equipeId === equipe))
-      && (!b || normalizar(l.p.nome).includes(b) || normalizar(l.p.email).includes(b)));
+      && (equipe === null || (equipe === SEM ? l.equipeIds.length === 0 : l.equipeIds.includes(equipe)))
+      && noRecorte(l)
+      && (!b || normalizar(l.p.nome).includes(b) || normalizar(l.p.email).includes(b) || (l.p.cracha ?? '').includes(b)));
     const valor = (l: typeof lista[number]): string => {
       switch (coluna) {
         case 'cargo': return `${GRUPOS_CARGO.indexOf(l.p.grupo)}${rotuloCargo(l.p.cargo)}`;
         case 'equipe': return l.lugar.equipe ?? '';
+        case 'cracha': return l.p.cracha ? l.p.cracha.padStart(8, '0') : '~';
         case 'desde': return l.p.criadoEm ?? '';
         default: return l.p.nome;
       }
@@ -77,11 +118,12 @@ export default function PainelSetor({
       const r = valor(a).localeCompare(valor(z), 'pt-BR') || a.p.nome.localeCompare(z.p.nome, 'pt-BR');
       return desc ? -r : r;
     });
-  }, [linhas, grupo, equipe, busca, coluna, desc]);
+  }, [linhas, grupo, equipe, recorte, busca, coluna, desc]);
 
-  const filtrar = (f: { grupo?: GrupoCargo | null; equipe?: string | null }) => {
+  const filtrar = (f: { grupo?: GrupoCargo | null; equipe?: string | null; recorte?: Recorte | null }) => {
     if ('grupo' in f) setGrupo(f.grupo ?? null);
     if ('equipe' in f) setEquipe(f.equipe ?? null);
+    if ('recorte' in f) setRecorte(f.recorte ?? null);
     tabela.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
   const ordenar = (c: Coluna) => {
@@ -115,6 +157,7 @@ export default function PainelSetor({
               </p>
             )}
             <div className="mt-3 flex flex-wrap items-center gap-2">
+              {setor.alternativo && <SeloAlternativo grande />}
               {setor.regra && <Etiqueta>Regra {setor.regra}</Etiqueta>}
               {setor.nucleo && <Etiqueta>Núcleo</Etiqueta>}
               {lideresDoSetor.length > 0 && (
@@ -137,8 +180,27 @@ export default function PainelSetor({
           )}
         </div>
 
-        <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          <Numero Icone={Users} valor={n.pessoas} rotulo="Pessoas" destaque />
+        {setor.alternativo && (
+          <div className="mt-4 flex gap-3 rounded-xl border border-info/30 bg-info/5 p-3.5 text-sm">
+            <Copy className="mt-0.5 size-4 shrink-0 text-info" />
+            <p className="text-foreground/85">
+              <strong className="font-semibold text-foreground">Setor alternativo.</strong>{' '}
+              As pessoas das equipes daqui são, na maioria, <strong className="font-semibold text-foreground">clones</strong> de
+              operadores de outros setores: o cadastro, o crachá e o dinheiro de cada um ficam no setor de origem, que aparece
+              ao lado do nome. {plural(setor.clones.length, 'clone', 'clones')}
+              {n.pessoas > 0 && <> e {plural(n.pessoas, 'pessoa', 'pessoas')} com cadastro aqui</>}.
+            </p>
+          </div>
+        )}
+
+        <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8">
+          {setor.alternativo && (
+            <Numero
+              Icone={Copy} valor={n.clones} rotulo="Clones de outros setores" destaque
+              onClick={n.clones > 0 ? () => filtrar({ recorte: 'clones', equipe: null, grupo: null }) : undefined}
+            />
+          )}
+          <Numero Icone={Users} valor={n.pessoas} rotulo={setor.alternativo ? 'Cadastro aqui' : 'Pessoas'} destaque={!setor.alternativo} />
           <Numero Icone={UsersRound} valor={n.equipes} rotulo="Equipes" />
           <Numero Icone={Crown} valor={n.lideres} rotulo="Líderes" />
           <Numero
@@ -146,7 +208,18 @@ export default function PainelSetor({
             tom={n.semEquipe > 0 && !ehBalde ? 'warning' : undefined}
             onClick={n.semEquipe > 0 && !ehBalde ? () => filtrar({ equipe: SEM, grupo: null }) : undefined}
           />
-          <Numero Icone={Sun} valor={n.emFerias} rotulo="De férias" />
+          <Numero
+            Icone={Sun} valor={n.emFerias} rotulo="De férias"
+            onClick={n.emFerias > 0 ? () => filtrar({ recorte: 'ferias', equipe: null, grupo: null }) : undefined}
+          />
+          <Numero
+            Icone={HeartPulse} valor={n.afastados} rotulo="Afastados"
+            onClick={n.afastados > 0 ? () => filtrar({ recorte: 'afastados', equipe: null, grupo: null }) : undefined}
+          />
+          <Numero
+            Icone={IdCard} valor={n.semCracha} rotulo="Sem crachá" tom={n.semCracha > 0 && !ehBalde ? 'warning' : undefined}
+            onClick={n.semCracha > 0 ? () => filtrar({ recorte: 'semCracha', equipe: null, grupo: null }) : undefined}
+          />
           <Numero Icone={Sparkles} valor={n.novatos} rotulo="Novos (30 dias)" tom={n.novatos > 0 ? 'success' : undefined} />
         </div>
       </section>
@@ -198,7 +271,7 @@ export default function PainelSetor({
               : 'Este setor não tem equipe cadastrada.'}
           </p>
           <ul className="mt-4 space-y-1.5">
-            {[...setor.equipes].sort((a, b) => b.membros.length - a.membros.length).map(e => {
+            {[...setor.equipes].sort((a, b) => tamanho(b) - tamanho(a)).map(e => {
               const ativo = equipe === e.id;
               return (
                 <li key={e.id}>
@@ -220,11 +293,14 @@ export default function PainelSetor({
                       <span className="mt-0.5 block truncate text-xs text-foreground/75">
                         {e.lideres.length ? <>Líder: {e.lideres.map(l => l.nome).join(', ')}</> : 'Sem líder registrado'}
                         {e.subgrupos.length > 0 && ` · ${e.subgrupos.map(sg => `${sg.nome} (${sg.membros.length})`).join(', ')}`}
+                        {setor.alternativo && e.apoio.length > 0 && (
+                          <span className="text-info"> · {plural(e.apoio.length, 'clone', 'clones')}</span>
+                        )}
                       </span>
                     </span>
-                    <span className="text-right text-lg font-bold tabular-nums text-foreground">{e.membros.length}</span>
+                    <span className="text-right text-lg font-bold tabular-nums text-foreground">{tamanho(e)}</span>
                     <span className="col-span-2 h-2 overflow-hidden rounded-full bg-muted">
-                      <span className="block h-full rounded-full bg-primary/80" style={{ width: `${(e.membros.length / maiorEquipe) * 100}%` }} />
+                      <span className={cn('block h-full rounded-full', setor.alternativo ? 'bg-info/80' : 'bg-primary/80')} style={{ width: `${(tamanho(e) / maiorEquipe) * 100}%` }} />
                     </span>
                   </button>
                 </li>
@@ -256,7 +332,7 @@ export default function PainelSetor({
       <section ref={tabela} className="scroll-mt-4 rounded-2xl border border-border bg-card shadow-sm">
         <header className="flex flex-wrap items-center gap-3 border-b border-border p-4 md:px-5">
           <div>
-            <h3 className="text-base font-semibold text-foreground">Pessoas do setor</h3>
+            <h3 className="text-base font-semibold text-foreground">{setor.alternativo ? 'Pessoas e clones do setor' : 'Pessoas do setor'}</h3>
             <p className="text-sm text-muted-foreground">
               {visiveis.length === linhas.length
                 ? plural(linhas.length, 'pessoa', 'pessoas')
@@ -266,31 +342,36 @@ export default function PainelSetor({
           <div className="flex flex-wrap items-center gap-2">
             {grupo && <Filtro onTirar={() => setGrupo(null)}>{GRUPO_META[grupo].rotulo}</Filtro>}
             {equipe && <Filtro onTirar={() => setEquipe(null)}>{nomeDaEquipe}</Filtro>}
+            {recorte && <Filtro onTirar={() => setRecorte(null)}>{ROTULO_RECORTE[recorte]}</Filtro>}
           </div>
           <div className="relative ml-auto w-full sm:w-64">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar nome ou e-mail…" className="h-9 pl-9" />
+            <Input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar nome, e-mail ou crachá…" className="h-9 pl-9" />
           </div>
         </header>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[44rem] text-sm">
+          <table className="w-full min-w-[52rem] text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/40 text-left text-xs font-semibold normal-case tracking-normal text-foreground/80 [&>th]:normal-case">
                 <Cabeca ativo={coluna === 'nome'} desc={desc} onClick={() => ordenar('nome')}>Pessoa</Cabeca>
                 <Cabeca ativo={coluna === 'cargo'} desc={desc} onClick={() => ordenar('cargo')}>Cargo</Cabeca>
+                <Cabeca ativo={coluna === 'cracha'} desc={desc} onClick={() => ordenar('cracha')}>Crachá</Cabeca>
                 <Cabeca ativo={coluna === 'equipe'} desc={desc} onClick={() => ordenar('equipe')}>Equipe</Cabeca>
                 <th className="px-4 py-2.5">Situação</th>
                 <Cabeca ativo={coluna === 'desde'} desc={desc} onClick={() => ordenar('desde')}>No sistema desde</Cabeca>
               </tr>
             </thead>
             <tbody>
-              {visiveis.map(({ p, lugar, lider }) => (
-                <tr key={p.id} className="border-b border-border/60 last:border-0 hover:bg-muted/40">
+              {visiveis.map(({ p, lugar, lider, clone }) => (
+                <tr key={p.id} className={cn('border-b border-border/60 last:border-0 hover:bg-muted/40', clone && 'bg-info/[0.03]')}>
                   <td className="px-4 py-2.5">
                     <div className="flex items-center gap-3">
                       <Foto pessoa={p} tamanho="md" />
                       <div className="min-w-0">
-                        <p className="truncate font-medium text-foreground">{p.nome}</p>
+                        <p className="flex items-center gap-1.5 font-medium text-foreground">
+                          <span className="truncate">{p.nome}</span>
+                          {clone && <SeloClone origem={clone.origem} />}
+                        </p>
                         {p.email && <p className="truncate text-xs text-foreground/65">{p.email}</p>}
                       </div>
                     </div>
@@ -300,6 +381,9 @@ export default function PainelSetor({
                       <span className={cn('size-2.5 shrink-0 rounded-full', GRUPO_META[p.grupo].cor)} />
                       {lider ? 'Líder da equipe' : rotuloCargo(p.cargo)}
                     </span>
+                  </td>
+                  <td className="px-4 py-2">
+                    <CrachaEditavel pessoa={p} podeEditar={podeEditarCracha} onSalvo={onCrachaSalvo} />
                   </td>
                   <td className="px-4 py-2.5 text-foreground">
                     {lugar.equipe && lugar.equipe !== 'Sem equipe'
@@ -311,7 +395,7 @@ export default function PainelSetor({
                 </tr>
               ))}
               {visiveis.length === 0 && (
-                <tr><td colSpan={5} className="px-4 py-10 text-center text-sm text-muted-foreground">Ninguém com esse filtro.</td></tr>
+                <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-muted-foreground">Ninguém com esse filtro.</td></tr>
               )}
             </tbody>
           </table>
@@ -340,7 +424,7 @@ function Numero({
         destaque ? 'border-primary/40' : 'border-border',
         tom === 'warning' && 'border-warning/50 bg-warning/5',
         tom === 'success' && 'border-success/40',
-        onClick && 'transition hover:border-warning hover:bg-warning/10',
+        onClick && 'transition hover:border-primary/50 hover:bg-primary/5',
       )}
     >
       <Icone className={cn('size-4', destaque ? 'text-primary' : tom === 'warning' ? 'text-warning' : tom === 'success' ? 'text-success' : 'text-foreground/60')} />
@@ -373,6 +457,13 @@ function Cabeca({ ativo, desc, onClick, children }: { ativo: boolean; desc: bool
 }
 
 function Situacao({ pessoa }: { pessoa: Pessoa }) {
+  if (pessoa.afastado) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-warning/15 px-2 py-0.5 text-xs font-semibold text-warning">
+        <HeartPulse className="size-3" /> Afastado
+      </span>
+    );
+  }
   if (pessoa.emFerias) {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full bg-warning/15 px-2 py-0.5 text-xs font-semibold text-warning">

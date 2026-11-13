@@ -38,6 +38,12 @@ export interface SetorBruto {
   cidade_id?: string | null;
   regra?: string | null;
   descricao?: string | null;
+  /**
+   * Setor alternativo (Marília Digital, Treinamento…): a gente dele é, quase
+   * toda, CLONE de operador de outro setor — o cadastro da pessoa continua no
+   * setor de origem, e o alternativo só replica.
+   */
+  alternativo?: boolean | null;
   /** De que empresa é o setor — preenchido quando o quadro junta várias. */
   empresa_nome?: string | null;
 }
@@ -51,6 +57,8 @@ export interface EquipeBruta {
 
 export interface PessoaBruta {
   id: string;
+  /** A empresa do cadastro: é nela que o crachá é gravado. */
+  empresa_id?: string | null;
   nome: string;
   email?: string | null;
   perfil: string;
@@ -74,6 +82,8 @@ export interface DadosBrutos {
   clones: { equipe_id: string; operador_id: string }[];
   /** A ordem que o admin arrastou na aba Setores (ids). Vazia = alfabética. */
   ordemSetores?: string[];
+  /** Crachá por pessoa (`rh_dados_operadores`), o que a RLS do RH entrega. */
+  crachas?: Record<string, string | null>;
 }
 
 // ── Saídas (o que a tela desenha) ────────────────────────────────────────────
@@ -87,6 +97,7 @@ export const GRUPOS_CARGO: readonly GrupoCargo[] = [
 
 export interface Pessoa {
   id: string;
+  empresaId: string | null;
   nome: string;
   email: string;
   cargo: string;
@@ -96,6 +107,10 @@ export interface Pessoa {
   subgrupoId: string | null;
   emFerias: boolean;
   feriasAte: string | null;
+  /** Situação `afastado` (INSS, licença…): fora das contas, como as férias. */
+  afastado: boolean;
+  /** O crachá oficial, ou null quando ainda não foi informado. */
+  cracha: string | null;
   fotoUrl: string | null;
   criadoEm: string | null;
   /** Cadastrada nos últimos 30 dias. */
@@ -130,7 +145,21 @@ export interface Numeros {
   lideres: number;
   semEquipe: number;
   emFerias: number;
+  afastados: number;
   novatos: number;
+  /** Quem ainda não tem crachá. */
+  semCracha: number;
+  /** Clones de outro setor (só em setor alternativo). */
+  clones: number;
+}
+
+/** Um clone num setor alternativo: a pessoa e de onde ela é de verdade. */
+export interface CloneQuadro {
+  pessoa: Pessoa;
+  /** O setor do cadastro (origem), pelo nome; null se a pessoa está sem setor. */
+  origem: string | null;
+  /** As equipes do alternativo em que ela aparece. */
+  equipes: string[];
 }
 
 export interface Cidade {
@@ -147,12 +176,17 @@ export interface SetorQuadro {
   cidade: Cidade;
   regra: string | null;
   nucleo: boolean;
+  /** Setor alternativo: replica gente de outros setores (ver `clones`). */
+  alternativo: boolean;
   /** Nome da empresa do setor (BookPlay, PaguePlay, Comercial…). */
   empresa: string | null;
   equipes: Equipe[];
   /** Quem é do setor e não tem equipe. */
   semEquipe: Pessoa[];
+  /** Quem tem o cadastro neste setor. */
   pessoas: Pessoa[];
+  /** Clones de operadores de outros setores (só no alternativo). */
+  clones: CloneQuadro[];
   numeros: Numeros;
 }
 
@@ -201,7 +235,7 @@ function numerosVazios(): Numeros {
   return {
     pessoas: 0,
     porGrupo: { operador: 0, lider: 0, elite: 0, gerencia: 0, diretoria: 0, outros: 0 },
-    equipes: 0, lideres: 0, semEquipe: 0, emFerias: 0, novatos: 0,
+    equipes: 0, lideres: 0, semEquipe: 0, emFerias: 0, afastados: 0, novatos: 0, semCracha: 0, clones: 0,
   };
 }
 
@@ -211,7 +245,9 @@ function contar(pessoas: readonly Pessoa[], equipes: readonly Equipe[], semEquip
   for (const p of pessoas) {
     n.porGrupo[p.grupo] += 1;
     if (p.emFerias) n.emFerias += 1;
+    if (p.afastado) n.afastados += 1;
     if (p.novata) n.novatos += 1;
+    if (!p.cracha) n.semCracha += 1;
   }
   n.equipes = equipes.length;
   n.lideres = new Set(equipes.flatMap(e => e.lideres.map(l => l.id))).size;
@@ -242,6 +278,7 @@ export function montarQuadro(dados: DadosBrutos, hoje: Date = new Date()): Quadr
       const criado = p.criado_em ? Date.parse(p.criado_em) : NaN;
       return {
         id: p.id,
+        empresaId: p.empresa_id ?? null,
         nome: (p.nome ?? '').trim() || 'Sem nome',
         email: p.email ?? '',
         cargo: p.perfil,
@@ -254,6 +291,8 @@ export function montarQuadro(dados: DadosBrutos, hoje: Date = new Date()): Quadr
         // Usuários mostra também.
         emFerias: p.situacao === 'ferias',
         feriasAte: p.ferias_ate ?? null,
+        afastado: p.situacao === 'afastado',
+        cracha: dados.crachas?.[p.id]?.trim() || null,
         fotoUrl: p.foto_url ?? null,
         criadoEm: p.criado_em ?? null,
         novata: Number.isFinite(criado) && criado >= limiteNovata,
@@ -308,6 +347,8 @@ export function montarQuadro(dados: DadosBrutos, hoje: Date = new Date()): Quadr
   }
 
   const setorDaEquipe = new Map(dados.equipes.map(e => [e.id, e.setor_id]));
+  /** Todos os setores lidos, inclusive os que não entram no quadro: a origem de um clone. */
+  const nomeDoSetor = new Map(dados.setores.map(s => [s.id, s.nome]));
 
   const setores: SetorQuadro[] = setoresBrutos.map(s => {
     const pessoas = pessoasTodas.filter(p => p.setorId === s.id);
@@ -343,6 +384,32 @@ export function montarQuadro(dados: DadosBrutos, hoje: Date = new Date()): Quadr
     const semEquipe = pessoas.filter(p =>
       !(p.equipeId && equipesDoSetor.has(p.equipeId)) && !lideresDoSetor.has(p.id));
 
+    /*
+     * Setor alternativo: quem está nas equipes dele sem ter o cadastro aqui é
+     * CLONE de operador de outro setor (o dinheiro é da origem; o alternativo
+     * só replica — regra de 06/10/2026). Antes o quadro mostrava o alternativo
+     * quase vazio, porque contava só o cadastro.
+     */
+    const alternativo = !!s.alternativo;
+    const clones: CloneQuadro[] = [];
+    if (alternativo) {
+      const porPessoa = new Map<string, CloneQuadro>();
+      for (const e of equipes) {
+        for (const p of e.apoio) {
+          if (p.setorId === s.id) continue;
+          const c = porPessoa.get(p.id)
+            ?? { pessoa: p, origem: p.setorId ? nomeDoSetor.get(p.setorId) ?? 'Outro setor' : null, equipes: [] };
+          c.equipes.push(e.nome);
+          porPessoa.set(p.id, c);
+        }
+      }
+      clones.push(...[...porPessoa.values()].sort((a, b) => porNome(a.pessoa, b.pessoa)));
+    }
+    // Os números são do CADASTRO: o clone já é contado no setor de origem, e
+    // somar de novo inflaria o total da cidade. O clone vai à parte.
+    const numeros = contar(pessoas, equipes, semEquipe.length);
+    numeros.clones = clones.length;
+
     return {
       id: s.id,
       nome: s.nome,
@@ -350,11 +417,13 @@ export function montarQuadro(dados: DadosBrutos, hoje: Date = new Date()): Quadr
       cidade: cidadeDe(s.cidade_id),
       regra: ehRegraDoSetor(s.regra) ? ROTULO_REGRA[s.regra] : null,
       nucleo: s.tipo === 'nucleo',
+      alternativo,
       empresa: s.empresa_nome ?? null,
       equipes,
       semEquipe,
       pessoas,
-      numeros: contar(pessoas, equipes, semEquipe.length),
+      clones,
+      numeros,
     };
   });
 

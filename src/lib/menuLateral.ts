@@ -36,7 +36,6 @@ import {
   ShoppingBag, Handshake, Send, Zap, Network, Tv, KeyRound, ShieldCheck, Headset,
 } from 'lucide-react';
 import { CARGOS_MODO_TV, ROUTE_PATHS } from '@/lib/index';
-import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { produtoPermite, type Produto } from '@/lib/produto';
 
 export interface NavItem {
@@ -155,7 +154,7 @@ export const NAV_ITEMS: NavItem[] = [
   // leitura. A chave é a do RH Gestão, e o filtro abaixo pede também o alcance
   // «todos os setores» daquela aba: é ele que faz do cargo «o RH», e não o
   // líder que preenche a premiação da própria equipe.
-  { label: 'Quadro de Pessoal', icon: Network,        to: ROUTE_PATHS.RH_QUADRO,           produtos: COBRANCA_E_RH, permissaoKey: 'ver_rh_gestao', depoisDe: ROUTE_PATHS.RH_GESTAO },
+  { label: 'Quadro de Pessoal', icon: Network,        to: ROUTE_PATHS.RH_QUADRO,           produtos: COBRANCA_E_RH, permissaoKey: 'ver_quadro_pessoal', depoisDe: ROUTE_PATHS.RH_GESTAO },
   // Fechamento — a planilha de fechamento da gerência. Só BookPlay. A chave
   // nasce desligada para todo cargo configurável: hoje o item aparece só para
   // quem tem acesso total, e a gerência entra quando alguém ligar no painel.
@@ -319,6 +318,13 @@ export interface ContextoMenu {
    * super_admin poder posicioná-la.
    */
   ouvidoria?: boolean;
+  /**
+   * A pessoa abre o Quadro de Pessoal (`ver_quadro_pessoal`, chave EXPLÍCITA:
+   * o acesso total do administrador não a concede; nasce só no RH e no
+   * super_admin — pedido do Cleber, 13/11/2026). Na prévia por cargo do
+   * editor vem ausente, e vale a chave do cargo, menos para o administrador.
+   */
+  quadroPessoal?: boolean;
 }
 
 /**
@@ -382,10 +388,12 @@ export function abasDoMenu(ctx: ContextoMenu): NavItem[] {
       return ctx.ouvidoria ?? true;
     }
 
-    // Quadro de Pessoal: a visão do RH, que é o alcance «todos os setores» do
-    // RH Gestão. A tela confere o mesmo por dentro.
+    // Quadro de Pessoal: chave própria e explícita (só RH e super_admin de
+    // fábrica). A tela confere o mesmo por dentro, e o banco na RPC.
     if (item.to === ROUTE_PATHS.RH_QUADRO) {
-      return niveisLiberados('rh', ctx.temPermissao).includes('todos_setores');
+      if (ctx.quadroPessoal !== undefined) return ctx.quadroPessoal;
+      if (ctx.cargo === 'super_admin') return true;
+      return ctx.cargo !== 'administrador' && ctx.temPermissao('ver_quadro_pessoal');
     }
 
     if (item.permissaoKey) return true;

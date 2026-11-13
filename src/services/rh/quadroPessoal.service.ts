@@ -17,24 +17,28 @@ import { lerOrdemSetores } from '@/lib/setores-ordem';
 import { listarClonesEquipes } from '@/services/equipes/equipesClones.service';
 import { listarLideresEquipes } from '@/services/equipes/equipesLideres.service';
 import { listarSubgrupos } from '@/services/equipes/equipesSubgrupos.service';
+import { listarCrachas } from './rhGestao.service';
 import type { DadosBrutos, EquipeBruta, PessoaBruta, SetorBruto } from './quadroPessoal';
 
 export async function carregarQuadro(empresaId: string): Promise<DadosBrutos> {
-  const [setores, cidades, equipes, pessoas, lideres, subgrupos, clones, vinculos] = await Promise.all([
+  const [setores, cidades, equipes, pessoas, lideres, subgrupos, clones, vinculos, crachas] = await Promise.all([
     supabase.from('setores')
-      .select('id, nome, ativo, tipo, cidade_id, regra, descricao')
+      .select('id, nome, ativo, tipo, cidade_id, regra, descricao, alternativo')
       .eq('empresa_id', empresaId).order('nome'),
     supabase.from('rh_celulas').select('id, nome').eq('empresa_id', empresaId),
     supabase.from('equipes')
       .select('id, nome, setor_id, treinamento')
       .eq('empresa_id', empresaId).order('nome'),
     supabase.from('perfis')
-      .select('id, nome, email, perfil, setor_id, equipe_id, situacao, ferias_ate, foto_url, arquivado, criado_em')
+      .select('id, empresa_id, nome, email, perfil, setor_id, equipe_id, situacao, ferias_ate, foto_url, arquivado, criado_em')
       .eq('empresa_id', empresaId).order('nome'),
     listarLideresEquipes(empresaId),
     listarSubgrupos(empresaId),
     listarClonesEquipes(empresaId),
     supabase.from('perfis').select('id, subgrupo_id').eq('empresa_id', empresaId),
+    // O crachá oficial (o mesmo do RH Gestão). A RLS entrega o que o alcance
+    // do RH vê; sem alcance, a coluna fica vazia e o resto do quadro segue.
+    listarCrachas(empresaId),
   ]);
 
   if (setores.error) throw setores.error;
@@ -56,6 +60,7 @@ export async function carregarQuadro(empresaId: string): Promise<DadosBrutos> {
     subgrupos: subgrupos ?? [],
     clones: (clones ?? []).map(c => ({ equipe_id: c.equipe_id, operador_id: c.operador_id })),
     ordemSetores: lerOrdemSetores(empresaId),
+    crachas: Object.fromEntries(crachas.map(c => [c.operador_id, c.cracha])),
   };
 }
 
@@ -76,7 +81,7 @@ export async function carregarQuadroDeVarias(
 ): Promise<DadosBrutos> {
   const partes = await Promise.all(empresas.map(async e => ({ e, d: await carregarQuadro(e.id) })));
   const junto: DadosBrutos = {
-    setores: [], cidades: [], equipes: [], pessoas: [], lideres: [], subgrupos: [], clones: [], ordemSetores: [],
+    setores: [], cidades: [], equipes: [], pessoas: [], lideres: [], subgrupos: [], clones: [], ordemSetores: [], crachas: {},
   };
   for (const { e, d } of partes) {
     junto.setores.push(...d.setores.map(s => ({ ...s, empresa_nome: e.nome })));
@@ -87,6 +92,7 @@ export async function carregarQuadroDeVarias(
     junto.subgrupos.push(...d.subgrupos);
     junto.clones.push(...d.clones);
     junto.ordemSetores!.push(...(d.ordemSetores ?? []));
+    Object.assign(junto.crachas!, d.crachas ?? {});
   }
   return junto;
 }

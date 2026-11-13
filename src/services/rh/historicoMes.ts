@@ -117,14 +117,30 @@ export function filtrar(eventos: readonly EventoRh[], f: FiltroHistorico): Event
     && (!f.setor || e.setor_de_id === f.setor || e.setor_para_id === f.setor));
 }
 
-/** Os setores que aparecem no mês, para o seletor. */
-export function setoresDoMes(eventos: readonly EventoRh[]): { id: string; nome: string }[] {
-  const m = new Map<string, string>();
+export interface SetorDoMes {
+  id: string;
+  nome: string;
+  /** Nome da cidade do setor, ou null. */
+  cidade: string | null;
+  /** Quantos eventos do mês passam por ele (origem ou destino). */
+  eventos: number;
+}
+
+/** Os setores que aparecem no mês, para o seletor: Birigui, Marília, os outros, por nome. */
+export function setoresDoMes(eventos: readonly EventoRh[]): SetorDoMes[] {
+  const m = new Map<string, SetorDoMes>();
+  const anotar = (id: string | null, nome: string | null, cidade: string | null) => {
+    if (!id || !nome) return;
+    const s = m.get(id) ?? { id, nome, cidade, eventos: 0 };
+    s.eventos += 1;
+    m.set(id, s);
+  };
   for (const e of eventos) {
-    if (e.setor_de_id && e.setor_de_nome) m.set(e.setor_de_id, e.setor_de_nome);
-    if (e.setor_para_id && e.setor_para_nome) m.set(e.setor_para_id, e.setor_para_nome);
+    anotar(e.setor_de_id, e.setor_de_nome, e.cidade_de);
+    if (e.setor_para_id !== e.setor_de_id) anotar(e.setor_para_id, e.setor_para_nome, e.cidade_para);
   }
-  return [...m].map(([id, nome]) => ({ id, nome })).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  const ordem = (c: string | null) => { const k = chaveCidade(c); return k === 'birigui' ? 0 : k === 'marilia' ? 1 : k === SEM_CIDADE ? 3 : 2; };
+  return [...m.values()].sort((a, b) => ordem(a.cidade) - ordem(b.cidade) || a.nome.localeCompare(b.nome, 'pt-BR'));
 }
 
 /** As seções na ordem da tela, só as que têm linha, cada uma ordenada por dia e nome. */

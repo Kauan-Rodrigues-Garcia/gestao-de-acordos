@@ -371,7 +371,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   // O cadastro de cargos editado pelo painel: lido uma vez e aplicado nas
   // listas de cargo (`lib/cargos.ts`, «O cadastro vivo»).
   useCargos();
-  const { temPermissao, valorDoCargo, loading: permLoading } = useCargoPermissoes();
+  const { temPermissao, temPermissaoExplicita, valorDoCargo, loading: permLoading } = useCargoPermissoes();
   const acessoTickets   = useTicketsAcesso();
   // Abas Acesso/Retenção do Jornada: pelo subgrupo da pessoa.
   const jornada         = useJornadaAbas();
@@ -443,8 +443,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     acessoTickets: acessoTickets.podeVerAba,
     abasJornada: { acesso: jornada.acesso, retencao: jornada.retencao },
     ouvidoria: ouvidoria.setores.length > 0,
+    // Chave explícita: o acesso total do administrador não abre o Quadro.
+    quadroPessoal: !permLoading && (userRole === 'super_admin' || temPermissaoExplicita('ver_quadro_pessoal')),
   }), [
-    userRole, produto, isPP, tenant.slug, permLoading, temPermissao,
+    userRole, produto, isPP, tenant.slug, permLoading, temPermissao, temPermissaoExplicita,
     acessoTickets.podeVerAba, jornada.acesso, jornada.retencao, ouvidoria.setores.length,
   ]);
 

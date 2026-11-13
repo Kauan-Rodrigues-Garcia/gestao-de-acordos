@@ -57,7 +57,10 @@ describe('historicoMes', () => {
 
   it('filtro de setor vale origem ou destino', () => {
     expect(filtrar(TODOS, { cidade: null, setor: 's9' }).map(e => e.pessoa_nome)).toEqual(['Bia', 'Duda']);
-    expect(setoresDoMes(TODOS)).toEqual([{ id: 's1', nome: 'Play 1' }, { id: 's9', nome: 'Play Mix Marília' }]);
+    expect(setoresDoMes(TODOS)).toEqual([
+      { id: 's1', nome: 'Play 1', cidade: 'Birigui', eventos: 2 },
+      { id: 's9', nome: 'Play Mix Marília', cidade: 'Marília', eventos: 2 },
+    ]);
   });
 
   it('seções na ordem da tela, só as que têm linha, ordenadas por dia', () => {

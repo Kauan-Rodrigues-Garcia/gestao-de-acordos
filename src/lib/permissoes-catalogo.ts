@@ -129,6 +129,12 @@ export const PERMISSOES_EXPLICITAS = [
    */
   'rh_reabrir_fechamento',
   /*
+   * Abrir o Quadro de Pessoal (13/11/2026). Não desfaz fato publicado, mas é a
+   * lista de todas as pessoas, com crachá, de todas as operações: o Cleber quer
+   * a aba só no RH e no super_admin, e o resto por concessão de quem decide.
+   */
+  'ver_quadro_pessoal',
+  /*
    * Definir qual setor é o Núcleo de Inteligência e Gestão.
    *
    * Mesma família das duas acima. `numeros_config` decide quem administra o
@@ -295,6 +301,13 @@ const SO_COMERCIAL: readonly Produto[] = ['comercial'];
  * chave que o Comercial consulta e o painel dele não mostra.
  */
 const COBRANCA_E_COMERCIAL: readonly Produto[] = ['cobranca', 'comercial'];
+
+/**
+ * Cobrança E RH: o Quadro de Pessoal (13/11/2026) aparece nas duas, como no
+ * menu. Sem o RH aqui, o painel da empresa Recursos Humanos não mostraria a
+ * chave — e salvar o cargo a apagaria (ver o comentário acima).
+ */
+const COBRANCA_E_RH: readonly Produto[] = ['cobranca', 'rh'];
 
 /** Atalhos para os padrões que se repetem. */
 const LIDERANCA: Partial<Record<CargoConfiguravel, boolean>> = {
@@ -622,6 +635,18 @@ export const PERMISSOES: PermissaoMeta[] = [
     descricao: 'Abrir o Controle de Premiação e Comissão',
     grupo: 'Abas e telas',
     padrao: { lider: true, elite: true, gerencia: true, diretoria: true, rh: true },
+  },
+  /*
+   * Quadro de Pessoal (13/11/2026): a visão do RH — setores, equipes, histórico
+   * do mês e o crachá oficial. Chave EXPLÍCITA (`PERMISSOES_EXPLICITAS`): o
+   * acesso total do administrador não a concede; de fábrica só o RH e o
+   * super_admin. Migration 20261113180000.
+   */
+  {
+    key: 'ver_quadro_pessoal', label: 'Aba Quadro de Pessoal (RH)',
+    descricao: 'Ver setores, equipes, clones, histórico do mês e crachás das pessoas — a visão do RH',
+    grupo: 'Abas e telas', produtos: COBRANCA_E_RH,
+    padrao: { rh: true },
   },
   {
     key: 'ver_lixeira', label: 'Lixeira',

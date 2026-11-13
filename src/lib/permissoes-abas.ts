@@ -150,6 +150,14 @@ export const MODULOS_PERMISSAO: readonly DefinicaoModulo[] = [
     descricao: 'Premiação, comissão, validação e fechamento do RH.', grupos: ['RH Gestão'],
   },
   {
+    /*
+     * Quadro de Pessoal (13/11/2026): a visão do RH. Chave explícita — nasce
+     * só no RH (o super_admin entra sempre); o administrador não herda.
+     */
+    id: 'quadro_pessoal', rotulo: 'Quadro de Pessoal (RH)', interruptor: 'ver_quadro_pessoal',
+    descricao: 'Setores, equipes, clones dos alternativos, histórico do mês e o crachá oficial das pessoas.',
+  },
+  {
     id: 'acordos', rotulo: 'Acordos', interruptor: 'ver_acordos', escopo: 'acordos',
     descricao: 'Lista, formulário e ações sobre acordos.', grupos: ['Acordos'],
     // As duas regras desde 05/11/2026 (a mesa da regra Cofen saiu do Dashboard).

@@ -25,16 +25,16 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent }
 import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
-  AlertTriangle, Building2, Crown, Download, Eye, FileCheck2, FileUp, History, Network, RefreshCw, Search,
+  AlertTriangle, Building2, Crown, Download, Eye, FileCheck2, FileUp, HeartPulse, History, IdCard, Network, RefreshCw, Search,
   Sparkles, Sun, Users, UsersRound,
 } from 'lucide-react';
 import { AbasSegmentadas, type AbaSegmentada } from '@/components/AbasSegmentadas';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useAuth } from '@/hooks/useAuth';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useEmpresa } from '@/hooks/useEmpresa';
-import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { produtoDaEmpresa } from '@/lib/produto';
 import type { Empresa } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
@@ -43,7 +43,7 @@ import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { registrarLog } from '@/services/logs.service';
 import {
   conferirPlanilha, linhasDaConferencia, linhasDaPlanilha, montarQuadro, normalizar,
-  type Numeros, type Pessoa, type Quadro, type SetorQuadro,
+  type DadosBrutos, type Numeros, type Pessoa, type Quadro, type SetorQuadro,
 } from '@/services/rh/quadroPessoal';
 import { carregarQuadro, carregarQuadroDeVarias } from '@/services/rh/quadroPessoal.service';
 import { baixarPlanilha, lerPlanilha } from '@/services/rh/quadroPessoalPlanilha';
@@ -53,6 +53,7 @@ import AbaConferencia from './AbaConferencia';
 import AbaHistorico from './AbaHistorico';
 import PainelSetor from './PainelSetor';
 import { Foto } from './partes';
+import { SeletorFiltro } from './SeletorFiltro';
 import { lugarTexto, rotuloCargo } from './formato';
 
 type Aba = 'setores' | 'equipes' | 'historico' | 'conferencia';
@@ -80,20 +81,31 @@ function baldeSemSetor(quadro: Quadro): SetorQuadro | null {
     porGrupo: { operador: 0, lider: 0, elite: 0, gerencia: 0, diretoria: 0, outros: 0 },
     equipes: 0, lideres: 0, semEquipe: quadro.semSetor.length,
     emFerias: quadro.semSetor.filter(p => p.emFerias).length,
+    afastados: quadro.semSetor.filter(p => p.afastado).length,
     novatos: quadro.semSetor.filter(p => p.novata).length,
+    semCracha: quadro.semSetor.filter(p => !p.cracha).length,
+    clones: 0,
   };
   for (const p of quadro.semSetor) n.porGrupo[p.grupo] += 1;
   return {
     id: SEM_SETOR, nome: 'Sem setor', descricao: null,
     cidade: { chave: '~', nome: 'Sem cidade', marca: null },
-    regra: null, nucleo: false, empresa: null, equipes: [], semEquipe: quadro.semSetor, pessoas: quadro.semSetor, numeros: n,
+    regra: null, nucleo: false, alternativo: false, empresa: null, equipes: [],
+    semEquipe: quadro.semSetor, pessoas: quadro.semSetor, clones: [], numeros: n,
   };
 }
 
 export default function RhQuadro() {
   const { empresa, tenantSlug } = useEmpresa();
-  const { temPermissao, loading: permCarregando } = useCargoPermissoes();
-  const podeVer = niveisLiberados('rh', temPermissao).includes('todos_setores');
+  const { perfil } = useAuth();
+  const { temPermissao, temPermissaoExplicita, loading: permCarregando } = useCargoPermissoes();
+  /*
+   * Chave própria e EXPLÍCITA (13/11/2026): o acesso total do administrador
+   * não abre o Quadro. De fábrica, só o RH e o super_admin; o resto, por
+   * concessão em Configurações › Permissões.
+   */
+  const podeVer = perfil?.perfil === 'super_admin' || temPermissaoExplicita('ver_quadro_pessoal');
+  const podeEditarCracha = temPermissao('rh_editar_cracha');
   const empresaId = empresa?.id ?? null;
   /*
    * Entrando pela empresa Recursos Humanos, não há setor nem equipe dela para
@@ -162,6 +174,8 @@ export default function RhQuadro() {
   const [versao, setVersao] = useState(0);
 
   const [quadro, setQuadro] = useState<Quadro | null>(null);
+  /** O que veio do banco: o crachá salvo remonta o quadro sem nova leitura. */
+  const dadosRef = useRef<DadosBrutos | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [atualizando, setAtualizando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -186,6 +200,7 @@ export default function RhQuadro() {
       const dados = empresasDoAlvo.length === 1 && alvoEfetivo !== TODAS
         ? await carregarQuadro(empresasDoAlvo[0].id)
         : await carregarQuadroDeVarias(empresasDoAlvo.map(e => ({ id: e.id, nome: e.nome })));
+      dadosRef.current = dados;
       setQuadro(montarQuadro(dados));
       setRetratoEm(new Date());
       setErro(null);
@@ -302,6 +317,13 @@ export default function RhQuadro() {
     setAba('equipes');
   }, [quadro, setAba]);
 
+  const crachaSalvo = useCallback((pessoaId: string, cracha: string | null) => {
+    const dados = dadosRef.current;
+    if (!dados) return;
+    dados.crachas = { ...(dados.crachas ?? {}), [pessoaId]: cracha };
+    setQuadro(montarQuadro(dados));
+  }, []);
+
   const irParaPessoaPorId = useCallback((id: string): boolean => {
     const p = quadro?.todas.find(x => x.id === id);
     if (!p) return false;
@@ -325,7 +347,7 @@ export default function RhQuadro() {
         <Network className="mx-auto size-8 opacity-40" />
         <p className="text-sm font-medium">O Quadro de Pessoal é a visão do RH.</p>
         <p className="text-xs text-muted-foreground">
-          Ele abre para quem tem o RH Gestão com o alcance «todos os setores», em Configurações › Permissões.
+          Ele abre para o RH e para quem o super admin liberar a chave «Aba Quadro de Pessoal (RH)», em Configurações › Permissões.
         </p>
       </div>
     );
@@ -381,18 +403,19 @@ export default function RhQuadro() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {operacoes && operacoes.length > 1 && (
-            <label className="inline-flex h-9 items-center gap-1.5 rounded-md border border-input bg-background px-2.5 text-sm">
-              <Building2 className="size-4 text-muted-foreground" />
-              <select
-                value={alvoEfetivo ?? ''}
-                onChange={e => trocarEmpresa(e.target.value)}
-                className="bg-transparent text-foreground outline-none"
-                aria-label="Empresa do quadro"
-              >
-                <option value={TODAS}>Todas as empresas</option>
-                {operacoes.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
-              </select>
-            </label>
+            <SeletorFiltro
+              valor={alvoEfetivo === TODAS ? null : alvoEfetivo}
+              onTrocar={v => trocarEmpresa(v ?? TODAS)}
+              Icone={Building2}
+              rotulo="Empresa do quadro"
+              rotuloTodos="Todas as empresas"
+              largura="w-72"
+              opcoes={operacoes.map(e => ({
+                valor: e.id,
+                rotulo: e.nome,
+                detalhe: produtoDaEmpresa(e) === 'comercial' ? 'Comercial' : 'Cobrança',
+              }))}
+            />
           )}
           <Button variant="ghost" size="sm" className="h-9 gap-1.5" onClick={() => { setVersao(v => v + 1); void carregar(true); }} disabled={atualizando}>
             <RefreshCw className={cn('size-4', atualizando && 'animate-spin')} />
@@ -408,13 +431,15 @@ export default function RhQuadro() {
       </header>
 
       {/* Os números */}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-7">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-9">
         <Numero Icone={Users} valor={n.pessoas} rotulo="Pessoas" destaque />
         <Numero Icone={Building2} valor={quadro.setores.length} rotulo="Setores" />
         <Numero Icone={UsersRound} valor={n.equipes} rotulo="Equipes" />
         <Numero Icone={Crown} valor={n.lideres} rotulo="Líderes de equipe" />
         <Numero Icone={AlertTriangle} valor={n.semEquipe} rotulo="Sem equipe" tom={n.semEquipe > 0 ? 'warning' : undefined} />
         <Numero Icone={Sun} valor={n.emFerias} rotulo="De férias" />
+        <Numero Icone={HeartPulse} valor={n.afastados} rotulo="Afastados" tom={n.afastados > 0 ? 'warning' : undefined} />
+        <Numero Icone={IdCard} valor={n.semCracha} rotulo="Sem crachá" tom={n.semCracha > 0 ? 'warning' : undefined} />
         <Numero Icone={Sparkles} valor={n.novatos} rotulo="Novos (30 dias)" tom={n.novatos > 0 ? 'success' : undefined} />
       </div>
 
@@ -433,6 +458,8 @@ export default function RhQuadro() {
             onVoltar={() => abrirSetor(null)}
             onVerOrganograma={verOrganograma}
             onExportar={s => void exportar(s)}
+            podeEditarCracha={podeEditarCracha}
+            onCrachaSalvo={crachaSalvo}
           />
         )
         : <AbaSetores quadro={quadro} semSetor={semSetor} onAbrir={abrirSetor} />)}

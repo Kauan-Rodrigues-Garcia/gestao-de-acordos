@@ -31,6 +31,8 @@ import { baixarPlanilha } from '@/services/rh/quadroPessoalPlanilha';
 import { registrarLog } from '@/services/logs.service';
 import { dataCurta, rotuloCargo } from './formato';
 import { historicoDeExemplo } from './historicoExemplo';
+import { SeletorFiltro } from './SeletorFiltro';
+import { marcaDaCidade } from '@/lib/marca';
 
 const META: Record<TipoEvento, { Icone: LucideIcon; cor: string; fundo: string }> = {
   transferencia: { Icone: ArrowRightLeft, cor: 'text-primary',          fundo: 'bg-primary/10' },
@@ -200,18 +202,22 @@ export default function AbaHistorico({
           ))}
         </div>
 
-        <label className="inline-flex h-9 items-center gap-1.5 rounded-md border border-input bg-background px-2.5 text-sm">
-          <MapPin className="size-4 text-muted-foreground" />
-          <select
-            value={setor ?? ''}
-            onChange={e => setSetor(e.target.value || null)}
-            className="max-w-[12rem] bg-transparent text-foreground outline-none"
-            aria-label="Setor"
-          >
-            <option value="">Todos os setores</option>
-            {setores.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}
-          </select>
-        </label>
+        <SeletorFiltro
+          valor={setor}
+          onTrocar={setSetor}
+          Icone={MapPin}
+          rotulo="Setor"
+          rotuloTodos="Todos os setores"
+          placeholderBusca="Buscar setor…"
+          vazio="Nenhum setor com esse nome."
+          className="max-w-[16rem]"
+          opcoes={setores.map(s => ({
+            valor: s.id,
+            rotulo: s.nome,
+            grupo: s.cidade ? [s.cidade, marcaDaCidade(s.cidade)?.nome].filter(Boolean).join(' · ') : 'Sem cidade',
+            contagem: s.eventos,
+          }))}
+        />
 
         <Button size="sm" variant="outline" className="ml-auto h-9 gap-1.5" onClick={() => void exportar()} disabled={!visiveis.length}>
           <Download className="size-4" /> Exportar mês

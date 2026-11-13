@@ -283,13 +283,27 @@ describe('abasDoMenu — por produto', () => {
     expect(noComercial).not.toContain(ROUTE_PATHS.RH_QUADRO);
   });
 
-  it('o Quadro de Pessoal pede o alcance «todos os setores» do RH Gestão', () => {
+  /*
+   * 13/11/2026: chave própria e EXPLÍCITA. O alcance «todos os setores» do RH
+   * Gestão não abre mais o Quadro (gerência e diretoria têm esse alcance), e o
+   * acesso total do administrador também não.
+   */
+  it('o Quadro de Pessoal pede a chave ver_quadro_pessoal, que o administrador não herda', () => {
     const so = (chaves: string[]) => (k: string) => chaves.includes(k);
-    const lider = rotas(abasDoMenu(ctx({ cargo: 'lider', temPermissao: so(['ver_rh_gestao', 'rh_escopo_equipe']) })));
-    const rh = rotas(abasDoMenu(ctx({ cargo: 'rh', temPermissao: so(['ver_rh_gestao', 'rh_escopo_todos_setores']) })));
-    expect(lider).toContain(ROUTE_PATHS.RH_GESTAO);
-    expect(lider).not.toContain(ROUTE_PATHS.RH_QUADRO);
+    const gerencia = rotas(abasDoMenu(ctx({ cargo: 'gerencia', temPermissao: so(['ver_rh_gestao', 'rh_escopo_todos_setores']) })));
+    const rh = rotas(abasDoMenu(ctx({ cargo: 'rh', temPermissao: so(['ver_rh_gestao', 'ver_quadro_pessoal']) })));
+    expect(gerencia).toContain(ROUTE_PATHS.RH_GESTAO);
+    expect(gerencia).not.toContain(ROUTE_PATHS.RH_QUADRO);
     expect(rh).toContain(ROUTE_PATHS.RH_QUADRO);
+
+    // Prévia por cargo (sem a resposta da pessoa): admin fora, super_admin dentro.
+    const tudo = () => true;
+    expect(rotas(abasDoMenu(ctx({ cargo: 'administrador', temPermissao: tudo })))).not.toContain(ROUTE_PATHS.RH_QUADRO);
+    expect(rotas(abasDoMenu(ctx({ cargo: 'super_admin', temPermissao: tudo })))).toContain(ROUTE_PATHS.RH_QUADRO);
+
+    // Menu real: manda a resposta da pessoa (temPermissaoExplicita).
+    expect(rotas(abasDoMenu(ctx({ cargo: 'administrador', temPermissao: tudo, quadroPessoal: true })))).toContain(ROUTE_PATHS.RH_QUADRO);
+    expect(rotas(abasDoMenu(ctx({ cargo: 'rh', temPermissao: tudo, quadroPessoal: false })))).not.toContain(ROUTE_PATHS.RH_QUADRO);
   });
 
   it('produto desconhecido não mostra NADA', () => {

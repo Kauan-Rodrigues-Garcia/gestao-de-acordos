@@ -8,12 +8,12 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AlertTriangle, ChevronsDownUp, ChevronsUpDown, Crown, GraduationCap, Network, Rows3, Search, Users,
+  AlertTriangle, ChevronsDownUp, ChevronsUpDown, Copy, Crown, GraduationCap, Network, Rows3, Search, Users,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { normalizar, type Equipe, type Pessoa, type Quadro, type SetorQuadro } from '@/services/rh/quadroPessoal';
-import { BarraComposicao, CartaoPessoa, Foto, PilhaDeFotos, SeloFerias, SeloNovata } from './partes';
+import { BarraComposicao, CartaoPessoa, Foto, PilhaDeFotos, SeloAlternativo, SeloFerias, SeloNovata } from './partes';
 import { GRUPO_META, lugarTexto, plural, rotuloCargo } from './formato';
 import { lerPreferencia, salvarPreferencia } from './preferencias';
 import './quadro.css';
@@ -112,11 +112,12 @@ export default function AbaEquipes({
                   )}
                 >
                   {s.nome}
+                  {s.alternativo && <Copy className={cn('size-3', ativo ? 'opacity-80' : 'text-info')} aria-label="Setor alternativo" />}
                   <span className={cn(
                     'rounded-full px-1.5 py-0.5 text-[10px] tabular-nums',
                     ativo ? 'bg-primary-foreground/20' : 'bg-muted text-muted-foreground',
                   )}>
-                    {s.numeros.pessoas}
+                    {s.numeros.pessoas + s.numeros.clones}
                   </span>
                 </button>
               );
@@ -202,8 +203,12 @@ function Organograma({
               {[quadro.empresas.length > 1 ? setor.empresa : null, setor.cidade.nome, setor.regra].filter(Boolean).join(' · ')}
             </p>
             <p className="mt-0.5 text-xl font-bold tracking-tight text-foreground">{setor.nome}</p>
+            {setor.alternativo && <div className="mt-1.5 flex justify-center"><SeloAlternativo grande /></div>}
             <p className="mt-1 text-xs text-muted-foreground">
-              {plural(setor.numeros.pessoas, 'pessoa', 'pessoas')} · {plural(setor.numeros.equipes, 'equipe', 'equipes')}
+              {setor.alternativo
+                ? <>{plural(setor.numeros.clones, 'clone', 'clones')} de outros setores · {plural(setor.numeros.pessoas, 'do cadastro', 'do cadastro')}</>
+                : plural(setor.numeros.pessoas, 'pessoa', 'pessoas')}
+              {' · '}{plural(setor.numeros.equipes, 'equipe', 'equipes')}
             </p>
             <BarraComposicao numeros={setor.numeros} className="mt-3" />
             {lideres.length > 0 && (
@@ -216,7 +221,7 @@ function Organograma({
           <ul className="qp-org-filhos">
             {setor.equipes.map(e => (
               <li key={e.id}>
-                <NoEquipe quadro={quadro} equipe={e} realce={realce} tudoAberto={tudoAberto} />
+                <NoEquipe quadro={quadro} equipe={e} realce={realce} tudoAberto={tudoAberto} alternativo={setor.alternativo} />
               </li>
             ))}
             {setor.semEquipe.length > 0 && (
@@ -234,8 +239,12 @@ function Organograma({
   );
 }
 
-function LinhaPessoa({ quadro, pessoa, realce }: { quadro: Quadro; pessoa: Pessoa; realce: Realce }) {
+function LinhaPessoa({
+  quadro, pessoa, realce, mostrarOrigem,
+}: { quadro: Quadro; pessoa: Pessoa; realce: Realce; mostrarOrigem?: boolean }) {
   const achado = casa(pessoa, realce);
+  /** No clone, o setor do cadastro: «de Play 4». */
+  const origem = mostrarOrigem ? lugarTexto(quadro, pessoa).setor : null;
   const apagado = !!realce.busca && !achado;
   return (
     <CartaoPessoa pessoa={pessoa} lugar={lugarTexto(quadro, pessoa)}>
@@ -250,7 +259,10 @@ function LinhaPessoa({ quadro, pessoa, realce }: { quadro: Quadro; pessoa: Pesso
         )}
       >
         <Foto pessoa={pessoa} tamanho="xs" />
-        <span className="min-w-0 flex-1 truncate text-xs text-foreground">{pessoa.nome}</span>
+        <span className="min-w-0 flex-1 truncate text-xs text-foreground">
+          {pessoa.nome}
+          {origem && <span className="block truncate text-[10px] text-info">de {origem}</span>}
+        </span>
         {pessoa.grupo !== 'operador' && (
           <span className="shrink-0 text-[10px] text-muted-foreground">{GRUPO_META[pessoa.grupo].um}</span>
         )}
@@ -261,15 +273,15 @@ function LinhaPessoa({ quadro, pessoa, realce }: { quadro: Quadro; pessoa: Pesso
 }
 
 function ListaLimitada({
-  quadro, pessoas, realce, aberto,
-}: { quadro: Quadro; pessoas: Pessoa[]; realce: Realce; aberto: boolean }) {
+  quadro, pessoas, realce, aberto, mostrarOrigem,
+}: { quadro: Quadro; pessoas: Pessoa[]; realce: Realce; aberto: boolean; mostrarOrigem?: boolean }) {
   const [mais, setMais] = useState(false);
   const temAchado = pessoas.some(p => casa(p, realce));
   const tudo = aberto || mais || temAchado || pessoas.length <= LIMITE + 1;
   const vis = tudo ? pessoas : pessoas.slice(0, LIMITE);
   return (
     <div className="space-y-0.5">
-      {vis.map(p => <LinhaPessoa key={p.id} quadro={quadro} pessoa={p} realce={realce} />)}
+      {vis.map(p => <LinhaPessoa key={p.id} quadro={quadro} pessoa={p} realce={realce} mostrarOrigem={mostrarOrigem} />)}
       {!tudo && (
         <button
           type="button"
@@ -284,9 +296,9 @@ function ListaLimitada({
 }
 
 function NoEquipe({
-  quadro, equipe, realce, tudoAberto,
-}: { quadro: Quadro; equipe: Equipe; realce: Realce; tudoAberto: boolean }) {
-  const temAchado = [...equipe.lideres, ...equipe.membros].some(p => casa(p, realce));
+  quadro, equipe, realce, tudoAberto, alternativo,
+}: { quadro: Quadro; equipe: Equipe; realce: Realce; tudoAberto: boolean; alternativo: boolean }) {
+  const temAchado = [...equipe.lideres, ...equipe.membros, ...(alternativo ? equipe.apoio : [])].some(p => casa(p, realce));
   const apagada = !!realce.busca && !temAchado;
   return (
     <article
@@ -355,10 +367,19 @@ function NoEquipe({
         {equipe.semSubgrupo.length > 0 && (
           <ListaLimitada quadro={quadro} pessoas={equipe.semSubgrupo} realce={realce} aberto={tudoAberto} />
         )}
-        {equipe.membros.length === 0 && (
+        {equipe.membros.length === 0 && !(alternativo && equipe.apoio.length > 0) && (
           <p className="px-1 py-2 text-center text-[11px] text-muted-foreground">Equipe sem ninguém hoje.</p>
         )}
-        {equipe.apoio.length > 0 && (
+        {/* Alternativo: os clones SÃO a equipe — lista inteira, com a origem de cada um. */}
+        {alternativo && equipe.apoio.length > 0 && (
+          <div className="rounded-lg border border-info/30 bg-info/5 p-1.5">
+            <p className="flex items-center gap-1 px-1 pb-1 text-[10px] font-semibold uppercase tracking-wider text-info">
+              <Copy className="size-3" /> Clones de outros setores · {equipe.apoio.length}
+            </p>
+            <ListaLimitada quadro={quadro} pessoas={equipe.apoio} realce={realce} aberto={tudoAberto} mostrarOrigem />
+          </div>
+        )}
+        {!alternativo && equipe.apoio.length > 0 && (
           <div className="flex items-center gap-2 border-t border-border px-1 pt-2" title={equipe.apoio.map(p => p.nome).join(', ')}>
             <span className="text-[10px] text-muted-foreground">Também contam aqui</span>
             <PilhaDeFotos pessoas={equipe.apoio} max={4} tamanho="xs" />

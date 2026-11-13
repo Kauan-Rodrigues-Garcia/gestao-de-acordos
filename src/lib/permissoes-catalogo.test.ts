@@ -333,11 +333,22 @@ describe('padrões de semeadura', () => {
    * pessoa passa a poder algo que não podia antes. Se um `padrao` for editado
    * para conceder uma chave explícita, este teste denuncia.
    */
+  /*
+   * Chave explícita que NASCE ligada num cargo configurável, por decisão
+   * registrada. `ver_quadro_pessoal` (13/11/2026) não escreve nada — é a aba do
+   * RH, e o Cleber a quer ligada no RH de fábrica. O que continua proibido é o
+   * acesso total herdar qualquer chave explícita.
+   */
+  const NASCE_LIGADA_NO_CARGO: Readonly<Record<string, readonly string[]>> = {
+    ver_quadro_pessoal: ['rh'],
+  };
+
   it('nenhum cargo nasce podendo escrever em mês fechado', () => {
     for (const cargo of [...CARGOS_CONFIGURAVEIS, ...CARGOS_ACESSO_TOTAL]) {
       const mapa = permissoesPadraoDoCargo(cargo);
       for (const chave of PERMISSOES_EXPLICITAS) {
-        expect(mapa[chave], `${cargo} nasceu com ${chave} ligada`).toBe(false);
+        const esperado = (NASCE_LIGADA_NO_CARGO[chave] ?? []).includes(cargo);
+        expect(mapa[chave], `${cargo} nasceu com ${chave} ${esperado ? 'desligada' : 'ligada'}`).toBe(esperado);
       }
     }
   });
@@ -417,8 +428,12 @@ describe('catálogo por produto', () => {
     const comercial = new Set(catalogoDoTenant('comercial').map(p => p.key));
     const rh        = new Set(catalogoDoTenant('rh').map(p => p.key));
 
-    // Tudo que o RH tem, o Comercial também tem: o RH não tem chave própria.
+    // Tudo que o RH tem, o Comercial também tem — menos as chaves que são
+    // declaradamente do RH (desde 13/11/2026 o Quadro de Pessoal, que é dele e
+    // da cobrança, e não do Comercial).
     for (const k of rh) {
+      const doRh = produtosDaPermissao(PERMISSOES_POR_CHAVE[k]).includes('rh');
+      if (doRh) continue;
       expect(comercial.has(k), `${k} está no RH e sumiu do Comercial`).toBe(true);
     }
     // E o que o Comercial tem a mais é, chave por chave, declaradamente dele —

@@ -795,12 +795,13 @@ export default function App() {
                 </LayoutWrapper>
               } />
 
-              {/* Quadro de Pessoal — setores e equipes vistos pelo RH, só
-                  leitura. Mesma chave do RH Gestão; dentro, a tela exige o
-                  alcance «todos os setores», que é o do RH. */}
+              {/* Quadro de Pessoal — a visão do RH. Chave própria e EXPLÍCITA
+                  (`ver_quadro_pessoal`, 13/11/2026): nasce só no RH e no
+                  super_admin. Aqui passa o administrador (acesso total); a tela
+                  barra quem não tem a chave de verdade, e o banco também. */}
               <Route path={ROUTE_PATHS.RH_QUADRO} element={
                 <LayoutWrapper>
-                  <ProtectedRoute produtos={COBRANCA_E_RH} requiredPermissao="ver_rh_gestao">
+                  <ProtectedRoute produtos={COBRANCA_E_RH} requiredPermissao="ver_quadro_pessoal">
                     <RhQuadro />
                   </ProtectedRoute>
                 </LayoutWrapper>

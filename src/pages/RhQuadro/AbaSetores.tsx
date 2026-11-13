@@ -8,15 +8,16 @@
 import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
-  AlertTriangle, ArrowUpDown, ChevronRight, Crown, LayoutGrid, Rows3, Search, Sun, UsersRound,
+  AlertTriangle, ArrowUpDown, ChevronRight, Crown, HeartPulse, IdCard, LayoutGrid, Rows3, Search, Sun, UsersRound,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import type { Cidade, Numeros, Quadro, SetorQuadro } from '@/services/rh/quadroPessoal';
 import { GRUPOS_CARGO, normalizar } from '@/services/rh/quadroPessoal';
-import { BarraComposicao, PilhaDeFotos } from './partes';
+import { BarraComposicao, PilhaDeFotos, SeloAlternativo } from './partes';
 import { GRUPO_META, plural } from './formato';
 import { lerPreferencia, salvarPreferencia } from './preferencias';
+import { SeletorFiltro } from './SeletorFiltro';
 
 type Ordem = 'sistema' | 'pessoas' | 'nome';
 type Modo = 'cartoes' | 'tabela';
@@ -31,7 +32,7 @@ function somar(setores: readonly SetorQuadro[]): Numeros {
   const n: Numeros = {
     pessoas: 0,
     porGrupo: { operador: 0, lider: 0, elite: 0, gerencia: 0, diretoria: 0, outros: 0 },
-    equipes: 0, lideres: 0, semEquipe: 0, emFerias: 0, novatos: 0,
+    equipes: 0, lideres: 0, semEquipe: 0, emFerias: 0, afastados: 0, novatos: 0, semCracha: 0, clones: 0,
   };
   for (const s of setores) {
     n.pessoas += s.numeros.pessoas;
@@ -39,7 +40,10 @@ function somar(setores: readonly SetorQuadro[]): Numeros {
     n.lideres += s.numeros.lideres;
     n.semEquipe += s.numeros.semEquipe;
     n.emFerias += s.numeros.emFerias;
+    n.afastados += s.numeros.afastados;
     n.novatos += s.numeros.novatos;
+    n.semCracha += s.numeros.semCracha;
+    n.clones += s.numeros.clones;
     for (const g of Object.keys(n.porGrupo) as (keyof Numeros['porGrupo'])[]) n.porGrupo[g] += s.numeros.porGrupo[g];
   }
   return n;
@@ -105,17 +109,17 @@ export default function AbaSetores({
               className="h-8 w-44 pl-8 text-xs"
             />
           </div>
-          <label className="inline-flex h-8 items-center gap-1.5 rounded-md border border-input bg-background px-2 text-xs text-muted-foreground">
-            <ArrowUpDown className="size-3.5" />
-            <select
-              value={ordem}
-              onChange={e => setOrdem(e.target.value as Ordem)}
-              className="bg-transparent text-foreground outline-none"
-              aria-label="Ordenar setores"
-            >
-              {ORDENS.map(o => <option key={o.k} value={o.k}>{o.rotulo}</option>)}
-            </select>
-          </label>
+          <SeletorFiltro
+            valor={ordem}
+            onTrocar={v => setOrdem((v ?? 'sistema') as Ordem)}
+            Icone={ArrowUpDown}
+            rotulo="Ordenar setores"
+            rotuloTodos="Ordem do sistema"
+            semTodos
+            largura="w-56"
+            className="h-8 text-xs"
+            opcoes={ORDENS.map(o => ({ valor: o.k, rotulo: o.rotulo }))}
+          />
           <div className="inline-flex rounded-md border border-input p-0.5" role="group" aria-label="Modo de ver">
             <BotaoModo ativo={modo === 'cartoes'} onClick={() => setModo('cartoes')} rotulo="Cartões"><LayoutGrid className="size-3.5" /></BotaoModo>
             <BotaoModo ativo={modo === 'tabela'} onClick={() => setModo('tabela')} rotulo="Tabela"><Rows3 className="size-3.5" /></BotaoModo>
@@ -249,13 +253,29 @@ function CartaoSetor({
         {setor.nucleo && (
           <span className="shrink-0 rounded-md bg-secondary px-1.5 py-0.5 text-[10px] font-semibold text-secondary-foreground">Núcleo</span>
         )}
+        {setor.alternativo && <SeloAlternativo />}
       </div>
 
-      <p className="mt-4 leading-none">
-        <span className="text-4xl font-bold tabular-nums tracking-tight text-foreground">{n.pessoas}</span>
-        <span className="ml-1.5 text-sm font-medium text-foreground/80">{n.pessoas === 1 ? 'pessoa' : 'pessoas'}</span>
-      </p>
-      <BarraComposicao numeros={n} className="mt-3" alta />
+      {setor.alternativo ? (
+        <>
+          <p className="mt-4 leading-none">
+            <span className="text-4xl font-bold tabular-nums tracking-tight text-foreground">{n.clones}</span>
+            <span className="ml-1.5 text-sm font-medium text-foreground/80">{n.clones === 1 ? 'clone' : 'clones'}</span>
+            {n.pessoas > 0 && (
+              <span className="ml-2 text-sm text-foreground/70">+ {plural(n.pessoas, 'do cadastro', 'do cadastro')}</span>
+            )}
+          </p>
+          <p className="mt-2 rounded-lg bg-info/10 px-2.5 py-1.5 text-xs text-foreground/80">
+            Operadores de outros setores replicados aqui. O cadastro (e o dinheiro) de cada um fica no setor de origem.
+          </p>
+        </>
+      ) : (
+        <p className="mt-4 leading-none">
+          <span className="text-4xl font-bold tabular-nums tracking-tight text-foreground">{n.pessoas}</span>
+          <span className="ml-1.5 text-sm font-medium text-foreground/80">{n.pessoas === 1 ? 'pessoa' : 'pessoas'}</span>
+        </p>
+      )}
+      {n.pessoas > 0 && <BarraComposicao numeros={n} className="mt-3" alta />}
       {/* A barra em palavras: quanto de cada cargo, sem precisar passar o mouse. */}
       <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-foreground">
         {composicao.map(g => (
@@ -272,10 +292,24 @@ function CartaoSetor({
         <Dado Icone={Crown} valor={n.lideres} rotulo={n.lideres === 1 ? 'líder' : 'líderes'} />
         <Dado Icone={AlertTriangle} valor={n.semEquipe} rotulo="sem equipe" alerta={n.semEquipe > 0} />
       </div>
-      {n.emFerias > 0 && (
-        <p className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-foreground/80">
-          <Sun className="size-3.5 text-warning" /> {plural(n.emFerias, 'pessoa de férias', 'pessoas de férias')}
-        </p>
+      {(n.emFerias > 0 || n.afastados > 0 || n.semCracha > 0) && (
+        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs font-medium text-foreground/80">
+          {n.emFerias > 0 && (
+            <span className="inline-flex items-center gap-1.5">
+              <Sun className="size-3.5 text-warning" /> {plural(n.emFerias, 'de férias', 'de férias')}
+            </span>
+          )}
+          {n.afastados > 0 && (
+            <span className="inline-flex items-center gap-1.5">
+              <HeartPulse className="size-3.5 text-warning" /> {plural(n.afastados, 'afastado', 'afastados')}
+            </span>
+          )}
+          {n.semCracha > 0 && (
+            <span className="inline-flex items-center gap-1.5">
+              <IdCard className="size-3.5 text-muted-foreground" /> {plural(n.semCracha, 'sem crachá', 'sem crachá')}
+            </span>
+          )}
+        </div>
       )}
 
       <div className="min-h-4 flex-1" />

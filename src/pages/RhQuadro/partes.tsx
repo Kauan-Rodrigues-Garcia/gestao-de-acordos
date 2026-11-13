@@ -6,7 +6,7 @@
  * cargos: a tela é do RH e convive com qualquer tema que a pessoa escolher.
  */
 import type { ReactNode } from 'react';
-import { CalendarDays, Mail, MapPin, Sparkles, Sun } from 'lucide-react';
+import { CalendarDays, Copy, HeartPulse, IdCard, Mail, MapPin, Sparkles, Sun } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { GRUPOS_CARGO, iniciais, type Numeros, type Pessoa } from '@/services/rh/quadroPessoal';
@@ -127,6 +127,45 @@ export function SeloFerias({ pessoa, compacto }: { pessoa: Pessoa; compacto?: bo
   );
 }
 
+export function SeloAfastado({ pessoa }: { pessoa: Pessoa }) {
+  if (!pessoa.afastado) return null;
+  return (
+    <span
+      title="Afastado: fora de ranking e quartil enquanto durar"
+      className="inline-flex shrink-0 items-center gap-1 rounded-full bg-warning/15 px-1.5 py-px text-[10px] font-semibold text-warning ring-1 ring-warning/30"
+    >
+      <HeartPulse className="size-2.5" /> Afastado
+    </span>
+  );
+}
+
+/** Setor alternativo: a gente dele é clone de operador de outro setor. */
+export function SeloAlternativo({ grande }: { grande?: boolean }) {
+  return (
+    <span
+      title="Setor alternativo: replica operadores de outros setores (clones). O cadastro e o dinheiro de cada um ficam no setor de origem."
+      className={cn(
+        'inline-flex shrink-0 items-center gap-1 rounded-md bg-info/15 font-semibold text-info ring-1 ring-info/30',
+        grande ? 'px-2 py-0.5 text-xs' : 'px-1.5 py-0.5 text-[10px]',
+      )}
+    >
+      <Copy className={grande ? 'size-3.5' : 'size-3'} /> Alternativo
+    </span>
+  );
+}
+
+/** Marca de clone numa pessoa: «Clone · de Play 4». */
+export function SeloClone({ origem }: { origem: string | null }) {
+  return (
+    <span
+      title={origem ? `Clone: o cadastro é do setor ${origem}` : 'Clone de um operador sem setor no cadastro'}
+      className="inline-flex shrink-0 items-center gap-1 rounded-full bg-info/15 px-1.5 py-px text-[10px] font-semibold text-info ring-1 ring-info/30"
+    >
+      <Copy className="size-2.5" /> Clone{origem && <span className="font-normal">· de {origem}</span>}
+    </span>
+  );
+}
+
 export function SeloNovata({ pessoa }: { pessoa: Pessoa }) {
   if (!pessoa.novata) return null;
   return (
@@ -166,6 +205,7 @@ export function CartaoPessoa({
             <p className="mt-0.5 text-xs text-muted-foreground">{rotuloCargo(pessoa.cargo)}</p>
             <div className="mt-1.5 flex flex-wrap gap-1">
               <SeloFerias pessoa={pessoa} />
+              <SeloAfastado pessoa={pessoa} />
               <SeloNovata pessoa={pessoa} />
             </div>
           </div>
@@ -178,6 +218,12 @@ export function CartaoPessoa({
               {lugar.equipe && <span className="text-muted-foreground"> › </span>}
               {lugar.equipe}
               {lugar.subgrupo && <span className="text-muted-foreground"> › {lugar.subgrupo}</span>}
+            </dd>
+          </div>
+          <div className="flex items-start gap-2">
+            <IdCard className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+            <dd className={cn('tabular-nums', pessoa.cracha ? 'text-foreground' : 'italic text-muted-foreground')}>
+              {pessoa.cracha ? `Crachá ${pessoa.cracha}` : 'Sem crachá'}
             </dd>
           </div>
           {pessoa.email && (
