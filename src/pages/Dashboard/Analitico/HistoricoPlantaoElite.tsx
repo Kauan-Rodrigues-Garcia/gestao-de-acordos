@@ -722,7 +722,12 @@ function Pessoas({ h, m }: { h: HistoricoElite; m: MesHistorico }) {
   const lista = useMemo(() => pessoasDoMes(m, h.duplas), [m, h.duplas]);
   const maior = Math.max(1, ...lista.map(p => p.total));
   return (
-    <Bloco titulo={`Quem mais recebeu em ${nomeDoMes(m.mes)}`} subtitulo="Nos dias de plantão da própria dupla">
+    <Bloco
+      titulo={`Quem mais recebeu em ${nomeDoMes(m.mes)}`}
+      subtitulo={m.metas
+        ? 'No mês inteiro, o mesmo valor das metas individuais'
+        : 'Nos dias de plantão da própria dupla'}
+    >
       <ol className="space-y-3">
         {lista.map((p, i) => (
           <li key={p.id} className="flex items-center gap-3">
@@ -737,7 +742,9 @@ function Pessoas({ h, m }: { h: HistoricoElite; m: MesHistorico }) {
                 <div className="h-full rounded-full" style={{ width: `${(p.total / maior) * 100}%`, background: corDaDupla(p.dupla) }} />
               </div>
               <div className="mt-0.5 text-[11px] text-muted-foreground">
-                {p.dias} plantã{p.dias === 1 ? 'o' : 'os'} · média {moedaRedonda.format(p.media)}
+                {m.metas
+                  ? <>No plantão: {moedaRedonda.format(p.noPlantao)} em {p.dias} plantã{p.dias === 1 ? 'o' : 'os'}</>
+                  : <>{p.dias} plantã{p.dias === 1 ? 'o' : 'os'} · média {moedaRedonda.format(p.media)}</>}
               </div>
             </div>
           </li>

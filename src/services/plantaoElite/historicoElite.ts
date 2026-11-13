@@ -424,24 +424,45 @@ export function acumuladoPorDia(meses: MesHistorico[]): Array<{ dia: number } & 
   return linhas;
 }
 
-/** Cada pessoa no mês: total, plantões e média. Maior primeiro. */
-export function pessoasDoMes(m: MesHistorico, duplas: DuplaHistorico[]): (PessoaHistorico & { dupla: DuplaHistorico | null })[] {
-  const porId = new Map<string, PessoaHistorico & { dupla: DuplaHistorico | null }>();
+/** Uma linha de «Quem mais recebeu no mês». */
+export interface PessoaDoMesElite extends PessoaHistorico {
+  dupla: DuplaHistorico | null;
+  /** O que a pessoa trouxe nos próprios dias de plantão. */
+  noPlantao: number;
+}
+
+/**
+ * Cada pessoa no mês, maior primeiro. `total` é o MESMO «Fechou no mês» das
+ * metas individuais (mês inteiro + ajuste de operador, régua do Fechamento):
+ * os dois quadros não podem mostrar valores diferentes para a mesma pessoa
+ * (pedido de 13/11/2026). O dos dias de plantão fica em `noPlantao`.
+ *
+ * Sem o bloco `metas` (banco sem 20261111170500) cai no total do plantão.
+ * Com ele, quem não tem linha fica de fora: é o colega de dupla quando quem vê
+ * é da dupla — o banco só manda o fechado da própria pessoa.
+ */
+export function pessoasDoMes(m: MesHistorico, duplas: DuplaHistorico[]): PessoaDoMesElite[] {
+  const porId = new Map<string, PessoaDoMesElite>();
   for (const d of m.dias) {
     if (!d) continue;
     for (const p of d.porMembro) {
       let x = porId.get(p.id);
       if (!x) {
-        x = { id: p.id, nome: p.nome, total: 0, dias: 0, media: 0, dupla: duplas.find(du => du.chave === d.dupla) ?? null };
+        x = { id: p.id, nome: p.nome, total: 0, dias: 0, media: 0, noPlantao: 0, dupla: duplas.find(du => du.chave === d.dupla) ?? null };
         porId.set(p.id, x);
       }
-      x.total = centavos(x.total + p.valor);
+      x.noPlantao = centavos(x.noPlantao + p.valor);
       if (d.comMovimento) x.dias += 1;
     }
   }
+  const fechado = m.metas ? new Map(m.metas.map(x => [x.id, x.fechado])) : null;
   return [...porId.values()]
-    .map(x => ({ ...x, media: x.dias > 0 ? centavos(x.total / x.dias) : 0 }))
-    .sort((a, b) => b.total - a.total);
+    .filter(x => !fechado || fechado.has(x.id))
+    .map(x => {
+      const total = fechado ? fechado.get(x.id)! : x.noPlantao;
+      return { ...x, total, media: x.dias > 0 ? centavos(x.noPlantao / x.dias) : 0 };
+    })
+    .sort((a, b) => b.total - a.total || b.noPlantao - a.noPlantao);
 }
 
 /**

@@ -135,6 +135,34 @@ describe('para os gráficos', () => {
       [MATHEUS, 60, 'Matheus & Gabriel'], [TIAGO, 10, 'Tiago & Agatha'], [AGATHA, 10, 'Tiago & Agatha'], [GABRIEL, 0, 'Matheus & Gabriel'],
     ]);
   });
+
+  it('com as metas, o total é o fechado do mês inteiro (o mesmo das metas individuais)', () => {
+    const r = resposta([
+      dia('2026-11-01', TA, [10, 10], 200),
+      dia('2026-11-02', MG, [60, 0], 300),
+    ]);
+    r.metas = [
+      { mes: '2026-11', id: TIAGO, meta: 1000, extras: [], fechado: 50 },
+      { mes: '2026-11', id: AGATHA, meta: 1000, extras: [], fechado: 15 },
+      { mes: '2026-11', id: MATHEUS, meta: 1000, extras: [], fechado: 90 },
+      { mes: '2026-11', id: GABRIEL, meta: 1000, extras: [], fechado: 120 },
+    ];
+    const nov = montarHistoricoElite(r).meses[0];
+    const p = pessoasDoMes(nov, montarHistoricoElite(r).duplas);
+    expect(p.map(x => [x.id, x.total, x.noPlantao])).toEqual([
+      [GABRIEL, 120, 0], [MATHEUS, 90, 60], [TIAGO, 50, 10], [AGATHA, 15, 10],
+    ]);
+    // Cada um com o mesmo valor do cartão da meta.
+    for (const x of p) expect(x.total).toBe(nov.metas!.find(mm => mm.id === x.id)!.fechado);
+  });
+
+  it('com as metas, quem não tem fechado (colega de quem é da dupla) fica de fora', () => {
+    const r = resposta([dia('2026-11-02', MG, [60, 40], 300)]);
+    r.sou_da_dupla = true;
+    r.metas = [{ mes: '2026-11', id: GABRIEL, meta: 1000, extras: [], fechado: 500 }];
+    const h2 = montarHistoricoElite(r);
+    expect(pessoasDoMes(h2.meses[0], h2.duplas).map(x => [x.id, x.total])).toEqual([[GABRIEL, 500]]);
+  });
 });
 
 describe('comparativo de quem é de dupla', () => {

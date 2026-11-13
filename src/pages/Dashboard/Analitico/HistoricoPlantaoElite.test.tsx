@@ -143,6 +143,21 @@ describe('Plantão Elite › Histórico › metas individuais e fotos (202611111
     expect(within(bloco).getByLabelText('Meta de Matheus Souza').textContent).toContain('Sem meta no mês');
   });
 
+  it('«Quem mais recebeu» mostra o mesmo valor do «Fechou no mês» de cada um', () => {
+    desenhar(comMetas);
+    fireEvent.click(screen.getByRole('tab', { name: /Outubro de 2026/ }));
+    const ranking = screen.getByText('Quem mais recebeu em outubro').closest('section')!;
+    expect(within(ranking).getByText('No mês inteiro, o mesmo valor das metas individuais')).toBeInTheDocument();
+    const linhas = within(ranking).getAllByRole('listitem').map(li => li.textContent ?? '');
+    // Tiago fechou 1.200 (no plantão 1.000); Agatha 500; Matheus 300; Gabriel 200.
+    expect(linhas[0]).toContain('Tiago Almada');
+    expect(linhas[0]).toMatch(/R\$\s1\.200/);
+    expect(linhas[0]).toMatch(/No plantão: R\$\s1\.000 em 1 plantão/);
+    expect(linhas.map(l => l.match(/^\dº/)?.[0])).toEqual(['1º', '2º', '3º', '4º']);
+    expect(linhas[3]).toContain('Gabriel Oliveira');
+    expect(linhas[3]).toMatch(/R\$\s200/);
+  });
+
   it('sem `metas` no banco o painel não aparece', () => {
     desenhar(historico);
     expect(screen.queryByText(/Metas individuais de/)).toBeNull();
