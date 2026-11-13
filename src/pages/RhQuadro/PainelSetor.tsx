@@ -3,16 +3,20 @@
  *
  * Substituiu a gaveta lateral em 20/10/2026: «abre de lado, é ruim e não
  * informativo». A gaveta escurecia o quadro atrás e espremia tudo numa coluna
- * de 36rem. Aqui o setor ganha a tela: números grandes, a composição por cargo
- * em barras com quantidade e porcentagem, as equipes comparadas pelo tamanho e
- * a tabela inteira das pessoas, que se filtra clicando numa equipe ou cargo.
+ * de 36rem. Aqui o setor ganha a tela.
+ *
+ * Refeito em 13/11/2026 («muito simples, faz algo mais dinâmico»): um cabeçalho
+ * com a composição em rosca, a estrutura (equipes, liderança) e os pontos de
+ * atenção (sem equipe, sem crachá, afastados, férias, clones, novos) — cada um
+ * filtra a tabela —, as equipes em cartões com líder e fotos, e a tabela
+ * inteira das pessoas embaixo.
  *
  * Só leitura, como o resto do Quadro.
  */
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import {
-  AlertTriangle, ArrowLeft, ArrowUpDown, Copy, Crown, Download, GraduationCap, HeartPulse, IdCard, Network, Search,
-  Sparkles, Sun, Users, UsersRound, X,
+  AlertTriangle, ArrowLeft, ArrowUpDown, CheckCircle2, Copy, Crown, Download, GraduationCap, HeartPulse, IdCard, Network, Search,
+  Sparkles, Sun, UsersRound, X, type LucideIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -129,6 +133,27 @@ export default function PainelSetor({
   const ordenar = (c: Coluna) => {
     if (coluna === c) setDesc(d => !d); else { setColuna(c); setDesc(c === 'desde'); }
   };
+  /** «BOOKPLAY · BIRIGUI · BOOKPLAY»: a marca costuma ser a empresa — sem repetir, sem olhar caixa. */
+  const trilha = [...new Map([setor.empresa, setor.cidade.nome, setor.cidade.marca]
+    .filter((t): t is string => !!t).map(t => [normalizar(t), t])).values()];
+
+  /** O que pede ação, em ordem de urgência. Só aparece o que tem alguém. */
+  const base = Math.max(1, n.pessoas + (setor.alternativo ? n.clones : 0));
+  const atencao = ([
+    { chave: 'semEquipe', Icone: AlertTriangle, rotulo: 'Sem equipe', valor: ehBalde ? 0 : n.semEquipe, cor: 'var(--warning)', base,
+      ativo: equipe === SEM, onClick: () => filtrar({ equipe: equipe === SEM ? null : SEM, grupo: null, recorte: null }) },
+    { chave: 'semCracha', Icone: IdCard, rotulo: 'Sem crachá', valor: n.semCracha, cor: 'var(--chart-5)', base,
+      ativo: recorte === 'semCracha', onClick: () => filtrar({ recorte: recorte === 'semCracha' ? null : 'semCracha', equipe: null, grupo: null }) },
+    { chave: 'afastados', Icone: HeartPulse, rotulo: 'Afastados', valor: n.afastados, cor: 'var(--chart-3)', base,
+      ativo: recorte === 'afastados', onClick: () => filtrar({ recorte: recorte === 'afastados' ? null : 'afastados', equipe: null, grupo: null }) },
+    { chave: 'ferias', Icone: Sun, rotulo: 'De férias', valor: n.emFerias, cor: 'var(--warning)', base,
+      ativo: recorte === 'ferias', onClick: () => filtrar({ recorte: recorte === 'ferias' ? null : 'ferias', equipe: null, grupo: null }) },
+    { chave: 'clones', Icone: Copy, rotulo: 'Clones de outros setores', valor: setor.alternativo ? n.clones : 0, cor: 'var(--info)', base,
+      ativo: recorte === 'clones', onClick: () => filtrar({ recorte: recorte === 'clones' ? null : 'clones', equipe: null, grupo: null }) },
+    { chave: 'novos', Icone: Sparkles, rotulo: 'Novos (30 dias)', valor: n.novatos, cor: 'var(--chart-2)', base,
+      ativo: false, onClick: () => filtrar({ equipe: null, grupo: null, recorte: null }) },
+  ]).filter(a => a.valor > 0);
+
   const nomeDaEquipe = equipe === SEM ? 'Sem equipe' : setor.equipes.find(e => e.id === equipe)?.nome;
 
   return (
@@ -142,191 +167,259 @@ export default function PainelSetor({
         <ArrowLeft className="size-4" /> Todos os setores
       </button>
 
-      {/* Cabeçalho do setor */}
-      <section className="rounded-2xl border border-border bg-card p-5 shadow-sm md:p-6">
-        <div className="flex flex-wrap items-start gap-4">
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              {/* A marca costuma ser o próprio nome da empresa: não repete. */}
-              {[...new Set([setor.empresa, setor.cidade.nome, setor.cidade.marca].filter(Boolean))].join(' · ')}
-            </p>
-            <h2 className="mt-1 text-3xl font-bold tracking-tight text-foreground">{setor.nome}</h2>
-            {(setor.descricao || ehBalde) && (
-              <p className="mt-1 text-sm text-foreground/80">
-                {ehBalde ? 'Pessoas sem setor no cadastro, ou num setor que foi desativado.' : setor.descricao}
-              </p>
+      {/* ── Cabeçalho: quem é o setor, o tamanho, a composição e o que pede atenção ── */}
+      <section className="relative overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background: `radial-gradient(60rem 18rem at 0% 0%, color-mix(in oklch, ${setor.alternativo ? 'var(--info)' : 'var(--primary)'} 12%, transparent), transparent 70%)`,
+          }}
+        />
+        <div className="relative p-5 md:p-7">
+          <div className="flex flex-wrap items-start gap-4">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-1.5">
+                {trilha.map(t => (
+                  <span key={t} className="rounded-full border border-border bg-background/70 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground backdrop-blur">
+                    {t}
+                  </span>
+                ))}
+              </div>
+              <h2 className="mt-2 text-4xl font-bold tracking-tight text-foreground md:text-5xl">{setor.nome}</h2>
+              {(setor.descricao || ehBalde) && (
+                <p className="mt-1.5 max-w-2xl text-sm text-foreground/75">
+                  {ehBalde ? 'Pessoas sem setor no cadastro, ou num setor que foi desativado.' : setor.descricao}
+                </p>
+              )}
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {setor.alternativo && <SeloAlternativo grande />}
+                {setor.regra && <Etiqueta>Regra {setor.regra}</Etiqueta>}
+                {setor.nucleo && <Etiqueta>Núcleo</Etiqueta>}
+              </div>
+            </div>
+            {!ehBalde && (
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" className="gap-1.5 bg-background/80" onClick={() => onVerOrganograma(setor.id)}>
+                  <Network className="size-4" /> Ver organograma
+                </Button>
+                <Button className="gap-1.5" onClick={() => onExportar(setor)}>
+                  <Download className="size-4" /> Exportar este setor
+                </Button>
+              </div>
             )}
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              {setor.alternativo && <SeloAlternativo grande />}
-              {setor.regra && <Etiqueta>Regra {setor.regra}</Etiqueta>}
-              {setor.nucleo && <Etiqueta>Núcleo</Etiqueta>}
-              {lideresDoSetor.length > 0 && (
-                <span className="inline-flex items-center gap-2 text-sm text-foreground">
-                  <PilhaDeFotos pessoas={lideresDoSetor} max={6} />
-                  <span>{plural(lideresDoSetor.length, 'líder', 'líderes')}</span>
-                </span>
+          </div>
+
+          {setor.alternativo && (
+            <div className="mt-5 flex gap-3 rounded-2xl border border-info/30 bg-info/5 p-3.5 text-sm">
+              <Copy className="mt-0.5 size-4 shrink-0 text-info" />
+              <p className="text-foreground/85">
+                <strong className="font-semibold text-foreground">Setor alternativo.</strong>{' '}
+                As pessoas das equipes daqui são, na maioria, <strong className="font-semibold text-foreground">clones</strong> de
+                operadores de outros setores: o cadastro, o crachá e o dinheiro de cada um ficam no setor de origem, que aparece
+                ao lado do nome. {plural(setor.clones.length, 'clone', 'clones')}
+                {n.pessoas > 0 && <> e {plural(n.pessoas, 'pessoa', 'pessoas')} com cadastro aqui</>}.
+              </p>
+            </div>
+          )}
+
+          <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)]">
+            {/* Tamanho e composição */}
+            <div className="flex items-center gap-5 rounded-2xl border border-border bg-background/70 p-4 backdrop-blur">
+              <Rosca
+                fatias={GRUPOS_CARGO.filter(g => n.porGrupo[g] > 0).map(g => ({ chave: g, valor: n.porGrupo[g], cor: COR_GRUPO[g] }))}
+                ativa={grupo}
+                onFatia={g => filtrar({ grupo: grupo === g ? null : g as GrupoCargo })}
+              >
+                <span className="text-3xl font-bold leading-none tabular-nums text-foreground">{setor.alternativo ? n.clones + n.pessoas : n.pessoas}</span>
+                <span className="mt-0.5 text-[11px] font-medium text-muted-foreground">{setor.alternativo ? 'com clones' : 'pessoas'}</span>
+              </Rosca>
+              <ul className="min-w-0 flex-1 space-y-1">
+                {GRUPOS_CARGO.filter(g => n.porGrupo[g] > 0).map(g => {
+                  const ativo = grupo === g;
+                  const pct = n.pessoas ? Math.round((n.porGrupo[g] / n.pessoas) * 100) : 0;
+                  return (
+                    <li key={g}>
+                      <button
+                        type="button"
+                        onClick={() => filtrar({ grupo: ativo ? null : g })}
+                        aria-pressed={ativo}
+                        className={cn('flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left text-sm transition hover:bg-muted', ativo && 'bg-primary/10 ring-1 ring-primary/30')}
+                      >
+                        <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: COR_GRUPO[g] }} />
+                        <span className="min-w-0 flex-1 truncate text-foreground">{GRUPO_META[g].rotulo}</span>
+                        <strong className="tabular-nums text-foreground">{n.porGrupo[g]}</strong>
+                        <span className="w-9 text-right text-xs tabular-nums text-muted-foreground">{pct}%</span>
+                      </button>
+                    </li>
+                  );
+                })}
+                {n.pessoas === 0 && <li className="px-2 text-sm text-muted-foreground">Ninguém com cadastro aqui.</li>}
+              </ul>
+            </div>
+
+            {/* Estrutura */}
+            <div className="grid grid-cols-2 gap-3">
+              <Destaque Icone={UsersRound} valor={n.equipes} rotulo={n.equipes === 1 ? 'equipe' : 'equipes'} />
+              <Destaque Icone={Crown} valor={lideresDoSetor.length} rotulo={lideresDoSetor.length === 1 ? 'líder' : 'líderes'} />
+              <div className="col-span-2 flex items-center gap-3 rounded-2xl border border-border bg-background/70 p-3.5 backdrop-blur">
+                {lideresDoSetor.length > 0 ? (
+                  <>
+                    <PilhaDeFotos pessoas={lideresDoSetor} max={5} />
+                    <p className="min-w-0 flex-1 text-xs text-foreground/80">
+                      <span className="block text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Liderança</span>
+                      <span className="line-clamp-2">{lideresDoSetor.map(l => l.nome.split(' ')[0]).join(', ')}</span>
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-xs italic text-muted-foreground">Sem líder registrado.</p>
+                )}
+              </div>
+            </div>
+
+            {/* O que pede atenção */}
+            <div className="rounded-2xl border border-border bg-background/70 p-4 backdrop-blur">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Pontos de atenção</p>
+              {atencao.length === 0 ? (
+                <p className="mt-3 flex items-center gap-2 text-sm font-medium text-success">
+                  <CheckCircle2 className="size-4" /> Tudo em ordem neste setor.
+                </p>
+              ) : (
+                <ul className="mt-2 space-y-1">
+                  {atencao.map(a => (
+                    <li key={a.chave}>
+                      <button
+                        type="button"
+                        onClick={a.onClick}
+                        className={cn('group flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition hover:bg-muted', a.ativo && 'bg-primary/10 ring-1 ring-primary/30')}
+                      >
+                        <span className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg" style={tingir(a.cor)}>
+                          <a.Icone className="size-3.5" />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-baseline justify-between gap-2 text-sm">
+                            <span className="truncate text-foreground">{a.rotulo}</span>
+                            <strong className="tabular-nums text-foreground">{a.valor}</strong>
+                          </span>
+                          <span className="mt-1 block h-1 overflow-hidden rounded-full bg-muted">
+                            <span className="block h-full rounded-full" style={{ width: `${Math.min(100, (a.valor / Math.max(1, a.base)) * 100)}%`, backgroundColor: a.cor }} />
+                          </span>
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
               )}
             </div>
           </div>
-          {!ehBalde && (
-            <div className="flex flex-wrap gap-2">
-              <Button variant="outline" className="gap-1.5" onClick={() => onVerOrganograma(setor.id)}>
-                <Network className="size-4" /> Ver organograma
-              </Button>
-              <Button variant="outline" className="gap-1.5" onClick={() => onExportar(setor)}>
-                <Download className="size-4" /> Exportar este setor
-              </Button>
-            </div>
-          )}
-        </div>
-
-        {setor.alternativo && (
-          <div className="mt-4 flex gap-3 rounded-xl border border-info/30 bg-info/5 p-3.5 text-sm">
-            <Copy className="mt-0.5 size-4 shrink-0 text-info" />
-            <p className="text-foreground/85">
-              <strong className="font-semibold text-foreground">Setor alternativo.</strong>{' '}
-              As pessoas das equipes daqui são, na maioria, <strong className="font-semibold text-foreground">clones</strong> de
-              operadores de outros setores: o cadastro, o crachá e o dinheiro de cada um ficam no setor de origem, que aparece
-              ao lado do nome. {plural(setor.clones.length, 'clone', 'clones')}
-              {n.pessoas > 0 && <> e {plural(n.pessoas, 'pessoa', 'pessoas')} com cadastro aqui</>}.
-            </p>
-          </div>
-        )}
-
-        <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8">
-          {setor.alternativo && (
-            <Numero
-              Icone={Copy} valor={n.clones} rotulo="Clones de outros setores" destaque
-              onClick={n.clones > 0 ? () => filtrar({ recorte: 'clones', equipe: null, grupo: null }) : undefined}
-            />
-          )}
-          <Numero Icone={Users} valor={n.pessoas} rotulo={setor.alternativo ? 'Cadastro aqui' : 'Pessoas'} destaque={!setor.alternativo} />
-          <Numero Icone={UsersRound} valor={n.equipes} rotulo="Equipes" />
-          <Numero Icone={Crown} valor={n.lideres} rotulo="Líderes" />
-          <Numero
-            Icone={AlertTriangle} valor={n.semEquipe} rotulo="Sem equipe"
-            tom={n.semEquipe > 0 && !ehBalde ? 'warning' : undefined}
-            onClick={n.semEquipe > 0 && !ehBalde ? () => filtrar({ equipe: SEM, grupo: null }) : undefined}
-          />
-          <Numero
-            Icone={Sun} valor={n.emFerias} rotulo="De férias"
-            onClick={n.emFerias > 0 ? () => filtrar({ recorte: 'ferias', equipe: null, grupo: null }) : undefined}
-          />
-          <Numero
-            Icone={HeartPulse} valor={n.afastados} rotulo="Afastados"
-            onClick={n.afastados > 0 ? () => filtrar({ recorte: 'afastados', equipe: null, grupo: null }) : undefined}
-          />
-          <Numero
-            Icone={IdCard} valor={n.semCracha} rotulo="Sem crachá" tom={n.semCracha > 0 && !ehBalde ? 'warning' : undefined}
-            onClick={n.semCracha > 0 ? () => filtrar({ recorte: 'semCracha', equipe: null, grupo: null }) : undefined}
-          />
-          <Numero Icone={Sparkles} valor={n.novatos} rotulo="Novos (30 dias)" tom={n.novatos > 0 ? 'success' : undefined} />
         </div>
       </section>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-        {/* Composição */}
-        <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-          <h3 className="text-base font-semibold text-foreground">Quem forma o setor</h3>
-          <p className="text-sm text-muted-foreground">Pessoas por cargo. Clique para ver só elas na tabela.</p>
-          <ul className="mt-4 space-y-3">
-            {GRUPOS_CARGO.filter(g => n.porGrupo[g] > 0).map(g => {
-              const qtd = n.porGrupo[g];
-              const pct = n.pessoas ? Math.round((qtd / n.pessoas) * 100) : 0;
-              const ativo = grupo === g;
-              return (
-                <li key={g}>
-                  <button
-                    type="button"
-                    onClick={() => filtrar({ grupo: ativo ? null : g })}
-                    aria-pressed={ativo}
-                    className={cn('w-full rounded-lg p-2 text-left transition hover:bg-muted', ativo && 'bg-primary/10 ring-1 ring-primary/40')}
-                  >
-                    <div className="flex items-baseline justify-between gap-2 text-sm">
-                      <span className="inline-flex items-center gap-2 font-medium text-foreground">
-                        <span className={cn('size-2.5 rounded-full', GRUPO_META[g].cor)} />{GRUPO_META[g].rotulo}
-                      </span>
-                      <span className="tabular-nums text-foreground">
-                        <strong className="font-semibold">{qtd}</strong>
-                        <span className="ml-1.5 text-muted-foreground">{pct}%</span>
-                      </span>
+      {/* ── Equipes em cartões ── */}
+      <section className="space-y-3">
+        <header className="flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <h3 className="text-lg font-semibold tracking-tight text-foreground">Equipes</h3>
+            <p className="text-sm text-muted-foreground">
+              {setor.equipes.length
+                ? 'Da maior para a menor. Clique numa equipe para ver quem está nela.'
+                : 'Este setor não tem equipe cadastrada.'}
+            </p>
+          </div>
+          {equipe && <Filtro onTirar={() => setEquipe(null)}>{nomeDaEquipe}</Filtro>}
+        </header>
+        <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(min(100%,16rem),1fr))]">
+          {[...setor.equipes].sort((a, b) => tamanho(b) - tamanho(a)).map(e => {
+            const ativo = equipe === e.id;
+            const gente = setor.alternativo ? [...e.membros, ...e.apoio] : e.membros;
+            const lider = e.lideres[0];
+            return (
+              <button
+                key={e.id}
+                type="button"
+                onClick={() => filtrar({ equipe: ativo ? null : e.id })}
+                aria-pressed={ativo}
+                className={cn(
+                  'group flex flex-col rounded-2xl border bg-card p-4 text-left shadow-sm transition',
+                  ativo ? 'border-primary ring-2 ring-primary/25' : 'border-border hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md',
+                )}
+              >
+                <div className="flex items-start gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-base font-semibold text-foreground" title={e.nome}>{e.nome}</p>
+                    <div className="mt-0.5 flex flex-wrap gap-1">
+                      {e.treinamento && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-1.5 text-[10px] font-semibold text-warning">
+                          <GraduationCap className="size-3" /> Treinamento
+                        </span>
+                      )}
+                      {setor.alternativo && e.apoio.length > 0 && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-info/15 px-1.5 text-[10px] font-semibold text-info">
+                          <Copy className="size-3" /> {plural(e.apoio.length, 'clone', 'clones')}
+                        </span>
+                      )}
                     </div>
-                    <div className="mt-1.5 h-2.5 overflow-hidden rounded-full bg-muted">
-                      <div className={cn('h-full rounded-full transition-[width] duration-500', GRUPO_META[g].cor)} style={{ width: `${pct}%` }} />
-                    </div>
-                  </button>
-                </li>
-              );
-            })}
-            {n.pessoas === 0 && <li className="text-sm text-muted-foreground">Ninguém neste setor hoje.</li>}
-          </ul>
-        </section>
-
-        {/* Equipes */}
-        <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-          <h3 className="text-base font-semibold text-foreground">Equipes</h3>
-          <p className="text-sm text-muted-foreground">
-            {setor.equipes.length
-              ? 'Do maior para o menor time. Clique numa equipe para ver quem está nela.'
-              : 'Este setor não tem equipe cadastrada.'}
-          </p>
-          <ul className="mt-4 space-y-1.5">
-            {[...setor.equipes].sort((a, b) => tamanho(b) - tamanho(a)).map(e => {
-              const ativo = equipe === e.id;
-              return (
-                <li key={e.id}>
-                  <button
-                    type="button"
-                    onClick={() => filtrar({ equipe: ativo ? null : e.id })}
-                    aria-pressed={ativo}
-                    className={cn('grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 rounded-lg p-2.5 text-left transition hover:bg-muted', ativo && 'bg-primary/10 ring-1 ring-primary/40')}
-                  >
-                    <span className="min-w-0">
-                      <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                        <span className="truncate">{e.nome}</span>
-                        {e.treinamento && (
-                          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-warning/15 px-1.5 text-[11px] font-semibold text-warning">
-                            <GraduationCap className="size-3" /> Treinamento
-                          </span>
-                        )}
+                  </div>
+                  <span className="text-3xl font-bold leading-none tabular-nums text-foreground">{tamanho(e)}</span>
+                </div>
+                <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full transition-[width] duration-500"
+                    style={{ width: `${(tamanho(e) / maiorEquipe) * 100}%`, backgroundColor: setor.alternativo ? 'var(--info)' : 'var(--primary)' }}
+                  />
+                </div>
+                <div className="mt-3 flex items-center gap-2.5">
+                  {lider ? (
+                    <>
+                      <Foto pessoa={lider} tamanho="sm" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          {e.lideres.length > 1 ? `Líderes (${e.lideres.length})` : 'Líder'}
+                        </span>
+                        <span className="block truncate text-xs font-medium text-foreground">{e.lideres.map(l => l.nome).join(', ')}</span>
                       </span>
-                      <span className="mt-0.5 block truncate text-xs text-foreground/75">
-                        {e.lideres.length ? <>Líder: {e.lideres.map(l => l.nome).join(', ')}</> : 'Sem líder registrado'}
-                        {e.subgrupos.length > 0 && ` · ${e.subgrupos.map(sg => `${sg.nome} (${sg.membros.length})`).join(', ')}`}
-                        {setor.alternativo && e.apoio.length > 0 && (
-                          <span className="text-info"> · {plural(e.apoio.length, 'clone', 'clones')}</span>
-                        )}
+                    </>
+                  ) : (
+                    <span className="flex-1 text-xs italic text-muted-foreground">Sem líder registrado</span>
+                  )}
+                </div>
+                {gente.length > 0 && (
+                  <div className="mt-3 flex items-center justify-between gap-2 border-t border-border pt-3">
+                    <PilhaDeFotos pessoas={gente} max={6} tamanho="xs" />
+                    {e.subgrupos.length > 0 && (
+                      <span className="truncate text-[11px] text-muted-foreground" title={e.subgrupos.map(sg => sg.nome).join(', ')}>
+                        {plural(e.subgrupos.length, 'subgrupo', 'subgrupos')}
                       </span>
-                    </span>
-                    <span className="text-right text-lg font-bold tabular-nums text-foreground">{tamanho(e)}</span>
-                    <span className="col-span-2 h-2 overflow-hidden rounded-full bg-muted">
-                      <span className={cn('block h-full rounded-full', setor.alternativo ? 'bg-info/80' : 'bg-primary/80')} style={{ width: `${(tamanho(e) / maiorEquipe) * 100}%` }} />
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-            {setor.semEquipe.length > 0 && (
-              <li>
-                <button
-                  type="button"
-                  onClick={() => filtrar({ equipe: equipe === SEM ? null : SEM })}
-                  aria-pressed={equipe === SEM}
-                  className={cn('grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 rounded-lg border border-dashed border-warning/50 p-2.5 text-left transition hover:bg-warning/10', equipe === SEM && 'bg-warning/10')}
-                >
-                  <span className="inline-flex items-center gap-2 text-sm font-semibold text-warning">
-                    <AlertTriangle className="size-4" /> {ehBalde ? 'Sem setor' : 'Sem equipe'}
-                  </span>
-                  <span className="text-right text-lg font-bold tabular-nums text-foreground">{setor.semEquipe.length}</span>
-                  <span className="col-span-2 h-2 overflow-hidden rounded-full bg-muted">
-                    <span className="block h-full rounded-full bg-warning" style={{ width: `${(setor.semEquipe.length / maiorEquipe) * 100}%` }} />
-                  </span>
-                </button>
-              </li>
-            )}
-          </ul>
-        </section>
-      </div>
+                    )}
+                  </div>
+                )}
+              </button>
+            );
+          })}
+          {setor.semEquipe.length > 0 && (
+            <button
+              type="button"
+              onClick={() => filtrar({ equipe: equipe === SEM ? null : SEM })}
+              aria-pressed={equipe === SEM}
+              className={cn(
+                'flex flex-col rounded-2xl border border-dashed border-warning/60 bg-warning/5 p-4 text-left transition hover:bg-warning/10',
+                equipe === SEM && 'ring-2 ring-warning/30',
+              )}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <p className="inline-flex items-center gap-1.5 text-base font-semibold text-warning">
+                  <AlertTriangle className="size-4" /> {ehBalde ? 'Sem setor' : 'Sem equipe'}
+                </p>
+                <span className="text-3xl font-bold leading-none tabular-nums text-foreground">{setor.semEquipe.length}</span>
+              </div>
+              <p className="mt-2 text-xs text-foreground/75">
+                {ehBalde ? 'Sem setor no cadastro.' : 'Pessoas do setor sem equipe no cadastro. Vale conferir com a liderança.'}
+              </p>
+              <div className="mt-auto pt-3"><PilhaDeFotos pessoas={setor.semEquipe} max={6} tamanho="xs" /></div>
+            </button>
+          )}
+        </div>
+      </section>
 
       {/* Pessoas */}
       <section ref={tabela} className="scroll-mt-4 rounded-2xl border border-border bg-card shadow-sm">
@@ -409,28 +502,71 @@ function Etiqueta({ children }: { children: React.ReactNode }) {
   return <span className="rounded-md bg-secondary px-2 py-0.5 text-xs font-semibold text-secondary-foreground">{children}</span>;
 }
 
-function Numero({
-  Icone, valor, rotulo, tom, destaque, onClick,
+/** Cor de cada grupo de cargo na rosca: variável de tema crua (oklch), nunca em hsl(). */
+const COR_GRUPO: Record<GrupoCargo, string> = {
+  operador: 'var(--primary)',
+  lider: 'var(--info)',
+  elite: 'var(--success)',
+  gerencia: 'var(--warning)',
+  diretoria: 'color-mix(in oklch, var(--foreground) 60%, transparent)',
+  outros: 'color-mix(in oklch, var(--muted-foreground) 45%, transparent)',
+};
+
+const tingir = (cor: string): CSSProperties => ({
+  backgroundColor: `color-mix(in oklch, ${cor} 15%, transparent)`,
+  color: cor,
+});
+
+/** A composição em rosca: cada fatia é um grupo de cargo, e clicar filtra a tabela. */
+function Rosca({
+  fatias, ativa, onFatia, children,
 }: {
-  Icone: typeof Users; valor: number; rotulo: string;
-  tom?: 'warning' | 'success'; destaque?: boolean; onClick?: () => void;
+  fatias: { chave: string; valor: number; cor: string }[];
+  ativa: string | null;
+  onFatia: (chave: string) => void;
+  children: ReactNode;
 }) {
-  const Tag = onClick ? 'button' : 'div';
+  const total = fatias.reduce((s, f) => s + f.valor, 0);
+  const R = 52;
+  const C = 2 * Math.PI * R;
+  let corrido = 0;
   return (
-    <Tag
-      {...(onClick ? { type: 'button' as const, onClick } : {})}
-      className={cn(
-        'rounded-xl border bg-background p-3 text-left',
-        destaque ? 'border-primary/40' : 'border-border',
-        tom === 'warning' && 'border-warning/50 bg-warning/5',
-        tom === 'success' && 'border-success/40',
-        onClick && 'transition hover:border-primary/50 hover:bg-primary/5',
-      )}
-    >
-      <Icone className={cn('size-4', destaque ? 'text-primary' : tom === 'warning' ? 'text-warning' : tom === 'success' ? 'text-success' : 'text-foreground/60')} />
-      <p className="mt-2 text-3xl font-bold leading-none tabular-nums tracking-tight text-foreground">{valor}</p>
+    <div className="relative size-36 shrink-0">
+      <svg viewBox="0 0 128 128" className="size-full -rotate-90" role="img" aria-label="Composição por cargo">
+        <circle cx="64" cy="64" r={R} fill="none" strokeWidth="14" style={{ stroke: 'var(--muted)' }} />
+        {total > 0 && fatias.map(f => {
+          const tam = (f.valor / total) * C;
+          const el = (
+            <circle
+              key={f.chave}
+              cx="64" cy="64" r={R} fill="none"
+              strokeWidth={ativa === f.chave ? 18 : 14}
+              strokeDasharray={`${Math.max(0, tam - (fatias.length > 1 ? 2 : 0))} ${C}`}
+              strokeDashoffset={-corrido}
+              style={{ stroke: f.cor, opacity: ativa && ativa !== f.chave ? 0.35 : 1, cursor: 'pointer', transition: 'all .3s' }}
+              onClick={() => onFatia(f.chave)}
+            >
+              <title>{String(f.valor)}</title>
+            </circle>
+          );
+          corrido += tam;
+          return el;
+        })}
+      </svg>
+      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">{children}</div>
+    </div>
+  );
+}
+
+function Destaque({ Icone, valor, rotulo }: { Icone: LucideIcon; valor: number; rotulo: string }) {
+  return (
+    <div className="rounded-2xl border border-border bg-background/70 p-3.5 backdrop-blur">
+      <span className="inline-flex size-8 items-center justify-center rounded-xl bg-primary/10 text-primary">
+        <Icone className="size-4" />
+      </span>
+      <p className="mt-2.5 text-3xl font-bold leading-none tabular-nums tracking-tight text-foreground">{valor}</p>
       <p className="mt-1 text-xs font-medium text-foreground/70">{rotulo}</p>
-    </Tag>
+    </div>
   );
 }
 
