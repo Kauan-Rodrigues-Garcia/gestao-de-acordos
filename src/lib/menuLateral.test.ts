@@ -287,6 +287,25 @@ describe('abasDoMenu — por produto', () => {
     expect(cobranca).toContain(ROUTE_PATHS.ADMIN_USUARIOS);
   });
 
+  /*
+   * O mapa REAL do cargo rh da empresa Recursos Humanos em 13/11/2026 (lido
+   * no banco): tem chaves que não servem ao RH — ver_dashboard, ver_cantina,
+   * desafios, chat. Mesmo assim o menu do RH fica só com as duas abas dele.
+   */
+  it('com o mapa real do cargo rh, o RH vê só Quadro de Pessoal e Usuários', () => {
+    const ligadas = new Set([
+      'acesso_multiempresa_permitido', 'analitico_sub_desafios', 'desafios_escopo_individual',
+      'ver_cantina', 'ver_dashboard', 'ver_quadro_pessoal',
+      'chat_cargo_administrador', 'chat_cargo_assistente_adm', 'chat_cargo_diretoria', 'chat_cargo_elite',
+      'chat_cargo_gerencia', 'chat_cargo_lider', 'chat_cargo_operador', 'chat_cargo_ouvidoria',
+      'chat_cargo_rh', 'chat_cargo_super_admin',
+    ]);
+    const rh = rotas(abasDoMenu(ctx({
+      produto: 'rh', isBookplay: false, cargo: 'rh', temPermissao: k => ligadas.has(k), quadroPessoal: true,
+    })));
+    expect(rh).toEqual([ROUTE_PATHS.RH_QUADRO, ROUTE_PATHS.RH_USUARIOS]);
+  });
+
   it('o Quadro de Pessoal existe no RH e na cobrança, e não no Comercial', () => {
     const noRh = rotas(abasDoMenu(ctx({ produto: 'rh', isBookplay: false })));
     const naCobranca = rotas(abasDoMenu(ctx({ produto: 'cobranca' })));
