@@ -21,7 +21,7 @@ export type RegistroPrevia = Omit<RegistroJornada, 'outros'>;
 export interface EstadoPrevia {
   pessoas: PessoaPrevia[];
   registros: RegistroPrevia[];
-  /** Metas de cada operador no mês, em ordem (até 4). Vazia = sem meta. */
+  /** Metas da EQUIPE no mês (o total do grupo), em ordem (até 4). Vazia = sem meta. */
   metas: number[];
   /** Metas individuais: perfil → metas do mês. */
   metasPessoa: Record<string, number[]>;
@@ -48,7 +48,8 @@ function sorteador(semente: number) {
 export function gerarPrevia(tipo: TipoJornada, hoje: string, eu: PessoaPrevia): EstadoPrevia {
   const sorte = sorteador(tipo === 'acesso' ? 7 : 11);
   const pessoas: PessoaPrevia[] = [eu, ...NOMES.map((nome, i) => ({ id: `previa-${i}`, nome }))];
-  const metas = tipo === 'acesso' ? [100, 120, 140, 160] : [30, 40];
+  // Metas da equipe inteira (o total do grupo no mês), não de cada um.
+  const metas = tipo === 'acesso' ? [600, 700, 800, 900] : [150, 200];
   const [min, max] = tipo === 'acesso' ? [2, 8] : [0, 3];
 
   const registros: RegistroPrevia[] = [];
@@ -137,9 +138,10 @@ export function painelDaPrevia(estado: EstadoPrevia, tipo: TipoJornada, dia: str
     no_grupo: true,
     no_dia: doMes.filter(r => r.perfil_id === p.id && r.data === dia).length,
     no_mes: doMes.filter(r => r.perfil_id === p.id).length,
-    meta: (estado.metasPessoa[p.id] ?? estado.metas)[0] ?? null,
+    // Só a individual: a do grupo é da equipe inteira.
+    meta: estado.metasPessoa[p.id]?.[0] ?? null,
     meta_propria: estado.metasPessoa[p.id] !== undefined,
-    metas: estado.metasPessoa[p.id] ?? estado.metas,
+    metas: estado.metasPessoa[p.id] ?? [],
   }));
 
   return {

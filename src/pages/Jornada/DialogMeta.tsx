@@ -1,8 +1,9 @@
 /**
  * As metas do mês de um grupo (equipe ou subgrupo). Só a liderança abre.
  *
- * Em cima as metas do grupo — as de cada operador. Embaixo, uma linha por
- * pessoa: em branco segue a do grupo; com número, é a meta só dela (04/11/2026).
+ * Em cima a meta da EQUIPE — o total do grupo no mês (13/11/2026; até então
+ * valia para cada operador). Embaixo, uma linha por pessoa: com número, é a
+ * meta individual dela; em branco, ela não tem meta individual.
  *
  * Até QUATRO metas no mês (05/11/2026): a 1ª e mais três faixas acima, como os
  * desafios do Receptivo. Em branco no fim = não tem aquela faixa. Cada uma tem
@@ -22,7 +23,7 @@ import { MAX_METAS, ORDINAIS, TEXTOS, iniciais, lerMetas } from './jornada';
 
 export interface MetaIndividual {
   perfil_id: string;
-  /** As metas dela, em ordem. `null` devolve a pessoa às metas do grupo. */
+  /** As metas dela, em ordem. `null` tira a meta individual. */
   metas: number[] | null;
 }
 
@@ -123,8 +124,8 @@ export function DialogMeta({
         <DialogHeader>
           <DialogTitle>Metas do mês · {textos.titulo}</DialogTitle>
           <DialogDescription>
-            Quantos {textos.unidade} cada operador precisa fazer no mês — até 4 metas, cada uma maior
-            que a anterior. Em branco no fim = sem aquela meta. Zera no dia 1.
+            A meta da equipe é o total do grupo no mês; a individual, o de cada pessoa. Até 4 metas,
+            cada uma maior que a anterior. Em branco no fim = sem aquela meta. Zera no dia 1.
           </DialogDescription>
         </DialogHeader>
 
@@ -132,8 +133,8 @@ export function DialogMeta({
           <div className="rounded-lg border bg-muted/30 px-3 py-2.5">
             <div className="flex items-center gap-3">
               <span className="flex-1 min-w-0">
-                <span className="block text-sm font-medium">Metas do grupo</span>
-                <span className="block text-xs text-muted-foreground">Valem para todos sem meta própria</span>
+                <span className="block text-sm font-medium">Meta da equipe</span>
+                <span className="block text-xs text-muted-foreground">O total de {textos.unidade} do grupo no mês</span>
               </span>
               <div className="flex gap-1.5">
                 {grupo.map((v, i) => (
@@ -144,8 +145,8 @@ export function DialogMeta({
                       inputMode="numeric"
                       value={v}
                       onChange={e => setGrupo(g => mudarCampo(g, i, e.target.value))}
-                      placeholder={i === 0 ? 'Ex.: 100' : '—'}
-                      aria-label={`${ORDINAIS[i]} meta do grupo`}
+                      placeholder={i === 0 ? 'Ex.: 1200' : '—'}
+                      aria-label={`${ORDINAIS[i]} meta da equipe`}
                       className={cn('h-9 w-[4.5rem] text-right tabular-nums font-semibold', lidoGrupo.erro && v && 'border-destructive')}
                     />
                   </label>
@@ -158,7 +159,7 @@ export function DialogMeta({
             <div className="flex items-baseline justify-between">
               <span className="text-sm font-medium">Metas individuais</span>
               <span className="text-xs text-muted-foreground">
-                {comPropria ? `${comPropria} com meta própria` : 'em branco = as do grupo'}
+                {comPropria ? `${comPropria} com meta individual` : 'em branco = sem meta individual'}
               </span>
             </div>
             {pessoas.length === 0 ? (
@@ -187,8 +188,8 @@ export function DialogMeta({
                           type="button"
                           className="text-muted-foreground hover:text-foreground"
                           onClick={() => setIndividuais(s => ({ ...s, [p.id]: vazios() }))}
-                          title="Voltar às metas do grupo"
-                          aria-label={`Voltar ${p.nome} às metas do grupo`}
+                          title="Tirar a meta individual"
+                          aria-label={`Tirar a meta individual de ${p.nome}`}
                         >
                           <X className="h-3.5 w-3.5" />
                         </button>
@@ -203,7 +204,7 @@ export function DialogMeta({
                             onChange={e => setIndividuais(s => ({
                               ...s, [p.id]: mudarCampo(s[p.id] ?? vazios(), i, e.target.value),
                             }))}
-                            placeholder={grupo[i] || '—'}
+                            placeholder="—"
                             aria-label={`${ORDINAIS[i]} meta de ${p.nome}`}
                             className={cn(
                               'h-8 w-14 text-right tabular-nums px-2',

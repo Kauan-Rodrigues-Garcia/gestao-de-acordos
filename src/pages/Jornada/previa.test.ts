@@ -18,17 +18,17 @@ describe('prévia da aba do Jornada', () => {
     const total = painel.pessoas.reduce((s, p) => s + p.no_dia, 0);
     expect(painel.registros).toHaveLength(total);
     expect(painel.dias.find(d => d.dia === '2026-11-03')?.total).toBe(total);
-    expect(painel.meta).toBe(30);
+    expect(painel.meta).toBe(150); // a meta da equipe inteira
     expect(painel.sou_membro && painel.pode_gerir).toBe(true);
   });
 
-  it('a meta individual vale só para a pessoa; o resto segue a do grupo', () => {
+  it('a meta individual vale só para a pessoa; a do grupo é da equipe, não de cada um', () => {
     const estado = gerarPrevia('acesso', '2026-11-04', eu);
     const painel = painelDaPrevia({ ...estado, metas: [100, 130], metasPessoa: { 'previa-1': [150, 170, 190] } }, 'acesso', '2026-11-04');
     const bruno = painel.pessoas.find(p => p.id === 'previa-1')!;
     const ana = painel.pessoas.find(p => p.id === 'previa-0')!;
     expect([bruno.meta, bruno.meta_propria, bruno.metas]).toEqual([150, true, [150, 170, 190]]);
-    expect([ana.meta, ana.meta_propria, ana.metas]).toEqual([100, false, [100, 130]]);
+    expect([ana.meta, ana.meta_propria, ana.metas]).toEqual([null, false, []]);
     expect(painel.metas).toEqual([100, 130]);
   });
 });

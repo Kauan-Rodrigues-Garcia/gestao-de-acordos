@@ -3,8 +3,9 @@
  *
  * Quem está na equipe ou no subgrupo Suporte lança aqui os acessos; quem está
  * na equipe ou no subgrupo Retenção, as retenções. Os dois lançam só o NR e a data — e a tela filtra
- * pelo dia. A liderança do setor vê todo mundo e configura a meta DO MÊS que
- * vale para cada operador.
+ * pelo dia. A liderança do setor vê todo mundo, configura a meta DO MÊS da
+ * equipe (o total do grupo; 13/11/2026) e as individuais, e lança pelo
+ * operador escolhido (migration 20261113120000).
  *
  * O desenho é feito para lançar em sequência: o NR nasce com o cursor, Enter
  * grava, o campo limpa e o cursor volta. A data fica onde a pessoa deixou.
@@ -39,7 +40,7 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { useJornadaAbas } from '@/hooks/useJornadaAbas';
 import {
-  buscarPainel, excluir, excluirLote, exportar, lancar, lancarLote, salvarFaixas, salvarMeta, salvarMetasPessoas,
+  buscarPainel, excluir, excluirLote, exportar, lancar, lancarLote, lancarPara, salvarFaixas, salvarMeta, salvarMetasPessoas,
   listarLixeira, restaurar, type ItemImportado, type ItemLixeira, type ResultadoLote,
   type PainelJornada, type PessoaPlacar, type RegistroJornada, type GrupoJornada, type TipoJornada,
   type OutroNoNr,
@@ -142,8 +143,11 @@ export default function PaginaJornada({ tipo }: { tipo: TipoJornada }) {
 
 /** O que a tela faz com o que a pessoa digita — no banco, ou na prévia. */
 interface AcoesJornada {
-  /** Grava; devolve quem MAIS tem o NR na aba no mês (vazio = só você). */
-  lancar: (nr: string, data: string) => Promise<OutroNoNr[]>;
+  /**
+   * Grava; devolve quem MAIS tem o NR na aba no mês (vazio = só a pessoa).
+   * `perfilId` = a liderança lançando por esse operador; sem ele, por si mesmo.
+   */
+  lancar: (nr: string, data: string, perfilId?: string) => Promise<OutroNoNr[]>;
   excluir: (id: string) => Promise<void>;
   /** Metas do grupo no mês (vazia tira) e as individuais que mudaram. Só a liderança. */
   salvarMeta: (metas: number[], individuais: MetaIndividual[]) => Promise<void>;
@@ -164,6 +168,7 @@ function Painel({ grupo, tipo }: { grupo: GrupoJornada; tipo: TipoJornada }) {
   const hoje = getTodayISO();
   const [dia, setDia] = useState(hoje);
   const queryClient = useQueryClient();
+  const { perfil } = useAuth();
 
   const query = useQuery({
     queryKey: ['jornada-painel', grupo.grupo_id, dia],
@@ -174,8 +179,11 @@ function Painel({ grupo, tipo }: { grupo: GrupoJornada; tipo: TipoJornada }) {
   const recarregar = () => queryClient.invalidateQueries({ queryKey: ['jornada-painel', grupo.grupo_id] });
 
   const acoes: AcoesJornada = {
-    lancar: async (nr, data) => {
-      const id = await lancar(grupo.grupo_id, nr, data);
+    lancar: async (nr, data, perfilId) => {
+      // Por outra pessoa: a função da liderança. Por si mesmo: a de sempre.
+      const id = perfilId && perfilId !== perfil?.id
+        ? await lancarPara(grupo.grupo_id, perfilId, nr, data)
+        : await lancar(grupo.grupo_id, nr, data);
       // O painel do dia do lançamento já relido traz o `outros` dele (e é o que a tela vai mostrar).
       const chave = ['jornada-painel', grupo.grupo_id, data];
       const novo = await queryClient.fetchQuery({ queryKey: chave, queryFn: () => buscarPainel(grupo.grupo_id, data), staleTime: 0 })
@@ -268,18 +276,20 @@ function PainelPrevia({ tipo }: { tipo: TipoJornada }) {
       ...e.registros.filter(r => ids.has(r.id)).map(r => ({ ...r, apagado_em: new Date().toISOString() })),
     ],
   });
-  const novoRegistro = (nr: string, data: string) => ({
-    id: `previa-novo-${crypto.randomUUID()}`, nr, data, perfil_id: eu,
-    nome: meuNome, criado_em: new Date().toISOString(),
+  const novoRegistro = (nr: string, data: string, perfilId = eu) => ({
+    id: `previa-novo-${crypto.randomUUID()}`, nr, data, perfil_id: perfilId,
+    nome: estado.pessoas.find(p => p.id === perfilId)?.nome ?? meuNome, criado_em: new Date().toISOString(),
   });
 
   const acoes: AcoesJornada = {
-    lancar: async (nr, data) => {
+    lancar: async (nr, data, perfilId = eu) => {
       // A mesma regra do banco: a mesma pessoa não repete o NR no mês; outra pessoa pode.
-      if (estado.registros.some(r => r.nr === nr && r.perfil_id === eu && r.data.slice(0, 7) === data.slice(0, 7))) {
-        throw new Error('Este NR já foi lançado por você neste mês.');
+      if (estado.registros.some(r => r.nr === nr && r.perfil_id === perfilId && r.data.slice(0, 7) === data.slice(0, 7))) {
+        throw new Error(perfilId === eu
+          ? 'Este NR já foi lançado por você neste mês.'
+          : 'Este NR já foi lançado para esta pessoa neste mês.');
       }
-      const novo = novoRegistro(nr, data);
+      const novo = novoRegistro(nr, data, perfilId);
       setEstado(e => ({ ...e, registros: [...e.registros, novo] }));
       return outrosNoMes(estado.registros, novo);
     },
@@ -374,6 +384,7 @@ function Tela({
   const [metaAberta, setMetaAberta] = useState<boolean | string>(false);
   const abrirMetas = painel.pode_gerir ? (perfilId?: string) => setMetaAberta(perfilId ?? true) : undefined;
   const [importando, setImportando] = useState(false);
+  const { perfil } = useAuth();
 
   return (
     <>
@@ -389,19 +400,27 @@ function Tela({
           >
             Lançar {TEXTOS[tipo].unidadeUm}
           </Rotulo>
-          {painel.sou_membro ? (
+          {painel.sou_membro || painel.pode_gerir ? (
             <FormLancar
               tipo={tipo}
               hoje={hoje}
-              aoGravar={async (nr, data) => {
-                const outros = await acoes.lancar(nr, data);
+              // A liderança escolhe por quem lança (13/11/2026); o membro lança por si.
+              operadores={painel.pode_gerir ? painel.pessoas.filter(p => p.no_grupo) : null}
+              euId={painel.sou_membro ? (perfil?.id ?? null) : null}
+              aoGravar={async (nr, data, perfilId) => {
+                const outros = await acoes.lancar(nr, data, perfilId ?? undefined);
                 if (data !== dia) setDia(data);
+                const pessoa = perfilId && perfilId !== perfil?.id
+                  ? painel.pessoas.find(p => p.id === perfilId)?.nome ?? null
+                  : null;
                 // Lançou, e o cliente já está com outra pessoa: fica marcado (não é erro).
                 if (outros.length) {
                   toast.warning(`NR ${nr} também está com ${textoDosOutros(outros)}.`, {
-                    description: 'Foi lançado e conta para você. Ele fica marcado como compartilhado.',
+                    description: `Foi lançado e conta para ${pessoa ?? 'você'}. Ele fica marcado como compartilhado.`,
                     duration: 8000,
                   });
+                } else if (pessoa) {
+                  toast.success(`NR ${nr} lançado para ${pessoa}.`);
                 }
               }}
             />
@@ -484,30 +503,51 @@ function nomeDoMes(dia: string): string {
 
 // ─── Lançar ─────────────────────────────────────────────────────────────────
 
-/** NR + data + Adicionar numa linha. Enter grava e o cursor volta ao NR. */
+/**
+ * NR + data + Adicionar numa linha. Enter grava e o cursor volta ao NR.
+ *
+ * A liderança (13/11/2026) escolhe antes POR QUEM lança: o lançamento conta
+ * para o operador escolhido. A escolha fica até trocar — dá para lançar vários
+ * do mesmo operador em sequência — e sem escolha não grava (nada de cair, por
+ * engano, na conta de outra pessoa).
+ */
 function FormLancar({
-  tipo, hoje, aoGravar,
+  tipo, hoje, operadores, euId, aoGravar,
 }: {
   tipo: TipoJornada;
   hoje: string;
-  aoGravar: (nr: string, data: string) => Promise<void>;
+  /** Quem a liderança pode escolher; `null` = o membro lança por si. */
+  operadores: PessoaPlacar[] | null;
+  /** Quem está na tela, se é do grupo: vem escolhido de início. */
+  euId: string | null;
+  aoGravar: (nr: string, data: string, perfilId: string | null) => Promise<void>;
 }) {
   const [nr, setNr] = useState('');
   const [data, setData] = useState(hoje);
   const [gravando, setGravando] = useState(false);
   const [ultimo, setUltimo] = useState<string | null>(null);
+  const [escolhido, setEscolhido] = useState<string>('');
   const campoNr = useRef<HTMLInputElement>(null);
+  const lista = useMemo(
+    () => (operadores ? [...operadores].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')) : null),
+    [operadores],
+  );
+  // Quem saiu do grupo deixa de valer; quem está na tela e é do grupo vem escolhido.
+  const operador = lista
+    ? (lista.some(o => o.id === escolhido) ? escolhido : (euId && lista.some(o => o.id === euId) ? euId : ''))
+    : null;
 
   useEffect(() => { campoNr.current?.focus(); }, []);
 
   async function gravar(e?: React.FormEvent) {
     e?.preventDefault();
     const limpo = nr.trim();
+    if (lista && !operador) { toast.error('Escolha o operador antes de lançar.'); return; }
     if (!limpo) { campoNr.current?.focus(); return; }
     if (!data || data > hoje) { toast.error('A data não pode ser depois de hoje.'); return; }
     setGravando(true);
     try {
-      await aoGravar(limpo, data);
+      await aoGravar(limpo, data, operador);
       setUltimo(limpo);
       setNr('');
     } catch (erro) {
@@ -519,33 +559,71 @@ function FormLancar({
   }
 
   const rotuloData = tipo === 'acesso' ? 'Data do acesso' : 'Data da retenção';
+  const escolhidoInfo = lista?.find(o => o.id === operador) ?? null;
 
   return (
-    <form onSubmit={gravar} className="flex items-center gap-2">
-      <Input
-        ref={campoNr}
-        value={nr}
-        placeholder={ultimo ? `✓ ${ultimo} lançado — próximo NR` : 'NR'}
-        aria-label="NR"
-        className={cn('h-9 flex-1 min-w-0 font-mono', ultimo && !nr && 'placeholder:text-success')}
-        maxLength={20}
-        disabled={gravando}
-        {...propsSoNumeros(setNr, 'NR')}
-      />
-      <Input
-        type="date"
-        value={data}
-        max={hoje}
-        aria-label={rotuloData}
-        title={rotuloData}
-        className={cn('h-9 w-[136px] shrink-0', data !== hoje && 'border-warning text-warning')}
-        onChange={e => setData(e.target.value)}
-        disabled={gravando}
-      />
-      <Button type="submit" className="h-9 px-3 shrink-0" disabled={gravando || !nr}>
-        {gravando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-        <span className="hidden sm:inline">Adicionar</span>
-      </Button>
+    <form onSubmit={gravar} className="space-y-2">
+      {lista && (
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-muted-foreground shrink-0 w-[4.5rem]">Lançar para</span>
+          <Select
+            value={operador || undefined}
+            onValueChange={v => { setEscolhido(v); setUltimo(null); campoNr.current?.focus(); }}
+            disabled={gravando}
+          >
+            <SelectTrigger
+              className={cn('h-8 flex-1 min-w-0 text-sm', operador ? 'border-primary/50 bg-primary/5 font-medium' : 'text-muted-foreground')}
+              aria-label="Operador do lançamento"
+            >
+              <SelectValue placeholder={lista.length ? 'Escolha o operador' : 'Ninguém no grupo'} />
+            </SelectTrigger>
+            <SelectContent>
+              {lista.map(o => (
+                <SelectItem key={o.id} value={o.id}>
+                  <span className="flex items-center gap-2">
+                    {o.foto_url ? (
+                      <img src={o.foto_url} alt="" className="h-5 w-5 rounded-full object-cover shrink-0" />
+                    ) : (
+                      <span className="h-5 w-5 rounded-full bg-muted text-[9px] font-semibold flex items-center justify-center shrink-0">
+                        {iniciais(o.nome)}
+                      </span>
+                    )}
+                    {o.nome}{o.id === euId ? ' (você)' : ''}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+      <div className="flex items-center gap-2">
+        <Input
+          ref={campoNr}
+          value={nr}
+          placeholder={ultimo
+            ? `✓ ${ultimo} lançado — próximo NR`
+            : escolhidoInfo && escolhidoInfo.id !== euId ? `NR de ${escolhidoInfo.nome.split(' ')[0]}` : 'NR'}
+          aria-label="NR"
+          className={cn('h-9 flex-1 min-w-0 font-mono', ultimo && !nr && 'placeholder:text-success')}
+          maxLength={20}
+          disabled={gravando}
+          {...propsSoNumeros(setNr, 'NR')}
+        />
+        <Input
+          type="date"
+          value={data}
+          max={hoje}
+          aria-label={rotuloData}
+          title={rotuloData}
+          className={cn('h-9 w-[136px] shrink-0', data !== hoje && 'border-warning text-warning')}
+          onChange={e => setData(e.target.value)}
+          disabled={gravando}
+        />
+        <Button type="submit" className="h-9 px-3 shrink-0" disabled={gravando || !nr || (!!lista && !operador)}>
+          {gravando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+          <span className="hidden sm:inline">Adicionar</span>
+        </Button>
+      </div>
     </form>
   );
 }
@@ -563,26 +641,33 @@ function ResumoMeta({
   const { perfil } = useAuth();
   const mes = nomeDoMes(dia);
   const eu = painel.pessoas.find(p => p.id === perfil?.id);
-  // Quem tem meta (a própria ou a do grupo) e ainda está no grupo.
+  const unidade = TEXTOS[tipo].unidade;
+  // Quem tem meta individual e ainda está no grupo.
   const comMeta = painel.pessoas.filter(p => p.no_grupo && p.meta);
-  const minhaMeta = painel.sou_membro ? (eu?.meta ?? painel.meta) : null;
-  const minhasMetas = painel.sou_membro ? (eu?.metas ?? painel.metas) : [];
-  const temMeta = painel.sou_membro ? !!minhaMeta : comMeta.length > 0;
+  /*
+   * Membro: a PRÓPRIA meta (a individual). Liderança: a meta da EQUIPE contra
+   * o total do grupo no mês (13/11/2026 — antes contava quantos bateram, e
+   * a meta de 1.200 da equipe aparecia como «2/4»). Sem meta da equipe, a
+   * liderança vê quantos bateram a individual.
+   */
+  const total = painel.pessoas.reduce((s, p) => s + p.no_mes, 0);
+  const alvoDoCartao: { feito: number; metas: number[] } | null = painel.sou_membro
+    ? (eu?.metas.length ? { feito: eu.no_mes, metas: eu.metas } : null)
+    : (painel.metas.length ? { feito: total, metas: painel.metas } : null);
+  const temMeta = !!alvoDoCartao || (!painel.sou_membro && comMeta.length > 0);
 
   const engrenagem = painel.pode_gerir && temMeta ? (
     <Button
       variant="ghost" size="icon" className="h-6 w-6"
       onClick={aoConfigurar}
-      title="Metas do grupo e individuais"
+      title="Meta da equipe e individuais"
       aria-label="Configurar as metas"
     >
       <Settings2 className="h-3.5 w-3.5" />
     </Button>
   ) : null;
 
-  const titulo = painel.sou_membro
-    ? `Meta de ${TEXTOS[tipo].unidade}`
-    : `Meta de ${TEXTOS[tipo].unidade} · equipe`;
+  const titulo = painel.sou_membro ? `Minha meta de ${unidade}` : `Meta da equipe · ${unidade}`;
 
   if (!temMeta) {
     return (
@@ -590,7 +675,9 @@ function ResumoMeta({
         <Rotulo icone={Target}>{titulo}</Rotulo>
         <div className="h-9 flex items-center gap-2">
           <p className="text-sm text-muted-foreground flex-1">
-            Sem meta para o mês{painel.pode_gerir ? '.' : ' — a liderança define.'}
+            {painel.sou_membro
+              ? <>Sem meta individual no mês{painel.meta ? ` · a equipe tem meta de ${painel.meta.toLocaleString('pt-BR')}` : ''}.</>
+              : <>Sem meta para o mês{painel.pode_gerir ? '.' : ' — a liderança define.'}</>}
           </p>
           {painel.pode_gerir && (
             <Button variant="outline" size="sm" className="h-8" onClick={aoConfigurar}>Configurar meta</Button>
@@ -600,31 +687,30 @@ function ResumoMeta({
     );
   }
 
-  // Membro: o próprio número do mês. Liderança: quantos já bateram a sua.
   let numero: React.ReactNode;
   let pct: number;
   let lado: string;
-  if (painel.sou_membro && minhaMeta) {
-    const feito = eu?.no_mes ?? 0;
+  if (alvoDoCartao) {
+    const { feito, metas } = alvoDoCartao;
     // Até 4 metas (05/11/2026): a barra mede a PRÓXIMA a bater.
-    const sit = situacaoMetas(feito, minhasMetas.length ? minhasMetas : [minhaMeta]);
-    const alvo = sit.alvo ?? minhaMeta;
-    const varias = minhasMetas.length > 1;
+    const sit = situacaoMetas(feito, metas);
+    const alvo = sit.alvo ?? metas[0];
+    const varias = metas.length > 1;
     pct = percentual(feito, alvo) ?? 0;
     numero = (
       <>
-        <span className="text-xl font-bold tabular-nums">{feito}</span>
-        <span className="text-sm text-muted-foreground tabular-nums">/{alvo}</span>
+        <span className="text-xl font-bold tabular-nums">{feito.toLocaleString('pt-BR')}</span>
+        <span className="text-sm text-muted-foreground tabular-nums">/{alvo.toLocaleString('pt-BR')}</span>
       </>
     );
     if (!varias) {
-      lado = pct >= 100 ? `Meta batida! ${pct}%` : `${pct}% · faltam ${alvo - feito}`;
+      lado = pct >= 100 ? `Meta batida! ${pct}%` : `${pct}% · faltam ${(alvo - feito).toLocaleString('pt-BR')}`;
     } else if (sit.todas) {
-      lado = `Bateu as ${minhasMetas.length} metas!`;
+      lado = `Bateu as ${metas.length} metas!`;
     } else {
       lado = sit.batidas > 0
-        ? `${ORDINAIS[sit.batidas - 1]} batida · faltam ${sit.faltam} p/ ${ORDINAIS[sit.indiceAlvo]}`
-        : `${pct}% · faltam ${sit.faltam} p/ 1ª`;
+        ? `${ORDINAIS[sit.batidas - 1]} batida · faltam ${sit.faltam.toLocaleString('pt-BR')} p/ ${ORDINAIS[sit.indiceAlvo]}`
+        : `${pct}% · faltam ${sit.faltam.toLocaleString('pt-BR')} p/ 1ª`;
       // A barra só fica verde ao bater TODAS; até lá ela mede a próxima.
       pct = Math.min(pct, 99);
     }
@@ -637,9 +723,7 @@ function ResumoMeta({
         <span className="text-sm text-muted-foreground tabular-nums">/{comMeta.length}</span>
       </>
     );
-    lado = painel.meta
-      ? `bateram · meta ${painel.meta} ${TEXTOS[tipo].unidade}`
-      : 'bateram a meta individual';
+    lado = 'bateram a meta individual';
   }
   const bateu = pct >= 100;
 
@@ -1205,7 +1289,7 @@ function CardEquipe({
   const pessoas = [...painel.pessoas].sort((a, b) => b.no_mes - a.no_mes || a.nome.localeCompare(b.nome));
   const maior = Math.max(1, ...pessoas.map(p => Math.max(p.no_mes, p.meta ?? 0)));
   /** A próxima meta de cada um (até 4 no mês) — é contra ela que a barra mede. */
-  const situacao = (p: PessoaPlacar) => situacaoMetas(p.no_mes, p.metas.length ? p.metas : (p.meta ? [p.meta] : []));
+  const situacao = (p: PessoaPlacar) => situacaoMetas(p.no_mes, p.metas);
   const total = pessoas.reduce((s, p) => s + p.no_mes, 0);
 
   return (
@@ -1215,6 +1299,7 @@ function CardEquipe({
         <h2 className="text-sm font-semibold">Equipe</h2>
         <span className="text-xs text-muted-foreground">
           · <span className="capitalize">{nomeDoMes(dia)}</span> · {total.toLocaleString('pt-BR')}
+          {painel.meta ? <span title="Meta da equipe no mês">/{painel.meta.toLocaleString('pt-BR')}</span> : null}
         </span>
         {aoAbrirMeta && (
           <Button variant="ghost" size="sm" className="ml-auto h-7 px-2 text-xs" onClick={() => aoAbrirMeta()}>
@@ -1273,7 +1358,7 @@ function CardEquipe({
             const dica = `${p.nome} · ${contagem(feito, tipo)} no mês, ${contagem(p.no_dia, tipo)} no dia aberto`
               + (p.meta
                 ? ` · ${p.metas.length > 1 ? `metas ${p.metas.join(' / ')}` : `meta ${p.meta}`}`
-                  + (p.meta_propria ? ' (individual)' : ' (do grupo)')
+                  + ' (individual)'
                 : '');
             const classe = cn(
               'w-full flex items-center gap-2 rounded-md px-1.5 h-8',

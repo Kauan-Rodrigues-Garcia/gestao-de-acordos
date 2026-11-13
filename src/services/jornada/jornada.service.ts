@@ -5,6 +5,7 @@
  *   fn_jornada_minhas_abas — os grupos (subgrupo ou equipe) Suporte/Retenção que a pessoa alcança.
  *   fn_jornada_painel      — meta, placar da equipe, total por dia e lançamentos do dia.
  *   fn_jornada_lancar      — grava NR + data.
+ *   fn_jornada_lancar_para — a liderança grava pelo operador (migration 20261113120000).
  *   fn_jornada_excluir     — apaga um lançamento.
  *   fn_jornada_meta_salvar — grava (ou tira, com 0) a meta do grupo.
  *   fn_jornada_meta_pessoas_salvar — metas individuais (migration 20261104210000).
@@ -46,13 +47,16 @@ export interface PessoaPlacar {
   no_grupo: boolean;
   no_dia: number;
   no_mes: number;
-  /** A meta do mês desta pessoa: a individual, ou a do grupo. */
+  /**
+   * A meta INDIVIDUAL do mês desta pessoa; nulo sem meta própria. A meta do
+   * grupo é da equipe inteira (o total do grupo), não de cada um (13/11/2026).
+   */
   meta: number | null;
   /** A liderança deu a ela uma meta só dela. */
   meta_propria: boolean;
   /**
    * Todas as metas do mês dela, em ordem (05/11/2026): a 1ª (`meta`) e as
-   * faixas acima, até a 4ª. Vazia sem meta. As dela, ou as do grupo.
+   * faixas acima, até a 4ª. Vazia sem meta individual.
    */
   metas: number[];
 }
@@ -89,7 +93,10 @@ export interface PainelJornada {
   grupo: 'subgrupo' | 'equipe';
   pode_gerir: boolean;
   sou_membro: boolean;
-  /** Meta de cada operador NO MÊS (04/11/2026: a meta é sempre mensal). */
+  /**
+   * A meta da EQUIPE no mês: o total do grupo (13/11/2026 — antes valia para
+   * cada operador, e 1.200 de equipe virava 1.200 para cada um). Sempre mensal.
+   */
   meta: number | null;
   /** As metas do grupo, em ordem: a 1ª (`meta`) e as faixas, até a 4ª. */
   metas: number[];
@@ -142,15 +149,16 @@ export async function buscarPainel(grupoId: string, dia: string): Promise<Painel
     ...data,
     meta: metaGrupo,
     metas: metasGrupo,
-    // Sem a 20261104210000 o banco não manda a meta por pessoa: vale a do grupo.
+    // O banco ainda devolve, em `meta`, a do grupo para quem não tem a própria
+    // (COALESCE no painel). A do grupo é da equipe: só a própria fica na pessoa.
     pessoas: (data.pessoas ?? []).map(p => {
-      const meta = p.meta === undefined ? metaGrupo : p.meta;
       const propria = p.meta_propria ?? false;
+      const meta = propria && p.meta ? p.meta : null;
       return {
         ...p,
         meta,
-        meta_propria: propria,
-        metas: !meta ? [] : propria ? [meta, ...(extrasDe.get(p.id) ?? [])] : metasGrupo,
+        meta_propria: propria && meta != null,
+        metas: meta ? [meta, ...(extrasDe.get(p.id) ?? [])] : [],
       };
     }),
     dias: data.dias ?? [],
@@ -164,6 +172,8 @@ export function mensagemDoBanco(msg: string): string {
   return msg
     .replace(/^.*?ERROR:\s*/i, '')
     .replace('ja foi lancado por voce neste mes', 'já foi lançado por você neste mês')
+    .replace('ja foi lancado para esta pessoa neste mes', 'já foi lançado para esta pessoa neste mês')
+    .replace('So a lideranca lanca por outra pessoa', 'Só a liderança lança por outra pessoa')
     .replace('ja foi lancado por outra pessoa neste mes', 'já foi lançado por outra pessoa neste mês')
     .replace('ja foi lancado por voce', 'já foi lançado por você')
     .replace('So quem esta neste grupo lanca aqui', 'Só quem está neste grupo lança aqui')
@@ -182,6 +192,26 @@ export async function lancar(grupoId: string, nr: string, data: string): Promise
     p_data: data,
   });
   if (error) throw new Error(mensagemDoBanco(error.message));
+  return id as string;
+}
+
+/**
+ * A liderança lança pelo operador escolhido: conta para ele, e quem lançou
+ * fica registrado (migration 20261113120000). Sem a migration, avisa.
+ */
+export async function lancarPara(grupoId: string, perfilId: string, nr: string, data: string): Promise<string> {
+  const { data: id, error } = await rpcSemTipo<string>('fn_jornada_lancar_para', {
+    p_grupo_id: grupoId,
+    p_perfil_id: perfilId,
+    p_nr: nr,
+    p_data: data,
+  });
+  if (error) {
+    if (/PGRST202|Could not find the function/i.test(error.message)) {
+      throw new Error('Lançar pelo operador ainda não está no banco (migration 20261113120000).');
+    }
+    throw new Error(mensagemDoBanco(error.message));
+  }
   return id as string;
 }
 

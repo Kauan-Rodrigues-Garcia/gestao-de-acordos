@@ -30,6 +30,7 @@ const SQL = [
   ler('20261105140000_jornada_quatro_metas.sql'),
   ler('20261105170000_jornada_no_desempenho_do_dia.sql'),
   ler('20261110120000_jornada_nr_por_pessoa.sql'),
+  ler('20261113120000_jornada_lider_lanca_pelo_operador.sql'),
 ];
 
 let db: PGlite;
@@ -405,5 +406,48 @@ describe('20261110120000 — o mesmo NR com pessoas diferentes fica marcado', ()
     const r = await db.query<{ v: boolean }>(
       `select has_function_privilege('authenticated', 'public.fn_jornada_nr_outros(uuid,text,text,date,uuid)', 'EXECUTE') v`);
     expect(r.rows[0].v).toBe(false);
+  });
+});
+
+describe('20261113120000 — a liderança lança pelo operador escolhido', () => {
+  const CAMILA = '00000000-0000-4000-8000-0000000000e1'; // Suporte (criada acima)
+  const LEO = '00000000-0000-4000-8000-0000000000e2';    // Suporte (criado acima)
+  const LIDER = '00000000-0000-4000-8000-0000000000d1';  // líder do Jornada
+  const LID_REC = '00000000-0000-4000-8000-0000000000f4'; // líder do Receptivo
+  const para = (uid: string, perfil: string, nr: string, dia: string) =>
+    como<string>(uid, 'select public.fn_jornada_lancar_para($1, $2, $3, $4) v', [EQ_SUP, perfil, nr, dia]);
+  const registro = (id: string) => db.query<{ perfil_id: string; criado_por: string; equipe_id: string }>(
+    'select perfil_id, criado_por, equipe_id from public.jornada_registros where id = $1', [id]).then(r => r.rows[0]);
+
+  beforeAll(async () => {
+    await db.exec(`delete from public.jornada_registros;`);
+  });
+
+  it('o líder lança pela Camila: conta para ela, e o líder fica como quem lançou', async () => {
+    const id = await para(LIDER, CAMILA, '4321', '2026-11-06');
+    expect(await registro(id)).toEqual({ perfil_id: CAMILA, criado_por: LIDER, equipe_id: EQ_SUP });
+    const p = await como<{ pessoas: { id: string; no_mes: number }[] }>(LIDER, 'select public.fn_jornada_painel($1, $2) v', [EQ_SUP, '2026-11-06']);
+    expect(p.pessoas.find(x => x.id === CAMILA)?.no_mes).toBe(1);
+  });
+
+  it('a mesma pessoa não repete o NR no mês; outra pessoa pode', async () => {
+    await expect(para(LIDER, CAMILA, '4321', '2026-11-07')).rejects.toThrow(/para esta pessoa neste mes/);
+    await expect(para(LIDER, LEO, '4321', '2026-11-07')).resolves.toBeTruthy();
+  });
+
+  it('o operador não lança pelo colega, mas pode por si mesmo', async () => {
+    await expect(para(LEO, CAMILA, '5555', '2026-11-07')).rejects.toThrow(/lideranca lanca por outra pessoa/);
+    const id = await para(LEO, LEO, '5555', '2026-11-07');
+    expect(await registro(id)).toMatchObject({ perfil_id: LEO, criado_por: LEO });
+  });
+
+  it('quem não está no grupo não recebe lançamento; líder de outro setor não lança', async () => {
+    await expect(para(LIDER, BIA, '6666', '2026-11-07')).rejects.toThrow(/nao esta neste grupo/);
+    await expect(para(LID_REC, CAMILA, '6666', '2026-11-07')).rejects.toThrow(/lideranca lanca por outra pessoa/);
+  });
+
+  it('data futura e NR vazio continuam recusados', async () => {
+    await expect(para(LIDER, CAMILA, '7777', '2099-01-01')).rejects.toThrow(/depois de hoje/);
+    await expect(para(LIDER, CAMILA, 'abc', '2026-11-07')).rejects.toThrow(/Informe o NR/);
   });
 });
