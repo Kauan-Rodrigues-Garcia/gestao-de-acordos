@@ -12,6 +12,7 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { ROUTE_PATHS } from '@/lib/index';
 import { useMesGlobal } from '@/providers/MesProvider';
 import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
+import { useDiretoExtraNoRecorte } from '@/hooks/useDiretoExtraNoRecorte';
 import { AnalyticsPanel } from '@/components/AnalyticsPanel';
 import { useSetoresEquipes } from '@/hooks/useSetoresEquipes';
 import { useLideroEquipe } from '@/hooks/useLideroEquipe';
@@ -277,12 +278,22 @@ export default function Dashboard() {
     : null;
 
   // Mês fechado: o Direto/Extra que valia NAQUELE mês (retrato) — o painel de indicadores separa por ele.
-  const { isAtivoParaUsuario } = useDiretoExtraConfig(mesFiltro);
-  const usuarioTemLogicaDiretoExtra = isAtivoParaUsuario(
-    perfil?.id ?? '',
-    lugar.setorId,
-    equipePrincipal,
-  );
+  const { configs: configsDiretoExtra, isAtivoParaUsuario } = useDiretoExtraConfig(mesFiltro);
+  const diretoExtraNoRecorte = useDiretoExtraNoRecorte(configsDiretoExtra);
+  /*
+   * Na visão individual, a lógica da própria pessoa. Num setor ou numa equipe,
+   * a do RECORTE (16/11/2026): antes valia sempre o perfil de quem olha, e a
+   * gerência/diretoria abria o Receptivo — setor com Direto e Extra — sem ver a
+   * separação, porque o próprio perfil não tem a lógica.
+   */
+  const setorDoRecorte = setorFiltroAtivo ?? (niveis.includes('todos_setores') ? null : lugar.setorId);
+  const usuarioTemLogicaDiretoExtra = soOsMeus
+    ? isAtivoParaUsuario(perfil?.id ?? '', lugar.setorId, equipePrincipal)
+    : diretoExtraNoRecorte(
+      setorDoRecorte,
+      equipeFiltroAtivo,
+      equipeFiltroAtivo ? equipesDoSetor.find(e => e.id === equipeFiltroAtivo)?.setor_id : undefined,
+    );
 
   const diaSemana    = new Date().toLocaleDateString('pt-BR', { weekday: 'long' });
   const dataFormatada = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });

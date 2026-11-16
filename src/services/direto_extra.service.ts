@@ -201,3 +201,58 @@ export async function fetchIsDiretoExtraAtivo(params: {
     configs,
   });
 }
+
+/**
+ * O RECORTE que está na tela tem a lógica Direto e Extra? (16/11/2026)
+ *
+ * O Dashboard perguntava pelo perfil de QUEM OLHA: a gerência, a diretoria e o
+ * super_admin abriam o Receptivo — setor com a lógica ligada, 142 acordos
+ * Extra em novembro — e não viam a separação Direto × Extra, porque o próprio
+ * perfil não tem a lógica. Na visão individual continua valendo a pessoa
+ * (`resolverDiretoExtraAtivo`); num setor ou numa equipe vale o que está
+ * ligado ali dentro:
+ *
+ *   equipe  a config da equipe, senão a do setor dela; ou alguém da equipe
+ *           com a lógica ligada à parte;
+ *   setor   o setor ligado, ou uma equipe dele, ou alguém dele;
+ *   empresa (sem setor) qualquer config ligada que ainda aponta para algo.
+ *
+ * `equipes` e `pessoas` dizem onde estão as equipes e as pessoas das configs
+ * ligadas; config cujo alvo não aparece ali (apagado) não conta.
+ */
+export function diretoExtraNoRecorte(params: {
+  configs: readonly DiretoExtraConfig[];
+  setorId: string | null;
+  equipeId: string | null;
+  /** equipe → setor, das equipes com config ligada (e da equipe em foco). */
+  equipes: ReadonlyMap<string, string | null>;
+  /** pessoa → setor e equipe, das pessoas com config ligada. */
+  pessoas: ReadonlyMap<string, { setorId: string | null; equipeId: string | null }>;
+}): boolean {
+  const { configs, equipeId, equipes, pessoas } = params;
+  const ligadas = configs.filter(c => c.ativo);
+  const cfg = (escopo: DiretoExtraEscopo, id: string | null) =>
+    id ? configs.find(c => c.escopo === escopo && c.referencia_id === id) : undefined;
+  const pessoasLigadas = ligadas
+    .filter(c => c.escopo === 'usuario')
+    .map(c => pessoas.get(c.referencia_id))
+    .filter((p): p is { setorId: string | null; equipeId: string | null } => !!p);
+
+  if (equipeId) {
+    const setorDaEquipe = equipes.get(equipeId) ?? params.setorId;
+    const daEquipe = cfg('equipe', equipeId) ?? cfg('setor', setorDaEquipe);
+    if (daEquipe?.ativo) return true;
+    return pessoasLigadas.some(p => p.equipeId === equipeId);
+  }
+
+  const setorId = params.setorId;
+  if (setorId) {
+    if (cfg('setor', setorId)?.ativo) return true;
+    if (ligadas.some(c => c.escopo === 'equipe' && equipes.get(c.referencia_id) === setorId)) return true;
+    return pessoasLigadas.some(p => p.setorId === setorId);
+  }
+
+  return ligadas.some(c => c.escopo === 'setor'
+    || (c.escopo === 'equipe' && equipes.has(c.referencia_id))
+    || (c.escopo === 'usuario' && pessoas.has(c.referencia_id)));
+}
