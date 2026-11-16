@@ -125,6 +125,11 @@ export interface NumerosTv {
   serie?: { dia: string; valor: number; valor_ho: number }[];
   /** A cena «Destaque» (20261029230000). Faltam no cache antigo. */
   destaques?: DestaqueTv[];
+  /**
+   * Cada pessoa dia a dia, para o destaque de um período (20261116120000).
+   * `dias`: 'YYYY-MM-DD' → [valor, valor_ho, pagamentos]. Falta no cache antigo.
+   */
+  destaques_dias?: { escopo: string; id: string; nome: string; foto: string | null; dias: Record<string, [number, number, number]> }[];
   equipes?: { id: string; nome: string }[];
   equipe_id?: string | null;
   setor_nome?: string;

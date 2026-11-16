@@ -60,6 +60,11 @@ export interface VisaoTv {
   serie: { dia: number; valor: number }[];
   /** A cena «Destaque»: o 1º de cada dia e do mês, já na unidade. */
   destaques: { escopo: string; dia: string; id: string; nome: string; foto: string | null; valor: number; pagamentos: number }[];
+  /**
+   * Cada pessoa dia a dia, já na unidade, para o destaque de um período.
+   * `null`: o banco ainda não manda (antes de 20261116120000).
+   */
+  destaquesDias: { escopo: string; id: string; nome: string; foto: string | null; dias: Record<string, { valor: number; pagamentos: number }> }[] | null;
   equipes: { id: string; nome: string }[];
   equipeDoPainel: string | null;
   setorNome: string;
@@ -151,6 +156,15 @@ export function montarVisao(
       escopo: String(d.escopo), dia: String(d.dia), id: d.id, nome: d.nome ?? '', foto: d.foto ?? null,
       valor: num(emHo ? d.valor_ho : d.valor), pagamentos: Math.max(0, Math.trunc(num(d.pagamentos))),
     })),
+    destaquesDias: Array.isArray(n.destaques_dias)
+      ? n.destaques_dias.map(p => ({
+          escopo: String(p.escopo), id: p.id, nome: p.nome ?? '', foto: p.foto ?? null,
+          dias: Object.fromEntries(Object.entries(p.dias && typeof p.dias === 'object' ? p.dias : {}).map(([dia, x]) => {
+            const a: unknown[] = Array.isArray(x) ? x : [];
+            return [dia, { valor: num(emHo ? a[1] : a[0]), pagamentos: Math.max(0, Math.trunc(num(a[2]))) }];
+          })),
+        }))
+      : null,
     equipes: Array.isArray(n.equipes) ? n.equipes : [],
     equipeDoPainel: n.equipe_id ?? null,
     setorNome: n.setor_nome ?? (n.alvo_tipo === 'setor' ? n.alvo_nome ?? '' : ''),
@@ -440,8 +454,10 @@ export interface DestaqueNaTela {
   /** `null`: ninguém (ainda) — `motivo` diz por quê. */
   pessoa: { id: string; nome: string; foto: string | null; valor: number; pagamentos: number } | null;
   motivo: string;
-  /** «YYYY-MM-DD», ou `null` no mês inteiro (ou sem dia escolhido). */
+  /** «YYYY-MM-DD», ou `null` no mês inteiro (ou sem dia escolhido). No período, o 1º dia. */
   dia: string | null;
+  /** O período escolhido (de ≤ até), ou `null` fora da opção «Período». */
+  periodo: { de: string; ate: string } | null;
   doMes: boolean;
   /** «Equipe Rosa», «Play 1». */
   onde: string;
@@ -460,11 +476,41 @@ export function destaqueDaTela(v: VisaoTv, tela: Pick<TelaDoPainel, 'template' |
   const equipe = porEquipe ? (opcao<string>(tela, 'equipe_id') || v.equipeDoPainel || '') : '';
   const nomeEquipe = v.equipes.find(e => e.id === equipe)?.nome;
   const onde = porEquipe ? (nomeEquipe ? rotuloDaEquipe(nomeEquipe) : '') : v.setorNome;
-  const vazio = (motivo: string, dia: string | null = null): DestaqueNaTela => ({ pessoa: null, motivo, dia, doMes, onde });
+  const vazio = (motivo: string, dia: string | null = null, periodo: DestaqueNaTela['periodo'] = null): DestaqueNaTela =>
+    ({ pessoa: null, motivo, dia, periodo, doMes, onde });
 
   if (porEquipe && !equipe) return vazio('Escolha a equipe nas opções da tela.');
   const escopo = porEquipe ? equipe : 'setor';
   const doEscopo = v.destaques.filter(d => d.escopo === escopo);
+
+  // 16/11/2026: o período — quem mais recebeu SOMANDO os dias (de sexta a
+  // domingo, na segunda). Só dias do mês atual: o pacote é do mês.
+  if (opcao<string>(tela, 'dia') === 'periodo') {
+    let de = opcao<string>(tela, 'data_de');
+    let ate = opcao<string>(tela, 'data_ate');
+    if (!de || !ate) return vazio('Escolha o primeiro e o último dia nas opções da tela.');
+    if (de > ate) [de, ate] = [ate, de];
+    const periodo = { de, ate };
+    if (!de.startsWith(`${v.mesIso}-`) || !ate.startsWith(`${v.mesIso}-`)) return vazio('A TV mostra os dias do mês atual.', de, periodo);
+    if (!v.destaquesDias) return vazio('Atualizando os números… o período aparece em instantes.', de, periodo);
+    let melhor: { id: string; nome: string; foto: string | null; valor: number; pagamentos: number } | null = null;
+    for (const p of v.destaquesDias) {
+      if (p.escopo !== escopo) continue;
+      let valor = 0;
+      let pagamentos = 0;
+      for (const [dia, x] of Object.entries(p.dias)) {
+        if (dia < de || dia > ate) continue;
+        valor += x.valor;
+        pagamentos += x.pagamentos;
+      }
+      valor = centavos(valor);
+      if (valor > 0 && (!melhor || valor > melhor.valor || (valor === melhor.valor && p.id < melhor.id))) {
+        melhor = { id: p.id, nome: p.nome, foto: p.foto, valor, pagamentos };
+      }
+    }
+    if (!melhor) return vazio('Ninguém recebeu neste período.', de, periodo);
+    return { pessoa: melhor, motivo: '', dia: de, periodo, doMes, onde };
+  }
 
   let dia: string | null = null;
   switch (opcao<string>(tela, 'dia')) {
@@ -490,7 +536,7 @@ export function destaqueDaTela(v: VisaoTv, tela: Pick<TelaDoPainel, 'template' |
   }
   return {
     pessoa: { id: achado.id, nome: achado.nome, foto: achado.foto, valor: achado.valor, pagamentos: achado.pagamentos },
-    motivo: '', dia, doMes, onde,
+    motivo: '', dia, periodo: null, doMes, onde,
   };
 }
 

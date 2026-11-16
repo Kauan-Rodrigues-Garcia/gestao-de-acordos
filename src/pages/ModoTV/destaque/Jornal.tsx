@@ -26,8 +26,10 @@ export function DestaqueJornal({ v, tela }: PropsEstilo) {
   const p = d.pessoa;
   const primeiro = d.nome.split(' ')[0];
   // «na quinta-feira, 29 de outubro», «no sábado, …» (sábado e domingo são masculinos).
+  const noPeriodo = !!d.periodo && d.periodo.de !== d.periodo.ate;
   const quando = d.doMes
     ? `em ${d.quando.replace(' · até agora', '')}, até agora`
+    : noPeriodo ? `de ${d.quando}`
     : d.quando ? `${/^(sábado|domingo)/.test(d.quando) ? 'no' : 'na'} ${d.quando}` : '';
 
   const manchete = p ? `${d.nome} é o ${d.titulo.toLowerCase()}` : 'Quem será o destaque?';
@@ -47,7 +49,7 @@ export function DestaqueJornal({ v, tela }: PropsEstilo) {
       {/* O cabeçalho. */}
       <div style={{ position: 'absolute', left: 90, right: 90, top: 50, textAlign: 'center', ...imprime(0) }}>
         <div style={{ borderTop: `3px solid ${TINTA}`, borderBottom: `1px solid ${TINTA}`, padding: '8px 0', display: 'flex', justifyContent: 'space-between', fontSize: 24, letterSpacing: 2, textTransform: 'uppercase' }}>
-          <span>Edição {d.doMes ? 'do mês' : 'do dia'}</span>
+          <span>Edição {d.doMes ? 'do mês' : noPeriodo ? 'do período' : 'do dia'}</span>
           <span>{d.onde || 'O time'}</span>
           <span>Preço: um acordo</span>
         </div>
@@ -77,7 +79,7 @@ export function DestaqueJornal({ v, tela }: PropsEstilo) {
           } />
         </div>
         <div style={{ fontSize: 24, fontStyle: 'italic', marginTop: 12, lineHeight: 1.35 }}>
-          {p ? `${d.nome}, ${doOnde(d.onde)}: o nome ${d.doMes ? 'do mês' : 'do dia'}.` : 'Foto: a redação aguarda o primeiro recebimento.'}
+          {p ? `${d.nome}, ${doOnde(d.onde)}: o nome ${d.doMes ? 'do mês' : noPeriodo ? 'do período' : 'do dia'}.` : 'Foto: a redação aguarda o primeiro recebimento.'}
         </div>
       </div>
 

@@ -42,6 +42,17 @@ export function dataPorExtenso(iso: string): string {
   return d.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
 }
 
+/** «13 a 15 de novembro»; no mesmo dia, como um dia só. */
+export function periodoPorExtenso(de: string, ate: string): string {
+  if (de === ate) return dataPorExtenso(de);
+  const a = new Date(`${de}T12:00:00`);
+  const b = new Date(`${ate}T12:00:00`);
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return '';
+  return a.getMonth() === b.getMonth()
+    ? `${a.getDate()} a ${b.getDate()} de ${MESES[b.getMonth()]}`
+    : `${a.getDate()} de ${MESES[a.getMonth()]} a ${b.getDate()} de ${MESES[b.getMonth()]}`;
+}
+
 export function dadosDoDestaque(v: VisaoTv, tela: TelaDoPainel, tituloPadrao?: { dia: string; mes: string }): DadosDestaque {
   const d = destaqueDaTela(v, tela);
   const p = d.pessoa;
@@ -49,12 +60,17 @@ export function dadosDoDestaque(v: VisaoTv, tela: TelaDoPainel, tituloPadrao?: {
   const valor = p && opcao<boolean>(tela, 'mostrar_valor') ? moedaTv(p.valor) : null;
   const quando = d.doMes
     ? `${MESES[Number(v.mesIso.slice(5, 7)) - 1] ?? ''} · até agora`
+    : d.periodo ? periodoPorExtenso(d.periodo.de, d.periodo.ate)
     : d.dia ? dataPorExtenso(d.dia) : '';
+  // No período, «Destaque do dia» vira «Destaque do período» (título de estilo sem «do dia» fica).
+  const tituloDoDia = d.periodo && d.periodo.de !== d.periodo.ate
+    ? automatico.dia.replace(/do dia/i, 'do período')
+    : automatico.dia;
   // Só diz a unidade quando há valor na tela: sem ele, «em H.O.» não fala de nada.
   const unidade = valor && v.unidade === 'ho' ? 'em H.O.' : '';
   return {
     ...d,
-    titulo: opcao<string>(tela, 'titulo') || (d.doMes ? automatico.mes : automatico.dia),
+    titulo: opcao<string>(tela, 'titulo') || (d.doMes ? automatico.mes : tituloDoDia),
     quando,
     quandoNaTela: [quando, unidade && `valor ${unidade}`].filter(Boolean).join(' · '),
     unidade,

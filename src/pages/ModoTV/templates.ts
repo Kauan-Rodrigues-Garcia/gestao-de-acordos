@@ -176,7 +176,7 @@ export const TEMPLATES: Template[] = [
     // 29/10/2026: o destaque com a foto grande, em vários estilos (`destaque/`).
     id: 'destaque', categoria: 'ranking',
     nome: 'Destaque do dia',
-    descricao: 'Quem mais recebeu no dia ou no mês, com a foto bem grande. Estilos: gibi, sério, fofo, pixel art, neon, jornal e Natal.',
+    descricao: 'Quem mais recebeu no dia, num período ou no mês, com a foto bem grande. Estilos: gibi, sério, fofo, pixel art, neon, jornal e Natal.',
     campos: [
       { chave: 'estilo', rotulo: 'Estilo', tipo: 'escolha', padrao: 'gibi',
         escolhas: [
@@ -193,9 +193,14 @@ export const TEMPLATES: Template[] = [
       { chave: 'dia', rotulo: 'Dia', tipo: 'escolha', padrao: 'anterior',
         escolhas: [
           { valor: 'hoje', rotulo: 'Hoje' }, { valor: 'anterior', rotulo: 'Dia anterior' },
-          { valor: 'data', rotulo: 'Outro dia' }, { valor: 'mes', rotulo: 'Mês' },
+          { valor: 'data', rotulo: 'Outro dia' },
+          // 16/11/2026: soma os dias (na segunda, de sexta a domingo).
+          { valor: 'periodo', rotulo: 'Período (soma os dias)' },
+          { valor: 'mes', rotulo: 'Mês' },
         ] },
       { chave: 'data', rotulo: 'Qual dia', tipo: 'data', padrao: '', quando: { chave: 'dia', valor: 'data' } },
+      { chave: 'data_de', rotulo: 'De', tipo: 'data', padrao: '', quando: { chave: 'dia', valor: 'periodo' } },
+      { chave: 'data_ate', rotulo: 'Até', tipo: 'data', padrao: '', quando: { chave: 'dia', valor: 'periodo' } },
       { chave: 'mostrar_valor', rotulo: 'Mostrar o valor', tipo: 'liga', padrao: true },
     ],
   },

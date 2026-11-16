@@ -294,6 +294,29 @@ describe('cena Destaque em gibi', () => {
     for (const e of ['serio', 'fofo', 'pixel', 'neon', 'jornal', 'surpresa']) expect(opcao<string>(tela({ estilo: e }), 'estilo')).toBe(e);
     expect(opcao<string>(tela({ estilo: 'batman' }), 'estilo')).toBe('gibi');
   });
+  it('período: soma os dias escolhidos e mostra quem mais recebeu no total', () => {
+    // Sexta 23, sábado 24, domingo 25: Bia ganha a sexta, Caio soma mais no fim de semana.
+    const comDias = montarVisao({ ...base, destaques_dias: [
+      { escopo: 'setor', id: 'b', nome: 'Bia', foto: null, dias: { '2026-10-23': [500, 100, 5], '2026-10-26': [9_000, 900, 9] } },
+      { escopo: 'setor', id: 'c', nome: 'Caio', foto: null, dias: { '2026-10-23': [200, 40, 2], '2026-10-24': [250, 60, 2], '2026-10-25': [100, 20, 1] } },
+      { escopo: E1, id: 'd', nome: 'Davi', foto: null, dias: { '2026-10-24': [80, 10, 1] } },
+    ] }, 'bruto');
+    const d = destaqueDaTela(comDias, tela({ dia: 'periodo', data_de: '2026-10-23', data_ate: '2026-10-25' }));
+    expect(d.pessoa).toMatchObject({ nome: 'Caio', valor: 550, pagamentos: 5 });
+    expect(d.periodo).toEqual({ de: '2026-10-23', ate: '2026-10-25' });
+    // De e até trocados valem igual; o dia 26 fica fora.
+    expect(destaqueDaTela(comDias, tela({ dia: 'periodo', data_de: '2026-10-25', data_ate: '2026-10-23' })).pessoa?.nome).toBe('Caio');
+    // H.O. no Cofen: a coluna de H.O. (Bia 100 x Caio 120).
+    expect(destaqueDaTela(montarVisao({ ...base, destaques_dias: [
+      { escopo: 'setor', id: 'b', nome: 'Bia', foto: null, dias: { '2026-10-23': [500, 100, 5] } },
+      { escopo: 'setor', id: 'c', nome: 'Caio', foto: null, dias: { '2026-10-23': [200, 40, 2], '2026-10-24': [250, 80, 2] } },
+    ] }, 'ho'), tela({ dia: 'periodo', data_de: '2026-10-23', data_ate: '2026-10-25' })).pessoa?.valor).toBe(120);
+    // Equipe, sem ninguém, sem datas e pacote antigo.
+    expect(destaqueDaTela(comDias, tela({ dia: 'periodo', escopo: 'equipe', equipe_id: E1, data_de: '2026-10-23', data_ate: '2026-10-25' })).pessoa?.nome).toBe('Davi');
+    expect(destaqueDaTela(comDias, tela({ dia: 'periodo', data_de: '2026-10-01', data_ate: '2026-10-05' })).motivo).toMatch(/período/);
+    expect(destaqueDaTela(comDias, tela({ dia: 'periodo' })).motivo).toMatch(/Escolha/);
+    expect(destaqueDaTela(v, tela({ dia: 'periodo', data_de: '2026-10-23', data_ate: '2026-10-25' })).pessoa).toBeNull();
+  });
   it('sem ninguém: hoje ainda vazio, dia de outro mês', () => {
     expect(destaqueDaTela(v, tela({ dia: 'hoje' })).pessoa).toBeNull();
     expect(destaqueDaTela(v, tela({ dia: 'data', data: '2026-09-10' })).motivo).toMatch(/mês atual/);
