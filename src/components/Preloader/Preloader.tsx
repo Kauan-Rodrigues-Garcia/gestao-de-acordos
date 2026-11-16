@@ -26,8 +26,8 @@ import './preloader.css';
  * `data-anima-sempre`: no modo leve ela continua, porque parada diria
  * «travou» (a mesma exceção do spinner).
  *
- * POR ENQUANTO SÓ NO LABORATÓRIO (`/lab-preloader.html`, `npm run dev`): não
- * está ligada ao site.
+ * No site: `CortinaAbertura.tsx`, ao abrir ou recarregar (16/11/2026). Para
+ * ajustar o desenho, o laboratório (`/lab-preloader.html`, `npm run dev`).
  */
 export function Preloader({ tamanho = 120, saindo = false, nome = 'Gestão de Acordos' }: {
   /** O lado da logo, em px. */

@@ -43,6 +43,7 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { ROUTE_PATHS } from '@/lib/index';
 import { Skeleton } from '@/components/ui/skeleton';
+import { SeguraCortina } from '@/components/Preloader/CortinaAbertura';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { produtoDaEmpresa, produtoPermite, type Produto } from '@/lib/produto';
@@ -110,6 +111,8 @@ export function ProtectedRoute({
   if (carregando && !jaMostrou.current) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
+        {/* A sessão carregando segura a cortina de abertura. */}
+        <SeguraCortina />
         <div className="space-y-3 w-64">
           <Skeleton className="h-4 w-full" />
           <Skeleton className="h-4 w-3/4" />
@@ -201,6 +204,8 @@ export function PublicRoute({ children }: { children: React.ReactNode }) {
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
+        {/* A sessão carregando segura a cortina de abertura. */}
+        <SeguraCortina />
         <div className="space-y-3 w-64">
           <Skeleton className="h-4 w-full" />
           <Skeleton className="h-4 w-3/4" />

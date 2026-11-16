@@ -18,6 +18,8 @@ import { MotionConfig } from 'framer-motion';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useModoLeve } from '@/lib/modoLeve';
 import { Skeleton } from '@/components/ui/skeleton';
+// A cortina de abertura: as linhas desenham a logo enquanto o sistema carrega.
+import { CortinaAbertura, SeguraCortina } from '@/components/Preloader/CortinaAbertura';
 import { RealtimeAcordosProvider } from '@/providers/RealtimeAcordosProvider';
 import { SincronizarDashboard } from '@/components/SincronizarDashboard';
 import { PresenceProvider } from '@/providers/PresenceProvider';
@@ -148,6 +150,8 @@ const DesafioCobranca   = lazy(() => import('@/pages/DesafioCobranca'));
 function PageLoader() {
   return (
     <div className="p-6 space-y-4">
+      {/* Na abertura do site, a tela baixando segura a cortina. */}
+      <SeguraCortina />
       <Skeleton className="h-8 w-48" />
       <Skeleton className="h-4 w-96" />
       <div className="grid grid-cols-4 gap-4 mt-6">
@@ -923,6 +927,8 @@ export default function App() {
           </MesProvider>
         </EmpresaProvider>
         <DevToolsAdminOnly />
+        {/* A cortina de abertura (Preloader): por cima de tudo até o sistema estar pronto. */}
+        <CortinaAbertura />
       </AuthProvider>
     </ThemeProvider>
     </QueryClientProvider>
