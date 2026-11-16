@@ -26,6 +26,7 @@ import {
 import { Destaque } from './destaque/Destaque';
 import { CenaLivre } from './livre/CenaLivre';
 import { cenaValida } from './livre/cena';
+import { TelaDesafioCobrancaTv } from '@/components/DesafioCobranca/DesafioCobrancaTv';
 
 export const LARGURA = 1920;
 export const ALTURA = 1080;
@@ -1137,7 +1138,9 @@ export function TelaTv({ tela, tema, visao, midiaUrl, posicao, atualizadoEm, mes
   const c = CORES[tema];
   // Tela cheia, sem o cabeçalho e o rodapé: a mídia, o destaque (cada estilo
   // tem a página dele) e a cena livre (o líder desenha a página inteira).
-  const ehMidia = tela.template === 'imagem' || tela.template === 'video' || tela.template === 'destaque' || tela.template === 'livre';
+  const ehMidia = tela.template === 'imagem' || tela.template === 'video' || tela.template === 'destaque' || tela.template === 'livre'
+    // O Desafio Cobrança tem o próprio céu e os próprios números.
+    || tela.template === 'desafio_cobranca';
   const nomeMes = mes ? MESES[Number(mes.slice(5, 7)) - 1] : undefined;
 
   let corpo: ReactNode;
@@ -1145,6 +1148,7 @@ export function TelaTv({ tela, tema, visao, midiaUrl, posicao, atualizadoEm, mes
   else if (tela.template === 'imagem') corpo = <Imagem tela={tela} c={c} url={midiaUrl} />;
   else if (tela.template === 'video') corpo = <Video tela={tela} c={c} url={midiaUrl} parada={parada} semSom={semSom} />;
   else if (tela.template === 'recado') corpo = <Recado tela={tela} c={c} />;
+  else if (tela.template === 'desafio_cobranca') corpo = <TelaDesafioCobrancaTv />;
   else if (!visao) corpo = <Aviso texto="Carregando os números…" c={c} />;
   else {
     const P = { v: visao, tela, c };

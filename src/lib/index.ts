@@ -168,6 +168,8 @@ export const ROUTE_PATHS = {
    * existir não é falha de segurança: não há dado do Gestão nela.
    */
   CREATORS_LAB: '/creators',
+  /** Desafio Cobrança (folgar mais cedo): configuração, ajustes e hora a hora. Só super_admin. */
+  DESAFIO_COBRANCA: '/desafio-cobranca',
 } as const;
 
 export const STATUS_LABELS: Record<string, string> = {

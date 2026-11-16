@@ -230,6 +230,15 @@ export const TEMPLATES: Template[] = [
     ],
   },
   {
+    // O Desafio Cobrança «para folgar mais cedo» (16/11/2026). Os números vêm
+    // do próprio desafio (o 59 dos setores que somam), não do pacote do painel:
+    // só aparece liberado e para setor marcado «vê». Ver `DesafioCobrancaTv`.
+    id: 'desafio_cobranca', categoria: 'meta',
+    nome: 'Desafio Cobrança',
+    descricao: 'O desafio geral de folgar mais cedo: quanto todos os setores já somaram, a meta e o prêmio.',
+    campos: [],
+  },
+  {
     id: 'imagem', categoria: 'midia',
     nome: 'Imagem',
     descricao: 'Uma arte, foto ou campanha em tela cheia.',

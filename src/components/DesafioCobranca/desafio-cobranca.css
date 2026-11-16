@@ -1,0 +1,476 @@
+/* Desafio Cobrança — a gaveta de 620 px do Gestão (veio do modelo de teste de 16/11/2026).
+   A gaveta tem o próprio céu de fim de tarde (igual no tema claro e no escuro
+   do Gestão): contraste do texto ≥ 7:1, e nenhum estado depende só da cor. */
+
+.dc, .dc-tv {
+  /* Padrão: o «Pôr do sol». Os outros temas (lab-desafio-cobranca-temas.ts)
+     trocam estas variáveis por cima. */
+  --dc-noite: #0d1226;
+  --dc-noite-2: #1a1838;
+  --dc-noite-3: #2a1c3c;
+  --dc-brilho-1: rgba(255, 127, 92, 0.26);
+  --dc-brilho-2: rgba(255, 192, 77, 0.14);
+  --dc-veu: #ffffff;
+  --dc-cartao: rgba(255, 255, 255, 0.06);
+  --dc-cartao-borda: rgba(255, 255, 255, 0.14);
+  --dc-texto: #f7f4ee;
+  --dc-suave: #c4c8da;
+  --dc-ouro: #ffc04d;
+  --dc-coral: #ff7f5c;
+  --dc-sobre-ouro: #2b1400;
+  --dc-verde: #45e0a0;
+  --dc-vermelho: #ff8a8a;
+  --dc-foco: #8ec5ff;
+  --dc-quente-1: #ffd36b;
+  --dc-quente-2: #ff9a5c;
+  --dc-quente-3: #ff6f61;
+  --dc-claro-1: #ffe4a3;
+  --dc-claro-2: #ffc27a;
+  --dc-tinta: #2b1400;
+  --dc-tinta-ok: #052a1a;
+  --dc-canhoto: rgba(43, 20, 0, 0.88);
+  --dc-canhoto-texto: #ffe7a8;
+  --dc-verso: #232650;
+  --dc-trilho: rgba(255, 255, 255, 0.12);
+  --dc-marca: rgba(255, 255, 255, 0.7);
+  --dc-estrela: #ffffff;
+  --dc-sol: #fff3c4;
+  --dc-minha: #8ec5ff;
+  --dc-minha-2: #b39dff;
+  --dc-minha-texto: #cfe6ff;
+}
+.dc {
+
+  color: var(--dc-texto);
+  font-size: 15px;
+  line-height: 1.45;
+  background:
+    radial-gradient(700px 360px at 85% 105%, var(--dc-brilho-1), transparent 60%),
+    radial-gradient(520px 300px at 0% 100%, var(--dc-brilho-2), transparent 60%),
+    linear-gradient(180deg, var(--dc-noite) 0%, var(--dc-noite-2) 65%, var(--dc-noite-3) 100%);
+}
+.dc button { font: inherit; color: inherit; }
+.dc :focus-visible { outline: 3px solid var(--dc-foco); outline-offset: 2px; border-radius: 10px; }
+
+/* ── Cabeçalho da gaveta ───────────────────────────────────────────────── */
+
+.dc-cabeca { flex-shrink: 0; padding: 16px 20px 14px; border-bottom: 1px solid var(--dc-cartao-borda); }
+.dc-cabeca-linha { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.dc-selo {
+  display: inline-flex; align-items: center; gap: 6px;
+  color: var(--dc-ouro); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.14em;
+}
+.dc-fechar {
+  display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%;
+  border: 0; background: transparent; color: var(--dc-suave); cursor: pointer;
+}
+.dc-fechar:hover { background: var(--dc-cartao); color: var(--dc-texto); }
+.dc-titulo { margin: 6px 0 0; font-size: 22px; font-weight: 900; line-height: 1.15; letter-spacing: -0.01em; }
+.dc-titulo span {
+  background: linear-gradient(90deg, var(--dc-ouro), var(--dc-coral));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.dc-periodo { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 6px 0 0; color: var(--dc-suave); font-size: 13px; }
+.dc-pilula {
+  margin-left: 4px; padding: 1px 8px; border-radius: 999px;
+  background: var(--dc-texto); color: var(--dc-noite); font-size: 12px; font-weight: 800;
+}
+
+.dc-corpo { position: relative; flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.dc-conteudo { display: flex; flex-direction: column; gap: 14px; padding: 18px 20px 24px; }
+
+.dc-sobe { opacity: 0; animation: dc-sobe 0.5s ease-out forwards; animation-delay: calc(var(--d) * 0.08s); }
+@keyframes dc-sobe { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+
+.dc-cartao { padding: 16px; border-radius: 16px; border: 1px solid var(--dc-cartao-borda); background: var(--dc-cartao); }
+.dc-rotulo {
+  display: flex; align-items: center; gap: 6px; margin: 0;
+  color: var(--dc-suave); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+}
+.dc-rotulo-solto { margin-bottom: 8px; }
+.dc-rotulo-solto span { margin-left: auto; font-size: 11px; font-weight: 500; text-transform: none; letter-spacing: 0; }
+
+/* ── O ingresso (1ª vez) ───────────────────────────────────────────────── */
+
+.dc-palco { position: relative; min-height: 100%; display: grid; place-items: center; padding: 28px 20px; }
+.dc-ceu { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.dc-ceu span {
+  position: absolute; width: 3px; height: 3px; border-radius: 50%; background: var(--dc-estrela); opacity: 0.5;
+  animation: dc-pisca 3.2s ease-in-out infinite; animation-delay: calc(var(--i) * -0.37s);
+}
+@keyframes dc-pisca { 50% { opacity: 0.1; transform: scale(0.6); } }
+
+.dc-ingresso {
+  position: relative; width: min(340px, 100%); padding: 0; border: 0; background: none; cursor: pointer;
+  filter: drop-shadow(0 18px 36px rgba(0, 0, 0, 0.45));
+  animation: dc-flutua 4s ease-in-out infinite;
+}
+@keyframes dc-flutua { 50% { transform: translateY(-6px) rotate(-0.6deg); } }
+.dc-ingresso:hover { animation-play-state: paused; }
+.dc-ingresso-corpo {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 26px 22px 22px; border-radius: 20px 20px 0 0; text-align: center;
+  background: linear-gradient(160deg, var(--dc-quente-1) 0%, var(--dc-quente-2) 55%, var(--dc-quente-3) 100%); color: var(--dc-tinta);
+}
+.dc-ingresso-sol {
+  display: grid; place-items: center; width: 60px; height: 60px; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.45); animation: dc-gira 18s linear infinite;
+}
+@keyframes dc-gira { to { transform: rotate(360deg); } }
+.dc-ingresso-chamada { font-size: 13px; font-weight: 600; }
+.dc-ingresso-titulo { font-size: 34px; font-weight: 900; line-height: 1.05; letter-spacing: -0.02em; }
+.dc-ingresso-datas {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px;
+  background: color-mix(in srgb, var(--dc-tinta) 12%, transparent); font-size: 12px; font-weight: 700;
+}
+.dc-ingresso-picote { position: relative; display: block; height: 0; margin: 0 16px; border-top: 3px dashed color-mix(in srgb, var(--dc-tinta) 35%, transparent); }
+.dc-ingresso-picote::before, .dc-ingresso-picote::after {
+  content: ''; position: absolute; top: -12px; width: 22px; height: 22px; border-radius: 50%; background: var(--dc-noite-2);
+}
+.dc-ingresso-picote::before { left: -27px; }
+.dc-ingresso-picote::after { right: -27px; }
+.dc-ingresso-canhoto {
+  display: flex; justify-content: center; padding: 14px 18px 16px;
+  border-radius: 0 0 20px 20px; background: var(--dc-quente-3); color: var(--dc-tinta); transform-origin: top center;
+}
+.dc-toque { font-size: 17px; font-weight: 900; letter-spacing: 0.04em; text-transform: uppercase; }
+.dc-ingresso.abrindo { animation: dc-abre 0.9s ease-in forwards; }
+.dc-ingresso.abrindo .dc-ingresso-canhoto { animation: dc-rasga 0.55s cubic-bezier(0.5, 0, 0.75, 0) forwards; }
+@keyframes dc-rasga { 30% { transform: rotate(4deg); } 100% { transform: translateY(140px) rotate(18deg); opacity: 0; } }
+@keyframes dc-abre {
+  0%, 45% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1.3); opacity: 0; filter: brightness(1.6) drop-shadow(0 0 50px var(--dc-ouro)); }
+}
+
+/* ── O desafio geral (o foco) ──────────────────────────────────────────── */
+
+.dc-heroi {
+  display: grid; grid-template-columns: 200px minmax(0, 1fr); align-items: center; gap: 18px;
+  border-color: color-mix(in srgb, var(--dc-ouro) 35%, transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--dc-ouro) 12%, transparent), color-mix(in srgb, var(--dc-coral) 5%, transparent) 60%, color-mix(in srgb, var(--dc-veu) 4%, transparent));
+}
+.dc-heroi-valor { margin: 4px 0 0; font-size: 26px; font-weight: 900; line-height: 1.1; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+.dc-heroi-meta { margin: 0; color: var(--dc-suave); font-size: 14px; font-weight: 600; }
+
+.dc-relogio { position: relative; width: 200px; aspect-ratio: 1; }
+.dc-relogio svg { width: 100%; height: 100%; overflow: visible; }
+.dc-relogio-fundo { fill: color-mix(in srgb, var(--dc-veu) 4%, transparent); stroke: var(--dc-trilho); stroke-width: 14; }
+.dc-relogio-anel { fill: none; stroke: url(#dc-anel); stroke-width: 14; stroke-linecap: round; transition: stroke-dashoffset 1.3s cubic-bezier(0.22, 1, 0.36, 1); }
+.dc-marca { stroke: var(--dc-marca); stroke-width: 3.5; stroke-linecap: round; }
+.dc-marca-dia { fill: var(--dc-suave); font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; }
+.dc-marca-dia.hoje { fill: var(--dc-ouro); }
+.dc-marca-alvo { stroke: var(--dc-ouro); stroke-width: 4; stroke-linecap: round; stroke-dasharray: 3 4; }
+.dc-ponteiro { transform-origin: 120px 120px; transition: transform 1.3s cubic-bezier(0.22, 1, 0.36, 1); }
+.dc-sol { fill: var(--dc-sol); stroke: var(--dc-ouro); stroke-width: 3; }
+.dc-sol-halo { fill: color-mix(in srgb, var(--dc-ouro) 35%, transparent); animation: dc-halo 2.4s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes dc-halo { 50% { transform: scale(1.35); opacity: 0.4; } }
+.dc-relogio-centro { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
+.dc-relogio-pct { font-size: 34px; font-weight: 900; line-height: 1; }
+
+.dc-ritmo { margin-top: 12px; padding: 10px 12px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--dc-ouro) 40%, transparent); background: color-mix(in srgb, var(--dc-ouro) 8%, transparent); }
+.dc-ritmo.em-dia { border-color: color-mix(in srgb, var(--dc-verde) 50%, transparent); background: color-mix(in srgb, var(--dc-verde) 10%, transparent); }
+.dc-ritmo-titulo { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 14px; font-weight: 800; color: var(--dc-ouro); }
+.dc-ritmo.em-dia .dc-ritmo-titulo { color: var(--dc-verde); }
+.dc-ritmo-texto { margin: 2px 0 0 22px; font-size: 13px; }
+
+/* ── Hoje ──────────────────────────────────────────────────────────────── */
+
+.dc-hoje-linha { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.dc-hoje-dias { margin: 0; font-size: 13px; color: var(--dc-suave); }
+.dc-hoje-dias strong { color: var(--dc-texto); font-size: 15px; }
+.dc-hoje-valor { display: flex; align-items: baseline; gap: 8px; margin: 6px 0 0; color: var(--dc-suave); font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+.dc-hoje-valor strong { color: var(--dc-texto); font-size: 28px; font-weight: 900; text-transform: none; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+.dc-hoje-valor.ok { align-items: center; color: var(--dc-verde); font-size: 20px; font-weight: 900; text-transform: none; letter-spacing: 0; }
+.dc-barra-caixa { margin-top: 10px; }
+.dc-barra { height: 12px; border-radius: 999px; background: var(--dc-trilho); overflow: hidden; }
+.dc-barra-cheia { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--dc-ouro), var(--dc-coral)); transition: width 0.8s cubic-bezier(0.22, 1, 0.36, 1); }
+.dc-barra-texto { display: flex; justify-content: space-between; gap: 8px; margin: 4px 0 0; font-size: 12px; color: var(--dc-suave); }
+.dc-barra-texto strong { color: var(--dc-texto); }
+
+/* ── Os 4 dias: cartas que viram ───────────────────────────────────────── */
+
+.dc-dias { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.dc-dia { width: 100%; height: 124px; padding: 0; border: 0; background: none; cursor: pointer; perspective: 700px; }
+.dc-dia-interno { position: relative; display: block; width: 100%; height: 100%; transition: transform 0.55s cubic-bezier(0.22, 1, 0.36, 1); transform-style: preserve-3d; }
+.dc-dia.virado .dc-dia-interno { transform: rotateY(180deg); }
+.dc-dia:hover:not(.virado) .dc-dia-interno { transform: rotateY(10deg); }
+.dc-dia-frente, .dc-dia-verso {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  padding: 8px 4px; border-radius: 14px; text-align: center;
+  backface-visibility: hidden; -webkit-backface-visibility: hidden;
+  border: 2px solid var(--dc-cartao-borda); background: var(--dc-cartao);
+}
+.dc-dia-verso { transform: rotateY(180deg); background: var(--dc-verso); }
+.dc-dia-semana { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--dc-suave); }
+.dc-dia-data { font-size: 18px; font-weight: 900; line-height: 1.1; }
+.dc-dia-icone { flex-shrink: 0; display: grid; place-items: center; width: 32px; height: 32px; margin: 4px 0 2px; border-radius: 50%; background: color-mix(in srgb, var(--dc-veu) 10%, transparent); }
+.dc-dia-legenda { font-size: 12px; font-weight: 800; }
+.dc-dia-verso-titulo { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--dc-suave); }
+.dc-dia-verso-valor { font-size: 16px; font-weight: 900; }
+.dc-dia-verso-texto { font-size: 11px; color: var(--dc-suave); }
+
+.dc-dia.batido .dc-dia-frente, .dc-dia.hoje-batido .dc-dia-frente { border-color: var(--dc-verde); background: color-mix(in srgb, var(--dc-verde) 12%, transparent); }
+.dc-dia.batido .dc-dia-icone, .dc-dia.hoje-batido .dc-dia-icone { background: var(--dc-verde); color: var(--dc-tinta-ok); }
+.dc-dia.batido .dc-dia-legenda, .dc-dia.hoje-batido .dc-dia-legenda { color: var(--dc-verde); }
+.dc-dia.nao .dc-dia-frente { border-style: dashed; }
+.dc-dia.nao .dc-dia-icone { color: var(--dc-vermelho); }
+.dc-dia.hoje .dc-dia-frente { border-color: var(--dc-ouro); background: color-mix(in srgb, var(--dc-ouro) 10%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--dc-ouro) 22%, transparent); }
+.dc-dia.hoje .dc-dia-icone { background: var(--dc-ouro); color: var(--dc-sobre-ouro); animation: dc-ampulheta 2.4s ease-in-out infinite; }
+.dc-dia.hoje .dc-dia-legenda { color: var(--dc-ouro); }
+@keyframes dc-ampulheta { 0%, 40% { transform: rotate(0); } 60%, 100% { transform: rotate(180deg); } }
+.dc-dia.futuro .dc-dia-frente { opacity: 0.75; }
+
+.dc-rever {
+  align-self: center; display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border: 0; border-radius: 999px; background: transparent;
+  color: var(--dc-suave); font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.dc-rever:hover { background: var(--dc-cartao); color: var(--dc-texto); }
+
+/* ── Gaveta estreita (celular) ─────────────────────────────────────────── */
+
+@media (max-width: 520px) {
+  .dc-cabeca { padding: 14px 16px 12px; }
+  .dc-titulo { font-size: 19px; }
+  .dc-conteudo { padding: 14px 14px 20px; }
+  .dc-heroi { grid-template-columns: 1fr; justify-items: center; text-align: center; }
+  .dc-heroi-texto { width: 100%; }
+  .dc-heroi .dc-rotulo { justify-content: center; }
+  .dc-ritmo { text-align: left; }
+  .dc-dias { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* ── O prêmio: saída às 14:00 de quinta ────────────────────────────────── */
+
+.dc-ingresso-premio { display: flex; flex-direction: column; margin-top: 2px; font-size: 13px; line-height: 1.35; }
+.dc-ingresso-premio strong { font-weight: 900; }
+
+.dc-premio {
+  display: flex; align-items: center; gap: 14px;
+  padding: 12px 14px; border-radius: 16px;
+  background: linear-gradient(120deg, var(--dc-quente-1) 0%, var(--dc-quente-2) 60%, var(--dc-quente-3) 100%); color: var(--dc-tinta);
+  box-shadow: 0 10px 30px color-mix(in srgb, var(--dc-coral) 25%, transparent);
+}
+.dc-premio.bateu { background: linear-gradient(120deg, color-mix(in srgb, var(--dc-verde) 60%, white) 0%, var(--dc-verde) 100%); color: var(--dc-tinta-ok); }
+.dc-premio-hora {
+  flex-shrink: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  width: 92px; height: 64px; border-radius: 12px; background: var(--dc-canhoto); color: var(--dc-canhoto-texto);
+}
+.dc-premio.bateu .dc-premio-hora { background: color-mix(in srgb, var(--dc-tinta-ok) 90%, transparent); color: color-mix(in srgb, var(--dc-verde) 35%, white); }
+.dc-premio-hora span { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.12em; opacity: 0.85; }
+.dc-premio-hora strong { font-size: 26px; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; }
+.dc-premio-texto { min-width: 0; }
+.dc-premio-titulo { margin: 0; font-size: 17px; font-weight: 900; line-height: 1.2; }
+.dc-premio-quando { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 4px 0 0; font-size: 13px; font-weight: 600; }
+.dc-premio-quando strong { font-weight: 900; }
+.dc-capitalizar { text-transform: capitalize; }
+.dc-premio-falta { margin: 1px 0 0; font-size: 13px; font-weight: 600; }
+.dc-premio-falta strong { font-weight: 900; }
+
+/* ── A folga chama: pisca forte até ser aberta ─────────────────────────── */
+
+/* Anel de brilho que pulsa, um tom âmbar que acende por dentro e um leve
+   balanço. 1,1 s por ciclo: forte, mas abaixo de 3 piscadas por segundo. */
+@keyframes dc-chama {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 138, 61, 0), inset 0 0 0 100px rgba(255, 170, 60, 0); transform: scale(1) rotate(0); }
+  20% { transform: scale(1.04) rotate(-2deg); }
+  45% { box-shadow: 0 0 0 5px rgba(255, 138, 61, 0.55), 0 0 26px 8px rgba(255, 184, 77, 0.8), inset 0 0 0 100px rgba(255, 170, 60, 0.3); transform: scale(1.08) rotate(2deg); }
+  70% { transform: scale(1.03) rotate(-1deg); }
+}
+.dc-chamando { animation: dc-chama 1.1s ease-in-out infinite; border-color: #f97316 !important; }
+.dc-chamando:hover, .dc-chamando:focus-visible { animation-play-state: paused; }
+
+.dc-abra {
+  position: absolute; top: -9px; right: -10px;
+  padding: 1px 6px; border-radius: 999px;
+  background: #ef4444; color: #fff; font-size: 9px; font-weight: 900; letter-spacing: 0.06em;
+  box-shadow: 0 2px 6px rgba(239, 68, 68, 0.5);
+  animation: dc-abra-pula 1.1s ease-in-out infinite;
+}
+@keyframes dc-abra-pula { 0%, 100% { transform: translateY(0); } 45% { transform: translateY(-3px) scale(1.1); } }
+
+/* As abas da gaveta no céu da folga. */
+.dc-abas { display: inline-flex; padding: 2px; border-radius: 999px; background: color-mix(in srgb, var(--dc-veu) 8%, transparent); border: 1px solid var(--dc-cartao-borda); }
+.dc .dc-aba {
+  position: relative; display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 12px; border: 0; border-radius: 999px; background: transparent; cursor: pointer;
+  color: var(--dc-suave); font-size: 12px; font-weight: 700;
+}
+.dc .dc-aba[aria-selected='true'] { background: var(--dc-ouro); color: var(--dc-sobre-ouro); }
+
+/* ── Os dois prêmios (banco de horas) ──────────────────────────────────── */
+
+.dc-ingresso-niveis { display: flex; flex-direction: column; gap: 1px; margin-top: 4px; font-size: 13px; line-height: 1.35; }
+.dc-ingresso-niveis strong { font-weight: 900; }
+.dc-ingresso-niveis em { margin-top: 2px; font-size: 11px; font-style: normal; font-weight: 700; opacity: 0.8; }
+
+.dc-niveis { display: flex; flex-direction: column; gap: 8px; }
+.dc-niveis-topo { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.dc-niveis-prazo {
+  flex-shrink: 0; padding: 2px 10px; border-radius: 999px;
+  background: color-mix(in srgb, var(--dc-ouro) 15%, transparent); color: var(--dc-ouro); font-size: 12px; font-weight: 800;
+}
+.dc-niveis-dica { margin: 0; font-size: 13px; font-weight: 700; color: var(--dc-verde); text-align: center; }
+
+.dc-nivel {
+  display: flex; align-items: stretch; min-height: 70px; border-radius: 14px; overflow: hidden; color: var(--dc-tinta);
+  background: linear-gradient(115deg, var(--dc-claro-1) 0%, var(--dc-claro-2) 100%);
+}
+.dc-nivel.maior { background: linear-gradient(115deg, var(--dc-quente-1) 0%, var(--dc-quente-2) 60%, var(--dc-quente-3) 100%); box-shadow: 0 10px 28px color-mix(in srgb, var(--dc-coral) 25%, transparent); }
+.dc-nivel.ok { background: linear-gradient(115deg, color-mix(in srgb, var(--dc-verde) 55%, white) 0%, var(--dc-verde) 100%); color: var(--dc-tinta-ok); box-shadow: none; }
+.dc-nivel-canhoto {
+  flex-shrink: 0; width: 88px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: var(--dc-canhoto); color: var(--dc-canhoto-texto); border-right: 3px dashed color-mix(in srgb, var(--dc-canhoto-texto) 35%, transparent);
+}
+.dc-nivel.ok .dc-nivel-canhoto { background: color-mix(in srgb, var(--dc-tinta-ok) 90%, transparent); color: color-mix(in srgb, var(--dc-verde) 35%, white); }
+.dc-nivel-canhoto span { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.12em; opacity: 0.85; }
+.dc-nivel-canhoto strong { font-size: 24px; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; }
+.dc-nivel-texto { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; padding: 8px 12px; }
+.dc-nivel-titulo { margin: 0; font-size: 16px; font-weight: 900; line-height: 1.2; }
+.dc-nivel-regra { margin: 2px 0 0; font-size: 12px; font-weight: 700; opacity: 0.8; }
+.dc-nivel-situacao { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; justify-content: center; padding: 8px 14px 8px 4px; }
+.dc-nivel-falta-rotulo { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.75; }
+.dc-nivel-falta { font-size: 17px; font-weight: 900; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dc-nivel-ok { display: inline-flex; align-items: center; gap: 4px; font-size: 14px; font-weight: 900; white-space: nowrap; }
+
+/* Os 3 dias. */
+.dc-dias.dc-dias-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+/* As marcas dos prêmios no anel. */
+.dc-marca-premio { stroke: var(--dc-ouro); stroke-width: 5; stroke-linecap: round; }
+.dc-marca-premio-txt { fill: var(--dc-ouro); font-size: 12px; font-weight: 900; }
+
+@media (max-width: 520px) {
+  .dc-nivel-canhoto { width: 70px; }
+  .dc-nivel-titulo { font-size: 14px; }
+}
+
+/* A regra individual do operador: à parte, discreta — não é o desafio geral. */
+.dc-regra-operador {
+  display: flex; align-items: flex-start; gap: 8px; margin: 2px 0 0;
+  padding: 9px 12px; border-radius: 12px; border: 1px dashed var(--dc-cartao-borda);
+  color: var(--dc-suave); font-size: 13px; line-height: 1.4;
+}
+.dc-regra-operador svg { flex-shrink: 0; margin-top: 1px; color: var(--dc-ouro); }
+.dc-regra-operador strong { color: var(--dc-texto); }
+
+/* ── Informação extra: precisa ter banco de horas ──────────────────────── */
+
+.dc-info-extra {
+  display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; margin: 0;
+  padding: 3px 10px; border-radius: 999px;
+  background: color-mix(in srgb, var(--dc-minha) 12%, transparent); color: var(--dc-minha-texto); font-size: 12px; font-weight: 600;
+}
+
+/* ── Sua meta individual (só o operador vê) ─────────────────────────────── */
+
+.dc-minha {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 16px; border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--dc-minha) 35%, transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--dc-minha) 12%, transparent), color-mix(in srgb, var(--dc-veu) 4%, transparent));
+}
+.dc-minha.ok { border-color: color-mix(in srgb, var(--dc-verde) 55%, transparent); background: linear-gradient(135deg, color-mix(in srgb, var(--dc-verde) 14%, transparent), color-mix(in srgb, var(--dc-veu) 4%, transparent)); }
+.dc-minha .dc-rotulo { color: var(--dc-minha-texto); }
+.dc-minha-selo { flex-shrink: 0; padding: 2px 9px; border-radius: 999px; background: color-mix(in srgb, var(--dc-minha) 16%, transparent); color: var(--dc-minha-texto); font-size: 11px; font-weight: 800; }
+.dc-minha-media { margin: 0; font-size: 14px; }
+.dc-minha-media strong { font-size: 16px; font-weight: 900; }
+.dc-minha-media span { display: block; margin-top: 1px; font-size: 12px; color: var(--dc-suave); }
+
+.dc-minha-placar { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.dc-minha-feito { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-size: 15px; color: var(--dc-suave); }
+.dc-minha-feito strong { font-size: 26px; font-weight: 900; color: var(--dc-texto); }
+.dc-minha.ok .dc-minha-feito, .dc-minha.ok .dc-minha-feito strong { color: var(--dc-verde); }
+.dc-minha-valores { margin: 0; font-size: 13px; color: var(--dc-suave); font-variant-numeric: tabular-nums; }
+
+/* A régua: cheia até onde ele está, uma marca por média, o fim = 4,5. */
+.dc-minha-regua { position: relative; height: 14px; margin: 4px 0 14px; border-radius: 999px; background: var(--dc-trilho); }
+.dc-minha-cheia { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--dc-minha), var(--dc-minha-2)); transition: width 0.8s cubic-bezier(0.22, 1, 0.36, 1); }
+.dc-minha.ok .dc-minha-cheia { background: var(--dc-verde); }
+.dc-minha-marca { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: color-mix(in srgb, var(--dc-noite) 75%, transparent); }
+.dc-minha-marca em { position: absolute; top: 19px; left: 50%; transform: translateX(-50%); font-size: 10px; font-style: normal; font-weight: 800; color: var(--dc-suave); }
+
+.dc-minha-status { margin: 0; font-size: 14px; }
+.dc-minha-status strong { font-weight: 900; }
+.dc-minha-status.ok { color: var(--dc-verde); font-weight: 900; font-size: 15px; }
+
+.dc-minha-dias { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 0; padding: 0; list-style: none; }
+.dc-minha-dias li {
+  display: flex; flex-direction: column; align-items: center; padding: 6px; border-radius: 10px;
+  background: color-mix(in srgb, var(--dc-veu) 5%, transparent); font-size: 11px; color: var(--dc-suave); text-transform: uppercase; font-weight: 700;
+}
+.dc-minha-dias li strong { font-size: 14px; color: var(--dc-texto); text-transform: none; font-variant-numeric: tabular-nums; }
+.dc-minha-dias li.hoje { outline: 2px solid color-mix(in srgb, var(--dc-minha) 50%, transparent); }
+.dc-minha-dias li.depois { opacity: 0.55; }
+.dc-minha-nota { margin: 0; font-size: 11px; color: var(--dc-suave); }
+.dc-minha-nota strong { color: var(--dc-texto); font-weight: 800; }
+
+/* Compacta: a regra individual é à parte — não pode empurrar o geral para baixo. */
+.dc-minha-compacta { gap: 8px; padding: 12px 14px; }
+.dc-minha-compacta .dc-minha-feito strong { font-size: 22px; }
+.dc-minha-compacta .dc-minha-regua { height: 10px; margin: 16px 0 14px; }
+.dc-minha-compacta .dc-minha-marca em { top: 14px; }
+.dc-minha-compacta .dc-minha-status { font-size: 13px; }
+/* Os dois níveis da regra individual, numa lista curta. */
+.dc-minha-niveis { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.dc-minha-niveis li {
+  display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 999px;
+  border: 1px solid rgba(142, 197, 255, 0.3); font-size: 12px; color: var(--dc-suave); font-variant-numeric: tabular-nums;
+}
+.dc-minha-niveis li strong { color: var(--dc-texto); }
+.dc-minha-niveis li.ok { border-color: rgba(69, 224, 160, 0.6); color: var(--dc-verde); }
+/* A marca do 1º nível (4,5 = 1h) é mais forte que as das médias inteiras. */
+.dc-minha-marca.nivel { width: 3px; margin-left: -1.5px; background: var(--dc-ouro); }
+.dc-minha-marca.nivel em { top: auto; bottom: 15px; color: var(--dc-ouro); white-space: nowrap; }
+/* O fim da régua é o 2º nível (5 = 14h): rótulo à direita, sem traço. */
+.dc-minha-fim { position: absolute; right: 0; top: 14px; font-size: 10px; font-weight: 900; color: var(--dc-texto); white-space: nowrap; }
+
+/* ── Os temas e os enfeites de Natal (16/11/2026) ──────────────────────────
+   As cores de cada tema chegam como variáveis `--dc-*` no próprio elemento
+   (`temas.ts`, `varsDoTema`). Nos temas de Natal o elemento ganha
+   `data-natal`: aparecem o pisca-pisca, os sincelos (o componente do Natal do
+   Gestão), o laço, a estrela, os montes e a neve caindo. Na TV, tudo parado. */
+
+.dc-so-natal { display: none !important; }
+:is(.dc, .dc-tv)[data-natal] .dc-so-natal { display: revert !important; }
+:is(.dc, .dc-tv)[data-natal] .dc-so-sol { display: none !important; }
+
+/* O cabeçalho: o pisca-pisca no alto e os sincelos pendurados embaixo. */
+.dc-cabeca { position: relative; z-index: 2; }
+.dc[data-natal] .dc-cabeca { padding-top: 30px; }
+.dc-luzes-topo { position: absolute; top: -6px; left: 0; width: 100%; height: auto; pointer-events: none; }
+.dc .dc-sincelo-cabeca { top: 100%; right: 26px; }
+
+.dc-pisca .dc-luz { filter: drop-shadow(0 0 4px var(--cor)); animation: dc-luz 2.6s ease-in-out infinite; animation-delay: calc(var(--i) * -0.41s); }
+.dc-pisca.parado .dc-luz { animation: none; }
+@keyframes dc-luz { 50% { opacity: 0.5; filter: none; } }
+
+/* O ingresso vira presente: o laço no alto, a neve caindo e os montes no chão. */
+.dc-laco { position: absolute; top: -24px; left: 50%; transform: translateX(-50%); z-index: 2; filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.3)); }
+.dc-palco .dc-montes { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; pointer-events: none; }
+.dc-montes .longe { fill: color-mix(in srgb, var(--dc-sol) 12%, transparent); }
+.dc-montes .perto { fill: color-mix(in srgb, var(--dc-sol) 22%, transparent); }
+.dc[data-natal] .dc-ceu span {
+  width: 6px; height: 6px; opacity: 0.85; top: -10px !important;
+  animation: dc-neve 9s linear infinite; animation-delay: calc(var(--i) * -0.6s);
+}
+.dc[data-natal] .dc-ceu span:nth-child(3n) { width: 4px; height: 4px; animation-duration: 12s; }
+.dc[data-natal] .dc-ceu span:nth-child(4n) { width: 8px; height: 8px; animation-duration: 7s; }
+@keyframes dc-neve {
+  0% { transform: translate(0, 0); }
+  50% { transform: translate(14px, 50vh); }
+  100% { transform: translate(-6px, 100vh); }
+}
+
+/* O cartão principal com um floco de neve no canto; o ponteiro vira estrela. */
+.dc-heroi { position: relative; overflow: hidden; }
+.dc-floco { position: absolute; right: -16px; top: -16px; color: var(--dc-ouro); opacity: 0.13; pointer-events: none; }
+.dc-estrela-ponteiro { fill: #ffd54f; stroke: #e7a800; stroke-width: 1.5; stroke-linejoin: round; filter: drop-shadow(0 0 5px #ffd54f); }
+
+/* Os sincelos pendurados no ingresso do prêmio. */
+.dc-nivel-caixa { position: relative; }
+.dc .dc-sincelo-premio { top: calc(100% - 3px); right: 36px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .dc-pisca .dc-luz, .dc[data-natal] .dc-ceu span { animation: none; }
+}

@@ -57,7 +57,7 @@ import { ThemeToggle } from './ThemeToggle';
 import { HelpDrawer } from './HelpDrawer';
 import { OnboardingTour } from './OnboardingTour';
 import { DesafioMenu } from './DesafioMenu';
-import { BarraDesafioDoDia } from './DesafioDoDia/BarraDesafioDoDia';
+import { BarraDosDesafios } from './DesafioCobranca/BarraDosDesafios';
 import { CorridaDaSorte } from './Corrida';
 import { ChefeDeTeste } from './Corrida/guerra/ChefeDeTeste';
 import { PalcoDoOrganizador } from './Corrida/admin/PalcoDoOrganizador';
@@ -863,10 +863,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               arquivo para o que isso substituiu. */}
           <AvisoNotificacaoHeader />
 
-          {/* O desafio do dia de quem participa: quanto falta, a barra e o
-              tempo. Mesma chave da aba Desafios; quem está no alvo, o placar
-              responde. Ver `DesafioDoDia/BarraDesafioDoDia.tsx`. */}
-          <BarraDesafioDoDia ativo={!permLoading && temPermissao('analitico_sub_desafios')} />
+          {/* Os desafios na barra: o Desafio Cobrança (a folga; quem vê, o
+              banco decide) e o desafio do dia de quem participa (mesma chave
+              da aba Desafios). Com os dois, o ⇄ escolhe qual fica à vista.
+              Ver `DesafioCobranca/BarraDosDesafios.tsx`. */}
+          <BarraDosDesafios ativoDia={!permLoading && temPermissao('analitico_sub_desafios')} />
 
           {/* `shrink-0`: o bloco de ações tem tamanho próprio e não cede espaço
               para o aviso. Quem aperta quando a janela encolhe é o aviso, que

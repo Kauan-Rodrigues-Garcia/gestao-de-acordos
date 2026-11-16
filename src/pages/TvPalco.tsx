@@ -36,6 +36,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Rodizio } from './ModoTV/Rodizio';
 import { PalcoTv } from './ModoTV/TelaTv';
+import { avisarTokenDaTv } from '@/components/DesafioCobranca/tokenDaTv';
 import { CORES } from './ModoTV/cores';
 import { numerosDemo, painelDemo, simularRelatorio } from './ModoTV/demo';
 import { avisarSaida, pedirCodigo, versaoTv, verTv } from './ModoTV/servico';
@@ -145,6 +146,8 @@ function TvPareada() {
   const ler = useCallback(async (): Promise<number> => {
     try {
       let token = lerToken();
+      // O Desafio Cobrança lê os números dele pelo token desta TV.
+      avisarTokenDaTv(token);
       if (!token) {
         const novo = await pedirCodigo();
         gravarToken(novo.token);

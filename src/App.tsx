@@ -141,6 +141,7 @@ const DashboardAdm      = lazy(() => import('@/pages/DashboardAdm'));
 // Creators Lab: lazy como todo o resto, e por um motivo a mais — quem usa o
 // Gestão e nunca descobre o Easter Egg não baixa um byte dele.
 const CreatorsLab       = lazy(() => import('@/pages/CreatorsLab'));
+const DesafioCobranca   = lazy(() => import('@/pages/DesafioCobranca'));
 // Comemorações não tem mais rota própria: virou aba de /admin/usuarios e é
 // carregada de lá (lazy também, para não entrar no bundle de quem não abre).
 
@@ -896,6 +897,16 @@ export default function App() {
                 <ProtectedRoute produtos={SO_COBRANCA} roles={['super_admin']}>
                   <CreatorsLab />
                 </ProtectedRoute>
+              } />
+
+              {/* Desafio Cobrança (folgar mais cedo): só o super_admin configura,
+                  lança ajuste e acompanha hora a hora. */}
+              <Route path={ROUTE_PATHS.DESAFIO_COBRANCA} element={
+                <LayoutWrapper>
+                  <ProtectedRoute roles={['super_admin']}>
+                    <DesafioCobranca />
+                  </ProtectedRoute>
+                </LayoutWrapper>
               } />
 
               <Route path="*" element={<NotFound />} />
