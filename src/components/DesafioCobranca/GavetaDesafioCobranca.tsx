@@ -252,7 +252,7 @@ const nomeDoMes = (iso: string) => diaLocal(iso).toLocaleDateString('pt-BR', { m
 /**
  * A meta INDIVIDUAL de quem está olhando, em dois níveis (16/11/2026):
  * 4,5 médias diárias dele = 1 hora mais cedo; 5 médias = sai às 14:00.
- * A média é a do sistema, congelada na véspera. A régua vai até o 2º nível;
+ * A média é a meta do mês ÷ os dias úteis dele no mês. A régua vai até o 2º nível;
  * a marca «1h» fica no 1º.
  */
 function MinhaMeta({ placar, meu }: { placar: PlacarCobranca; meu: MinhaMetaNoDesafio }) {
@@ -264,7 +264,7 @@ function MinhaMeta({ placar, meu }: { placar: PlacarCobranca; meu: MinhaMetaNoDe
     return (
       <section className="dc-minha dc-minha-compacta dc-sobe" style={{ ['--d' as string]: 2 }} aria-label="Sua meta individual">
         <p className="dc-rotulo">{titulo}</p>
-        <p className="dc-dica">Você ainda não tem média em {nomeDoMes(placar.dias[0])} (sem recebimento antes do desafio), então a regra das {medias(n1)} e {medias(n2)} não vale para você agora.</p>
+        <p className="dc-dica">Você ainda não tem meta cadastrada em {nomeDoMes(placar.dias[0])}, então a regra das {medias(n1)} e {medias(n2)} não vale para você agora.</p>
       </section>
     );
   }
@@ -328,7 +328,7 @@ function MinhaMeta({ placar, meu }: { placar: PlacarCobranca; meu: MinhaMetaNoDe
       </p>
 
       <p className="dc-minha-nota">
-        Sua média diária: <strong>{brl(meu.mediaDiaria)}</strong> ({brl(meu.recebidoAntes)} recebidos no 59 em {nomeDoMes(placar.dias[0])} ÷ {meu.diasUteisAntes} dias úteis antes do desafio).
+        Sua média diária: <strong>{brl(meu.mediaDiaria)}</strong> (sua meta de {nomeDoMes(placar.dias[0])}, {brl(meu.metaMensal)}, ÷ {meu.diasUteisMes} dias úteis seus no mês).
         {' '}Não muda durante o desafio e não conta para a meta geral. {placar.premio_requisito}.
       </p>
     </section>

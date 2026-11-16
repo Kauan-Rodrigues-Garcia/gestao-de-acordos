@@ -12,6 +12,7 @@
  */
 import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useSinalDoDesafioCobranca } from '@/hooks/useDesafioCobranca';
 import { toast } from 'sonner';
 import {
   Bar, BarChart, CartesianGrid, Cell, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -41,6 +42,8 @@ const caixa = 'rounded-xl border border-border bg-card';
 const campo = 'h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
 export default function DesafioCobrancaPagina() {
+  // O 59 subiu lote, outro super_admin lançou ajuste: relê sem recarregar.
+  useSinalDoDesafioCobranca(true, [CHAVE, ['desafio-cobranca']]);
   const q = useQuery({ queryKey: CHAVE, queryFn: buscarDetalheCobranca, refetchInterval: 5 * 60 * 1000, refetchOnWindowFocus: false });
   const d = q.data;
 

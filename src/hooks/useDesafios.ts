@@ -89,7 +89,7 @@ export function useDesafios(ativo: boolean): UsoDesafios {
     if (!habilitado || !empresaId) return;
     const invalidar = () => { void queryClient.invalidateQueries({ queryKey: chave }); };
     return assinarSinal('desafios', empresaId, {
-      onMudou:       (s) => { if (s.tabela !== 'desafios_setores') invalidar(); },
+      onMudou:       (s) => { if (s.tabela !== 'desafios_setores' && !s.tabela.startsWith('desafio_cobranca')) invalidar(); },
       onReconectado: invalidar,
     });
   }, [habilitado, empresaId, queryClient, chave]);
@@ -245,7 +245,7 @@ export function useDesafioEmCartaz(ativo: boolean): UsoDesafioEmCartaz {
     const invalidar = () => { void queryClient.invalidateQueries({ queryKey: chave }); };
 
     return assinarSinal('desafios', empresaId, {
-      onMudou:       (s) => { if (s.tabela !== 'desafios_setores') invalidar(); },
+      onMudou:       (s) => { if (s.tabela !== 'desafios_setores' && !s.tabela.startsWith('desafio_cobranca')) invalidar(); },
       onReconectado: invalidar,
     });
   }, [habilitado, empresaId, queryClient, chave]);

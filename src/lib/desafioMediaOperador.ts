@@ -4,23 +4,22 @@
  * mais cedo; com 5 médias, sai às 14:00 (banco de horas). Não entra na meta
  * geral — é a conta de cada um. Cada nível é uma chamada com o seu `fator`.
  *
- * ## A média diária é a do sistema
+ * ## A média diária é a da META (usuário, 16/11/2026)
  *
- * A mesma de `ritmoDoPeriodo` (Analítico, Quartis): recebido no mês ÷ dias
- * úteis trabalhados. Os dias úteis saem de `diasUteisDecorridos`, que já
- * desconta fim de semana e os feriados passados (os do setor, se houver).
+ * Média diária = meta do mês do operador ÷ dias úteis DELE no mês. Os dias
+ * úteis são a régua da pessoa (`diasUteisDoSetor` com o perfil): fim de
+ * semana, feriados do setor e, para quem tem meta proporcional na aba Metas,
+ * os dias em que ela não trabalha.
  *
- * ## Congelada na véspera do desafio
+ * Antes era o recebido do mês até a véspera ÷ dias trabalhados. Corrigido a
+ * pedido do usuário: «deve ser a meta dividido pela quantidade de dias úteis
+ * daquele usuário».
  *
- * A média é a de ANTES do primeiro dia do desafio. Se ela contasse os dias do
- * desafio, cada real a mais que o operador fizesse subiria a própria média — e
- * a meta andaria junto, fugindo dele. Congelada, a meta é a mesma do primeiro
- * ao último minuto.
- *
- * Por enquanto só o modelo de teste usa (`lab-desafio-cobranca.tsx`).
+ * A meta é a do mês inteiro, então a média não anda durante o desafio: a meta
+ * individual é a mesma do primeiro ao último minuto. Sem meta cadastrada no
+ * mês, a regra não vale para a pessoa.
  */
-import { ritmoDoPeriodo } from '@/lib/projecaoMetas';
-import { diasUteisDecorridos } from '@/lib/diasUteis';
+import { diasUteisDoMes } from '@/lib/diasUteis';
 
 /** Quantas médias diárias o operador precisa fazer para sair 1 hora mais cedo. */
 export const MEDIAS_PARA_SAIR_MAIS_CEDO = 4.5;
@@ -28,24 +27,25 @@ export const MEDIAS_PARA_SAIR_MAIS_CEDO = 4.5;
 export const MEDIAS_PARA_SAIR_AS_14 = 5;
 
 /**
- * Dias úteis do mês ANTES do desafio — a base da média. Ex.: desafio em
- * 16/11/2026, com Finados (02/11) de feriado: 03 a 13/11 = 9 dias.
+ * Dias úteis da pessoa no mês do 1º dia do desafio — a base da média. Ex.:
+ * novembro/2026 com Finados (02/11) e a Consciência Negra (20/11) de feriado:
+ * 21 dias úteis − 2 = 19.
  */
-export function diasUteisAntesDoDesafio(inicioISO: string, feriados: string[] = []): number {
+export function diasUteisDoMesDoDesafio(inicioISO: string, feriados: string[] = []): number {
   const [ano, mes] = inicioISO.split('-').map(Number);
-  return diasUteisDecorridos(ano, mes, feriados, inicioISO, undefined, false);
+  return diasUteisDoMes(ano, mes, feriados);
 }
 
 export interface MetaDoOperador {
-  /** Recebido no mês ÷ dias úteis trabalhados, antes do desafio. */
+  /** Meta do mês ÷ dias úteis da pessoa no mês. */
   mediaDiaria: number;
-  /** 4,5 × a média. `null` sem média (operador sem dia trabalhado ou sem recebimento). */
+  /** `fator` × a média. `null` sem média (sem meta no mês ou sem dia útil). */
   meta: number | null;
   /** O que ele fez nos dias do desafio até agora. */
   feito: number;
   /** Quantas médias o feito já é — cortado em uma casa: 4,49 não vira 4,5. */
   medias: number;
-  /** Quanto falta para as 4,5 médias. `null` sem média; 0 = bateu. */
+  /** Quanto falta para as `fator` médias. `null` sem média; 0 = bateu. */
   falta: number | null;
   bateu: boolean;
   /** Dias do desafio que ainda contam, HOJE incluído. */
@@ -55,10 +55,10 @@ export interface MetaDoOperador {
 }
 
 export function metaDoOperadorNoDesafio(entrada: {
-  /** O recebido dele no mês, até a véspera do desafio. */
-  recebidoAntes: number;
-  /** `diasUteisAntesDoDesafio`. */
-  diasUteisAntes: number;
+  /** A meta do mês do operador (aba Metas). */
+  metaMensal: number;
+  /** `diasUteisDoMesDoDesafio`, com a régua da pessoa. */
+  diasUteisMes: number;
   /** O recebido dele em cada dia do desafio (dia que não chegou = 0). */
   recebidoNoDesafio: readonly number[];
   /** Índice do dia de hoje no desafio (0 = primeiro). */
@@ -67,24 +67,25 @@ export function metaDoOperadorNoDesafio(entrada: {
   fator?: number;
 }): MetaDoOperador {
   const fator = entrada.fator ?? MEDIAS_PARA_SAIR_MAIS_CEDO;
-  const { mediaDiaria } = ritmoDoPeriodo({
-    acumulado: Math.max(0, entrada.recebidoAntes),
-    meta: null,
-    totalUteis: entrada.diasUteisAntes,
-    decorridos: entrada.diasUteisAntes,
-  });
+  const metaMensal = Math.max(0, Number(entrada.metaMensal) || 0);
+  const mediaDiaria = entrada.diasUteisMes > 0 ? metaMensal / entrada.diasUteisMes : 0;
   const feito = entrada.recebidoNoDesafio.reduce((s, v) => s + Math.max(0, v), 0);
   const temMedia = mediaDiaria > 0;
   const meta = temMedia ? mediaDiaria * fator : null;
-  const falta = meta === null ? null : Math.max(0, meta - feito);
+  // Centavo: 19 dias não dividem a meta exata, e a sobra de 0,0000001 não pode
+  // deixar «falta R$ 0,00» sem bater.
+  const falta = meta === null ? null : Math.max(0, Math.round((meta - feito) * 100) / 100);
   const diasRestantes = Math.max(0, entrada.recebidoNoDesafio.length - entrada.hoje);
+  const bateu = falta === 0;
+  const cortadas = temMedia ? Math.floor((feito / mediaDiaria) * 10 + 1e-9) / 10 : 0;
   return {
     mediaDiaria,
     meta,
     feito,
-    medias: temMedia ? Math.floor((feito / mediaDiaria) * 10) / 10 : 0,
+    // Bateu ao centavo: mostra as médias do nível, não 4,4 por causa da dízima.
+    medias: bateu ? Math.max(cortadas, fator) : cortadas,
     falta,
-    bateu: falta === 0,
+    bateu,
     diasRestantes,
     porDia: falta !== null && falta > 0 && diasRestantes > 0 ? falta / diasRestantes : null,
   };
@@ -92,8 +93,10 @@ export function metaDoOperadorNoDesafio(entrada: {
 
 /** A meta individual pronta para a gaveta: os dois níveis e de onde veio a média. */
 export interface MinhaMetaNoDesafio extends MetaDoOperador {
-  recebidoAntes: number;
-  diasUteisAntes: number;
+  /** A meta do mês dele (0 = sem meta cadastrada). */
+  metaMensal: number;
+  /** Dias úteis dele no mês. */
+  diasUteisMes: number;
   /** O recebido dele em cada dia do desafio (dia que não chegou = 0). */
   recebidoPorDia: number[];
   /** O 2º nível (5 médias = sai às 14:00): a mesma média, outro fator. */
@@ -101,28 +104,25 @@ export interface MinhaMetaNoDesafio extends MetaDoOperador {
 }
 
 /**
- * A meta individual a partir do recebido DO OPERADOR no 59, dia a dia — o 59
- * já atribuído a ele pela sincronização (o Analítico, sem colchão).
+ * A meta individual a partir da meta do mês do operador e do recebido DELE no
+ * 59, dia a dia — o 59 já atribuído a ele pela sincronização (o Analítico).
  *
  * De propósito, isto NÃO recebe o placar inteiro: só os dias e as regras. A
  * fonte do placar geral (59 ou lançamento manual do super_admin), o total e os
- * lançamentos não chegam aqui — a média do operador vem SEMPRE do 59
+ * lançamentos não chegam aqui — o feito do operador vem SEMPRE do 59
  * (decisão do usuário, 16/11/2026: «só o valor total que não»).
  */
-export function minhaMetaPeloRecebido(
+export function minhaMetaNoDesafio(
   regras: { dias: readonly string[]; regra_medias: number; regra_medias_maior: number },
+  metaMensal: number,
   recebidoPorDiaDoMes: Readonly<Record<string, number>>,
   feriados: string[],
   hoje: number,
 ): MinhaMetaNoDesafio {
-  const inicio = regras.dias[0];
-  const recebidoAntes = Object.entries(recebidoPorDiaDoMes)
-    .filter(([d]) => d < inicio && d.slice(0, 7) === inicio.slice(0, 7))
-    .reduce((s, [, v]) => s + v, 0);
   const recebidoPorDia = regras.dias.map(d => recebidoPorDiaDoMes[d] ?? 0);
-  const diasUteisAntes = diasUteisAntesDoDesafio(inicio, feriados);
-  const base = { recebidoAntes, diasUteisAntes, recebidoNoDesafio: recebidoPorDia, hoje };
+  const diasUteisMes = diasUteisDoMesDoDesafio(regras.dias[0], feriados);
+  const base = { metaMensal, diasUteisMes, recebidoNoDesafio: recebidoPorDia, hoje };
   const meta = metaDoOperadorNoDesafio({ ...base, fator: regras.regra_medias });
   const maior = metaDoOperadorNoDesafio({ ...base, fator: regras.regra_medias_maior });
-  return { ...meta, recebidoAntes, diasUteisAntes, recebidoPorDia, maior };
+  return { ...meta, metaMensal: Math.max(0, Number(metaMensal) || 0), diasUteisMes, recebidoPorDia, maior };
 }

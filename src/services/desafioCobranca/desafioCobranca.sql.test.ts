@@ -83,6 +83,15 @@ beforeAll(async () => {
     insert into public.tv_conexoes (painel_id, segredo_hash) values ('${PAINEL}', '${createHash('sha256').update(TOKEN).digest('hex')}');
   `);
   await db.exec(readFileSync('supabase/migrations/20261116150000_desafio_cobranca.sql', 'utf8'));
+  // O sinal ao vivo (20261116210000): o emissor de verdade é a fila de 10 s; aqui só anota.
+  await db.exec(`
+    create table public.sinais_teste (topico text, tabela text, operacao text);
+    create function public.fn_realtime_sinal_emitir(p_topico text, p_payload jsonb, p_forcar boolean default false)
+    returns boolean language plpgsql as $$ begin
+      insert into public.sinais_teste values (p_topico, p_payload ->> 'tabela', p_payload ->> 'operacao'); return true;
+    end $$;
+  `);
+  await db.exec(readFileSync('supabase/migrations/20261116210000_desafio_cobranca_ao_vivo.sql', 'utf8'));
 }, 60_000);
 
 afterAll(async () => { await db?.close(); });
@@ -258,5 +267,45 @@ describe('desafio cobrança — robô, ajuste e liberação', () => {
     `);
     const l = (await db.query<{ estado: string }>(`select estado from public.mestre_lotes`)).rows[0];
     expect(l.estado).toBe('vigente');
+  });
+});
+
+describe('desafio cobrança — ao vivo (20261116210000)', () => {
+  const sinais = async () => (await db.query<{ topico: string; tabela: string; operacao: string }>(
+    'select topico, tabela, operacao from public.sinais_teste')).rows;
+
+  it('uma leitura do 59 com várias linhas vira UM sinal por empresa, no tópico desafios', async () => {
+    await db.exec(`delete from public.sinais_teste;
+      insert into public.desafio_cobranca_leituras (desafio_id, lido_em, dia, cod_grupo_filtro, valor)
+      select id, '2026-11-17 15:07:00-03', '2026-11-17', c, 10 from public.desafio_cobranca, unnest(array['25','3','61']) c`);
+    expect(await sinais()).toEqual([{ topico: `desafios:${EMP}`, tabela: 'desafio_cobranca_leituras', operacao: 'INSERT' }]);
+  });
+
+  it('ajuste lançado e removido, e mudança no desafio também avisam', async () => {
+    await como(SUPER);
+    await db.exec(`delete from public.sinais_teste;
+      insert into public.desafio_cobranca_ajustes (desafio_id, dia, valor, motivo)
+      select id, '2026-11-17', 50, 'teste ao vivo' from public.desafio_cobranca;
+      update public.desafio_cobranca_ajustes set removido_em = now() where motivo = 'teste ao vivo';
+      update public.desafio_cobranca set meta_geral = meta_geral;`);
+    expect((await sinais()).map(x => `${x.tabela}:${x.operacao}`)).toEqual([
+      'desafio_cobranca_ajustes:INSERT', 'desafio_cobranca_ajustes:UPDATE', 'desafio_cobranca:UPDATE',
+    ]);
+  });
+
+  it('abrir a gaveta não manda sinal para a empresa inteira', async () => {
+    await db.exec('delete from public.sinais_teste');
+    await como(SUPER);
+    await db.query('select public.fn_desafio_cobranca_abri(id) from public.desafio_cobranca');
+    expect(await sinais()).toEqual([]);
+  });
+
+  it('o sinal com erro não derruba quem escreveu', async () => {
+    await db.exec(`create or replace function public.fn_realtime_sinal_emitir(p_topico text, p_payload jsonb, p_forcar boolean default false)
+                   returns boolean language plpgsql as $$ begin raise exception 'caiu'; end $$`);
+    await db.exec(`insert into public.desafio_cobranca_leituras (desafio_id, lido_em, dia, cod_grupo_filtro, valor)
+      select id, '2026-11-17 16:07:00-03', '2026-11-17', '25', 10 from public.desafio_cobranca`);
+    const n = (await db.query<{ n: number }>(`select count(*)::int n from public.desafio_cobranca_leituras where lido_em = '2026-11-17 16:07:00-03'`)).rows[0].n;
+    expect(n).toBe(1);
   });
 });

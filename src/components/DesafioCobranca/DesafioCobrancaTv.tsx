@@ -68,9 +68,12 @@ export function TelaDesafioCobrancaTv() {
   const q = useQuery({
     queryKey: ['desafio-cobranca-tv', token],
     queryFn: () => (token ? buscarDesafioCobrancaTv(token) : buscarDesafioCobranca()),
-    refetchInterval: 5 * 60 * 1000,
+    // A TV entra sem login (token): não ouve o sinal do banco, que é canal
+    // privado. Relê a cada minuto — são poucas TVs, e o placar chega quase
+    // junto com o do Gestão (16/11/2026: «tem que carregar sem recarregar»).
+    refetchInterval: 60 * 1000,
     refetchOnWindowFocus: false,
-    staleTime: 4 * 60 * 1000,
+    staleTime: 50 * 1000,
   });
 
   if (!q.data) {

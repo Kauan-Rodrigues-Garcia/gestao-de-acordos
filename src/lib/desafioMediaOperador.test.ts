@@ -1,24 +1,35 @@
 import { describe, it, expect } from 'vitest';
-import { diasUteisAntesDoDesafio, MEDIAS_PARA_SAIR_AS_14, MEDIAS_PARA_SAIR_MAIS_CEDO, metaDoOperadorNoDesafio, minhaMetaPeloRecebido } from './desafioMediaOperador';
+import { diasUteisDoMesDoDesafio, MEDIAS_PARA_SAIR_AS_14, MEDIAS_PARA_SAIR_MAIS_CEDO, metaDoOperadorNoDesafio, minhaMetaNoDesafio } from './desafioMediaOperador';
+import { diasUteisDoSetor } from './diasUteisDoSetor';
 
 const FINADOS = '2026-11-02';
+const CONSCIENCIA = '2026-11-20';
 
-describe('dias úteis antes do desafio (base da média)', () => {
-  it('desafio em 16/11/2026, com Finados: 03 a 13/11 = 9 dias', () => {
-    expect(diasUteisAntesDoDesafio('2026-11-16', [FINADOS])).toBe(9);
+describe('dias úteis da pessoa no mês (base da média)', () => {
+  it('novembro/2026 tem 21 dias de segunda a sexta', () => {
+    expect(diasUteisDoMesDoDesafio('2026-11-16')).toBe(21);
   });
-  it('sem o feriado no calendário, conta 10', () => {
-    expect(diasUteisAntesDoDesafio('2026-11-16')).toBe(10);
+  it('com Finados e Consciência Negra: 19', () => {
+    expect(diasUteisDoMesDoDesafio('2026-11-16', [FINADOS, CONSCIENCIA])).toBe(19);
   });
-  it('o primeiro dia do desafio não entra na base', () => {
-    expect(diasUteisAntesDoDesafio('2026-11-17', [FINADOS])).toBe(10);
+  it('é o mês inteiro, não só até a véspera: o dia do desafio não muda a conta', () => {
+    expect(diasUteisDoMesDoDesafio('2026-11-02', [FINADOS])).toBe(diasUteisDoMesDoDesafio('2026-11-27', [FINADOS]));
+  });
+  it('quem tem dias próprios (meta proporcional) conta só os dias dele', () => {
+    const config = {
+      data: { feriados: [FINADOS], contar_dia_atual: false },
+      porPessoa: { p1: { mes: '2026-11', dias: ['2026-11-16', '2026-11-17', '2026-11-18', '2026-11-19'] } },
+    };
+    const regua = diasUteisDoSetor(config, null, 'p1');
+    expect(diasUteisDoMesDoDesafio('2026-11-16', regua.feriados)).toBe(4);
   });
 });
 
 describe('a meta do operador: 4,5 médias diárias dele', () => {
-  const base = { recebidoAntes: 72_000, diasUteisAntes: 9 };
+  // Meta de R$ 160.000 em 20 dias úteis = R$ 8.000 por dia.
+  const base = { metaMensal: 160_000, diasUteisMes: 20 };
 
-  it('média = recebido ÷ dias trabalhados; meta = 4,5 × média', () => {
+  it('média = meta do mês ÷ dias úteis dele; meta = 4,5 × média', () => {
     const r = metaDoOperadorNoDesafio({ ...base, recebidoNoDesafio: [0, 0, 0], hoje: 0 });
     expect(r.mediaDiaria).toBe(8_000);
     expect(r.meta).toBe(36_000);
@@ -52,16 +63,23 @@ describe('a meta do operador: 4,5 médias diárias dele', () => {
     expect(r.medias).toBe(4.4);
   });
 
-  it('a meta não anda com o que ele faz no desafio (a média é a da véspera)', () => {
+  it('divisão que não fecha (19 dias): bater a meta ao centavo conta como batido', () => {
+    const r = metaDoOperadorNoDesafio({ metaMensal: 100_000, diasUteisMes: 19, recebidoNoDesafio: [23_684.21, 0, 0], hoje: 0 });
+    expect(r.mediaDiaria).toBeCloseTo(5_263.157894, 5);
+    expect(r.bateu).toBe(true);
+    expect(r.medias).toBe(4.5);
+  });
+
+  it('a meta não anda com o que ele faz no desafio', () => {
     const pouco = metaDoOperadorNoDesafio({ ...base, recebidoNoDesafio: [1_000, 0, 0], hoje: 0 });
     const muito = metaDoOperadorNoDesafio({ ...base, recebidoNoDesafio: [30_000, 0, 0], hoje: 0 });
     expect(pouco.meta).toBe(muito.meta);
   });
 
-  it('operador sem dia trabalhado ou sem recebimento no mês: sem média, sem meta', () => {
+  it('sem meta no mês ou sem dia útil: sem média, sem meta', () => {
     for (const r of [
-      metaDoOperadorNoDesafio({ recebidoAntes: 0, diasUteisAntes: 9, recebidoNoDesafio: [5_000, 0, 0], hoje: 0 }),
-      metaDoOperadorNoDesafio({ recebidoAntes: 10_000, diasUteisAntes: 0, recebidoNoDesafio: [5_000, 0, 0], hoje: 0 }),
+      metaDoOperadorNoDesafio({ metaMensal: 0, diasUteisMes: 20, recebidoNoDesafio: [5_000, 0, 0], hoje: 0 }),
+      metaDoOperadorNoDesafio({ metaMensal: 160_000, diasUteisMes: 0, recebidoNoDesafio: [5_000, 0, 0], hoje: 0 }),
     ]) {
       expect(r.mediaDiaria).toBe(0);
       expect(r.meta).toBeNull();
@@ -71,15 +89,17 @@ describe('a meta do operador: 4,5 médias diárias dele', () => {
     }
   });
 
-  it('feriado do setor a mais na base: menos dias, média maior, meta maior', () => {
-    const com = metaDoOperadorNoDesafio({ recebidoAntes: 72_000, diasUteisAntes: diasUteisAntesDoDesafio('2026-11-16', [FINADOS, '2026-11-13']), recebidoNoDesafio: [0, 0, 0], hoje: 0 });
-    expect(com.mediaDiaria).toBe(9_000);
-    expect(com.meta).toBe(40_500);
+  it('feriado a mais: menos dias úteis, média maior, meta maior', () => {
+    const com = metaDoOperadorNoDesafio({
+      metaMensal: 152_000, diasUteisMes: diasUteisDoMesDoDesafio('2026-11-16', [FINADOS, CONSCIENCIA]), recebidoNoDesafio: [0, 0, 0], hoje: 0,
+    });
+    expect(com.mediaDiaria).toBe(8_000);
+    expect(com.meta).toBe(36_000);
   });
 });
 
 describe('o 2º nível: 5 médias = sai às 14:00', () => {
-  const base = { recebidoAntes: 72_000, diasUteisAntes: 9 };
+  const base = { metaMensal: 160_000, diasUteisMes: 20 };
 
   it('a mesma média, fator 5: R$ 8.000 × 5 = R$ 40.000', () => {
     const r = metaDoOperadorNoDesafio({ ...base, recebidoNoDesafio: [0, 0, 0], hoje: 0, fator: MEDIAS_PARA_SAIR_AS_14 });
@@ -104,21 +124,19 @@ describe('o 2º nível: 5 médias = sai às 14:00', () => {
   });
 });
 
-describe('a meta individual vem do 59 do operador, nunca do placar geral', () => {
+describe('minhaMetaNoDesafio: meta do mês ÷ dias úteis dele; o feito é o 59 dele', () => {
   const DIAS = ['2026-11-16', '2026-11-17', '2026-11-18'];
-  // O 59 do operador por dia: 72 mil antes do desafio (03 a 13/11) e o que fez no desafio.
   const recebido: Record<string, number> = {
-    '2026-10-30': 99_999,                       // outro mês: não entra
-    '2026-11-03': 8_000, '2026-11-04': 8_000, '2026-11-05': 8_000, '2026-11-06': 8_000,
-    '2026-11-09': 8_000, '2026-11-10': 8_000, '2026-11-11': 8_000, '2026-11-12': 8_000, '2026-11-13': 8_000,
+    '2026-11-13': 99_999, // antes do desafio: não entra no feito nem na média
     '2026-11-16': 9_400, '2026-11-17': 11_200,
   };
   const regras = { dias: DIAS, regra_medias: 4.5, regra_medias_maior: 5 };
 
-  it('média, meta e o feito saem do recebido dele', () => {
-    const m = minhaMetaPeloRecebido(regras, recebido, [FINADOS], 1);
-    expect(m.recebidoAntes).toBe(72_000);
-    expect(m.diasUteisAntes).toBe(9);
+  it('média, meta e o feito', () => {
+    // 152 mil ÷ 19 dias úteis (Finados e Consciência Negra fora) = 8 mil.
+    const m = minhaMetaNoDesafio(regras, 152_000, recebido, [FINADOS, CONSCIENCIA], 1);
+    expect(m.metaMensal).toBe(152_000);
+    expect(m.diasUteisMes).toBe(19);
     expect(m.mediaDiaria).toBe(8_000);
     expect(m.meta).toBe(36_000);
     expect(m.maior.meta).toBe(40_000);
@@ -126,10 +144,22 @@ describe('a meta individual vem do 59 do operador, nunca do placar geral', () =>
     expect(m.falta).toBe(15_400);
   });
 
+  it('o recebido de antes do desafio não muda a meta', () => {
+    const semAntes = { '2026-11-16': 9_400, '2026-11-17': 11_200 };
+    expect(minhaMetaNoDesafio(regras, 152_000, recebido, [FINADOS, CONSCIENCIA], 1))
+      .toEqual(minhaMetaNoDesafio(regras, 152_000, semAntes, [FINADOS, CONSCIENCIA], 1));
+  });
+
   it('placar geral em «só o lançamento do super_admin»: a meta do operador não muda', () => {
     const doPlacar59 = { ...regras, fonte: '59', total: 95_209.72, ajustes: [] };
     const doPlacarManual = { ...regras, fonte: 'manual', total: 150_000, ajustes: [{ valor: 150_000 }] };
-    expect(minhaMetaPeloRecebido(doPlacarManual, recebido, [FINADOS], 1))
-      .toEqual(minhaMetaPeloRecebido(doPlacar59, recebido, [FINADOS], 1));
+    expect(minhaMetaNoDesafio(doPlacarManual, 152_000, recebido, [FINADOS], 1))
+      .toEqual(minhaMetaNoDesafio(doPlacar59, 152_000, recebido, [FINADOS], 1));
+  });
+
+  it('sem meta cadastrada: a regra não vale', () => {
+    const m = minhaMetaNoDesafio(regras, 0, recebido, [FINADOS], 1);
+    expect(m.meta).toBeNull();
+    expect(m.maior.meta).toBeNull();
   });
 });
