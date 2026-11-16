@@ -18,7 +18,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Vote } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
-import { faltaMigration, lerMinhas, mensagemDoErro, votar, type MinhaVotacaoOpcoes } from './banco';
+import { faltaMigration, lerMinhas, lerResultados, mensagemDoErro, votar, type MinhaVotacaoOpcoes, type ResultadoVotacaoOpcoes } from './banco';
+import { CardResultadoVotacao } from './CardResultadoVotacao';
 import { TelaVotacaoOpcoes } from './TelaVotacaoOpcoes';
 
 const INTERVALO_MS = 5 * 60_000;
@@ -29,6 +30,11 @@ const RECENTE_MS = 2 * 60_000;
 const chaveAbriu = (id: string) => `votacao-opcoes:abriu:${id}`;
 const jaAbriu = (id: string) => { try { return sessionStorage.getItem(chaveAbriu(id)) === '1'; } catch { return false; } };
 const marcarAbriu = (id: string) => { try { sessionStorage.setItem(chaveAbriu(id), '1'); } catch { /* sem armazenamento */ } };
+
+// O resultado abre uma vez por pessoa (neste navegador), depois de encerrada.
+const chaveResultado = (eu: string, id: string) => `votacao-opcoes:resultado:${eu}:${id}`;
+const viuResultado = (eu: string, id: string) => { try { return localStorage.getItem(chaveResultado(eu, id)) === '1'; } catch { return false; } };
+const marcarResultado = (eu: string, id: string) => { try { localStorage.setItem(chaveResultado(eu, id), '1'); } catch { /* sem armazenamento */ } };
 
 export function PilulaVotacaoOpcoes({ titulo, onAbrir, acimaDoRodape }: { titulo: string; onAbrir: () => void; acimaDoRodape?: number }) {
   return (
@@ -55,6 +61,7 @@ export function AvisoVotacaoOpcoes({ acimaDoRodape }: { acimaDoRodape?: number }
   const eu = perfil?.id ?? null;
   const [abertas, setAbertas] = useState<MinhaVotacaoOpcoes[]>([]);
   const [aberta, setAberta] = useState<MinhaVotacaoOpcoes | null>(null);
+  const [resultado, setResultado] = useState<ResultadoVotacaoOpcoes | null>(null);
   const semMigration = useRef(false);
   const ultimaLeitura = useRef(0);
 
@@ -90,6 +97,16 @@ export function AvisoVotacaoOpcoes({ acimaDoRodape }: { acimaDoRodape?: number }
     return () => { window.clearTimeout(timer); window.clearTimeout(volta); document.removeEventListener('visibilitychange', visivel); };
   }, [eu, carregar]);
 
+  // Resultado das encerradas: lido uma vez ao entrar (migration 20261116210000).
+  useEffect(() => {
+    if (!eu) return;
+    let vivo = true;
+    lerResultados()
+      .then(l => { if (vivo) setResultado(l.find(r => !viuResultado(eu, r.id)) ?? null); })
+      .catch(() => { /* sem a migration: nada aparece */ });
+    return () => { vivo = false; };
+  }, [eu]);
+
   const aVotar = abertas.find(v => !v.meu_voto) ?? null;
 
   // A primeira vez nesta sessão: a votação abre sozinha.
@@ -108,6 +125,11 @@ export function AvisoVotacaoOpcoes({ acimaDoRodape }: { acimaDoRodape?: number }
           <PilulaVotacaoOpcoes key={aVotar.id} titulo={aVotar.titulo} acimaDoRodape={acimaDoRodape} onAbrir={() => setAberta(aVotar)} />
         )}
       </AnimatePresence>
+      {resultado && !aberta && (
+        <CardResultadoVotacao titulo={resultado.titulo} pergunta={resultado.pergunta} opcoes={resultado.opcoes}
+          contagem={resultado.contagem} votaram={resultado.votaram} eleitores={resultado.eleitores}
+          onFechar={() => { if (eu) marcarResultado(eu, resultado.id); setResultado(null); }} />
+      )}
       {aberta && (
         <TelaVotacaoOpcoes titulo={aberta.titulo} pergunta={aberta.pergunta} opcoes={aberta.opcoes} meuVoto={aberta.meu_voto}
           onVotar={async opcao => {

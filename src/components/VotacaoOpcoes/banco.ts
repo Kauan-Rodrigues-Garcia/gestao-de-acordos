@@ -69,3 +69,17 @@ export interface DadosParaLiberar {
 export const liberar = (d: DadosParaLiberar) => rpc<string>('fn_votacao_opcoes_liberar', {
   p_titulo: d.titulo, p_pergunta: d.pergunta, p_opcoes: d.opcoes, p_eleitores: d.eleitores, p_publico: d.publico,
 });
+
+/** Uma votação encerrada, com a contagem, para quem foi chamado a votar (migration 20261116210000). */
+export interface ResultadoVotacaoOpcoes {
+  id: string;
+  titulo: string;
+  pergunta: string;
+  opcoes: OpcaoDaVotacao[];
+  eleitores: number;
+  votaram: number;
+  contagem: Record<string, number>;
+  encerrada_em: string;
+}
+
+export const lerResultados = async () => comOpcoes<ResultadoVotacaoOpcoes>(await rpc('fn_votacao_opcoes_resultados'));

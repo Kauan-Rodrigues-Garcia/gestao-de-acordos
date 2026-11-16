@@ -35,6 +35,7 @@ const banco = vi.hoisted(() => ({ minhas: vi.fn(), votar: vi.fn() }));
 vi.mock('./banco', async importOriginal => ({
   ...(await importOriginal<typeof import('./banco')>()),
   lerMinhas: banco.minhas,
+  lerResultados: async () => [],
   votar: banco.votar,
 }));
 
