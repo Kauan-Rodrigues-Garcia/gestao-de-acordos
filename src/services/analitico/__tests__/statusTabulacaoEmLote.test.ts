@@ -24,18 +24,30 @@ describe('verificarStatusTabulacaoEmLote', () => {
         b: { status: 'divergente', acordo_id: 'ac-2', outro_operador_id: 'op-9', outro_operador_nome: 'Bia' },
         c: { status: 'nao_tabulado' },
         d: { status: 'tabulado', acordo_id: 'ac-3', extra_do_direto: true, outro_operador_id: 'op-5', outro_operador_nome: 'Caio' },
+        e: { status: 'nao_tabulado', par_pelo_relatorio: true, acordo_id: 'ac-4', outro_operador_id: 'op-7', outro_operador_nome: 'Quezia' },
       } },
       error: null,
     });
-    const promessas = ['a', 'b', 'c', 'd'].map(id => verificarStatusTabulacaoEmLote(id));
+    const promessas = ['a', 'b', 'c', 'd', 'e'].map(id => verificarStatusTabulacaoEmLote(id));
     await vi.advanceTimersByTimeAsync(50);
-    const [a, b, c, d] = await Promise.all(promessas);
+    const [a, b, c, d, e] = await Promise.all(promessas);
 
     expect(rpcSpy).toHaveBeenCalledTimes(1);
-    expect(rpcSpy).toHaveBeenCalledWith('fn_analitico_status_tabulacao_lote', { p_linha_ids: ['a', 'b', 'c', 'd'] });
-    expect(a).toEqual({ status: 'tabulado', acordoId: 'ac-1', outroOperadorId: null, outroOperadorNome: null, extraDoDireto: false });
+    expect(rpcSpy).toHaveBeenCalledWith('fn_analitico_status_tabulacao_lote', { p_linha_ids: ['a', 'b', 'c', 'd', 'e'] });
+    expect(a).toEqual({
+      status: 'tabulado', acordoId: 'ac-1', outroOperadorId: null, outroOperadorNome: null,
+      extraDoDireto: false, parPeloRelatorio: false,
+    });
     // Extra do relatório (20261028180000): tabulado no direto do colega.
-    expect(d).toEqual({ status: 'tabulado', acordoId: 'ac-3', outroOperadorId: 'op-5', outroOperadorNome: 'Caio', extraDoDireto: true });
+    expect(d).toEqual({
+      status: 'tabulado', acordoId: 'ac-3', outroOperadorId: 'op-5', outroOperadorNome: 'Caio',
+      extraDoDireto: true, parPeloRelatorio: false,
+    });
+    // Par pelo relatório (20261116234244): não tabulada, com o acordo do colega Extra.
+    expect(e).toEqual({
+      status: 'nao_tabulado', acordoId: 'ac-4', outroOperadorId: 'op-7', outroOperadorNome: 'Quezia',
+      extraDoDireto: false, parPeloRelatorio: true,
+    });
     expect(b.outroOperadorNome).toBe('Bia');
     expect(c.status).toBe('nao_tabulado');
   });

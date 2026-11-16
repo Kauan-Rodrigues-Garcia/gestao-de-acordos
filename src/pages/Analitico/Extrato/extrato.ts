@@ -21,10 +21,20 @@
 import type { AnaliticoRecebimento } from '@/lib/supabase';
 import { classificarComissao } from '@/services/analitico/analiticoComum';
 import { familiaDaForma, rotuloDaForma } from '@/lib/formasPagamento';
+import type { DetalheSituacao } from './situacaoAcordos';
 
 export type VinculoDaLinha = 'direto' | 'extra' | null;
 
-export type FiltroStatus = 'todos' | 'a_tabular' | 'tabulados';
+/**
+ * `marcar_pago`, `reagendar` e `em_dia` só existem quando quem chama passa as
+ * situações dos acordos (`situacaoAcordos.ts`); sem elas, valem como «todos».
+ */
+export type FiltroStatus = 'todos' | 'a_tabular' | 'tabulados' | 'marcar_pago' | 'reagendar' | 'em_dia';
+
+/** Os filtros que dependem da situação do acordo, e não só da tabulação. */
+export function ehFiltroDeAcordo(status: FiltroStatus): status is 'marcar_pago' | 'reagendar' | 'em_dia' {
+  return status === 'marcar_pago' || status === 'reagendar' || status === 'em_dia';
+}
 export type FiltroVinculo = 'todos' | 'direto' | 'extra';
 
 export function vinculoDaLinha(l: Pick<AnaliticoRecebimento, 'tipo_comissao'>): VinculoDaLinha {
@@ -113,11 +123,14 @@ export function filtrarExtrato(
   status: FiltroStatus,
   vinculo: FiltroVinculo,
   formas?: ReadonlySet<string> | null,
+  situacoes?: ReadonlyMap<string, DetalheSituacao> | null,
 ): AnaliticoRecebimento[] {
   const porForma = formas && formas.size > 0 ? formas : null;
   return linhas.filter(l => {
     if (status === 'a_tabular' && !precisaTabular(l)) return false;
     if (status === 'tabulados' && precisaTabular(l)) return false;
+    if (ehFiltroDeAcordo(status) && situacoes
+        && (situacoes.get(l.id)?.situacao ?? 'em_dia') !== status) return false;
     if (vinculo !== 'todos' && vinculoDaLinha(l) !== vinculo) return false;
     if (porForma && !porForma.has(formaDaLinha(l).chave)) return false;
     return true;

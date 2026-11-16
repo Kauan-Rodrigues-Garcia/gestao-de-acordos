@@ -1260,6 +1260,40 @@ acordos da empresa, independente do alcance de quem olha:
 | `tabulado` | O operador da linha tem acordo desse código — **DIRETO ou EXTRA** |
 | `divergente` | O acordo **DIRETO** do código é de outro operador |
 
+A coluna «Tipo comissão» do relatório (Extra / Integral) entra na decisão, nesta
+ordem — vale a primeira que casar:
+
+| A linha | O acordo do código | Resultado |
+|---|---|---|
+| qualquer | do próprio operador (Direto ou Extra) | `tabulado` |
+| **Extra** | Direto de um colega | `tabulado`, ligada ao Direto dele (`extra_do_direto`, 28/10/2026) |
+| **não é Extra** | Direto de um colega **que o relatório do mês mostra recebendo esse código como Extra**, e ainda sem par | `nao_tabulado` com `par_pelo_relatorio` (16/11/2026) |
+| não é Extra | Direto de um colega, nos outros casos | `divergente` |
+| qualquer | nenhum | `nao_tabulado` |
+
+O relatório da regra **Cofen** não traz «Tipo comissão»: ali não existe linha
+Extra, então nunca há par pelo relatório — o código que está com outra pessoa é
+sempre `divergente`.
+
+#### Par pelo relatório: ninguém perde o acordo
+
+Decisão do Cleber, 16/11/2026 (migration `20261116234244`). Quando o relatório
+já diz quem é o Direto e quem é o Extra, não há o que transferir. A tela mostra
+«Entrar como Direto»; ao confirmar, `fn_analitico_tabular_divergente` devolve
+`par_formado`:
+
+- o acordo do colega **continua com ele** e vira `extra`, apontando para o
+  operador da linha (o `trg_sync_nr_registros` solta o NR);
+- o operador da linha ganha um acordo `direto` **com os mesmos dados** (valor,
+  vencimento, parcelas, situação), e o gatilho do par liga as duas metades;
+- as linhas do operador com esse código viram `tabulado` no Direto novo;
+- se o Direto novo não puder nascer, o Extra do colega é desfeito junto
+  (`par_recusado`): nada fica pela metade.
+
+Quem confirma é o mesmo de sempre (ver abaixo). Acordo do colega que já tem um
+Extra pendurado não entra aqui — trocar o titular tiraria o lugar de um
+terceiro —, e segue como `divergente`.
+
 #### Divergente: o acordo muda de dono direto, sem líder
 
 A linha do Analítico prova que o pagamento **já entrou** em nome do operador
@@ -1275,8 +1309,12 @@ do outro operador para o operador da linha, numa transação só.
 - Se o acordo é o DIRETO de um par, o **EXTRA é re-apontado** para o novo dono.
 - As linhas do Analítico do novo dono com esse código viram `tabulado`; as de
   quem perdeu voltam a `nao_tabulado`, para a tela conferir de novo.
-- Notifica quem perdeu o acordo e o líder de cada lado; registra
-  `acordo_transferido` no log com `origem = analitico_divergente`.
+- Quem perdeu o acordo recebe um **card no chat**, na conversa direta com o
+  novo dono (`chat_mensagens.sistema = 'acordo_vinculo'`, `evento`
+  `transferido`; no par, `virou_extra`) — sem chat liberado para um dos dois,
+  notificação comum. O líder de cada lado segue recebendo a notificação.
+  Registra `acordo_transferido` no log com `origem = analitico_divergente`
+  (no par: `acordo_par_pelo_analitico`, `origem = analitico_par_pelo_relatorio`).
 
 **Quem confirma:** o próprio operador da linha (o pagamento é dele), ou quem o
 painel deixa **alterar** o acordo que sai — a mesma escada da policy
@@ -1287,6 +1325,26 @@ painel deixa **alterar** o acordo que sai — a mesma escada da policy
 > Divergente), e o `DELETE` do acordo alheio batia na RLS, afetava zero linhas
 > sem erro e deixava o acordo com o dono antigo. Quem era EXTRA do NR via a
 > própria linha como Divergente, e confirmar desfaria o par.
+
+#### Depois de tabular: marcar pago e reagendar
+
+O resumo do operador (aba Recebimentos › Meus recebimentos) diz também o que
+falta no acordo de cada linha já tabulada (`situacaoAcordos.ts`, 16/11/2026):
+
+| Situação | Quando |
+|---|---|
+| A tabular | a linha não tem acordo do operador (inclui Divergente e o par) |
+| Marcar pago | tabulado, mas nenhum acordo do código está **pago** no mês do recebimento |
+| Reagendar | pago, parcelado, não é a última parcela e a próxima não existe (§ reagendamento) |
+| Em dia | nada a fazer |
+
+A conta olha **todos os acordos do operador com aquele código**, e não só o
+`acordo_id` da linha: o servidor liga a linha ao acordo mais novo, e num
+parcelado esse é a próxima parcela, ainda pendente. A chave é a do próprio
+acordo — NR quando existe, senão instituição —, então vale igual para Nosso
+produto e Cofen; cartão parcelado só reagenda em Nosso produto. Linha Extra
+tabulada no Direto do colega fica «em dia»: quem marca pago e reagenda é o dono
+do Direto.
 
 ### 10.3 Totais
 

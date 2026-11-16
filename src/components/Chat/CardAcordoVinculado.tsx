@@ -11,14 +11,17 @@
  * `sistema_dados`: rótulos de situação e forma de pagamento são do tenant de
  * quem lê, e o valor cru envelhece melhor que uma frase pronta.
  */
-import { Link2 } from 'lucide-react';
+import { ArrowRightLeft, Link2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { rotaDoAcordo } from '@/lib/notificacoes-rota';
+import { formatBRL } from '@/lib/money';
 import { useTenant } from '@/lib/tenant-config';
 import type { MensagemChat } from '@/services/chat/chat.service';
 import { horaDoBalao } from './formatos';
-import { acordoDoLeitor, descreverMudanca, fraseDoCard, lerCardAcordo } from './cardAcordo';
+import {
+  acordoDoLeitor, descreverMudanca, ehCardDoAnalitico, fraseDoCard, frasesDoAnalitico, lerCardAcordo,
+} from './cardAcordo';
 
 export function CardAcordoVinculado({ m, meuId }: { m: MensagemChat; meuId: string | null | undefined }) {
   const tenant   = useTenant();
@@ -32,6 +35,50 @@ export function CardAcordoVinculado({ m, meuId }: { m: MensagemChat; meuId: stri
     dados.cliente,
     dados.parcela && (dados.parcelas ?? 1) > 1 ? `parcela ${dados.parcela}/${dados.parcelas}` : null,
   ].filter(Boolean).join(' · ');
+
+  // Os avisos do Analítico (transferência e par pelo relatório, 20261116234244).
+  if (ehCardDoAnalitico(dados)) {
+    const { titulo, detalhe } = frasesDoAnalitico(dados, meuId);
+    const transferido = dados.evento === 'transferido';
+    const Icone = transferido ? ArrowRightLeft : Link2;
+    return (
+      <div className="flex justify-center py-1.5">
+        <div className={`w-full max-w-[85%] rounded-xl border px-3 py-2.5 text-xs ${
+          transferido ? 'border-amber-500/30 bg-amber-500/[0.07]' : 'border-primary/25 bg-primary/5'
+        }`}>
+          <div className="flex items-center gap-1.5 font-semibold text-foreground">
+            <Icone
+              className={`h-3.5 w-3.5 shrink-0 ${transferido ? 'text-amber-600 dark:text-amber-400' : 'text-primary'}`}
+              aria-hidden="true"
+            />
+            <span>{titulo}</span>
+          </div>
+          {identificacao && (
+            <p className="mt-0.5 text-[11px] text-muted-foreground">{identificacao}</p>
+          )}
+          <p className="mt-2 leading-snug">{detalhe}</p>
+          {dados.valorRecebido !== null && (
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Recebido no relatório: <span className="font-mono text-foreground">{formatBRL(dados.valorRecebido)}</span>
+            </p>
+          )}
+          <div className="mt-2 flex items-center justify-between gap-2">
+            {acordoId ? (
+              <Button
+                size="sm" variant="outline" className="h-7 text-xs"
+                onClick={() => navigate(rotaDoAcordo(acordoId))}
+              >
+                Ver acordo
+              </Button>
+            ) : <span />}
+            <span className="text-[10px] text-muted-foreground">
+              Pelo Analítico · {dados.feitoPor === meuId ? 'você confirmou' : `${dados.feitoPorNome} confirmou`} · {horaDoBalao(m.criado_em)}
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex justify-center py-1.5">

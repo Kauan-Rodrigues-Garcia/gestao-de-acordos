@@ -56,6 +56,11 @@ describe('filtros do extrato', () => {
   it('combina situação e vínculo', () => {
     expect(filtrarExtrato(ls, 'a_tabular', 'extra').map(l => l.id)).toEqual(['c']);
     expect(filtrarExtrato(ls, 'tabulados', 'direto')).toEqual([]);
+    // Os filtros de acordo (16/11/2026) só filtram com as situações em mãos.
+    expect(filtrarExtrato(ls, 'marcar_pago', 'todos')).toHaveLength(ls.length);
+    const situacoes = new Map([[ls[0].id, { situacao: 'marcar_pago' as const }]]);
+    expect(filtrarExtrato(ls, 'marcar_pago', 'todos', null, situacoes).map(l => l.id)).toEqual([ls[0].id]);
+    expect(filtrarExtrato(ls, 'em_dia', 'todos', null, situacoes)).toHaveLength(ls.length - 1);
   });
 });
 

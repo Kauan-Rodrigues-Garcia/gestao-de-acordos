@@ -7,24 +7,28 @@
  *   EXTRA        → tabulado também: a linha é «Extra» no relatório e está
  *                  ligada ao acordo DIRETO do colega (20261028180000). O
  *                  botão diz de quem é o direto e abre esse acordo.
+ *   PAR          → a linha é Direto, o acordo está com um colega e o relatório
+ *                  mostra esse colega recebendo o código como Extra
+ *                  (20261116234244). Não é divergência: o botão diz «Entrar
+ *                  como Direto»; confirmar deixa o colega Extra e cria o
+ *                  Direto do operador da linha. Ninguém perde o acordo.
  *   DIVERGENTE   → botão "Divergente": o acordo do código é de outra pessoa.
  *                  Confirmar passa o acordo DIRETO para o operador da linha —
  *                  o pagamento já entrou em nome dele, então não há autorização
  *                  de líder. Quem decide e executa é o servidor
  *                  (`fn_analitico_status_tabulacao` / `fn_analitico_tabular_divergente`).
+ *
+ * Os três casos com outra pessoa abrem o mesmo cartão
+ * (`CartaoDecisaoTabulacao`). Quem sai ou vira Extra é avisado por um card no
+ * chat, na conversa com o operador da linha.
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { CheckCircle2, AlertTriangle, Plus, Loader2, SlidersHorizontal } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Link2, Plus, Loader2, SlidersHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel,
-  AlertDialogContent, AlertDialogDescription,
-  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { formatBRL } from '@/lib/money';
+import { rotuloDaForma } from '@/lib/formasPagamento';
 import type { AnaliticoRecebimento, StatusTabulacaoAnalitico } from '@/lib/supabase';
 import {
   verificarStatusTabulacao,
@@ -35,6 +39,7 @@ import {
 } from '@/services/analitico/analitico.service';
 import { ehLinhaDeAjuste } from '@/services/analitico/ajusteManual.service';
 import { ehComissaoExtra } from '@/services/analitico/analiticoComum';
+import { CartaoDecisaoTabulacao } from './CartaoDecisaoTabulacao';
 
 interface TabulacaoCellProps {
   linha: AnaliticoRecebimento;
@@ -64,6 +69,9 @@ export function TabulacaoCell({
   const [acordoIdLocal,    setAcordoIdLocal]    = useState<string | null>(linha.acordo_id);
   const [divergenteInfo,   setDivergenteInfo]   = useState<{ outroNome: string; acordoId: string } | null>(null);
   const [confirmandoDiv,   setConfirmandoDiv]   = useState(false);
+  /** Par pelo relatório: o colega que tem o acordo e é o Extra do código. */
+  const [parInfo,          setParInfo]          = useState<{ outroNome: string; acordoId: string } | null>(null);
+  const [confirmandoPar,   setConfirmandoPar]   = useState(false);
   /** Dono do acordo direto quando a linha é Extra tabulada nele; `''` = nome não sabido. */
   const [donoDoDireto,     setDonoDoDireto]     = useState<string | null>(null);
   const [vendoExtra,       setVendoExtra]       = useState(false);
@@ -89,11 +97,18 @@ export function TabulacaoCell({
     let cancelled = false;
     const timer = setTimeout(async () => {
       if (cancelled || statusRef.current === 'tabulado') return;
-      const { status, acordoId, outroOperadorNome, extraDoDireto } = await verificarStatusTabulacaoEmLote(linha.id);
+      const { status, acordoId, outroOperadorNome, extraDoDireto, parPeloRelatorio } =
+        await verificarStatusTabulacaoEmLote(linha.id);
       if (cancelled) return;
       setStatusLocal(status);
-      setAcordoIdLocal(acordoId);
+      // No par, o acordo da resposta é o do colega: a linha não aponta para ele.
+      setAcordoIdLocal(parPeloRelatorio ? null : acordoId);
       setDonoDoDireto(extraDoDireto ? (outroOperadorNome ?? '') : null);
+      setParInfo(
+        parPeloRelatorio && acordoId
+          ? { outroNome: outroOperadorNome ?? 'outro operador', acordoId }
+          : null,
+      );
       setDivergenteInfo(
         status === 'divergente' && acordoId
           ? { outroNome: outroOperadorNome ?? 'outro operador', acordoId }
@@ -117,7 +132,19 @@ export function TabulacaoCell({
   async function handleTabular() {
     setCarregando(true);
     esquecerStatusTabulacao(linha.id);
-    const { status, acordoId, outroOperadorNome, extraDoDireto } = await verificarStatusTabulacao(linha.id);
+    const { status, acordoId, outroOperadorNome, extraDoDireto, parPeloRelatorio } =
+      await verificarStatusTabulacao(linha.id);
+
+    // Par pelo relatório: nada a gravar na linha — só mostrar o cartão.
+    if (parPeloRelatorio && acordoId) {
+      setStatusLocal('nao_tabulado');
+      setAcordoIdLocal(null);
+      setParInfo({ outroNome: outroOperadorNome ?? 'outro operador', acordoId });
+      setConfirmandoPar(true);
+      setCarregando(false);
+      return;
+    }
+    setParInfo(null);
 
     if (status === 'tabulado' && acordoId) {
       await atualizarTabulacao(linha.id, 'tabulado', acordoId);
@@ -150,8 +177,10 @@ export function TabulacaoCell({
   }
 
   async function confirmarDivergente() {
-    if (!divergenteInfo) return;
+    const outro = divergenteInfo ?? parInfo;
+    if (!outro) return;
     setConfirmandoDiv(false);
+    setConfirmandoPar(false);
     setCarregando(true);
 
     const r = await tabularDivergente(linha.id);
@@ -164,6 +193,7 @@ export function TabulacaoCell({
     }
 
     setDivergenteInfo(null);
+    setParInfo(null);
 
     if (r.resultado === 'livre') {
       // O acordo do outro sumiu entre a checagem e o clique: código livre.
@@ -180,17 +210,33 @@ export function TabulacaoCell({
     if (r.resultado === 'extra_do_direto') {
       // O servidor recusou a transferência: a linha é Extra e o direto é o par.
       setDonoDoDireto(r.donoDoDiretoNome ?? '');
-      toast.success(`Extra: tabulado no acordo direto de ${r.donoDoDiretoNome ?? divergenteInfo.outroNome}. Nada foi transferido.`);
+      toast.success(`Extra: tabulado no acordo direto de ${r.donoDoDiretoNome ?? outro.outroNome}. Nada foi transferido.`);
+      onRefetch();
+      return;
+    }
+    if (r.resultado === 'par_formado') {
+      toast.success(
+        `${r.operadorNovoNome ?? operadorNome} entrou como Direto. ${r.operadorAnteriorNome ?? outro.outroNome} segue com o acordo, como Extra.`,
+      );
       onRefetch();
       return;
     }
     toast.success(
       r.resultado === 'transferido'
-        ? `Acordo transferido de ${r.operadorAnteriorNome ?? divergenteInfo.outroNome} para ${r.operadorNovoNome ?? operadorNome}.`
+        ? `Acordo transferido de ${r.operadorAnteriorNome ?? outro.outroNome} para ${r.operadorNovoNome ?? operadorNome}.`
         : 'Este acordo já era deste operador. Registro atualizado.',
     );
     onRefetch();
   }
+
+  /** O que os três cartões têm em comum: a linha do relatório. */
+  const dadosDoCartao = {
+    codigo:        linha.codigo,
+    cliente:       linha.nome_cliente,
+    valor:         linha.valor_recebido,
+    forma:         rotuloDaForma(linha.forma_pagamento, linha.forma_detalhe),
+    dataPagamento: linha.data_pagamento,
+  };
 
   /*
    * Ajuste manual: selo, e não botão.
@@ -251,33 +297,18 @@ export function TabulacaoCell({
           {donoDoDireto ? `Extra · direto de ${donoDoDireto.split(/\s+/)[0]}` : 'Extra'}
         </Button>
 
-        <AlertDialog open={vendoExtra} onOpenChange={setVendoExtra}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle className="flex items-center gap-2 text-emerald-600">
-                <CheckCircle2 className="w-5 h-5" /> Pagamento Extra
-              </AlertDialogTitle>
-              <AlertDialogDescription className="space-y-2 text-left">
-                <p>
-                  O relatório marca este pagamento como <strong>Extra</strong>: o acordo direto do
-                  código <strong>{linha.codigo}</strong> é de{' '}
-                  <strong>{donoDoDireto || 'outro operador'}</strong>, e{' '}
-                  <strong>{operadorNome}</strong> recebe como extra.
-                </p>
-                <p>
-                  A linha já está tabulada nesse acordo direto. Não é preciso registrar nada.
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Recebido: <strong>{formatBRL(linha.valor_recebido)}</strong> · Forma:{' '}
-                  <strong>{linha.forma_pagamento === 'cartao' ? 'Cartão' : 'Boleto/Pix'}</strong>
-                </p>
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Fechar</AlertDialogCancel>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        <CartaoDecisaoTabulacao
+          aberto={vendoExtra} onAberto={setVendoExtra}
+          tom="extra"
+          titulo="Pagamento Extra"
+          {...dadosDoCartao}
+          de={{ nome: donoDoDireto || 'Outro operador', papel: 'Direto · dono do acordo' }}
+          para={{ nome: operadorNome, papel: 'Extra · recebeu este pagamento' }}
+          passos={[
+            <>O relatório marca este pagamento como <strong>Extra</strong>: o acordo direto do código é de <strong>{donoDoDireto || 'outro operador'}</strong>.</>,
+            <>A linha já está tabulada nesse acordo direto. Não é preciso registrar nada.</>,
+          ]}
+        />
       </>
     );
   }
@@ -295,7 +326,41 @@ export function TabulacaoCell({
     );
   }
 
-  // Divergente — mostrar alerta
+  // Par pelo relatório — o colega é o Extra; o operador da linha entra Direto.
+  if (statusLocal !== 'tabulado' && parInfo) {
+    return (
+      <>
+        <Button
+          size="sm" variant="outline"
+          title="O relatório mostra o colega como Extra deste código: você entra como Direto e ele continua com o acordo."
+          className="h-7 gap-1.5 text-xs border-primary/40 text-primary hover:bg-primary/5"
+          onClick={() => setConfirmandoPar(true)}
+          disabled={carregando}
+        >
+          {carregando ? <Loader2 className="w-3 h-3 animate-spin" /> : <Link2 className="w-3 h-3" />}
+          {carregando ? 'Vinculando…' : 'Entrar como Direto'}
+        </Button>
+
+        <CartaoDecisaoTabulacao
+          aberto={confirmandoPar} onAberto={setConfirmandoPar}
+          tom="par"
+          titulo="Direto e Extra no mesmo código"
+          {...dadosDoCartao}
+          de={{ nome: parInfo.outroNome, papel: 'Tem o acordo · Extra no relatório' }}
+          para={{ nome: operadorNome, papel: 'Direto no relatório' }}
+          passos={[
+            <>O acordo de <strong>{parInfo.outroNome}</strong> continua com essa pessoa e passa a ser <strong>Extra</strong>.</>,
+            <><strong>{operadorNome}</strong> ganha o acordo <strong>Direto</strong> desse código, com os mesmos dados, ligado em par.</>,
+            <>Ninguém perde o acordo e não há autorização de líder. {parInfo.outroNome} recebe um card no chat; os líderes são notificados.</>,
+          ]}
+          confirmar={{ rotulo: 'Entrar como Direto', onClick: confirmarDivergente }}
+        />
+      </>
+    );
+  }
+
+  // Divergente — o acordo do código é de outra pessoa, e o relatório não a
+  // mostra como Extra: confirmar transfere.
   if (statusLocal === 'divergente' && divergenteInfo) {
     return (
       <>
@@ -309,41 +374,20 @@ export function TabulacaoCell({
           {carregando ? 'Transferindo…' : 'Divergente'}
         </Button>
 
-        <AlertDialog open={confirmandoDiv} onOpenChange={setConfirmandoDiv}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle className="flex items-center gap-2 text-amber-600">
-                <AlertTriangle className="w-5 h-5" /> Acordo registrado por outro operador
-              </AlertDialogTitle>
-              <AlertDialogDescription className="space-y-2 text-left">
-                <p>
-                  O código <strong>{linha.codigo}</strong> está registrado para{' '}
-                  <strong>{divergenteInfo.outroNome}</strong>, mas o pagamento entrou no
-                  Analítico em nome de <strong>{operadorNome}</strong>.
-                </p>
-                <p>
-                  Ao confirmar, o acordo <strong>sai</strong> de{' '}
-                  <strong>{divergenteInfo.outroNome}</strong> e <strong>passa direto</strong>{' '}
-                  para <strong>{operadorNome}</strong>, com os mesmos dados, sem autorização
-                  de líder. {divergenteInfo.outroNome} e os líderes serão notificados.
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Recebido: <strong>{formatBRL(linha.valor_recebido)}</strong> · Forma:{' '}
-                  <strong>{linha.forma_pagamento === 'cartao' ? 'Cartão' : 'Boleto/Pix'}</strong>
-                </p>
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={confirmarDivergente}
-                className="bg-amber-500 hover:bg-amber-600 text-white"
-              >
-                Confirmar transferência
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        <CartaoDecisaoTabulacao
+          aberto={confirmandoDiv} onAberto={setConfirmandoDiv}
+          tom="transferencia"
+          titulo="Acordo registrado por outro operador"
+          {...dadosDoCartao}
+          de={{ nome: divergenteInfo.outroNome, papel: 'Tem o acordo hoje' }}
+          para={{ nome: operadorNome, papel: 'Recebeu o pagamento' }}
+          passos={[
+            <>O acordo <strong>sai</strong> de <strong>{divergenteInfo.outroNome}</strong> e passa direto para <strong>{operadorNome}</strong>, com os mesmos dados.</>,
+            <>Não há autorização de líder: o pagamento já entrou no Analítico em nome de {operadorNome}.</>,
+            <>{divergenteInfo.outroNome} recebe um card no chat; os líderes dos dois são notificados.</>,
+          ]}
+          confirmar={{ rotulo: 'Confirmar transferência', onClick: confirmarDivergente }}
+        />
       </>
     );
   }

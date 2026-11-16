@@ -32,6 +32,10 @@ vi.mock('@/services/analitico/analitico.service', () => ({
   buscarResumoOperadoresAnalitico: vi.fn(async () => ({ data: [], error: null })),
   buscarPessoasDoRanking: vi.fn(async () => ({ fotos: {}, fora: new Set<string>() })),
 }));
+// A situação dos acordos lê `acordos` ao montar; aqui não há banco.
+vi.mock('@/services/analitico/acordosDoOperador', () => ({
+  buscarAcordosDoOperador: vi.fn(async () => ({ data: [], error: null })),
+}));
 vi.mock('@/services/situacaoUsuario.service', () => ({
   buscarForaDoRanking: vi.fn(async () => new Set<string>()),
 }));

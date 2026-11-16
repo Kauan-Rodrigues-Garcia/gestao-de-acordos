@@ -24,7 +24,7 @@
 
 import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { useState, useMemo, useEffect, useCallback, lazy, Suspense } from 'react';
-import { CalendarDays, X, ListChecks, Trophy, Wallet } from 'lucide-react';
+import { CalendarClock, CalendarDays, CircleDollarSign, X, ListChecks, Trophy, Wallet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ValorAnimado } from '@/components/ValorAnimado';
 import { AbasSegmentadas, type AbaSegmentada } from '@/components/AbasSegmentadas';
@@ -40,7 +40,10 @@ import { recebimentoCasaBusca } from './buscaAnalitico';
 import type { VinculosOperador } from './agregacaoLider';
 import { ExtratoRecebimentos } from '@/pages/Analitico/Extrato/ExtratoRecebimentos';
 import { FitaDoMes } from '@/pages/Analitico/Extrato/FitaDoMes';
-import { resumirVinculos, totaisPorDiaDoMes } from '@/pages/Analitico/Extrato/extrato';
+import { resumirVinculos, totaisPorDiaDoMes, type FiltroStatus } from '@/pages/Analitico/Extrato/extrato';
+import { resumirSituacoes } from '@/pages/Analitico/Extrato/situacaoAcordos';
+import { useSituacaoDosAcordos } from '@/pages/Analitico/Extrato/useSituacaoDosAcordos';
+import { cn } from '@/lib/utils';
 
 import {
   buscarPessoasDoRanking,
@@ -106,6 +109,10 @@ export function AnaliticoOperador({
   const [abaOp, setAbaOp] = useState<AbaOperador>('meus');
   // NR, cliente ou empresa — só filtra a tabela; os cards seguem o período.
   const [busca, setBusca] = useState('');
+  // O filtro de situação do extrato mora aqui: o resumo lá em cima filtra a lista.
+  const [filtroSituacao, setFiltroSituacao] = useState<FiltroStatus>('todos');
+  // O que falta no acordo de cada linha: marcar pago, reagendar (16/11/2026).
+  const { situacoes, recarregar: recarregarSituacoes } = useSituacaoDosAcordos(dados, empresaId, operadorId);
   // Monitoramento de uso: nível 3, abaixo da aba principal e do recorte.
   useSubAbaUso(abaOp, 3);
   useEffect(() => { onAbaMudou?.(abaOp); }, [abaOp, onAbaMudou]);
@@ -204,6 +211,10 @@ export function AnaliticoOperador({
   const totalRecebido = dadosFiltrados.reduce((s, d) => s + d.valor_recebido, 0);
   const totalHO       = dadosFiltrados.reduce((s, d) => s + d.total_ho, 0);
   const tabulados     = dadosFiltrados.filter(d => d.status_tabulacao === 'tabulado').length;
+  const resumoSituacoes = useMemo(
+    () => (situacoes ? resumirSituacoes(dadosFiltrados, situacoes) : null),
+    [dadosFiltrados, situacoes],
+  );
   const vinculos      = useMemo(() => resumirVinculos(dadosFiltrados), [dadosFiltrados]);
   const pctDireto     = vinculos.direto + vinculos.extra > 0
     ? (vinculos.direto / (vinculos.direto + vinculos.extra)) * 100
@@ -327,27 +338,17 @@ export function AnaliticoOperador({
                 </div>
 
                 <div className="min-w-0 space-y-3">
-                  {/* Tabulação: a fração exige conta de cabeça; a barra, não. */}
-                  <div>
-                    <div className="flex items-baseline justify-between gap-2 text-xs">
-                      <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
-                        <ListChecks className="h-3.5 w-3.5 text-success" aria-hidden="true" /> Tabulados
-                      </span>
-                      <span className="font-mono tabular-nums">
-                        <strong className="text-success">{tabulados}</strong>
-                        <span className="text-muted-foreground">/{dadosFiltrados.length}</span>
-                      </span>
-                    </div>
-                    <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-muted">
-                      <div className="h-full rounded-full bg-success transition-[width] duration-500"
-                        style={{ width: `${dadosFiltrados.length ? (tabulados / dadosFiltrados.length) * 100 : 0}%` }} />
-                    </div>
-                    <p className="mt-1 text-[11px] text-muted-foreground">
-                      {dadosFiltrados.length - tabulados > 0
-                        ? <><strong className="text-warning">{dadosFiltrados.length - tabulados}</strong> para tabular — filtre por «A tabular» no extrato.</>
-                        : dadosFiltrados.length > 0 ? 'Tudo tabulado.' : 'Nada no recorte.'}
-                    </p>
-                  </div>
+                  {/* Situação dos acordos: tabular é o começo. A barra diz também
+                      o que falta DEPOIS de tabular — marcar pago, reagendar a
+                      parcela. Cada item da legenda filtra o extrato. Enquanto
+                      os acordos não chegam, fica só tabulado × a tabular. */}
+                  <SituacaoDosAcordos
+                    total={dadosFiltrados.length}
+                    tabulados={tabulados}
+                    resumo={resumoSituacoes}
+                    filtro={filtroSituacao}
+                    onFiltrar={setFiltroSituacao}
+                  />
 
                   {/* Direto × Extra — só quando há Extra; ver `temExtra`. */}
                   {vinculos.qtdExtra > 0 && (
@@ -436,13 +437,16 @@ export function AnaliticoOperador({
                 linhas={linhasDaTabela}
                 mostrarHO={mostrarHO}
                 hojeISO={hojeISO}
+                situacoes={situacoes}
+                status={filtroSituacao}
+                onStatus={setFiltroSituacao}
                 renderAcao={linha => (
                   <TabulacaoCell
                     linha={linha} empresaId={empresaId}
                     operadorId={operadorId} operadorNome={operadorNome}
                     onAbrirNovoAcordo={onAbrirNovoAcordo}
                     onVerAcordo={onVerAcordo}
-                    onRefetch={() => { setForceRender(v => v + 1); onRefetch(); }}
+                    onRefetch={() => { setForceRender(v => v + 1); recarregarSituacoes(); onRefetch(); }}
                   />
                 )}
               />
@@ -496,6 +500,101 @@ export function AnaliticoOperador({
         />
         </Suspense>
       )}
+    </div>
+  );
+}
+
+// ── O bloco «Situação dos acordos» do resumo ────────────────────────────────
+
+interface ItemSituacao {
+  chave: FiltroStatus;
+  rotulo: string;
+  qtd: number;
+  /** Classe de fundo do trecho da barra e do ponto da legenda. */
+  cor: string;
+  Icone?: typeof ListChecks;
+}
+
+function SituacaoDosAcordos({
+  total, tabulados, resumo, filtro, onFiltrar,
+}: {
+  total: number;
+  tabulados: number;
+  /** `null` enquanto os acordos não chegaram: só tabulado × a tabular. */
+  resumo: { a_tabular: number; marcar_pago: number; reagendar: number; em_dia: number } | null;
+  filtro: FiltroStatus;
+  onFiltrar: (f: FiltroStatus) => void;
+}) {
+  const itens: ItemSituacao[] = resumo
+    ? [
+        { chave: 'em_dia',      rotulo: 'Em dia',      qtd: resumo.em_dia,      cor: 'bg-success' },
+        { chave: 'marcar_pago', rotulo: 'Marcar pago', qtd: resumo.marcar_pago, cor: 'bg-rose-500', Icone: CircleDollarSign },
+        { chave: 'reagendar',   rotulo: 'Reagendar',   qtd: resumo.reagendar,   cor: 'bg-sky-500', Icone: CalendarClock },
+        { chave: 'a_tabular',   rotulo: 'A tabular',   qtd: resumo.a_tabular,   cor: 'bg-warning' },
+      ]
+    : [
+        { chave: 'tabulados', rotulo: 'Tabulados', qtd: tabulados,         cor: 'bg-success' },
+        { chave: 'a_tabular', rotulo: 'A tabular', qtd: total - tabulados, cor: 'bg-warning' },
+      ];
+  const pendentes = resumo ? resumo.a_tabular + resumo.marcar_pago + resumo.reagendar : total - tabulados;
+
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-2 text-xs">
+        <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
+          <ListChecks className="h-3.5 w-3.5 text-success" aria-hidden="true" />
+          {resumo ? 'Situação dos acordos' : 'Tabulados'}
+        </span>
+        <span className="font-mono tabular-nums">
+          <strong className="text-success">{tabulados}</strong>
+          <span className="text-muted-foreground">/{total} tabulados</span>
+        </span>
+      </div>
+
+      <div className="mt-1.5 flex h-2 overflow-hidden rounded-full bg-muted" aria-hidden="true">
+        {itens.filter(i => i.qtd > 0).map(i => (
+          <div key={i.chave} className={cn('h-full transition-[width] duration-500', i.cor)}
+            style={{ width: `${total ? (i.qtd / total) * 100 : 0}%` }} />
+        ))}
+      </div>
+
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {itens.filter(i => i.qtd > 0).map(i => {
+          const ligado = filtro === i.chave;
+          return (
+            <button key={i.chave} type="button" aria-pressed={ligado}
+              onClick={() => onFiltrar(ligado ? 'todos' : i.chave)}
+              title={ligado ? 'Mostrar todos no extrato' : `Filtrar o extrato: ${i.rotulo}`}
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] transition-colors',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                ligado
+                  ? 'border-primary/40 bg-primary/10 text-foreground'
+                  : 'border-border bg-background/60 text-muted-foreground hover:text-foreground',
+              )}>
+              {i.Icone
+                ? <i.Icone className="h-3 w-3 shrink-0" aria-hidden="true" />
+                : <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', i.cor)} aria-hidden="true" />}
+              {i.rotulo}
+              <strong className="font-mono tabular-nums text-foreground">{i.qtd}</strong>
+            </button>
+          );
+        })}
+      </div>
+
+      <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
+        {total === 0
+          ? 'Nada no recorte.'
+          : pendentes === 0
+            ? (resumo ? 'Tudo tabulado, pago e reagendado.' : 'Tudo tabulado.')
+            : resumo && resumo.a_tabular === 0
+              ? <>Tudo tabulado. Falta
+                  {resumo.marcar_pago > 0 && <> marcar <strong className="text-foreground">{resumo.marcar_pago}</strong> como pago</>}
+                  {resumo.marcar_pago > 0 && resumo.reagendar > 0 && ' e'}
+                  {resumo.reagendar > 0 && <> reagendar <strong className="text-foreground">{resumo.reagendar}</strong> {resumo.reagendar === 1 ? 'parcelado' : 'parcelados'}</>}
+                  {' '}— o botão «Ver acordo» da linha leva até lá.</>
+              : <>Toque numa situação para filtrar o extrato.</>}
+      </p>
     </div>
   );
 }

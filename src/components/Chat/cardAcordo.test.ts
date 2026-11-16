@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { formatCurrency, STATUS_LABELS, TIPO_LABELS } from '@/lib/index';
 import {
-  acordoDoLeitor, descreverMudanca, fraseDoCard, lerCardAcordo,
+  acordoDoLeitor, descreverMudanca, ehCardDoAnalitico, fraseDoCard, frasesDoAnalitico, lerCardAcordo,
 } from './cardAcordo';
 
 const rotulos = { status: STATUS_LABELS, tipo: TIPO_LABELS };
@@ -91,5 +91,45 @@ describe('fraseDoCard', () => {
     const d = lerCardAcordo({ ...bruto, evento: 'excluido', resultado: 'virou_direto' });
     expect(fraseDoCard(d, 'cleber', STATUS_LABELS)).toBe('Isa excluiu a parcela 2 do acordo vinculado');
     expect(d.resultado).toBe('virou_direto');
+  });
+});
+
+/** Como `fn_analitico_avisar_no_chat` grava (migration 20261116234244). */
+describe('avisos do Analítico', () => {
+  const base = {
+    origem: 'analitico', feito_por: 'ayslan', feito_por_nome: 'Ayslan',
+    rotulo: 'NR', chave: '13027352', cliente: 'Maria', valor_recebido: 3220,
+    de_id: 'quezia', de_nome: 'Quezia', para_id: 'ayslan', para_nome: 'Ayslan',
+  };
+
+  it('transferência: quem perdeu lê que saiu da lista dele, e não tem acordo para abrir', () => {
+    const d = lerCardAcordo({ ...base, evento: 'transferido', acordos: { ayslan: 'ac-1' } });
+    expect(ehCardDoAnalitico(d)).toBe(true);
+    expect(d.valorRecebido).toBe(3220);
+    expect(frasesDoAnalitico(d, 'quezia').titulo).toBe('Seu acordo passou para Ayslan');
+    expect(frasesDoAnalitico(d, 'ayslan').titulo).toBe('O acordo de Quezia passou para você');
+    expect(acordoDoLeitor(d, 'quezia')).toBeNull();
+    expect(acordoDoLeitor(d, 'ayslan')).toBe('ac-1');
+  });
+
+  it('par pelo relatório: ninguém perde, e cada um abre o seu', () => {
+    const d = lerCardAcordo({ ...base, evento: 'virou_extra', acordos: { quezia: 'ac-extra', ayslan: 'ac-direto' } });
+    expect(frasesDoAnalitico(d, 'quezia')).toEqual({
+      titulo: 'Seu acordo virou Extra',
+      detalhe: 'O relatório mostra Ayslan como Direto e o seu recebimento como Extra. Seu acordo continua com você.',
+    });
+    expect(frasesDoAnalitico(d, 'ayslan').titulo).toBe('Você entrou como Direto');
+    expect(acordoDoLeitor(d, 'quezia')).toBe('ac-extra');
+    expect(acordoDoLeitor(d, 'ayslan')).toBe('ac-direto');
+  });
+
+  it('quem olha de fora (monitor) lê os dois nomes', () => {
+    const d = lerCardAcordo({ ...base, evento: 'transferido', acordos: { ayslan: 'ac-1' } });
+    expect(frasesDoAnalitico(d, 'lider').titulo).toBe('O acordo passou de Quezia para Ayslan');
+    expect(acordoDoLeitor(d, 'lider')).toBe('ac-1');
+  });
+
+  it('o card do par Direto/Extra de sempre não é do Analítico', () => {
+    expect(ehCardDoAnalitico(lerCardAcordo(bruto))).toBe(false);
   });
 });

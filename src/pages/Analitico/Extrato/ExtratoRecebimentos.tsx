@@ -16,6 +16,10 @@
  *   • a faixa de formas (Pix, Cartão, Boleto…) diz quantos recebimentos
  *     entraram por cada uma e filtra a lista no clique — ver `FaixaFormas`.
  *
+ * Com `situacoes` (16/11/2026), a linha tabulada ganha o selo do que ainda
+ * falta no acordo — «Marcar pago», «Reagendar 3/10» — e a barra, os dois
+ * filtros. Quem calcula é `situacaoAcordos.ts`; sem a prop, nada muda.
+ *
  * A ação da linha (tabular, ver acordo, divergente) continua sendo de quem
  * chama: o extrato não sabe quem é o operador da linha nem para onde navegar.
  *
@@ -24,7 +28,7 @@
  * busca) já aplicados; sem filtro, todos. E o NR de cada linha copia no clique.
  */
 import { useEffect, useMemo, useState, type MouseEvent, type ReactNode } from 'react';
-import { Check, Copy, Link2, X } from 'lucide-react';
+import { CalendarClock, Check, CircleDollarSign, Copy, Link2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { copiarTexto } from '@/lib/clipboard';
 import type { AnaliticoRecebimento } from '@/lib/supabase';
@@ -33,10 +37,11 @@ import { formatBRL } from '@/lib/money';
 import { corTexto } from '@/lib/temas';
 import { cn } from '@/lib/utils';
 import {
-  agruparPorDia, filtrarExtrato, nrsParaCopiar, precisaTabular, resumirFormas, resumirVinculos,
+  agruparPorDia, ehFiltroDeAcordo, filtrarExtrato, nrsParaCopiar, precisaTabular, resumirFormas, resumirVinculos,
   rotuloDoDia, temExtra, vinculoDaLinha,
   type FiltroStatus, type FiltroVinculo, type ResumoForma, type VinculoDaLinha,
 } from './extrato';
+import type { DetalheSituacao } from './situacaoAcordos';
 
 interface ExtratoRecebimentosProps {
   linhas: AnaliticoRecebimento[];
@@ -50,6 +55,11 @@ interface ExtratoRecebimentosProps {
   /** Sem borda própria — quando o extrato mora dentro de outro card. */
   embutido?: boolean;
   className?: string;
+  /** O que falta no acordo de cada linha (`situacaoDasLinhas`). Liga os selos e os filtros. */
+  situacoes?: ReadonlyMap<string, DetalheSituacao> | null;
+  /** Filtro de situação controlado por quem chama (o resumo do operador filtra daqui). */
+  status?: FiltroStatus;
+  onStatus?: (status: FiltroStatus) => void;
 }
 
 const ESTILO_SELO =
@@ -73,6 +83,32 @@ export function SeloVinculo({ vinculo }: { vinculo: VinculoDaLinha }) {
         title="Direto: cliente da carteira do próprio operador (Integral no relatório)"
       >
         Direto
+      </span>
+    );
+  }
+  return null;
+}
+
+/** O que ainda falta no acordo de uma linha já tabulada. */
+export function SeloSituacao({ detalhe }: { detalhe: DetalheSituacao | undefined }) {
+  if (detalhe?.situacao === 'marcar_pago') {
+    return (
+      <span
+        className={cn(ESTILO_SELO, 'border-rose-500/35 bg-rose-500/15 text-rose-700 dark:text-rose-300')}
+        title="O pagamento entrou no relatório, mas o acordo ainda não está marcado como pago."
+      >
+        <CircleDollarSign className="h-2.5 w-2.5" aria-hidden="true" /> Marcar pago
+      </span>
+    );
+  }
+  if (detalhe?.situacao === 'reagendar') {
+    const parcela = detalhe.parcela && detalhe.parcelas ? ` ${detalhe.parcela}/${detalhe.parcelas}` : '';
+    return (
+      <span
+        className={cn(ESTILO_SELO, 'border-sky-500/35 bg-sky-500/15 text-sky-700 dark:text-sky-300')}
+        title="Acordo parcelado: esta parcela está paga e a próxima ainda não foi agendada."
+      >
+        <CalendarClock className="h-2.5 w-2.5" aria-hidden="true" /> Reagendar{parcela}
       </span>
     );
   }
@@ -190,8 +226,21 @@ function dataCurta(iso: string) {
 
 export function ExtratoRecebimentos({
   linhas, mostrarHO, hojeISO, renderAcao, vazio, acoes, embutido, className,
+  situacoes, status: statusDeFora, onStatus,
 }: ExtratoRecebimentosProps) {
-  const [status, setStatus] = useState<FiltroStatus>('todos');
+  const [statusInterno, setStatusInterno] = useState<FiltroStatus>('todos');
+  const statusPedido = statusDeFora ?? statusInterno;
+  const setStatus = onStatus ?? setStatusInterno;
+  // Sem as situações, os filtros de acordo não têm o que filtrar.
+  const status: FiltroStatus = !situacoes && ehFiltroDeAcordo(statusPedido) ? 'todos' : statusPedido;
+  const qtdMarcarPago = useMemo(
+    () => (situacoes ? linhas.filter(l => situacoes.get(l.id)?.situacao === 'marcar_pago').length : 0),
+    [linhas, situacoes],
+  );
+  const qtdReagendar = useMemo(
+    () => (situacoes ? linhas.filter(l => situacoes.get(l.id)?.situacao === 'reagendar').length : 0),
+    [linhas, situacoes],
+  );
   const [vinculo, setVinculo] = useState<FiltroVinculo>('todos');
 
   const mostrarVinculo = useMemo(() => temExtra(linhas), [linhas]);
@@ -212,8 +261,8 @@ export function ExtratoRecebimentos({
   const alternarForma = (chave: string) => setFormaSel(atual => (atual === chave ? null : chave));
 
   const filtradas = useMemo(
-    () => filtrarExtrato(linhas, status, vinculoEfetivo, selecaoFormas),
-    [linhas, status, vinculoEfetivo, selecaoFormas],
+    () => filtrarExtrato(linhas, status, vinculoEfetivo, selecaoFormas, situacoes),
+    [linhas, status, vinculoEfetivo, selecaoFormas, situacoes],
   );
   const dias = useMemo(() => agruparPorDia(filtradas), [filtradas]);
   const maiorDia = dias.reduce((m, d) => Math.max(m, d.total), 0);
@@ -248,6 +297,16 @@ export function ExtratoRecebimentos({
     { key: 'todos', rotulo: 'Todos', detalhe: String(linhas.length) },
     { key: 'a_tabular', rotulo: 'A tabular', detalhe: String(qtdATabular), tom: qtdATabular > 0 ? 'alerta' : undefined },
     { key: 'tabulados', rotulo: 'Tabulados', detalhe: String(linhas.length - qtdATabular) },
+    // «Em dia» liga pelo resumo do operador; aqui só aparece para poder desligar.
+    ...(status === 'em_dia' ? [{ key: 'em_dia' as const, rotulo: 'Em dia' }] : []),
+    // Só aparecem quando há o que mostrar — ou enquanto o filtro está ligado,
+    // para a pessoa conseguir desligar depois de resolver a última.
+    ...(qtdMarcarPago > 0 || status === 'marcar_pago'
+      ? [{ key: 'marcar_pago' as const, rotulo: 'Marcar pago', detalhe: String(qtdMarcarPago), tom: 'alerta' as const }]
+      : []),
+    ...(qtdReagendar > 0 || status === 'reagendar'
+      ? [{ key: 'reagendar' as const, rotulo: 'Reagendar', detalhe: String(qtdReagendar), tom: 'alerta' as const }]
+      : []),
   ];
   const opcoesVinculo: OpcaoFiltro<FiltroVinculo>[] = [
     { key: 'todos', rotulo: 'Direto + Extra' },
@@ -366,6 +425,7 @@ export function ExtratoRecebimentos({
                                 : <Copy className="h-3 w-3 opacity-0 transition-opacity group-hover/nr:opacity-60" aria-hidden="true" />}
                             </button>
                             {mostrarVinculo && <SeloVinculo vinculo={vinculoDaLinha(l)} />}
+                            <SeloSituacao detalhe={situacoes?.get(l.id)} />
                           </div>
                           {(l.nome_cliente || l.instituicao) && (
                             <p className="mt-0.5 truncate text-xs text-muted-foreground">

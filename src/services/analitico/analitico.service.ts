@@ -3551,6 +3551,13 @@ export interface StatusTabulacaoResultado {
    * (20261028180000). `outroOperador*` é o dono do direto.
    */
   extraDoDireto: boolean;
+  /**
+   * Linha Direto cujo acordo está com um colega que o relatório mostra como
+   * Extra do mesmo código (20261116234244). Não é divergência: ao confirmar, o
+   * colega fica Extra e o dono da linha entra como Direto. O status vem
+   * `nao_tabulado`; `acordoId` e `outroOperador*` são do acordo do colega.
+   */
+  parPeloRelatorio: boolean;
 }
 
 /**
@@ -3571,7 +3578,7 @@ export async function verificarStatusTabulacao(
 ): Promise<StatusTabulacaoResultado> {
   const vazio: StatusTabulacaoResultado = {
     status: 'nao_tabulado', acordoId: null, outroOperadorId: null, outroOperadorNome: null,
-    extraDoDireto: false,
+    extraDoDireto: false, parPeloRelatorio: false,
   };
 
   const { data, error } = await rpcSemTipo<{
@@ -3580,6 +3587,7 @@ export async function verificarStatusTabulacao(
     outro_operador_id?: string | null;
     outro_operador_nome?: string | null;
     extra_do_direto?: boolean;
+    par_pelo_relatorio?: boolean;
     erro?: string;
   }>('fn_analitico_status_tabulacao', { p_linha_id: linhaId });
 
@@ -3598,6 +3606,7 @@ export async function verificarStatusTabulacao(
     outroOperadorId:   data.outro_operador_id ?? null,
     outroOperadorNome: data.outro_operador_nome ?? null,
     extraDoDireto:     data.extra_do_direto === true,
+    parPeloRelatorio:  data.par_pelo_relatorio === true,
   };
 }
 
@@ -3637,6 +3646,7 @@ type ItemLoteTabulacao = {
   outro_operador_id?: string | null;
   outro_operador_nome?: string | null;
   extra_do_direto?: boolean;
+  par_pelo_relatorio?: boolean;
 };
 
 async function despacharLoteTabulacao(): Promise<void> {
@@ -3646,7 +3656,7 @@ async function despacharLoteTabulacao(): Promise<void> {
   const ids = [...fila.keys()];
   const vazio: StatusTabulacaoResultado = {
     status: 'nao_tabulado', acordoId: null, outroOperadorId: null, outroOperadorNome: null,
-    extraDoDireto: false,
+    extraDoDireto: false, parPeloRelatorio: false,
   };
 
   for (let i = 0; i < ids.length; i += LOTE_TABULACAO_MAX) {
@@ -3675,6 +3685,7 @@ async function despacharLoteTabulacao(): Promise<void> {
             outroOperadorId:   item.outro_operador_id ?? null,
             outroOperadorNome: item.outro_operador_nome ?? null,
             extraDoDireto:     item.extra_do_direto === true,
+            parPeloRelatorio:  item.par_pelo_relatorio === true,
           }
         : vazio;
       if (item?.status) cacheTabulacao.set(id, { resultado: r, ate });
@@ -3715,6 +3726,11 @@ export async function atualizarTabulacao(
 export type TabularDivergenteResultado =
   /** O acordo saiu do outro operador e entrou no dono da linha. */
   | { ok: true; resultado: 'transferido'; acordoId: string; operadorAnteriorNome: string | null; operadorNovoNome: string | null }
+  /**
+   * Par pelo relatório (20261116234244): o colega ficou Extra e o dono da linha
+   * ganhou o Direto. `acordoId` é o Direto novo; ninguém perdeu acordo.
+   */
+  | { ok: true; resultado: 'par_formado'; acordoId: string; operadorAnteriorNome: string | null; operadorNovoNome: string | null }
   /** O dono da linha já tinha o acordo (DIRETO ou EXTRA) — nada a transferir. */
   | { ok: true; resultado: 'ja_era_seu'; acordoId: string }
   /** Linha «Extra» do relatório: ligada ao direto do colega, nada transferido (20261028180000). */
@@ -3734,6 +3750,9 @@ const MENSAGEM_ERRO_DIVERGENTE: Record<string, string> = {
   nao_autorizado:
     'Você não tem permissão sobre o acordo do outro operador. '
     + 'O próprio operador da linha pode confirmar pela tela dele.',
+  par_recusado:
+    'Não foi possível criar o acordo Direto a partir do acordo do colega. '
+    + 'Nada foi alterado — chame o líder.',
 };
 
 /**
@@ -3741,7 +3760,11 @@ const MENSAGEM_ERRO_DIVERGENTE: Record<string, string> = {
  * (`fn_analitico_tabular_divergente`), do outro operador para o operador da
  * linha — o pagamento já entrou em nome dele. Sem lixeira, sem formulário novo
  * e sem autorização de líder. O servidor re-aponta o EXTRA do par, atualiza as
- * linhas do Analítico, notifica quem perdeu e os líderes, e registra o log.
+ * linhas do Analítico, avisa quem perdeu (card no chat) e os líderes, e
+ * registra o log.
+ *
+ * Quando o relatório mostra o dono do acordo como Extra do código, a mesma
+ * chamada forma o par em vez de transferir (`par_formado`, 20261116234244).
  *
  * Antes era lixeira + DELETE pelo navegador: a RLS só deixa o operador apagar
  * o próprio acordo, o DELETE afetava zero linhas sem erro e o acordo ficava
@@ -3751,7 +3774,8 @@ export async function tabularDivergente(linhaId: string): Promise<TabularDiverge
   const { data, error } = await rpcSemTipo<{
     ok: boolean;
     erro?: string;
-    resultado?: 'transferido' | 'ja_era_seu' | 'livre' | 'extra_do_direto';
+    resultado?: 'transferido' | 'ja_era_seu' | 'livre' | 'extra_do_direto' | 'par_formado';
+    detalhe?: string;
     acordo_id?: string;
     operador_anterior_nome?: string | null;
     operador_novo_nome?: string | null;
@@ -3760,6 +3784,7 @@ export async function tabularDivergente(linhaId: string): Promise<TabularDiverge
   if (error) return { ok: false, error: error.message };
   if (!data) return { ok: false, error: 'O servidor não respondeu.' };
   if (!data.ok) {
+    if (data.detalhe) console.warn('[tabularDivergente]', data.erro, data.detalhe);
     return { ok: false, error: MENSAGEM_ERRO_DIVERGENTE[data.erro ?? ''] ?? data.erro ?? 'Falha ao transferir.' };
   }
 
@@ -3776,7 +3801,7 @@ export async function tabularDivergente(linhaId: string): Promise<TabularDiverge
   }
   return {
     ok: true,
-    resultado:            'transferido',
+    resultado:            data.resultado === 'par_formado' ? 'par_formado' : 'transferido',
     acordoId:             data.acordo_id,
     operadorAnteriorNome: data.operador_anterior_nome ?? null,
     operadorNovoNome:     data.operador_novo_nome ?? null,
