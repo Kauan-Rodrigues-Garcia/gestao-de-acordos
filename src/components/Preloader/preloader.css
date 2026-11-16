@@ -1,0 +1,104 @@
+/*
+ * A tela de abertura do Gestão de Acordos — ver `Preloader.tsx`.
+ *
+ * Um ciclo dura `--ciclo`; todas as animações têm a mesma duração e se acertam
+ * pelas porcentagens:
+ *
+ *    0–10%  pontos de luz aparecem em volta do desenho
+ *   10–54%  esticam em linhas que correm pelo contorno e crescem até fechar
+ *   46–64%  a logo se enche de cor
+ *   58–72%  dá uma pulsada: fechou
+ *   84–100% some, e recomeça
+ *
+ * O que custa e o que não custa (medido, 16/11/2026):
+ *   - o tracejado das linhas é a única coisa redesenhada, e só de 0 a 54% do
+ *     ciclo: a animação dele roda uma vez e PARA; no resto do ciclo a thread
+ *     principal não é chamada para nada;
+ *   - aparecer e sumir são a opacidade do SVG INTEIRO das linhas, não de cada
+ *     traço; a logo cheia é outro SVG, parado por dentro; brilho e pulsada são
+ *     caixas próprias. Tudo isso é opacidade/`transform` com `will-change`:
+ *     vai para a placa de vídeo e não passa pela thread principal;
+ *   - `contain: strict` na caixa da marca: o que é repintado não sai dela.
+ *
+ * Cada traço tem `pathLength=1`: o tracejado é medido em fração do laço. `--p`
+ * é o passo (1 ÷ quantas linhas correm nele) e `--d` o sentido (1 ou -1).
+ */
+.gda-pre {
+  --ciclo: 3s;
+  position: fixed; inset: 0; z-index: 9999;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+  background: var(--background);
+  color: var(--primary);
+  transition: opacity .4s ease;
+}
+.gda-pre-sai { opacity: 0; pointer-events: none; }
+
+.gda-pre-marca {
+  position: relative; width: var(--tam, 120px); height: var(--tam, 120px);
+  will-change: transform;
+  animation: gda-pre-pulso var(--ciclo) ease-in-out infinite both;
+}
+
+/* A luz atrás da logo: acende quando ela fecha. */
+.gda-pre-brilho {
+  position: absolute; inset: -22%; border-radius: 50%; will-change: opacity;
+  background: radial-gradient(closest-side, color-mix(in oklch, var(--primary) 24%, transparent), transparent);
+  animation: gda-pre-brilho var(--ciclo) ease-in-out infinite both;
+}
+
+/* As linhas chegam de um pouco mais longe e assentam no lugar. Aparecer e sumir
+   é a opacidade deste SVG inteiro (uma camada), não de cada traço. */
+.gda-pre-logo {
+  position: absolute; inset: 0; width: 100%; height: 100%; contain: strict; will-change: transform, opacity;
+  animation:
+    gda-pre-chega var(--ciclo) cubic-bezier(.2, .7, .2, 1) infinite both,
+    gda-pre-some var(--ciclo) linear infinite both;
+}
+.gda-pre-linha {
+  fill: none; stroke: currentColor; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round;
+  stroke-dasharray: 0 var(--p);
+  /* Roda UMA vez e para, pelo tempo em que as linhas correm (54% do ciclo). Quem
+     dá a partida de novo a cada volta é o `Preloader.tsx`, no relógio da pulsada.
+     Em laço infinito ela custaria a cada quadro mesmo com tudo parado. */
+  animation: gda-pre-linha calc(var(--ciclo) * .54) cubic-bezier(.55, 0, .2, 1) both;
+}
+.gda-pre-cheia {
+  position: absolute; inset: 0; width: 100%; height: 100%; contain: strict; will-change: opacity;
+  fill: currentColor; fill-rule: evenodd;
+  animation: gda-pre-cheia var(--ciclo) ease-in-out infinite both;
+}
+
+.gda-pre-nome {
+  margin: 0; font-size: 11px; font-weight: 600; letter-spacing: .34em; text-transform: uppercase;
+  color: var(--muted-foreground); opacity: .75; padding-left: .34em;
+}
+
+@keyframes gda-pre-linha {
+  from { stroke-dasharray: 0 var(--p); stroke-dashoffset: calc(var(--d) * .8); }
+  to { stroke-dasharray: var(--p) 0; stroke-dashoffset: 0; }
+}
+@keyframes gda-pre-some {
+  0% { opacity: 0; }
+  10%, 84% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes gda-pre-cheia {
+  0%, 46% { opacity: 0; }
+  64%, 84% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes gda-pre-chega {
+  0% { transform: scale(1.14); }
+  54%, 100% { transform: scale(1); }
+}
+@keyframes gda-pre-pulso {
+  0%, 58% { transform: scale(1); }
+  64% { transform: scale(1.045); }
+  74%, 100% { transform: scale(1); }
+}
+@keyframes gda-pre-brilho {
+  0%, 40% { opacity: 0; }
+  64% { opacity: 1; }
+  84% { opacity: .55; }
+  100% { opacity: 0; }
+}
