@@ -85,6 +85,7 @@ import { useEasterEggCriadores, DURACAO_ESCURECIMENTO_MS } from '@/hooks/useEast
 import { ComemoracaoOverlay } from './comemoracao/ComemoracaoOverlay';
 import { SireneOverlay } from './Sirene/SireneOverlay';
 import { AvisoVotacao } from './VotacaoLideres/AvisoVotacao';
+import { AvisoVotacaoOpcoes } from './VotacaoOpcoes/AvisoVotacaoOpcoes';
 import { BingoNoSistema } from '@/pages/ModoTV/bingo/jogador/BingoNoSistema';
 import { useModoLeve } from '@/lib/modoLeve';
 import { useModoLeveZeradoPeloAdmin } from '@/lib/modoLeveZerado';
@@ -1195,6 +1196,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <AutorizacaoDock recuoEsquerda={(sidebarOpen ? 240 : 64) + 16} />
       {/* Votação da Liderança (04/11/2026): «Votar agora» / «Ver resultado» no canto. Ver `VotacaoLideres/AvisoVotacao.tsx`. */}
       <AvisoVotacao recuoEsquerda={(sidebarOpen ? 240 : 64) + 16} />
+      {/* Votação de opções (16/11/2026): abre sozinha para quem vota; pílula no pé até votar. */}
+      <AvisoVotacaoOpcoes />
 
       {/* Chat interno — mesma quina do dock de autorizações, um degrau acima.
           Fica fora das rotas de propósito: conversar não é uma tela, é uma

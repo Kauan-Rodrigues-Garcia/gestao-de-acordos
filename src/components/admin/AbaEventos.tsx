@@ -10,7 +10,7 @@
  * `ranking_quitacao_configurar`. Esconder o botão é só conveniência.
  */
 import { Suspense, lazy, useState, type ReactNode } from 'react';
-import { Flag, Siren, Medal, TrainFront, Vote, Loader2, type LucideIcon } from 'lucide-react';
+import { Flag, Siren, Medal, TrainFront, Vote, ListChecks, Loader2, type LucideIcon } from 'lucide-react';
 import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { cn } from '@/lib/utils';
 import { NOME_CORRIDA } from '@/components/Corrida/nome';
@@ -22,6 +22,7 @@ const SireneConfig = lazy(() => import('@/components/admin/SireneConfig'));
 const RankingQuitacaoConfig = lazy(() => import('@/components/admin/RankingQuitacaoConfig'));
 const TremNatalConfig = lazy(() => import('@/components/admin/TremNatalConfig'));
 const VotacaoLideresConfig = lazy(() => import('@/components/admin/VotacaoLideresConfig'));
+const VotacaoOpcoesConfig = lazy(() => import('@/components/admin/VotacaoOpcoesConfig'));
 
 interface Props {
   ehSuperAdmin: boolean;
@@ -66,6 +67,12 @@ export default function AbaEventos({ ehSuperAdmin, podeConfigurarRankingQuitacao
       id: 'votacao_lideres', rotulo: 'Votação da Liderança', icone: Vote, visivel: ehSuperAdmin,
       descricao: 'Os líderes escolhem o colega de cada categoria: o mais comunicativo, o mais inspirador…',
       conteudo: <VotacaoLideresConfig />,
+    },
+    {
+      // 16/11/2026: a de dezembro, Sorteio de prêmios OU Happy hour no Ibis.
+      id: 'votacao_opcoes', rotulo: 'Votação de opções', icone: ListChecks, visivel: ehSuperAdmin,
+      descricao: 'Uma pergunta com opções (prêmios ou happy hour…) para os setores, equipes ou pessoas que você escolher.',
+      conteudo: <VotacaoOpcoesConfig />,
     },
   ];
   const visiveis = EVENTOS.filter(e => e.visivel);
