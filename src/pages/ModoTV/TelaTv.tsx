@@ -990,24 +990,44 @@ function LinhaQuitacao({ p, c, falta, compacto, porQtd }: { p: QuitacaoLinha; c:
   );
 }
 
+/**
+ * Onde a imagem ou o vídeo fica (16/11/2026): o «Tamanho na tela», centrado.
+ * Menor que 100%, em volta aparece o fundo do tema do palco (nunca preto); no
+ * «Preencher», a caixa ganha canto redondo e sombra para não parecer recortada.
+ */
+function caixaDaMidia(tela: TelaDoPainel): CSSProperties {
+  const tamanho = opcao<number>(tela, 'tamanho');
+  const preencher = opcao<string>(tela, 'ajuste') === 'cover';
+  const menor = tamanho < 100;
+  const margem = (100 - tamanho) / 2;
+  return {
+    position: 'absolute', left: `${margem}%`, top: `${margem}%`, width: `${tamanho}%`, height: `${tamanho}%`,
+    objectFit: preencher ? 'cover' : 'contain',
+    background: 'transparent',
+    ...(menor && preencher ? { borderRadius: 28, boxShadow: '0 30px 80px rgba(0,0,0,.45)' } : {}),
+  };
+}
+
+function Legenda({ tela }: { tela: TelaDoPainel }) {
+  const legenda = opcao<string>(tela, 'legenda');
+  if (!legenda) return null;
+  return (
+    <div style={{
+      position: 'absolute', left: 0, right: 0, bottom: 0, padding: '120px 120px 70px',
+      background: 'linear-gradient(transparent, rgba(0,0,0,.72))', color: '#fff',
+      fontSize: 64, fontWeight: 700, textAlign: 'center',
+    }}>
+      {legenda}
+    </div>
+  );
+}
+
 function Imagem({ tela, c, url }: { tela: TelaDoPainel; c: Cores; url: string | null }) {
   if (!url) return <Aviso texto="Escolha uma imagem para esta tela." c={c} />;
-  const legenda = opcao<string>(tela, 'legenda');
   return (
     <>
-      <img src={url} alt="" decoding="async" style={{
-        position: 'absolute', inset: 0, width: '100%', height: '100%',
-        objectFit: opcao<string>(tela, 'ajuste') === 'cover' ? 'cover' : 'contain',
-      }} />
-      {legenda && (
-        <div style={{
-          position: 'absolute', left: 0, right: 0, bottom: 0, padding: '120px 120px 70px',
-          background: 'linear-gradient(transparent, rgba(0,0,0,.72))', color: '#fff',
-          fontSize: 64, fontWeight: 700, textAlign: 'center',
-        }}>
-          {legenda}
-        </div>
-      )}
+      <img src={url} alt="" decoding="async" style={caixaDaMidia(tela)} />
+      <Legenda tela={tela} />
     </>
   );
 }
@@ -1024,6 +1044,11 @@ function Video({ tela, c, url, parada, semSom }: {
   const ref = useRef<HTMLVideoElement>(null);
   const comSom = !semSom && opcao<boolean>(tela, 'com_som') === true;
   const laco = parada || opcao<boolean>(tela, 'tempo_do_arquivo') !== true;
+  const volume = opcao<number>(tela, 'volume') / 100;
+
+  useEffect(() => {
+    if (ref.current) ref.current.volume = Math.min(1, Math.max(0, volume));
+  }, [volume, url]);
 
   useEffect(() => {
     const v = ref.current;
@@ -1047,13 +1072,10 @@ function Video({ tela, c, url, parada, semSom }: {
 
   if (!url) return <Aviso texto="Escolha um vídeo para esta tela." c={c} />;
   return (
-    <video
-      ref={ref} src={url} muted={!comSom} loop={laco} playsInline preload="auto"
-      style={{
-        position: 'absolute', inset: 0, width: '100%', height: '100%', background: '#000',
-        objectFit: opcao<string>(tela, 'ajuste') === 'cover' ? 'cover' : 'contain',
-      }}
-    />
+    <>
+      <video ref={ref} src={url} muted={!comSom} loop={laco} playsInline preload="auto" style={caixaDaMidia(tela)} />
+      <Legenda tela={tela} />
+    </>
   );
 }
 

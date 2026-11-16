@@ -210,6 +210,21 @@ export function Editor({ painel, alvo, conexoes, aoMudar, aoMudarConexoes }: {
   const visao = useMemo(() => (numeros ? montarVisao(numeros, r.unidade) : null), [numeros, r.unidade]);
 
   /** Uma linha da lista de telas. A sob demanda troca o tempo e o «Fixar» por «Pôr no ar». */
+  /** Quanto tempo a tela fica na TV. No vídeo, a 1ª escolha é «Duração do arquivo» (o vídeo inteiro). */
+  const seletorDeTempo = (t: TelaDoPainel) => (t.template === 'video' ? (
+    <SeletorTempo
+      valor={t.segundos ?? null} padrao={r.segundos_por_tela}
+      arquivo={{
+        ligado: t.opcoes.tempo_do_arquivo === true,
+        segundos: segundosDoArquivo(t.opcoes.duracao_arquivo),
+        aoEscolher: () => { void escolherTempoDoArquivo(t.id); },
+      }}
+      aoMudar={v => mudarTelaPorId(t.id, x => ({ ...x, segundos: v, opcoes: { ...x.opcoes, tempo_do_arquivo: false } }))}
+    />
+  ) : (
+    <SeletorTempo valor={t.segundos ?? null} padrao={r.segundos_por_tela} aoMudar={v => mudarTelaPorId(t.id, x => ({ ...x, segundos: v }))} />
+  ));
+
   const linhaDaTela = (t: TelaDoPainel, i: number) => {
     const fixada = painel.tela_fixa === t.id;
     const publicada = publicadas.has(t.id);
@@ -241,19 +256,7 @@ export function Editor({ painel, alvo, conexoes, aoMudar, aoMudarConexoes }: {
             <option value="rodizio">No rodízio</option>
             <option value="demanda">Sob demanda</option>
           </select>
-          {!demanda && (t.template === 'video' ? (
-            <SeletorTempo
-              valor={t.segundos ?? null} padrao={r.segundos_por_tela}
-              arquivo={{
-                ligado: t.opcoes.tempo_do_arquivo === true,
-                segundos: segundosDoArquivo(t.opcoes.duracao_arquivo),
-                aoEscolher: () => { void escolherTempoDoArquivo(t.id); },
-              }}
-              aoMudar={v => mudarTelaPorId(t.id, x => ({ ...x, segundos: v, opcoes: { ...x.opcoes, tempo_do_arquivo: false } }))}
-            />
-          ) : (
-            <SeletorTempo valor={t.segundos ?? null} padrao={r.segundos_por_tela} aoMudar={v => mudarTela(i, { segundos: v })} />
-          ))}
+          {!demanda && seletorDeTempo(t)}
         </div>
         {demanda ? (
           <Button
@@ -437,6 +440,19 @@ export function Editor({ painel, alvo, conexoes, aoMudar, aoMudarConexoes }: {
                     equipes={numeros?.equipes ?? []} />
                 )
               ))}
+              {noRodizio(telaSel) ? (
+                <div className="space-y-1.5">
+                  <Label>Tempo na TV</Label>
+                  <div>{seletorDeTempo(telaSel)}</div>
+                  {telaSel.template === 'video' && (
+                    <p className="text-xs text-muted-foreground">
+                      «Duração do arquivo» passa o vídeo inteiro; um tempo fixo corta (ou repete) o vídeo nesse tempo.
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">Sob demanda: fica na TV até alguém tirar.</p>
+              )}
               {!tplSel.campos.length && <p className="text-sm text-muted-foreground">Esta tela não tem opções.</p>}
             </>
           ) : (
@@ -901,6 +917,19 @@ function CampoDaTela({ campo, tela, painelId, aoMudar, aoEnviarVideo, equipes = 
           <Label>{campo.rotulo}</Label>
           <Input type="date" value={v} onChange={e => aoMudar(e.target.value)} />
           <p className="text-xs text-muted-foreground">Um dia do mês atual.</p>
+        </div>
+      );
+    }
+    case 'faixa': {
+      const v = opcao<number>(tela, campo.chave);
+      return (
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between text-sm">
+            <Label>{campo.rotulo}</Label>
+            <span className="tabular-nums text-muted-foreground">{v}{campo.sufixo}</span>
+          </div>
+          <input type="range" className="w-full accent-primary" min={campo.min} max={campo.max} step={campo.passo} value={v}
+            onChange={e => aoMudar(Number(e.target.value))} />
         </div>
       );
     }

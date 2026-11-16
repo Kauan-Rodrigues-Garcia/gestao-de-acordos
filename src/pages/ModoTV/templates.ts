@@ -33,6 +33,8 @@ export type CampoOpcao = Condicao & (
   | { chave: string; rotulo: string; tipo: 'numero'; padrao: number | null; dica?: string }
   | { chave: string; rotulo: string; tipo: 'escolha'; padrao: string; escolhas: { valor: string; rotulo: string }[] }
   | { chave: string; rotulo: string; tipo: 'liga'; padrao: boolean }
+  /** Um número numa régua (16/11/2026: tamanho da mídia, volume do vídeo). */
+  | { chave: string; rotulo: string; tipo: 'faixa'; padrao: number; min: number; max: number; passo: number; sufixo: string }
   | { chave: string; rotulo: string; tipo: 'midia'; padrao: string; aceita: 'imagem' | 'video' }
   /** Uma equipe do setor do painel (o id); a lista vem do pacote de números. */
   | { chave: string; rotulo: string; tipo: 'equipe'; padrao: string }
@@ -45,6 +47,14 @@ export type CampoOpcao = Condicao & (
   | { chave: string; rotulo: string; tipo: 'data'; padrao: string }
   /** A cena livre inteira (`livre/cena.ts`), montada no estúdio. */
   | { chave: string; rotulo: string; tipo: 'cena'; padrao: null });
+
+/**
+ * Imagem e vídeo menores que a tela (16/11/2026): em volta aparece o fundo do
+ * tema, nunca preto.
+ */
+const TAMANHO_MIDIA: CampoOpcao = {
+  chave: 'tamanho', rotulo: 'Tamanho na tela', tipo: 'faixa', padrao: 100, min: 30, max: 100, passo: 5, sufixo: '%',
+};
 
 export interface Template {
   id: TemplateId;
@@ -227,20 +237,25 @@ export const TEMPLATES: Template[] = [
       { chave: 'url', rotulo: 'Imagem', tipo: 'midia', padrao: '', aceita: 'imagem' },
       { chave: 'ajuste', rotulo: 'Encaixe', tipo: 'escolha', padrao: 'contain',
         escolhas: [{ valor: 'contain', rotulo: 'Inteira' }, { valor: 'cover', rotulo: 'Preencher a tela' }] },
+      TAMANHO_MIDIA,
       { chave: 'legenda', rotulo: 'Legenda (opcional)', tipo: 'texto', padrao: '', max: 80 },
     ],
   },
   {
     id: 'video', categoria: 'midia',
     nome: 'Vídeo',
-    descricao: 'Um vídeo em tela cheia, com ou sem som.',
+    descricao: 'Um vídeo em tela cheia ou menor, com ou sem som.',
     // Fora dos campos, gravados pelo editor: `duracao_arquivo` (segundos do
     // vídeo, medidos no envio) e `tempo_do_arquivo` (a tela dura o vídeo).
     campos: [
       { chave: 'url', rotulo: 'Vídeo', tipo: 'midia', padrao: '', aceita: 'video' },
       { chave: 'ajuste', rotulo: 'Encaixe', tipo: 'escolha', padrao: 'contain',
         escolhas: [{ valor: 'contain', rotulo: 'Inteiro' }, { valor: 'cover', rotulo: 'Preencher a tela' }] },
+      TAMANHO_MIDIA,
       { chave: 'com_som', rotulo: 'Tocar o som do vídeo', tipo: 'liga', padrao: false },
+      { chave: 'volume', rotulo: 'Volume', tipo: 'faixa', padrao: 100, min: 10, max: 100, passo: 10, sufixo: '%',
+        quando: { chave: 'com_som', valor: 'true' } },
+      { chave: 'legenda', rotulo: 'Legenda (opcional)', tipo: 'texto', padrao: '', max: 80 },
     ],
   },
   {
@@ -288,6 +303,10 @@ export function opcao<T extends string | number | boolean | null | string[]>(
     }
     case 'liga':
       return (typeof bruto === 'boolean' ? bruto : campo.padrao) as T;
+    case 'faixa': {
+      const n = typeof bruto === 'number' ? bruto : NaN;
+      return (Number.isFinite(n) ? Math.min(campo.max, Math.max(campo.min, n)) : campo.padrao) as T;
+    }
     case 'escolha':
       return (campo.escolhas.some(e => e.valor === bruto) ? bruto : campo.padrao) as T;
     case 'equipe':
@@ -331,7 +350,8 @@ export function campoVisivel(tela: Pick<TelaDoPainel, 'template' | 'opcoes'>, ca
     const propria = origem === 'propria' || (origem === undefined && tela.opcoes?.alvo_manual != null && tela.opcoes?.alvo_manual !== '');
     return (propria ? 'propria' : 'sistema') === campo.quando.valor;
   }
-  return opcao<string>(tela, campo.quando.chave) === campo.quando.valor;
+  // String(): o `quando` também aponta uma liga («true»/«false»).
+  return String(opcao<string | boolean>(tela, campo.quando.chave)) === campo.quando.valor;
 }
 
 /** Uma tela nova, com o id que a lista do editor usa como chave. */

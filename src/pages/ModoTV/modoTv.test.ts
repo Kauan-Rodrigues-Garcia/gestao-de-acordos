@@ -323,3 +323,20 @@ describe('cena Destaque em gibi', () => {
     expect(destaqueDaTela(montarVisao({ ...base, destaques: undefined }, 'bruto'), tela({ dia: 'mes' })).pessoa).toBeNull();
   });
 });
+
+describe('imagem e vídeo: tamanho na tela e volume (16/11/2026)', () => {
+  const video = (opcoes: Record<string, unknown>) => ({ template: 'video' as const, opcoes });
+  it('tamanho: 100% por padrão, preso entre 30% e 100%', () => {
+    expect(opcao<number>(video({}), 'tamanho')).toBe(100);
+    expect(opcao<number>(video({ tamanho: 60 }), 'tamanho')).toBe(60);
+    expect(opcao<number>(video({ tamanho: 5 }), 'tamanho')).toBe(30);
+    expect(opcao<number>(video({ tamanho: 'grande' }), 'tamanho')).toBe(100);
+    expect(opcao<number>({ template: 'imagem', opcoes: { tamanho: 70 } }, 'tamanho')).toBe(70);
+  });
+  it('volume: só aparece com o som ligado', () => {
+    const campo = templateDe('video')!.campos.find(c => c.chave === 'volume')!;
+    expect(campoVisivel(video({}), campo)).toBe(false);
+    expect(campoVisivel(video({ com_som: true }), campo)).toBe(true);
+    expect(opcao<number>(video({ volume: 150 }), 'volume')).toBe(100);
+  });
+});
