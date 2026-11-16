@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { curvaHoraAHora, diaDoDesafio, esperadoAteODia, hojeEmSaoPaulo, horasSemRetrato, metaDoDia, minutosSemO59, pct, porSetorNoDia } from './regras';
+import { curvaHoraAHora, diaDoDesafio, esperadoAteODia, hojeEmSaoPaulo, horasSemRetrato, metaDoDia, minutosSemO59, pct, porSetorNoDia, valorDosLancamentos } from './regras';
 import type { SetorDoDesafio } from './desafioCobranca.service';
 
 const DIAS = ['2026-11-16', '2026-11-17', '2026-11-18'];
@@ -56,7 +56,33 @@ describe('regras do Desafio Cobrança', () => {
     ]);
   });
 
-  it('fonte manual: a curva é a dos lançamentos; o 59 não entra; a remoção desce', () => {
+  it('fonte manual: o dia vale o ÚLTIMO lançamento, não a soma; cada dia tem o seu', () => {
+    const lanc = (id: string, dia: string, valor: number, criado_em: string, removido_em: string | null = null) =>
+      ({ id, dia, setor_id: null, valor, motivo: '', criado_em, criado_por: null, removido_em });
+    const ajustes = [
+      lanc('a', DIAS[0], 300_000, '2026-11-16T14:00:00Z'),
+      lanc('b', DIAS[0], 420_000, '2026-11-16T17:00:00Z'),
+      lanc('c', DIAS[1], 80_000, '2026-11-17T13:00:00Z'),
+      lanc('d', DIAS[1], 95_000, '2026-11-17T15:00:00Z', '2026-11-17T15:10:00Z'),
+    ];
+    expect(valorDosLancamentos(ajustes, 'manual', DIAS[0])).toBe(420_000);
+    // O último do dia 17 foi removido: vale o anterior.
+    expect(valorDosLancamentos(ajustes, 'manual', DIAS[1])).toBe(80_000);
+    expect(valorDosLancamentos(ajustes, 'manual')).toBe(500_000);
+    // No 59, o ajuste de divergência continua somando.
+    expect(valorDosLancamentos(ajustes, '59', DIAS[0])).toBe(720_000);
+
+    const curva = curvaHoraAHora({ leituras: [], horas: [], ajustes, setores: [], fonte: 'manual', dia: DIAS[1] });
+    expect(curva.map(p => [p.lido_em.slice(5, 16), p.total, p.dia])).toEqual([
+      ['11-16T14:00', 300_000, 0],
+      ['11-16T17:00', 420_000, 0],
+      ['11-17T13:00', 500_000, 80_000],
+      ['11-17T15:00', 515_000, 95_000],
+      ['11-17T15:10', 500_000, 80_000],
+    ]);
+  });
+
+  it('fonte manual: a curva é a dos lançamentos; o 59 não entra; a remoção volta ao anterior', () => {
     const curva = curvaHoraAHora({
       leituras: ['2026-11-16T15:16:00Z'],
       horas: [{ lido_em: '2026-11-16T15:16:00Z', dia: DIAS[0], setor_id: 'play1', valor: 93_808.31 }],
@@ -71,9 +97,9 @@ describe('regras do Desafio Cobrança', () => {
     });
     expect(curva.map(p => [p.lido_em.slice(11, 16), p.total])).toEqual([
       ['15:05', 100_000],
-      ['17:05', 150_000],
-      ['17:10', 150_000],   // o da Jornada não soma
-      ['17:30', 100_000],   // removido
+      ['17:05', 50_000],    // o último lançado substitui, não soma
+      ['17:10', 50_000],    // o da Jornada não conta
+      ['17:30', 100_000],   // removido: volta o anterior
     ]);
   });
 

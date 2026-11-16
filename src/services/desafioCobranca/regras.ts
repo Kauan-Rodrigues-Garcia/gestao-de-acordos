@@ -41,6 +41,32 @@ function ajusteValeEm(a: AjusteCobranca, t: string, somam: ReadonlySet<string>):
   return !a.removido_em || a.removido_em > t;
 }
 
+/**
+ * Placar manual (16/11/2026): o dia vale o lançamento MAIS NOVO dos que valem —
+ * lançar de novo substitui, não soma. Os anteriores ficam só no histórico.
+ * Mesma regra de `fn_desafio_cobranca_montar` (migration 20261116230000).
+ */
+export function ultimoLancamentoPorDia<T extends Pick<AjusteCobranca, 'dia' | 'criado_em' | 'removido_em' | 'id'>>(
+  ajustes: readonly T[],
+): Map<string, T> {
+  const tempo = (iso: string) => new Date(iso).getTime();
+  const porDia = new Map<string, T>();
+  // Quem chama já filtrou os válidos (na curva, «válido naquele instante»).
+  for (const a of ajustes) {
+    const atual = porDia.get(a.dia);
+    if (!atual || tempo(a.criado_em) > tempo(atual.criado_em)
+      || (tempo(a.criado_em) === tempo(atual.criado_em) && a.id > atual.id)) porDia.set(a.dia, a);
+  }
+  return porDia;
+}
+
+/** O que os lançamentos dão no placar: manual = último de cada dia; 59 = soma. */
+export function valorDosLancamentos(ajustes: readonly AjusteCobranca[], fonte: FonteDoPlacar, dia?: string): number {
+  const validos = ajustes.filter(a => !a.removido_em && (!dia || a.dia === dia));
+  if (fonte === 'manual') return [...ultimoLancamentoPorDia(validos).values()].reduce((s, a) => s + a.valor, 0);
+  return validos.reduce((s, a) => s + a.valor, 0);
+}
+
 export interface PontoDaHora { lido_em: string; total: number; dia: number }
 
 /**
@@ -68,10 +94,11 @@ export function curvaHoraAHora(entrada: {
     const instantes = [...new Set(normal.flatMap(a => (a.removido_em ? [a.criado_em, a.removido_em] : [a.criado_em])))].sort();
     return instantes.map(t => {
       const aj = normal.filter(a => ajusteValeEm(a, t, somam));
+      const porDia = ultimoLancamentoPorDia(aj);
       return {
         lido_em: t,
-        total: aj.reduce((s, a) => s + a.valor, 0),
-        dia: aj.filter(a => a.dia === entrada.dia).reduce((s, a) => s + a.valor, 0),
+        total: [...porDia.values()].reduce((s, a) => s + a.valor, 0),
+        dia: porDia.get(entrada.dia)?.valor ?? 0,
       };
     });
   }

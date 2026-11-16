@@ -34,7 +34,7 @@ import {
 } from '@/services/desafioCobranca/desafioCobranca.service';
 import {
   brl, brlCurto, curvaHoraAHora, dataCurta, diaDoDesafio, esperadoAteODia, hojeEmSaoPaulo, horaCurta, horaEmSaoPaulo, horasSemRetrato,
-  minutosSemO59, pct, porSetorNoDia, semana, semanaCurta,
+  minutosSemO59, pct, porSetorNoDia, semana, semanaCurta, ultimoLancamentoPorDia, valorDosLancamentos,
 } from '@/services/desafioCobranca/regras';
 
 const CHAVE = ['desafio-cobranca-detalhe'];
@@ -199,7 +199,8 @@ function FonteDoPlacarEscolha({ d }: { d: DetalheCobranca }) {
   const recarregar = useRecarregar();
   const [pedida, setPedida] = useState<FonteDoPlacar | null>(null);
   const [salvando, setSalvando] = useState(false);
-  const lancado = d.ajustes.filter(a => !a.removido_em).reduce((s, a) => s + a.valor, 0);
+  // Manual: o último lançamento de cada dia. 59: tudo soma por cima.
+  const lancado = valorDosLancamentos(d.ajustes, pedida === 'manual' ? 'manual' : '59');
 
   async function trocar() {
     if (!pedida) return;
@@ -253,8 +254,8 @@ function FonteDoPlacarEscolha({ d }: { d: DetalheCobranca }) {
             <AlertDialogTitle>{pedida === 'manual' ? 'Seguir só o lançamento do super admin?' : 'Voltar a seguir o 59?'}</AlertDialogTitle>
             <AlertDialogDescription>
               {pedida === 'manual'
-                ? `O placar de todo mundo passa a ser só o que foi lançado (${brl(lancado)} até agora). O 59 continua sendo lido, mas não conta. Dá para voltar quando quiser.`
-                : `O placar volta a ser o 59 mais os lançamentos, que viram ajustes e SOMAM por cima (${brl(lancado)} lançados). Se eles repetem o que o 59 já traz, remova-os antes para não contar duas vezes.`}
+                ? `O placar de todo mundo passa a ser só o que foi lançado: o último lançamento de cada dia (${brl(lancado)} até agora). O 59 continua sendo lido, mas não conta. Dá para voltar quando quiser.`
+                : `O placar volta a ser o 59 mais os lançamentos, que viram ajustes e SOMAM por cima — todos, não só o último do dia (${brl(lancado)} lançados). Se eles repetem o que o 59 já traz, remova-os antes para não contar duas vezes.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -602,15 +603,22 @@ function Ajustes({ d, diaInicial }: { d: DetalheCobranca; diaInicial: string }) 
 
   const manual = d.fonte === 'manual';
   const numero = Number(valor.replace(/\./g, '').replace(',', '.'));
-  const lancadoNoDia = d.ajustes.filter(a => !a.removido_em && a.dia === dia).reduce((s, a) => s + a.valor, 0);
-  const valido = Number.isFinite(numero) && numero !== 0 && motivo.trim().length >= 3;
+  // Manual: vale o último lançamento do dia. 59: os ajustes somam.
+  const lancadoNoDia = valorDosLancamentos(d.ajustes, d.fonte, dia);
+  // Os que valem agora no manual (um por dia); os outros são histórico.
+  const valendo = useMemo(
+    () => new Set(manual ? [...ultimoLancamentoPorDia(d.ajustes.filter(a => !a.removido_em && (!a.setor_id || d.setores.some(s => s.soma && s.setor_id === a.setor_id)))).values()].map(a => a.id) : []),
+    [manual, d.ajustes, d.setores],
+  );
+  // Motivo opcional (16/11/2026). Manual: o valor do dia, 0 inclusive; 59: o ajuste, nunca 0.
+  const valido = valor.trim() !== '' && Number.isFinite(numero) && (manual ? numero >= 0 : numero !== 0);
 
   async function lancar() {
     if (!valido || !perfil) return;
     setSalvando(true);
     try {
-      await lancarAjuste({ desafioId: d.id, dia, setorId: setor || null, valor: numero, motivo, criadoPor: perfil.id });
-      toast.success(manual ? 'Lançado. Já aparece no Gestão e na TV.' : 'Ajuste lançado. Já soma no Gestão e na TV.');
+      await lancarAjuste({ desafioId: d.id, dia, setorId: manual ? null : setor || null, valor: numero, motivo, criadoPor: perfil.id });
+      toast.success(manual ? 'Lançado. O placar do dia passa a ser este valor no Gestão e na TV.' : 'Ajuste lançado. Já soma no Gestão e na TV.');
       setValor(''); setMotivo('');
       await recarregar();
     } catch (e) {
@@ -637,31 +645,34 @@ function Ajustes({ d, diaInicial }: { d: DetalheCobranca; diaInicial: string }) 
         <h2 id="dc-ajustes-titulo" className="font-semibold">{manual ? 'Lançamentos do super admin' : 'Ajuste de valor (divergência)'}</h2>
         <p className="text-sm text-muted-foreground">
           {manual
-            ? 'O placar de todo mundo (Gestão e TV) é a soma destes lançamentos. Cada lançamento SOMA ao que já foi lançado no dia: lance o que entrou desde o último, não o total. Negativo tira. Remover deixa o registro.'
+            ? 'Lance o TOTAL do dia, quantas vezes quiser. Não soma: o placar de todo mundo (Gestão e TV) fica sempre com o último valor lançado no dia. Os anteriores ficam no histórico, com a hora. Remover o último volta ao anterior.'
             : 'O valor soma no placar de todo mundo (Gestão e TV). Negativo tira. Ajuste com setor só conta se o setor soma. Remover deixa o registro.'}
         </p>
         {manual && (
           <p className="mt-2 text-sm">
-            Já lançado em {semanaCurta(dia)} {dataCurta(dia)}: <strong className="tabular-nums">{brl(lancadoNoDia)}</strong>
+            Valendo em {semanaCurta(dia)} {dataCurta(dia)}: <strong className="tabular-nums">{brl(lancadoNoDia)}</strong>
           </p>
         )}
       </div>
-      <form className="grid gap-3 p-4 sm:grid-cols-[auto_auto_10rem_1fr_auto] sm:items-end" onSubmit={e => { e.preventDefault(); void lancar(); }}>
+      <form className={cn('grid gap-3 p-4 sm:items-end', manual ? 'sm:grid-cols-[auto_10rem_1fr_auto]' : 'sm:grid-cols-[auto_auto_10rem_1fr_auto]')} onSubmit={e => { e.preventDefault(); void lancar(); }}>
         <label className="text-sm">Dia
           <select className={campo} value={dia} onChange={e => setDia(e.target.value)}>
             {d.dias.map(x => <option key={x} value={x}>{semanaCurta(x)} {dataCurta(x)}</option>)}
           </select>
         </label>
-        <label className="text-sm">Setor
-          <select className={campo} value={setor} onChange={e => setSetor(e.target.value)}>
-            <option value="">Geral</option>
-            {d.setores.filter(s => s.soma).map(s => <option key={s.setor_id} value={s.setor_id}>{s.nome}</option>)}
-          </select>
-        </label>
-        <label className="text-sm">Valor (R$)
+        {/* Manual: o lançamento é o total do dia, do geral — sem setor. */}
+        {!manual && (
+          <label className="text-sm">Setor
+            <select className={campo} value={setor} onChange={e => setSetor(e.target.value)}>
+              <option value="">Geral</option>
+              {d.setores.filter(s => s.soma).map(s => <option key={s.setor_id} value={s.setor_id}>{s.nome}</option>)}
+            </select>
+          </label>
+        )}
+        <label className="text-sm">{manual ? 'Total do dia (R$)' : 'Valor (R$)'}
           <Input inputMode="decimal" placeholder="1.234,56" value={valor} onChange={e => setValor(e.target.value)} />
         </label>
-        <label className="text-sm">Motivo
+        <label className="text-sm">Motivo <span className="text-muted-foreground">(opcional)</span>
           <Input placeholder={manual ? 'Ex.: recebido das 12h às 14h' : 'Ex.: baixa que o 59 não trouxe'} value={motivo} onChange={e => setMotivo(e.target.value)} maxLength={200} />
         </label>
         <Button type="submit" disabled={!valido || salvando}><Plus className="mr-2 h-4 w-4" aria-hidden /> Lançar</Button>
@@ -675,11 +686,14 @@ function Ajustes({ d, diaInicial }: { d: DetalheCobranca; diaInicial: string }) 
             </tr></thead>
             <tbody>
               {d.ajustes.map(a => (
-                <tr key={a.id} className={cn('border-t border-border', a.removido_em && 'text-muted-foreground line-through')}>
+                <tr key={a.id} className={cn('border-t border-border', a.removido_em && 'text-muted-foreground line-through', manual && !a.removido_em && !valendo.has(a.id) && 'text-muted-foreground')}>
                   <td className="px-4 py-2">{dataCurta(a.dia)}</td>
                   <td className="px-2 py-2">{nomeSetor(a.setor_id)}</td>
-                  <td className="px-2 py-2 text-right tabular-nums">{a.valor > 0 ? '+' : ''}{brl(a.valor)}</td>
-                  <td className="px-2 py-2">{a.motivo}</td>
+                  <td className="px-2 py-2 text-right tabular-nums">
+                    {manual ? brl(a.valor) : <>{a.valor > 0 ? '+' : ''}{brl(a.valor)}</>}
+                    {manual && valendo.has(a.id) && <span className="ml-2 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-primary">valendo</span>}
+                  </td>
+                  <td className="px-2 py-2">{a.motivo?.trim() ? a.motivo : '—'}</td>
                   <td className="px-2 py-2 text-xs">{a.criado_por ?? '—'} · {dataCurta(hojeEmSaoPaulo(new Date(a.criado_em)))} {horaCurta(a.criado_em)}</td>
                   <td className="px-4 py-2 text-right">
                     {!a.removido_em && (

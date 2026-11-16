@@ -92,6 +92,7 @@ beforeAll(async () => {
     end $$;
   `);
   await db.exec(readFileSync('supabase/migrations/20261116210000_desafio_cobranca_ao_vivo.sql', 'utf8'));
+  await db.exec(readFileSync('supabase/migrations/20261116230000_desafio_cobranca_lancamento_vale_o_ultimo.sql', 'utf8'));
 }, 60_000);
 
 afterAll(async () => { await db?.close(); });
@@ -155,6 +156,18 @@ describe('desafio cobrança — semente e placar', () => {
     expect(num(p.total)).toBe(5000);
     expect(num(p.por_dia[0].valor_59)).toBe(0);
     expect(new Date(p.atualizado_em!).toISOString()).toBe('2026-11-16T17:05:00.000Z');
+
+    // 20261116230000: lançar de novo SUBSTITUI (vale o último), sem motivo, e 0 é valor.
+    await db.query(`insert into public.desafio_cobranca_ajustes (desafio_id, dia, valor, criado_em)
+                    values ($1, '2026-11-16', 7000, '2026-11-16 15:05:00-03')`, [id]);
+    p = await json('select public.fn_desafio_cobranca_atual() r');
+    expect(num(p.total)).toBe(7000);
+    await db.query(`insert into public.desafio_cobranca_ajustes (desafio_id, dia, valor, motivo, criado_em)
+                    values ($1, '2026-11-17', 0, '', '2026-11-17 09:00:00-03')`, [id]);
+    expect(num((await json<{ total: number }>('select public.fn_desafio_cobranca_atual() r')).total)).toBe(7000);
+    // Remover o último volta ao anterior.
+    await db.exec(`update public.desafio_cobranca_ajustes set removido_em = now() where valor = 7000`);
+    expect(num((await json<{ total: number }>('select public.fn_desafio_cobranca_atual() r')).total)).toBe(5000);
 
     // De volta ao 59: o 59 + o lançamento (que vira ajuste). Limpa para os próximos testes.
     await db.exec(`update public.desafio_cobranca set fonte = '59'`);
