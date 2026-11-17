@@ -10,7 +10,7 @@
  * `ranking_quitacao_configurar`. Esconder o botão é só conveniência.
  */
 import { Suspense, lazy, useState, type ReactNode } from 'react';
-import { Flag, Siren, Medal, TrainFront, Vote, ListChecks, Loader2, type LucideIcon } from 'lucide-react';
+import { Flag, Siren, Medal, TrainFront, Vote, ListChecks, Megaphone, Loader2, type LucideIcon } from 'lucide-react';
 import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 import { cn } from '@/lib/utils';
 import { NOME_CORRIDA } from '@/components/Corrida/nome';
@@ -23,6 +23,7 @@ const RankingQuitacaoConfig = lazy(() => import('@/components/admin/RankingQuita
 const TremNatalConfig = lazy(() => import('@/components/admin/TremNatalConfig'));
 const VotacaoLideresConfig = lazy(() => import('@/components/admin/VotacaoLideresConfig'));
 const VotacaoOpcoesConfig = lazy(() => import('@/components/admin/VotacaoOpcoesConfig'));
+const ArtesConfig = lazy(() => import('@/components/admin/ArtesConfig'));
 
 interface Props {
   ehSuperAdmin: boolean;
@@ -73,6 +74,12 @@ export default function AbaEventos({ ehSuperAdmin, podeConfigurarRankingQuitacao
       id: 'votacao_opcoes', rotulo: 'Votação de opções', icone: ListChecks, visivel: ehSuperAdmin,
       descricao: 'Uma pergunta com opções (prêmios ou happy hour…) para os setores, equipes ou pessoas que você escolher.',
       conteudo: <VotacaoOpcoesConfig />,
+    },
+    {
+      // 17/11/2026: um card (Deu a louca na gerente, Parabéns, Recado, imagem própria) que abre para todos.
+      id: 'artes', rotulo: 'Artes para todos', icone: Megaphone, visivel: ehSuperAdmin,
+      descricao: 'Lance um card (parabéns, desafio, recado ou imagem própria) que abre na tela de todo mundo.',
+      conteudo: <ArtesConfig />,
     },
   ];
   const visiveis = EVENTOS.filter(e => e.visivel);

@@ -33,6 +33,7 @@ import { FotoOuLogo, FundoVivo } from '../comum/partesComuns';
 import { ChatDoApp } from '../comum/ChatDoApp';
 import { AvisoVotacao } from '@/components/VotacaoLideres/AvisoVotacao';
 import { AvisoVotacaoOpcoes } from '@/components/VotacaoOpcoes/AvisoVotacaoOpcoes';
+import { AvisoArte } from '@/components/Artes/AvisoArte';
 import './equipe.css';
 
 type Aba = 'equipe' | 'quartis' | 'grafico' | 'hoje';
@@ -206,6 +207,7 @@ function TelaDaEquipe() {
           mesmo sem equipe — o líder vota pelo cargo e pelo setor. */}
       <AvisoVotacao recuoEsquerda={16} acimaDoRodape={equipe ? 72 : 0} />
       <AvisoVotacaoOpcoes acimaDoRodape={equipe ? 72 : 0} />
+      <AvisoArte />
 
       {equipe && (
         <nav className="e-abas" aria-label="Abas">

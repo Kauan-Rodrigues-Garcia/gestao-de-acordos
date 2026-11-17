@@ -24,6 +24,7 @@ import { FotoOuLogo, FundoVivo } from '../comum/partesComuns';
 import { ChatDoApp } from '../comum/ChatDoApp';
 import { AvisoVotacao } from '@/components/VotacaoLideres/AvisoVotacao';
 import { AvisoVotacaoOpcoes } from '@/components/VotacaoOpcoes/AvisoVotacaoOpcoes';
+import { AvisoArte } from '@/components/Artes/AvisoArte';
 import { InterruptorUnidade, TrocaDeVisao } from '../comum/Topo';
 import { BotaoInstalar, PassoIPhone } from '../equipe/InstalarApp';
 import { IconeAba } from '../equipe/partes';
@@ -203,6 +204,7 @@ function TelaDoSetor() {
       {/* Votação da Liderança (11/11/2026): o card só existia no site. */}
       <AvisoVotacao recuoEsquerda={16} acimaDoRodape={temSetor ? 72 : 0} />
       <AvisoVotacaoOpcoes acimaDoRodape={temSetor ? 72 : 0} />
+      <AvisoArte />
 
       {temSetor && !tela.carregando && (
         <nav className="e-abas" aria-label="Abas" style={{ gridTemplateColumns: `repeat(${abas.length}, 1fr)` }}>

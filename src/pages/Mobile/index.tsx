@@ -33,6 +33,7 @@ import { getImpersonacaoAtiva, sairImpersonacao } from '@/services/impersonacao.
 import { ChatDoApp } from './comum/ChatDoApp';
 import { AvisoVotacao } from '@/components/VotacaoLideres/AvisoVotacao';
 import { AvisoVotacaoOpcoes } from '@/components/VotacaoOpcoes/AvisoVotacaoOpcoes';
+import { AvisoArte } from '@/components/Artes/AvisoArte';
 import { InterruptorUnidade, TrocaDeVisao } from './comum/Topo';
 import { ResumoDaVisao } from './ResumoDaVisao';
 import { acessoDasVisoes, rotaDaVisao, visaoDaBusca } from '@/lib/mobile/visoes';
@@ -234,6 +235,7 @@ function TelaDoOperador() {
           não participa de nada não vê nada. */}
       <AvisoVotacao recuoEsquerda={16} acimaDoRodape={0} />
       <AvisoVotacaoOpcoes acimaDoRodape={0} />
+      <AvisoArte />
     </div>
   );
 }
