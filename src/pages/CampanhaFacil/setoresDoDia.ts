@@ -10,6 +10,7 @@
  * A parte pura mora aqui; a leitura é `listarCampanhasDoDia` + o andamento de
  * cada uma (`fn_campanha_facil_envios_do_lote`, só números).
  */
+import { pctAbatido, totalAbatido } from '@/lib/campanhaAbate';
 import type { LoteCampanha, PlacarOperador } from './campanhaFacilEnvios.service';
 
 export interface Andamento { total: number; enviados: number; nao: number }
@@ -70,8 +71,14 @@ export function faltam(a: Andamento): number {
 }
 
 /** Enviadas sobre o total, cortado (não arredondado): 99,6% não vira 100%. */
+/** Enviado sobre o total SEM os «Não deu» (17/11/2026, lib/campanhaAbate.ts). */
 export function pctEnviado(a: Andamento): number {
-  return a.total > 0 ? Math.floor((a.enviados / a.total) * 100) : 0;
+  return pctAbatido(a.enviados, a.total, a.nao, Math.floor);
+}
+
+/** As mensagens que contam: total menos os «Não deu». */
+export function totalValido(a: Andamento): number {
+  return totalAbatido(a.total, a.nao);
 }
 
 /** Enviadas + «não deu»: quanto da campanha já teve resposta do operador. */

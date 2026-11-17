@@ -11,6 +11,7 @@ import { History, Loader2, Minus, ThumbsDown, ThumbsUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
+import { pctAbatido, totalAbatido } from '@/lib/campanhaAbate';
 import { cn } from '@/lib/utils';
 import { minhasParticipacoes, type Participacao } from './campanhasWhatsapp.service';
 import {
@@ -173,7 +174,8 @@ function SeloVoto({ bom }: { bom: boolean | null }) {
 
 function LinhaParticipacao({ p, onAbrir }: { p: Participacao; onAbrir: (loteId: string) => boolean }) {
   const s = situacaoDaParticipacao(p);
-  const pct = p.total > 0 ? Math.round((p.enviados / p.total) * 100) : 0;
+  // «Não deu» sai do total (lib/campanhaAbate.ts).
+  const pct = pctAbatido(p.enviados, p.total, p.nao_enviados);
   return (
     <li className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-3.5">
       <SeloVoto bom={p.bom} />
@@ -192,7 +194,7 @@ function LinhaParticipacao({ p, onAbrir }: { p: Participacao; onAbrir: (loteId: 
       </div>
       <div className="w-full space-y-1 sm:w-44">
         <div className="flex items-baseline justify-between text-xs">
-          <span><strong className="tabular-nums">{n(p.enviados)}</strong><span className="text-muted-foreground">/{n(p.total)} enviadas</span></span>
+          <span><strong className="tabular-nums">{n(p.enviados)}</strong><span className="text-muted-foreground">/{n(totalAbatido(p.total, p.nao_enviados))} enviadas</span></span>
           {p.nao_enviados > 0 && <span className="text-amber-700 dark:text-amber-400">{n(p.nao_enviados)} não deu</span>}
         </div>
         <Progress value={pct} className="h-1.5" />

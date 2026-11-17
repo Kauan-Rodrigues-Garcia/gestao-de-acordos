@@ -15,7 +15,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { situacaoDoLote, type LoteCampanha } from './campanhaFacilEnvios.service';
 import {
-  agruparPorSetor, faltam, pctEnviado, setoresSemCampanha, totalDoDia,
+  agruparPorSetor, faltam, pctEnviado, setoresSemCampanha, totalDoDia, totalValido,
   type Andamento, type CampanhaDoDia, type LiderDoDia, type SetorDoDia,
 } from './setoresDoDia';
 import type { useCampanhasDoDia } from './useCampanhasDoDia';
@@ -102,7 +102,7 @@ export function CampanhasPorSetor({ doDia, setores, onAbrir }: {
               valor={n(porSetor.length)}
             />
             <Bloco
-              rotulo={`de ${n(total.total)} mensagens enviadas · ${pctEnviado(total)}%`} valor={n(total.enviados)}
+              rotulo={`de ${n(totalValido(total))} mensagens enviadas · ${pctEnviado(total)}%${total.nao > 0 ? ` · ${n(total.nao)} não deu` : ''}`} valor={n(total.enviados)}
               tom={total.total > 0 && faltam(total) === 0 ? 'ok' : undefined}
             />
           </div>
@@ -285,16 +285,17 @@ function LinhaCampanha({ c, onClick }: { c: CampanhaDoDia; onClick: () => void }
   );
 }
 
-/** Enviadas (verde), «não deu» (âmbar) e o que falta (fundo). */
+/**
+ * Enviadas (verde) sobre o total SEM os «Não deu» (17/11/2026); o fundo é o
+ * que falta. O «Não deu» não entra na barra — aparece contado ao lado.
+ */
 function BarraAndamento({ a, fina = false }: { a: Andamento; fina?: boolean }) {
-  const pct = (x: number) => (a.total > 0 ? (x / a.total) * 100 : 0);
   return (
     <div
       className={cn('flex overflow-hidden rounded-full bg-muted', fina ? 'h-1' : 'h-2')}
       role="img" aria-label={`${pctEnviado(a)}% enviadas, ${n(a.nao)} não deu, ${n(faltam(a))} faltam`}
     >
-      <div className="bg-success transition-[width] duration-500" style={{ width: `${pct(a.enviados)}%` }} />
-      <div className="bg-warning transition-[width] duration-500" style={{ width: `${pct(Math.min(a.nao, a.total - a.enviados))}%` }} />
+      <div className="bg-success transition-[width] duration-500" style={{ width: `${pctEnviado(a)}%` }} />
     </div>
   );
 }

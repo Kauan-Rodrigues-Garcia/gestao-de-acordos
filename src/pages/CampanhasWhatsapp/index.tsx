@@ -17,6 +17,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Progress } from '@/components/ui/progress';
+import { pctAbatido, totalAbatido } from '@/lib/campanhaAbate';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -40,10 +41,6 @@ const POR_PAGINA = 60;
 
 function quando(iso: string): string {
   return new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-}
-
-function pct(parte: number, total: number): number {
-  return total > 0 ? Math.round((parte / total) * 100) : 0;
 }
 
 /** Nome de cliente em caixa alta vira «Maria da Silva». */
@@ -233,11 +230,17 @@ export default function CampanhasWhatsapp() {
                     <div className="flex items-baseline justify-between text-sm">
                       <span>
                         <strong className="tabular-nums">{contagem.enviados.toLocaleString('pt-BR')}</strong>
-                        <span className="text-muted-foreground"> de {contagem.total.toLocaleString('pt-BR')} enviadas</span>
+                        <span className="text-muted-foreground"> de {totalAbatido(contagem.total, contagem.naoEnviados).toLocaleString('pt-BR')} enviadas</span>
+                        {contagem.naoEnviados > 0 && (
+                          <span className="text-xs text-amber-700 dark:text-amber-400">
+                            {' '}· {contagem.naoEnviados.toLocaleString('pt-BR')} não deu (fora do total)
+                          </span>
+                        )}
                       </span>
-                      <span className="tabular-nums text-muted-foreground">{pct(contagem.enviados, contagem.total)}%</span>
+                      <span className="tabular-nums text-muted-foreground">{pctAbatido(contagem.enviados, contagem.total, contagem.naoEnviados)}%</span>
                     </div>
-                    <Progress value={pct(contagem.enviados, contagem.total)} className="h-2" />
+                    {/* «Não deu» sai do total (17/11/2026) — ver lib/campanhaAbate.ts. */}
+                    <Progress value={pctAbatido(contagem.enviados, contagem.total, contagem.naoEnviados)} className="h-2" />
                   </div>
 
                   <AvaliacaoCampanha
@@ -474,9 +477,10 @@ function ObservacaoParaLider({ salva, destaque, onSalvar }: {
 function CartaoCampanha({ c, ativa, onClick, voto }: {
   c: EnvioResumo; ativa: boolean; onClick: () => void; voto: boolean | undefined;
 }) {
-  const total = c.progresso.total || c.qtd;
+  const bruto = c.progresso.total || c.qtd;
+  const total = totalAbatido(bruto, c.progresso.nao_enviados);
   const feito = c.progresso.enviados;
-  const completa = total > 0 && feito >= total;
+  const completa = bruto > 0 && feito >= total;
   return (
     <button
       type="button" onClick={onClick} aria-current={ativa ? 'true' : undefined}
@@ -489,7 +493,7 @@ function CartaoCampanha({ c, ativa, onClick, voto }: {
         <p className="line-clamp-2 text-sm font-medium leading-snug">{c.titulo}</p>
         {completa && <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" aria-label="Concluída" />}
       </div>
-      <Progress value={pct(feito, total)} className="h-1.5" />
+      <Progress value={pctAbatido(feito, bruto, c.progresso.nao_enviados)} className="h-1.5" />
       <div className="flex items-center justify-between text-[11px] text-muted-foreground">
         <span className="inline-flex items-center gap-1.5 tabular-nums">
           {feito.toLocaleString('pt-BR')}/{total.toLocaleString('pt-BR')} enviadas

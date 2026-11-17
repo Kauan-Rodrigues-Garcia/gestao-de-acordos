@@ -34,6 +34,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Progress } from '@/components/ui/progress';
+import { pctAbatido, totalAbatido } from '@/lib/campanhaAbate';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -541,7 +542,10 @@ function DialogoCampanha({ lote, envios, somenteLeitura, onFechar }: {
 
         {/* Resumo */}
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <Numero rotulo="mensagens" valor={soma.total || lote.total} />
+          <Numero
+            rotulo={soma.nao > 0 ? `mensagens (de ${n(soma.total)} contatos)` : 'mensagens'}
+            valor={soma.total ? totalAbatido(soma.total, soma.nao) : lote.total}
+          />
           <Numero rotulo="enviadas" valor={soma.enviados} tom="ok" />
           <Numero rotulo="não deu" valor={soma.nao} tom="alerta" />
           <Numero rotulo="faltam" valor={Math.max(pendentes, 0)} />
@@ -799,7 +803,8 @@ function ObservacoesDaOperacao({ votos, nomes }: {
 /** `voto`: true = joinha, false = mão para baixo, undefined = não votou. `observou`: deixou observação. */
 function LinhaPlacar({ o, voto, observou }: { o: Placar; voto?: boolean; observou?: boolean }) {
   const faltam = Math.max(o.total - o.enviados - o.nao_enviados, 0);
-  const pct = o.total > 0 ? Math.round((o.enviados / o.total) * 100) : 0;
+  // «Não deu» sai do total (lib/campanhaAbate.ts); o total de contatos fica ao lado.
+  const pct = pctAbatido(o.enviados, o.total, o.nao_enviados);
   const completo = o.total > 0 && faltam === 0;
   return (
     <li className="space-y-1.5 px-3 py-2.5">
@@ -825,7 +830,7 @@ function LinhaPlacar({ o, voto, observou }: { o: Placar; voto?: boolean; observo
         )}
         {o.repasse && <Badge variant="secondary" className="h-4 px-1 text-[10px]">repasse</Badge>}
         <span className="shrink-0 tabular-nums text-muted-foreground">
-          <strong className="text-foreground">{n(o.enviados)}</strong>/{n(o.total)}
+          <strong className="text-foreground">{n(o.enviados)}</strong>/{n(totalAbatido(o.total, o.nao_enviados))}
         </span>
       </div>
       <Progress value={pct} className="h-1.5" />
@@ -833,7 +838,7 @@ function LinhaPlacar({ o, voto, observou }: { o: Placar; voto?: boolean; observo
         <span>{faltam > 0 ? `faltam ${n(faltam)}` : 'nada pendente'}</span>
         {o.nao_enviados > 0 && (
           <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-400">
-            <XCircle className="h-3 w-3" /> {n(o.nao_enviados)} não deu
+            <XCircle className="h-3 w-3" /> {n(o.nao_enviados)} não deu · de {n(o.total)} contatos
           </span>
         )}
       </p>
