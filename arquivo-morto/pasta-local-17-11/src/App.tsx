@@ -1,0 +1,931 @@
+import { lazy, Suspense, useEffect, useState } from 'react';
+import { HashRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
+import { ouvirAtencao } from '@/lib/atencao';
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
+import { ThemeProvider } from 'next-themes';
+import { NOMES_TEMAS } from '@/lib/temas';
+import { AuthProvider, useAuth } from '@/hooks/useAuth';
+import { EmpresaProvider } from '@/hooks/useEmpresa';
+import { useEmpresa } from '@/hooks/useEmpresa';
+import { useMarca } from '@/hooks/useMarca';
+import { ProtectedRoute, PublicRoute } from '@/components/ProtectedRoute';
+import { TermoUsoGate } from '@/components/TermoUsoGate';
+import { TermoUsoProvider } from '@/hooks/useTermoUso';
+import { ImpersonacaoBanner } from '@/components/ImpersonacaoBanner';
+import { Toaster } from '@/components/ui/sonner';
+import { MotionConfig } from 'framer-motion';
+import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
+import { useModoLeve } from '@/lib/modoLeve';
+import { Skeleton } from '@/components/ui/skeleton';
+import { RealtimeAcordosProvider } from '@/providers/RealtimeAcordosProvider';
+import { SincronizarDashboard } from '@/components/SincronizarDashboard';
+import { PresenceProvider } from '@/providers/PresenceProvider';
+import { RegistroAppInstalado } from '@/components/RegistroAppInstalado';
+import { TrocaDeSenhaObrigatoria } from '@/components/TrocaDeSenhaObrigatoria';
+import { RastreioUsoProvider } from '@/providers/RastreioUsoProvider';
+import { NotificacoesProvider } from '@/providers/NotificacoesProvider';
+import { MesProvider } from '@/providers/MesProvider';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { useVersionCheck } from '@/hooks/useVersionCheck';
+import { CARGOS_MODO_TV, ROUTE_PATHS } from '@/lib/index';
+import { produtoDaEmpresa, type Produto } from '@/lib/produto';
+import { SoNoEnderecoDoApp } from '@/pages/Mobile/comum/SoNoEnderecoDoApp';
+import { decidirDesvio, deveAbrirMobile, destinoMobile, ehCelular, lerVersao, temaSoClaro } from '@/lib/mobile/preferencia';
+
+/**
+ * As rotas da cobrança, declaradas uma vez.
+ *
+ * Repetir `['cobranca']` em dezesseis rotas convida à divergência: alguém
+ * acrescenta um produto em quinze e esquece a décima sexta, e o buraco não
+ * aparece em teste nenhum — aparece quando um vendedor abre a URL.
+ */
+const SO_COBRANCA: readonly Produto[] = ['cobranca'];
+/** Mesma razão, do outro lado: o Comercial começou com uma rota e vai ter mais. */
+const SO_COMERCIAL: readonly Produto[] = ['comercial'];
+/**
+ * As telas que servem às duas operações — hoje, só Tickets.
+ *
+ * O menu declarou Tickets no Comercial na Fase 9 (15/09/2026) e a rota ficou
+ * em `SO_COBRANCA`: o item aparecia, o vendedor clicava e voltava para o
+ * Dashboard. `Layout.navegacao.test.ts` confere agora que rota e menu
+ * declaram o mesmo produto.
+ */
+const COBRANCA_E_COMERCIAL: readonly Produto[] = ['cobranca', 'comercial'];
+/**
+ * A primeira tela do produto RH, o Quadro de Pessoal (20/10/2026): também na
+ * cobrança, onde o RH de cada operação a abre.
+ */
+const COBRANCA_E_RH: readonly Produto[] = ['cobranca', 'rh'];
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 60 * 1000,
+      refetchOnWindowFocus: false,  // Realtime mantém cache em sincronia — refetch no foco é redundante e causa "piscar"
+      refetchOnReconnect: true,     // refaz se internet caiu e voltou (importante)
+      retry: 1,
+    },
+  },
+});
+
+// Ninguém olhando (outra janela, outra aba: `lib/atencao.ts`): para o react-query,
+// a página está «sem foco», e as consultas com `refetchInterval` param até a volta.
+focusManager.setEventListener(definirFoco => ouvirAtencao(a => definirFoco(a === 'olhando')));
+
+const Login             = lazy(() => import('@/pages/Login'));
+const Dashboard         = lazy(() => import('@/pages/Dashboard'));
+const ProdutoEmMontagem = lazy(() => import('@/pages/ProdutoEmMontagem'));
+const Acordos           = lazy(() => import('@/pages/Acordos'));
+const PaginaPixAutomatico = lazy(() => import('@/pages/PixAutomatico'));
+const PaginaJornada       = lazy(() => import('@/pages/Jornada'));
+const PaginaOuvidoria     = lazy(() => import('@/pages/Ouvidoria'));
+const AcordoForm        = lazy(() => import('@/pages/AcordoForm'));
+const AcordoDetalhe     = lazy(() => import('@/pages/AcordoDetalhe'));
+const PainelLider       = lazy(() => import('@/pages/PainelLider'));
+const AdminUsuarios     = lazy(() => import('@/pages/AdminUsuarios'));
+const AdminConfiguracoes= lazy(() => import('@/pages/AdminConfiguracoes'));
+const ImportarExcel     = lazy(() => import('@/pages/ImportarExcel'));
+const NotFound          = lazy(() => import('@/pages/not-found/Index'));
+const Lixeira           = lazy(() => import('@/pages/Lixeira'));
+const PainelDiretoria   = lazy(() => import('@/pages/PainelDiretoria'));
+const ModoTV            = lazy(() => import('@/pages/ModoTV'));
+// O PC da TV baixa SÓ este pedaço, e não a montagem nem o Gestão inteiro.
+const TvPalco           = lazy(() => import('@/pages/TvPalco'));
+const PaginaAnalitico   = lazy(() => import('@/pages/Analitico'));
+const CampanhaFacil     = lazy(() => import('@/pages/CampanhaFacil'));
+const CampanhasWhatsapp = lazy(() => import('@/pages/CampanhasWhatsapp'));
+const AbrirAutorizacoes = lazy(() => import('@/pages/AbrirAutorizacoes'));
+const AbrirTransferencias = lazy(() => import('@/pages/AbrirTransferencias'));
+const AbrirSenhas       = lazy(() => import('@/pages/AbrirSenhas'));
+const SolicitacoesWpp   = lazy(() => import('@/pages/SolicitacoesWhatsapp'));
+const Tickets           = lazy(() => import('@/pages/Tickets'));
+const Vendas            = lazy(() => import('@/pages/Vendas'));
+const Mobile            = lazy(() => import('@/pages/Mobile'));
+
+/*
+ * O casco do site — barra lateral, cabeçalho, chat, tour, comemorações — sob
+ * demanda (30/09/2026). Era import estático, e toda abertura baixava e
+ * interpretava o casco inteiro (framer-motion, catálogos, chat…) antes de
+ * desenhar qualquer coisa — inclusive a tela do celular, que não usa nada dele.
+ * Fora do celular ele começa a baixar já na abertura, em paralelo com a página,
+ * então o desktop não espera mais do que esperava.
+ */
+const carregarLayout = () => import('@/components/Layout');
+const carregarChatNotificacoes = () => import('@/components/ChatNotificacoes');
+const Layout            = lazy(carregarLayout);
+const ChatNotificacoes  = lazy(() => carregarChatNotificacoes().then(m => ({ default: m.ChatNotificacoes })));
+if (typeof window !== 'undefined' && !ehCelular()) {
+  void carregarLayout();
+  void carregarChatNotificacoes();
+}
+const MobileEquipe      = lazy(() => import('@/pages/Mobile/equipe'));
+const MobileSetor       = lazy(() => import('@/pages/Mobile/setor'));
+// A rota `/` do Comercial. Lazy como o resto: quem é da cobrança nunca baixa
+// este pedaço, e quem é do Comercial nunca baixa o Dashboard da cobrança.
+const DashboardComercial = lazy(() => import('@/pages/Vendas/DashboardComercial'));
+const VendasPainelLider  = lazy(() => import('@/pages/Vendas/PainelLiderComercial'));
+const VendasPainelDiretoria = lazy(() => import('@/pages/Vendas/PainelDiretoriaComercial'));
+const VendasLixeira      = lazy(() => import('@/pages/Vendas/LixeiraVendas'));
+// Importação e Fechamento do Setor, em abas. Metas, Acompanhamento e Desafios
+// também deixaram de ser página própria — ver os redirecionamentos abaixo.
+const VendasIndicacoes  = lazy(() => import('@/pages/Vendas/Indicacoes'));
+const RhGestao          = lazy(() => import('@/pages/RhGestao'));
+const RhQuadro          = lazy(() => import('@/pages/RhQuadro'));
+const RhUsuarios        = lazy(() => import('@/pages/RhUsuarios'));
+const Fechamento        = lazy(() => import('@/pages/Fechamento'));
+const ControleNumeros   = lazy(() => import('@/pages/ControleNumeros'));
+const MeusChips         = lazy(() => import('@/pages/MeusChips'));
+// O painel do Nucleo. Lazy como o resto, e aqui isso poupa o bundle de quase
+// todo mundo: um cargo so nasce com a chave.
+const DashboardAdm      = lazy(() => import('@/pages/DashboardAdm'));
+// Creators Lab: lazy como todo o resto, e por um motivo a mais — quem usa o
+// Gestão e nunca descobre o Easter Egg não baixa um byte dele.
+const CreatorsLab       = lazy(() => import('@/pages/CreatorsLab'));
+const DesafioCobranca   = lazy(() => import('@/pages/DesafioCobranca'));
+// Comemorações não tem mais rota própria: virou aba de /admin/usuarios e é
+// carregada de lá (lazy também, para não entrar no bundle de quem não abre).
+
+function PageLoader() {
+  return (
+    <div className="p-6 space-y-4">
+      <Skeleton className="h-8 w-48" />
+      <Skeleton className="h-4 w-96" />
+      <div className="grid grid-cols-4 gap-4 mt-6">
+        {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-28 rounded-xl" />)}
+      </div>
+      <Skeleton className="h-64 w-full rounded-xl" />
+    </div>
+  );
+}
+
+/**
+ * O casco do site: sessão, termo de uso, menu e cabeçalho em volta da página.
+ *
+ * TODA rota com casco passa por este MESMO componente, inclusive a `/` — e
+ * isso é o que mantém o menu e o cabeçalho montados de uma página para outra.
+ * Até 02/10/2026 a `/` embrulhava o casco em `RaizDoSite`: o React via outro
+ * componente naquela posição da árvore e desmontava o casco inteiro ao ir do
+ * Dashboard para Vendas (o menu sumia e voltava, as animações recomeçavam — o
+ * «bug visual» do pedido). Aqui dentro mora também o desvio do celular, que
+ * morava lá.
+ */
+function LayoutWrapper({ children }: { children: React.ReactNode }) {
+  const desvio = useDesvioDoCelular();
+  if (desvio) return desvio;
+  return (
+    <ProtectedRoute>
+      <TermoUsoProvider>
+        <TermoUsoGate>
+          <Suspense fallback={<PageLoader />}>
+            <Layout>
+              {/* ErrorBoundary por página — evita que o erro de uma rota quebre o layout inteiro */}
+              <ErrorBoundary scope="Page" fallbackMessage="Ocorreu um erro ao carregar esta página. Tente novamente.">
+                {children}
+              </ErrorBoundary>
+            </Layout>
+          </Suspense>
+          <Suspense fallback={null}>
+            <ChatNotificacoes />
+          </Suspense>
+        </TermoUsoGate>
+      </TermoUsoProvider>
+    </ProtectedRoute>
+  );
+}
+
+function DevToolsAdminOnly() {
+  const { perfil } = useAuth();
+  if (perfil?.perfil !== 'administrador' && perfil?.perfil !== 'super_admin') return null;
+  return <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-left" />;
+}
+
+function VersionWatcher(): null {
+  useVersionCheck();
+  return null;
+}
+
+/**
+ * Avisa o App quando a rota entra ou sai do app do celular, que é sempre claro
+ * (`temaSoClaro`). Mora DENTRO do Router porque a troca de rota do
+ * `HashRouter` é `pushState`, que não dispara `hashchange`; o tema é decidido
+ * FORA dele, no `ThemeProvider`.
+ *
+ * A classe `no-app` no `<html>` é a do CSS que só vale no app (index.css).
+ */
+function TemaDoApp({ onMudar }: { onMudar: (soClaro: boolean) => void }): null {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    const soClaro = temaSoClaro(undefined, pathname);
+    document.documentElement.classList.toggle('no-app', soClaro);
+    onMudar(soClaro);
+  }, [pathname, onMudar]);
+  return null;
+}
+
+/**
+ * A rota `/` por produto.
+ *
+ * O Dashboard é da cobrança inteiro — recebimento, acordo, ticket médio e
+ * colchão —, e nenhuma dessas palavras significa alguma coisa fora dela. Por
+ * isso `/` escolhe o painel pelo produto, e não mostra o mesmo para todos.
+ *
+ * Desde a Fase 9 (15/09/2026) o Comercial tem o dele: `DashboardComercial`, que
+ * é o rodapé da planilha mensal escrito uma vez. O RH não tem Dashboard
+ * (13/11/2026, pedido do Cleber): a `/` dele é o Quadro de Pessoal — ver
+ * `EntradaDoRh`, que decide antes da chave `ver_dashboard`.
+ *
+ * ## O Núcleo não passa mais por aqui
+ *
+ * Até 11/09/2026 esta função desenhava o painel do Núcleo para quem estava no
+ * SETOR dele, por um hook que saiu junto — a última decisão que olhava o setor. O
+ * painel virou a aba Dashboard – ADM, com chave própria, e o Assistente ADM
+ * deixou de ter `ver_dashboard`: quem chega em `/` sem essa chave e com
+ * `ver_dashboard_adm` é mandado para lá pela `alternativa` da rota, antes de
+ * chegar a esta função. Administrador e super_admin têm as duas chaves e
+ * continuam abrindo no Dashboard.
+ */
+/**
+ * No produto RH a `/` abre o Quadro de Pessoal (13/11/2026). Fica POR FORA do
+ * `ProtectedRoute` do Dashboard: o RH não tem `ver_dashboard`, e a rota
+ * mostraria «aba não liberada» antes de qualquer desvio.
+ */
+function EntradaDoRh({ children }: { children: React.ReactElement }): React.ReactElement {
+  const { empresa, tenantSlug, loading } = useEmpresa();
+  if (!loading && produtoDaEmpresa(empresa, tenantSlug) === 'rh') {
+    return <Navigate to={ROUTE_PATHS.RH_QUADRO} replace />;
+  }
+  return children;
+}
+
+function PainelDeEntrada(): React.ReactElement {
+  const { empresa, tenantSlug, loading } = useEmpresa();
+  const { perfil } = useAuth();
+  const produto = produtoDaEmpresa(empresa, tenantSlug);
+
+  // No celular, quem recebe no próprio nome abre a tela mínima — a menos que
+  // tenha escolhido «Versão completa» neste aparelho. O login navega para `/`,
+  // então este é o único ponto de redirecionamento. Ver `lib/mobile/preferencia`.
+  if (!loading && produto === 'cobranca' && deveAbrirMobile(perfil?.perfil)) {
+    return <Navigate to={destinoMobile(perfil?.perfil)} replace />;
+  }
+
+  // Enquanto carrega, o Dashboard já se vira sozinho com os próprios estados de
+  // carregamento — e trocá-lo por um esqueleto aqui piscaria duas vezes.
+  if (loading || produto === 'cobranca') return <Dashboard />;
+  if (produto === 'comercial') return <DashboardComercial />;
+  return <ProdutoEmMontagem produto={produto} />;
+}
+
+/**
+ * O celular decide ANTES do casco do site — em QUALQUER rota do casco.
+ *
+ * Até 06/10/2026 só a `/` desviava, sem esperar o perfil: com internet ruim o
+ * site desenhava primeiro e, se o perfil não carregasse, ficava nele; e um link
+ * para outra rota nunca chegava ao app (relato do Cleber: «às vezes vai para o
+ * site normal»). Agora:
+ *
+ *   • celular é o app instalado, ou toque + tela de celular (`ehCelular`);
+ *   • «Versão completa» nesta sessão do app deixa o site em paz;
+ *   • com sessão e perfil carregando, o esqueleto — nunca o site;
+ *   • perfil que não veio, «Sem conexão · Tentar de novo» — nunca o site;
+ *   • só manda se a pessoa tem a chave da tela de destino (sem ela, a tela
+ *     devolveria para `/` e o desvio mandaria de volta, sem fim).
+ *
+ * As rotas do app (`/m…`), o login e a TV não têm casco: não passam por aqui.
+ * `PainelDeEntrada` mantém a checagem antiga como segunda guarda.
+ */
+function useDesvioDoCelular(): React.ReactElement | null {
+  const { user, perfil, loading: authLoading, perfilLoading, refreshPerfil } = useAuth();
+  const { empresa, tenantSlug, loading: empresaLoading } = useEmpresa();
+  const { temPermissao, loading: permLoading } = useCargoPermissoes();
+  const decisao = decidirDesvio({
+    temSessao: !!user,
+    celular: ehCelular(),
+    versaoCompleta: lerVersao() === 'completa',
+    carregando: authLoading || perfilLoading || empresaLoading,
+    perfil: perfil?.perfil,
+    produtoCobranca: produtoDaEmpresa(empresa, tenantSlug) === 'cobranca',
+    permissoesCarregando: permLoading,
+    temPermissao,
+  });
+  if (decisao.tipo === 'esperar') return <PageLoader />;
+  if (decisao.tipo === 'sem_conexao') return <SemConexaoNoCelular onTentar={() => { void refreshPerfil(); }} />;
+  if (decisao.tipo === 'ir') return <Navigate to={decisao.destino} replace />;
+  return null;
+}
+
+/** O perfil não veio (internet ruim): a tela do app, e não o site. */
+function SemConexaoNoCelular({ onTentar }: { onTentar: () => void }) {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background p-8 text-center">
+      <div className="max-w-xs space-y-3">
+        <p className="text-base font-semibold text-foreground">Sem conexão</p>
+        <p className="text-sm text-muted-foreground">Não foi possível carregar os seus dados. Confira a internet e tente de novo.</p>
+        <button type="button" onClick={onTentar}
+          className="mt-2 w-full rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground">
+          Tentar de novo
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * A cor da sessão — azul BookPlay ou verde PaguePlay — e o ícone da aba.
+ *
+ * Desde 04/10/2026 (Cleber) a cor é da PESSOA, e não do link acessado: quem
+ * está num setor de Marília (PaguePlay) vê tudo verde, quem está em Birigui
+ * (BookPlay) vê tudo azul, entre pelo endereço que entrar. Quem decide é a
+ * cidade do setor (`useMarca` / `lib/marca.ts`). Sem setor com cidade (o
+ * super admin, quem ainda não tem setor) fica a empresa do link, como antes.
+ *
+ * `data-tenant` aqui é só COR (o CSS de `index.css` e os gráficos). Regra de
+ * negócio não sai daqui: ela é do setor (`lib/regraDoSetor.ts`).
+ */
+function TenantThemeApplier(): null {
+  const { empresa, tenantSlug: slugDoLink } = useEmpresa();
+  const marca = useMarca();
+  const tenantSlug = marca ? marca.tom : slugDoLink;
+  useEffect(() => {
+    document.documentElement.setAttribute('data-tenant', tenantSlug);
+
+    // Favicon por empresa (vale em todas as páginas, inclusive login):
+    // BookPlay = handshake azul; PaguePlay = handshake verde.
+    //
+    // O ternário de dois casos ficou errado quando surgiram Comercial e RH:
+    // «não é bookplay» virava PaguePlay, e as duas empresas novas nasceram com
+    // a logo de uma cobrança que não é a delas.
+    //
+    // Fora da cobrança o app NÃO troca o ícone — fica o do `index.html`. Apontar
+    // para um arquivo que ainda não existe daria 404 e ícone quebrado, que é
+    // pior do que um ícone genérico. Quando Comercial e RH tiverem logo, entram
+    // aqui como mais uma linha do mapa.
+    const produto = produtoDaEmpresa(empresa, slugDoLink);
+    const href = produto !== 'cobranca'
+      ? null
+      : (tenantSlug === 'bookplay' ? '/logo-bookplay.png' : '/logo-pagueplay.png');
+    if (href) {
+      let link = document.querySelector<HTMLLinkElement>("link[rel='icon']");
+      if (!link) {
+        link = document.createElement('link');
+        link.rel = 'icon';
+        document.head.appendChild(link);
+      }
+      link.type = 'image/png';
+      link.href = href;
+    }
+
+    return () => {
+      document.documentElement.removeAttribute('data-tenant');
+    };
+  }, [empresa, tenantSlug, slugDoLink]);
+  return null;
+}
+
+export default function App() {
+  // Modo leve (`lib/modoLeve.ts`): o framer-motion do app inteiro para de animar.
+  // Fora dele fica o de sempre — `never` é o padrão da biblioteca.
+  const leve = useModoLeve();
+  const [soClaro, setSoClaro] = useState(() => temaSoClaro());
+  return (
+    <ErrorBoundary scope="App" fallbackMessage="Erro crítico na aplicação. Recarregue a página.">
+    <MotionConfig reducedMotion={leve ? 'always' : 'never'}>
+    <QueryClientProvider client={queryClient}>
+    {/* Dono único do tema (o ThemeToggle só chama `setTheme`). `themes` lista
+        todos os temas — é o que ele tira do <html> ao trocar. `color-scheme`
+        fica com o CSS: o do next-themes só conhece `light`/`dark`. */}
+    {/*
+      `disableTransitionOnChange` (30/09/2026): trocar de tema muda a cor de
+      TODOS os elementos de uma vez, e o `index.css` dá `transition-all` a todo
+      botão e link, além dos `transition-colors` espalhados. Eram centenas de
+      animações de cor disparando no mesmo quadro — era isso que derrubava o FPS
+      na troca de tema, não o backend. O next-themes desliga as transições só
+      durante a troca e devolve em seguida.
+    */}
+    <ThemeProvider
+      attribute="class" defaultTheme="system" enableSystem
+      themes={NOMES_TEMAS} enableColorScheme={false}
+      disableTransitionOnChange
+      // O app do celular é só claro — ver `temaSoClaro`. Não grava nada: ao
+      // voltar para o site, o tema escolhido continua lá.
+      forcedTheme={soClaro ? 'light' : undefined}
+    >
+      <AuthProvider>
+        <EmpresaProvider>
+          {/* Acima de tudo que desenha número: o mês escolhido vale para o
+              sistema inteiro, e não pode se perder ao trocar de página. */}
+          <MesProvider>
+          <RealtimeAcordosProvider>
+          {/* O cache do Dashboard segue o banco com ou sem a tela aberta. */}
+          <SincronizarDashboard />
+          <PresenceProvider>
+          {/* Acima do Router: o sino do header (Layout) e o painel
+              (ChatNotificacoes) precisam do MESMO estado de notificações. */}
+          <NotificacoesProvider>
+        <TenantThemeApplier />
+        <Router>
+          {/* Dentro do Router: a versão nova entra na próxima troca de tela. */}
+          <VersionWatcher />
+          <TemaDoApp onMudar={setSoClaro} />
+          {/* Senha resetada por pedido: troca obrigatória, no site e no app (05/11/2026). */}
+          <TrocaDeSenhaObrigatoria />
+          {/* App aberto como instalado no celular: registra quem instalou. */}
+          <RegistroAppInstalado />
+          {/* DENTRO do Router: o rastreio lê a rota atual com `useLocation`, e
+              fora dele o hook estouraria. Não renderiza nada — só mede. */}
+          <RastreioUsoProvider>
+          <Suspense fallback={<PageLoader />}>
+            <Routes>
+              <Route path={ROUTE_PATHS.LOGIN} element={
+                <PublicRoute><Login /></PublicRoute>
+              } />
+              {/* Cadastro público desligado (auditoria de segurança, 06/10/2026):
+                  conta só nasce pela administração, em /api/criar-usuario. */}
+              <Route path={ROUTE_PATHS.REGISTRO} element={<Navigate to={ROUTE_PATHS.LOGIN} replace />} />
+
+              {/* `/` existe em todo produto — é a porta de entrada. O que ela
+                  DESENHA é que muda: o Dashboard atual é da cobrança de ponta a
+                  ponta (recebimento, acordo, meta, ticket médio) e não significa
+                  nada em Vendas ou RH. Ver `PainelDeEntrada`.
+
+                  `alternativa`: quem não tem o Dashboard da cobrança e tem o
+                  Dashboard – ADM — o Assistente ADM — entra direto no painel dele,
+                  em vez de ler «aba não liberada» na tela inicial. */}
+              <Route path={ROUTE_PATHS.DASHBOARD} element={
+                <LayoutWrapper>
+                  <EntradaDoRh>
+                  <ProtectedRoute
+                    requiredPermissao="ver_dashboard" mostrarSemAcesso
+                    alternativa={{ permissao: 'ver_dashboard_adm', rota: ROUTE_PATHS.DASHBOARD_ADM }}
+                  >
+                    <PainelDeEntrada />
+                  </ProtectedRoute>
+                  </EntradaDoRh>
+                </LayoutWrapper>
+              } />
+              {/* Tela mínima do celular (PWA). Sem `LayoutWrapper`: ela toma a
+                  tela inteira, sem barra lateral nem cabeçalho. Mesma chave do
+                  Dashboard, que é de onde vêm os números dela. */}
+              <Route path={ROUTE_PATHS.MOBILE} element={
+                <SoNoEnderecoDoApp>
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_dashboard">
+                    <Mobile />
+                  </ProtectedRoute>
+                </SoNoEnderecoDoApp>
+              } />
+              {/* A visão da equipe no celular (liderança). Mesma chave do Painel
+                  do Líder, que é de onde vêm os números dela. */}
+              <Route path={ROUTE_PATHS.MOBILE_EQUIPE} element={
+                <SoNoEnderecoDoApp>
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_painel_lider">
+                    <MobileEquipe />
+                  </ProtectedRoute>
+                </SoNoEnderecoDoApp>
+              } />
+              {/* A visão do setor no celular (gerência, e elite e líder pela troca
+                  de visão — 06/10/2026). Mesma chave do Painel do Líder, que é de
+                  onde vêm os números dela. */}
+              <Route path={ROUTE_PATHS.MOBILE_SETOR} element={
+                <SoNoEnderecoDoApp>
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_painel_lider">
+                    <MobileSetor />
+                  </ProtectedRoute>
+                </SoNoEnderecoDoApp>
+              } />
+              {/* Dashboard – ADM — o painel do Núcleo de Inteligência e Gestão.
+                  Quem abre é a chave, que nasce só no Assistente ADM; o dado
+                  passa pela RLS do Controle de Números. */}
+              <Route path={ROUTE_PATHS.DASHBOARD_ADM} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_dashboard_adm">
+                    <DashboardAdm />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+              {/* A mesa de acordos, nas duas regras (05/11/2026): `pages/Acordos` escolhe a de cada uma. Era livre: qualquer cargo logado abria. */}
+              <Route path={ROUTE_PATHS.ACORDOS} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_acordos">
+                    <Acordos />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+              <Route path={ROUTE_PATHS.ACORDO_NOVO} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="criar_acordos">
+                    <AcordoForm />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+              {/* Pix Automático — tela própria desde 16/10/2026. A chave é a
+                  mesma que abria a aba dentro de Acordos. */}
+              <Route path={ROUTE_PATHS.PIX_AUTOMATICO} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_pix_automatico">
+                    <PaginaPixAutomatico />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+              {/* Jornada (04/11/2026): Acesso (grupo Suporte) e Retenção. A
+                  chave liga por cargo; o grupo, a tela pergunta ao banco. */}
+              <Route path={ROUTE_PATHS.JORNADA_ACESSO} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_jornada_acesso">
+                    <PaginaJornada tipo="acesso" />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+              <Route path={ROUTE_PATHS.JORNADA_RETENCAO} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_jornada_retencao">
+                    <PaginaJornada tipo="retencao" />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+              {/* Ouvidoria (06/11/2026): só setor de regra Cofen. A chave liga
+                  por cargo (ou o líder libera na aba); o setor, a tela pergunta ao banco. */}
+              <Route path={ROUTE_PATHS.OUVIDORIA} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_ouvidoria_cofen">
+                    <PaginaOuvidoria />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+              <Route path={ROUTE_PATHS.ACORDO_EDITAR} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="editar_acordos">
+                    <AcordoForm />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+              {/* Sem `requiredPermissao` de propósito: a rota sempre foi aberta a
+                  qualquer pessoa logada, e apertá-la agora tiraria acesso de quem
+                  usa hoje. O que entra é só a barreira de PRODUTO — quem não é da
+                  cobrança não tem o que ver aqui. Fechar por permissão é decisão à
+                  parte, e merece ser tomada em separado. */}
+              <Route path={ROUTE_PATHS.ACORDO_DETALHE} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COBRANCA}><AcordoDetalhe /></ProtectedRoute>
+                </LayoutWrapper>
+              } />
+
+              {/* Importar Excel — gated pela permissão importar_excel (admin bypassa) */}
+              <Route path={ROUTE_PATHS.IMPORTAR_EXCEL} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="importar_excel">
+                    <ImportarExcel />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+
+              <Route path={ROUTE_PATHS.PAINEL_LIDER} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_painel_lider">
+                    <PainelLider />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+              <Route path={ROUTE_PATHS.PAINEL_LIDER_OPERADOR} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_painel_lider">
+                    <PainelLider />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+              <Route path={ROUTE_PATHS.ADMIN_USUARIOS} element={
+                <LayoutWrapper>
+                  <ProtectedRoute requiredPermissao="ver_usuarios">
+                    <AdminUsuarios />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+              {/* /admin/setores agora é aba dentro de /admin/usuarios */}
+              <Route path={ROUTE_PATHS.ADMIN_SETORES} element={<Navigate to={ROUTE_PATHS.ADMIN_USUARIOS + '?tab=setores'} replace />} />
+              {/* /admin/equipes agora é aba dentro de /admin/usuarios */}
+              <Route path={ROUTE_PATHS.ADMIN_EQUIPES} element={<Navigate to={ROUTE_PATHS.ADMIN_USUARIOS + '?tab=equipes'} replace />} />
+              <Route path={ROUTE_PATHS.ADMIN_CONFIGURACOES} element={
+                <LayoutWrapper>
+                  <ProtectedRoute requiredPermissao="ver_configuracoes">
+                    <AdminConfiguracoes />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+              {/* /admin/logs agora é aba dentro de /admin/configuracoes */}
+              <Route path={ROUTE_PATHS.ADMIN_LOGS} element={<Navigate to={ROUTE_PATHS.ADMIN_CONFIGURACOES + '?tab=logs'} replace />} />
+              {/* /admin/metas agora é só a aba Metas de /admin/usuarios (12/11/2026) */}
+              <Route path={ROUTE_PATHS.ADMIN_METAS} element={<Navigate to={ROUTE_PATHS.ADMIN_USUARIOS + '?tab=metas'} replace />} />
+              <Route path={ROUTE_PATHS.ADMIN_LIXEIRA} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_lixeira">
+                    <Lixeira />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+
+              {/* Painel Diretoria */}
+              <Route path={ROUTE_PATHS.PAINEL_DIRETORIA} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COBRANCA}
+                                  requiredPermissao="ver_painel_diretoria">
+                    <PainelDiretoria />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+
+              {/* Modo TV 2 — a montagem. Só líder, elite e acima, por cargo; o
+                  alcance de cada painel é da RLS (fn_tv_alvo_no_meu_alcance). */}
+              <Route path={ROUTE_PATHS.MODO_TV} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COBRANCA} roles={[...CARGOS_MODO_TV]}>
+                    <ModoTV />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+
+              {/* A TV na parede: tela cheia, sem LayoutWrapper e SEM login. O
+                  que abre o painel é o token do pareamento (fn_tv_ver), não a
+                  sessão — ver TvPalco.tsx. */}
+              <Route path={ROUTE_PATHS.TV_PALCO} element={<TvPalco />} />
+
+              {/* Analítico (PaguePlay + BookPlay — o gate por slug continua
+                  dentro da página; a permissão decide QUEM abre) */}
+              <Route path={ROUTE_PATHS.ANALITICO} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_analitico">
+                    <PaginaAnalitico />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+
+              {/* Campanha Fácil [BP] — o gate por slug segue dentro da página. */}
+              <Route path={ROUTE_PATHS.CAMPANHA_FACIL} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_campanha_facil">
+                    <CampanhaFacil />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+
+              {/* Autorizações — não é tela: abre o chat na conversa do setor e
+                  volta. É o destino da notificação de pedido (15/10/2026). */}
+              <Route path={ROUTE_PATHS.AUTORIZACOES} element={
+                <LayoutWrapper>
+                  <ProtectedRoute>
+                    <AbrirAutorizacoes />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+
+              {/* Transferências — não é tela: abre o chat no canal dos pedidos e volta (03/11/2026). */}
+              <Route path={ROUTE_PATHS.TRANSFERENCIAS} element={
+                <LayoutWrapper>
+                  <ProtectedRoute>
+                    <AbrirTransferencias />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+
+              {/* Senhas — não é tela: abre o chat no canal dos pedidos de reset e volta (05/11/2026). */}
+              <Route path={ROUTE_PATHS.SENHAS} element={
+                <LayoutWrapper>
+                  <ProtectedRoute>
+                    <AbrirSenhas />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+
+              {/* Campanhas de WhatsApp [BP] — a parte do operador (20261007150000). */}
+              <Route path={ROUTE_PATHS.CAMPANHAS_WHATSAPP} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_campanhas_whatsapp">
+                    <CampanhasWhatsapp />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+
+              {/* Solicitações de WhatsApp — o chat interno entre o setor de
+                  ligação e o digital. */}
+              <Route path={ROUTE_PATHS.SOLICITACOES_WHATSAPP} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_solicitacoes_whatsapp">
+                    <SolicitacoesWpp />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+
+              {/* Tickets — a fila de pedidos da liderança. O cargo aqui é só a
+                  porta larga: quem enxerga de fato depende da chave em
+                  `tickets_config`, e a própria página resolve isso. */}
+              {/* ── O Comercial no desenho da BookPlay (16/09/2026) ─────────
+                  Quatro telas viraram abas de outra, e os endereços antigos
+                  continuam valendo — um favorito ou um link colado no grupo
+                  não pode virar «página não encontrada». Cada aba de destino
+                  pede a mesma chave que a rota antiga pedia. */}
+              <Route path={ROUTE_PATHS.VENDAS_METAS} element={<Navigate to={ROUTE_PATHS.ADMIN_USUARIOS + '?tab=metas'} replace />} />
+              <Route path={ROUTE_PATHS.VENDAS_ACOMPANHAMENTO} element={<Navigate to={ROUTE_PATHS.ADMIN_USUARIOS + '?tab=acompanhamento'} replace />} />
+              <Route path={ROUTE_PATHS.VENDAS_FECHAMENTO} element={<Navigate to={ROUTE_PATHS.VENDAS_PAINEL_DIRETORIA + '?tab=fechamento'} replace />} />
+              {/* Importar Vendas saiu do menu em 21/09/2026: o relatório virou
+                  abas do Painel Diretoria, uma por pergunta. */}
+              <Route path={ROUTE_PATHS.VENDAS_IMPORTAR} element={<Navigate to={ROUTE_PATHS.VENDAS_PAINEL_DIRETORIA + '?tab=importar'} replace />} />
+              <Route path={ROUTE_PATHS.VENDAS_DESAFIOS} element={<Navigate to={ROUTE_PATHS.VENDAS_PAINEL_LIDER + '?tab=desafios'} replace />} />
+
+              {/* Vendas — a primeira tela própria do Comercial. */}
+
+              {/* Indicações tem chave e escopo PRÓPRIOS: quem prospecta não é
+                  necessariamente quem a venda pertence. Ver permissoes-escopo. */}
+              <Route path={ROUTE_PATHS.VENDAS_INDICACOES} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COMERCIAL} requiredPermissao="ver_indicacoes">
+                    <VendasIndicacoes />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+              <Route path={ROUTE_PATHS.VENDAS} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COMERCIAL} requiredPermissao="ver_vendas">
+                    <Vendas />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+
+              {/* Fase 9 — painéis e herança.
+
+                  As CHAVES são as mesmas da cobrança (`ver_painel_lider`,
+                  `ver_painel_diretoria`, `ver_lixeira`,
+                  `analitico_sub_desafios`): a pergunta que elas fazem é a
+                  mesma dos dois lados, e criar chave nova exigiria encostar na
+                  cadeia de `fn_permissoes_catalogo()`, que já se partiu uma
+                  vez aqui. O que separa as duas operações é a barreira de
+                  PRODUTO, e ela está em cada linha abaixo.
+
+                  As listas de cargo espelham as da cobrança, para quem tem o
+                  painel lá ter o de cá sem ninguém reconfigurar cargo. */}
+              <Route path={ROUTE_PATHS.VENDAS_PAINEL_LIDER} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COMERCIAL}
+                   
+                    requiredPermissao="ver_painel_lider">
+                    <VendasPainelLider />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+              <Route path={ROUTE_PATHS.VENDAS_PAINEL_DIRETORIA} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COMERCIAL}
+                   
+                    requiredPermissao="ver_painel_diretoria">
+                    <VendasPainelDiretoria />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+              {/* A lixeira do Comercial é outra TABELA, não outro filtro:
+                  `lixeira_vendas` e `fn_venda_restaurar`, criadas na Fase 1.
+                  Restaurar exige `restaurar_vendas`, conferida na tela e na
+                  RPC — quem só tem `ver_lixeira_vendas` lê e não mexe. A
+                  porta é a chave do Comercial, e não `ver_lixeira` (a dos
+                  acordos), que o painel do Comercial não mostra. */}
+              <Route path={ROUTE_PATHS.VENDAS_LIXEIRA} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COMERCIAL} requiredPermissao="ver_lixeira_vendas">
+                    <VendasLixeira />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+              <Route path={ROUTE_PATHS.TICKETS} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={COBRANCA_E_COMERCIAL} requiredPermissao="ver_tickets">
+                    <Tickets />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+
+              {/* RH Gestão — Controle de Premiação e Comissão. O cargo não
+                  entra na rota: quem abre é `ver_rh_gestao`, e o que a pessoa
+                  enxerga dentro sai do escopo da aba (equipe que ela lidera,
+                  setor, ou a empresa). A RLS cumpre o mesmo recorte no banco. */}
+              <Route path={ROUTE_PATHS.RH_GESTAO} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_rh_gestao">
+                    <RhGestao />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+
+              {/* Quadro de Pessoal — a visão do RH. Chave própria e EXPLÍCITA
+                  (`ver_quadro_pessoal`, 13/11/2026): nasce só no RH e no
+                  super_admin. Aqui passa o administrador (acesso total); a tela
+                  barra quem não tem a chave de verdade, e o banco também. */}
+              <Route path={ROUTE_PATHS.RH_QUADRO} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={COBRANCA_E_RH} requiredPermissao="ver_quadro_pessoal">
+                    <RhQuadro />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+              {/* Usuários do sistema do RH (13/11/2026): todas as operações, com
+                  quem está online por cidade. Só leitura; a mesma chave do Quadro. */}
+              <Route path={ROUTE_PATHS.RH_USUARIOS} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={['rh']} requiredPermissao="ver_quadro_pessoal">
+                    <RhUsuarios />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+
+
+              {/* Fechamento [BP] — a planilha de fechamento da gerência. Quem
+                  abre é `ver_fechamento`; o setor que aparece sai do escopo da
+                  aba, e `fn_fechamento_alcanca` cumpre o mesmo recorte no banco. */}
+              <Route path={ROUTE_PATHS.FECHAMENTO} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_fechamento">
+                    <Fechamento />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+
+              {/* Controle de Números — o Núcleo de Inteligência e Gestão.
+
+                  Sem `allowedProfiles`: quem abre é a chave, como nas abas já
+                  convertidas, e ela nasce só no cargo do Núcleo, Assistente ADM.
+                  A chave sozinha não basta — `fn_numeros_visivel` ainda exige que
+                  a pessoa esteja no setor apontado por `numeros_config`, então
+                  um cargo com a chave ligada num setor qualquer abre a tela e
+                  não recebe uma linha. */}
+              <Route path={ROUTE_PATHS.CONTROLE_NUMEROS} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_controle_numeros">
+                    <ControleNumeros />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+
+              {/* Meus Chips — a outra ponta. O que a pessoa enxerga aqui sai do
+                  escopo da aba `chips`: individual (o operador vê o que foi
+                  lançado para ele) ou setor (a liderança vê o setor, e o
+                  Assistente ADM acompanha a distribuição). */}
+              <Route path={ROUTE_PATHS.MEUS_CHIPS} element={
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_meus_chips">
+                    <MeusChips />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+
+              {/* /comemoracoes agora é aba dentro de /admin/usuarios.
+                  Redireciona em vez de sumir: notificação antiga, link colado no
+                  WhatsApp e favorito continuam caindo na tela certa. */}
+              <Route path={ROUTE_PATHS.COMEMORACOES} element={
+                <Navigate to={ROUTE_PATHS.ADMIN_USUARIOS + '?tab=comemoracoes'} replace />
+              } />
+
+              {/* /admin/cargos agora é aba dentro de /admin/configuracoes */}
+              <Route path={ROUTE_PATHS.ADMIN_CARGOS} element={<Navigate to={ROUTE_PATHS.ADMIN_CONFIGURACOES + '?tab=cargos'} replace />} />
+
+              {/*
+                Creators Lab — a área escondida.
+
+                Sem `LayoutWrapper` de propósito: ela substitui a tela inteira,
+                sem barra lateral nem cabeçalho do Gestão.
+
+                Fora do ar desde 28/10/2026 (Cleber): só o super admin entra.
+                Quem digitar o endereço cai no Dashboard.
+              */}
+              <Route path={ROUTE_PATHS.CREATORS_LAB} element={
+                <ProtectedRoute produtos={SO_COBRANCA} roles={['super_admin']}>
+                  <CreatorsLab />
+                </ProtectedRoute>
+              } />
+
+              {/* Desafio Cobrança (folgar mais cedo): só o super_admin configura,
+                  lança ajuste e acompanha hora a hora. */}
+              <Route path={ROUTE_PATHS.DESAFIO_COBRANCA} element={
+                <LayoutWrapper>
+                  <ProtectedRoute roles={['super_admin']}>
+                    <DesafioCobranca />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </Suspense>
+          <ImpersonacaoBanner />
+          <Toaster richColors position="top-right" />
+          {/* A oferta do modo leve saiu (29/10/2026): quem quiser liga no menu de tema. */}
+          </RastreioUsoProvider>
+        </Router>
+          </NotificacoesProvider>
+          </PresenceProvider>
+          </RealtimeAcordosProvider>
+          </MesProvider>
+        </EmpresaProvider>
+        <DevToolsAdminOnly />
+      </AuthProvider>
+    </ThemeProvider>
+    </QueryClientProvider>
+    </MotionConfig>
+    </ErrorBoundary>
+  );
+}

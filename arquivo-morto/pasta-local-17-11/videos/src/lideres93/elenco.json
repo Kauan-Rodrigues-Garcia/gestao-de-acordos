@@ -1,0 +1,28 @@
+{
+  "_leia": "Cenas do «Líderes que bateram o desafio». clip = public/lideres93/cNN.mp4 (NN = ordem alfabética dos arquivos de Downloads\\Lideres que fecharam acima de 93). de/ate em segundos do vídeo original; vel < 1 = câmera lenta. ganhou = o instante em que o cupom chega na mão (vira batida, flash e confete). foto = quadro do mosaico final. Depois de mexer: npm run render:lideres93.",
+  "duracoes": {
+    "c01": 12.67, "c02": 9.79, "c03": 18.86, "c04": 4.93, "c05": 3.88, "c06": 8.27, "c07": 32.73,
+    "c10": 12.0, "c11": 16.02, "c12": 29.25, "c13": 23.21, "c14": 11.32, "c15": 16.84, "c16": 14.09,
+    "c17": 23.03, "c18": 43.49, "c19": 10.02, "c21": 13.66
+  },
+  "abertura": { "clip": "c13", "de": 2.4, "vel": 1 },
+  "cenas": [
+    { "cortes": [{ "clip": "c01", "de": 5.9, "ate": 11.3 }], "ganhou": { "corte": 0, "t": 6.9 }, "foto": ["c01", 12.2] },
+    { "cortes": [{ "clip": "c02", "de": 2.7, "ate": 8.6 }], "ganhou": { "corte": 0, "t": 3.3 }, "foto": ["c02", 8.6] },
+    { "cortes": [{ "clip": "c04", "de": 0.3, "ate": 2.4 }, { "clip": "c04", "de": 2.4, "ate": 4.4, "vel": 0.8 }], "ganhou": { "corte": 0, "t": 0.9 }, "foto": ["c04", 3.4] },
+    { "cortes": [{ "clip": "c06", "de": 2.4, "ate": 7.6 }], "ganhou": { "corte": 0, "t": 3.3 }, "foto": ["c06", 7.6] },
+    { "cortes": [{ "clip": "c03", "de": 11.8, "ate": 14.1 }, { "clip": "c05", "de": 0.0, "ate": 3.7 }], "ganhou": { "corte": 0, "t": 12.6 }, "foto": ["c05", 2.4] },
+    { "cortes": [{ "clip": "c10", "de": 6.3, "ate": 11.3 }], "ganhou": { "corte": 0, "t": 7.2 }, "foto": ["c10", 10.0] },
+    { "cortes": [{ "clip": "c15", "de": 5.2, "ate": 8.0 }, { "clip": "c15", "de": 9.6, "ate": 12.4 }], "ganhou": { "corte": 0, "t": 6.0 }, "foto": ["c15", 11.5] },
+    { "cortes": [{ "clip": "c11", "de": 5.8, "ate": 8.0 }, { "clip": "c11", "de": 10.4, "ate": 14.6 }], "ganhou": { "corte": 0, "t": 6.6 }, "foto": ["c11", 14.0] },
+    { "cortes": [{ "clip": "c13", "de": 14.3, "ate": 19.9 }], "ganhou": { "corte": 0, "t": 15.2 }, "foto": ["c13", 21.5] },
+    { "cortes": [{ "clip": "c12", "de": 23.7, "ate": 28.3 }], "ganhou": { "corte": 0, "t": 24.6 }, "foto": ["c12", 26.5] },
+    { "cortes": [{ "clip": "c14", "de": 5.3, "ate": 10.4 }], "ganhou": { "corte": 0, "t": 6.2 }, "foto": ["c14", 8.5] },
+    { "cortes": [{ "clip": "c16", "de": 5.9, "ate": 12.4 }], "ganhou": { "corte": 0, "t": 6.8 }, "foto": ["c16", 10.0] },
+    { "cortes": [{ "clip": "c17", "de": 13.5, "ate": 18.0 }, { "clip": "c17", "de": 19.4, "ate": 21.5 }], "ganhou": { "corte": 0, "t": 14.4 }, "foto": ["c17", 17.0] },
+    { "cortes": [{ "clip": "c18", "de": 0.0, "ate": 1.15, "vel": 0.4 }], "ganhou": { "corte": 0, "t": 0.2 }, "foto": ["c18", 0.1] },
+    { "cortes": [{ "clip": "c19", "de": 5.0, "ate": 10.0 }], "ganhou": { "corte": 0, "t": 6.0 }, "foto": ["c19", 8.0] },
+    { "cortes": [{ "clip": "c21", "de": 7.6, "ate": 13.1 }], "ganhou": { "corte": 0, "t": 8.5 }, "foto": ["c21", 12.3] },
+    { "cortes": [{ "clip": "c07", "de": 13.1, "ate": 19.6 }, { "clip": "c07", "de": 23.6, "ate": 24.9, "vel": 0.6 }], "ganhou": { "corte": 0, "t": 14.2 }, "foto": ["c07", 26.2] }
+  ]
+}

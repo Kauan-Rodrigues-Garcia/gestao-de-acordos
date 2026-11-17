@@ -1,0 +1,17 @@
+{
+  "_leia": "Versões do vídeo, uma por música. bpm = ritmo medido da música. trechos = pedaços da música (segundos do arquivo) colados em sequência a partir do início do vídeo; o primeiro pedaço vai até o próximo começar. A batida 16 do vídeo (primeira entrega) cai na explosão da música. Arquivos em public/lideres93/musicas/ (fora do git).",
+  "original": { "bpm": 120, "nome": "trilha própria" },
+  "uptown": {
+    "bpm": 115,
+    "nome": "Uptown Funk (Mark Ronson ft. Bruno Mars)",
+    "arquivo": "musicas/uptown.mp3",
+    "trechos": [{ "musica": 8.105, "video": 0 }]
+  },
+  "cantstop": {
+    "bpm": 113,
+    "nome": "Can't Stop the Feeling! (Justin Timberlake)",
+    "arquivo": "musicas/cant-stop.mp3",
+    "_trechos": "a introdução tem a batida meio tempo deslocada (pausa antes da explosão): cola a explosão (25,389 s) direto na batida 16",
+    "trechos": [{ "musica": 16.634, "video": 0 }, { "musica": 25.389, "video": "batida16" }]
+  }
+}
