@@ -23,7 +23,7 @@ export function PixAbaDivergencias({ pix }: { pix: PixTela }) {
     empresa, perfil, temPermissao, loading, fechamento, noMesAtual, diaNovo, carregar,
     divergenciasAbertas, pedidosNr, pedidosDoFoco, aprovacoesNr, meusSetores,
     podeVerTodosSetores, nomePorSetor, setorFoco, setFiltroSetor, acordosSemPix,
-    podeRegistrar, podeAjustarSaldo, operadoresFiltro, saldos, nrPorAcordo,
+    podeRegistrar, podeAjustarSaldo, operadoresFiltro, saldos, nrPorAcordo, ajustePorAcordo,
   } = pix;
   /**
    * Registrar aqui um acordo que já está na lista de acordos.
@@ -156,6 +156,7 @@ export function PixAbaDivergencias({ pix }: { pix: PixTela }) {
             operadores={operadoresFiltro}
             saldos={saldos}
             nrPorAcordo={nrPorAcordo}
+            ajustePorAcordo={ajustePorAcordo}
             onMudou={carregar}
           />
         </SecaoDivergencia>

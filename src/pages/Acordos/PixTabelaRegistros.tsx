@@ -81,9 +81,11 @@ export function PixTabelaRegistros({ pix }: { pix: PixTela }) {
   async function aplicarCorrecao(item: PixAutoAcordo) {
     setAjustandoId(item.id);
     try {
-      const { ok, error } = await aplicarSaldoNoAcordo(item.id);
+      const { ok, error, acordo } = await aplicarSaldoNoAcordo(item.id);
       if (!ok) { toast.error(error ?? 'Não foi possível aplicar a correção.'); return; }
-      toast.success('Correção aplicada. Ela some quando este acordo for marcado como pago.');
+      toast.success(acordo
+        ? `Correção aplicada: o NR ${item.nr_cliente} passa a pagar ${formatCurrency(valorAPagarDe(acordo, pctPorSetor))}. O saldo é quitado quando este acordo for marcado como pago.`
+        : 'Correção aplicada. O saldo é quitado quando este acordo for marcado como pago.');
       await carregar();
     } finally {
       setAjustandoId(null);
@@ -376,29 +378,32 @@ export function PixTabelaRegistros({ pix }: { pix: PixTela }) {
                         ) : formatCurrency(item.valor)}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <span className={cn('font-mono font-bold', desaprovado ? 'text-muted-foreground line-through' : 'text-primary')}>
-                          {formatCurrency(comissao)}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground ml-1">
-                          ({fixaLinha != null ? 'fixo' : fmtPct(pctLinha)})
-                        </span>
-                        {/* A correção fica ao lado da comissão, e não somada
-                            dentro dela: quem confere precisa ver os dois
-                            números para saber por que o total mudou. */}
-                        {item.ajuste_valor != null && (
-                          <p
-                            className={cn(
-                              'text-[10px] font-mono font-semibold mt-0.5',
-                              Number(item.ajuste_valor) > 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400',
-                            )}
-                            title={item.ajuste_motivo ?? 'Correção de valor divergente'}
-                          >
-                            {Number(item.ajuste_valor) > 0 ? '+' : '−'}
-                            {formatCurrency(Math.abs(Number(item.ajuste_valor)))} correção
-                            <span className="block text-muted-foreground font-normal">
-                              a pagar {formatCurrency(valorAPagarDe(item, pctPorSetor))}
+                        {/* 17/11/2026: com correção, o número grande é o que
+                            SAI (comissão ± correção) — antes ficava a comissão
+                            pura e parecia que a correção não somava nem tirava.
+                            A conta fica embaixo, para quem confere. */}
+                        {item.ajuste_valor != null ? (
+                          <>
+                            <span className={cn('font-mono font-bold', desaprovado ? 'text-muted-foreground line-through' : 'text-primary')}
+                              title="Valor a pagar: comissão com a correção de valor divergente">
+                              {formatCurrency(valorAPagarDe(item, pctPorSetor))}
                             </span>
-                          </p>
+                            <p className="text-[10px] font-mono text-muted-foreground mt-0.5" title={item.ajuste_motivo ?? 'Correção de valor divergente'}>
+                              {formatCurrency(comissao)} ({fixaLinha != null ? 'fixo' : fmtPct(pctLinha)}){' '}
+                              <span className={cn('font-semibold', Number(item.ajuste_valor) > 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400')}>
+                                {Number(item.ajuste_valor) > 0 ? '+' : '−'} {formatCurrency(Math.abs(Number(item.ajuste_valor)))} correção
+                              </span>
+                            </p>
+                          </>
+                        ) : (
+                          <>
+                            <span className={cn('font-mono font-bold', desaprovado ? 'text-muted-foreground line-through' : 'text-primary')}>
+                              {formatCurrency(comissao)}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground ml-1">
+                              ({fixaLinha != null ? 'fixo' : fmtPct(pctLinha)})
+                            </span>
+                          </>
                         )}
                       </td>
                       <td className="px-4 py-3">
@@ -488,7 +493,13 @@ export function PixTabelaRegistros({ pix }: { pix: PixTela }) {
                               vai recusar. */}
                           {saldoAplicavelNa(item) && (
                             <button
-                              title={`Aplicar ${formatCurrency(saldoAplicavelNa(item)!.valor)} de correção neste pagamento`}
+                              title={(() => {
+                                // O desconto entra até a comissão deste NR; o resto vai para o próximo.
+                                const s = Number(saldoAplicavelNa(item)!.valor);
+                                const parte = s >= 0 ? s : Math.max(s, -comissao);
+                                return `Aplicar ${formatCurrency(Math.abs(parte))} de correção neste pagamento`
+                                  + (parte !== s ? ` (o resto, ${formatCurrency(Math.abs(s - parte))}, vai para o próximo NR)` : '');
+                              })()}
                               disabled={ajustandoId === item.id}
                               onClick={() => aplicarCorrecao(item)}
                               className="h-7 px-2 rounded-lg flex items-center gap-1 text-[11px] font-semibold text-primary border border-primary/30 bg-primary/10 hover:bg-primary/20 disabled:opacity-50">

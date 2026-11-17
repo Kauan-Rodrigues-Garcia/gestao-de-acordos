@@ -101,7 +101,7 @@ function telaBase(extras: Partial<PixTela> = {}): PixTela {
     operadoresFiltro: [], operadoresDoSeletor: [], visiveis: itens,
     setPagina: vi.fn(), totalPaginas: 1, paginaAtual: 1, daPagina: itens,
     totais: totaisPorStatus(itens, PCT), pagamento: totalPagoPix(itens, PCT),
-    meusDesaprovados: 0, saldoPorOperador: {}, nrPorAcordo: {},
+    meusDesaprovados: 0, saldoPorOperador: {}, nrPorAcordo: {}, ajustePorAcordo: {},
     bonusMeta: null, metaPorSetor: {},
     dobra: calcularDobraComissao(itens, 'op-1', PCT, MES, { metaValor: null, recebidoMes: null }, {}),
     abasRanking: [], pedidosDoFoco: [], fotoPorOperador: {}, nomePorSetor: {},

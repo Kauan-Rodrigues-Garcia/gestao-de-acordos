@@ -2047,6 +2047,10 @@ function mensagemSaldo(bruta: string): string {
     return 'A comissão deste acordo já foi paga. Desfaça o pagamento antes.';
   if (t.includes('PIX_SALDO_SO_APROVADO'))
     return 'A correção só entra em acordo aprovado e ainda não pago.';
+  if (t.includes('PIX_SALDO_SEM_COMISSAO'))
+    return 'Este NR não tem comissão para descontar. A correção entra sozinha no próximo NR com comissão.';
+  if (t.includes('PIX_SALDO_NAO_GRAVOU'))
+    return 'A correção não ficou gravada no NR, e nada foi alterado. Avise o suporte.';
   if (t.includes('PIX_SALDO_SEM_CORRECAO'))
     return 'Este acordo não carrega correção.';
   if (t.includes('PIX_SALDO_OPERADOR'))
@@ -2102,7 +2106,13 @@ export async function aplicarSaldoNoAcordo(
 ): Promise<{ ok: boolean; acordo?: PixAutoAcordo; error?: string }> {
   const { data, error } = await supabase.rpc('fn_pix_saldo_aplicar', { p_acordo_id: acordoId });
   if (error) return { ok: false, error: mensagemSaldo(error.message) };
-  return { ok: true, acordo: (data as unknown as PixAutoAcordo) ?? undefined };
+  const acordo = (data as unknown as PixAutoAcordo | null) ?? undefined;
+  // 17/11/2026: o banco dizia «aplicada» e um gatilho desfazia a correção em
+  // silêncio. A resposta tem de trazer a correção no NR; sem ela, não foi.
+  if (acordo && acordo.ajuste_valor == null) {
+    return { ok: false, error: 'A correção não ficou gravada no NR. Recarregue a lista e tente de novo; se repetir, avise o suporte.' };
+  }
+  return { ok: true, acordo };
 }
 
 /** Tira a correção de um acordo ainda não pago; o saldo volta a ficar livre. */

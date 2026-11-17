@@ -57,12 +57,14 @@ export interface PixSaldoPainelProps {
   saldos: PixAutoSaldo[];
   /** NR do acordo onde cada saldo está reservado, para a etiqueta da lista. */
   nrPorAcordo: Record<string, string>;
+  /** A parte do saldo que cada NR leva (o desconto vai em partes, até a comissão). */
+  ajustePorAcordo?: Record<string, number>;
   /** Relê saldos e acordos depois de qualquer gravação. */
   onMudou: () => void | Promise<void>;
 }
 
 export function PixSaldoPainel({
-  empresaId, operadores, saldos, nrPorAcordo, onMudou,
+  empresaId, operadores, saldos, nrPorAcordo, ajustePorAcordo = {}, onMudou,
 }: PixSaldoPainelProps) {
   const [aberto, setAberto]   = useState(false);
   const [busca, setBusca]     = useState('');
@@ -105,15 +107,19 @@ export function PixSaldoPainel({
 
     setSalvando(true);
     try {
-      const { ok, error } = await definirSaldoPix({
+      const { ok, error, saldo } = await definirSaldoPix({
         empresaId, operadorId: alvo.id, valor: assinado,
         motivo: motivo.trim() || null, somar,
       });
       if (!ok) { toast.error(error ?? 'Não foi possível gravar o saldo.'); return; }
+      // 17/11/2026: o banco já põe o saldo no próximo pagamento — o aviso diz onde.
+      const onde = saldo?.acordo_id
+        ? 'Já entrou no próximo pagamento dela (NR aprovado ainda não pago).'
+        : 'Entra sozinho no pagamento quando um NR dela for aprovado.';
       toast.success(
         somar
-          ? `Saldo somado ao de ${alvo.nome}.`
-          : `Saldo de ${formatCurrency(Math.abs(assinado))} anotado para ${alvo.nome}.`,
+          ? `Saldo somado ao de ${alvo.nome}. ${onde}`
+          : `Saldo de ${formatCurrency(Math.abs(assinado))} anotado para ${alvo.nome}. ${onde}`,
       );
       limpar();
       await onMudou();
@@ -165,10 +171,13 @@ export function PixSaldoPainel({
         {aberto && (
           <div className="space-y-4 pt-1">
             <p className="text-[11px] text-muted-foreground leading-relaxed">
-              Anote aqui quanto um Pix saiu a mais ou a menos. O valor fica pendente
-              e aparece como <strong>Corrigir valor</strong> nos acordos aprovados e
-              ainda não pagos da pessoa. Ele só é limpo quando o acordo que levou a
-              correção for marcado como pago.
+              Anote aqui quanto um Pix saiu a mais ou a menos. O valor <strong>entra sozinho
+              no próximo pagamento</strong> da pessoa: soma ou desconta no NR aprovado e ainda
+              não pago dela (se ela não tiver nenhum agora, entra quando o próximo for
+              aprovado). Um desconto nunca deixa o NR negativo: ele tira no máximo a
+              comissão daquele NR, e o resto vai sozinho para o próximo. Cada parte é
+              quitada quando o NR dela for marcado como pago. Para pôr em outro NR, use{' '}
+              <strong>Corrigir valor</strong> na linha dele.
             </p>
 
             {/* ── Quem ── */}
@@ -222,8 +231,8 @@ export function PixSaldoPainel({
                 </p>
                 {saldoDoAlvo.acordo_id && (
                   <p className="text-[10px] text-muted-foreground">
-                    Aplicado no NR {nrPorAcordo[saldoDoAlvo.acordo_id] ?? '—'} — retire a
-                    correção de lá antes de alterar o valor.
+                    Já está no pagamento do NR {nrPorAcordo[saldoDoAlvo.acordo_id] ?? '—'}. Somar ou
+                    substituir atualiza a correção lá.
                   </p>
                 )}
               </div>
@@ -282,7 +291,7 @@ export function PixSaldoPainel({
             <div className="flex flex-wrap items-center gap-2">
               <Button
                 size="sm" className="h-8 text-xs gap-1.5"
-                disabled={salvando || !alvo || !!saldoDoAlvo?.acordo_id}
+                disabled={salvando || !alvo}
                 onClick={() => gravar(false)}
               >
                 {salvando ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
@@ -292,7 +301,7 @@ export function PixSaldoPainel({
               {saldoDoAlvo && (
                 <Button
                   size="sm" variant="outline" className="h-8 text-xs"
-                  disabled={salvando || !!saldoDoAlvo.acordo_id}
+                  disabled={salvando}
                   onClick={() => gravar(true)}
                 >
                   Somar ao existente
@@ -323,10 +332,26 @@ export function PixSaldoPainel({
                         {s.motivo && (
                           <p className="text-[10px] text-muted-foreground truncate">{s.motivo}</p>
                         )}
-                        {s.acordo_id && (
-                          <p className="text-[10px] text-primary inline-flex items-center gap-1">
-                            <Link2 className="w-2.5 h-2.5 shrink-0" />
-                            aplicado no NR {nrPorAcordo[s.acordo_id] ?? '—'} — aguardando pagamento
+                        {s.acordo_id ? (() => {
+                          // O desconto vai em partes: este NR leva até a comissão dele.
+                          const parte = ajustePorAcordo[s.acordo_id] ?? Number(s.valor);
+                          const resto = Math.round((Number(s.valor) - parte) * 100) / 100;
+                          return (
+                            <p className="text-[10px] text-primary">
+                              <span className="inline-flex items-center gap-1">
+                                <Link2 className="w-2.5 h-2.5 shrink-0" />
+                                {parte > 0 ? 'soma' : 'desconta'} {formatCurrency(Math.abs(parte))} no pagamento do NR {nrPorAcordo[s.acordo_id] ?? '—'}
+                              </span>
+                              {resto !== 0 && (
+                                <span className="block text-muted-foreground">
+                                  o resto ({formatCurrency(Math.abs(resto))}) entra sozinho no próximo NR aprovado
+                                </span>
+                              )}
+                            </p>
+                          );
+                        })() : (
+                          <p className="text-[10px] text-muted-foreground">
+                            esperando um NR aprovado da pessoa — entra sozinho
                           </p>
                         )}
                       </div>
@@ -337,10 +362,9 @@ export function PixSaldoPainel({
                         )}>
                           {s.valor > 0 ? '+' : '−'}{formatCurrency(Math.abs(s.valor))}
                         </span>
-                        {/* Saldo reservado não some por aqui: ele está carimbado
-                            num acordo, e apagá-lo deixaria a linha prometendo
-                            uma correção que não existe mais. */}
-                        {!s.acordo_id && (
+                        {/* 17/11/2026: zerar também tira a correção do NR
+                            (o banco faz as duas coisas juntas). */}
+                        {(
                           <button
                             type="button" onClick={() => zerar(s)} disabled={salvando}
                             title="Remover este saldo"

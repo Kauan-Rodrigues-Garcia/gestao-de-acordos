@@ -1102,6 +1102,13 @@ export function usePixAutomatico() {
     return m;
   }, [itens]);
 
+  /** A parte do saldo que cada NR leva (17/11/2026: o desconto vai em partes). */
+  const ajustePorAcordo = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const i of itens) if (i.ajuste_valor != null) m[i.id] = Number(i.ajuste_valor);
+    return m;
+  }, [itens]);
+
   // ── Bônus por meta (card dinâmico) ──────────────────────────────────────
   // O que o operador já recebeu de comissão APROVADA no mês é pago DE NOVO se
   // ele bater a meta. Estado do card vem da meta + quartis configurados:
@@ -1372,7 +1379,7 @@ export function usePixAutomatico() {
     metaModoSetorConfig, comissaoModoSetorConfig, valorFixoSetorConfig, regraJornadaDisponivel,
     operadoresFiltro, operadoresDoSeletor, visiveis,
     setPagina, totalPaginas, paginaAtual, daPagina,
-    totais, pagamento, meusDesaprovados, saldoPorOperador, nrPorAcordo,
+    totais, pagamento, meusDesaprovados, saldoPorOperador, nrPorAcordo, ajustePorAcordo,
     bonusMeta, metaPorSetor, dobra, abasRanking, pedidosDoFoco,
     fotoPorOperador, nomePorSetor, resumoPorSetor, pedidosSemSetor, blocosMetaPix,
     selecionados, setSelecionados, quemExclui, divergenciasAbertas, resumoPremiacao,
