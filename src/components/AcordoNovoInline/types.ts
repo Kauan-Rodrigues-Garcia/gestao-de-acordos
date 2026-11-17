@@ -100,6 +100,9 @@ export interface SharedFormState {
   // Autocomplete profissional (PP only)
   profissionalLoading: boolean;
   profissionalEncontrado: boolean;
+  // Nome/instituição já conhecidos do NR (BookPlay) — useClienteConhecido
+  clienteLoading: boolean;
+  clienteEncontrado: boolean;
   // ── PIX Automático / Cartão Recorrente (BookPlay) ────────────────────────
   /** A forma escolhida é PIX Automático ou Cartão Recorrente? */
   formaRecorrente: boolean;

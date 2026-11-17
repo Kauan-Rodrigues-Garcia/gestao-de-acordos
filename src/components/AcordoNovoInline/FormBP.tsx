@@ -5,7 +5,7 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { FileText, Hash, Link2, Save, Tag, User, X, Info, Wallet } from 'lucide-react';
+import { CheckCircle2, FileText, Hash, Link2, Loader2, Save, Tag, User, X, Info, Wallet } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatBRL, parseBRL } from '@/lib/money';
 import { INSTITUICOES_OPTIONS, PARCELAS_MAX_DEFAULT } from '@/lib/index';
@@ -44,6 +44,7 @@ export function FormBP({ state }: { state: SharedFormState }) {
     avisoDiretoExtra, confirmandoDiretoExtra, confirmarDiretoExtra, cancelarAvisoDiretoExtra,
     formaRecorrente, confirmouValorTotal, setConfirmouValorTotal,
     avisoPixAutomatico, irParaPixAutomatico, dispensarAvisoPixAutomatico,
+    clienteLoading, clienteEncontrado,
   } = state;
 
   const { temPermissao } = useCargoPermissoes();
@@ -94,7 +95,20 @@ export function FormBP({ state }: { state: SharedFormState }) {
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                 <div className="space-y-1">
                   <Label className="text-xs">NR *</Label>
-                  <Input value={nrCliente} {...propsSoNumeros(setNrCliente, 'NR')} placeholder="Código do acordo" className="h-8 text-xs font-mono" />
+                  {/* Ao digitar o NR, nome e instituição já conhecidos entram
+                      sozinhos (useClienteConhecido) — como o Código na Cofen. */}
+                  <div className="relative">
+                    <Input value={nrCliente} {...propsSoNumeros(setNrCliente, 'NR')} placeholder="Código do acordo" className="h-8 text-xs font-mono pr-7" />
+                    {clienteLoading && (
+                      <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground animate-spin" />
+                    )}
+                    {!clienteLoading && clienteEncontrado && (
+                      <CheckCircle2
+                        className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-emerald-600 dark:text-emerald-500"
+                        aria-label="Cliente já conhecido: nome e instituição preenchidos"
+                      />
+                    )}
+                  </div>
                 </div>
                 <DatePickerField
                   label="Vencimento" required

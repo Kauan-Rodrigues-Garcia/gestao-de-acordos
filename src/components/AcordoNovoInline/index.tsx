@@ -37,6 +37,7 @@ import { fetchIsDiretoExtraAtivo }  from '@/services/direto_extra.service';
 import { converterParaExtra, vincularExtraAoDireto } from '@/services/diretoExtraRpc';
 import { useEmpresaTags }           from '@/hooks/useEmpresaTags';
 import { useProfissional }          from '@/hooks/useProfissional';
+import { useClienteConhecido }      from '@/hooks/useClienteConhecido';
 import { ModalAdicionarParcela }    from '@/components/ModalAdicionarParcela';
 import {
   adicionarParcelasAoGrupo, mensagemDaInclusao, type NovaParcelaInput, type QuitarAntes,
@@ -156,6 +157,44 @@ export function AcordoNovoInline({
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profissional]);
+
+  // Nome e instituição já conhecidos do NR (ou do Código, na Cofen): acordo
+  // anterior com a mesma chave, senão o relatório 58/59 (20261117170000).
+  // Só ocupa campo vazio ou que ele mesmo preencheu — trocar o NR troca o que
+  // veio do NR antigo, e nunca o que a pessoa digitou. Na Cofen, o cadastro de
+  // `profissionais` (acima) continua mandando; aqui é só a reserva.
+  const { cliente, loading: clienteLoading } = useClienteConhecido(
+    isPaguePlay ? instituicao : nrCliente,
+    empresa?.id,
+    isPaguePlay ? 'instituicao' : 'nr_cliente',
+  );
+  const nomeAutoRef = useRef<string | null>(null);
+  const instAutoRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (clienteLoading) return;
+    const nomeEhDoAuto = nomeAutoRef.current !== null && nomeCliente === nomeAutoRef.current;
+    const instEhDoAuto = instAutoRef.current !== null && instituicao === instAutoRef.current;
+    const novoNome = isPaguePlay && profissional ? null : (cliente?.nome ?? null);
+    const novaInst = isPaguePlay ? null : (cliente?.instituicao ?? null);
+
+    if (novoNome && (!nomeCliente.trim() || nomeEhDoAuto)) {
+      setNomeCliente(novoNome);
+      nomeAutoRef.current = novoNome;
+    } else if (!novoNome && nomeEhDoAuto) {
+      setNomeCliente('');
+      nomeAutoRef.current = null;
+    }
+
+    if (novaInst && (!instituicao.trim() || instEhDoAuto)) {
+      setInstituicao(novaInst);
+      instAutoRef.current = novaInst;
+    } else if (!novaInst && instEhDoAuto) {
+      setInstituicao('');
+      instAutoRef.current = null;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cliente, clienteLoading]);
 
   const draftClearedRef = useRef(false);
   const persistRafRef = useRef<number | null>(null);
@@ -984,6 +1023,8 @@ export function AcordoNovoInline({
     confirmandoDiretoExtra, confirmarDiretoExtra, cancelarAvisoDiretoExtra,
     profissionalLoading,
     profissionalEncontrado: !!profissional,
+    clienteLoading,
+    clienteEncontrado: !!cliente,
     formaRecorrente,
     confirmouValorTotal, setConfirmouValorTotal,
     avisoPixAutomatico: avisoPixAutomatico

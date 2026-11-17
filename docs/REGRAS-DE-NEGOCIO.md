@@ -871,6 +871,41 @@ Um acordo é **atrasado** quando o vencimento passou e o status ainda não é
 `pago` nem `nao_pago` (`isAtrasado`). A data usa timezone `America/Sao_Paulo`
 (`getTodayISO`) — não UTC, para o "hoje" não virar antes da meia-noite local.
 
+#### Nome e instituição completados pelo histórico (migration `20261117120000`)
+
+Decisão do Cleber, 17/11/2026. Todo acordo que entra (tela, importação,
+parcela, reagendamento, par) com **nome do cliente** ou **instituição** em
+branco é completado no banco (`trg_acordos_completa_cliente`, BEFORE INSERT),
+pelo que já se sabe da mesma chave na mesma empresa (`fn_cliente_conhecido`):
+
+1. o acordo anterior com a mesma chave;
+2. senão, o recebimento mais recente do relatório (`analitico_recebimentos`:
+   coluna «Cliente» e, na BookPlay, «Empresa»).
+
+- **Nunca sobrescreve** o que veio preenchido.
+- **Instituição só em acordo com NR.** Sem NR, a `instituicao` é a própria chave
+  (o Código da regra Cofen), e completá-la trocaria o dono.
+- Só entram as quatro instituições da tela; **UNIVERSIDADE PLAY** e **EDIT
+  BRASIL**, que o relatório traz, entram como **MUNDIAL EDITORA**
+  (`fn_instituicao_oficial`).
+- Nome com CPF não é aproveitado.
+- O nome entra **sem o código do ERP** na frente («1994034 - NOME» → «NOME»,
+  `fn_nome_sem_codigo`, migration `20261117150000`): o 58 já cortava na
+  leitura, mas a projeção do 59 grava a coluna «Cliente» inteira.
+- Se a busca falhar, o acordo entra como veio.
+
+**Na tela, antes de salvar** (migration `20261117170000`, hook
+`useClienteConhecido`): ao digitar o NR, a mesma busca preenche nome e
+instituição no formulário — como o Código da Cofen já fazia pelo cadastro de
+`profissionais`. Só ocupa campo vazio ou que ela mesma preencheu (trocar o NR
+troca o que veio do NR antigo, nunca o que a pessoa digitou). Na Cofen o
+cadastro de `profissionais` continua mandando; a busca é só a reserva do nome.
+Pode usar quem é da empresa — a mesma regra de leitura de `profissionais`.
+
+Os acordos já salvos são completados uma vez pelo script
+`supabase/sql_scripts/preencher_cliente_dos_acordos_20261117.sql` (prévia que
+só conta, depois o preenchimento).
+
 ### 7.3 O fluxo de conflito — ordem exata das decisões
 
 Ao salvar um acordo, se o NR/Código mudou, o sistema consulta `nr_registros`.
