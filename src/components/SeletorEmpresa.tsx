@@ -27,7 +27,7 @@
  * meio segundo de recarga. Impersonação, que tem o mesmo problema, faz igual.
  */
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Building2, Check, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -37,7 +37,8 @@ import {
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
-import { fetchEmpresasLiberadas } from '@/services/empresas.service';
+import { fetchEmpresasLiberadas, fetchVisaoEmpresas } from '@/services/empresas.service';
+import { indexarVisoes, type VisaoEmpresaBruta } from '@/lib/visaoDaEmpresa';
 import { definirEmpresaEscolhida } from '@/services/empresaAtiva.service';
 import { perfilVeDuasEmpresas } from '@/services/acessoMultiempresa.service';
 import { getImpersonacaoAtiva } from '@/services/impersonacao.service';
@@ -52,11 +53,25 @@ export function SeletorEmpresa() {
   const [empresas, setEmpresas] = useState<Empresa[] | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [trocando, setTrocando]     = useState<string | null>(null);
+  const [visoesBrutas, setVisoesBrutas] = useState<VisaoEmpresaBruta[]>([]);
+
+  const visivel = perfilVeDuasEmpresas(perfil, temPermissao) && !getImpersonacaoAtiva();
+
+  // A visão (regra de negócio) de cada empresa, para o botão e a lista dizerem
+  // «Nosso produto», «Cofen», «Cantina»… em vez do nome do cadastro. Ver
+  // lib/visaoDaEmpresa.ts. Só busca para quem vê o botão.
+  useEffect(() => {
+    if (!visivel) return;
+    let vivo = true;
+    fetchVisaoEmpresas().then(v => { if (vivo) setVisoesBrutas(v); });
+    return () => { vivo = false; };
+  }, [visivel]);
+  const visoes = useMemo(() => indexarVisoes(visoesBrutas), [visoesBrutas]);
 
   // Durante impersonação a empresa é a do usuário impersonado, e trocá-la
   // deixaria a sessão apontando para uma empresa que a pessoa impersonada não
   // tem — dois "de quem é esta tela?" ao mesmo tempo.
-  if (!perfilVeDuasEmpresas(perfil, temPermissao) || getImpersonacaoAtiva()) return null;
+  if (!visivel) return null;
 
   async function abrir(aberto: boolean) {
     if (!aberto || empresas || carregando) return;
@@ -93,12 +108,12 @@ export function SeletorEmpresa() {
         >
           <Building2 className="w-3.5 h-3.5 shrink-0" />
           <span className="hidden lg:inline max-w-[120px] truncate">
-            {empresa?.nome ?? 'Empresa'}
+            {(empresa && visoes.get(empresa.id)?.titulo) || empresa?.nome || 'Empresa'}
           </span>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuLabel className="text-xs">Empresa</DropdownMenuLabel>
+      <DropdownMenuContent align="end" className="w-64">
+        <DropdownMenuLabel className="text-xs">Visão</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {carregando && (
           <div className="flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground">
@@ -112,6 +127,7 @@ export function SeletorEmpresa() {
         )}
         {(empresas ?? []).map(e => {
           const atual = e.id === empresa?.id;
+          const visao = visoes.get(e.id);
           return (
             <DropdownMenuItem
               key={e.id}
@@ -122,7 +138,14 @@ export function SeletorEmpresa() {
               {trocando === e.id
                 ? <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
                 : <Check className={cn('w-3.5 h-3.5 shrink-0', !atual && 'opacity-0')} />}
-              <span className="truncate">{e.nome}</span>
+              <span className="min-w-0 flex flex-col">
+                <span className="truncate">{visao?.titulo || e.nome}</span>
+                {visao?.detalhe && (
+                  <span className="truncate text-[10px] font-normal text-muted-foreground">
+                    {visao.detalhe}
+                  </span>
+                )}
+              </span>
             </DropdownMenuItem>
           );
         })}

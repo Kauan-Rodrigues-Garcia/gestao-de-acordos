@@ -34,6 +34,8 @@ export interface AcessoMultiempresa {
   email:         string | null;
   perfil:        string;
   foto_url:      string | null;
+  /** Empresa de origem (onde o cadastro mora). Compare por id, não por nome. */
+  empresa_id?:   string | null;
   empresa_nome:  string | null;
   /** Acesso que vem do cargo, e por isso não pode ser removido aqui. */
   e_super_admin: boolean;
@@ -47,6 +49,12 @@ export interface AcessoMultiempresa {
    * caixas, o que não é verdade.
    */
   empresas_liberadas: { id: string; nome: string; slug: string }[];
+  /**
+   * O cargo ATUAL ainda pode atravessar (`fn_multiempresa_cargo_permite`)?
+   * `false` = tem concessão gravada mas não alcança nada hoje: foi rebaixado,
+   * ou o painel tirou a chave do cargo. Opcional porque o banco antigo não manda.
+   */
+  cargo_permite?: boolean;
 }
 
 export interface CandidatoMultiempresa {
@@ -55,7 +63,12 @@ export interface CandidatoMultiempresa {
   email:        string | null;
   perfil:       string;
   foto_url:     string | null;
+  empresa_id?:  string | null;
   empresa_nome: string | null;
+  /** Setor do cadastro, a regra dele e a cidade — de onde a pessoa é. */
+  setor_nome?:  string | null;
+  regra?:       string | null;
+  cidade?:      string | null;
 }
 
 /** Mensagens do banco traduzidas. O `erro` cru nunca chega à tela. */
@@ -64,7 +77,7 @@ const MOTIVOS: Record<string, string> = {
   sem_permissao:         'Só o super admin pode alterar o acesso entre empresas.',
   usuario_nao_encontrado:'Usuário não encontrado.',
   super_admin_ja_tem:    'Super admin já enxerga todas as empresas pelo cargo.',
-  cargo_nao_elegivel:    'O cargo desta pessoa não pode receber acesso a outra empresa. Ligue a chave «Acesso às duas operações» no painel de permissões.',
+  cargo_nao_elegivel:    'O cargo desta pessoa não pode receber acesso a outra empresa. Ligue a chave «Acesso às duas operações» no painel de permissões do cargo.',
   empresa_nao_encontrada:'Empresa não encontrada.',
   empresa_propria:       'Esta já é a empresa da pessoa — o acesso vem do cadastro, não de concessão.',
 };
@@ -79,7 +92,14 @@ export async function listarAcessoMultiempresa(): Promise<AcessoMultiempresa[]> 
   return data ?? [];
 }
 
-/** Gerência e diretoria ativos, das duas empresas, que ainda não têm acesso. */
+/**
+ * Quem pode receber acesso e ainda não tem nenhum.
+ *
+ * Até 17/11/2026 o banco listava só gerência e diretoria, escrito à mão — e o
+ * Marcelinho, administrador recém-criado, não aparecia. Agora a lista segue a
+ * chave `acesso_multiempresa_permitido` do painel de cada cargo (administrador
+ * passa por acesso total), a mesma regra que a concessão confere.
+ */
 export async function listarCandidatosMultiempresa(): Promise<CandidatoMultiempresa[]> {
   const { data, error } = await rpcSemTipo<CandidatoMultiempresa[]>('fn_multiempresa_elegiveis', {});
   if (error) {

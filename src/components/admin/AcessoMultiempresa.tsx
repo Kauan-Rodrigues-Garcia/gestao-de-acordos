@@ -1,36 +1,41 @@
 /**
- * AcessoMultiempresa — quem enxerga o conteúdo das duas empresas.
+ * AcessoMultiempresa — quem enxerga mais de uma visão (empresa do cadastro).
  *
  * ## Para que serve
  *
- * `bookplay` e `pagueplay` dividem o banco e são separadas por `empresa_id` +
- * RLS. Atravessar era privilégio exclusivo de `super_admin`. Esta tela deixa o
- * super_admin liberar nominalmente gente de gerência e diretoria — que passa a
- * ver as duas e ganha o botão de trocar de empresa no cabeçalho.
+ * As empresas dividem o banco e são separadas por `empresa_id` + RLS.
+ * Atravessar é privilégio de `super_admin` por cargo; esta tela deixa o
+ * super_admin liberar nominalmente outras pessoas, empresa por empresa.
+ *
+ * ## Quem pode receber
+ *
+ * O cargo que o PAINEL deixa atravessar (chave `acesso_multiempresa_permitido`;
+ * administrador por acesso total). Até 17/11/2026 a lista de candidatos tinha
+ * «gerência e diretoria» escrito no banco, e um administrador recém-criado
+ * (Marcelinho) não aparecia. Hoje candidatos, lista e concessão usam a mesma
+ * função: `fn_multiempresa_cargo_permite`.
+ *
+ * ## Cada empresa aparece pela VISÃO, não pelo nome do cadastro
+ *
+ * O que muda a tela é a regra de negócio (Nosso produto, Cofen) ou o produto
+ * (Comercial, Cantina, RH). BookPlay/PaguePlay é só a marca, pela cidade. Ver
+ * `lib/visaoDaEmpresa.ts` e CLAUDE.md, «Cofen não é PaguePlay».
  *
  * ## Só super_admin entra
  *
- * A aba nem aparece para os outros, e não é aí que a segurança mora: as três
- * RPCs conferem `fn_user_is_super_admin()` na primeira linha, e a coluna em
- * `perfis` tem trigger que recusa escrita de quem não for super_admin — inclusive
- * de administrador, que tem UPDATE em `perfis` por outra policy.
- *
- * ## O super_admin aparece na lista e não sai dela
- *
- * O acesso dele vem do cargo, não de uma liberação, e "remover" ali não teria o
- * que remover. Some da lista quando o cargo muda — que é a forma certa.
+ * As RPCs conferem `fn_user_is_super_admin()` na primeira linha; a aba nem
+ * aparece para os outros, mas não é ali que a segurança mora.
  *
  * ## O que o liberado vê de fato
  *
- * A outra empresa COM O PRÓPRIO CARGO. Onde a regra do banco pede setor
- * (Acordos, para gerência na BookPlay), o setor da empresa de origem não casa
- * com os setores da outra e a lista vem curta. Diretoria, liberada por cargo na
- * maioria das telas, atravessa inteira. O aviso no rodapé do card diz isso na
- * tela, para ninguém descobrir depois.
+ * A outra visão COM O PRÓPRIO CARGO. Onde a regra do banco pede setor, o setor
+ * de origem não casa com os da outra empresa e a lista vem curta.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Building2, UserPlus, ShieldCheck, Loader2, X, Search, Info } from 'lucide-react';
+import {
+  Building2, UserPlus, ShieldCheck, Loader2, X, Search, Info, AlertTriangle, ArrowLeft,
+} from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -45,7 +50,10 @@ import {
   definirAcessoEmpresa,
   type AcessoMultiempresa as Acesso, type CandidatoMultiempresa,
 } from '@/services/acessoMultiempresa.service';
-import { fetchEmpresas } from '@/services/empresas.service';
+import { fetchEmpresas, fetchVisaoEmpresas } from '@/services/empresas.service';
+import { indexarVisoes, type VisaoEmpresa, type VisaoEmpresaBruta } from '@/lib/visaoDaEmpresa';
+import { ROTULO_REGRA, ehRegraDoSetor } from '@/lib/regraDoSetor';
+import { marcaDaCidade } from '@/lib/marca';
 import type { Empresa } from '@/lib/supabase';
 
 function Avatar({ nome, foto }: { nome: string; foto: string | null }) {
@@ -68,6 +76,18 @@ function Cargo({ perfil }: { perfil: string }) {
   );
 }
 
+/** «Play 1 · Nosso produto · BookPlay» — de onde a pessoa é, pela regra e pela marca. */
+function origemDoCandidato(c: CandidatoMultiempresa, visaoOrigem: VisaoEmpresa | undefined): string {
+  const partes: string[] = [];
+  if (c.setor_nome) partes.push(c.setor_nome);
+  if (ehRegraDoSetor(c.regra)) partes.push(ROTULO_REGRA[c.regra]);
+  else if (visaoOrigem?.titulo) partes.push(visaoOrigem.titulo);
+  else if (c.empresa_nome) partes.push(c.empresa_nome);
+  const marca = marcaDaCidade(c.cidade);
+  if (marca) partes.push(marca.nome);
+  return partes.join(' · ') || 'sem empresa';
+}
+
 export default function AcessoMultiempresa() {
   const [lista, setLista]           = useState<Acesso[]>([]);
   const [carregando, setCarregando] = useState(true);
@@ -76,13 +96,33 @@ export default function AcessoMultiempresa() {
   const [dialogoAberto, setDialogoAberto] = useState(false);
   const [candidatos, setCandidatos]       = useState<CandidatoMultiempresa[] | null>(null);
   const [busca, setBusca]                 = useState('');
+  /** Passo 2 do «Adicionar»: a pessoa escolhida e as empresas marcadas. */
+  const [escolhido, setEscolhido]         = useState<CandidatoMultiempresa | null>(null);
+  const [marcadas, setMarcadas]           = useState<Set<string>>(new Set());
 
   const [paraRemover, setParaRemover] = useState<Acesso | null>(null);
 
-  // Todas as empresas ativas. Quem abre esta tela é super_admin, então a lista
-  // completa é exatamente o que ele precisa marcar.
+  // Todas as empresas ativas e a visão de cada uma. Quem abre esta tela é
+  // super_admin, então a lista completa é exatamente o que ele precisa marcar.
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
-  useEffect(() => { fetchEmpresas().then(setEmpresas); }, []);
+  const [visoesBrutas, setVisoesBrutas] = useState<VisaoEmpresaBruta[]>([]);
+  useEffect(() => {
+    fetchEmpresas().then(setEmpresas);
+    fetchVisaoEmpresas().then(setVisoesBrutas);
+  }, []);
+  const visoes = useMemo(() => indexarVisoes(visoesBrutas), [visoesBrutas]);
+  const rotulo = useCallback(
+    (emp: Pick<Empresa, 'id' | 'nome'>) => visoes.get(emp.id)?.titulo || emp.nome,
+    [visoes],
+  );
+  const dica = useCallback((emp: Pick<Empresa, 'id' | 'nome'>) => {
+    const v = visoes.get(emp.id);
+    return [v?.detalhe, `cadastro: ${emp.nome}`].filter(Boolean).join(' — ');
+  }, [visoes]);
+
+  /** A empresa de origem, por id; o nome só serve para o banco antigo. */
+  const ehPropria = (emp: Empresa, empresaId: string | null | undefined, empresaNome: string | null) =>
+    empresaId ? emp.id === empresaId : emp.nome === empresaNome;
 
   const recarregar = useCallback(async () => {
     setCarregando(true);
@@ -97,21 +137,44 @@ export default function AcessoMultiempresa() {
 
   async function abrirDialogo(aberto: boolean) {
     setDialogoAberto(aberto);
-    if (!aberto) { setBusca(''); return; }
+    if (!aberto) { setBusca(''); setEscolhido(null); return; }
     if (candidatos) return;
     setCandidatos(await listarCandidatosMultiempresa());
   }
 
-  async function conceder(c: CandidatoMultiempresa) {
-    setSalvando(c.usuario_id);
-    const res = await definirAcessoMultiempresa(c.usuario_id, true);
+  /**
+   * Passo 1 → 2: escolhe a pessoa e já sugere as outras empresas do MESMO
+   * produto (um administrador da cobrança costuma precisar de Nosso produto e
+   * Cofen). O super_admin ajusta antes de confirmar.
+   */
+  function escolher(c: CandidatoMultiempresa) {
+    const origem = empresas.find(e => ehPropria(e, c.empresa_id, c.empresa_nome));
+    const sugestao = new Set(
+      empresas
+        .filter(e => e.id !== origem?.id && origem?.produto && e.produto === origem.produto)
+        .map(e => e.id),
+    );
+    setEscolhido(c);
+    setMarcadas(sugestao);
+  }
+
+  async function conceder() {
+    if (!escolhido || marcadas.size === 0) return;
+    setSalvando(escolhido.usuario_id);
+    let erro: string | null = null;
+    for (const empresaId of marcadas) {
+      const res = await definirAcessoEmpresa(escolhido.usuario_id, empresaId, true);
+      // `strict: false`: o TS não estreita união por discriminante booleano —
+      // `in` estreita. Mesmo motivo do resto do projeto.
+      if ('erro' in res) { erro = res.erro; break; }
+    }
     setSalvando(null);
-    // `strict: false`: o TS não estreita união por discriminante booleano —
-    // `in` estreita. Mesmo motivo do resto do projeto.
-    if ('erro' in res) { toast.error(res.erro); return; }
-    toast.success(`${c.nome} agora enxerga as duas empresas.`);
+    if (erro) { toast.error(erro); await recarregar(); return; }
+    const nomes = empresas.filter(e => marcadas.has(e.id)).map(rotulo).join(', ');
+    toast.success(`${escolhido.nome} agora enxerga também: ${nomes}.`);
     setDialogoAberto(false);
     setBusca('');
+    setEscolhido(null);
     await recarregar();
   }
 
@@ -120,10 +183,8 @@ export default function AcessoMultiempresa() {
     const res = await definirAcessoMultiempresa(a.usuario_id, false);
     setSalvando(null);
     setParaRemover(null);
-    // `strict: false`: o TS não estreita união por discriminante booleano —
-    // `in` estreita. Mesmo motivo do resto do projeto.
     if ('erro' in res) { toast.error(res.erro); return; }
-    toast.success(`${a.nome} volta a ver só ${a.empresa_nome ?? 'a empresa de origem'}.`);
+    toast.success(`${a.nome} volta a ver só a própria visão.`);
     await recarregar();
   }
 
@@ -133,17 +194,15 @@ export default function AcessoMultiempresa() {
    * `salvando` guarda `pessoa:empresa` e não só a pessoa: sem isso, marcar uma
    * empresa acenderia o spinner em todas as outras da mesma linha.
    */
-  async function alternarEmpresa(a: Acesso, empresaId: string, liberar: boolean) {
-    setSalvando(`${a.usuario_id}:${empresaId}`);
-    const res = await definirAcessoEmpresa(a.usuario_id, empresaId, liberar);
+  async function alternarEmpresa(a: Acesso, emp: Empresa, liberar: boolean) {
+    setSalvando(`${a.usuario_id}:${emp.id}`);
+    const res = await definirAcessoEmpresa(a.usuario_id, emp.id, liberar);
     setSalvando(null);
-    // `strict: false`: o TS não estreita união por discriminante booleano —
-    // `in` estreita. Mesmo motivo do resto do projeto.
     if ('erro' in res) { toast.error(res.erro); return; }
     toast.success(
       liberar
-        ? `${a.nome} passa a enxergar ${res.empresa}.`
-        : `${a.nome} deixa de enxergar ${res.empresa}.`,
+        ? `${a.nome} passa a enxergar ${rotulo(emp)}.`
+        : `${a.nome} deixa de enxergar ${rotulo(emp)}.`,
     );
     await recarregar();
   }
@@ -155,7 +214,9 @@ export default function AcessoMultiempresa() {
     return base.filter(c =>
       c.nome.toLowerCase().includes(termo)
       || (c.email ?? '').toLowerCase().includes(termo)
-      || (c.empresa_nome ?? '').toLowerCase().includes(termo));
+      || (c.empresa_nome ?? '').toLowerCase().includes(termo)
+      || (c.setor_nome ?? '').toLowerCase().includes(termo)
+      || (PERFIL_LABELS[c.perfil] ?? c.perfil).toLowerCase().includes(termo));
   }, [candidatos, busca]);
 
   const liberados = lista.filter(a => !a.e_super_admin);
@@ -167,12 +228,12 @@ export default function AcessoMultiempresa() {
           <div className="flex items-start justify-between gap-3">
             <div>
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <Building2 className="w-4 h-4 text-primary" /> Acesso entre empresas
+                <Building2 className="w-4 h-4 text-primary" /> Acesso entre visões
               </CardTitle>
               <p className="text-xs text-muted-foreground mt-1">
-                Marque, pessoa por pessoa, quais empresas ela enxerga além da
-                própria. Quem tem ao menos uma ganha o botão de trocar de empresa
-                no topo da tela.
+                Marque, pessoa por pessoa, quais visões ela enxerga além da
+                própria — Nosso produto, Cofen, Comercial, Cantina, RH. Quem tem
+                ao menos uma ganha o botão de trocar no topo da tela.
               </p>
             </div>
             <Button size="sm" className="gap-1.5 shrink-0" onClick={() => abrirDialogo(true)}>
@@ -188,108 +249,106 @@ export default function AcessoMultiempresa() {
             </div>
           )}
 
-          {!carregando && lista.map(a => (
-            <div
-              key={a.usuario_id}
-              className="rounded-lg border border-border"
-            >
-            <div className="flex items-center gap-3 p-3">
-              <Avatar nome={a.nome} foto={a.foto_url} />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-medium truncate">{a.nome}</span>
-                  <Cargo perfil={a.perfil} />
-                  {a.empresa_nome && (
-                    <span className="text-[10px] text-muted-foreground">
-                      origem: {a.empresa_nome}
-                    </span>
+          {!carregando && lista.map(a => {
+            const origem = empresas.find(e => ehPropria(e, a.empresa_id, a.empresa_nome));
+            const semEfeito = !a.e_super_admin && a.cargo_permite === false;
+            return (
+            <div key={a.usuario_id} className="rounded-lg border border-border">
+              <div className="flex items-center gap-3 p-3">
+                <Avatar nome={a.nome} foto={a.foto_url} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-medium truncate">{a.nome}</span>
+                    <Cargo perfil={a.perfil} />
+                    {(origem || a.empresa_nome) && (
+                      <span className="text-[10px] text-muted-foreground">
+                        origem: {origem ? rotulo(origem) : a.empresa_nome}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {a.e_super_admin
+                      ? 'Acesso pelo cargo de super admin — não pode ser removido aqui.'
+                      : a.concedido_em
+                        ? `Liberado por ${a.concedido_por ?? 'alguém que já saiu'} em ${formatDate(a.concedido_em)}`
+                        : 'Liberado'}
+                  </p>
+                  {semEfeito && (
+                    <p className="text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-1 mt-0.5">
+                      <AlertTriangle className="w-3 h-3 shrink-0" />
+                      O cargo atual não pode atravessar — a liberação está gravada mas sem efeito.
+                    </p>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground truncate">
-                  {a.e_super_admin
-                    ? 'Acesso pelo cargo de super admin — não pode ser removido aqui.'
-                    : a.concedido_em
-                      ? `Liberado por ${a.concedido_por ?? 'alguém que já saiu'} em ${formatDate(a.concedido_em)}`
-                      : 'Liberado'}
-                </p>
+                {a.e_super_admin ? (
+                  <ShieldCheck className="w-4 h-4 text-muted-foreground shrink-0" />
+                ) : (
+                  <Button
+                    size="sm" variant="ghost"
+                    className="h-8 gap-1.5 text-xs text-destructive hover:text-destructive shrink-0"
+                    disabled={salvando !== null}
+                    onClick={() => setParaRemover(a)}
+                  >
+                    {salvando === a.usuario_id
+                      ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      : <X className="w-3.5 h-3.5" />}
+                    Remover
+                  </Button>
+                )}
               </div>
-              {a.e_super_admin ? (
-                <ShieldCheck className="w-4 h-4 text-muted-foreground shrink-0" />
-              ) : (
-                <Button
-                  size="sm" variant="ghost"
-                  className="h-8 gap-1.5 text-xs text-destructive hover:text-destructive shrink-0"
-                  disabled={salvando !== null}
-                  onClick={() => setParaRemover(a)}
-                >
-                  {salvando === a.usuario_id
-                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    : <X className="w-3.5 h-3.5" />}
-                  Remover
-                </Button>
+
+              {/*
+                As visões, uma a uma. A de origem aparece marcada e travada: o
+                acesso a ela vem do cadastro, não de concessão.
+              */}
+              {!a.e_super_admin && empresas.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 pl-12 pr-3 pb-3">
+                  {empresas.map(emp => {
+                    const propria  = ehPropria(emp, a.empresa_id, a.empresa_nome);
+                    const liberada = a.empresas_liberadas.some(x => x.id === emp.id);
+                    const ocupado  = salvando === `${a.usuario_id}:${emp.id}`;
+                    return (
+                      <button
+                        key={emp.id}
+                        type="button"
+                        disabled={propria || salvando !== null}
+                        onClick={() => alternarEmpresa(a, emp, !liberada)}
+                        className={cn(
+                          'text-[11px] px-2 py-1 rounded-full border transition-colors',
+                          propria
+                            ? 'border-border bg-muted text-muted-foreground cursor-default'
+                            : liberada
+                              ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+                              : 'border-border text-muted-foreground hover:bg-accent',
+                        )}
+                        title={propria ? `Visão de origem — vem do cadastro (${emp.nome})` : dica(emp)}
+                      >
+                        {ocupado && <Loader2 className="w-3 h-3 animate-spin inline mr-1" />}
+                        {rotulo(emp)}
+                        {propria && ' · origem'}
+                      </button>
+                    );
+                  })}
+                </div>
               )}
             </div>
-
-            {/*
-            As empresas, uma a uma.
-            ───────────────────────
-            Até 25/08 esta tela tinha um interruptor só, e ele valia para TODAS
-            as empresas — inclusive as que ainda não existiam. Foi assim que duas
-            pessoas de diretoria ganharam acesso ao Comercial e ao RH no dia em
-            que essas empresas nasceram, sem ninguém decidir.
-
-            A empresa de origem aparece marcada e travada: o acesso a ela vem do
-            cadastro, não de concessão, e oferecer um botão para tirá-la sugeriria
-            um poder que esta tela não tem.
-          */}
-            {!a.e_super_admin && empresas.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 pl-12 pb-1">
-              {empresas.map(emp => {
-                const propria  = emp.nome === a.empresa_nome;
-                const liberada = a.empresas_liberadas.some(x => x.id === emp.id);
-                const ocupado  = salvando === `${a.usuario_id}:${emp.id}`;
-                return (
-                  <button
-                    key={emp.id}
-                    type="button"
-                    disabled={propria || salvando !== null}
-                    onClick={() => alternarEmpresa(a, emp.id, !liberada)}
-                    className={cn(
-                      'text-[11px] px-2 py-1 rounded-full border transition-colors',
-                      propria
-                        ? 'border-border bg-muted text-muted-foreground cursor-default'
-                        : liberada
-                          ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
-                          : 'border-border text-muted-foreground hover:bg-accent',
-                    )}
-                    title={propria ? 'Empresa de origem — vem do cadastro' : undefined}
-                  >
-                    {ocupado && <Loader2 className="w-3 h-3 animate-spin inline mr-1" />}
-                    {emp.nome}
-                    {propria && ' · origem'}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-          </div>
-          ))}
+            );
+          })}
 
           {!carregando && liberados.length === 0 && (
             <p className="text-xs text-muted-foreground py-2">
-              Ninguém liberado além dos super admins. Use "Adicionar" para incluir
-              gerência ou diretoria.
+              Ninguém liberado além dos super admins. Use «Adicionar» para incluir alguém.
             </p>
           )}
 
           <div className="flex gap-2 items-start pt-2 text-[11px] text-muted-foreground border-t border-border mt-2">
             <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
             <p>
-              Quem é liberado vê a outra empresa <strong>com o próprio cargo</strong>, não
+              Quem é liberado vê a outra visão <strong>com o próprio cargo</strong>, não
               como super admin. Nas telas em que a regra depende de setor — Acordos, por
-              exemplo — o setor da empresa de origem não corresponde a nenhum setor da
-              outra, então a lista vem curta. Diretoria atravessa inteira. E o acesso cai
-              sozinho se o cargo deixar de ser gerência ou diretoria.
+              exemplo — o setor de origem não corresponde a nenhum setor da outra visão,
+              então a lista vem curta. O acesso cai sozinho se o painel do cargo deixar de
+              permitir «Acesso às duas operações».
             </p>
           </div>
         </CardContent>
@@ -299,61 +358,125 @@ export default function AcessoMultiempresa() {
       <Dialog open={dialogoAberto} onOpenChange={abrirDialogo}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-base">Liberar acesso às duas empresas</DialogTitle>
+            <DialogTitle className="text-base">
+              {escolhido ? `Quais visões ${escolhido.nome} enxerga?` : 'Liberar acesso a outras visões'}
+            </DialogTitle>
             <DialogDescription className="text-xs">
-              Só gerência e diretoria aparecem aqui. Operadores, líderes e
-              administradores continuam restritos à empresa de origem.
+              {escolhido
+                ? 'Marque as visões além da de origem. Dá para mudar depois na lista.'
+                : 'Aparecem os cargos que o painel deixa atravessar (chave «Acesso às duas operações») — administrador, diretoria, gerência e o que mais estiver marcado.'}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={busca}
-              onChange={e => setBusca(e.target.value)}
-              placeholder="Buscar por nome, e-mail ou empresa"
-              className="pl-8 h-9 text-sm"
-            />
-          </div>
-
-          <div className="max-h-72 overflow-y-auto space-y-1.5 -mx-1 px-1">
-            {candidatos === null && (
-              <div className="flex items-center gap-2 py-6 justify-center text-xs text-muted-foreground">
-                <Loader2 className="w-4 h-4 animate-spin" /> Carregando…
+          {!escolhido && (
+            <>
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={busca}
+                  onChange={e => setBusca(e.target.value)}
+                  placeholder="Buscar por nome, cargo, setor ou e-mail"
+                  className="pl-8 h-9 text-sm"
+                />
               </div>
-            )}
-            {candidatos !== null && candidatosFiltrados.length === 0 && (
-              <p className="text-xs text-muted-foreground py-6 text-center">
-                {candidatos.length === 0
-                  ? 'Todo mundo de gerência e diretoria já tem acesso.'
-                  : 'Ninguém encontrado com esse termo.'}
-              </p>
-            )}
-            {candidatosFiltrados.map(c => (
-              <button
-                key={c.usuario_id}
-                type="button"
-                disabled={salvando !== null}
-                onClick={() => conceder(c)}
-                className={cn(
-                  'w-full flex items-center gap-3 p-2.5 rounded-lg border border-border text-left',
-                  'hover:bg-muted/60 transition-colors disabled:opacity-60',
-                )}
-              >
-                <Avatar nome={c.nome} foto={c.foto_url} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium truncate">{c.nome}</span>
-                    <Cargo perfil={c.perfil} />
+
+              <div className="max-h-72 overflow-y-auto space-y-1.5 -mx-1 px-1">
+                {candidatos === null && (
+                  <div className="flex items-center gap-2 py-6 justify-center text-xs text-muted-foreground">
+                    <Loader2 className="w-4 h-4 animate-spin" /> Carregando…
                   </div>
-                  <p className="text-[11px] text-muted-foreground truncate">
-                    {c.empresa_nome ?? 'sem empresa'}{c.email ? ` · ${c.email}` : ''}
+                )}
+                {candidatos !== null && candidatosFiltrados.length === 0 && (
+                  <p className="text-xs text-muted-foreground py-6 text-center">
+                    {candidatos.length === 0
+                      ? 'Todo mundo que pode atravessar já tem acesso.'
+                      : 'Ninguém encontrado com esse termo.'}
                   </p>
-                </div>
-                {salvando === c.usuario_id && <Loader2 className="w-4 h-4 animate-spin shrink-0" />}
-              </button>
-            ))}
-          </div>
+                )}
+                {candidatosFiltrados.map(c => {
+                  const origem = empresas.find(e => ehPropria(e, c.empresa_id, c.empresa_nome));
+                  return (
+                    <button
+                      key={c.usuario_id}
+                      type="button"
+                      onClick={() => escolher(c)}
+                      className={cn(
+                        'w-full flex items-center gap-3 p-2.5 rounded-lg border border-border text-left',
+                        'hover:bg-muted/60 transition-colors',
+                      )}
+                    >
+                      <Avatar nome={c.nome} foto={c.foto_url} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium truncate">{c.nome}</span>
+                          <Cargo perfil={c.perfil} />
+                        </div>
+                        <p className="text-[11px] text-muted-foreground truncate">
+                          {origemDoCandidato(c, origem ? visoes.get(origem.id) : undefined)}
+                          {c.email ? ` · ${c.email}` : ''}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          {escolhido && (
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-1.5">
+                {empresas.map(emp => {
+                  const propria = ehPropria(emp, escolhido.empresa_id, escolhido.empresa_nome);
+                  const marcada = marcadas.has(emp.id);
+                  return (
+                    <button
+                      key={emp.id}
+                      type="button"
+                      disabled={propria || salvando !== null}
+                      onClick={() => setMarcadas(prev => {
+                        const prox = new Set(prev);
+                        if (prox.has(emp.id)) prox.delete(emp.id); else prox.add(emp.id);
+                        return prox;
+                      })}
+                      title={dica(emp)}
+                      className={cn(
+                        'text-xs px-2.5 py-1.5 rounded-full border transition-colors text-left',
+                        propria
+                          ? 'border-border bg-muted text-muted-foreground cursor-default'
+                          : marcada
+                            ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+                            : 'border-border text-muted-foreground hover:bg-accent',
+                      )}
+                    >
+                      {rotulo(emp)}
+                      {propria && ' · origem'}
+                      {visoes.get(emp.id)?.detalhe && (
+                        <span className="block text-[10px] opacity-75">{visoes.get(emp.id)?.detalhe}</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              <DialogFooter className="gap-2">
+                <Button
+                  variant="outline" size="sm" className="gap-1.5"
+                  disabled={salvando !== null}
+                  onClick={() => setEscolhido(null)}
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" /> Voltar
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={salvando !== null || marcadas.size === 0}
+                  onClick={conceder}
+                >
+                  {salvando !== null && <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />}
+                  Liberar
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
@@ -361,15 +484,14 @@ export default function AcessoMultiempresa() {
       <Dialog open={paraRemover !== null} onOpenChange={a => !a && setParaRemover(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-base">Remover acesso às duas empresas?</DialogTitle>
+            <DialogTitle className="text-base">Remover acesso às outras visões?</DialogTitle>
             <DialogDescription className="text-xs">
               {paraRemover && (
                 <>
-                  <strong>{paraRemover.nome}</strong> volta a ver só{' '}
-                  {paraRemover.empresa_nome ?? 'a empresa de origem'}, e o botão de trocar
-                  de empresa some do cabeçalho. Se estiver com a outra empresa aberta
-                  agora, a tela volta para a de origem no próximo carregamento. Dá para
-                  liberar de novo depois.
+                  <strong>{paraRemover.nome}</strong> volta a ver só a visão de origem, e o
+                  botão de trocar some do cabeçalho. Se estiver com outra visão aberta agora,
+                  a tela volta para a de origem no próximo carregamento. Dá para liberar de
+                  novo depois.
                 </>
               )}
             </DialogDescription>

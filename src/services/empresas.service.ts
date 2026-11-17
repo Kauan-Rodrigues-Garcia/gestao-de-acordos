@@ -6,6 +6,7 @@
 import { supabase, Empresa } from '@/lib/supabase';
 import { rpcSemTipo } from '@/lib/supabaseSemTipo';
 import { registrarVariantes } from '@/lib/variante';
+import type { VisaoEmpresaBruta } from '@/lib/visaoDaEmpresa';
 
 /**
  * As empresas que a pessoa logada realmente ALCANÇA.
@@ -51,6 +52,23 @@ export async function fetchEmpresasLiberadas(): Promise<Empresa[]> {
     return [];
   }
   return comVariantes((data as Empresa[]) || []);
+}
+
+/**
+ * A visão de cada empresa ativa: regras dos setores, cidades e setores.
+ *
+ * É o que deixa o seletor e a aba Multiempresa chamarem a empresa pela regra
+ * de negócio (Nosso produto, Cofen, Cantina, RH) em vez do nome do cadastro.
+ * Ver `lib/visaoDaEmpresa.ts`. Sem a função no banco, devolve lista vazia e a
+ * tela cai no nome.
+ */
+export async function fetchVisaoEmpresas(): Promise<VisaoEmpresaBruta[]> {
+  const { data, error } = await rpcSemTipo<VisaoEmpresaBruta[]>('fn_empresas_visao', {});
+  if (error) {
+    console.warn('[empresas.service] fetchVisaoEmpresas error:', error.message);
+    return [];
+  }
+  return data ?? [];
 }
 
 /** Lista todas as empresas ativas */
