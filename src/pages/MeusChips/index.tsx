@@ -16,11 +16,11 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { escopoEfetivo } from '@/lib/permissoes-escopo';
-import { ChipsFisicos } from './ChipsFisicos';
+import { MeusChipsV2 } from './v2/MeusChipsV2';
 
 export default function MeusChips() {
   // A mesma conta de `useChipsFisicos`, sem ler a lista duas vezes: o hook
-  // de verdade roda dentro de <ChipsFisicos />.
+  // de verdade roda dentro de <MeusChipsV2 />.
   const { temPermissao, loading: permLoading } = useCargoPermissoes();
   const habilitado = temPermissao('ver_chips_fisicos');
   const alcance = temPermissao('chips_fisicos_todos_setores') ? 'todos'
@@ -50,7 +50,7 @@ export default function MeusChips() {
           <Skeleton className="h-48 w-full" />
         </div>
       ) : habilitado ? (
-        <ChipsFisicos />
+        <MeusChipsV2 />
       ) : (
         <Card className="border-dashed">
           <CardContent className="space-y-2 py-12 text-center">

@@ -29,10 +29,10 @@ import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { escopoEfetivo } from '@/lib/permissoes-escopo';
 import { reconciliarLista } from '@/lib/dadosVivos';
 import {
-  eTabelaAusente, listarChipsFisicos, listarPessoas, mensagemDeErro,
-  type ChipFisicoRow, type PessoaChipRow,
+  eTabelaAusente, listarChipsFisicos, listarEquipesChips, listarPessoas, listarSetoresChips,
+  mensagemDeErro,
+  type ChipFisicoRow, type EquipeChipRow, type PessoaChipRow, type SetorChipRow,
 } from '@/services/chipsFisicos/chipsFisicos.service';
-import { listarSetores, type SetorNome } from '@/services/numeros/numeros.service';
 
 export type AlcanceChipsFisicos = 'proprios' | 'setor' | 'todos';
 
@@ -45,8 +45,10 @@ interface Retorno {
   chips: ChipFisicoRow[];
   /** Por id: quem a tela sabe nomear. Na visão «proprios», só a própria pessoa. */
   pessoas: Map<string, PessoaChipRow>;
-  /** Os setores da empresa, para o filtro e os títulos da visão «todos». */
-  setores: SetorNome[];
+  /** Os setores da empresa com a cidade (a marca), para agrupar e filtrar. */
+  setores: SetorChipRow[];
+  /** As equipes que a visão de gestão pode agrupar (2.0). */
+  equipes: EquipeChipRow[];
   meuId: string | null;
   meuSetorId: string | null;
   instalado: boolean;
@@ -73,7 +75,8 @@ export function useChipsFisicos(): Retorno {
 
   const [chips, setChips]         = useState<ChipFisicoRow[]>([]);
   const [listaPessoas, setListaPessoas] = useState<PessoaChipRow[]>([]);
-  const [setores, setSetores]     = useState<SetorNome[]>([]);
+  const [setores, setSetores]     = useState<SetorChipRow[]>([]);
+  const [equipes, setEquipes]     = useState<EquipeChipRow[]>([]);
   const [instalado, setInstalado] = useState(true);
   const [loading, setLoading]     = useState(true);
   const [erro, setErro]           = useState<string | null>(null);
@@ -102,15 +105,20 @@ export function useChipsFisicos(): Retorno {
     // Os nomes vêm depois, e uma falha aqui não apaga a lista: sem nome, o
     // bloco diz «Pessoa não encontrada», e o chip continua na tela.
     try {
-      const [pessoas, sets] = await Promise.all([
+      const grupo = alcance !== 'proprios';
+      const [pessoas, sets, eqs] = await Promise.all([
         // Quem enxerga o setor mas não tem setor não tem quem nomear além de si.
         alcance === 'proprios' || (alcance === 'setor' && !meuSetorId)
           ? Promise.resolve<PessoaChipRow[]>([])
           : listarPessoas(empresaId, alcance === 'setor' ? meuSetorId : null),
-        alcance === 'todos' ? listarSetores(empresaId) : Promise.resolve<SetorNome[]>([]),
+        grupo ? listarSetoresChips(empresaId).catch(() => [] as SetorChipRow[]) : Promise.resolve<SetorChipRow[]>([]),
+        grupo
+          ? listarEquipesChips(empresaId, alcance === 'setor' ? meuSetorId : null).catch(() => [] as EquipeChipRow[])
+          : Promise.resolve<EquipeChipRow[]>([]),
       ]);
       setListaPessoas(pessoas);
       setSetores(sets);
+      setEquipes(eqs);
     } catch {
       // Mantém o que já havia.
     } finally {
@@ -150,7 +158,7 @@ export function useChipsFisicos(): Retorno {
   }, [listaPessoas, perfil]);
 
   return {
-    habilitado, alcance, podeCuidarColegas, chips, pessoas, setores,
+    habilitado, alcance, podeCuidarColegas, chips, pessoas, setores, equipes,
     meuId, meuSetorId, instalado, loading, erro, recarregar: carregar,
   };
 }

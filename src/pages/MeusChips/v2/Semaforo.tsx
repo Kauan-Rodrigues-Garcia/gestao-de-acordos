@@ -15,7 +15,7 @@ import { mascararNumero } from '@/services/numeros/numerosFormato';
 import {
   STATUS_CHIP_LABELS, luzesDoSemaforo, type StatusChip,
 } from '@/services/chipsFisicos/chipsFisicosRegras';
-import { LUZ_STATUS } from './coresStatusChip';
+import { LUZ_STATUS } from '../ChipsFisicos/coresStatusChip';
 
 
 export interface SemaforoProps {

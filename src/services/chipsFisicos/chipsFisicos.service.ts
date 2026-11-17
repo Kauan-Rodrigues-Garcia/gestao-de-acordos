@@ -47,6 +47,23 @@ export interface ChipFisicoRow {
 
 export interface PessoaChipRow extends PessoaDoChip {
   ativo: boolean;
+  /** Equipe da pessoa (2.0): agrupa a visão de gestão por equipe. */
+  equipe_id?: string | null;
+}
+
+/** Equipe para o agrupamento da visão de gestão. */
+export interface EquipeChipRow {
+  id: string;
+  nome: string;
+  setor_id: string | null;
+}
+
+/** Setor com a cidade — a cidade dá a marca (Birigui BookPlay, Marília PaguePlay). */
+export interface SetorChipRow {
+  id: string;
+  nome: string;
+  ativo: boolean | null;
+  cidade: string | null;
 }
 
 export interface Resultado<T = void> {
@@ -109,7 +126,7 @@ export async function listarPessoas(
 ): Promise<PessoaChipRow[]> {
   let q = supabase
     .from('perfis')
-    .select('id, nome, foto_url, setor_id, ativo')
+    .select('id, nome, foto_url, setor_id, equipe_id, ativo')
     .eq('empresa_id', empresaId);
   if (setorId) q = q.eq('setor_id', setorId);
   const { data, error } = await q.order('nome');
@@ -175,4 +192,33 @@ export async function salvarLembreteChip(
   });
   if (error) return falha(error);
   return { ok: true };
+}
+
+/** As equipes da empresa (ou de um setor), para agrupar a visão de gestão. */
+export async function listarEquipesChips(
+  empresaId: string, setorId: string | null,
+): Promise<EquipeChipRow[]> {
+  let q = supabase.from('equipes').select('id, nome, setor_id').eq('empresa_id', empresaId);
+  if (setorId) q = q.eq('setor_id', setorId);
+  const { data, error } = await q.order('nome');
+  if (error) throw error;
+  return (data as EquipeChipRow[]) ?? [];
+}
+
+/** Os setores da empresa com o nome da cidade. */
+export async function listarSetoresChips(empresaId: string): Promise<SetorChipRow[]> {
+  const { data, error } = await db
+    .from('setores')
+    .select('id, nome, ativo, excluido_em, cidade:rh_celulas!setores_cidade_fkey(nome)')
+    .eq('empresa_id', empresaId)
+    .order('nome');
+  if (error) throw error;
+  type Linha = { id: string; nome: string; ativo: boolean | null; excluido_em: string | null;
+                 cidade: { nome: string } | { nome: string }[] | null };
+  return ((data as Linha[]) ?? [])
+    .filter(l => !l.excluido_em)
+    .map(l => ({
+      id: l.id, nome: l.nome, ativo: l.ativo,
+      cidade: Array.isArray(l.cidade) ? l.cidade[0]?.nome ?? null : l.cidade?.nome ?? null,
+    }));
 }
