@@ -76,6 +76,14 @@ export function useEnviosCampanha(empresaId: string | null, perfil: Perfil | nul
   const [liberando, setLiberando] = useState(false);
 
   const autorId = perfil?.id ?? null;
+  /**
+   * Vê «Por setor» em Minhas campanhas: o dia de todos os setores (16/11/2026).
+   * Pela chave do painel, não pelo cargo (`painel-manda.test.ts`): a mesma de
+   * liberar campanha em qualquer setor — o super admin tem todas; quem mais a
+   * tiver no painel vê também. O RLS já dá a essas pessoas as campanhas de
+   * todos os setores.
+   */
+  const verPorSetor = temPermissao('campanha_escopo_todos_setores');
 
   // Gerência para cima escolhe o setor; começa pelo dela, se tiver. O líder
   // também carrega a lista, só para mostrar o nome do setor dele no topo.
@@ -259,7 +267,7 @@ export function useEnviosCampanha(empresaId: string | null, perfil: Perfil | nul
     equipes, filtroEquipes, escolherEquipes,
     carregandoOperadores, selecionados, operadoresSelecionados,
     alternar, marcarTodos, desmarcarTodos,
-    empresaId, autorId, historico, carregandoHistorico, recarregarHistorico,
+    empresaId, autorId, verPorSetor, historico, carregandoHistorico, recarregarHistorico,
     liberando, liberar, repassar, ativar, excluir, editar, finalizar,
   };
 }

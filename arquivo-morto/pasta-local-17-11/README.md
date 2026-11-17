@@ -19,7 +19,7 @@ Nada aqui é compilado, testado ou publicado.
 | Caminho | O que era |
 |---|---|
 | `src/pages/CreatorsLab/` | Reescrita do Creators Lab como «área de trabalho» (`desktop/`, `programas/`, `museu/`, `lib/intro`, `lib/janelas`). Também apagava `BarraLab`, `BootSequence` e `RealitySelect`, que continuam no Git. |
-| `src/pages/CampanhaFacil/` | Campanha «Por setor» do super admin (`CampanhasPorSetor`, `setoresDoDia`, `useCampanhasDoDia`) e o que ela mexia no histórico e nos envios. |
+| ~~`src/pages/CampanhaFacil/`~~ | Campanha «Por setor» (quais líderes lançaram campanha, por setor). **Voltou para o app em 17/11** a pedido do usuário — saiu daqui. |
 | `src/components/Corrida/guerra/cartas/`, `cavaloDaGuerra.d.ts`, `admin/CorridaConfig.tsx` | Cartas do Cavalo da Guerra. |
 | `src/components/Insignias/lendas/dadosDasLendas.ts`, `arquivo-morto/halloween/...` | Ajuste das Lendas (em cima do Halloween, que já estava arquivado). |
 | `src/pages/DesafioCobranca/index.tsx` | Versão de 16/11 com a correção do valor do ajuste: «R$ 50.000,00» ou valor com espaço virava NaN e o botão ficava apagado sem aviso; também diz o que falta para lançar. **Não está no Git.** A versão do Cleber (e3c23ea9) deixou o motivo opcional, então reaplicar só a parte do valor. |

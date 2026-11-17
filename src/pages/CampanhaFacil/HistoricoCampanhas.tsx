@@ -24,7 +24,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
-  ArrowRightLeft, CalendarDays, CheckCircle2, Clock, Eye, History, Loader2, NotebookPen, Pencil, Power, PowerOff,
+  ArrowRightLeft, Building2, CalendarDays, CheckCircle2, Clock, Eye, History, Loader2, NotebookPen, Pencil, Power, PowerOff,
   RefreshCw, Send, ThumbsDown, ThumbsUp, Trash2, Users, XCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -62,6 +62,8 @@ import {
   type PendenteComBase,
 } from './descontoDaEdicao';
 import type { useEnviosCampanha } from './useEnviosCampanha';
+import { CampanhasPorSetor } from './CampanhasPorSetor';
+import { useCampanhasDoDia } from './useCampanhasDoDia';
 
 type Envios = ReturnType<typeof useEnviosCampanha>;
 
@@ -103,7 +105,7 @@ function SeloSituacao({ s }: { s: SituacaoLote }) {
 
 // ── A aba «Minhas campanhas» ─────────────────────────────────────────────────
 
-type Visao = 'minhas' | 'setor';
+type Visao = 'setores' | 'minhas' | 'setor';
 
 /**
  * Sub-aba própria desde 16/10/2026: na lateral da nova campanha, a lista de
@@ -111,16 +113,25 @@ type Visao = 'minhas' | 'setor';
  * abertas de um lado e o histórico do mês escolhido do outro, cada lista com
  * rolagem própria. As do setor (dos outros líderes) ficam num seletor à parte,
  * só para acompanhar.
+ *
+ * Quem tem `campanha_escopo_todos_setores` (o super admin, e quem mais o painel
+ * der) abre em «Por setor» (16/11/2026): o que cada setor lançou no
+ * dia e quanto já foi encaminhado, sem precisar entrar na conta de um líder.
+ * Ver `CampanhasPorSetor`.
  */
 export function MinhasCampanhas({ envios }: { envios: Envios }) {
-  const { historico, autorId } = envios;
+  const { historico, autorId, verPorSetor } = envios;
   // As minhas e as dos outros líderes do setor, sempre separadas.
   const minhas = useMemo(() => historico.filter((l) => l.criado_por === autorId), [historico, autorId]);
   const doSetor = useMemo(() => historico.filter((l) => l.criado_por !== autorId), [historico, autorId]);
-  const [visaoEscolhida, setVisao] = useState<Visao>('minhas');
-  const visao: Visao = doSetor.length === 0 ? 'minhas' : visaoEscolhida;
+  const [visaoEscolhida, setVisao] = useState<Visao>(verPorSetor ? 'setores' : 'minhas');
+  const visao: Visao = visaoEscolhida === 'setores'
+    ? (verPorSetor ? 'setores' : 'minhas')
+    : visaoEscolhida === 'setor' && doSetor.length === 0 ? 'minhas' : visaoEscolhida;
   const somenteLeitura = visao === 'setor';
   const lista = somenteLeitura ? doSetor : minhas;
+
+  const doDia = useCampanhasDoDia(envios.empresaId, verPorSetor && visao === 'setores');
 
   const [aberto, setAberto] = useState<LoteCampanha | null>(null);
   const [atualizando, setAtualizando] = useState(false);
@@ -133,20 +144,67 @@ export function MinhasCampanhas({ envios }: { envios: Envios }) {
     if (!pedida) return;
     const l = historico.find((x) => x.id === pedida);
     if (!l) return;
-    if (l.criado_por !== autorId) setVisao('setor');
+    setVisao(l.criado_por !== autorId ? 'setor' : 'minhas');
     setAberto(l);
     setParams((p) => { const x = new URLSearchParams(p); x.delete('campanha'); return x; }, { replace: true });
   }, [pedida, historico, autorId, setParams]);
 
-  // A campanha aberta no diálogo acompanha o histórico recarregado.
-  const loteAberto = aberto ? (historico.find((l) => l.id === aberto.id) ?? null) : null;
+  // A campanha aberta no diálogo acompanha a lista recarregada (o histórico,
+  // ou as do dia na visão por setor).
+  const loteAberto = aberto
+    ? (historico.find((l) => l.id === aberto.id) ?? doDia.campanhas.find((c) => c.lote.id === aberto.id)?.lote ?? aberto)
+    : null;
 
   async function atualizar() {
     setAtualizando(true);
     try { await envios.recarregarHistorico(); } finally { setAtualizando(false); }
   }
 
-  if (historico.length === 0) {
+  const opcoes: [Visao, string, number | null][] = [
+    ...(verPorSetor ? [['setores', 'Por setor', null] as [Visao, string, null]] : []),
+    ['minhas', 'Minhas', minhas.length],
+    ...(doSetor.length > 0 ? [['setor', 'Dos outros líderes do setor', doSetor.length] as [Visao, string, number]] : []),
+  ];
+
+  const seletor = opcoes.length > 1 && (
+    <div className="inline-flex flex-wrap rounded-lg border border-border bg-muted/40 p-0.5" role="group" aria-label="De quem são as campanhas">
+      {opcoes.map(([v, rotulo, qtd]) => (
+        <button
+          key={v} type="button" onClick={() => setVisao(v)} aria-pressed={visao === v}
+          className={cn(
+            'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
+            visao === v ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+          )}
+        >
+          {v === 'setores' ? <Building2 className="h-3.5 w-3.5" /> : v === 'setor' ? <Users className="h-3.5 w-3.5" /> : <Send className="h-3.5 w-3.5" />}
+          {rotulo}
+          {qtd !== null && <span className="tabular-nums text-muted-foreground">{n(qtd)}</span>}
+        </button>
+      ))}
+    </div>
+  );
+
+  const dialogo = loteAberto && (
+    <DialogoCampanha
+      key={loteAberto.id}
+      lote={loteAberto}
+      envios={envios}
+      somenteLeitura={loteAberto.criado_por !== autorId}
+      onFechar={() => setAberto(null)}
+    />
+  );
+
+  if (visao === 'setores') {
+    return (
+      <div className="space-y-4">
+        {seletor}
+        <CampanhasPorSetor doDia={doDia} setores={envios.setores} onAbrir={setAberto} />
+        {dialogo}
+      </div>
+    );
+  }
+
+  if (historico.length === 0 && !verPorSetor) {
     return (
       <Card className="flex min-h-[40vh] items-center justify-center">
         <CardContent className="max-w-md py-12 text-center">
@@ -171,23 +229,7 @@ export function MinhasCampanhas({ envios }: { envios: Envios }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        {doSetor.length > 0 && (
-          <div className="inline-flex rounded-lg border border-border bg-muted/40 p-0.5" role="group" aria-label="De quem são as campanhas">
-            {([['minhas', 'Minhas', minhas.length], ['setor', 'Dos outros líderes do setor', doSetor.length]] as const).map(([v, rotulo, qtd]) => (
-              <button
-                key={v} type="button" onClick={() => setVisao(v)} aria-pressed={visao === v}
-                className={cn(
-                  'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
-                  visao === v ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                {v === 'setor' ? <Users className="h-3.5 w-3.5" /> : <Send className="h-3.5 w-3.5" />}
-                {rotulo}
-                <span className="tabular-nums text-muted-foreground">{n(qtd)}</span>
-              </button>
-            ))}
-          </div>
-        )}
+        {seletor}
         <Button
           variant="outline" size="sm" className="ml-auto h-8 gap-1.5 text-xs"
           onClick={() => void atualizar()} disabled={atualizando}
@@ -212,15 +254,7 @@ export function MinhasCampanhas({ envios }: { envios: Envios }) {
         <PainelCampanhas key={visao} lista={lista} somenteLeitura={somenteLeitura} onAbrir={setAberto} />
       )}
 
-      {loteAberto && (
-        <DialogoCampanha
-          key={loteAberto.id}
-          lote={loteAberto}
-          envios={envios}
-          somenteLeitura={loteAberto.criado_por !== autorId}
-          onFechar={() => setAberto(null)}
-        />
-      )}
+      {dialogo}
     </div>
   );
 }

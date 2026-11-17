@@ -353,6 +353,30 @@ export async function listarHistorico(autorId: string, setorId: string | null): 
   return todos;
 }
 
+/**
+ * Todas as campanhas da empresa lançadas entre `de` e `ate` (ISO), de todos
+ * os setores — a visão «Por setor» do super admin (16/11/2026). Quem lê tudo
+ * é o RLS: `fn_cf_alcanca_setor` é verdadeiro para o super admin em qualquer
+ * setor; para os outros, a leitura volta só com o que já alcançam.
+ */
+export async function listarCampanhasDoDia(empresaId: string, de: string, ate: string): Promise<LoteCampanha[]> {
+  const todos: LoteCampanha[] = [];
+  let colunas = `${COLUNAS_LOTE}, observacoes`;
+  for (let i = 0; ; i += PAGINA) {
+    const pedir = () => db.from('campanha_facil_lotes').select(colunas)
+      .eq('empresa_id', empresaId)
+      .gte('lancada_em', de).lt('lancada_em', ate)
+      .order('lancada_em', { ascending: false })
+      .range(i, i + PAGINA - 1);
+    let { data, error } = await pedir();
+    if (semColuna(error)) { colunas = COLUNAS_LOTE; ({ data, error } = await pedir()); }
+    if (error) throw error;
+    todos.push(...((data ?? []) as unknown as LoteCampanha[]));
+    if ((data ?? []).length < PAGINA) break;
+  }
+  return todos;
+}
+
 /** O que um operador disse da campanha: o voto e a observação para o líder. */
 export interface AvaliacaoDoOperador {
   /** `true` = bom retorno, `false` = não deu, `null` = só deixou observação. */
