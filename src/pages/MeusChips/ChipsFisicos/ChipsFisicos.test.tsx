@@ -198,3 +198,63 @@ describe('Chips Físicos — antes da migration', () => {
     expect(container.innerHTML).toBe('');
   });
 });
+
+describe('Chips Físicos 2.0', () => {
+  const c2 = (p: Partial<ChipFisicoRow> & { id: string; operador_id: string; numero: string }) =>
+    chip({ etiquetas: [], ativo_acumulado_seg: 0, lembrete_texto: null, lembrete_ate: null, lembrete_por: null, ...p });
+
+  it('semáforo da pessoa: uma luz por chip, verde e vermelha', () => {
+    estado = base({
+      chips: [
+        c2({ id: 'a', operador_id: 'ana', numero: '18911110000' }),
+        c2({ id: 'b', operador_id: 'ana', numero: '18922220000', status: 'banido' }),
+        c2({ id: 'c', operador_id: 'ana', numero: '18933330000' }),
+      ],
+      pessoas: new Map([['ana', pessoa('ana', 'Ana Lima')]]),
+    });
+    render(<ChipsFisicos />);
+    expect(screen.getByRole('img', { name: '3 chips: 2 ativo, 1 banido' })).toBeTruthy();
+  });
+
+  it('saúde no topo e contador de movimentando filtra', () => {
+    estado = base({
+      chips: [
+        c2({ id: 'a', operador_id: 'ana', numero: '18911110000', etiquetas: ['movimentando'] }),
+        c2({ id: 'b', operador_id: 'bruno', numero: '18922220000', status: 'banido' }),
+      ],
+      pessoas: new Map([['ana', pessoa('ana', 'Ana Lima')], ['bruno', pessoa('bruno', 'Bruno Reis')]]),
+    });
+    render(<ChipsFisicos />);
+    expect(screen.getByText('50%')).toBeTruthy();
+    expect(screen.getByText(/1 com banido/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /1\s*Movimentando/ }));
+    expect(screen.getByText('Ana Lima')).toBeTruthy();
+    expect(screen.queryByText('Bruno Reis')).toBeNull();
+  });
+
+  it('cartão mostra etiqueta, lembrete e dias ativo', () => {
+    estado = base({
+      alcance: 'proprios', podeCuidarColegas: false, meuId: 'ana',
+      chips: [c2({
+        id: 'a', operador_id: 'ana', numero: '18911110000', etiquetas: ['principal'],
+        status_desde: em(-3 * 1440 - 5),
+        lembrete_texto: 'Recarregar', lembrete_ate: em(30),
+      })],
+      pessoas: new Map([['ana', pessoa('ana', 'Ana Lima')]]),
+    });
+    render(<ChipsFisicos />);
+    expect(screen.getByText('Principal')).toBeTruthy();
+    expect(screen.getByText('Recarregar')).toBeTruthy();
+    expect(screen.getByText('3 dias')).toBeTruthy();
+  });
+
+  it('antes da migration, sem etiquetas nem lembrete no menu', () => {
+    estado = base({
+      alcance: 'proprios', podeCuidarColegas: false, meuId: 'ana',
+      chips: [chip({ id: 'a', operador_id: 'ana', numero: '18911110000' })],
+      pessoas: new Map([['ana', pessoa('ana', 'Ana Lima')]]),
+    });
+    render(<ChipsFisicos />);
+    expect(screen.queryByRole('button', { name: /Movimentando/ })).toBeNull();
+  });
+});

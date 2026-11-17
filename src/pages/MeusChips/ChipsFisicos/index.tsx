@@ -1,5 +1,13 @@
 /**
- * ChipsFisicos — a separação da aba Meus Chips com os chips que cada pessoa tem.
+ * ChipsFisicos — a aba Meus Chips: os chips que cada pessoa tem.
+ *
+ * ## 2.0 (17/11/2026)
+ *
+ * Virou a página inteira (a separação «Números de WhatsApp» saiu). Painel de
+ * saúde no topo, semáforo de luzes por pessoa (uma luz por chip, da verde à
+ * vermelha), etiquetas (Movimentando, Principal…), dias ativo, lembrete
+ * criado pela pessoa, e aviso na tela quando um tempo ou lembrete acaba — a
+ * notificação vem do robô `chips-fisicos-avisar` (migration 20261117200000).
  *
  * ## Uma tela, três alcances
  *
@@ -28,10 +36,11 @@
  *
  * Nada aqui lê ou escreve `numeros_whatsapp`. Ver a migration 20260921160000.
  */
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import {
-  ChevronRight, ChevronsDownUp, ChevronsUpDown, Database, Plus, Search, Smartphone, UserX,
+  ArrowDownAZ, ChevronRight, ChevronsDownUp, ChevronsUpDown, Database, Plus, Radio, Search,
+  Siren, Smartphone, UserX,
 } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -50,7 +59,8 @@ import { useAgora } from '@/hooks/useAgora';
 import { useChipsFisicos } from '@/hooks/useChipsFisicos';
 import { mascararNumero } from '@/services/numeros/numerosFormato';
 import {
-  STATUS_CHIP, agruparPorPessoa, estadoDoTempo, filtrarChips, resumir, rotuloContagem,
+  STATUS_CHIP, agruparPorPessoa, estadoDoLembrete, estadoDoTempo, filtrarChips, resumir,
+  rotuloContagem,
   type BlocoPessoa, type FiltroChips, type FiltroStatusChip, type StatusChip,
 } from '@/services/chipsFisicos/chipsFisicosRegras';
 import {
@@ -59,12 +69,22 @@ import {
 import { PONTO_STATUS_CHIP, PONTO_TEMPO_ENCERRADO } from './coresStatusChip';
 import { DialogoChipFisico } from './DialogoChipFisico';
 import { DialogoStatusChip } from './DialogoStatusChip';
+import { DialogoEtiquetas } from './DialogoEtiquetas';
+import { DialogoLembrete } from './DialogoLembrete';
 import { LinhaChip } from './LinhaChip';
+import { PainelResumo } from './PainelResumo';
+import { Semaforo } from './Semaforo';
 import { setoresDosFiltros } from '@/lib/setoresDosFiltros';
 
-const ROTULO_CONTADOR: Record<StatusChip, string> = {
-  ativo: 'Ativos', restricao: 'Restrição', banido: 'Banidos', recuperar: 'Recuperar',
-};
+/** Ordem dos blocos de pessoa na visão de grupo. */
+type OrdemPessoas = 'nome' | 'atencao';
+
+/** Quanto um bloco pede atenção: banido pesa mais, depois restrição e recuperar. */
+function pesoAtencao(chips: readonly { status: StatusChip }[]): number {
+  let p = 0;
+  for (const c of chips) p += c.status === 'banido' ? 100 : c.status === 'restricao' ? 10 : c.status === 'recuperar' ? 1 : 0;
+  return p;
+}
 
 const TODOS_OS_SETORES = 'todos';
 const SEM_SETOR = 'sem_setor';
@@ -111,8 +131,14 @@ export function ChipsFisicos() {
   const [cadastro, setCadastro] = useState<EstadoCadastro>(CADASTRO_FECHADO);
   const [paraExcluir, setParaExcluir] = useState<ChipFisicoRow | null>(null);
   const [excluindo, setExcluindo] = useState(false);
+  const [paraEtiquetas, setParaEtiquetas] = useState<ChipFisicoRow | null>(null);
+  const [paraLembrete, setParaLembrete] = useState<ChipFisicoRow | null>(null);
+  const [ordem, setOrdem] = useState<OrdemPessoas>('nome');
 
   const visaoDeGrupo = alcance !== 'proprios';
+  // As colunas da 2.0 chegaram do banco? Antes da migration 20261117200000 a
+  // linha vem sem elas, e etiquetas/lembrete somem da tela em vez de quebrar.
+  const recursos2 = chips.some(c => 'etiquetas' in c);
 
   const nomeDe = useCallback(
     (id: string) => pessoas.get(id)?.nome ?? '',
@@ -148,7 +174,46 @@ export function ChipsFisicos() {
   );
   const filtrando = filtro.status !== 'todos' || filtro.busca.trim() !== '';
 
-  const blocos = useMemo(() => agruparPorPessoa(visiveis, pessoas), [visiveis, pessoas]);
+  const blocos = useMemo(() => {
+    const b = agruparPorPessoa(visiveis, pessoas);
+    if (ordem === 'atencao') {
+      // Estável: empate fica na ordem alfabética que `agruparPorPessoa` já deu.
+      return [...b].sort((x, y) => pesoAtencao(y.chips) - pesoAtencao(x.chips));
+    }
+    return b;
+  }, [visiveis, pessoas, ordem]);
+
+  /*
+   * O aviso na tela quando um tempo (ou lembrete) acaba com a página aberta. A
+   * notificação de verdade vem do robô no banco, a cada minuto; isto é o
+   * «plim» de quem está olhando. Na primeira leitura não avisa: o que já
+   * estava encerrado ao abrir a página não é novidade.
+   */
+  const vencidos = chipsNoRecorte
+    .filter(c => estadoDoTempo(c, agora).tipo === 'encerrado' || estadoDoLembrete(c, agora).tipo === 'vencido')
+    .map(c => `${c.id}:${estadoDoLembrete(c, agora).tipo === 'vencido' ? 'l' : 't'}`)
+    .join(',');
+  const jaVistos = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    const atuais = new Set(vencidos ? vencidos.split(',') : []);
+    const antes = jaVistos.current;
+    jaVistos.current = atuais;
+    if (!antes) return;
+    for (const chave of atuais) {
+      if (antes.has(chave)) continue;
+      const [id, tipo] = chave.split(':');
+      const c = chipsNoRecorte.find(x => x.id === id);
+      if (!c) continue;
+      const dono = c.operador_id !== meuId && nomeDe(c.operador_id) ? ` (${nomeDe(c.operador_id)})` : '';
+      if (tipo === 'l') {
+        toast.info(`Lembrete: ${c.lembrete_texto ?? ''}`, { description: `${mascararNumero(c.numero)}${dono}`, duration: 15_000 });
+      } else {
+        toast.warning(`Tempo encerrado — ${mascararNumero(c.numero)}${dono}`, {
+          description: 'Confira o chip e mude o status.', duration: 15_000,
+        });
+      }
+    }
+  }, [vencidos, chipsNoRecorte, meuId, nomeDe]);
 
   const [alternados, setAlternados] =
     useState<BlocosAlternados>({ filtrando: false, ids: NENHUM });
@@ -216,6 +281,8 @@ export function ChipsFisicos() {
   const abrirStatus   = useCallback((c: ChipFisicoRow) => setParaStatus(c), []);
   const abrirCorrecao = useCallback((c: ChipFisicoRow) => setCadastro({ aberto: true, chip: c, dono: null }), []);
   const abrirExclusao = useCallback((c: ChipFisicoRow) => setParaExcluir(c), []);
+  const abrirEtiquetas = useCallback((c: ChipFisicoRow) => setParaEtiquetas(c), []);
+  const abrirLembrete  = useCallback((c: ChipFisicoRow) => setParaLembrete(c), []);
   const aoMudar       = useCallback(() => { void recarregar(); }, [recarregar]);
 
   function adicionar(dono: string | null) {
@@ -270,9 +337,12 @@ export function ChipsFisicos() {
       key={c.id}
       chip={c}
       podeCuidar={podeCuidar(c)}
+      recursos2={recursos2}
       onStatus={abrirStatus}
       onCorrigir={abrirCorrecao}
       onExcluir={abrirExclusao}
+      onEtiquetas={abrirEtiquetas}
+      onLembrete={abrirLembrete}
     />
   );
 
@@ -296,31 +366,29 @@ export function ChipsFisicos() {
     ? agruparBlocosPorSetor(blocos, nomeDoSetor)
     : null;
 
+  // Pessoas na visão de grupo, e quantas têm chip banido — o primeiro número
+  // que a liderança procura.
+  const pessoasNoResumo = visaoDeGrupo
+    ? (() => {
+        const porPessoa = new Map<string, boolean>();
+        for (const c of chipsNoRecorte) {
+          porPessoa.set(c.operador_id, (porPessoa.get(c.operador_id) ?? false) || c.status === 'banido');
+        }
+        return { total: porPessoa.size, comBanido: [...porPessoa.values()].filter(Boolean).length };
+      })()
+    : undefined;
+
   return (
     <div className="space-y-5">
-      {/* ── Contadores (são o filtro) ─────────────────────────────────────── */}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6" role="group" aria-label="Filtrar por status">
-        <Contador rotulo="Todos" valor={resumo.total} marcado={filtro.status === 'todos'}
-                  onClick={() => setFiltro(f => ({ ...f, status: 'todos' }))} />
-        {STATUS_CHIP.map(s => (
-          <Contador
-            key={s}
-            rotulo={ROTULO_CONTADOR[s]}
-            valor={resumo[s]}
-            ponto={PONTO_STATUS_CHIP[s]}
-            marcado={filtro.status === s}
-            onClick={() => filtrarStatus(s)}
-          />
-        ))}
-        <Contador
-          rotulo="Tempo encerrado"
-          valor={resumo.tempoEncerrado}
-          ponto={PONTO_TEMPO_ENCERRADO}
-          marcado={filtro.status === 'tempo_encerrado'}
-          destaque={resumo.tempoEncerrado > 0}
-          onClick={() => filtrarStatus('tempo_encerrado')}
-        />
-      </div>
+      {/* ── Saúde e contadores (os contadores são o filtro) ──────────────── */}
+      <PainelResumo
+        resumo={resumo}
+        chipsDoSemaforo={visaoDeGrupo ? undefined : chipsNoRecorte}
+        pessoas={pessoasNoResumo}
+        filtro={filtro.status}
+        onFiltro={s => (s === 'todos' ? setFiltro(f => ({ ...f, status: 'todos' })) : filtrarStatus(s))}
+        recursos2={recursos2}
+      />
 
       {/* ── Cadastro, busca e setor ───────────────────────────────────────── */}
       {/* «Adicionar chip» abre a linha: é a ação mais usada, e na ponta direita
@@ -352,6 +420,17 @@ export function ChipsFisicos() {
               <SelectItem value={SEM_SETOR}>Sem setor</SelectItem>
             </SelectContent>
           </Select>
+        )}
+        {visaoDeGrupo && blocos.length > 1 && (
+          <Button
+            variant="outline"
+            onClick={() => setOrdem(o => (o === 'nome' ? 'atencao' : 'nome'))}
+            title={ordem === 'nome' ? 'Pôr primeiro quem tem chip banido ou em restrição' : 'Voltar à ordem alfabética'}
+          >
+            {ordem === 'nome'
+              ? <><Siren className="mr-1 h-4 w-4" aria-hidden /> Atenção primeiro</>
+              : <><ArrowDownAZ className="mr-1 h-4 w-4" aria-hidden /> Ordem por nome</>}
+          </Button>
         )}
         {visaoDeGrupo && blocos.length > 1 && (
           <Button variant="outline" onClick={abrirOuRecolherTodos}>
@@ -463,6 +542,8 @@ export function ChipsFisicos() {
       />
 
       <DialogoStatusChip chip={paraStatus} onFechar={() => setParaStatus(null)} onSalvo={aoMudar} />
+      <DialogoEtiquetas chip={paraEtiquetas} onFechar={() => setParaEtiquetas(null)} onSalvo={aoMudar} />
+      <DialogoLembrete chip={paraLembrete} onFechar={() => setParaLembrete(null)} onSalvo={aoMudar} />
 
       <AlertDialog open={paraExcluir !== null} onOpenChange={a => { if (!a && !excluindo) setParaExcluir(null); }}>
         <AlertDialogContent>
@@ -494,35 +575,6 @@ export function ChipsFisicos() {
 
 // ── Peças ───────────────────────────────────────────────────────────────────
 
-function Contador({
-  rotulo, valor, ponto, marcado, destaque, onClick,
-}: {
-  rotulo: string; valor: number; ponto?: string; marcado: boolean;
-  destaque?: boolean; onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={marcado}
-      onClick={onClick}
-      className={cn(
-        'flex flex-col items-start rounded-lg border bg-card px-3 py-2 text-left transition-colors',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-        marcado ? 'border-primary ring-1 ring-primary' : 'hover:bg-muted/60',
-      )}
-    >
-      <span className="text-2xl font-semibold leading-tight tabular-nums">{valor}</span>
-      <span className={cn(
-        'flex items-center gap-1.5 text-xs',
-        destaque ? 'font-medium text-sky-700 dark:text-sky-300' : 'text-muted-foreground',
-      )}>
-        {ponto && <span className={cn('h-2 w-2 rounded-full', ponto)} aria-hidden />}
-        {rotulo}
-      </span>
-    </button>
-  );
-}
-
 function MiniAvatar({ nome, foto }: { nome: string; foto: string | null }) {
   return (
     <Avatar className="h-5 w-5">
@@ -550,10 +602,14 @@ function BlocoPessoaChips({
   const { pessoa, chips } = bloco;
   const conta: Record<StatusChip, number> = { ativo: 0, restricao: 0, banido: 0, recuperar: 0 };
   for (const c of chips) conta[c.status] += 1;
+  const movimentando = chips.filter(c => c.etiquetas?.includes('movimentando')).length;
   const idConteudo = `chips-de-${pessoa.id}`;
 
   return (
-    <Card>
+    <Card className={cn(
+      'overflow-hidden transition-shadow hover:shadow-md',
+      conta.banido > 0 && 'border-red-500/30',
+    )}>
       <CardHeader className={aberto ? 'px-4 pb-3 pt-4' : 'px-4 py-3'}>
         <div className="flex items-center gap-2">
           {/* O cabeçalho inteiro abre e fecha; o «+» fica fora do botão. */}
@@ -575,8 +631,11 @@ function BlocoPessoaChips({
                 {iniciaisDe(pessoa.nome)}
               </AvatarFallback>
             </Avatar>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-base font-semibold leading-tight">{pessoa.nome}</span>
+            <span className="min-w-0 flex-1 space-y-1">
+              <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="truncate text-base font-semibold leading-tight">{pessoa.nome}</span>
+                <Semaforo chips={chips} tamanho="sm" />
+              </span>
               <span className="flex flex-wrap items-center gap-x-2.5 text-xs text-muted-foreground">
                 {setorNome && <span>{setorNome}</span>}
                 {STATUS_CHIP.filter(s => conta[s] > 0).map(s => (
@@ -585,6 +644,12 @@ function BlocoPessoaChips({
                     {conta[s]} {rotuloContagem(s, conta[s])}
                   </span>
                 ))}
+                {movimentando > 0 && (
+                  <span className="flex items-center gap-1 font-medium tabular-nums text-emerald-700 dark:text-emerald-300">
+                    <Radio className="h-3 w-3" aria-hidden />
+                    {movimentando} movimentando
+                  </span>
+                )}
                 {encerrados > 0 && (
                   <span className="flex items-center gap-1 font-medium tabular-nums text-sky-700 dark:text-sky-300">
                     <span className={cn('h-1.5 w-1.5 rounded-full', PONTO_TEMPO_ENCERRADO)} aria-hidden />

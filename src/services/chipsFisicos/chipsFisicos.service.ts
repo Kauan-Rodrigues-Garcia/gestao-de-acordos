@@ -12,7 +12,7 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
-import type { Operadora, PessoaDoChip, StatusChip } from './chipsFisicosRegras';
+import type { EtiquetaChip, Operadora, PessoaDoChip, StatusChip } from './chipsFisicosRegras';
 
 const db = supabase as unknown as SupabaseClient;
 
@@ -36,6 +36,13 @@ export interface ChipFisicoRow {
   criado_por: string | null;
   criado_em: string;
   atualizado_em: string;
+  // ── 2.0 (migration 20261117200000). Opcionais: antes da migration a linha
+  //    vem sem elas, e a tela some com o recurso em vez de quebrar.
+  etiquetas?: string[] | null;
+  ativo_acumulado_seg?: number | null;
+  lembrete_texto?: string | null;
+  lembrete_ate?: string | null;
+  lembrete_por?: string | null;
 }
 
 export interface PessoaChipRow extends PessoaDoChip {
@@ -148,6 +155,24 @@ export async function alterarStatusChip(
 
 export async function excluirChipFisico(id: string): Promise<Resultado> {
   const { error } = await rpc('fn_chips_fisicos_excluir', { p_id: id });
+  if (error) return falha(error);
+  return { ok: true };
+}
+
+/** Troca as etiquetas do chip (lista inteira). */
+export async function salvarEtiquetasChip(id: string, etiquetas: EtiquetaChip[]): Promise<Resultado> {
+  const { error } = await rpc('fn_chips_fisicos_etiquetas', { p_id: id, p_etiquetas: etiquetas });
+  if (error) return falha(error);
+  return { ok: true };
+}
+
+/** Cria ou troca o lembrete; `minutos` nulo apaga. */
+export async function salvarLembreteChip(
+  id: string, texto: string | null, minutos: number | null,
+): Promise<Resultado> {
+  const { error } = await rpc('fn_chips_fisicos_lembrete', {
+    p_id: id, p_texto: texto, p_minutos: minutos,
+  });
   if (error) return falha(error);
   return { ok: true };
 }

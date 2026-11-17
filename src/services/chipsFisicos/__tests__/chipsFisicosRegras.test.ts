@@ -74,6 +74,7 @@ describe('resumo e filtro', () => {
   it('conta cada status e o tempo encerrado', () => {
     expect(resumir(chips, AGORA)).toEqual({
       total: 5, ativo: 1, restricao: 1, banido: 2, recuperar: 1, tempoEncerrado: 2,
+      movimentando: 0, lembreteVencido: 0,
     });
   });
 
