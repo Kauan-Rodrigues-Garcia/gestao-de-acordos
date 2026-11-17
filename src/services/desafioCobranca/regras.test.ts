@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { curvaHoraAHora, diaDoDesafio, esperadoAteODia, hojeEmSaoPaulo, horasSemRetrato, metaDoDia, minutosSemO59, pct, porSetorNoDia, valorDosLancamentos } from './regras';
+import { curvaHoraAHora, diaDoDesafio, esperadoAteODia, hojeEmSaoPaulo, horasSemRetrato, lerValorEmReais, metaDoDia, minutosSemO59, pct, porSetorNoDia, totalDepoisDoLancamento, valorDosLancamentos } from './regras';
 import type { SetorDoDesafio } from './desafioCobranca.service';
 
 const DIAS = ['2026-11-16', '2026-11-17', '2026-11-18'];
@@ -139,5 +139,35 @@ describe('regras do Desafio Cobrança', () => {
       ['Jornada Play', 300, 'fora'],
       ['COB PLAY - EM DIA', 70, 'avulso'],
     ]);
+  });
+
+  it('lê o valor digitado como dinheiro, com ou sem «R$», ponto e espaço', () => {
+    expect(lerValorEmReais('R$ 50.000,00')).toBe(50_000);
+    expect(lerValorEmReais('50000')).toBe(50_000);
+    expect(lerValorEmReais('50 000')).toBe(50_000);
+    expect(lerValorEmReais('1.234,56')).toBe(1234.56);
+    expect(lerValorEmReais('-1.200,50')).toBe(-1200.5);
+    expect(lerValorEmReais('1.500')).toBe(1500);
+    expect(lerValorEmReais('12.5')).toBe(12.5);
+    expect(lerValorEmReais('0')).toBe(0);
+    expect(lerValorEmReais('')).toBeNull();
+    expect(lerValorEmReais('R$')).toBeNull();
+    expect(lerValorEmReais('abc')).toBeNull();
+    expect(lerValorEmReais('1,2,3')).toBeNull();
+  });
+
+  it('corrigir troca o total do dia; somar põe em cima do que o dia já tem', () => {
+    expect(totalDepoisDoLancamento(420_000, 500_000, 'corrigir')).toBe(500_000);
+    expect(totalDepoisDoLancamento(420_000, 30_000, 'somar')).toBe(450_000);
+    expect(totalDepoisDoLancamento(420_000, -20_000, 'somar')).toBe(400_000);
+    expect(totalDepoisDoLancamento(0.1, 0.2, 'somar')).toBe(0.3);
+    // O total gravado no somar vira o «último do dia»: o desafio soma os dias.
+    const ajustes = [
+      { id: 'a', dia: DIAS[0], setor_id: null, valor: 420_000, motivo: '', criado_em: '2026-11-16T15:00:00Z', criado_por: null, removido_em: null },
+      { id: 'b', dia: DIAS[1], setor_id: null, valor: 80_000, motivo: '', criado_em: '2026-11-17T13:00:00Z', criado_por: null, removido_em: null },
+      { id: 'c', dia: DIAS[1], setor_id: null, valor: totalDepoisDoLancamento(80_000, 30_000, 'somar'), motivo: 'Somou', criado_em: '2026-11-17T15:00:00Z', criado_por: null, removido_em: null },
+    ];
+    expect(valorDosLancamentos(ajustes, 'manual', DIAS[1])).toBe(110_000);
+    expect(valorDosLancamentos(ajustes, 'manual')).toBe(530_000);
   });
 });

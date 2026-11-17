@@ -34,7 +34,8 @@ import {
 } from '@/services/desafioCobranca/desafioCobranca.service';
 import {
   brl, brlCurto, curvaHoraAHora, dataCurta, diaDoDesafio, esperadoAteODia, hojeEmSaoPaulo, horaCurta, horaEmSaoPaulo, horasSemRetrato,
-  minutosSemO59, pct, porSetorNoDia, semana, semanaCurta, ultimoLancamentoPorDia, valorDosLancamentos,
+  lerValorEmReais, maiuscula, minutosSemO59, pct, porSetorNoDia, semana, semanaCurta, totalDepoisDoLancamento, ultimoLancamentoPorDia,
+  valorDosLancamentos, type ModoDoLancamento,
 } from '@/services/desafioCobranca/regras';
 
 const CHAVE = ['desafio-cobranca-detalhe'];
@@ -598,27 +599,48 @@ function Ajustes({ d, diaInicial }: { d: DetalheCobranca; diaInicial: string }) 
   const [setor, setSetor] = useState('');
   const [valor, setValor] = useState('');
   const [motivo, setMotivo] = useState('');
+  // Manual (17/11/2026): «corrigir» troca o total do dia; «somar» põe em cima do que já tem.
+  const [modo, setModo] = useState<ModoDoLancamento>('corrigir');
   const [salvando, setSalvando] = useState(false);
   const nomeSetor = (id: string | null) => (id ? d.setores.find(s => s.setor_id === id)?.nome ?? 'setor' : 'Geral');
 
   const manual = d.fonte === 'manual';
-  const numero = Number(valor.replace(/\./g, '').replace(',', '.'));
+  const numero = lerValorEmReais(valor);
   // Manual: vale o último lançamento do dia. 59: os ajustes somam.
   const lancadoNoDia = valorDosLancamentos(d.ajustes, d.fonte, dia);
+  // O desafio soma os dias: segunda + terça + … (no manual, o último de cada dia).
+  const porDia = d.dias.map(x => ({ dia: x, valor: valorDosLancamentos(d.ajustes, d.fonte, x) }));
+  const totalDoDesafio = porDia.reduce((s, x) => s + x.valor, 0);
   // Os que valem agora no manual (um por dia); os outros são histórico.
   const valendo = useMemo(
     () => new Set(manual ? [...ultimoLancamentoPorDia(d.ajustes.filter(a => !a.removido_em && (!a.setor_id || d.setores.some(s => s.soma && s.setor_id === a.setor_id)))).values()].map(a => a.id) : []),
     [manual, d.ajustes, d.setores],
   );
-  // Motivo opcional (16/11/2026). Manual: o valor do dia, 0 inclusive; 59: o ajuste, nunca 0.
-  const valido = valor.trim() !== '' && Number.isFinite(numero) && (manual ? numero >= 0 : numero !== 0);
+  // No manual o que se grava é o novo total do dia (o banco fica com o último).
+  const novoTotalDoDia = manual && numero !== null ? totalDepoisDoLancamento(lancadoNoDia, numero, modo) : null;
+  // Motivo opcional (16/11/2026). Manual: o total do dia nunca negativo (0 vale);
+  // somar 0 não muda nada. 59: o ajuste, nunca 0.
+  const problema: string | null = !valor.trim() ? 'o valor'
+    : numero === null ? 'um valor válido (ex.: 50.000,00)'
+    : !manual ? (numero === 0 ? 'um valor diferente de zero' : null)
+    : modo === 'somar' && numero === 0 ? 'um valor diferente de zero para somar'
+    : (novoTotalDoDia ?? 0) < 0 ? `um valor menor: o dia tem ${brl(lancadoNoDia)} e não pode ficar negativo`
+    : null;
+  const valido = problema === null;
+  const nomeDoDia = `${maiuscula(semana(dia))} ${dataCurta(dia)}`;
 
   async function lancar() {
-    if (!valido || !perfil) return;
+    if (!valido || !perfil || numero === null) return;
     setSalvando(true);
     try {
-      await lancarAjuste({ desafioId: d.id, dia, setorId: manual ? null : setor || null, valor: numero, motivo, criadoPor: perfil.id });
-      toast.success(manual ? 'Lançado. O placar do dia passa a ser este valor no Gestão e na TV.' : 'Ajuste lançado. Já soma no Gestão e na TV.');
+      const somando = manual && modo === 'somar';
+      const valorGravado = manual ? (novoTotalDoDia ?? numero) : numero;
+      // No somar o histórico guarda quanto entrou, porque o valor gravado é o total.
+      const motivoGravado = somando ? [`Somou ${numero > 0 ? '+' : ''}${brl(numero)}`, motivo.trim()].filter(Boolean).join(' · ') : motivo;
+      await lancarAjuste({ desafioId: d.id, dia, setorId: manual ? null : setor || null, valor: valorGravado, motivo: motivoGravado, criadoPor: perfil.id });
+      toast.success(manual
+        ? `${nomeDoDia} fica com ${brl(valorGravado)} no Gestão e na TV.`
+        : 'Ajuste lançado. Já soma no Gestão e na TV.');
       setValor(''); setMotivo('');
       await recarregar();
     } catch (e) {
@@ -645,15 +667,46 @@ function Ajustes({ d, diaInicial }: { d: DetalheCobranca; diaInicial: string }) 
         <h2 id="dc-ajustes-titulo" className="font-semibold">{manual ? 'Lançamentos do super admin' : 'Ajuste de valor (divergência)'}</h2>
         <p className="text-sm text-muted-foreground">
           {manual
-            ? 'Lance o TOTAL do dia, quantas vezes quiser. Não soma: o placar de todo mundo (Gestão e TV) fica sempre com o último valor lançado no dia. Os anteriores ficam no histórico, com a hora. Remover o último volta ao anterior.'
+            ? 'Escolha o dia e lance quantas vezes quiser; o motivo é opcional. «Corrigir» troca o total do dia pelo valor; «Somar» põe o valor em cima do que o dia já tem (negativo tira). O desafio é a soma dos dias. Tudo fica no histórico, com a hora; remover o último volta ao anterior.'
             : 'O valor soma no placar de todo mundo (Gestão e TV). Negativo tira. Ajuste com setor só conta se o setor soma. Remover deixa o registro.'}
         </p>
         {manual && (
-          <p className="mt-2 text-sm">
-            Valendo em {semanaCurta(dia)} {dataCurta(dia)}: <strong className="tabular-nums">{brl(lancadoNoDia)}</strong>
-          </p>
+          // O placar dia a dia: clicar num dia escolhe ele para lançar.
+          <div className="mt-3 flex flex-wrap items-stretch gap-2" role="group" aria-label="Valor de cada dia do desafio">
+            {porDia.map((x, i) => (
+              <div key={x.dia} className="flex items-center gap-2">
+                {i > 0 && <span className="text-muted-foreground" aria-hidden>+</span>}
+                <button
+                  type="button"
+                  onClick={() => setDia(x.dia)}
+                  aria-pressed={x.dia === dia}
+                  className={cn('rounded-lg border px-3 py-1.5 text-left text-sm transition-colors',
+                    x.dia === dia ? 'border-primary bg-primary/10' : 'border-border hover:bg-muted')}
+                >
+                  <span className="block text-xs text-muted-foreground">{semanaCurta(x.dia)} {dataCurta(x.dia)}</span>
+                  <strong className="tabular-nums">{brl(x.valor)}</strong>
+                </button>
+              </div>
+            ))}
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground" aria-hidden>=</span>
+              <div className="rounded-lg bg-muted px-3 py-1.5 text-sm">
+                <span className="block text-xs text-muted-foreground">Desafio</span>
+                <strong className="tabular-nums">{brl(totalDoDesafio)}</strong>
+              </div>
+            </div>
+          </div>
         )}
       </div>
+      {manual && (
+        <div className="flex flex-wrap gap-2 px-4 pt-4" role="radiogroup" aria-label="Como lançar">
+          {([['corrigir', 'Corrigir o total do dia'], ['somar', 'Somar ao dia']] as const).map(([m, rotulo]) => (
+            <Button key={m} type="button" size="sm" variant={modo === m ? 'default' : 'outline'} role="radio" aria-checked={modo === m} onClick={() => setModo(m)}>
+              {rotulo}
+            </Button>
+          ))}
+        </div>
+      )}
       <form className={cn('grid gap-3 p-4 sm:items-end', manual ? 'sm:grid-cols-[auto_10rem_1fr_auto]' : 'sm:grid-cols-[auto_auto_10rem_1fr_auto]')} onSubmit={e => { e.preventDefault(); void lancar(); }}>
         <label className="text-sm">Dia
           <select className={campo} value={dia} onChange={e => setDia(e.target.value)}>
@@ -669,13 +722,23 @@ function Ajustes({ d, diaInicial }: { d: DetalheCobranca; diaInicial: string }) 
             </select>
           </label>
         )}
-        <label className="text-sm">{manual ? 'Total do dia (R$)' : 'Valor (R$)'}
+        <label className="text-sm">{!manual ? 'Valor (R$)' : modo === 'somar' ? 'Quanto somar (R$)' : 'Total do dia (R$)'}
           <Input inputMode="decimal" placeholder="1.234,56" value={valor} onChange={e => setValor(e.target.value)} />
         </label>
         <label className="text-sm">Motivo <span className="text-muted-foreground">(opcional)</span>
           <Input placeholder={manual ? 'Ex.: recebido das 12h às 14h' : 'Ex.: baixa que o 59 não trouxe'} value={motivo} onChange={e => setMotivo(e.target.value)} maxLength={200} />
         </label>
         <Button type="submit" disabled={!valido || salvando}><Plus className="mr-2 h-4 w-4" aria-hidden /> Lançar</Button>
+        <p className={cn('text-sm', manual ? 'sm:col-span-4' : 'sm:col-span-5')} role="status" aria-live="polite">
+          {valor.trim() && problema
+            ? <span className="text-muted-foreground">Para lançar falta {problema}.</span>
+            : manual && novoTotalDoDia !== null
+              ? <>{nomeDoDia}: <span className="tabular-nums">{brl(lancadoNoDia)}</span> → <strong className="tabular-nums">{brl(novoTotalDoDia)}</strong>
+                  <span className="text-muted-foreground"> · desafio </span><span className="tabular-nums">{brl(totalDoDesafio)}</span> → <strong className="tabular-nums">{brl(totalDoDesafio - lancadoNoDia + novoTotalDoDia)}</strong></>
+              : manual
+                ? <span className="text-muted-foreground">Valendo em {nomeDoDia}: <span className="tabular-nums">{brl(lancadoNoDia)}</span></span>
+                : null}
+        </p>
       </form>
       {d.ajustes.length > 0 && (
         <div className="overflow-x-auto border-t border-border">

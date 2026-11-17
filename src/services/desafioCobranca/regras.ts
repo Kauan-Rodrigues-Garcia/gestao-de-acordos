@@ -67,6 +67,34 @@ export function valorDosLancamentos(ajustes: readonly AjusteCobranca[], fonte: F
   return validos.reduce((s, a) => s + a.valor, 0);
 }
 
+/**
+ * O valor digitado, em reais. Aceita «R$ 50.000,00», «50000», «50 000»,
+ * «1.234,56», «-1.200,50» e «1.500» (milhar). `null` = não é um valor.
+ * (17/11/2026: com «R$» ou espaço o número virava NaN e o botão ficava apagado.)
+ */
+export function lerValorEmReais(texto: string): number | null {
+  let t = texto.replace(/r\$|\s/gi, '');
+  const negativo = t.startsWith('-');
+  t = t.replace(/^[+-]/, '');
+  if (!t) return null;
+  if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.');
+  else if (/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, '');
+  if (!/^\d+(\.\d+)?$/.test(t)) return null;
+  const n = Math.round(Number(t) * 100) / 100;
+  return negativo ? -n : n;
+}
+
+/**
+ * Placar manual: «corrigir» troca o total do dia pelo valor; «somar» põe o
+ * valor em cima do que o dia já tem. Nos dois, o que se grava é o novo total
+ * do dia — a regra do banco continua «vale o último lançamento do dia».
+ */
+export type ModoDoLancamento = 'corrigir' | 'somar';
+
+export function totalDepoisDoLancamento(atualDoDia: number, valor: number, modo: ModoDoLancamento): number {
+  return Math.round((modo === 'somar' ? atualDoDia + valor : valor) * 100) / 100;
+}
+
 export interface PontoDaHora { lido_em: string; total: number; dia: number }
 
 /**
