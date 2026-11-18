@@ -17,6 +17,8 @@
  * 2. Tela sempre acesa: `wakeLock`, re-pedido quando a aba volta a aparecer.
  * 3. Faltou luz: o atalho reabre `/tv`, o token está no navegador, e ela volta
  *    sozinha para o mesmo painel.
+ * 4. Tela cheia (18/11/2026): qualquer toque ou tecla põe; o atalho da TV
+ *    (`ModoTV/telaCheia.tsx`) abre o Chrome em quiosque, sem ninguém tocar.
  *
  * ## Tempo real sem peso
  *
@@ -35,6 +37,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Rodizio } from './ModoTV/Rodizio';
+import { AvisoTelaCheia } from './ModoTV/AvisoTelaCheia';
 import { PalcoTv } from './ModoTV/TelaTv';
 import { avisarTokenDaTv } from '@/components/DesafioCobranca/tokenDaTv';
 import { CORES } from './ModoTV/cores';
@@ -103,6 +106,7 @@ function TvDemo({ tema, fixarEm, vivo }: { tema: string | null; fixarEm: number 
   return (
     <div style={{ position: 'fixed', inset: 0, cursor: 'none' }}>
       <Rodizio key={tema ?? ''} painel={painel} numeros={numeros} fixarEm={fixarEm} style={{ position: 'absolute', inset: 0 }} />
+      <AvisoTelaCheia />
     </div>
   );
 }
@@ -124,6 +128,7 @@ function BingoDemo({ tema, inicio }: { tema: TemaBingoId; inicio: number }) {
   return (
     <div style={{ position: 'fixed', inset: 0, cursor: 'none', background: CORES.noite.fundo }}>
       <BingoNaParede estado={estado} />
+      <AvisoTelaCheia />
     </div>
   );
 }
@@ -269,6 +274,8 @@ function TvPareada() {
           </div>
         </PalcoTv>
       )}
+      {/* Ninguém aperta F11 na TV: o primeiro toque ou tecla põe em tela cheia. */}
+      <AvisoTelaCheia />
       {offline && (
         <div style={{
           position: 'absolute', right: 24, bottom: 20, display: 'flex', alignItems: 'center', gap: 10,

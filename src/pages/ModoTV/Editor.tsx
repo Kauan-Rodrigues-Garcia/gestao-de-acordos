@@ -48,6 +48,7 @@ import {
 } from './servico';
 import { estadoDaTv, horaCurta, rotuloAlvo, situacaoDoPainel, type EstadoTv } from './apoio';
 import { diferencaDoServidor, telaNoInstante } from './relogio';
+import { baixarAtalhoDaTv } from './telaCheia';
 
 interface Rascunho {
   nome: string; tema: TemaId; unidade: Unidade; segundos_por_tela: number; telas: TelaDoPainel[];
@@ -465,14 +466,26 @@ export function Editor({ painel, alvo, conexoes, aoMudar, aoMudarConexoes }: {
       <div className="rounded-xl border p-4 space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold flex items-center gap-2"><Tv className="h-4 w-4" />TVs deste painel</h2>
-          <Button size="sm" variant="outline" onClick={() => setConectando(true)}>Conectar TV</Button>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="ghost" onClick={baixarAtalhoDaTv}
+              title="Abre a TV em tela cheia sozinha, sem F11. Para sair: Alt+F4.">
+              Baixar atalho da TV
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setConectando(true)}>Conectar TV</Button>
+          </div>
         </div>
         {!conexoes.length && (
           <p className="text-sm text-muted-foreground">
-            No PC da TV, abra <code className="px-1 rounded bg-muted">{window.location.origin}/#/tv</code> em tela cheia (F11).
+            No PC da TV, abra <code className="px-1 rounded bg-muted">{window.location.origin}/#/tv</code>.
             Ela mostra um código; clique em «Conectar TV» e digite o código.
           </p>
         )}
+        {/* Ninguém aperta F11 nas TVs (18/11/2026): o atalho abre em quiosque. */}
+        <p className="text-xs text-muted-foreground">
+          Tela cheia sem F11: baixe o atalho, leve ao PC da TV, feche o Chrome e abra o arquivo.
+          Para abrir sozinho ao ligar o PC, copie o arquivo para a pasta <code className="px-1 rounded bg-muted">shell:startup</code> (Win+R).
+          Para sair do modo tela cheia: Alt+F4.
+        </p>
         {conexoes.map(c => {
           const e = estadoDaTv(c, painel.atualizado_em);
           return (
