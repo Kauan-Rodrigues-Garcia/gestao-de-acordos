@@ -20,6 +20,9 @@ import { useModoLeve } from '@/lib/modoLeve';
 import { Skeleton } from '@/components/ui/skeleton';
 // A cortina de abertura: as linhas desenham a logo enquanto o sistema carrega.
 import { CortinaAbertura, SeguraCortina } from '@/components/Preloader/CortinaAbertura';
+// GTA VI (18 e 19/11/2026): a tela de carregamento do dia.
+import { viNoCarregamento } from '@/components/Vi/tema';
+import { CortinaVi, EsperaVi } from '@/components/Vi/CortinaVi';
 import { RealtimeAcordosProvider } from '@/providers/RealtimeAcordosProvider';
 import { SincronizarDashboard } from '@/components/SincronizarDashboard';
 import { PresenceProvider } from '@/providers/PresenceProvider';
@@ -148,6 +151,9 @@ const DesafioCobranca   = lazy(() => import('@/pages/DesafioCobranca'));
 // carregada de lá (lazy também, para não entrar no bundle de quem não abre).
 
 function PageLoader() {
+  // GTA VI (18 e 19/11/2026): no dia, o carregamento é o logo da Rockstar com o
+  // feixe de luz, na tela inteira, como no site do jogo (`Vi/CortinaVi.tsx`).
+  if (viNoCarregamento()) return <EsperaVi />;
   return (
     <div className="p-6 space-y-4">
       {/* Na abertura do site, a tela baixando segura a cortina. */}
@@ -927,8 +933,10 @@ export default function App() {
           </MesProvider>
         </EmpresaProvider>
         <DevToolsAdminOnly />
-        {/* A cortina de abertura (Preloader): por cima de tudo até o sistema estar pronto. */}
-        <CortinaAbertura />
+        {/* A cortina de abertura; no dia do GTA VI quem cobre é a da Rockstar. */}
+        <CortinaAbertura desligada={viNoCarregamento()} />
+        {/* GTA VI (18 e 19/11/2026): o logo da Rockstar por cima de tudo enquanto carrega. */}
+        <CortinaVi />
       </AuthProvider>
     </ThemeProvider>
     </QueryClientProvider>

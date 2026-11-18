@@ -48,6 +48,8 @@
  */
 import { useEffect, useState } from 'react';
 import { NucleoHolografico } from '@/pages/CreatorsLab/components/NucleoHolografico';
+import { DinheiroVi } from '@/components/Vi/DinheiroVi';
+import { useTemaVi } from '@/components/Vi/tema';
 
 /**
  * Cor de uma variável CSS, resolvida para algo que o Canvas aceita.
@@ -77,7 +79,13 @@ function movimentoReduzidoEscolhido(): boolean {
   catch { return false; }
 }
 
+/** GTA VI (18 e 19/11/2026): com o tema ligado, o sólido vira o maço de dinheiro. */
 export function FormaSaudacao({ tamanho = 52 }: { tamanho?: number }) {
+  const vi = useTemaVi();
+  return vi ? <DinheiroVi tamanho={tamanho} /> : <Solido tamanho={tamanho} />;
+}
+
+function Solido({ tamanho }: { tamanho: number }) {
   const [cores, setCores] = useState(() => ({
     primaria:   corDoTema('--primary', '#3b82f6'),
     secundaria: corDoTema('--muted-foreground', '#94a3b8'),

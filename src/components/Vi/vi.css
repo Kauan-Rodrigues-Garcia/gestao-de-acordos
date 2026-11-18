@@ -1,0 +1,440 @@
+/*
+ * Tema do lançamento do GTA VI (18 e 19/11/2026) — ver `tema.ts`.
+ *
+ * Leve de propósito (PCs de 4 a 8 GB, vídeo integrado): no máximo DUAS imagens
+ * na tela (a arte e a anterior, durante a troca), sem desfoque no que fica; o
+ * que mexe é só transform e opacidade em caixa HTML. O neon é sombra parada
+ * (`text-shadow`/`box-shadow`): desenhada uma vez, não custa por quadro.
+ * No modo leve as animações acabam em 1 ms no estado final (`index.css`), e
+ * tudo aqui continua legível assim.
+ */
+
+/* ── A fonte do site oficial do jogo (GTA Art Deco) ───────────────────────── */
+
+@font-face {
+  font-family: 'GTA Art Deco Condensed';
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+  src: url('/vi/GTAArtDeco-CondensedHeavy.woff') format('woff');
+}
+@font-face {
+  font-family: 'GTA Art Deco';
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+  src: url('/vi/GTAArtDeco-Bold.woff') format('woff');
+}
+
+:root {
+  --vi-rosa: #ff4fb6;
+  --vi-ciano: #45e6ff;
+  --vi-titulo: 'GTA Art Deco Condensed', 'Arial Narrow', 'Arial Black', sans-serif;
+  --vi-texto: 'GTA Art Deco', 'Segoe UI', sans-serif;
+}
+
+/* ── O que o tema muda no sistema (o `Layout` põe `data-vi` no <html>) ────── */
+
+/* Os títulos das páginas (a saudação do Dashboard entre eles) na fonte do jogo. */
+html[data-vi] main h1 {
+  font-family: var(--vi-titulo);
+  font-weight: 900;
+  font-size: 2.15rem;
+  line-height: 1;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+}
+
+/* O fio de neon debaixo da barra do topo. */
+.vi-topo {
+  z-index: 2;
+  border-bottom-color: var(--vi-rosa);
+  box-shadow: 0 1px 0 var(--vi-rosa), 0 2px 10px rgb(255 79 182 / .7), 0 4px 26px rgb(255 79 182 / .4);
+}
+
+/* A aba acesa do menu: tubo de neon na beirada. */
+.vi-aceso {
+  box-shadow: inset 3px 0 0 var(--vi-rosa), 0 0 10px rgb(255 79 182 / .55), 0 0 22px rgb(255 79 182 / .28);
+}
+
+/* ── A arte, parada atrás do conteúdo; troca sozinha (`FundoVi`) ──────────── */
+
+.vi-fundo { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+/*
+ * Some no fundo da página: em cima a arte inteira; da altura do título em
+ * diante ela já está quase apagada, para o texto da página continuar legível
+ * no tema claro e no escuro.
+ */
+.vi-fundo-artes {
+  position: absolute; top: 0; left: 0; width: 100%; height: 320px;
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 34%, rgb(0 0 0 / .42) 60%, rgb(0 0 0 / .12) 80%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 0%, #000 34%, rgb(0 0 0 / .42) 60%, rgb(0 0 0 / .12) 80%, transparent 100%);
+}
+/* A máscara fica na caixa, não em cada imagem: com ela na imagem, a arte
+   anterior aparecia por baixo da nova na parte que esmaece. */
+.vi-fundo-arte { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+/* A arte nova entra por cima da anterior. */
+.vi-fundo-entra { animation: vi-arte-entra 1.6s ease-in-out both; }
+@keyframes vi-arte-entra { from { opacity: 0; } to { opacity: 1; } }
+
+/* ── A faixa do alto do conteúdo: o logo, e a data no canto. Rola com a página. ── */
+
+.vi-faixa { position: relative; height: 172px; pointer-events: none; }
+.vi-faixa-logo { position: absolute; left: 24px; bottom: 6px; height: 138px; width: auto; display: block; }
+/* No canto de cima à direita: a data e, embaixo dela, a contagem. */
+.vi-faixa-canto { position: absolute; top: 16px; right: 24px; display: flex; flex-direction: column; align-items: flex-end; gap: 12px; }
+/* A data, em tubo de neon. */
+.vi-faixa-data {
+  font-family: var(--vi-titulo); font-size: 26px; font-weight: 900; line-height: 1; letter-spacing: .14em;
+  color: #fff;
+  text-shadow: 0 0 3px #fff, 0 0 9px var(--vi-rosa), 0 0 20px var(--vi-rosa), 0 0 42px rgb(255 45 149 / .85), 0 2px 3px rgb(30 4 50 / .9);
+}
+
+@media (max-width: 767px) {
+  .vi-fundo-artes { height: 220px; }
+  .vi-faixa { height: 112px; }
+  .vi-faixa-logo { left: 16px; height: 92px; }
+  .vi-faixa-canto { top: 12px; right: 16px; gap: 7px; }
+  .vi-faixa-data { font-size: 18px; }
+  html[data-vi] main h1 { font-size: 1.7rem; }
+}
+
+/* ── «Missão cumprida»: por cima do conteúdo, ao salvar um acordo ─────────── */
+
+.vi-sobre { position: absolute; inset: 0; z-index: 5; pointer-events: none; overflow: hidden; }
+.vi-missao {
+  position: absolute; left: 0; right: 0; top: 24%;
+  padding: 20px 16px 22px; text-align: center;
+  background: linear-gradient(90deg, transparent 0%, rgb(8 4 18 / .8) 22%, rgb(8 4 18 / .8) 78%, transparent 100%);
+  animation: vi-missao-entra .32s cubic-bezier(.2, .9, .3, 1.15) both;
+  transition: opacity .45s ease-in;
+}
+.vi-missao.vi-saindo { opacity: 0; }
+/* Dois tubos de neon: rosa em cima, ciano embaixo. */
+.vi-missao::before, .vi-missao::after { content: ''; position: absolute; left: 22%; right: 22%; height: 2px; border-radius: 2px; }
+.vi-missao::before { top: 0; background: var(--vi-rosa); box-shadow: 0 0 8px var(--vi-rosa), 0 0 20px rgb(255 79 182 / .7); }
+.vi-missao::after { bottom: 0; background: var(--vi-ciano); box-shadow: 0 0 8px var(--vi-ciano), 0 0 20px rgb(69 230 255 / .7); }
+.vi-missao-titulo {
+  font-family: var(--vi-titulo);
+  font-size: clamp(30px, 5vw, 64px); font-weight: 900; line-height: 1; letter-spacing: .06em; text-transform: uppercase;
+  color: #f4c84a;
+  text-shadow: 0 2px 0 #000, 0 0 12px rgb(244 200 74 / .55), 0 0 30px rgb(244 200 74 / .3);
+}
+.vi-missao-sub { margin-top: 9px; font-family: var(--vi-texto); font-size: clamp(13px, 1.3vw, 17px); font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: #fff; }
+.vi-missao-sub b { color: #ff8fd0; font-weight: 700; text-shadow: 0 0 8px var(--vi-rosa), 0 0 18px rgb(255 79 182 / .7); }
+
+@keyframes vi-missao-entra {
+  from { opacity: 0; transform: scale(1.12); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* ── O menu: o nome do sistema na fonte do jogo, e o «VI» depois dele ──────────────────── */
+
+/* Cabe no menu aberto (228 px, com o logo da empresa na frente): medido no laboratório. */
+.vi-marca { display: flex; align-items: center; gap: 6px; }
+.vi-marca-simbolo { height: 17px; width: auto; flex-shrink: 0; }
+.vi-marca-nome { font-family: var(--vi-titulo); font-size: 15px; font-weight: 900; line-height: 1; letter-spacing: .012em; text-transform: uppercase; white-space: nowrap; }
+
+/* ── A bolha do chat: o «VI» com halo de neon ─────────────────────────────── */
+
+.vi-selo {
+  width: 56px; height: auto; display: block; transition: transform .25s ease;
+  filter: drop-shadow(0 0 4px rgb(255 79 182 / .9)) drop-shadow(0 0 12px rgb(255 79 182 / .5));
+}
+.group:hover .vi-selo { transform: scale(1.08); }
+/* Mensagem nova: o selo pulsa. Uma animação só, de transform, numa caixa HTML. */
+.vi-selo-chama { animation: vi-selo-pulsa 1.4s ease-in-out infinite; }
+@keyframes vi-selo-pulsa {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.14) rotate(-3deg); }
+}
+
+/* ── A tela de carregamento: o logo da Rockstar com o feixe de luz ────────── *
+ * A mesma do site do jogo: o contorno do logo como máscara, um feixe rosa e   *
+ * lilás cruzando em diagonal e o contorno acendendo junto, a cada 2,15 s. As  *
+ * cores são as de lá. O feixe anda por `transform` (lá é `top`/`left`).       */
+
+.vi-carrega { display: flex; align-items: center; justify-content: center; min-height: min(70vh, 560px); }
+.vi-carrega-logo { position: relative; width: 104px; height: 105px; }
+.vi-carrega-brilho {
+  position: absolute; inset: 0;
+  background: url('/vi/rockstar.svg') center / cover no-repeat;
+  filter: drop-shadow(0 0 9px #7a6fd6);
+  animation: vi-carrega-brilho 2.15s cubic-bezier(.455, .03, .515, .955) infinite both;
+}
+.vi-carrega-traco {
+  position: relative; width: 100%; height: 100%;
+  background: rgb(141 134 184 / .4);
+  -webkit-mask: url('/vi/rockstar.svg') center / cover no-repeat;
+  mask: url('/vi/rockstar.svg') center / cover no-repeat;
+  animation: vi-carrega-cor 2.15s cubic-bezier(.455, .03, .515, .955) infinite both;
+}
+.vi-carrega-traco::after {
+  content: ''; position: absolute; top: -40%; left: -40%; width: 25%; height: 60%;
+  background: linear-gradient(232deg, #ffb2c6 20%, #988bd0 70%);
+  filter: blur(5px);
+  transform: skew(-45deg, 45deg);
+  animation: vi-carrega-feixe 2.15s cubic-bezier(.77, 0, .175, 1) infinite both;
+}
+/* A cortina (`CortinaVi`): o logo na tela inteira, por cima de tudo, como no
+   site do jogo. Sai esmaecendo; no modo leve some de uma vez. */
+.vi-cortina {
+  position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(ellipse at 50% 45%, #1c1631 0%, #0b0914 70%);
+  transition: opacity .38s ease;
+}
+.vi-cortina-sai { opacity: 0; pointer-events: none; }
+@keyframes vi-carrega-feixe {
+  0% { transform: translate(0, 0) skew(-45deg, 45deg); }
+  92%, 100% { transform: translate(580%, 200%) skew(-45deg, 45deg); }
+}
+@keyframes vi-carrega-cor {
+  0%, 22%, 92%, 100% { background-color: rgb(141 134 184 / .4); }
+  42% { background-color: rgb(170 150 255 / .95); }
+}
+@keyframes vi-carrega-brilho {
+  0%, 22%, 92%, 100% { opacity: .2; }
+  42% { opacity: 1; }
+}
+
+/* ── A contagem até o lançamento, junto do logo (`ContagemVi`) ───────────── */
+
+.vi-contagem {
+  flex-shrink: 0; padding: 11px 16px 9px; border-radius: 12px; color: #fff;
+  background: linear-gradient(100deg, rgb(58 23 64 / .92) 0%, rgb(30 23 40 / .92) 48%, rgb(18 35 56 / .92) 100%);
+  border: 1px solid var(--vi-rosa);
+  box-shadow: 0 0 10px rgb(255 79 182 / .6), inset 0 0 14px rgb(255 79 182 / .14);
+}
+.vi-contagem-corpo { display: flex; flex-direction: column; gap: 6px; }
+.vi-contagem-rotulo {
+  font-family: var(--vi-texto); font-size: 11px; font-weight: 700; line-height: 1; letter-spacing: .16em; text-transform: uppercase; white-space: nowrap;
+  color: #bff6ff; text-shadow: 0 0 6px var(--vi-ciano);
+}
+.vi-contagem-tempo {
+  display: flex; font-family: var(--vi-titulo); font-size: 42px; font-weight: 900; line-height: 1;
+  text-shadow: 0 0 3px #fff, 0 0 9px var(--vi-rosa), 0 0 20px var(--vi-rosa);
+}
+.vi-contagem-par { display: flex; }
+/* Largura fixa por dígito: o relógio não treme quando o número muda. */
+.vi-contagem-digito { width: .6em; text-align: center; }
+.vi-contagem-sep { width: .36em; text-align: center; color: #ff8fd0; }
+.vi-contagem-chegou {
+  display: block; font-family: var(--vi-titulo); font-size: 36px; font-weight: 900; line-height: 1; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap;
+  text-shadow: 0 0 3px #fff, 0 0 9px var(--vi-rosa), 0 0 20px var(--vi-rosa);
+}
+@media (max-width: 767px) {
+  .vi-contagem { padding: 7px 10px 6px; border-radius: 9px; }
+  .vi-contagem-corpo { gap: 4px; }
+  .vi-contagem-rotulo { font-size: 8px; letter-spacing: .1em; }
+  .vi-contagem-tempo { font-size: 25px; }
+  .vi-contagem-chegou { font-size: 22px; }
+}
+
+/* ── O botão da música, no alto da tela (`BotaoMusicaVi`) ────────────────── */
+
+.vi-musica-botao.ligada { background: rgb(255 79 182 / .14); color: var(--vi-rosa); }
+.vi-musica-botao.ligada:hover { background: rgb(255 79 182 / .24); }
+/* Três barrinhas fora de compasso; crescem por `scaleY` (não mexem no layout). */
+.vi-musica-eq { display: inline-flex; align-items: flex-end; gap: 2px; height: 13px; }
+.vi-musica-eq span { width: 3px; height: 13px; border-radius: 2px; background: var(--vi-rosa); transform-origin: 50% 100%; animation: vi-musica-eq 1s ease-in-out infinite alternate; }
+.vi-musica-eq span:nth-child(2) { background: #b78cff; animation-duration: .8s; animation-delay: -.3s; }
+.vi-musica-eq span:nth-child(3) { background: var(--vi-ciano); animation-duration: 1.15s; animation-delay: -.6s; }
+@keyframes vi-musica-eq { from { transform: scaleY(.23); } to { transform: scaleY(1); } }
+.vi-musica-topo { background: linear-gradient(135deg, rgb(255 79 182 / .14), rgb(69 230 255 / .12)); border-bottom: 1px solid var(--border); }
+
+/* ── O convite (`ConviteVi`): fechado num canto, e aberto no meio da tela ──── *
+ * Tem as cores dele (noite de Vice City), iguais no tema claro e no escuro:   *
+ * aparece ANTES de o tema ligar, e é para destoar do resto da tela.           */
+
+.vi-convite-etiqueta {
+  display: block; font-family: var(--vi-texto); font-size: 11px; font-weight: 700; letter-spacing: .22em; text-transform: uppercase;
+  color: #bff6ff; text-shadow: 0 0 8px var(--vi-ciano);
+}
+
+/* Fechado: um cartão pequeno no canto de cima, à direita, debaixo da barra. */
+.vi-convite-fechado {
+  position: fixed; top: 72px; right: 24px; z-index: 45;
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 20px 14px 16px; border-radius: 16px; text-align: left; cursor: pointer;
+  color: #fff;
+  background: linear-gradient(189deg, #2d1f36 0%, #1e1728 35%, #16111f 70%, #0f0c1a 100%);
+  border: 1px solid var(--vi-rosa);
+  box-shadow: 0 0 0 1px rgb(255 79 182 / .35), 0 0 16px rgb(255 79 182 / .55), 0 10px 30px rgb(10 4 24 / .5);
+  animation: vi-convite-chega .5s cubic-bezier(.2, .9, .3, 1.2) both;
+  transition: transform .2s ease;
+}
+.vi-convite-fechado:hover { transform: translateY(-2px) scale(1.02); }
+.vi-convite-fechado:focus-visible { outline: 2px solid var(--vi-ciano); outline-offset: 3px; }
+/* O halo que respira: um anel à parte, só opacidade e escala. */
+.vi-convite-fechado-brilho {
+  position: absolute; inset: -2px; border-radius: inherit; pointer-events: none;
+  box-shadow: 0 0 0 2px rgb(255 79 182 / .7), 0 0 26px rgb(255 79 182 / .7);
+  animation: vi-convite-respira 1.8s ease-in-out infinite;
+}
+.vi-convite-fechado-logo { height: 44px; width: auto; flex-shrink: 0; filter: drop-shadow(0 0 6px rgb(255 79 182 / .8)); }
+.vi-convite-fechado-texto { display: flex; flex-direction: column; gap: 4px; }
+.vi-convite-fechado-titulo { font-family: var(--vi-titulo); font-size: 22px; font-weight: 900; line-height: 1; letter-spacing: .04em; text-transform: uppercase; }
+.vi-convite-fechado-dica { font-size: 12px; color: rgb(255 255 255 / .72); }
+@keyframes vi-convite-chega { from { opacity: 0; transform: translateY(-14px) scale(.94); } to { opacity: 1; transform: none; } }
+@keyframes vi-convite-respira { 0%, 100% { opacity: .25; transform: scale(1); } 50% { opacity: 1; transform: scale(1.03); } }
+
+/* Aberto. */
+.vi-convite-veu {
+  position: fixed; inset: 0; z-index: 80;
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+  background: rgb(8 4 18 / .72);
+  animation: vi-arte-entra .3s ease-out both;
+}
+.vi-convite {
+  width: min(560px, 100%); max-height: calc(100vh - 32px); overflow-y: auto;
+  border-radius: 20px; color: #fff;
+  background: linear-gradient(189deg, #2d1f36 0%, #1e1728 30%, #16111f 65%, #0f0c1a 100%);
+  border: 1px solid var(--vi-rosa);
+  box-shadow: 0 0 0 1px rgb(255 79 182 / .35), 0 0 22px rgb(255 79 182 / .55), 0 0 70px rgb(255 79 182 / .25), 0 24px 60px rgb(0 0 0 / .6);
+  animation: vi-convite-abre .45s cubic-bezier(.2, .9, .3, 1.1) both;
+}
+.vi-convite-arte { position: relative; height: 210px; overflow: hidden; border-radius: 19px 19px 0 0; }
+.vi-convite-arte > img:first-child { width: 100%; height: 100%; object-fit: cover; object-position: 50% 16%; display: block; }
+.vi-convite-arte::after { content: ""; position: absolute; inset: 0; background: linear-gradient(to bottom, transparent 45%, #1e1728 100%); }
+.vi-convite-logo { position: absolute; left: 20px; bottom: 6px; height: 112px; width: auto; z-index: 1; }
+.vi-convite-data {
+  position: absolute; top: 14px; right: 18px; z-index: 1;
+  font-family: var(--vi-titulo); font-size: 20px; font-weight: 900; letter-spacing: .14em; color: #fff;
+  text-shadow: 0 0 3px #fff, 0 0 9px var(--vi-rosa), 0 0 20px var(--vi-rosa), 0 2px 3px rgb(30 4 50 / .9);
+}
+.vi-convite-corpo { padding: 18px 24px 22px; }
+.vi-convite-titulo {
+  margin-top: 6px; font-family: var(--vi-titulo); font-size: 40px; font-weight: 900; line-height: 1; letter-spacing: .04em; text-transform: uppercase;
+  color: #fff; text-shadow: 0 0 3px #fff, 0 0 10px var(--vi-rosa), 0 0 24px var(--vi-rosa);
+}
+.vi-convite-texto { margin-top: 12px; font-size: 14px; line-height: 1.55; color: rgb(255 255 255 / .86); }
+.vi-convite-musica { margin-top: 16px; display: flex; align-items: center; gap: 9px; font-size: 12px; color: rgb(255 255 255 / .7); }
+/* A altura fica reservada desde o começo: os botões entram sem empurrar nada. */
+.vi-convite-acoes { margin-top: 18px; min-height: 44px; display: flex; justify-content: flex-end; gap: 10px; }
+.vi-convite-botao {
+  height: 44px; padding: 0 20px; border-radius: 12px; cursor: pointer;
+  font-family: var(--vi-texto); font-size: 14px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: rgb(255 255 255 / .85); background: rgb(255 255 255 / .06); border: 1px solid rgb(255 255 255 / .22);
+  animation: vi-convite-botao .6s cubic-bezier(.2, .9, .3, 1.25) both;
+  transition: background .15s ease, transform .15s ease;
+}
+.vi-convite-botao:hover { background: rgb(255 255 255 / .14); transform: translateY(-1px); }
+.vi-convite-botao:focus-visible { outline: 2px solid var(--vi-ciano); outline-offset: 2px; }
+/* O principal entra um instante depois, e acende. */
+.vi-convite-principal {
+  color: #fff; background: linear-gradient(90deg, #d63fc0 0%, #ff4f8f 60%, #ff8a3d 100%); border-color: transparent;
+  box-shadow: 0 0 12px rgb(255 79 182 / .75), 0 0 30px rgb(255 79 182 / .4);
+  animation-delay: .14s;
+}
+.vi-convite-principal:hover { background: linear-gradient(90deg, #e350cd 0%, #ff639c 60%, #ff9a52 100%); }
+@keyframes vi-convite-abre { from { opacity: 0; transform: translateY(18px) scale(.94); } to { opacity: 1; transform: none; } }
+@keyframes vi-convite-botao { from { opacity: 0; transform: translateY(16px) scale(.9); } to { opacity: 1; transform: none; } }
+
+/* ── O maço de dinheiro da saudação (`DinheiroVi`) ─────────────────────────
+   Um bloco de seis faces e a cinta de papel em volta, em CSS 3D. Só dois
+   `transform` se mexem (o giro e o sobe-e-desce): nada é redesenhado por
+   quadro. Sem `filter` em nenhum pai — ele achataria o 3D. Tudo sai de `--u`
+   (1 px quando o maço ocupa 52 px), então ele escala inteiro pelo `--tam`. */
+.vi-grana {
+  --u: calc(var(--tam, 52px) / 52);
+  --w: calc(40 * var(--u));   /* comprimento da nota */
+  --d: calc(18 * var(--u));   /* largura da nota */
+  --h: calc(11 * var(--u));   /* altura do maço */
+  --c: calc(11 * var(--u));   /* largura da cinta */
+  --e: calc(.45 * var(--u));  /* quanto a cinta fica para fora das notas */
+  position: relative; display: inline-block; flex-shrink: 0; vertical-align: middle;
+  width: var(--tam, 52px); height: var(--tam, 52px);
+  perspective: calc(230 * var(--u));
+  /* Dá para pegar e girar (`DinheiroVi`): o arrasto é dele, não da página nem do texto. */
+  cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none;
+}
+.vi-grana[data-pegou] { cursor: grabbing; }
+.vi-grana-brilho { transition: opacity .25s ease, transform .25s ease; opacity: .8; }
+.vi-grana:hover .vi-grana-brilho, .vi-grana[data-pegou] .vi-grana-brilho { opacity: 1; transform: scale(1.18); }
+.vi-grana span, .vi-grana i { position: absolute; display: block; }
+.vi-grana-brilho {
+  inset: 4%; border-radius: 50%;
+  background: radial-gradient(closest-side, rgb(255 79 182 / .34), rgb(69 230 255 / .14) 62%, transparent);
+}
+.vi-grana-sombra {
+  left: 22%; right: 22%; bottom: 3%; height: 11%; border-radius: 50%;
+  background: radial-gradient(closest-side, rgb(10 4 24 / .5), transparent);
+  animation: vi-grana-sombra 1.9s ease-in-out infinite alternate;
+}
+.vi-grana-boia, .vi-grana-camera, .vi-grana-gira, .vi-grana-maco { transform-style: preserve-3d; }
+.vi-grana-boia { inset: 0; animation: vi-grana-boia 1.9s ease-in-out infinite alternate; will-change: transform; }
+/* O olho fica um pouco acima do maço; o giro é em pé, como o dinheiro caído do jogo. */
+.vi-grana-camera { left: 50%; top: 47%; width: 0; height: 0; transform: rotateX(-16deg); }
+/* A pose parada (modo leve) é a de três quartos; o giro sai dela e volta nela. */
+.vi-grana-gira { left: 0; top: 0; width: 0; height: 0; transform: rotateY(-32deg); animation: vi-grana-gira 5.6s linear infinite; will-change: transform; }
+/* O maço deitado de lado, para aparecer ora a nota de cima, ora a de baixo. */
+.vi-grana-maco { left: 0; top: 0; width: 0; height: 0; transform: rotateZ(13deg) rotateX(-38deg); }
+
+.vi-g { backface-visibility: hidden; }
+.vi-g-nota {
+  left: calc(var(--w) / -2); top: calc(var(--d) / -2); width: var(--w); height: var(--d); border-radius: calc(.6 * var(--u));
+  background:
+    radial-gradient(circle at 15% 50%, #e2f6cf 0 calc(2.5 * var(--u)), #2c7d43 calc(2.6 * var(--u)) calc(3.3 * var(--u)), transparent calc(3.4 * var(--u))),
+    radial-gradient(circle at 85% 50%, #e2f6cf 0 calc(2.5 * var(--u)), #2c7d43 calc(2.6 * var(--u)) calc(3.3 * var(--u)), transparent calc(3.4 * var(--u))),
+    linear-gradient(120deg, #74cf78, #3c9f55 55%, #2f8a4a);
+  box-shadow: inset 0 0 0 calc(.9 * var(--u)) #2c7d43, inset 0 0 0 calc(1.7 * var(--u)) #b9e8ab;
+}
+.vi-g-cima { transform: rotateX(90deg) translateZ(calc(var(--h) / 2)); }
+.vi-g-baixo {
+  transform: rotateX(-90deg) translateZ(calc(var(--h) / 2));
+  background:
+    radial-gradient(circle at 15% 50%, #c4e4b2 0 calc(2.5 * var(--u)), #22673a calc(2.6 * var(--u)) calc(3.3 * var(--u)), transparent calc(3.4 * var(--u))),
+    radial-gradient(circle at 85% 50%, #c4e4b2 0 calc(2.5 * var(--u)), #22673a calc(2.6 * var(--u)) calc(3.3 * var(--u)), transparent calc(3.4 * var(--u))),
+    linear-gradient(120deg, #4fae60, #2f8a4a 55%, #257540);
+}
+/* As beiradas: o papel das notas empilhadas, uma risca por nota. */
+.vi-g-borda {
+  left: calc(var(--w) / -2); top: calc(var(--h) / -2); width: var(--w); height: var(--h);
+  background:
+    linear-gradient(to bottom, rgb(255 255 255 / .18), transparent 30%, rgb(0 0 0 / .2)),
+    repeating-linear-gradient(to bottom, #d6ecc6 0 calc(.75 * var(--u)), #8dbb84 calc(.75 * var(--u)) calc(1.1 * var(--u)));
+}
+.vi-g-frente { transform: translateZ(calc(var(--d) / 2)); }
+.vi-g-tras { transform: rotateY(180deg) translateZ(calc(var(--d) / 2)); }
+.vi-g-lado {
+  left: calc(var(--d) / -2); width: var(--d);
+  background:
+    linear-gradient(to bottom, rgb(0 0 0 / .1), rgb(0 0 0 / .34)),
+    repeating-linear-gradient(to bottom, #d6ecc6 0 calc(.75 * var(--u)), #8dbb84 calc(.75 * var(--u)) calc(1.1 * var(--u)));
+}
+.vi-g-dir { transform: rotateY(90deg) translateZ(calc(var(--w) / 2)); }
+.vi-g-esq { transform: rotateY(-90deg) translateZ(calc(var(--w) / 2)); }
+/* A cinta: papel creme com dois fios do rosa do tema, e o cifrão em cima. */
+.vi-g-cinta {
+  left: calc(var(--c) / -2); width: var(--c);
+  background:
+    linear-gradient(90deg, transparent 12%, var(--vi-rosa) 12% 22%, transparent 22% 78%, var(--vi-rosa) 78% 88%, transparent 88%),
+    #f7efd8;
+}
+.vi-grana .vi-g-cinta-cima, .vi-grana .vi-g-cinta-baixo {
+  top: calc(var(--d) / -2 - var(--e)); height: calc(var(--d) + 2 * var(--e));
+  display: flex; align-items: center; justify-content: center;
+  font: 800 calc(8.5 * var(--u)) / 1 'Segoe UI', Arial, sans-serif; font-style: normal; letter-spacing: 0; color: #1f7a3d;
+}
+.vi-g-cinta-cima { transform: rotateX(90deg) translateZ(calc(var(--h) / 2 + var(--e))); }
+.vi-g-cinta-baixo { transform: rotateX(-90deg) translateZ(calc(var(--h) / 2 + var(--e))); background-color: #e2d9be; }
+.vi-g-cinta-frente, .vi-g-cinta-tras {
+  top: calc(var(--h) / -2 - var(--e)); height: calc(var(--h) + 2 * var(--e));
+  background-image:
+    linear-gradient(to bottom, transparent 40%, rgb(0 0 0 / .16)),
+    linear-gradient(90deg, transparent 12%, var(--vi-rosa) 12% 22%, transparent 22% 78%, var(--vi-rosa) 78% 88%, transparent 88%);
+}
+.vi-g-cinta-frente { transform: translateZ(calc(var(--d) / 2 + var(--e))); }
+.vi-g-cinta-tras { transform: rotateY(180deg) translateZ(calc(var(--d) / 2 + var(--e))); }
+
+@keyframes vi-grana-gira { from { transform: rotateY(-32deg); } to { transform: rotateY(328deg); } }
+@keyframes vi-grana-boia { from { transform: translateY(calc(-2.6 * var(--u))); } to { transform: translateY(calc(2.2 * var(--u))); } }
+@keyframes vi-grana-sombra { from { transform: scale(.78); opacity: .55; } to { transform: scale(1); opacity: 1; } }
+
+@media (max-width: 767px) {
+  .vi-convite-fechado { top: 64px; right: 12px; left: 12px; }
+  .vi-convite-arte { height: 150px; }
+  .vi-convite-logo { height: 84px; }
+  .vi-convite-titulo { font-size: 30px; }
+  .vi-convite-acoes { flex-direction: column-reverse; }
+}

@@ -1,4 +1,4 @@
-import { Moon, Sun, Monitor, Flower2, Leaf, Droplets, PanelLeft, Feather, Snowflake } from 'lucide-react';
+import { Moon, Sun, Monitor, Flower2, Leaf, Droplets, PanelLeft, Feather, Snowflake, Gamepad2 } from 'lucide-react';
 import { definirModoLeve, useModoLeveEscolhido } from '@/lib/modoLeve';
 import { CHAVE_MENU_ESCURO, aplicarMenuEscuro } from '@/lib/menuEscuro';
 import { useEffect, useState } from 'react';
@@ -79,7 +79,13 @@ export interface InterruptorNatal {
   aoMudar: (ligado: boolean) => void;
 }
 
-export function ThemeToggle({ natal }: { natal?: InterruptorNatal } = {}) {
+/**
+ * `vi`: o interruptor «Tema GTA VI», só em 18 e 19/11/2026 (`Vi/tema.ts`). O
+ * `Layout` só passa no dia. O tema não liga sozinho: começa desmarcado para
+ * quem recusou o convite, e é por aqui que a pessoa ativa depois. Desligado,
+ * ela volta para o Natal dela.
+ */
+export function ThemeToggle({ natal, vi }: { natal?: InterruptorNatal; vi?: InterruptorNatal } = {}) {
   const { theme, setTheme, resolvedTheme } = useTheme();
   const atual = (theme ?? 'system') as EscolhaTema;
   const escuroEmVigor = ehTemaEscuro(resolvedTheme);
@@ -161,6 +167,22 @@ export function ThemeToggle({ natal }: { natal?: InterruptorNatal } = {}) {
           Sistema
           {atual === 'system' && <span className="ml-auto text-primary">✓</span>}
         </DropdownMenuItem>
+        {/* GTA VI (18 e 19/11/2026): liga ou desliga o tema do dia; o menu fica aberto para ver o efeito. */}
+        {vi && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuCheckboxItem
+              checked={vi.ligado}
+              onCheckedChange={v => vi.aoMudar(v === true)}
+              onSelect={e => e.preventDefault()}
+              title="Liga ou desliga o tema do lançamento do GTA VI. Vale só para você, neste computador, até 19/11."
+              className="gap-2"
+            >
+              <Gamepad2 className="h-3.5 w-3.5" />
+              Tema GTA VI
+            </DropdownMenuCheckboxItem>
+          </>
+        )}
         {/* Quem não quiser o Natal desliga; o menu fica aberto para ver o efeito. */}
         {natal && (
           <>

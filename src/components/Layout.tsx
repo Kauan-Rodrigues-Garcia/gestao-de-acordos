@@ -74,10 +74,12 @@ import { EVENTO_REINICIAR_ABERTURA, abrirNatal, desligarNatal, useNatal } from '
 import { VIDEOS as VIDEOS_NATAL, marcarAbertura } from '@/components/Natal/abertura';
 import { guardarAssistiu } from '@/components/Natal/assistiuAbertura';
 import { MarcaNatal } from '@/components/Natal/MarcaNatal';
-import { PreviaNatal } from '@/components/Natal/PreviaNatal';
 import { SincelosDaMarca, SincelosDoTopo } from '@/components/Natal/Sincelos';
 import '@/components/Natal/enfeiteDasPaginas.css';
 import { abaDoCaminho, ROTA_DO_TREM, useTelaLarga } from '@/components/Natal/trem/rota';
+// GTA VI (18 e 19/11/2026): entra no lugar do Natal por dois dias (`Vi/tema.ts`).
+import { TemaViContext, escolherVi, useVi } from '@/components/Vi/tema';
+import { MarcaVi } from '@/components/Vi/MarcaVi';
 import { useNotificacoes } from '@/providers/NotificacoesProvider';
 import { useEasterEggCriadores, DURACAO_ESCURECIMENTO_MS } from '@/hooks/useEasterEggCriadores';
 // O overlay continua no Layout: a comemoração explode em QUALQUER página, não
@@ -154,7 +156,14 @@ const FaixaDoTremFim    = lazy(() => carregarTrem().then(m => ({ default: m.Faix
 const MapaDaLinha       = lazy(() => carregarTrem().then(m => ({ default: m.MapaDaLinha })));
 /** A abertura chama durante o vídeo: o código do tema desce antes de ele montar atrás do bilhete. */
 const prepararNatal = () => Promise.all([carregarNatal(), carregarTrem(), carregarBotaoMusica()]);
-
+// GTA VI (18 e 19/11/2026): as camadas só descem no dia.
+const carregarVi     = comNovaTentativa(() => import('@/components/Vi/CenaVi'));
+const FundoVi        = lazy(() => carregarVi().then(m => ({ default: m.FundoVi })));
+const FaixaVi        = lazy(() => carregarVi().then(m => ({ default: m.FaixaVi })));
+const SobreposicaoVi = lazy(() => carregarVi().then(m => ({ default: m.SobreposicaoVi })));
+// O convite (só para quem ainda não respondeu) e o botão da música (só com o tema ligado).
+const ConviteVi      = lazy(() => comNovaTentativa(() => import('@/components/Vi/ConviteVi'))().then(m => ({ default: m.ConviteVi })));
+const BotaoMusicaVi  = lazy(() => comNovaTentativa(() => import('@/components/Vi/BotaoMusicaVi'))().then(m => ({ default: m.BotaoMusicaVi })));
 /*
  * A lista e o filtro mudaram de casa: `src/lib/menuLateral.ts`.
  *
@@ -331,15 +340,34 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   // Tema de Natal (novembro): só o super_admin até a liberação em Configurações;
   // depois, todo mundo, a partir do presente (`Natal/previa.ts`).
   const {
-    podeVer: podeVerNatal, prevista: previaNatal, estilo: natal, pessoa: pessoaNatal, aberto: natalAberto,
+    podeVer: podeVerNatal, estilo: estiloNatal, pessoa: pessoaNatal, aberto: natalAberto,
     presenteOculto, pronto: natalPronto, video: videoNatal, desligado: natalDesligado,
   } = useNatal();
+  // GTA VI (18 e 19/11/2026, `Vi/tema.ts`): no dia o tema NÃO liga sozinho —
+  // aparece o convite, e só quem ativa fica com ele no lugar do Natal (sem
+  // estilo, nada do Natal aparece). Quem recusa, ou desliga depois no menu de
+  // temas, fica com o Natal dela, como em qualquer outro dia.
+  const vi = useVi(pessoaNatal);
+  const natal = vi.ligado ? null : estiloNatal;
+  // `data-vi` no <html>: a folha do tema troca a fonte dos títulos (`Vi/vi.css`).
+  useEffect(() => {
+    if (!vi.ligado) return;
+    document.documentElement.setAttribute('data-vi', '');
+    return () => document.documentElement.removeAttribute('data-vi');
+  }, [vi.ligado]);
+  const interruptorVi = useMemo(
+    () => (vi.noDia
+      ? { ligado: vi.ligado, aoMudar: (ligado: boolean) => escolherVi(pessoaNatal, ligado ? 'sim' : 'nao') }
+      : undefined),
+    [vi.noDia, vi.ligado, pessoaNatal],
+  );
   // «Tema de Natal» no menu de temas: só para quem já tem o Natal (presente aberto).
+  // Com o do GTA VI na tela ele não teria efeito, então some.
   const interruptorNatal = useMemo(
-    () => (podeVerNatal && natalAberto
+    () => (podeVerNatal && natalAberto && !vi.ligado
       ? { ligado: !natalDesligado, aoMudar: (ligado: boolean) => desligarNatal(pessoaNatal, !ligado) }
       : undefined),
-    [podeVerNatal, natalAberto, natalDesligado, pessoaNatal],
+    [podeVerNatal, natalAberto, natalDesligado, pessoaNatal, vi.ligado],
   );
   // O tema entra no meio da abertura (atrás do bilhete), com ela ainda na tela:
   // a abertura fica montada até avisar que terminou.
@@ -595,7 +623,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <AnimatePresence>
           {(sidebarOpen || mobileOpen) && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="overflow-hidden">
-              {natal
+              {vi.ligado
+                ? <MarcaVi nome={branding.appName} />
+                : natal
                 ? <MarcaNatal nome={branding.appName} />
                 : (
                   <div>
@@ -625,7 +655,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',
               item.to === itemAceso
                 ? 'bg-sidebar-primary text-sidebar-primary-foreground'
-                : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground'
+                : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground',
+              // GTA VI (18 e 19/11/2026): a aba acesa ganha o tubo de neon.
+              vi.ligado && item.to === itemAceso && 'vi-aceso',
             )}
           >
             <item.icon className="w-4 h-4 flex-shrink-0" />
@@ -779,7 +811,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   );
 
   const conteudo = (
-    <main ref={areaConteudo} data-natal-enfeite={enfeiteNoTitulo ? '' : undefined} className={cn('flex-1 overflow-y-auto', natal && 'relative', tremNaAba && 'isolate', cenaNatal && temFundoNatal(cenaNatal) ? 'z-[1] bg-transparent' : 'bg-background')}>
+    <main ref={areaConteudo} data-natal-enfeite={enfeiteNoTitulo ? '' : undefined} className={cn('flex-1 overflow-y-auto', natal && 'relative', tremNaAba && 'isolate', (cenaNatal && temFundoNatal(cenaNatal)) || vi.ligado ? 'z-[1] bg-transparent' : 'bg-background')}>
+      {/* GTA VI (18 e 19/11/2026), em toda aba: a faixa do alto abre o espaço da arte, que fica atrás e troca sozinha. */}
+      {vi.ligado && <Suspense fallback={null}><FaixaVi /></Suspense>}
       {/* As camadas do Natal moram no alto do conteúdo e rolam com a página. */}
       {cenaNatal && <Suspense fallback={null}><CamadaNatal cena={cenaNatal} leve={leve} /></Suspense>}
       {/* O trem corre por trás do conteúdo (`isolate` no <main> segura o z-index dele)
@@ -798,6 +832,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <TemaNatalContext.Provider value={natal}>
+    <TemaViContext.Provider value={vi.ligado}>
     <DesfazTemaDaMarca />
     <div className="flex h-screen bg-background overflow-hidden">
       {/* O fio de 2 px que substituiu os esqueletos de releitura. Fica fora do
@@ -835,7 +870,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Header */}
-        <header className={cn('relative h-14 border-b border-border bg-card flex items-center px-4 gap-3 flex-shrink-0', geloNoTopo && 'z-[12]')}>
+        <header className={cn('relative h-14 border-b border-border bg-card flex items-center px-4 gap-3 flex-shrink-0', geloNoTopo && 'z-[12]', vi.ligado && 'vi-topo')}>
           {geloNoTopo && <SincelosDoTopo />}
           <Button variant="ghost" size="icon" className="w-8 h-8 shrink-0"
             onClick={() => {
@@ -928,6 +963,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 <BotaoMusicaNatal />
               </Suspense>
             )}
+            {/* GTA VI (18 e 19/11/2026): a música do tema mora no mesmo lugar da de Natal. */}
+            {vi.ligado && (
+              <Suspense fallback={<span className="h-8 w-8 shrink-0" />}>
+                <BotaoMusicaVi />
+              </Suspense>
+            )}
             {/* Sino — indica novas sem abrir o painel.
                 O sino BALANÇA e o número PULSA quando chega notificação: o
                 badge sozinho, num canto de 16 px, passava despercebido em quem
@@ -958,7 +999,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               )}
             </Button>
             <HelpDrawer />
-            <ThemeToggle natal={interruptorNatal} />
+            <ThemeToggle natal={interruptorNatal} vi={interruptorVi} />
             {/* Perfil no header — clicável para upload de foto */}
             <Popover open={perfilPopoverOpen} onOpenChange={setPerfilPopoverOpen}>
               <PopoverTrigger asChild>
@@ -1100,7 +1141,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             (atrás do bilhete da abertura) montava a página de novo. */}
         <div className="relative flex-1 min-h-0 flex flex-col bg-background">
           {cenaNatal && <Suspense fallback={null}>{temFundoNatal(cenaNatal) && <FundoNatal cena={cenaNatal} leve={leve} />}</Suspense>}
+          {vi.ligado && <Suspense fallback={null}><FundoVi /></Suspense>}
           {conteudo}
+          {/* GTA VI: «Missão cumprida» ao salvar acordo, em qualquer aba. */}
+          {vi.ligado && <Suspense fallback={null}><SobreposicaoVi /></Suspense>}
           {cenaNatal && (
             <Suspense fallback={null}>
               <SobreposicaoNatal cena={cenaNatal} />
@@ -1109,14 +1153,27 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           {/* O trenó do Papai Noel: de vez em quando, em qualquer aba (como os morcegos do Halloween). */}
           {natal && <Suspense fallback={null}><RevoadaNatal ativo={natal === 'detalhado' && !leve} /></Suspense>}
         </div>
-        {/* A prévia (e os botões de teste da abertura) fica à mão mesmo antes de abrir o presente. */}
         {/* Os quebra-nozes: em qualquer aba, para a cidade inteira ao mesmo tempo (`Natal/quebraNozes/sistema.tsx`). No modo leve, em quadrinhos. */}
         {natal && perfil?.id && (
           <Suspense fallback={null}>
             <QuebraNozesNoSistema pessoaId={perfil.id} setorId={perfil.setor_id ?? null} empresaId={empresa?.id ?? null} leve={leve} todasAsCidades={userRole === 'super_admin'} />
           </Suspense>
         )}
-        {previaNatal && <PreviaNatal estilo={natal} presenteAberto={natalAberto} presenteOculto={presenteOculto} video={videoNatal} />}
+        {/* GTA VI (18 e 19/11/2026): o convite, para quem ainda não respondeu. Espera o
+            termo, o tutorial e a troca de senha, e nunca aparece na impersonação
+            (as mesmas travas do presente do Natal). */}
+        {vi.noDia && vi.escolha === null && !!perfil?.id && !termoLoading && !precisaAceitar && tourJaVisto && perfil?.senha_troca_obrigatoria !== true && !getImpersonacaoAtiva() && (
+          <Suspense fallback={null}>
+            <ConviteVi
+              aoAtivar={() => escolherVi(pessoaNatal, 'sim')}
+              aoRecusar={() => escolherVi(pessoaNatal, 'nao')}
+            />
+          </Suspense>
+        )}
+        {/* (16/11/2026) O painel de prévia do Natal — os botões de teste do tema e dos
+            quebra-nozes, que só existiam no `npm run dev` — saiu da tela a pedido do
+            Cleber. O componente continua em `Natal/PreviaNatal.tsx`; os atalhos
+            `?natal=…` do endereço (`Natal/previa.ts`) seguem valendo no dev. */}
         {/* O presente do Natal: uma vez por pessoa, depois do termo e do tutorial,
             e nunca na impersonação. `?natal=presente` (ou a prévia) devolve.
             Espera o banco dizer se a pessoa já abriu em outro computador. */}
@@ -1315,6 +1372,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         />
       </PainelSobDemanda>
     </div>
+    </TemaViContext.Provider>
     </TemaNatalContext.Provider>
   );
 }
