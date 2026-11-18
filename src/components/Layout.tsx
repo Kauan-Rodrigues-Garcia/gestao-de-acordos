@@ -1159,8 +1159,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           {/* O trenó do Papai Noel: de vez em quando, em qualquer aba (como os morcegos do Halloween). */}
           {natal && <Suspense fallback={null}><RevoadaNatal ativo={natal === 'detalhado' && !leve} /></Suspense>}
         </div>
-        {/* Os quebra-nozes: em qualquer aba, para a cidade inteira ao mesmo tempo (`Natal/quebraNozes/sistema.tsx`). No modo leve, em quadrinhos. */}
-        {natal && perfil?.id && (
+        {/* Os quebra-nozes: em qualquer aba, para a cidade inteira ao mesmo tempo (`Natal/quebraNozes/sistema.tsx`). No modo leve, em quadrinhos.
+            Não dependem do tema da pessoa (Cleber, 18/11/2026): aparecem com o GTA VI ativo, com o Natal desligado e com o presente fechado. */}
+        {podeVerNatal && perfil?.id && (
           <Suspense fallback={null}>
             <QuebraNozesNoSistema pessoaId={perfil.id} pessoaNome={perfil.nome ?? ''} pessoaFoto={fotoUrl} setorId={perfil.setor_id ?? null} empresaId={empresa?.id ?? null} leve={leve} todasAsCidades={userRole === 'super_admin'} />
           </Suspense>

@@ -11,8 +11,8 @@
  *   - ele NÃO liga sozinho: aparece um convite fechado na tela (`ConviteVi`);
  *     quem abre lê a novidade, ouve a música e escolhe ativar ou não;
  *   - quem ativa fica com o tema no lugar do Natal — o `Layout` entrega `null`
- *     no lugar do estilo do Natal e tudo dele some (enfeites, trem,
- *     quebra-nozes, música, globo do chat);
+ *     no lugar do estilo do Natal e o visual dele some (enfeites, trem,
+ *     música, globo do chat). Os quebra-nozes continuam aparecendo;
  *   - quem recusa continua como estava, e pode ligar depois no menu de temas
  *     («Tema GTA VI»). A escolha vale para a pessoa, neste navegador.
  *
