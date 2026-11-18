@@ -79,6 +79,7 @@ import '@/components/Natal/enfeiteDasPaginas.css';
 import { abaDoCaminho, ROTA_DO_TREM, useTelaLarga } from '@/components/Natal/trem/rota';
 // GTA VI (18 e 19/11/2026): entra no lugar do Natal por dois dias (`Vi/tema.ts`).
 import { TemaViContext, escolherVi, useVi } from '@/components/Vi/tema';
+import { enviarEscolhaVi } from '@/components/Vi/registroEscolha';
 import { MarcaVi } from '@/components/Vi/MarcaVi';
 import { useNotificacoes } from '@/providers/NotificacoesProvider';
 import { useEasterEggCriadores, DURACAO_ESCURECIMENTO_MS } from '@/hooks/useEasterEggCriadores';
@@ -355,6 +356,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     document.documentElement.setAttribute('data-vi', '');
     return () => document.documentElement.removeAttribute('data-vi');
   }, [vi.ligado]);
+  // A resposta entra na contagem de quem ativou. No localhost não: o banco é o de produção.
+  useEffect(() => {
+    if (import.meta.env.DEV || !vi.noDia || !vi.escolha || !perfil?.id) return;
+    void enviarEscolhaVi(perfil.id, vi.escolha);
+  }, [vi.noDia, vi.escolha, perfil?.id]);
   const interruptorVi = useMemo(
     () => (vi.noDia
       ? { ligado: vi.ligado, aoMudar: (ligado: boolean) => escolherVi(pessoaNatal, ligado ? 'sim' : 'nao') }
