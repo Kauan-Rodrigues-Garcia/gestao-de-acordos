@@ -1,7 +1,7 @@
 /**
  * A chamada local dos quebra-nozes: sobe só na tela de quem clicou. Disparam os
  * botões da prévia (`PreviaNatal.tsx`, no `npm run dev`) e o «Ver só aqui» do
- * card de Configurações › Geral; o palco do sistema (`sistema.tsx`) ouve. Fica
+ * card de Configurações › Eventos e gincanas; o palco do sistema (`sistema.tsx`) ouve. Fica
  * num arquivo à parte para quem dispara não puxar os bonecos junto.
  *
  * A chamada para a cidade inteira é outra coisa: passa pelo banco

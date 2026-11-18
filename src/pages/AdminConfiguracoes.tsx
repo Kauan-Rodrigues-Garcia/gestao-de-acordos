@@ -17,6 +17,8 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { produtoDaEmpresa } from '@/lib/produto';
 import { useAuth } from '@/hooks/useAuth';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
+import { useQuery } from '@tanstack/react-query';
+import { lerPainel } from '@/components/AvisoNascimento/banco';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import AdminPermissoes from '@/pages/AdminPermissoes';
 import AdminLogs from '@/pages/AdminLogs';
@@ -24,11 +26,8 @@ import AdminDiretoExtra from '@/pages/AdminDiretoExtra';
 import AdminTags from '@/components/admin/AdminTags';
 import AcessoMultiempresa from '@/components/admin/AcessoMultiempresa';
 import LiberacaoChat from '@/components/admin/LiberacaoChat';
-import NatalLiberacaoConfig from '@/components/admin/NatalLiberacaoConfig';
-import QuebraNozesConfig from '@/components/admin/QuebraNozesConfig';
 import SenhaInicialLiberacaoConfig from '@/components/admin/SenhaInicialLiberacaoConfig';
 import CrachaPedidoConfig from '@/components/admin/CrachaPedidoConfig';
-import AvisoNascimentoConfig from '@/components/admin/AvisoNascimentoConfig';
 import AdminDocumentacoes from '@/pages/AdminDocumentacoes';
 import AdminCargos from '@/components/admin/AdminCargos';
 import ImportarAcordosCard from '@/components/admin/ImportarAcordosCard';
@@ -93,7 +92,15 @@ export default function AdminConfiguracoes() {
    * Eventos e gincanas. As chaves não mudaram: Eventos e Banco de dados eram
    * cards da Geral, e continuam pedindo `config_sub_geral` além da sua própria.
    */
-  const podeVerEventos = podeVerGeral && (ehSuperAdmin || podeConfigurarRankingQuitacao);
+  // O Aviso de nascimento veio da Geral (18/11/2026). Quem o acompanha é quem o
+  // banco deixa (`fn_nascimento_painel`): a mesma leitura do card decide se a
+  // pessoa entra em Eventos por ele — sem lista de cargo no código.
+  const { data: avisosNascimento } = useQuery({
+    queryKey: ['aviso-nascimento'], queryFn: lerPainel, enabled: podeVerGeral,
+    refetchInterval: 60_000, staleTime: 30_000, retry: false,
+  });
+  const veAvisoNascimento = (avisosNascimento?.length ?? 0) > 0;
+  const podeVerEventos = podeVerGeral && (ehSuperAdmin || podeConfigurarRankingQuitacao || veAvisoNascimento);
   const podeVerDados = podeVerGeral && podeVerBancoDados;
   const secoes: { titulo: string; abas: { id: string; rotulo: string; icone: LucideIcon; visivel: boolean }[] }[] = [
     { titulo: 'Operação', abas: [
@@ -275,8 +282,9 @@ export default function AdminConfiguracoes() {
         {podeVerGeral && <TabsContent value="geral" className="mt-0 min-w-0 flex-1 overflow-y-auto p-6">
           <div className="max-w-4xl mx-auto space-y-6">
 
-          {/* ── Aviso de nascimento (18/11/2026): acompanhar, ler os recadinhos e liberar. */}
-          <AvisoNascimentoConfig />
+          {/* Tema, gincana, votação ou aviso para o salão NÃO entra aqui: vai para
+              «Eventos e gincanas» (`AbaEventos`). Lá estão, desde 18/11/2026,
+              também o Tema de Natal, o Quebra-nozes e o Aviso de nascimento. */}
 
           {/* ── Pedido do crachá (26/10/2026): liga/desliga o cartão e mostra quem
               respondeu, por setor. Ligar é do super_admin; ler é de quem abre
@@ -289,16 +297,6 @@ export default function AdminConfiguracoes() {
               mandar depois que ela abre. Só super_admin vira — a policy
               `chat_config_update` confere de novo no banco. */}
           {ehSuperAdmin && <LiberacaoChat />}
-
-          {/* ── Tema de Natal (09/11/2026): liberar para todos, recolher, e quem já
-              abriu o presente em Birigui e em Marília. Só super_admin — as
-              funções `fn_natal_*` conferem de novo no banco. */}
-          {ehSuperAdmin && <NatalLiberacaoConfig />}
-
-          {/* ── Quebra-nozes do Natal (12/11/2026): ligar as aparições e a chamada
-              das 10h, ver a agenda do dia e chamar na hora. Só super_admin — as
-              funções `fn_natal_quebra_nozes_*` conferem de novo no banco. */}
-          {ehSuperAdmin && <QuebraNozesConfig />}
 
           {/* ── Senha inicial (10/11/2026): a hora em que a troca passa a ser
               obrigatória para quem ainda estava com a senha igual para todo
@@ -370,7 +368,7 @@ export default function AdminConfiguracoes() {
 
         {/* ─── Aba: Eventos e gincanas ────────────────────────────────── */}
         {podeVerEventos && <TabsContent value="eventos" className="mt-0 min-w-0 flex-1 overflow-y-auto p-6">
-          <AbaEventos ehSuperAdmin={ehSuperAdmin} podeConfigurarRankingQuitacao={podeConfigurarRankingQuitacao} />
+          <AbaEventos ehSuperAdmin={ehSuperAdmin} veAvisoNascimento={veAvisoNascimento} podeConfigurarRankingQuitacao={podeConfigurarRankingQuitacao} />
         </TabsContent>}
 
         {/* ─── Aba: Banco de dados ─────────────────────────────────────── */}

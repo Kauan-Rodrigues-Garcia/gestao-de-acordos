@@ -1,5 +1,5 @@
 /**
- * AvisoNascimentoConfig.tsx — o aviso de nascimento em Configurações › Geral.
+ * AvisoNascimentoConfig.tsx — o aviso de nascimento em Configurações › Eventos e gincanas.
  *
  * Administrador e super_admin acompanham quem viu e leem os recadinhos. Enviar a
  * foto, liberar e recolher são do super_admin. O banco confere tudo de novo
@@ -162,9 +162,19 @@ function Aviso({ a }: { a: AvisoNoPainel }) {
   );
 }
 
-export default function AvisoNascimentoConfig() {
+export default function AvisoNascimentoConfig({ mostrarVazio = false }: {
+  /** Em «Eventos e gincanas» o card é a página inteira: vazio, diz por quê. */
+  mostrarVazio?: boolean;
+} = {}) {
   // Quem decide é o banco: sem acesso, sem migration ou sem aviso, o card não aparece.
-  const { data } = useQuery({ queryKey: ['aviso-nascimento'], queryFn: lerPainel, refetchInterval: 60_000, staleTime: 30_000, retry: false });
-  if (!data?.length) return null;
+  const { data, isLoading } = useQuery({ queryKey: ['aviso-nascimento'], queryFn: lerPainel, refetchInterval: 60_000, staleTime: 30_000, retry: false });
+  if (!data?.length) {
+    if (!mostrarVazio || isLoading) return null;
+    return (
+      <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+        Nenhum aviso de nascimento cadastrado agora.
+      </p>
+    );
+  }
   return <>{data.map(a => <Aviso key={a.id} a={a} />)}</>;
 }

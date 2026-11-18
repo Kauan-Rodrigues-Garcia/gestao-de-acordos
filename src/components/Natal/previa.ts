@@ -3,7 +3,7 @@
  *
  * ## Quem vê (09/11/2026)
  *
- * Antes da liberação (`liberacao.ts`, card de Configurações › Geral): só o
+ * Antes da liberação (`liberacao.ts`, card de Configurações › Eventos e gincanas): só o
  * super_admin e o `npm run dev`. Depois: todo mundo. Em qualquer caso o Natal
  * só entra depois que a pessoa abre o presente (`presente/AberturaNatal.tsx`).
  *

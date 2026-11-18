@@ -1,5 +1,5 @@
 /**
- * acompanhamento.ts — o card de Configurações › Geral que acompanha o presente
+ * acompanhamento.ts — o card de Configurações › Eventos e gincanas que acompanha o presente
  * de Natal: quem já entrou no tema, quem assistiu o vídeo inteiro, quem pulou,
  * quem deixou para depois e quem ainda não abriu, separado por cidade
  * (Cleber, 09/11/2026).

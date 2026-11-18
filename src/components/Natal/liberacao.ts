@@ -2,7 +2,7 @@
  * liberacao.ts — o Natal já foi liberado para todos?
  *
  * Uma linha em `natal_liberacao` (migration 20261109150000). O tema sobe
- * desligado; o super_admin libera pelo card de Configurações › Geral
+ * desligado; o super_admin libera pelo card de Configurações › Eventos e gincanas
  * (`fn_natal_liberar`) e pode recolher. Liberar ou recolher manda um sinal no
  * tópico `permissoes` de cada empresa, e quem está logado relê aqui.
  *

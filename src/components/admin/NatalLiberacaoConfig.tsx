@@ -1,5 +1,5 @@
 /**
- * NatalLiberacaoConfig.tsx — o tema de Natal em Configurações › Geral
+ * NatalLiberacaoConfig.tsx — o tema de Natal em Configurações › Eventos e gincanas
  * (Cleber, 09/11/2026). Só o super_admin (as funções do banco conferem de novo).
  *
  *   - Liberar para todos, ou recolher (`Natal/liberacao.ts`). Antes de liberar,

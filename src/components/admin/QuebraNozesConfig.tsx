@@ -1,5 +1,5 @@
 /**
- * QuebraNozesConfig.tsx — os quebra-nozes do Natal em Configurações › Geral
+ * QuebraNozesConfig.tsx — os quebra-nozes do Natal em Configurações › Eventos e gincanas
  * (Cleber, 12/11/2026). Só o super_admin (as funções do banco conferem de novo).
  *
  *   - Os interruptores: as aparições sorteadas do dia (umas três, de segunda a

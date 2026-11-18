@@ -3,7 +3,7 @@
  *
  * Uma linha em `natal_quebra_nozes` (migration 20261112180100): as aparições
  * sorteadas ligadas ou não, a chamada das dez, os sons, e a última chamada
- * que o super_admin fez pelo card de Configurações › Geral. A 20261112210100
+ * que o super_admin fez pelo card de Configurações › Eventos e gincanas. A 20261112210100
  * acrescenta o boletim e os horários trocados à mão (`ajustes`); sem ela, o
  * boletim fica desligado e os horários não se mexem. Mudou a linha, o
  * banco manda um sinal no tópico `permissoes` de cada empresa, e quem está
