@@ -88,7 +88,7 @@
 .ln .chips{display:flex;flex-wrap:wrap;gap:7px;margin:13px 0}
 .ln .chips button{min-height:36px;padding:5px 12px;border:1.5px solid var(--linha);border-radius:99px;background:rgba(255,255,255,.75);font-size:13px;font-weight:700;color:var(--real)}
 .ln .recado textarea{display:block;width:100%;min-height:96px;resize:vertical;padding:11px 13px;border:1.5px solid var(--linha);border-radius:13px;background:#fff;color:var(--tinta);font-size:16px;font-weight:600;line-height:1.4}
-.ln .linha{display:flex;justify-content:space-between;gap:10px;margin-top:6px;font-size:12.5px;font-weight:700;color:#74404f}
+.ln .linha{display:flex;justify-content:flex-end;gap:10px;margin-top:6px;font-size:12.5px;font-weight:700;color:#74404f}
 .ln .enviar,.ln .sec{display:block;width:100%;min-height:48px;margin-top:11px;border:0;border-radius:13px;font-weight:800;font-size:16px}
 .ln .enviar{background:var(--real);color:#fff}
 .ln .enviar:disabled{background:#dca7b8;color:#fff;cursor:not-allowed}

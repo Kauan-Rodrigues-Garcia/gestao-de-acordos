@@ -78,7 +78,7 @@ export function criarLivro(raiz: HTMLElement, dados: DadosDoLivro, ev: EventosDo
     <form class="f"><h2><label for="ln-msg">${escapar(c.recado_titulo)}</label></h2>
       <div class="chips">${c.sugestoes.map(s => `<button type="button">${escapar(s)}</button>`).join('')}</div>
       <textarea id="ln-msg" maxlength="280" placeholder="Escreva com carinho…"></textarea>
-      <div class="linha"><span>Seu nome vai junto. Só a administração lê.</span><span class="conta">0/280</span></div>
+      <div class="linha"><span class="conta">0/280</span></div>
       ${dados.previa ? '<p class="aviso-previa">Prévia: nada é gravado.</p>' : ''}<p class="erro-recado" hidden></p>
       <button class="enviar" disabled>Guardar meu carinho</button></form>
     <div class="guardado" hidden><svg aria-hidden="true"><use href="#ln-coracao"/></svg><h2>Recadinho guardado</h2><p>Obrigado por fazer parte deste começo.</p><blockquote></blockquote><button class="sec editar" type="button">Editar meu recadinho</button></div>
