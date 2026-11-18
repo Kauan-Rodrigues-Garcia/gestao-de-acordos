@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { EPOCA } from '../musica';
 import {
   CHAMADA_DAS_DEZ_MIN, DIA_MS, JANELAS_MIN, TOLERANCIA_MS,
-  chaveDoAjuste, diaDoNatal, ehDiaUtil, indiceDoBoletim, inicioDoDia, proximaSessao, sessaoDaChamada, sessoesDoDia,
+  ESPERA_DO_AVISO_MS, chaveDoAjuste, diaDoNatal, ehDiaUtil, indiceDoBoletim, inicioDoDia, proximaSessao, sessaoDaChamada, sessoesDoDia,
 } from './agenda';
 import { DESLIGADA, daLinha, type ChamadaNaHora } from './configuracao';
 import { montarDestaques, nomeCurto, tituloDosDestaques } from './dados';
@@ -175,6 +175,11 @@ describe('a chamada na hora', () => {
     expect(sessaoDaChamada(chamada, 'birigui')).toBeNull();
     expect(sessaoDaChamada({ ...chamada, cidade: 'todas' }, 'birigui')?.inicio).toBe(em);
     expect(sessaoDaChamada(null, 'birigui')).toBeNull();
+  });
+
+  it('a chamada dos destaques espera o aviso da sirene; as outras sobem na hora', () => {
+    expect(sessaoDaChamada({ ...chamada, tipo: 'parabens' }, 'marilia')?.inicio).toBe(em + ESPERA_DO_AVISO_MS);
+    expect(sessaoDaChamada({ ...chamada, tipo: 'boletim' }, 'marilia')?.inicio).toBe(em);
   });
 
   it('sobe mesmo no sábado e com tudo desligado, e vence depois da tolerância', () => {

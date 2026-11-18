@@ -1162,7 +1162,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         {/* Os quebra-nozes: em qualquer aba, para a cidade inteira ao mesmo tempo (`Natal/quebraNozes/sistema.tsx`). No modo leve, em quadrinhos. */}
         {natal && perfil?.id && (
           <Suspense fallback={null}>
-            <QuebraNozesNoSistema pessoaId={perfil.id} setorId={perfil.setor_id ?? null} empresaId={empresa?.id ?? null} leve={leve} todasAsCidades={userRole === 'super_admin'} />
+            <QuebraNozesNoSistema pessoaId={perfil.id} pessoaNome={perfil.nome ?? ''} pessoaFoto={fotoUrl} setorId={perfil.setor_id ?? null} empresaId={empresa?.id ?? null} leve={leve} todasAsCidades={userRole === 'super_admin'} />
           </Suspense>
         )}
         {/* GTA VI (18 e 19/11/2026): o convite, para quem ainda não respondeu. Espera o

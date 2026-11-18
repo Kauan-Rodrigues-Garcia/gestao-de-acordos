@@ -49,6 +49,11 @@ export const JANELAS_MIN: readonly (readonly [number, number])[] = [
  */
 export const TOLERANCIA_MS = 150_000;
 
+/** Quanto antes dos destaques o aviso com a sirene aparece (Cleber, 18/11/2026). */
+export const AVISO_DOS_DESTAQUES_MS = 5_000;
+/** O que a chamada feita na hora espera para dar tempo do aviso: os 5 s e o palco nascer. */
+export const ESPERA_DO_AVISO_MS = 5_500;
+
 /** O boletim é uma aparição que anuncia quem mais recebeu até agora. */
 export type TipoDeSessao = TipoDeEspetaculo | 'boletim';
 
@@ -133,7 +138,7 @@ export function sessaoDaChamada(chamada: ChamadaNaHora | null, cidade: Cidade): 
   return {
     chave: `chamada:${chamada.numero}:${chamada.em}`,
     tipo: chamada.tipo,
-    inicio: chamada.em,
+    inicio: chamada.tipo === 'parabens' ? chamada.em + ESPERA_DO_AVISO_MS : chamada.em,
     dia: diaDoNatal(chamada.em),
     // Longe dos números do dia (0 a 3): a chamada na hora nunca repete uma aparição marcada.
     indice: 100 + (chamada.numero % 10_000),

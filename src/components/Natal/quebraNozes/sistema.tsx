@@ -42,13 +42,14 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import { conferirRelogioNatal, relogioNatal } from '../musica';
-import { diaDoNatal, proximaSessao, type Ajustes, type Sessao, type TipoDeSessao } from './agenda';
+import { ESPERA_DO_AVISO_MS, diaDoNatal, proximaSessao, type Ajustes, type Sessao, type TipoDeSessao } from './agenda';
 import { EVENTO_QUEBRA_NOZES, EVENTO_QUEBRA_NOZES_RESPOSTA, type ChamadaLocal } from './chamada';
 import { useConfiguracaoDosQuebraNozes } from './configuracao';
-import { cidadeGuardada, fotosDaCidade, lerDestaques, lerElenco, lerLider, tituloDosDestaques } from './dados';
+import { cidadeGuardada, fotosDaCidade, lerDestaques, lerElenco, lerLider, nomeCurto, tituloDosDestaques } from './dados';
 import type { Destaque } from './diretor';
 import type { Cidade } from './elenco';
 import type { PropsDoPalco } from './Palco';
+import { souDestaque, type ParabensDoPalco } from './regrasDosParabens';
 import { permitirSonsDosQuebraNozes } from './sons';
 
 interface NoPalco {
@@ -130,8 +131,11 @@ async function lerLiderComCalma(cidade: Cidade, sessao: string, setorId: string 
   return null;
 }
 
-export function QuebraNozesNoSistema({ pessoaId, setorId, empresaId, leve = false, todasAsCidades = false }: {
+export function QuebraNozesNoSistema({ pessoaId, pessoaNome = '', pessoaFoto = null, setorId, empresaId, leve = false, todasAsCidades = false }: {
   pessoaId: string;
+  /** Nome e foto de quem está logado: vão no balão de parabéns. */
+  pessoaNome?: string;
+  pessoaFoto?: string | null;
   setorId: string | null;
   empresaId: string | null;
   /** O super_admin: vê as aparições das duas cidades, seja qual for o setor. */
@@ -149,8 +153,8 @@ export function QuebraNozesNoSistema({ pessoaId, setorId, empresaId, leve = fals
   const preparadas = useRef(new Set<string>());
   /** Quando o último espetáculo desta tela acabou (relógio do Natal); 0 = nenhum ainda. */
   const fimDoUltimo = useRef(0);
-  const quem = useRef({ pessoaId, setorId, leve });
-  quem.current = { pessoaId, setorId, leve };
+  const quem = useRef({ pessoaId, pessoaNome, pessoaFoto, setorId, leve });
+  quem.current = { pessoaId, pessoaNome, pessoaFoto, setorId, leve };
 
   useEffect(() => { permitirSonsDosQuebraNozes(config.sons); }, [config.sons]);
 
@@ -205,8 +209,10 @@ export function QuebraNozesNoSistema({ pessoaId, setorId, empresaId, leve = fals
         nomes: { a: elenco.a, b: elenco.b },
       });
       const espetaculo = quadrinho ? montagem.emQuadrinhos(montado) : montado;
-      // Negativo: o palco nasce antes da hora e espera, escondido.
-      const desde = p.inicio === null ? 0 : (relogioNatal() - p.inicio) / 1000;
+      // A chamada dos destaques vem com o aviso da sirene antes.
+      const comAviso = p.tipo === 'parabens' && destaques.length > 0;
+      // Negativo: o palco nasce antes da hora e espera, escondido. Sem hora marcada, só espera o aviso.
+      const desde = p.inicio === null ? (comAviso ? -ESPERA_DO_AVISO_MS / 1000 : 0) : (relogioNatal() - p.inicio) / 1000;
       // Chegou no fim: não vale subir para ver só a saída.
       if (desde > espetaculo.duracao - 6) { ocupado.current = false; setRodada(r => r + 1); return false; }
 
@@ -216,12 +222,17 @@ export function QuebraNozesNoSistema({ pessoaId, setorId, empresaId, leve = fals
           : p.tipo === 'boletim' ? ` · quem mais recebeu: ${deExemplo ? 'de exemplo' : 'de verdade'}` : '';
         responder(`${espetaculo.resumo.join(' · ')} · foto: ${fotos}${lidos}`);
       }
+      // Por enquanto só no teste desta tela: o envio entre as pessoas depende da migration.
+      const meuNome = nomeCurto(quem.current.pessoaNome);
+      const parabens: ParabensDoPalco | undefined = p.local
+        ? { eu: { nome: meuNome || 'Você', foto: quem.current.pessoaFoto }, souDestaque: souDestaque(lider ? [lider] : destaques, meuNome), ensaio: true }
+        : undefined;
       setNoPalco({
         chave: p.chave,
         Palco: montagem.PalcoDosQuebraNozes,
         props: lider
-          ? { cidade: p.cidade, elenco, espetaculo, destaques: [lider], titulo: TITULO_DO_BOLETIM, desde, quadrinho }
-          : { cidade: p.cidade, elenco, espetaculo, destaques, titulo, desde, quadrinho, comMusica: p.tipo === 'parabens' && destaques.length > 0 },
+          ? { cidade: p.cidade, elenco, espetaculo, destaques: [lider], titulo: TITULO_DO_BOLETIM, desde, quadrinho, parabens }
+          : { cidade: p.cidade, elenco, espetaculo, destaques, titulo, desde, quadrinho, comMusica: comAviso, comAviso, parabens },
       });
       return true;
     } catch (erro) {

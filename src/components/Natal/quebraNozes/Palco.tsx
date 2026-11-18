@@ -38,6 +38,10 @@ import { cn } from '@/lib/utils';
 import { aplicarNoBoneco, reposicionar, tocar, type Cena, type Medidas, type Quem, type Reacao, type Surpresa } from './deixas';
 import type { Destaque, EspetaculoMontado } from './diretor';
 import type { Artista, Cidade } from './elenco';
+import { AvisoDosDestaques } from './AvisoDosDestaques';
+import { BotaoDeParabens } from './BotaoDeParabens';
+import type { ParabensDoPalco } from './regrasDosParabens';
+import { useParabensDoPalco } from './useParabensDoPalco';
 import { DefsDoQuebraNozes, QuebraNozes } from './QuebraNozes';
 import {
   descansarSonsDosQuebraNozes, ligarSonsDosQuebraNozes, pararMusicaDosDestaques, prepararSonsDosQuebraNozes, tocarMusicaDosDestaques,
@@ -117,6 +121,10 @@ export interface PropsDoPalco {
   quadrinho?: boolean;
   /** A chamada dos destaques: a musiquinha toca enquanto a faixa está em cena. */
   comMusica?: boolean;
+  /** A chamada dos destaques: o aviso com sirene aparece nos 5 s antes de começar. */
+  comAviso?: boolean;
+  /** Com isto, o botão de parabéns aparece enquanto os cartões estão em cena. */
+  parabens?: ParabensDoPalco;
   aoTerminar?: () => void;
 }
 
@@ -133,8 +141,10 @@ const VOZ_DO_HEAD = 560;
 const VOZ_DA_HEAD = 700;
 /** A musiquinha entra depois da fanfarra da faixa. */
 const MUSICA_DEPOIS_DA_FAIXA_MS = 1_400;
+/** Quanto o quadro sobe para o botão de parabéns caber embaixo dos cartões (`.qn-quadro`, no CSS). */
+const ALTURA_DO_BOTAO_DE_PARABENS = 48;
 
-export function PalcoDosQuebraNozes({ cidade, elenco, espetaculo, destaques = [], titulo = 'Destaques de ontem', comSom = true, desde = 0, quadrinho = false, comMusica = false, aoTerminar }: PropsDoPalco) {
+export function PalcoDosQuebraNozes({ cidade, elenco, espetaculo, destaques = [], titulo = 'Destaques de ontem', comSom = true, desde = 0, quadrinho = false, comMusica = false, comAviso = false, parabens, aoTerminar }: PropsDoPalco) {
   const sons = useSonsDosQuebraNozes();
   // O palco nasce em quatro tempos: 0 o chão, 1 um boneco, 2 o outro, 3 os cartões — e aí toca.
   const [tempo, setTempo] = useState<0 | 1 | 2 | 3>(0);
@@ -156,6 +166,9 @@ export function PalcoDosQuebraNozes({ cidade, elenco, espetaculo, destaques = []
   const [cena, setCena] = useState<EstadoDaCena>(VAZIA);
   const terminar = useRef(aoTerminar);
   terminar.current = aoTerminar;
+  const comParabens = !!parabens && destaques.length > 0;
+  const parabensNoAr = comParabens && cena.cartoes >= 0 && !cena.cartoesSaindo;
+  const festa = useParabensDoPalco({ parabens, destaques, noAr: parabensNoAr, quadrinho, mini });
 
   // A escala e a coxia desta tela.
   const medir = useCallback(() => {
@@ -169,7 +182,7 @@ export function PalcoDosQuebraNozes({ cidade, elenco, espetaculo, destaques = []
     // Os cartões: no palco pequeno eles crescem de volta, e em qualquer um têm de caber na janela.
     const k = mini ? CARTOES_NO_MINI : 1;
     const largura = (w / escala - 48) / k;
-    const altura = (h / escala - (mini ? 350 : 308)) / k - 90;
+    const altura = (h / escala - (mini ? 350 : 308 + (comParabens ? ALTURA_DO_BOTAO_DE_PARABENS : 0))) / k - 90;
     const colunas = Math.max(1, destaques.length <= 7 ? destaques.length : Math.ceil(destaques.length / 2));
     const fileiras = destaques.length <= 7 ? 1 : 2;
     el.style.setProperty('--qn-escala', String(escala));
@@ -180,7 +193,7 @@ export function PalcoDosQuebraNozes({ cidade, elenco, espetaculo, destaques = []
     controles.current?.style.setProperty('--qn-x', `${Math.round(MEIO_TABLADO * escala + 12)}px`);
     // A coxia mudou de lugar: quem está nela (ou indo para ela) acompanha.
     for (const q of ['a', 'b'] as const) { const b = bonecos.current[q]; if (b) reposicionar(b, medidas.current); }
-  }, [destaques.length, mini]);
+  }, [comParabens, destaques.length, mini]);
 
   useLayoutEffect(() => {
     medir();
@@ -335,6 +348,7 @@ export function PalcoDosQuebraNozes({ cidade, elenco, espetaculo, destaques = []
         <div className="qn-cartoes-c">
           {destaques.map((d, i) => <Cartao key={`${d.setor}:${d.nome}`} d={d} revelado={i <= cena.cartoes} saindo={cena.cartoesSaindo} />)}
         </div>
+        {comParabens && <BotaoDeParabens destaques={destaques} souDestaque={parabens.souDestaque} noAr={parabensNoAr} jaEnviou={festa.jaEnviou} recarregando={festa.recarregando} aoClicar={festa.enviar} />}
       </div>
     </div>
   );
@@ -342,7 +356,7 @@ export function PalcoDosQuebraNozes({ cidade, elenco, espetaculo, destaques = []
   const rotuloDoTamanho = mini ? 'Voltar os quebra-nozes ao tamanho normal' : 'Diminuir os quebra-nozes';
   return (
     <>
-      <div ref={raiz} className="qn-palco" data-cidade={cidade} data-troca={espetaculo.troca ? '' : undefined} data-solo={sozinho ? '' : undefined} data-mini={mini ? '' : undefined}
+      <div ref={raiz} className="qn-palco" data-cidade={cidade} data-troca={espetaculo.troca ? '' : undefined} data-solo={sozinho ? '' : undefined} data-mini={mini ? '' : undefined} data-com-parabens={comParabens ? '' : undefined}
         // Em quadrinhos quem manda no que anima é o CSS do palco, não a regra geral do modo leve (`index.css`).
         data-quadrinho={quadrinho ? '' : undefined} data-anima-sempre={quadrinho ? '' : undefined}
         // Fora da pausa do «ninguém olhando» (`lib/atencao.ts`): o espetáculo segue com a janela de lado (Cleber, 13/11/2026).
@@ -374,6 +388,8 @@ export function PalcoDosQuebraNozes({ cidade, elenco, espetaculo, destaques = []
           {quadro}
         </div>
       )}
+      {comAviso && desde < 0 && <AvisoDosDestaques comecaEm={nascido.current - desde * 1000} quadrinho={quadrinho} />}
+      {comParabens && <div ref={festa.caixa} className="qn-parabens" data-mini={mini ? '' : undefined} data-anima-sempre={quadrinho ? '' : undefined} data-nao-pausa="" aria-hidden />}
       {/* Fora do palco, para não encolher com ele: tem de continuar dando para clicar. */}
       <div ref={controles} className={cn('qn-controles', cena.veu && 'aceso')} data-anima-sempre={quadrinho ? '' : undefined} data-nao-pausa="">
         {comSom && (

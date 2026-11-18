@@ -19,6 +19,7 @@
  *   viva         o acorde do confete, com guizos por cima
  *   vozinha      o tagarelar de bichinho de algumas falas (13/11)
  *   música       a musiquinha animada da chamada dos destaques (13/11)
+ *   sirene       o aviso, 5 s antes da chamada dos destaques (18/11)
  *
  * Tudo sintetizado (Web Audio), sem arquivo. A mixagem: cada som sai de onde o
  * boneco está (um pouco para a esquerda ou para a direita), passa por um
@@ -33,8 +34,8 @@
 import { useSyncExternalStore } from 'react';
 import type { SomDeCena } from './deixas';
 
-export type Som = SomDeCena | 'cartao' | 'viva' | 'noz';
-export const SONS: readonly Som[] = ['sino', 'tambor', 'corneta', 'corda', 'palmas', 'baque', 'pop', 'noz', 'brinde', 'fanfarra', 'cartao', 'viva'];
+export type Som = SomDeCena | 'cartao' | 'viva' | 'noz' | 'sirene';
+export const SONS: readonly Som[] = ['sino', 'tambor', 'corneta', 'corda', 'palmas', 'baque', 'pop', 'noz', 'brinde', 'fanfarra', 'cartao', 'viva', 'sirene'];
 
 export interface OpcoesDoSom {
   /** No cartão, qual deles (cada um sobe um degrau). */
@@ -354,6 +355,30 @@ export function desenharSom(c: BaseAudioContext, som: Som, t: number, o: OpcoesD
       celesta(c, s, MI6, t, 0.9, 0.6);
       celesta(c, s, SOL6, t + 0.035, 1.1, 0.5);
       break;
+    case 'sirene': {
+      // Sobe e desce, quatro vezes, com os agudos cortados: chama a atenção sem assustar a operação.
+      const VOLTA = 0.72, VOLTAS = 4, GRAVE = 620, AGUDO = 930;
+      const fim = t + VOLTA * VOLTAS;
+      const o = c.createOscillator();
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(GRAVE, t);
+      for (let i = 0; i < VOLTAS; i++) {
+        o.frequency.exponentialRampToValueAtTime(AGUDO, t + (i + 0.5) * VOLTA);
+        o.frequency.exponentialRampToValueAtTime(GRAVE, t + (i + 1) * VOLTA);
+      }
+      const corte = c.createBiquadFilter();
+      corte.type = 'lowpass';
+      corte.frequency.value = 1900;
+      const g = c.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.5, t + 0.1);
+      g.gain.setValueAtTime(0.5, fim - 0.3);
+      g.gain.exponentialRampToValueAtTime(0.0001, fim);
+      o.connect(corte).connect(g).connect(s);
+      o.start(t);
+      o.stop(fim + 0.05);
+      break;
+    }
     case 'fanfarra':
       [SOL5, DO6, MI6].forEach((f, i) => celesta(c, s, f, t + i * 0.16, 1.1));
       celesta(c, s, DO6, t + 0.62, 1.8, 0.8);

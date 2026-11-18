@@ -22,6 +22,7 @@
  *   ?foto=nao                  sem foto: o rosto de madeira
  *   ?auto=1                    toca ao abrir        ?t=12  começa no segundo 12
  *   ?galeria=1                 todas as poses e adereços, parados, para conferir o desenho
+ *   ?destaque=1                vê os parabéns como quem está nos cartões (sem o botão)
  *
  * Sem StrictMode, como o app.
  */
@@ -30,7 +31,7 @@ import { createRoot } from 'react-dom/client';
 import '@/index.css';
 import type { ItemDeMao, ItemDePeito, Pose } from './deixas';
 import { aplicarNoBoneco } from './deixas';
-import type { TipoDeSessao } from './agenda';
+import { ESPERA_DO_AVISO_MS, type TipoDeSessao } from './agenda';
 import {
   CERIMONIAS, ENTRADAS, FINAIS, NUMEROS, SAIDAS, montarEspetaculo,
   type Cerimonia, type Entrada, type Final, type Formacao, type Numero, type Saida,
@@ -39,6 +40,7 @@ import { elencoDaCidade, type Cidade } from './elenco';
 import { ROSTOS_DE_EXEMPLO as EXEMPLO, destaquesDeExemplo } from './exemplos';
 import { CONVERSAS } from './falas';
 import { PalcoDosQuebraNozes } from './Palco';
+import type { ParabensDoPalco } from './regrasDosParabens';
 import { emQuadrinhos } from './quadrinho';
 import { DefsDoQuebraNozes, QuebraNozes } from './QuebraNozes';
 import { SONS, pararMusicaDosDestaques, tocarMusicaDosDestaques, tocarSom, tocarVozinha } from './sons';
@@ -60,6 +62,12 @@ function opcao<T extends string>(chave: string, validas: readonly T[]): T | '' {
   const v = busca.get(chave) as T | null;
   return v && validas.includes(v) ? v : '';
 }
+
+const PARABENS_DO_LAB: ParabensDoPalco = {
+  eu: { nome: 'Você', foto: EXEMPLO.a },
+  souDestaque: busca.get('destaque') === '1',
+  ensaio: true,
+};
 
 function Campo({ rotulo, children }: { rotulo: string; children: React.ReactNode }) {
   return <label className="flex items-center gap-1.5 text-xs"><span className="text-muted-foreground">{rotulo}</span>{children}</label>;
@@ -200,7 +208,8 @@ function Lab() {
       {rodada > 0 && (
         <PalcoDosQuebraNozes key={rodada} cidade={cidade} elenco={elenco} espetaculo={espetaculo}
           destaques={comBoletim && lider ? [lider] : destaques} titulo={comBoletim ? 'Quem mais recebeu até agora' : undefined}
-          quadrinho={quadrinho} comMusica={tipo === 'parabens'} desde={rodada === 1 && busca.has('t') ? numero('t', 0) : -numero('espera', 0)} aoTerminar={() => setTocando(false)} />
+          quadrinho={quadrinho} comMusica={tipo === 'parabens'} comAviso={tipo === 'parabens'} parabens={PARABENS_DO_LAB}
+          desde={rodada === 1 && busca.has('t') ? numero('t', 0) : -numero('espera', tipo === 'parabens' ? ESPERA_DO_AVISO_MS / 1000 : 0)} aoTerminar={() => setTocando(false)} />
       )}
     </div>
   );
