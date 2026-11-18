@@ -34,6 +34,7 @@ import { ChatDoApp } from '../comum/ChatDoApp';
 import { AvisoVotacao } from '@/components/VotacaoLideres/AvisoVotacao';
 import { AvisoVotacaoOpcoes } from '@/components/VotacaoOpcoes/AvisoVotacaoOpcoes';
 import { AvisoArte } from '@/components/Artes/AvisoArte';
+import { AvisoNascimento } from '@/components/AvisoNascimento/AvisoNascimento';
 import './equipe.css';
 
 type Aba = 'equipe' | 'quartis' | 'grafico' | 'hoje';
@@ -208,6 +209,7 @@ function TelaDaEquipe() {
       <AvisoVotacao recuoEsquerda={16} acimaDoRodape={equipe ? 72 : 0} />
       <AvisoVotacaoOpcoes acimaDoRodape={equipe ? 72 : 0} />
       <AvisoArte />
+      <AvisoNascimento />
 
       {equipe && (
         <nav className="e-abas" aria-label="Abas">

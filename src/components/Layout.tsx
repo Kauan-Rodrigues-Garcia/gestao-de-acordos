@@ -90,6 +90,7 @@ import { SireneOverlay } from './Sirene/SireneOverlay';
 import { AvisoVotacao } from './VotacaoLideres/AvisoVotacao';
 import { AvisoVotacaoOpcoes } from './VotacaoOpcoes/AvisoVotacaoOpcoes';
 import { AvisoArte } from './Artes/AvisoArte';
+import { AvisoNascimento } from './AvisoNascimento/AvisoNascimento';
 import { BingoNoSistema } from '@/pages/ModoTV/bingo/jogador/BingoNoSistema';
 import { useModoLeve } from '@/lib/modoLeve';
 import { useModoLeveZeradoPeloAdmin } from '@/lib/modoLeveZerado';
@@ -1265,6 +1266,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <AvisoVotacaoOpcoes />
       {/* Artes para todos (17/11/2026): o card lançado em Eventos abre sozinho, uma vez por pessoa. */}
       <AvisoArte />
+      {/* Aviso de nascimento (18/11/2026): a cegonha traz o livro só para o setor do aviso. */}
+      <AvisoNascimento />
 
       {/* Chat interno — mesma quina do dock de autorizações, um degrau acima.
           Fica fora das rotas de propósito: conversar não é uma tela, é uma

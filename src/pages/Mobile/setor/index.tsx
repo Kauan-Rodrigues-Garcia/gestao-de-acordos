@@ -25,6 +25,7 @@ import { ChatDoApp } from '../comum/ChatDoApp';
 import { AvisoVotacao } from '@/components/VotacaoLideres/AvisoVotacao';
 import { AvisoVotacaoOpcoes } from '@/components/VotacaoOpcoes/AvisoVotacaoOpcoes';
 import { AvisoArte } from '@/components/Artes/AvisoArte';
+import { AvisoNascimento } from '@/components/AvisoNascimento/AvisoNascimento';
 import { InterruptorUnidade, TrocaDeVisao } from '../comum/Topo';
 import { BotaoInstalar, PassoIPhone } from '../equipe/InstalarApp';
 import { IconeAba } from '../equipe/partes';
@@ -205,6 +206,7 @@ function TelaDoSetor() {
       <AvisoVotacao recuoEsquerda={16} acimaDoRodape={temSetor ? 72 : 0} />
       <AvisoVotacaoOpcoes acimaDoRodape={temSetor ? 72 : 0} />
       <AvisoArte />
+      <AvisoNascimento />
 
       {temSetor && !tela.carregando && (
         <nav className="e-abas" aria-label="Abas" style={{ gridTemplateColumns: `repeat(${abas.length}, 1fr)` }}>

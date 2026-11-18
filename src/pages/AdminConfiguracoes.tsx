@@ -28,6 +28,7 @@ import NatalLiberacaoConfig from '@/components/admin/NatalLiberacaoConfig';
 import QuebraNozesConfig from '@/components/admin/QuebraNozesConfig';
 import SenhaInicialLiberacaoConfig from '@/components/admin/SenhaInicialLiberacaoConfig';
 import CrachaPedidoConfig from '@/components/admin/CrachaPedidoConfig';
+import AvisoNascimentoConfig from '@/components/admin/AvisoNascimentoConfig';
 import AdminDocumentacoes from '@/pages/AdminDocumentacoes';
 import AdminCargos from '@/components/admin/AdminCargos';
 import ImportarAcordosCard from '@/components/admin/ImportarAcordosCard';
@@ -273,6 +274,9 @@ export default function AdminConfiguracoes() {
         {/* ─── Aba: Geral ──────────────────────────────────────────────── */}
         {podeVerGeral && <TabsContent value="geral" className="mt-0 min-w-0 flex-1 overflow-y-auto p-6">
           <div className="max-w-4xl mx-auto space-y-6">
+
+          {/* ── Aviso de nascimento (18/11/2026): acompanhar, ler os recadinhos e liberar. */}
+          <AvisoNascimentoConfig />
 
           {/* ── Pedido do crachá (26/10/2026): liga/desliga o cartão e mostra quem
               respondeu, por setor. Ligar é do super_admin; ler é de quem abre
