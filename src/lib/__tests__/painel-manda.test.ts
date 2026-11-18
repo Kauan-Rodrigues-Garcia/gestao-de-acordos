@@ -158,6 +158,13 @@ const EXCECOES: Record<string, Excecao> = {
       + 'a aba para os outros); para todo o resto manda temPermissaoExplicita. O banco faz o mesmo em '
       + 'fn_rh_historico_mes (fn_user_tem OR fn_user_is_super_admin).',
   },
+  'lib/bancoHoras/liberacao.ts': {
+    linhas: 1, familia: 'chave-mestra',
+    motivo: 'Banco de Horas (18/11/2026): TRAVA temporária até haver autorização — vai para a main, mas só o '
+      + 'super_admin entra, nem o administrador por acesso total, nem cargo com a chave ligada. Uma linha só '
+      + '(o super_admin sempre passa). Liberado, só a liderança (CARGOS_DO_BANCO_HORAS, decisão do usuário) e, '
+      + 'dentro dela, ver_banco_horas. O banco faz o mesmo (20261118200000, fn_banco_horas_cargo_passa).',
+  },
   'pages/Jornada/index.tsx': {
     linhas: 1, familia: 'chave-mestra',
     motivo: 'sem equipe/subgrupo Suporte ou Retenção, o super_admin vê a PRÉVIA com dados inventados (nada vai ao '

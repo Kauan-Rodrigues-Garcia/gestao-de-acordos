@@ -339,6 +339,16 @@ export const ABAS_COM_ESCOPO = {
     prefixo: 'fechamento',
     niveis: ['setor', 'todos_setores'],
   },
+  /*
+   * Banco de Horas (18/11/2026): aba própria. `setor` = os setores do DP
+   * ligados ao setor da pessoa em `banco_horas_mapa`; `todos_setores` = tudo,
+   * com o filtro de setor. No banco, `fn_banco_horas_alcanca` lê estes níveis.
+   */
+  banco_horas: {
+    chaveAba: 'ver_banco_horas',
+    prefixo: 'banco_horas',
+    niveis: ['setor', 'todos_setores'],
+  },
 } as const satisfies Record<string, AbaComEscopo>;
 
 export type AbaEscopada = keyof typeof ABAS_COM_ESCOPO;

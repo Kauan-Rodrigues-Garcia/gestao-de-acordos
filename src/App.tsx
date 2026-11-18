@@ -34,6 +34,7 @@ import { MesProvider } from '@/providers/MesProvider';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useVersionCheck } from '@/hooks/useVersionCheck';
 import { CARGOS_MODO_TV, ROUTE_PATHS } from '@/lib/index';
+import { BANCO_HORAS_LIBERADO } from '@/lib/bancoHoras/liberacao';
 import { produtoDaEmpresa, type Produto } from '@/lib/produto';
 import { SoNoEnderecoDoApp } from '@/pages/Mobile/comum/SoNoEnderecoDoApp';
 import { decidirDesvio, deveAbrirMobile, destinoMobile, ehCelular, lerVersao, temaSoClaro } from '@/lib/mobile/preferencia';
@@ -138,6 +139,7 @@ const VendasIndicacoes  = lazy(() => import('@/pages/Vendas/Indicacoes'));
 const RhGestao          = lazy(() => import('@/pages/RhGestao'));
 const RhQuadro          = lazy(() => import('@/pages/RhQuadro'));
 const Fechamento        = lazy(() => import('@/pages/Fechamento'));
+const BancoHoras        = lazy(() => import('@/pages/BancoHoras'));
 const ControleNumeros   = lazy(() => import('@/pages/ControleNumeros'));
 const MeusChips         = lazy(() => import('@/pages/MeusChips'));
 // O painel do Nucleo. Lazy como o resto, e aqui isso poupa o bundle de quase
@@ -853,6 +855,26 @@ export default function App() {
                   <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_fechamento">
                     <Fechamento />
                   </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+
+              {/* Banco de Horas [BP] — o relatório do DP (18/11/2026). Quem abre é
+                  `ver_banco_horas`; o alcance (`banco_horas_escopo_*`) recorta
+                  na tela e `fn_banco_horas_alcanca` recorta no banco.
+                  TRAVADO até a autorização: só super_admin
+                  (`BANCO_HORAS_LIBERADO`, lib/bancoHoras/liberacao.ts). */}
+              <Route path={ROUTE_PATHS.BANCO_HORAS} element={
+                <LayoutWrapper>
+                  {BANCO_HORAS_LIBERADO ? (
+                    <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_banco_horas">
+                      <BancoHoras />
+                    </ProtectedRoute>
+                  ) : (
+                    // Com requiredPermissao o guard ignora `roles`; travado, vale só o cargo.
+                    <ProtectedRoute produtos={SO_COBRANCA} roles={['super_admin']}>
+                      <BancoHoras />
+                    </ProtectedRoute>
+                  )}
                 </LayoutWrapper>
               } />
 

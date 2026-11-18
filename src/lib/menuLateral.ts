@@ -33,9 +33,10 @@ import {
   LayoutDashboard, FileText, Plus, Users, Settings, Trash2, TrendingUp,
   BarChart3, Upload, BarChart2, Megaphone, MessageSquarePlus,
   Ticket, ClipboardList, ClipboardCheck, Smartphone, MessageCircle, Gauge,
-  ShoppingBag, Handshake, Send, Zap, Network, Tv, KeyRound, ShieldCheck, Headset,
+  ShoppingBag, Handshake, Send, Zap, Network, Tv, KeyRound, ShieldCheck, Headset, Clock,
 } from 'lucide-react';
 import { CARGOS_MODO_TV, ROUTE_PATHS } from '@/lib/index';
+import { passaTravaBancoHoras } from '@/lib/bancoHoras/liberacao';
 import { produtoPermite, type Produto } from '@/lib/produto';
 
 export interface NavItem {
@@ -166,6 +167,9 @@ export const NAV_ITEMS: NavItem[] = [
   // nasce desligada para todo cargo configurável: hoje o item aparece só para
   // quem tem acesso total, e a gerência entra quando alguém ligar no painel.
   { label: 'Fechamento',       icon: ClipboardCheck,  to: ROUTE_PATHS.FECHAMENTO,          produtos: SO_COBRANCA, hiddenForPaguePay: true, permissaoKey: 'ver_fechamento' },
+  // Banco de Horas (18/11/2026) — o relatório do DP, aba própria. Só BookPlay,
+  // como o Fechamento. Nasce desligada para todo cargo configurável.
+  { label: 'Banco de Horas',   icon: Clock,           to: ROUTE_PATHS.BANCO_HORAS,         produtos: SO_COBRANCA, hiddenForPaguePay: true, permissaoKey: 'ver_banco_horas', depoisDe: ROUTE_PATHS.FECHAMENTO },
   // Controle de Números — a área do Núcleo de Inteligência e Gestão.
   // `hiddenForPaguePay` porque o setor existe só na BookPlay. Quem abre é a
   // chave, e ela nasce só no cargo do Núcleo, `assistente_adm` (11/09/2026). A
@@ -394,6 +398,12 @@ export function abasDoMenu(ctx: ContextoMenu): NavItem[] {
     // ligada num setor Nosso produto não abre nada).
     if (item.to === ROUTE_PATHS.OUVIDORIA) {
       return ctx.ouvidoria ?? true;
+    }
+
+    // Banco de Horas: travado até a autorização — só o super_admin vê, nem o
+    // administrador por acesso total. Ver `lib/bancoHoras/liberacao.ts`.
+    if (item.to === ROUTE_PATHS.BANCO_HORAS) {
+      return passaTravaBancoHoras(ctx.cargo);
     }
 
     // Quadro de Pessoal: chave própria e explícita (só RH e super_admin de

@@ -42,6 +42,7 @@ export type ModuloPermissaoId =
   | 'controle_numeros'
   | 'meus_chips'
   | 'fechamento'
+  | 'banco_horas'
   | 'vendas'
   | 'indicacoes'
   | 'acompanhamento'
@@ -342,6 +343,19 @@ export const MODULOS_PERMISSAO: readonly DefinicaoModulo[] = [
       'Fechamento mensal por operador: fechamento, meta, alcance, quartil, D.U. '
       + 'trabalhado e situação.',
     grupos: ['Fechamento'], tenants: ['bookplay'],
+  },
+  {
+    /*
+     * Banco de Horas (18/11/2026): o relatório do DP, aba própria. O alcance
+     * `setor` é o dos setores do DP ligados ao setor da pessoa; quem importa e
+     * liga os setores é `banco_horas_gerenciar`.
+     */
+    id: 'banco_horas', rotulo: 'Banco de Horas', interruptor: 'ver_banco_horas',
+    escopo: 'banco_horas',
+    descricao:
+      'Banco de horas do DP: horas positivas, negativas e o que vence, por pessoa '
+      + 'e por setor.',
+    grupos: ['Banco de Horas'], tenants: ['bookplay'],
   },
 ] as const;
 

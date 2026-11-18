@@ -24,7 +24,7 @@ import type { LucideIcon } from 'lucide-react';
 import { ValorAnimado } from '@/components/ValorAnimado';
 import { cn } from '@/lib/utils';
 
-export type TomKpi = 'primario' | 'neutro' | 'sucesso' | 'alerta';
+export type TomKpi = 'primario' | 'neutro' | 'sucesso' | 'alerta' | 'perigo';
 
 const TONS: Record<TomKpi, { caixa: string; fundo: string; valor: string }> = {
   primario: {
@@ -46,6 +46,12 @@ const TONS: Record<TomKpi, { caixa: string; fundo: string; valor: string }> = {
     caixa: 'bg-warning/15 text-warning ring-1 ring-warning/25',
     fundo: 'from-warning/[0.07] to-transparent border-warning/25',
     valor: 'text-warning',
+  },
+  // Banco de Horas (18/11/2026): hora negativa é sempre vermelha.
+  perigo: {
+    caixa: 'bg-destructive/12 text-destructive ring-1 ring-destructive/20',
+    fundo: 'from-destructive/[0.06] to-transparent border-destructive/25',
+    valor: 'text-destructive',
   },
 };
 

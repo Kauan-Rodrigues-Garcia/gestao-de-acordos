@@ -219,6 +219,8 @@ export const GRUPOS_PERMISSAO = [
   'Vendas',
   // Calendário do setor, 06/10/2026. Neutro de produto: cobrança e Comercial.
   'Calendário',
+  // Banco de Horas, 18/11/2026. O relatório do DP, por pessoa e por setor.
+  'Banco de Horas',
 ] as const;
 export type GrupoPermissao = typeof GRUPOS_PERMISSAO[number];
 
@@ -2281,6 +2283,44 @@ export const PERMISSOES: PermissaoMeta[] = [
     depende: {
       chaves: ['fechamento_escopo_setor', 'fechamento_escopo_todos_setores'],
       motivo: 'O selo mostra o alcance da própria aba Fechamento.',
+    },
+  },
+
+  // ── Banco de Horas ───────────────────────────────────────────────────────
+  //
+  // 18/11/2026. O relatório HRBH102 do DP, que era um HTML solto, virou aba do
+  // menu com alcance próprio: o líder vê o banco de horas do setor dele, a
+  // gerência vê todos. Todas nascem em `{}` — migration 20261118180000.
+  {
+    key: 'ver_banco_horas', label: 'Aba Banco de Horas',
+    descricao:
+      'Abrir o banco de horas do DP: horas positivas, negativas e o que vence, por '
+      + 'pessoa e por setor',
+    grupo: 'Banco de Horas', tenants: ['bookplay'], padrao: {},
+    depende: {
+      chaves: ['banco_horas_escopo_setor', 'banco_horas_escopo_todos_setores'],
+      motivo: 'A aba mostra o alcance que estiver ligado: o próprio setor ou todos.',
+    },
+  },
+  {
+    key: 'banco_horas_escopo_setor', label: 'Banco de Horas: o próprio setor',
+    descricao: 'Ver os setores do DP ligados ao setor da pessoa',
+    grupo: 'Banco de Horas', tenants: ['bookplay'], padrao: {},
+  },
+  {
+    key: 'banco_horas_escopo_todos_setores', label: 'Banco de Horas: todos os setores',
+    descricao: 'Ver todos os setores que o DP mandou, com o filtro de setor',
+    grupo: 'Banco de Horas', tenants: ['bookplay'], padrao: {},
+  },
+  {
+    key: 'banco_horas_gerenciar', label: 'Banco de Horas: importar e ligar setores',
+    descricao:
+      'Importar os arquivos do DP, apagar um relatório e escolher qual setor do '
+      + 'gestão vê cada setor do DP',
+    grupo: 'Banco de Horas', tenants: ['bookplay'], padrao: {},
+    depende: {
+      chaves: ['banco_horas_escopo_todos_setores'],
+      motivo: 'Quem importa precisa ver todos os setores que está importando.',
     },
   },
 

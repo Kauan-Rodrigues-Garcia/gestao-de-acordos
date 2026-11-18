@@ -72,6 +72,8 @@ export const ROUTE_PATHS = {
    * arquivo baixado e não tem rota.
    */
   FECHAMENTO: '/fechamento',
+  /** Banco de Horas (18/11/2026): o relatório HRBH102 do DP, por pessoa e setor. */
+  BANCO_HORAS: '/banco-de-horas',
   /**
    * A aba Vendas, do Comercial. É a primeira rota do produto `comercial` — até
    * ela, `/` abria em `ProdutoEmMontagem` e não havia mais nada.
