@@ -1,8 +1,8 @@
 /**
  * FaixaCobertura945 — os últimos dias do relatório 945, um quadrado por dia.
  *
- *   verde escuro  consolidado: um arquivo o cobriu 7+ dias depois (já com as
- *                 baixas retroativas)
+ *   verde escuro  consolidado: um arquivo o cobriu 7+ dias depois, ou o mês
+ *                 dele já foi validado (já com as baixas retroativas)
  *   verde         completo: um arquivo o cobriu depois que o dia acabou
  *   âmbar         parcial: só foi coberto enquanto ainda estava acontecendo
  *   cinza         sem importação

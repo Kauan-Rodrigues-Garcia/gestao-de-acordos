@@ -22,7 +22,11 @@ export interface DiaCobertura {
 
 export interface Cobertura {
   hoje: string;
-  /** Dia em que o próximo arquivo precisa começar; null = qualquer dia. */
+  /**
+   * Dia em que o próximo arquivo precisa começar; null = qualquer dia. Só
+   * aparece do 2º dia útil do mês em diante, enquanto o mês anterior não foi
+   * validado — e é sempre o dia 1º dele.
+   */
   inicio_exigido: string | null;
   /** O diário só guarda daqui em diante (1º dia do mês anterior). */
   piso_diario: string;
@@ -91,10 +95,49 @@ export function faltaInicio(inicio: string, fim: string, exigido: string | null)
   return !!exigido && fim >= exigido && inicio > exigido;
 }
 
-/** A frase que diz o que exportar no ERP. */
+const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+/** «novembro» de qualquer data ISO do mês. */
+export const nomeDoMes = (iso: string) => MESES[Number(iso.slice(5, 7)) - 1];
+
+/**
+ * O 2º dia útil (seg–sex) do mês de `iso`. Espelho de
+ * `private.r945_segundo_dia_util`: feriado não entra.
+ */
+export function segundoDiaUtil(iso: string): string {
+  const d = new Date(`${iso.slice(0, 7)}-01T12:00:00Z`);
+  let uteis = 0;
+  for (;;) {
+    const dow = d.getUTCDay();
+    if (dow >= 1 && dow <= 5 && ++uteis === 2) return d.toISOString().slice(0, 10);
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+}
+
+/** Dia 1º do mês seguinte ao de `iso`. */
+function proximoMes(iso: string): string {
+  const [a, m] = iso.split('-').map(Number);
+  return new Date(Date.UTC(a, m, 1)).toISOString().slice(0, 10);
+}
+/** Dia 1º do mês anterior ao de `iso`. */
+function mesAnterior(iso: string): string {
+  const [a, m] = iso.split('-').map(Number);
+  return new Date(Date.UTC(a, m - 2, 1)).toISOString().slice(0, 10);
+}
+
+/**
+ * A frase que diz o que exportar no ERP. Com `inicio_exigido`, o mês anterior
+ * ainda não foi validado (ver migration 20261119100000); sem ele, vale
+ * qualquer período e a frase avisa quando é a próxima validação.
+ */
 export function instrucaoDeExportacao(c: Pick<Cobertura, 'inicio_exigido' | 'hoje'>): string {
-  if (!c.inicio_exigido) return 'Hoje já tem arquivo cobrindo os últimos dias: pode importar o 945 de qualquer período, até só de hoje.';
-  return `Exporte o relatório 945 com data inicial ${dataBR(c.inicio_exigido)} (${diaDaSemana(c.inicio_exigido)}) até hoje.`;
+  if (c.inicio_exigido) {
+    return `Validação de ${nomeDoMes(c.inicio_exigido)}: exporte o relatório 945 com data inicial ${dataBR(c.inicio_exigido)} até hoje (o mês inteiro).`;
+  }
+  // Antes do 2º dia útil, a validação que vem é a do mês passado.
+  const antes = c.hoje < segundoDiaUtil(c.hoje);
+  const quando = antes ? segundoDiaUtil(c.hoje) : segundoDiaUtil(proximoMes(c.hoje));
+  const mes = nomeDoMes(antes ? mesAnterior(c.hoje) : c.hoje);
+  return `Pode importar o 945 de qualquer período, até só de hoje. A validação de ${mes} (o mês inteiro) fica para ${dataBR(quando).slice(0, 5)} (${diaDaSemana(quando)}).`;
 }
 
 export const somaQuantidade = (xs: readonly FaltaNoArquivo[]) => xs.reduce((s, x) => s + x.quantidade, 0);

@@ -130,7 +130,7 @@ export function useImportacao945(empresaId: string | null | undefined, origem: O
     }
     if (relatorio.fim > conferencia.hoje) return `O arquivo tem baixas com data futura (${dataBR(relatorio.fim)}). Confira a exportação.`;
     if (faltaInicio(inicio, relatorio.fim, conferencia.inicio_exigido)) {
-      return `Faltam dias no arquivo. ${instrucaoDeExportacao(conferencia)} Este começa em ${dataBR(inicio)}.`;
+      return `${instrucaoDeExportacao(conferencia)} Este começa em ${dataBR(inicio)}.`;
     }
     return null;
   }, [previa, inicio, origem]);

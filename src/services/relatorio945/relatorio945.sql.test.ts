@@ -2,7 +2,7 @@
 import { PGlite } from '@electric-sql/pglite';
 import { readFileSync, readdirSync } from 'node:fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { ResultadoImportacao945 } from './modelo';
+import { segundoDiaUtil, type ResultadoImportacao945 } from './modelo';
 
 const empresa = '00000000-0000-4000-8000-000000000001';
 const semCofen = '00000000-0000-4000-8000-000000000009';
@@ -32,6 +32,10 @@ const piso = (() => {
   const d = new Date(Date.UTC(a, m - 2, 1));
   return d.toISOString().slice(0, 10);
 })();
+
+/** O que a trava pede hoje sem nada importado: o mês passado, se já é dia de validá-lo. */
+const exigidoSemHistorico = hoje >= segundoDiaUtil(hoje) && piso >= '2026-11-01' ? piso : null;
+const primeiroInicio = dia(-35) < piso ? dia(-35) : piso;
 
 interface Linha { id: string; data: string; total: number; op?: string; opId?: string | null }
 const linha = ({ id, data, total, op = '', opId = null }: Linha) => ({
@@ -101,8 +105,10 @@ beforeAll(async () => {
     grant usage on schema public, auth to authenticated;
     grant select, insert, update, delete on all tables in schema public to authenticated;
   `);
-  const file = readdirSync('supabase/migrations').find(n => n.endsWith('_relatorio_945_importacao_unica.sql'))!;
-  await db.exec(readFileSync(`supabase/migrations/${file}`, 'utf8'));
+  for (const fim of ['_relatorio_945_importacao_unica.sql', '_relatorio_945_validacao_mensal.sql']) {
+    const file = readdirSync('supabase/migrations').find(n => n.endsWith(fim))!;
+    await db.exec(readFileSync(`supabase/migrations/${file}`, 'utf8'));
+  }
   await db.exec('set role authenticated');
 }, 30000);
 afterAll(async () => { await db?.close(); });
@@ -113,12 +119,14 @@ describe('relatório 945: importação única e cobertura', { concurrent: false 
     expect(r.filter(x => x.id_baixa === '777')).toEqual([expect.objectContaining({ dia_referencia: dia(-12), valor_recebido: '59.92' })]);
   });
 
-  it('sem histórico, exige 35 dias e recusa arquivo que começa depois', async () => {
-    const cob = await rpc<{ inicio_exigido: string; dias: unknown[] }>('cobertura', { empresa });
-    expect(cob.inicio_exigido).toBe(dia(-35));
+  it('sem histórico, só exige o mês passado se já é dia de validá-lo', async () => {
+    const cob = await rpc<{ inicio_exigido: string | null; dias: unknown[] }>('cobertura', { empresa });
+    expect(cob.inicio_exigido).toBe(exigidoSemHistorico);
     expect(cob.dias).toHaveLength(21);
-    await expect(importar([linha({ id: '1', data: dia(-1), total: 1000 })], { inicio: dia(-1) }))
-      .rejects.toThrow(/a partir de .* até hoje/);
+    if (exigidoSemHistorico) {
+      await expect(importar([linha({ id: '1', data: dia(-1), total: 1000 })], { inicio: dia(-1) }))
+        .rejects.toThrow(/a partir de .* até hoje/);
+    }
   });
 
   it('grava diretoria e diário juntos; o diário só recebe a janela operacional', async () => {
@@ -128,7 +136,7 @@ describe('relatório 945: importação única e cobertura', { concurrent: false 
       linha({ id: '12', data: hoje, total: 2000, op: '' }),
       linha({ id: '777', data: dia(-12), total: 5992 }),
     ];
-    const r = await importar(linhas, { inicio: dia(-35) });
+    const r = await importar(linhas, { inicio: primeiroInicio });
     expect(r).toMatchObject({ inseridos: 4, atualizados: 0, ignorados: 0 });
     const noDiario = dia(-35) >= piso ? 4 : 3;
     expect(r.diario.inseridos + r.diario.atualizados).toBeGreaterThanOrEqual(noDiario - 1);
@@ -181,10 +189,12 @@ describe('relatório 945: importação única e cobertura', { concurrent: false 
     expect(d.some(x => x.id_baixa === '12')).toBe(false);
   });
 
-  it('invalidar devolve os dias à exigência', async () => {
-    await rpc('invalidar', { empresa, inicio: dia(-3), fim: dia(-3) });
-    const cob = await rpc<{ inicio_exigido: string }>('cobertura', { empresa });
-    expect(cob.inicio_exigido).toBe(dia(-3));
+  it('invalidar um dia do mês passado devolve a validação', async () => {
+    await rpc('invalidar', { empresa, inicio: piso, fim: piso });
+    const cob = await rpc<{ inicio_exigido: string | null }>('cobertura', { empresa });
+    expect(cob.inicio_exigido).toBe(exigidoSemHistorico);
+    // valida de novo, para os testes seguintes importarem qualquer período
+    await importar([linha({ id: '60', data: piso, total: 100 })], { inicio: piso });
   });
 
   it('sem coluna Operador o diário não é tocado', async () => {
@@ -199,5 +209,58 @@ describe('relatório 945: importação única e cobertura', { concurrent: false 
     await db.exec(`select set_config('test.importar', '0', false)`);
     await expect(rpc('cobertura', { empresa })).rejects.toThrow(/Sem permissão/);
     await db.exec(`select set_config('test.importar', '1', false)`);
+  });
+});
+
+describe('relatório 945: validação do mês fechado', { concurrent: false }, () => {
+  // Empresa sem nenhuma importação: só as funções privadas, com `hoje` fixo.
+  const outra = semCofen;
+  const como = async <T>(sql: string): Promise<T> => {
+    await db.exec('reset role');
+    try {
+      const r = await db.exec(sql);
+      return r[r.length - 1].rows[0]?.r as T;
+    } finally { await db.exec('set role authenticated'); }
+  };
+  const exigido = (h: string) => como<string | null>(`select private.r945_inicio_exigido('${outra}', '${h}')::text r`);
+  /** Cobre novembro inteiro (até `ate`) com um arquivo de corte `corte` importado em `em`. */
+  const cobrirNovembro = (corte: string, em: string, ate = '2026-11-30') => como(`
+    delete from private.r945_cobertura where empresa_id = '${outra}';
+    insert into private.r945_cobertura (empresa_id, data, corte, atualizado_em)
+    select '${outra}', d::date, '${corte}-03'::timestamptz, '${em}-03'::timestamptz
+      from generate_series('2026-11-01'::timestamp, '${ate}'::timestamp, interval '1 day') d;
+    select 1 r`);
+
+  it('2º dia útil: seg–sex, contando do dia 1º', async () => {
+    const d = (x: string) => como<string>(`select private.r945_segundo_dia_util('${x}')::text r`);
+    expect(await d('2026-11-19')).toBe('2026-11-03'); // 1º é domingo
+    expect(await d('2026-12-15')).toBe('2026-12-02');
+    expect(await d('2027-01-10')).toBe('2027-01-04'); // 1º é sexta
+    expect(await d('2026-08-31')).toBe('2026-08-04'); // 1º é sábado
+    for (const x of ['2026-11-19', '2026-12-15', '2027-01-10', '2026-08-31']) expect(segundoDiaUtil(x)).toBe(await d(x));
+  });
+
+  it('não exige nada antes do 2º dia útil nem de outubro para trás', async () => {
+    expect(await exigido('2026-11-19')).toBeNull();
+    expect(await exigido('2026-12-01')).toBeNull();
+    expect(await exigido('2026-12-02')).toBe('2026-11-01');
+  });
+
+  it('valida com o mês inteiro importado do 2º dia útil em diante, indo além do fim do mês', async () => {
+    await cobrirNovembro('2026-12-02 09:00', '2026-12-02 10:00');
+    expect(await exigido('2026-12-02')).toBeNull();
+    expect(await exigido('2026-12-20')).toBeNull();
+    const estado = await como<string>(`select e->>'estado' r from jsonb_array_elements(
+      private.r945_cobertura_json('${outra}', '2026-12-02')->'dias') e where e->>'data' = '2026-11-30'`);
+    expect(estado).toBe('consolidado');
+  });
+
+  it('não valida arquivo importado antes do dia, que para no fim do mês, ou com dia faltando', async () => {
+    await cobrirNovembro('2026-12-01 15:00', '2026-12-01 16:00');
+    expect(await exigido('2026-12-02')).toBe('2026-11-01');
+    await cobrirNovembro('2026-11-30 19:00', '2026-12-02 10:00');
+    expect(await exigido('2026-12-02')).toBe('2026-11-01');
+    await cobrirNovembro('2026-12-02 09:00', '2026-12-02 10:00', '2026-11-29');
+    expect(await exigido('2026-12-02')).toBe('2026-11-01');
   });
 });

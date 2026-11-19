@@ -1505,12 +1505,21 @@ Cada importação guarda o **corte** do arquivo — a maior `Dt.Baixa` +
 **completo** quando o corte passou do fim dele e **consolidado** quando passou
 7 dias (baixa retroativa: Data anterior à Dt.Baixa, até 5 dias no medido).
 
-O arquivo precisa começar no **dia mais antigo dos últimos 35 que não está
-consolidado nem foi coberto por um arquivo hoje**. A tela mostra a data pronta
-(«exporte o 945 com data inicial 23/10/2026 (sex) até hoje») numa faixa com os
-últimos 14 dias; o banco recusa de novo na gravação. Depois do primeiro arquivo
-do dia, os seguintes podem ser de qualquer período. «Limpar dia» e «Limpar mês»
-devolvem os dias à exigência. A faixa também marca, com anel vermelho, dia em
+Desde 19/11/2026 (migration `20261119100000`) **não há trava diária**: o 945 do
+dia a dia pode ser de qualquer período, e a faixa dos últimos 14 dias mostra o
+que já veio completo. A trava é **mensal**: do **2º dia útil (seg–sex, sem
+feriado)** do mês em diante, enquanto o mês anterior não estiver validado, o
+arquivo precisa começar no dia 1º dele e ir até hoje («Validação de novembro:
+exporte o relatório 945 com data inicial 01/11/2026 até hoje»); o banco recusa
+de novo na gravação. Um dia está **validado** quando um arquivo que o cobre foi
+importado no 2º dia útil do mês seguinte ou depois e tem corte já no mês
+seguinte. A regra começa em novembro/2026 (primeira validação em 02/12/2026).
+Na faixa, «consolidado» = corte 7+ dias depois do dia **ou** dia validado.
+«Limpar dia» e «Limpar mês» num dia do mês anterior devolvem a validação.
+
+Antes disso (26/10–19/11), o arquivo precisava começar no dia mais antigo dos
+últimos 35 que não estava consolidado nem coberto por um arquivo hoje — na
+prática, toda importação pedia a semana anterior. A faixa também marca, com anel vermelho, dia em
 que diário e Relatório de pagamento têm quantidades diferentes.
 
 ### 11.6 Visões
