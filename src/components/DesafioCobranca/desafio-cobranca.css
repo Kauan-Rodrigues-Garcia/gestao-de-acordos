@@ -474,3 +474,45 @@
 @media (prefers-reduced-motion: reduce) {
   .dc-pisca .dc-luz, .dc[data-natal] .dc-ceu span { animation: none; }
 }
+
+/* ── Aba «Equipes»: a meta individual de cada operador, para o líder (19/11/2026) ── */
+.dc-cabeca-abas { margin-top: 12px; }
+.dc-eq-setor {
+  max-width: 55%; padding: 3px 8px; border-radius: 999px; border: 1px solid var(--dc-cartao-borda);
+  background: color-mix(in srgb, var(--dc-veu) 8%, transparent); color: var(--dc-texto); font: inherit; font-size: 12px; font-weight: 700;
+}
+.dc-eq-setor option { color: #111; }
+.dc-eq-total { margin: 8px 0 0; font-size: 15px; color: var(--dc-suave); }
+.dc-eq-total strong { font-size: 26px; font-weight: 900; color: var(--dc-texto); }
+.dc-eq-resumo { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 0; padding: 0; list-style: none; }
+.dc-eq-resumo li {
+  display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700;
+  background: color-mix(in srgb, var(--dc-ouro) 14%, transparent); color: var(--dc-ouro);
+}
+.dc-eq-resumo li.maior { background: color-mix(in srgb, var(--dc-verde) 16%, transparent); color: var(--dc-verde); }
+.dc-eq-nome { margin: 0; font-size: 16px; font-weight: 900; }
+.dc-eq-contagem { font-size: 13px; color: var(--dc-suave); }
+.dc-eq-contagem strong { color: var(--dc-texto); font-weight: 900; }
+.dc-eq-lista { display: flex; flex-direction: column; gap: 12px; margin: 12px 0 0; padding: 0; list-style: none; }
+.dc-eq-linha { display: flex; flex-direction: column; gap: 5px; }
+.dc-eq-topo { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.dc-eq-pessoa { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 700; }
+.dc-eq-selo {
+  flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 999px;
+  font-size: 11px; font-weight: 800; white-space: nowrap;
+  background: color-mix(in srgb, var(--dc-veu) 8%, transparent); color: var(--dc-suave);
+}
+.dc-eq-selo.maior { background: var(--dc-verde); color: var(--dc-tinta-ok); }
+.dc-eq-selo.menor { background: var(--dc-ouro); color: var(--dc-sobre-ouro); }
+.dc-eq-regua { position: relative; height: 8px; border-radius: 999px; background: var(--dc-trilho); }
+.dc-eq-cheia { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--dc-minha), var(--dc-minha-2)); transition: width 0.8s cubic-bezier(0.22, 1, 0.36, 1); }
+.dc-eq-linha.menor .dc-eq-cheia { background: linear-gradient(90deg, var(--dc-ouro), var(--dc-coral)); }
+.dc-eq-linha.maior .dc-eq-cheia { background: var(--dc-verde); }
+.dc-eq-marca { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: var(--dc-texto); opacity: 0.7; }
+.dc-eq-numeros { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 10px; margin: 0; font-size: 12px; color: var(--dc-suave); font-variant-numeric: tabular-nums; }
+.dc-eq-numeros strong { color: var(--dc-texto); font-weight: 800; }
+.dc-eq-vazio { margin: 0; padding: 12px; text-align: center; font-size: 14px; color: var(--dc-suave); }
+.dc-eq-nota { margin: 0; text-align: center; font-size: 11px; color: var(--dc-suave); }
+@media (max-width: 480px) {
+  .dc-eq-numeros span:last-child { display: none; }
+}

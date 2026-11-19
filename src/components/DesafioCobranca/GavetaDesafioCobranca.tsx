@@ -10,10 +10,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import * as Dialog from '@radix-ui/react-dialog';
-import { CalendarDays, Check, Clock, Eye, Gift, Hourglass, Info, Lock, RotateCcw, Settings2, Snowflake, Sun, Target, UserRound, X } from 'lucide-react';
+import { CalendarDays, Check, Clock, Eye, Gift, Hourglass, Info, Lock, RotateCcw, Settings2, Snowflake, Sun, Target, UserRound, Users, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ROUTE_PATHS } from '@/lib';
 import { useMinhaMetaNoDesafio, type MinhaMetaNoDesafio } from '@/hooks/useDesafioCobranca';
+import { useAlcanceNoDesafio } from '@/hooks/useEquipeNoDesafio';
+import { EquipesNoDesafio } from './EquipesNoDesafio';
 import type { PlacarCobranca } from '@/services/desafioCobranca/desafioCobranca.service';
 import {
   brl, brlCurto, dataCurta, diaLocal, diasRestantes, esperadoAteODia, horaCurta, maiuscula, medias, metaDoDia, pct, semana, semanaCurta,
@@ -36,6 +38,12 @@ export function GavetaDesafioCobranca({ placar, hoje, aberta, onFechar, jaAbriu,
   const ultimo = placar.dias.length - 1;
   // As cores seguem o Gestão da pessoa: Natal ligado ou não, claro ou escuro.
   const tema = useTemaDoDesafio();
+  // A aba «Equipes» (19/11/2026): quem tem o Analítico do setor (ou de todos)
+  // no painel de permissões acompanha a meta individual de cada operador.
+  const alcance = useAlcanceNoDesafio();
+  const [aba, setAba] = useState<'desafio' | 'equipes'>('desafio');
+  const comAbas = jaAbriu && alcance !== 'nenhum';
+  const naEquipe = comAbas && aba === 'equipes';
   return (
     <Dialog.Root open={aberta} onOpenChange={(v) => { if (!v) onFechar(); }}>
       <Dialog.Portal>
@@ -62,12 +70,24 @@ export function GavetaDesafioCobranca({ placar, hoje, aberta, onFechar, jaAbriu,
               <span className="dc-pilula">Dia {hoje + 1} de {placar.dias.length}{hoje === ultimo ? ' · último!' : ''}</span>
             </p>
             {placar.super_admin && <AvisoSuperAdmin placar={placar} onFechar={onFechar} />}
+            {comAbas && (
+              <div className="dc-abas dc-cabeca-abas" role="tablist" aria-label="Abas do desafio">
+                <button type="button" role="tab" aria-selected={!naEquipe} className="dc-aba" onClick={() => setAba('desafio')}>
+                  <Sun size={13} aria-hidden /> Desafio
+                </button>
+                <button type="button" role="tab" aria-selected={naEquipe} className="dc-aba" onClick={() => setAba('equipes')}>
+                  <Users size={13} aria-hidden /> Equipes
+                </button>
+              </div>
+            )}
             <Sincelos largura={170} comprimento={22} semente={23} className="dc-so-natal dc-sincelo-cabeca" />
           </header>
 
           <div className="dc-corpo">
-            {jaAbriu
-              ? <Conteudo placar={placar} hoje={hoje} aberta={aberta} onVerAbertura={onVerAbertura} />
+            {naEquipe
+              ? <EquipesNoDesafio placar={placar} hoje={hoje} aberta={aberta} alcance={alcance} />
+              : jaAbriu
+                ? <Conteudo placar={placar} hoje={hoje} aberta={aberta} onVerAbertura={onVerAbertura} />
               : <Ingresso placar={placar} onAbrir={onAbriu} />}
           </div>
         </Dialog.Content>
