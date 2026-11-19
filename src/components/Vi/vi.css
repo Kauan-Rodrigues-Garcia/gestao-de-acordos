@@ -218,16 +218,11 @@ html[data-vi] main h1 {
 /* Largura fixa por dígito: o relógio não treme quando o número muda. */
 .vi-contagem-digito { width: .6em; text-align: center; }
 .vi-contagem-sep { width: .36em; text-align: center; color: #ff8fd0; }
-.vi-contagem-chegou {
-  display: block; font-family: var(--vi-titulo); font-size: 36px; font-weight: 900; line-height: 1; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap;
-  text-shadow: 0 0 3px #fff, 0 0 9px var(--vi-rosa), 0 0 20px var(--vi-rosa);
-}
 @media (max-width: 767px) {
   .vi-contagem { padding: 7px 10px 6px; border-radius: 9px; }
   .vi-contagem-corpo { gap: 4px; }
   .vi-contagem-rotulo { font-size: 8px; letter-spacing: .1em; }
   .vi-contagem-tempo { font-size: 25px; }
-  .vi-contagem-chegou { font-size: 22px; }
 }
 
 /* ── O botão da música, no alto da tela (`BotaoMusicaVi`) ────────────────── */

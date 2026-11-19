@@ -28,27 +28,26 @@ export function ContagemVi({ lancamento = LANCAMENTO_MS }: { lancamento?: number
     return () => window.clearTimeout(relogio);
   }, [acabou, lancamento]);
 
+  // Depois do lançamento a contagem some (Cleber, 19/11/2026: sem o «Já disponível»).
+  if (!partes) return null;
+
   return (
     <div
       className="vi-contagem"
       role="timer"
-      aria-label={partes ? `Faltam ${partes[0]} horas e ${partes[1]} minutos para o lançamento do GTA VI` : 'GTA VI já disponível'}
+      aria-label={`Faltam ${partes[0]} horas e ${partes[1]} minutos para o lançamento do GTA VI`}
     >
-      {partes ? (
-        <span className="vi-contagem-corpo" aria-hidden="true">
-          <span className="vi-contagem-rotulo">Lançamento em</span>
-          <span className="vi-contagem-tempo">
-            {partes.map((par, i) => (
-              <span key={i} className="vi-contagem-par">
-                {i > 0 && <span className="vi-contagem-sep">:</span>}
-                {[...par].map((d, j) => <span key={j} className="vi-contagem-digito">{d}</span>)}
-              </span>
-            ))}
-          </span>
+      <span className="vi-contagem-corpo" aria-hidden="true">
+        <span className="vi-contagem-rotulo">Lançamento em</span>
+        <span className="vi-contagem-tempo">
+          {partes.map((par, i) => (
+            <span key={i} className="vi-contagem-par">
+              {i > 0 && <span className="vi-contagem-sep">:</span>}
+              {[...par].map((d, j) => <span key={j} className="vi-contagem-digito">{d}</span>)}
+            </span>
+          ))}
         </span>
-      ) : (
-        <span className="vi-contagem-chegou" aria-hidden="true">Já disponível</span>
-      )}
+      </span>
     </div>
   );
 }
