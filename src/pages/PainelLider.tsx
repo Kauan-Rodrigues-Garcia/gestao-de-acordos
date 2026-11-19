@@ -48,6 +48,9 @@ import {
 import {
   buscarResumoMensalDiario, type ResumoMensalDiario,
 } from '@/services/diario/diario.service';
+import {
+  carregarPagamentoSetorPorDia, graficoPeloPagamento, linhasDoPagamento, type PagamentoSetor,
+} from '@/services/relatorioPaguePlay/pagamentoSetor';
 import { DesempenhoEquipes } from '@/pages/Dashboard/Analitico/DesempenhoEquipes';
 import { QuartisOperadores } from '@/pages/Dashboard/Analitico/QuartisOperadores';
 import { GraficoRecebimento } from '@/pages/Dashboard/Analitico/GraficoRecebimento';
@@ -373,6 +376,10 @@ export default function PainelLider() {
   const [analiticoExclusoes, setAnaliticoExclusoes] = useState<Record<string, Set<OrigemKey>>>({});
   const [loadingAnalitico, setLoadingAnalitico] = useState(false);
   const [resumoDiario, setResumoDiario]   = useState<ResumoMensalDiario | null>(null);
+  /** Relatório 945 de pagamento do setor Cofen, por dia — o do Painel Diretoria. */
+  const [pagamento945, setPagamento945]   = useState<PagamentoSetor | null>(null);
+  /** Gráfico pelo 945 da diretoria: setor Cofen inteiro em tela (19/11/2026). */
+  const graficoDo945 = graficoPeloPagamento(pagamento945, setoresAbas, escopoAbas.equipeIds);
   const [loadingDiario, setLoadingDiario] = useState(false);
   // Incrementado pelo botão de recarregar do cabeçalho — força nova busca
   const [diarioReloadKey, setDiarioReloadKey] = useState(0);
@@ -410,12 +417,16 @@ export default function PainelLider() {
     // O gráfico da regra Cofen lê o diário; o ajuste de recebimento (que não
     // está no diário) vem junto, cada um no dia em que foi lançado — a mesma
     // composição de `carregarGraficoEquipe` no celular.
+    // O 945 do setor Cofen vem junto: com o setor inteiro em tela, o gráfico
+    // lê ele em vez do diário (ver `graficoPeloPagamento`).
     void Promise.all([
       buscarResumoMensalDiario(empresa.id, mesStr),
       buscarAjustesComoLinhasDia(empresa.id, mesStr),
-    ]).then(([res, ajustes]) => {
+      carregarPagamentoSetorPorDia(empresa.id, mesStr).catch((): PagamentoSetor | null => null),
+    ]).then(([res, ajustes, pagamento]) => {
       if (cancel) return;
       setResumoDiario({ ...res, linhasDia: [...res.linhasDia, ...ajustes] });
+      setPagamento945(pagamento);
       setLoadingDiario(false);
     });
     return () => { cancel = true; };
@@ -895,9 +906,15 @@ export default function PainelLider() {
               equipes={equipesInfo?.equipes ?? []}
               operadorEquipeMap={equipesInfo?.operadorEquipeMap ?? {}}
               equipesExtrasPorOperador={equipesInfo?.equipesExtrasPorOperador ?? {}}
-              linhasExternas={isPP ? (resumoDiario?.linhasDia ?? []) : undefined}
-              fonteLabel={isPP ? 'relatório de recebimento diário' : 'relatório analítico'}
-              escopo={escopoDoGrafico}
+              linhasExternas={!isPP ? undefined
+                : graficoDo945 && pagamento945 ? linhasDoPagamento(pagamento945)
+                : (resumoDiario?.linhasDia ?? [])}
+              fonteLabel={!isPP ? 'relatório analítico'
+                : graficoDo945 ? 'relatório 945 de pagamento (o mesmo do Painel Diretoria)'
+                : 'relatório de recebimento diário'}
+              /* No 945 cada linha já é o dia inteiro do setor: recortar por
+                 origem tiraria dinheiro que a diretoria mostra. */
+              escopo={graficoDo945 ? ESCOPO_EMPRESA : escopoDoGrafico}
               rotuloEscopo={rotuloDoEscopo}
             />
           )}
