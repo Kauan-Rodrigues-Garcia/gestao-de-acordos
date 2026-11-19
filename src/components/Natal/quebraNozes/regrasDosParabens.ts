@@ -7,6 +7,7 @@
  */
 import type { Destaque } from './diretor';
 import { rostoDeExemplo } from './exemplos';
+import type { AoVivoDoPalco } from './parabensAoVivo';
 
 export interface PessoaDoParabens {
   nome: string;
@@ -19,6 +20,8 @@ export interface ParabensDoPalco {
   souDestaque: boolean;
   /** Teste nesta tela: colegas de mentira chegam, e nada sai do navegador. */
   ensaio: boolean;
+  /** Show de verdade: o clique vai para os colegas da cidade, e os deles chegam aqui. */
+  aoVivo?: AoVivoDoPalco;
 }
 
 export interface BalaoDeParabens extends PessoaDoParabens {

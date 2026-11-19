@@ -2,17 +2,19 @@
  * Os balões de parabéns que sobem pelas laterais.
  *
  * São peças soltas, como o confete do palco: entram direto na caixa e animam
- * por WAAPI, sem redesenhar o palco a cada um. Por ora só o ensaio
- * (`parabens.ensaio`) chega aqui: o clique fica nesta tela e os colegas são de
- * mentira.
+ * por WAAPI, sem redesenhar o palco a cada um. No ensaio (`parabens.ensaio`)
+ * o clique fica nesta tela e os colegas são de mentira; no show de verdade
+ * (`parabens.aoVivo`) os balões vão e vêm pela cidade (`parabensAoVivo.ts`).
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import type { Destaque } from './diretor';
 import {
-  ENTRE_COLEGAS_MS, RECARGA_DO_BOTAO_MS, TETO_DE_BALOES, colegaDoEnsaio, sortearOutraFrase,
+  ENTRE_COLEGAS_MS, RECARGA_DO_BOTAO_MS, TETO_DE_BALOES, colegaDoEnsaio, frasesDoEspetaculo, sortearOutraFrase,
   type BalaoDeParabens, type ParabensDoPalco,
 } from './regrasDosParabens';
+import { ESPALHAR_ENTRADA_MS, ESPERA_MAXIMA_MS, deveTentar, mandarParabens, ouvirParabens } from './parabensAoVivo';
+import { nomeCurto } from './dados';
 import { tocarSom } from './sons';
 
 const PRIMEIRO_COLEGA_MS = 1_200;
@@ -112,7 +114,34 @@ export function useParabensDoPalco({ parabens, destaques, noAr, quadrinho, mini 
     return () => window.clearTimeout(relogio);
   }, [noAr, ensaio, quantos, soltar]);
 
-  useEffect(() => () => window.clearTimeout(recarga.current), []);
+  // Ao vivo: os balões dos colegas da cidade. A entrada no canal se espalha
+  // por uns segundos (o palco nasce antes dos cartões), para a cidade não
+  // entrar toda no mesmo segundo.
+  const aoVivo = parabens?.aoVivo;
+  const noArAgora = useRef(noAr);
+  noArAgora.current = noAr;
+  const ultimoColega = useRef(0);
+  const ultimaTentativa = useRef(0);
+  const tentativa = useRef(0);
+  const chaveAoVivo = aoVivo ? `${aoVivo.cidade}|${aoVivo.chave}|${aoVivo.pessoaId}|${aoVivo.superAdmin}` : '';
+  const aoVivoAtual = useRef(aoVivo);
+  aoVivoAtual.current = aoVivo;
+  useEffect(() => {
+    const av = aoVivoAtual.current;
+    if (!av) return;
+    let cancelar: (() => void) | null = null;
+    const entrada = window.setTimeout(() => {
+      cancelar = ouvirParabens(av, p => {
+        ultimoColega.current = Date.now();
+        if (!noArAgora.current) return;
+        const lista = frasesDoEspetaculo(quantos);
+        soltar({ nome: nomeCurto(p.nome), foto: p.foto, frase: lista[p.frase] ?? lista[0] });
+      });
+    }, Math.random() * ESPALHAR_ENTRADA_MS);
+    return () => { window.clearTimeout(entrada); cancelar?.(); };
+  }, [chaveAoVivo, quantos, soltar]);
+
+  useEffect(() => () => { window.clearTimeout(recarga.current); window.clearTimeout(tentativa.current); }, []);
 
   const foto = parabens?.eu.foto ?? null;
   const enviar = useCallback(() => {
@@ -128,6 +157,18 @@ export function useParabensDoPalco({ parabens, destaques, noAr, quadrinho, mini 
       travado.current = false;
       setRecarregando(false);
     }, RECARGA_DO_BOTAO_MS);
+    // Para os colegas: espera um sorteio e só chama o banco se a cidade estiver quieta.
+    if (aoVivoAtual.current && !tentativa.current) {
+      tentativa.current = window.setTimeout(() => {
+        tentativa.current = 0;
+        const av = aoVivoAtual.current;
+        const agora = Date.now();
+        if (!av || !deveTentar({ agora, ultimoColega: ultimoColega.current, ultimaTentativa: ultimaTentativa.current })) return;
+        ultimaTentativa.current = agora;
+        const indice = Math.max(0, frasesDoEspetaculo(quantos).indexOf(ultimaFrase.current ?? ''));
+        void mandarParabens(av, indice);
+      }, Math.random() * ESPERA_MAXIMA_MS);
+    }
   }, [foto, quantos, soltar]);
 
   return { caixa, jaEnviou, recarregando, enviar };

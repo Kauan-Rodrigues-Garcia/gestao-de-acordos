@@ -222,11 +222,15 @@ export function QuebraNozesNoSistema({ pessoaId, pessoaNome = '', pessoaFoto = n
           : p.tipo === 'boletim' ? ` · quem mais recebeu: ${deExemplo ? 'de exemplo' : 'de verdade'}` : '';
         responder(`${espetaculo.resumo.join(' · ')} · foto: ${fotos}${lidos}`);
       }
-      // Por enquanto só no teste desta tela: o envio entre as pessoas depende da migration.
+      // No teste desta tela (`local`) os colegas são de mentira; no show de verdade
+      // o clique vai para a cidade pelo banco (migration 20261119120000).
       const meuNome = nomeCurto(quem.current.pessoaNome);
-      const parabens: ParabensDoPalco | undefined = p.local
-        ? { eu: { nome: meuNome || 'Você', foto: quem.current.pessoaFoto }, souDestaque: souDestaque(lider ? [lider] : destaques, meuNome), ensaio: true }
-        : undefined;
+      const parabens: ParabensDoPalco = {
+        eu: { nome: meuNome || 'Você', foto: quem.current.pessoaFoto },
+        souDestaque: souDestaque(lider ? [lider] : destaques, meuNome),
+        ensaio: p.local,
+        aoVivo: p.local ? undefined : { cidade: p.cidade, chave: p.chave, pessoaId: quem.current.pessoaId, superAdmin: !!p.forcarCidade },
+      };
       setNoPalco({
         chave: p.chave,
         Palco: montagem.PalcoDosQuebraNozes,
