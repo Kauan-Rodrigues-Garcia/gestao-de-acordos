@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { curvaHoraAHora, diaDoDesafio, esperadoAteODia, hojeEmSaoPaulo, horasSemRetrato, lerValorEmReais, metaDoDia, minutosSemO59, pct, porSetorNoDia, totalDepoisDoLancamento, valorDosLancamentos } from './regras';
+import { curvaHoraAHora, desafioEncerradoSemMeta, diaDoDesafio, esperadoAteODia, hojeEmSaoPaulo, horasSemRetrato, lerValorEmReais, metaDoDia, minutosSemO59, pct, porSetorNoDia, totalDepoisDoLancamento, valorDosLancamentos } from './regras';
 import type { SetorDoDesafio } from './desafioCobranca.service';
 
 const DIAS = ['2026-11-16', '2026-11-17', '2026-11-18'];
@@ -19,6 +19,14 @@ describe('regras do Desafio Cobrança', () => {
     expect(diaDoDesafio(DIAS, '2026-11-14')).toEqual({ indice: 0, fase: 'antes' });
     expect(diaDoDesafio(DIAS, '2026-11-17')).toEqual({ indice: 1, fase: 'durante' });
     expect(diaDoDesafio(DIAS, '2026-11-19')).toEqual({ indice: 2, fase: 'depois' });
+  });
+
+  it('encerrado sem meta: passou o último dia (ou chegou a folga) abaixo da meta', () => {
+    const base = { dias: DIAS, premio_dia: '2026-11-19', meta_geral: 1_900_000, total: 1_500_000 };
+    expect(desafioEncerradoSemMeta(base, '2026-11-18')).toBe(false);   // o último dia ainda corre
+    expect(desafioEncerradoSemMeta(base, '2026-11-19')).toBe(true);
+    expect(desafioEncerradoSemMeta({ ...base, premio_dia: null }, '2026-11-19')).toBe(true);
+    expect(desafioEncerradoSemMeta({ ...base, total: 1_900_000 }, '2026-11-19')).toBe(false);   // bateu: a folga vale
   });
 
   it('hoje é o dia de São Paulo, não o UTC', () => {

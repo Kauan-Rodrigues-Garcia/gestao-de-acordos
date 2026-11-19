@@ -15,14 +15,14 @@
  * para valer na hora, antes de o placar ser relido.
  */
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { ArrowLeftRight, Check, Sun, Zap } from 'lucide-react';
+import { ArrowLeftRight, Check, Flag, Sun, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { useDesafioCobranca } from '@/hooks/useDesafioCobranca';
 import { useDesafiosDoDiaNaBarra } from '@/hooks/useDesafioDoDia';
 import { BarraDesafioDoDia } from '@/components/DesafioDoDia/BarraDesafioDoDia';
 import { marcarAbertura, type PlacarCobranca } from '@/services/desafioCobranca/desafioCobranca.service';
-import { brl, brlCurto, diaDoDesafio, hojeEmSaoPaulo, pct } from '@/services/desafioCobranca/regras';
+import { brl, brlCurto, desafioEncerradoSemMeta, diaDoDesafio, hojeEmSaoPaulo, pct } from '@/services/desafioCobranca/regras';
 import './desafio-cobranca.css';
 
 const GavetaDesafioCobranca = lazy(() => import('./GavetaDesafioCobranca').then(m => ({ default: m.GavetaDesafioCobranca })));
@@ -57,7 +57,11 @@ export function BarraDosDesafios({ ativoDia }: { ativoDia: boolean }) {
 
   if (!placar) return <BarraDesafioDoDia ativo={ativoDia} />;
 
-  const { indice: hoje } = diaDoDesafio(placar.dias, hojeEmSaoPaulo());
+  const hojeIso = hojeEmSaoPaulo();
+  const { indice: hoje } = diaDoDesafio(placar.dias, hojeIso);
+  // Acabou sem a meta geral (19/11/2026): nada pisca, e a gaveta mostra o fim.
+  const encerrado = desafioEncerradoSemMeta(placar, hojeIso);
+  const chama = !jaAbriu && !encerrado;
   const mostrar: Qual = temDia ? naBarra : 'folga';
   const escolher = (q: Qual) => { setNaBarra(q); if (chaveBarra) gravar(chaveBarra, q); };
   const abrir = () => { setMontou(true); setAberta(true); };
@@ -65,12 +69,12 @@ export function BarraDosDesafios({ ativoDia }: { ativoDia: boolean }) {
   return (
     <div className="flex items-center gap-1.5">
       {mostrar === 'folga'
-        ? <PilulaFolga placar={placar} chamando={!jaAbriu} onAbrir={abrir} />
+        ? <PilulaFolga placar={placar} chamando={chama} encerrado={encerrado} onAbrir={abrir} />
         : <BarraDesafioDoDia ativo={ativoDia} />}
 
       {temDia && (
         <TrocaDaBarra
-          mostrar={mostrar} onEscolher={escolher} folgaFechada={!jaAbriu} placar={placar}
+          mostrar={mostrar} onEscolher={escolher} folgaFechada={chama} encerrado={encerrado} placar={placar}
           nomeDoDia={desafios[0]?.nome ?? 'Desafio do dia'}
         />
       )}
@@ -80,6 +84,7 @@ export function BarraDosDesafios({ ativoDia }: { ativoDia: boolean }) {
           <GavetaDesafioCobranca
             placar={placar} hoje={hoje} aberta={aberta} onFechar={() => setAberta(false)}
             jaAbriu={jaAbriu && !revendo}
+            encerrado={encerrado && !revendo}
             onAbriu={() => {
               setRevendo(false);
               setAbriuAqui(true);
@@ -103,7 +108,29 @@ const faltaGeral = (p: PlacarCobranca) => Math.max(p.meta_geral - p.total, 0);
  * só pisca enquanto a pessoa não abriu. A prévia do super_admin é a borda
  * tracejada (e o título), não um selo a mais.
  */
-export function PilulaFolga({ placar, chamando, onAbrir }: { placar: PlacarCobranca; chamando: boolean; onAbrir: () => void }) {
+export function PilulaFolga({ placar, chamando, encerrado = false, onAbrir }: {
+  placar: PlacarCobranca; chamando: boolean; encerrado?: boolean; onAbrir: () => void;
+}) {
+  if (encerrado) {
+    return (
+      <button
+        type="button" onClick={onAbrir} title={`${placar.titulo} encerrado`}
+        aria-label={`${placar.titulo} encerrado. Abrir para ver o resultado`}
+        className={cn(
+          'relative flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-border bg-card pl-1 pr-3 shadow-sm transition-shadow hover:shadow-md',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          placar.previa && 'border-dashed',
+        )}
+      >
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+          <Flag className="h-4 w-4" aria-hidden />
+        </span>
+        <span className="text-xs font-semibold text-muted-foreground">
+          <span className="hidden sm:inline">Folga mais cedo · </span>desafio encerrado
+        </span>
+      </button>
+    );
+  }
   const p = pct(placar.total, placar.meta_geral);
   const falta = faltaGeral(placar);
   const hora = placar.premio_hora.replace(':00', 'h');
@@ -155,8 +182,8 @@ export function PilulaFolga({ placar, chamando, onAbrir }: { placar: PlacarCobra
   );
 }
 
-function TrocaDaBarra({ mostrar, onEscolher, folgaFechada, placar, nomeDoDia }: {
-  mostrar: Qual; onEscolher: (q: Qual) => void; folgaFechada: boolean; placar: PlacarCobranca; nomeDoDia: string;
+function TrocaDaBarra({ mostrar, onEscolher, folgaFechada, encerrado, placar, nomeDoDia }: {
+  mostrar: Qual; onEscolher: (q: Qual) => void; folgaFechada: boolean; encerrado: boolean; placar: PlacarCobranca; nomeDoDia: string;
 }) {
   const [menu, setMenu] = useState(false);
   const caixa = useRef<HTMLDivElement>(null);
@@ -175,7 +202,7 @@ function TrocaDaBarra({ mostrar, onEscolher, folgaFechada, placar, nomeDoDia }: 
   const opcoes: { q: Qual; Icone: typeof Sun; titulo: string; sub: string }[] = [
     {
       q: 'folga', Icone: Sun, titulo: 'Folga mais cedo',
-      sub: folgaFechada ? 'Novo — ainda não abriu' : falta > 0 ? `saída ${placar.premio_hora}: faltam ${brlCurto(falta)}` : `Saída às ${placar.premio_hora} garantida!`,
+      sub: encerrado ? 'Desafio encerrado' : folgaFechada ? 'Novo — ainda não abriu' : falta > 0 ? `saída ${placar.premio_hora}: faltam ${brlCurto(falta)}` : `Saída às ${placar.premio_hora} garantida!`,
     },
     { q: 'dia', Icone: Zap, titulo: `Desafio do dia · ${nomeDoDia}`, sub: 'o placar de hoje' },
   ];

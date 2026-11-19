@@ -10,7 +10,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import * as Dialog from '@radix-ui/react-dialog';
-import { CalendarDays, Check, Clock, Eye, Gift, Hourglass, Info, Lock, RotateCcw, Settings2, Snowflake, Sun, Target, UserRound, Users, X } from 'lucide-react';
+import { CalendarDays, Check, Clock, Eye, Flag, Gift, Hourglass, Info, Lock, PartyPopper, RotateCcw, Settings2, Snowflake, Sun, Target, UserRound, Users, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ROUTE_PATHS } from '@/lib';
 import { useMinhaMetaNoDesafio, type MinhaMetaNoDesafio } from '@/hooks/useDesafioCobranca';
@@ -25,12 +25,14 @@ import { Laco, MontesDeNeve, PiscaPisca } from './Enfeites';
 import { atributosDoTema, caminhoDaEstrela, useTemaDoDesafio } from './temas';
 import './desafio-cobranca.css';
 
-export function GavetaDesafioCobranca({ placar, hoje, aberta, onFechar, jaAbriu, onAbriu, onVerAbertura }: {
+export function GavetaDesafioCobranca({ placar, hoje, aberta, onFechar, jaAbriu, encerrado = false, onAbriu, onVerAbertura }: {
   placar: PlacarCobranca;
   hoje: number;
   aberta: boolean;
   onFechar: () => void;
   jaAbriu: boolean;
+  /** Acabou sem a meta geral (19/11/2026): «não foi dessa vez», sem ingresso. */
+  encerrado?: boolean;
   onAbriu: () => void;
   /** Só o super_admin (para testar). A operação vê a abertura uma vez e pronto. */
   onVerAbertura?: () => void;
@@ -42,7 +44,7 @@ export function GavetaDesafioCobranca({ placar, hoje, aberta, onFechar, jaAbriu,
   // no painel de permissões acompanha a meta individual de cada operador.
   const alcance = useAlcanceNoDesafio();
   const [aba, setAba] = useState<'desafio' | 'equipes'>('desafio');
-  const comAbas = jaAbriu && alcance !== 'nenhum';
+  const comAbas = (jaAbriu || encerrado) && alcance !== 'nenhum';
   const naEquipe = comAbas && aba === 'equipes';
   return (
     <Dialog.Root open={aberta} onOpenChange={(v) => { if (!v) onFechar(); }}>
@@ -67,7 +69,9 @@ export function GavetaDesafioCobranca({ placar, hoje, aberta, onFechar, jaAbriu,
             <p className="dc-periodo">
               <CalendarDays size={14} aria-hidden />
               <span>{`${maiuscula(semana(placar.dias[0]))} a ${semana(placar.dias[ultimo])} · ${dataCurta(placar.dias[0])} a ${dataCurta(placar.dias[ultimo])}`}</span>
-              <span className="dc-pilula">Dia {hoje + 1} de {placar.dias.length}{hoje === ultimo ? ' · último!' : ''}</span>
+              <span className="dc-pilula">
+                {encerrado ? 'Encerrado' : `Dia ${hoje + 1} de ${placar.dias.length}${hoje === ultimo ? ' · último!' : ''}`}
+              </span>
             </p>
             {placar.super_admin && <AvisoSuperAdmin placar={placar} onFechar={onFechar} />}
             {comAbas && (
@@ -86,6 +90,8 @@ export function GavetaDesafioCobranca({ placar, hoje, aberta, onFechar, jaAbriu,
           <div className="dc-corpo">
             {naEquipe
               ? <EquipesNoDesafio placar={placar} hoje={hoje} aberta={aberta} alcance={alcance} />
+              : encerrado
+                ? <Encerrado placar={placar} hoje={hoje} aberta={aberta} onVerAbertura={onVerAbertura} />
               : jaAbriu
                 ? <Conteudo placar={placar} hoje={hoje} aberta={aberta} onVerAbertura={onVerAbertura} />
               : <Ingresso placar={placar} onAbrir={onAbriu} />}
@@ -225,6 +231,77 @@ function Conteudo({ placar, hoje, aberta, onVerAbertura }: { placar: PlacarCobra
         </button>
       )}
     </div>
+  );
+}
+
+/**
+ * O fim sem a meta geral (19/11/2026): «não foi dessa vez» para todo mundo e,
+ * para quem bateu um dos níveis da meta individual, os parabéns à parte.
+ */
+function Encerrado({ placar, hoje, aberta, onVerAbertura }: { placar: PlacarCobranca; hoje: number; aberta: boolean; onVerAbertura?: () => void }) {
+  const meu = useMinhaMetaNoDesafio(placar, hoje, aberta);
+  const metaDia = metaDoDia(placar);
+  const porDia = placar.dias.map(d => placar.por_dia.find(x => x.dia === d)?.total ?? 0);
+  const p = pct(placar.total, placar.meta_geral);
+  const bateu = meu.data && (meu.data.maior.bateu || meu.data.bateu) ? meu.data : null;
+
+  return (
+    <div className="dc-conteudo">
+      <section className="dc-cartao dc-fim dc-sobe" style={{ ['--d' as string]: 0 }} aria-label="Desafio encerrado">
+        <span className="dc-fim-icone" aria-hidden><Flag size={26} /></span>
+        <p className="dc-rotulo">Desafio encerrado</p>
+        <p className="dc-fim-titulo">Não foi dessa vez</p>
+        <p className="dc-fim-texto">
+          Mas virão mais oportunidades pela frente. Obrigado pelo esforço de cada um nestes {placar.dias.length} dias!
+        </p>
+        <div className="dc-fim-numeros">
+          <span>Todos juntos fizemos <strong>{brl(placar.total)}</strong></span>
+          <span>de {brl(placar.meta_geral)} · {p}%</span>
+        </div>
+        <Barra valor={placar.total} meta={placar.meta_geral} rotulo={`${brl(placar.total)} de ${brl(placar.meta_geral)}`} />
+      </section>
+
+      {bateu && <Parabens placar={placar} meu={bateu} />}
+
+      <section className="dc-sobe" style={{ ['--d' as string]: 2 }} aria-labelledby="dc-dias-fim">
+        <h3 id="dc-dias-fim" className="dc-rotulo dc-rotulo-solto">
+          <CalendarDays size={14} aria-hidden /> Os {placar.dias.length} dias <span>toque para ver o detalhe</span>
+        </h3>
+        <ol className="dc-dias dc-dias-3">
+          {placar.dias.map((d, i) => (
+            <li key={d}><CartaoDia iso={d} indice={i} hoje={placar.dias.length - 1} valor={porDia[i]} metaDia={metaDia} /></li>
+          ))}
+        </ol>
+      </section>
+
+      {onVerAbertura && (
+        <button type="button" className="dc-rever" onClick={onVerAbertura}>
+          <RotateCcw size={14} aria-hidden /> Ver a abertura de novo (só super admin, para testar)
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Bateu um dos níveis da meta individual: o cartãozinho de parabéns (só ele vê). */
+function Parabens({ placar, meu }: { placar: PlacarCobranca; meu: MinhaMetaNoDesafio }) {
+  const maior = meu.maior.bateu;
+  const nivel = maior ? placar.regra_medias_maior : placar.regra_medias;
+  const premio = maior ? placar.regra_premio_maior : placar.regra_premio;
+  return (
+    <section className="dc-cartao dc-parabens dc-sobe" style={{ ['--d' as string]: 1 }} aria-label="Parabéns pela meta individual">
+      <span className="dc-parabens-confete" aria-hidden>
+        {Array.from({ length: 14 }, (_, i) => <i key={i} style={{ left: `${(i * 41 + 7) % 96}%`, ['--i' as string]: i }} />)}
+      </span>
+      <span className="dc-parabens-icone" aria-hidden><PartyPopper size={24} /></span>
+      <div>
+        <p className="dc-parabens-titulo">Parabéns! Você bateu a sua meta individual</p>
+        <p className="dc-parabens-texto">
+          Foram <strong>{medias(meu.medias)}</strong> ({brl(meu.feito)}) — passou das {medias(nivel)}: você <strong>{premio}</strong>.
+        </p>
+        <p className="dc-parabens-nota">{placar.premio_requisito}. Só você vê este cartão.</p>
+      </div>
+    </section>
   );
 }
 

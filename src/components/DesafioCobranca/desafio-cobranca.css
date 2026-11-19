@@ -516,3 +516,43 @@
 @media (max-width: 480px) {
   .dc-eq-numeros span:last-child { display: none; }
 }
+
+/* ── Encerrado sem a meta (19/11/2026) e os parabéns da meta individual ── */
+.dc-fim { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; padding: 22px 18px 16px; }
+.dc-fim .dc-barra-caixa { align-self: stretch; }
+.dc-fim-icone {
+  display: grid; place-items: center; width: 52px; height: 52px; margin-bottom: 6px; border-radius: 50%;
+  background: color-mix(in srgb, var(--dc-veu) 8%, transparent); color: var(--dc-suave);
+}
+.dc-fim-titulo { margin: 2px 0 0; font-size: 26px; font-weight: 900; line-height: 1.1; letter-spacing: -0.01em; }
+.dc-fim-texto { max-width: 420px; margin: 4px 0 0; font-size: 15px; line-height: 1.45; color: var(--dc-suave); }
+.dc-fim-numeros { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 10px; margin-top: 10px; font-size: 13px; color: var(--dc-suave); font-variant-numeric: tabular-nums; }
+.dc-fim-numeros strong { color: var(--dc-texto); }
+
+.dc-parabens {
+  position: relative; overflow: hidden; display: flex; align-items: flex-start; gap: 12px;
+  border-color: color-mix(in srgb, var(--dc-verde) 55%, transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--dc-verde) 16%, transparent), color-mix(in srgb, var(--dc-ouro) 8%, transparent));
+}
+.dc-parabens-icone {
+  flex-shrink: 0; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%;
+  background: color-mix(in srgb, var(--dc-verde) 20%, transparent); color: var(--dc-verde);
+}
+.dc-parabens-titulo { margin: 0; font-size: 17px; font-weight: 900; line-height: 1.2; color: var(--dc-verde); }
+.dc-parabens-texto { margin: 4px 0 0; font-size: 14px; line-height: 1.45; }
+.dc-parabens-nota { margin: 6px 0 0; font-size: 12px; color: var(--dc-suave); }
+.dc-parabens-confete { position: absolute; inset: 0; pointer-events: none; }
+.dc-parabens-confete i {
+  position: absolute; top: -10px; width: 6px; height: 10px; border-radius: 2px; opacity: 0;
+  background: var(--dc-ouro);
+  animation: dc-confete 2.2s ease-in 1 forwards; animation-delay: calc(0.3s + var(--i) * 0.07s);
+}
+.dc-parabens-confete i:nth-child(3n) { background: var(--dc-verde); }
+.dc-parabens-confete i:nth-child(3n + 1) { background: var(--dc-coral); }
+@keyframes dc-confete {
+  0% { opacity: 1; transform: translateY(0) rotate(0); }
+  100% { opacity: 0; transform: translateY(150px) rotate(320deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dc-parabens-confete { display: none; }
+}

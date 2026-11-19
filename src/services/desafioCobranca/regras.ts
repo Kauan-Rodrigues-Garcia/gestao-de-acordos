@@ -34,6 +34,22 @@ export function diaDoDesafio(dias: readonly string[], hoje: string): { indice: n
   return { indice: Math.max(0, passou - 1), fase: 'durante' };
 }
 
+/**
+ * O desafio acabou sem bater a meta geral (19/11/2026): passou o último dia —
+ * ou chegou o dia da folga — e o total ficou abaixo da meta. A pílula vira
+ * «encerrado» e a gaveta mostra o «não foi dessa vez» (com os parabéns a quem
+ * bateu a meta individual). Meta batida não é encerrado: a folga vale.
+ */
+export function desafioEncerradoSemMeta(
+  p: Pick<PlacarCobranca, 'dias' | 'premio_dia' | 'total' | 'meta_geral'>,
+  hoje: string,
+): boolean {
+  if (!p.dias.length || p.total >= p.meta_geral) return false;
+  const passouOUltimo = hoje > p.dias[p.dias.length - 1];
+  const chegouAFolga = !!p.premio_dia && hoje >= p.premio_dia;
+  return passouOUltimo || chegouAFolga;
+}
+
 /** O ajuste vale no instante `t` (lançado antes, e não removido até lá). */
 function ajusteValeEm(a: AjusteCobranca, t: string, somam: ReadonlySet<string>): boolean {
   if (a.setor_id && !somam.has(a.setor_id)) return false;
