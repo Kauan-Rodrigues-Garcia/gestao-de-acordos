@@ -281,8 +281,8 @@ function TresRespostas({ l }: { l: Leitura }) {
   return (
     <div className="grid sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-border/70">
       <Resposta pergunta="Até hoje" valor={formatBRL(acum)} unidade={rotulo ?? undefined}>
-        {esperado !== null && <Linha rotulo="Deveria ter" valor={formatBRL(esperado)} dica="Meta ÷ dias úteis × dias trabalhados" />}
-        {esperado !== null && (
+        {esperado !== null && alvo.decorridos < alvo.totalUteis && <Linha rotulo="Deveria ter" valor={formatBRL(esperado)} dica="Meta ÷ dias úteis × dias trabalhados" />}
+        {esperado !== null && alvo.decorridos < alvo.totalUteis && (
           <Linha rotulo={acum >= esperado ? 'À frente do ritmo' : 'Atrás do ritmo'}
             valor={sinal(acum - esperado)} cor={acum >= esperado ? COR_QUARTIL[1] : COR_QUARTIL[4]} />
         )}
@@ -366,11 +366,13 @@ function Frase({ l, mes }: { l: Leitura; mes: string }) {
       </>
     );
   }
+  // Mês sem dia útil restante: o ritmo virou o resultado.
+  const fechado = l.alvo.totalUteis > 0 && l.alvo.decorridos >= l.alvo.totalUteis;
   return (
     <>
-      {l.alvo.titulo} está a{' '}
+      {l.alvo.titulo} {fechado ? 'fechou com' : 'está a'}{' '}
       <span className="font-mono tabular-nums" style={{ color: corTexto(l.cor) }}>{pctTexto(l.pctExato)}</span>{' '}
-      do ritmo da meta
+      {fechado ? 'da meta' : 'do ritmo da meta'}
     </>
   );
 }
@@ -430,7 +432,9 @@ function BarraDoMes({ l }: { l: Leitura }) {
         <div className="absolute inset-y-0 left-0 rounded-full transition-[width] duration-700 ease-out motion-reduce:transition-none"
           style={{ width: `${montado ? pA : 0}%`, background: l.cor }} />
       </div>
-      {pE !== null && (
+      {/* Com todos os dias úteis trabalhados, o esperado é a meta inteira e o
+          marcador cai em cima dela: «hoje deveria ter» repetia a meta. */}
+      {pE !== null && l.alvo.decorridos < l.alvo.totalUteis && (
         <div className="relative h-0">
           <div className="absolute -top-[17px] w-0.5 h-[22px] rounded-full bg-foreground/75" style={{ left: `calc(${pE}% - 1px)` }} />
           <span className="absolute top-1.5 -translate-x-1/2 text-[10px] font-medium text-foreground/70 whitespace-nowrap"
