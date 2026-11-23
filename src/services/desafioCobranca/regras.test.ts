@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { curvaHoraAHora, desafioEncerradoSemMeta, diaDoDesafio, esperadoAteODia, hojeEmSaoPaulo, horasSemRetrato, lerValorEmReais, metaDoDia, minutosSemO59, pct, porSetorNoDia, totalDepoisDoLancamento, valorDosLancamentos } from './regras';
+import { curvaHoraAHora, desafioCobrancaNoAr, desafioEncerradoSemMeta, diaDoDesafio, esperadoAteODia, hojeEmSaoPaulo, horasSemRetrato, lerValorEmReais, metaDoDia, minutosSemO59, pct, porSetorNoDia, totalDepoisDoLancamento, valorDosLancamentos } from './regras';
 import type { SetorDoDesafio } from './desafioCobranca.service';
 
 const DIAS = ['2026-11-16', '2026-11-17', '2026-11-18'];
@@ -177,5 +177,20 @@ describe('regras do Desafio Cobrança', () => {
     ];
     expect(valorDosLancamentos(ajustes, 'manual', DIAS[1])).toBe(110_000);
     expect(valorDosLancamentos(ajustes, 'manual')).toBe(530_000);
+  });
+});
+
+describe('desafio no ar na barra (23/11/2026)', () => {
+  const p = { dias: ['2026-11-16', '2026-11-17', '2026-11-18'], premio_dia: '2026-11-19' };
+  it('de 3 dias antes até o dia da folga', () => {
+    expect(desafioCobrancaNoAr(p, '2026-11-12')).toBe(false);
+    expect(desafioCobrancaNoAr(p, '2026-11-13')).toBe(true);
+    expect(desafioCobrancaNoAr(p, '2026-11-19')).toBe(true);
+    expect(desafioCobrancaNoAr(p, '2026-11-20')).toBe(false);
+    expect(desafioCobrancaNoAr(p, '2026-11-23')).toBe(false);
+  });
+  it('sem dia de folga, fecha no último dia', () => {
+    expect(desafioCobrancaNoAr({ ...p, premio_dia: null }, '2026-11-18')).toBe(true);
+    expect(desafioCobrancaNoAr({ ...p, premio_dia: null }, '2026-11-19')).toBe(false);
   });
 });

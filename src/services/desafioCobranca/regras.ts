@@ -50,6 +50,22 @@ export function desafioEncerradoSemMeta(
   return passouOUltimo || chegouAFolga;
 }
 
+/**
+ * O desafio está no ar na barra (23/11/2026): de 3 dias antes do 1º dia até o
+ * dia da folga (ou o último dia) — a mesma janela de
+ * `fn_desafio_cobranca_na_janela`. O banco já esconde da operação fora dela;
+ * isto esconde também do super_admin, que recebe o ativo sempre. Acabou, sai
+ * da barra; a tela /desafio-cobranca continua para conferir.
+ */
+export function desafioCobrancaNoAr(p: Pick<PlacarCobranca, 'dias' | 'premio_dia'>, hoje: string): boolean {
+  if (!p.dias.length) return false;
+  const primeiro = [...p.dias].sort()[0];
+  const ultimo = [...p.dias].sort()[p.dias.length - 1];
+  const abre = new Date(Date.parse(`${primeiro}T12:00:00Z`) - 3 * 86_400_000).toISOString().slice(0, 10);
+  const fecha = p.premio_dia && p.premio_dia > ultimo ? p.premio_dia : ultimo;
+  return hoje >= abre && hoje <= fecha;
+}
+
 /** O ajuste vale no instante `t` (lançado antes, e não removido até lá). */
 function ajusteValeEm(a: AjusteCobranca, t: string, somam: ReadonlySet<string>): boolean {
   if (a.setor_id && !somam.has(a.setor_id)) return false;
