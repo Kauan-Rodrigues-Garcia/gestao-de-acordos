@@ -1,0 +1,128 @@
+/* A abertura do Desafio do Vale (23/11/2026): a arte da campanha dentro da
+   gaveta, com as cores do tema da gaveta (`--dc-*`) e a laranja do cupom. */
+
+.dva { position: relative; display: flex; flex-direction: column; gap: 14px; padding: 20px 20px 28px; overflow: hidden; }
+.dva-entra { opacity: 0; animation: dva-sobe .55s cubic-bezier(.22, 1, .36, 1) forwards; animation-delay: calc(var(--d) * .12s + .1s); }
+@keyframes dva-sobe { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+.dva-brilhos { position: absolute; inset: 0; pointer-events: none; }
+.dva-brilhos span {
+  position: absolute; width: 4px; height: 4px; border-radius: 50%; background: var(--dc-ouro); opacity: 0;
+  animation: dva-pisca 3.2s ease-in-out infinite; animation-delay: calc(var(--i) * .27s);
+}
+@keyframes dva-pisca { 0%, 100% { opacity: 0; transform: scale(.4); } 50% { opacity: .7; transform: scale(1); } }
+
+/* Título + o vale de exemplo */
+.dva-topo { position: relative; display: grid; grid-template-columns: 1fr 230px; gap: 8px; align-items: center; }
+.dva-titulo { margin: 0; font-size: 38px; line-height: 1.02; font-weight: 900; letter-spacing: -.03em; }
+.dva-linha { display: block; opacity: 0; animation: dva-sobe .6s cubic-bezier(.22, 1, .36, 1) forwards; animation-delay: calc(var(--d) * .14s + .05s); }
+.dva-titulo em { font-style: normal; color: var(--dc-ouro); }
+.dva-datas { margin: 10px 0 0; font-size: 15px; font-weight: 800; color: var(--dc-suave); }
+.dva-dia1 { padding: 2px 9px; border-radius: 8px; background: var(--dv-cupom, #fb923c); color: #2b1200; font-weight: 900; }
+
+.dva-vale-caixa { position: relative; height: 178px; }
+.dva-vale-tras { position: absolute; top: 20px; left: 18px; width: 188px; height: 116px; border-radius: 14px; transform: rotate(6deg);
+  background: linear-gradient(135deg, #2a3366, #1b2150); border: 1px solid rgba(255,255,255,.12); box-shadow: 0 12px 26px rgba(0,0,0,.35);
+  opacity: 0; animation: dva-sobe .6s .55s forwards; }
+.dva-vale {
+  position: absolute; top: 8px; left: 2px; width: 196px; height: 122px; overflow: hidden; border-radius: 14px; padding: 12px 14px; color: #241200;
+  background:
+    repeating-linear-gradient(135deg, rgba(255,255,255,.10) 0 7px, rgba(255,255,255,0) 7px 15px),
+    linear-gradient(135deg, #ffe08a 0%, #ffc04d 45%, #ff9a5c 100%);
+  box-shadow: 0 18px 36px rgba(0,0,0,.45), inset 0 0 0 2px rgba(255,255,255,.35);
+  opacity: 0; transform: rotate(-7deg);
+  animation: dva-vale-entra .9s .45s cubic-bezier(.22, 1.4, .36, 1) forwards, dva-flutua 4s 1.6s ease-in-out infinite;
+}
+@keyframes dva-vale-entra { from { opacity: 0; transform: translateY(-30px) rotate(-25deg) scale(.7); } to { opacity: 1; transform: rotate(-7deg); } }
+@keyframes dva-flutua { 0%, 100% { transform: rotate(-7deg) translateY(0); } 50% { transform: rotate(-5deg) translateY(-6px); } }
+.dva-vale-brilho { position: absolute; inset: -40% auto -40% -60%; width: 40%; transform: skewX(-20deg);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.65), transparent); animation: dva-reluz 3.6s 1.4s ease-in-out infinite; }
+@keyframes dva-reluz { 0% { left: -60%; } 40%, 100% { left: 130%; } }
+.dva-vale-cima { display: flex; justify-content: space-between; align-items: flex-start; }
+.dva-vale-nome small { display: block; font-size: 9px; font-weight: 800; letter-spacing: .22em; text-transform: uppercase; opacity: .75; }
+.dva-vale-nome b { display: block; font-size: 19px; font-weight: 900; line-height: 1.05; }
+.dva-chip { width: 30px; height: 23px; border-radius: 5px;
+  background: linear-gradient(90deg, transparent 47%, rgba(0,0,0,.18) 47% 53%, transparent 53%), linear-gradient(0deg, transparent 47%, rgba(0,0,0,.18) 47% 53%, transparent 53%), linear-gradient(135deg, #f8f1d8, #cdb46a); }
+.dva-vale-valor { margin-top: 4px; font-size: 34px; font-weight: 900; letter-spacing: -.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+.dva-vale-valor span { font-size: 16px; vertical-align: top; margin-right: 2px; }
+.dva-vale-valor em { display: block; margin-bottom: 1px; font-size: 11px; font-style: normal; font-weight: 900; letter-spacing: .14em; text-transform: uppercase; }
+.dva-vale-pe { margin-top: 6px; font-size: 9px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; opacity: .75; }
+.dva-exemplo { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); white-space: nowrap; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--dc-cartao-borda);
+  background: var(--dc-cartao); font-size: 9px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--dc-suave); }
+
+/* As faixas */
+.dva-faixas { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.dva-faixa { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 12px 6px; border-radius: 14px; text-align: center;
+  border: 2px dashed var(--dc-cartao-borda); background: var(--dc-cartao);
+  opacity: 0; animation: dva-carta .6s cubic-bezier(.22, 1.3, .36, 1) forwards; animation-delay: calc(var(--d) * .12s + .1s); }
+@keyframes dva-carta { from { opacity: 0; transform: translateY(18px) rotateX(50deg); } to { opacity: 1; transform: none; } }
+.dva-faixa.topo { border: 0; color: #2b1400; background: linear-gradient(160deg, #ffd36b 0%, #ff9a5c 100%); box-shadow: 0 12px 26px rgba(255,154,92,.35); }
+.dva-c1 { font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; opacity: .8; }
+.dva-pct { padding: 2px 8px; border-radius: 8px; font-size: 13px; font-weight: 900; }
+.dva-p1 { background: #15803d; color: #ecfdf5; }
+.dva-p2 { background: #ffc04d; color: #2b1400; }
+.dva-p3 { background: #ff8a6a; color: #2b0c00; }
+.dva-valor { font-size: 30px; font-weight: 900; letter-spacing: -.03em; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.dva-c5 { font-size: 11px; font-weight: 800; }
+.dva-regra { margin: 0; font-size: 13px; color: var(--dc-suave); }
+.dva-regra strong { color: var(--dc-texto); }
+
+/* Cupons do Pix */
+.dva-mais { display: flex; align-items: center; gap: 10px; margin: 4px 0 0; font-size: 12px; font-weight: 900; letter-spacing: .16em; text-transform: uppercase; color: #fb923c; }
+.dva-mais::before, .dva-mais::after { content: ''; flex: 1; height: 2px; border-radius: 2px; background: rgba(251,146,60,.5); }
+.dva-cupom { display: grid; grid-template-columns: 104px 1fr auto; overflow: hidden; border-radius: 16px; border: 2px solid #fb923c; background: rgba(251,146,60,.10); }
+.dva-canhoto { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px 6px; text-align: center;
+  background: #fb923c; color: #2b1200; border-right: 3px dashed rgba(43,18,0,.45); }
+.dva-canhoto b { font-size: 40px; font-weight: 900; line-height: .9; }
+.dva-canhoto span { font-size: 10px; font-weight: 900; text-transform: uppercase; line-height: 1.15; }
+.dva-canhoto i { font-style: normal; font-size: 18px; font-weight: 900; }
+.dva-canhoto strong { font-size: 17px; font-weight: 900; text-transform: uppercase; white-space: nowrap; }
+.dva-cupom-texto { padding: 10px 12px; }
+.dva-cupom-titulo { margin: 0; font-size: 17px; font-weight: 900; }
+.dva-quando { margin: 4px 0 0; font-size: 16px; font-weight: 900; }
+.dva-quando strong { color: #fb923c; }
+.dva-hoje { display: inline-block; padding: 1px 8px; border-radius: 7px; background: #ef4444; color: #fff; box-shadow: 0 0 0 3px rgba(239,68,68,.25);
+  animation: dva-bate 1.6s ease-in-out infinite; }
+@keyframes dva-bate { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+.dva-cupom-regra { margin: 4px 0 0; font-size: 12px; line-height: 1.35; color: var(--dc-suave); }
+.dva-cupom-regra strong { color: var(--dc-texto); }
+.dva-cobre { display: inline-flex; align-items: center; gap: 6px; margin: 8px 0 0; padding: 4px 10px; border-radius: 9px; background: var(--dc-ouro); color: var(--dc-sobre-ouro); font-size: 12px; font-weight: 900; }
+.dva-sorteio { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 124px; padding: 6px 8px 8px 0; text-align: center; }
+.dva-sorteio-selo { padding: 2px 8px; border-radius: 999px; background: #ef4444; color: #fff; font-size: 9px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; transform: rotate(4deg); }
+.dva-hotdog { width: 118px; height: 72px; filter: drop-shadow(0 8px 10px rgba(0,0,0,.4)); animation: dva-pula 2.2s 1.8s ease-in-out infinite; }
+@keyframes dva-pula { 0%, 100% { transform: translateY(0) rotate(0); } 30% { transform: translateY(-6px) rotate(-3deg); } 60% { transform: translateY(0) rotate(2deg); } }
+.dva-sorteio b { font-size: 14px; font-weight: 900; text-transform: uppercase; }
+.dva-laranja { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 12px; color: var(--dc-suave); }
+.dva-tag { display: inline-flex; align-items: center; gap: 3px; padding: 1px 6px; border-radius: 6px; background: #fb923c; color: #2b1200;
+  font-size: 10px; font-weight: 900; text-transform: uppercase; }
+
+/* O botão de entrar */
+.dc .dva-entrar {
+  align-self: center; display: inline-flex; align-items: center; gap: 8px; margin-top: 6px; padding: 12px 26px; border: 0; border-radius: 999px; cursor: pointer;
+  background: linear-gradient(90deg, var(--dc-ouro), var(--dc-coral)); color: var(--dc-sobre-ouro); font-size: 16px; font-weight: 900;
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--dc-coral) 40%, transparent);
+}
+.dc .dva-entrar:hover { filter: brightness(1.06); }
+.dva-entrar.dva-entra { animation: dva-sobe .55s cubic-bezier(.22, 1, .36, 1) forwards, dva-chama 1.8s 2.4s ease-in-out infinite; animation-delay: calc(var(--d) * .12s + .1s), 2.4s; }
+@keyframes dva-chama { 0%, 100% { box-shadow: 0 10px 26px color-mix(in srgb, var(--dc-coral) 40%, transparent); } 50% { box-shadow: 0 0 0 8px color-mix(in srgb, var(--dc-ouro) 25%, transparent), 0 10px 26px color-mix(in srgb, var(--dc-coral) 40%, transparent); } }
+
+@media (max-width: 560px) {
+  .dva-topo { grid-template-columns: 1fr; }
+  .dva-vale-caixa { justify-self: center; width: 230px; }
+  .dva-faixas { grid-template-columns: 1fr; }
+  .dva-cupom { grid-template-columns: 96px 1fr; }
+  .dva-sorteio { display: none; }
+}
+
+/* No Natal, os brilhos viram neve caindo (claro e escuro). */
+.dc[data-natal] .dva-brilhos span {
+  top: -10px !important; width: 6px; height: 6px; opacity: .85; background: var(--dc-estrela);
+  animation: dc-neve 10s linear infinite; animation-delay: calc(var(--i) * -.6s);
+}
+.dc[data-natal] .dva-brilhos span:nth-child(3n) { width: 4px; height: 4px; animation-duration: 13s; }
+.dc[data-natal] .dva-brilhos span:nth-child(4n) { width: 8px; height: 8px; animation-duration: 8s; }
+
+/* A arte obrigatória: o botão espera alguns segundos antes de liberar. */
+.dc .dva-entrar:disabled { cursor: not-allowed; filter: grayscale(.55) opacity(.7); animation: dva-sobe .55s cubic-bezier(.22, 1, .36, 1) forwards; }
+.dva-entrar-conta { display: inline-grid; place-items: center; width: 24px; height: 24px; margin-left: 4px; border-radius: 50%;
+  background: rgba(0, 0, 0, .25); color: #fff; font-size: 13px; font-weight: 900; font-variant-numeric: tabular-nums; }

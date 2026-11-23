@@ -133,8 +133,15 @@ export async function buscarSetorNoDesafio(params: {
   setorId: string;
   regras: RegrasDoDesafio;
   hoje: number;
+  /**
+   * Mês (YYYY-MM) do retrato a usar para saber QUEM era do setor
+   * (`composicao_mes`). Desafio do Vale, 23/11/2026: passado o fim, quem mudou
+   * de setor na virada continua contando no setor em que estava. Sem retrato
+   * do mês, cai no cadastro de hoje.
+   */
+  retrato?: string;
 }): Promise<SetorNoDesafio> {
-  const { empresaId, setorId, regras, hoje } = params;
+  const { empresaId, setorId, regras, hoje, retrato } = params;
   const inicio = regras.dias[0];
   const fim = regras.dias[regras.dias.length - 1];
   const [ano, mes] = inicio.split('-').map(Number);
@@ -150,9 +157,19 @@ export async function buscarSetorNoDesafio(params: {
   if (equipesR.error) throw new Error(equipesR.error.message);
 
   type Crua = PessoaDoSetor & { ativo: boolean | null; arquivado: boolean | null };
-  const pessoas = ((pessoasR.data as Crua[] | null) ?? [])
+  let pessoas = ((pessoasR.data as Crua[] | null) ?? [])
     .filter(p => p.ativo !== false && !p.arquivado)
     .map(({ id, nome, equipe_id }) => ({ id, nome, equipe_id }));
+  if (retrato) {
+    const fotoR = await supabase.from('composicao_mes')
+      .select('operador_id, nome, equipe_id, ativo')
+      .eq('empresa_id', empresaId).eq('mes', retrato).eq('setor_id', setorId);
+    type Foto = { operador_id: string; nome: string | null; equipe_id: string | null; ativo: boolean | null };
+    const foto = ((fotoR.data as Foto[] | null) ?? []).filter(f => f.ativo !== false);
+    if (!fotoR.error && foto.length) {
+      pessoas = foto.map(f => ({ id: f.operador_id, nome: f.nome ?? 'Sem nome', equipe_id: f.equipe_id }));
+    }
+  }
   const ids = pessoas.map(p => p.id);
 
   const [metasR, analitico] = await Promise.all([

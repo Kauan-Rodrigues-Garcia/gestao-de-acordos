@@ -48,7 +48,7 @@ export interface CoresDoDesafio {
   minha: string; minha2: string; minhaTexto: string;
 }
 
-export type IdDoTema = 'noite-de-natal' | 'natal-gelo' | 'grafite';
+export type IdDoTema = 'noite-de-natal' | 'natal-gelo' | 'grafite' | 'vale-natal-claro' | 'vale-campanha';
 
 export interface TemaDoDesafio {
   id: IdDoTema;

@@ -406,6 +406,31 @@ export function usePixAutomatico() {
   const [dataDe, setDataDe]   = useEstadoLembrado(`${chaveAba}|data-de`, '');
   const [dataAte, setDataAte] = useEstadoLembrado(`${chaveAba}|data-ate`, '');
 
+  /*
+   * Cupons do Pix (Desafio do Vale, 23/11/2026): o link «aprovar os pendentes
+   * da campanha» (`?pendentes_de=2026-11-23&pendentes_ate=2026-11-26`) abre a
+   * aba já filtrada — só pendentes, só o período —, no mês do período. Os
+   * parâmetros saem da URL na hora; o filtro fica, e a pessoa limpa quando
+   * quiser.
+   */
+  useEffect(() => {
+    const de = searchParams.get('pendentes_de');
+    const ate = searchParams.get('pendentes_ate');
+    if (!de || !ate || !/^\d{4}-\d{2}-\d{2}$/.test(de) || !/^\d{4}-\d{2}-\d{2}$/.test(ate)) return;
+    const params = new URLSearchParams(searchParams);
+    params.delete('pendentes_de');
+    params.delete('pendentes_ate');
+    params.delete('aba');
+    setSearchParams(params, { replace: true });
+    setFiltroStatus('pendente');
+    setDataDe(de);
+    setDataAte(ate);
+    setBusca('');
+    setFiltroPagamento('todos');
+    setMes(de.slice(0, 7));
+    toast.info('Mostrando só os Pix pendentes da campanha. Aprove para virarem cupom.');
+  }, [searchParams, setSearchParams, setFiltroStatus, setDataDe, setDataAte, setBusca, setFiltroPagamento, setMes]);
+
   // Seleção múltipla (líder): a tabela marca, a barra de lote age.
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
 

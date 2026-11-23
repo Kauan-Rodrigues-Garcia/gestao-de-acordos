@@ -29,6 +29,7 @@ import { PixRegistroForm } from './PixRegistroForm';
 import { PixConfigSetor } from './PixConfigSetor';
 import { PixBarraLote } from './PixBarraLote';
 import { PixTabelaRegistros } from './PixTabelaRegistros';
+import { AvisoCupomNoPix } from '@/components/DesafioVale/AvisoCupomNoPix';
 import type { PixTela } from './usePixAutomatico';
 import { useTemaNatal } from '@/components/Natal/tema';
 import { KevinEsquecido, NeveNoTopo, VaralDosCards } from '@/components/Natal/pix/PixNatal';
@@ -391,6 +392,12 @@ export function PixAbaRegistros({ pix }: { pix: PixTela }) {
 
       {/* ── Barra de ação em lote (líder) ── */}
       <PixBarraLote pix={pix} />
+
+      {/* ── Campanha dos Cupons do Pix (Desafio do Vale, 23/11/2026) ── */}
+      <AvisoCupomNoPix
+        itens={pix.itens} podeAprovar={pix.podeAprovar}
+        onVerPendentes={(de, ate) => { setFiltroStatus('pendente'); setDataDe(de); setDataAte(ate); }}
+      />
 
       <PixTabelaRegistros pix={pix} />
     </>

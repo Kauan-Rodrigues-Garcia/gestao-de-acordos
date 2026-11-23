@@ -149,6 +149,7 @@ const DashboardAdm      = lazy(() => import('@/pages/DashboardAdm'));
 // Gestão e nunca descobre o Easter Egg não baixa um byte dele.
 const CreatorsLab       = lazy(() => import('@/pages/CreatorsLab'));
 const DesafioCobranca   = lazy(() => import('@/pages/DesafioCobranca'));
+const DesafioVale       = lazy(() => import('@/pages/DesafioVale'));
 // Comemorações não tem mais rota própria: virou aba de /admin/usuarios e é
 // carregada de lá (lazy também, para não entrar no bundle de quem não abre).
 
@@ -937,6 +938,16 @@ export default function App() {
                 <LayoutWrapper>
                   <ProtectedRoute roles={['super_admin']}>
                     <DesafioCobranca />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+
+              {/* Desafio do Vale (9 médias + cupons do Pix, 23/11/2026): só o
+                  super_admin configura, libera e confirma o fechamento. */}
+              <Route path={ROUTE_PATHS.DESAFIO_VALE} element={
+                <LayoutWrapper>
+                  <ProtectedRoute roles={['super_admin']}>
+                    <DesafioVale />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />

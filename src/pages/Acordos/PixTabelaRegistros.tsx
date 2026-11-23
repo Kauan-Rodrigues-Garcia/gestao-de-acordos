@@ -37,10 +37,15 @@ import { fmtPct, SO_MEMORIA, STATUS_INFO } from './pixTelaComum';
 import type { PixTela } from './usePixAutomatico';
 import { useTemaNatal } from '@/components/Natal/tema';
 import { corPixNatal } from '@/components/Natal/pix/corPixNatal';
+import { EtiquetaCupom } from '@/components/DesafioVale/AvisoCupomNoPix';
+import { CLASSE_LINHA_CUPOM, useCampanhaCupom } from '@/components/DesafioVale/campanhaCupom';
+import { pixNoPeriodoDoCupom } from '@/services/desafioVale/regras';
 
 export function PixTabelaRegistros({ pix }: { pix: PixTela }) {
   /** Natal: Pago dourado e EXTRA vermelho de fita (`Natal/pix/PixNatal.tsx`). */
   const natal = useTemaNatal();
+  /** Cupons do Pix (23/11/2026): as linhas do período ficam em laranja. */
+  const campanha = useCampanhaCupom();
   const {
     perfil, temPermissao, podeAprovar, podeVerDeOutros, podeAgirSobreOutros, podeAjustarSaldo,
     fechamento, nrsBloqueados, itens, visiveis, daPagina, paginaAtual, totalPaginas, setPagina,
@@ -305,10 +310,12 @@ export function PixTabelaRegistros({ pix }: { pix: PixTela }) {
                   const sInfo = STATUS_INFO[item.status];
                   const desaprovado = item.status === 'desaprovado';
                   const emEdicao = editandoId === item.id;
+                  const daCampanha = !!campanha && pixNoPeriodoDoCupom(item.criado_em, campanha);
                   return (
                     <LinhaViva key={item.id} nova={jaPintouPix.current}
                       className={cn(
                         'border-b border-border/30 group transition-colors hover:bg-accent/20',
+                        daCampanha && CLASSE_LINHA_CUPOM,
                         desaprovado && 'opacity-60',
                       )}>
                       {podeVerDeOutros && (
@@ -329,6 +336,7 @@ export function PixTabelaRegistros({ pix }: { pix: PixTela }) {
                         ) : (
                           <div className="flex items-center gap-1.5">
                             <span>{item.nr_cliente}</span>
+                            {daCampanha && <EtiquetaCupom />}
                             {/* A etiqueta EXTRA fica colada no NR porque é do
                                 NR que ela fala: «este número pode ter sido
                                 lançado por mais de um setor». Só chama a

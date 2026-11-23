@@ -36,6 +36,8 @@ vi.mock('@/services/pix_automatico.service', async (original) => ({
 }));
 // O painel de bônus lê o banco sozinho; aqui ele não tem o que provar.
 vi.mock('./PixBonusPainel', () => ({ PixBonusPainel: () => null }));
+// A campanha dos Cupons do Pix lê o desafio com login; aqui ela não está no ar.
+vi.mock('@/components/DesafioVale/campanhaCupom', () => ({ useCampanhaCupom: () => null, CLASSE_LINHA_CUPOM: '' }));
 
 import { PixAutomatico } from './PixAutomatico';
 

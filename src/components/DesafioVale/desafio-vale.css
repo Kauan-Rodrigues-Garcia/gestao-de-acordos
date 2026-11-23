@@ -1,0 +1,289 @@
+/* Desafio do Vale (23/11/2026) — por cima do `.dc` do Desafio Cobrança.
+   Só variáveis do tema `--dc-*`, mais a cor do cupom: a MESMA laranja que
+   destaca os Pix do período na aba Pix Automático (e na arte). */
+
+.dc { --dv-cupom: #fb923c; --dv-cupom-tinta: #2b1200; }
+
+.dc-dica { margin: 0; font-size: 13px; color: var(--dc-suave); }
+
+/* As faixas do vale */
+.dv-faixas-texto { margin: 6px 0 10px; font-size: 13px; color: var(--dc-suave); }
+.dv-faixas-texto strong { color: var(--dc-texto); }
+.dv-faixas-lista { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.dv-faixa {
+  display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 12px;
+  border: 1px dashed var(--dc-cartao-borda); background: color-mix(in srgb, var(--dc-veu) 3%, transparent);
+}
+.dv-faixa-valor { min-width: 84px; font-size: 20px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.dv-faixa-regra { flex: 1; font-size: 13px; font-weight: 700; color: var(--dc-suave); }
+.dv-faixa.aqui { border: 2px solid var(--dc-ouro); background: color-mix(in srgb, var(--dc-ouro) 12%, transparent); }
+.dv-faixa.aqui .dv-faixa-valor { color: var(--dc-ouro); }
+.dv-faixa.aqui .dv-faixa-regra { color: var(--dc-texto); }
+.dv-faixa-selo {
+  flex-shrink: 0; padding: 2px 9px; border-radius: 999px; background: var(--dc-ouro); color: var(--dc-sobre-ouro);
+  font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.04em;
+}
+
+.dv-setor-linha { display: flex; justify-content: space-between; gap: 8px; margin-top: 14px; font-size: 13px; color: var(--dc-suave); }
+.dv-setor-linha strong { color: var(--dc-texto); font-size: 15px; font-weight: 900; }
+.dv-setor-regua { position: relative; height: 10px; margin: 6px 0 18px; border-radius: 999px; background: var(--dc-trilho); }
+.dv-setor-cheia { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--dc-ouro), var(--dc-coral)); transition: width 0.8s cubic-bezier(0.22, 1, 0.36, 1); }
+.dv-setor-marca { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: var(--dc-texto); opacity: 0.8; }
+.dv-setor-marca em { position: absolute; top: 15px; left: 50%; transform: translateX(-50%); font-size: 10px; font-style: normal; font-weight: 800; color: var(--dc-suave); }
+.dv-setor-nota { display: block; margin: 0; font-size: 13px; line-height: 1.45; }
+.dv-setor-nota strong { font-weight: 900; }
+.dv-setor-nota svg { display: inline; margin-right: 6px; vertical-align: -2px; color: var(--dc-ouro); }
+
+/* O vale de hoje e o próximo degrau, embaixo da barra do setor. */
+.dv-agora { padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--dc-veu) 5%, transparent); border: 1px solid var(--dc-cartao-borda); }
+.dv-agora-linha { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 0; font-size: 13px; color: var(--dc-suave); }
+.dv-agora-valor { font-size: 22px; font-weight: 900; color: var(--dc-ouro); font-variant-numeric: tabular-nums; }
+.dv-agora-proximo { margin: 6px 0 0; font-size: 13px; line-height: 1.45; }
+.dv-agora-proximo b { font-weight: 900; color: var(--dc-texto); }
+
+/* O dia a dia, em médias */
+.dv-dias { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; margin: 0; padding: 0; list-style: none; }
+.dv-dias li {
+  display: flex; flex-direction: column; align-items: center; padding: 6px 2px; border-radius: 10px;
+  background: var(--dc-cartao); border: 1px solid var(--dc-cartao-borda);
+  font-size: 10px; font-weight: 800; text-transform: uppercase; color: var(--dc-suave);
+}
+.dv-dias li em { font-style: normal; font-weight: 600; text-transform: none; }
+.dv-dias li strong { margin-top: 2px; font-size: 16px; color: var(--dc-texto); font-variant-numeric: tabular-nums; }
+.dv-dias li.hoje { border-color: var(--dc-ouro); box-shadow: 0 0 0 2px color-mix(in srgb, var(--dc-ouro) 25%, transparent); }
+.dv-dias li.depois { opacity: 0.55; }
+@media (max-width: 520px) { .dv-dias { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+/* Cupons */
+.dv-tag-cupom {
+  display: inline-flex; align-items: center; gap: 3px; padding: 1px 6px; border-radius: 6px;
+  background: var(--dv-cupom); color: var(--dv-cupom-tinta);
+  font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap;
+}
+.dv-cupom-resumo {
+  display: flex; align-items: center; gap: 12px; width: 100%; cursor: pointer;
+  border-color: color-mix(in srgb, var(--dv-cupom) 55%, transparent) !important;
+  background: color-mix(in srgb, var(--dv-cupom) 10%, transparent) !important;
+}
+.dv-cupom-resumo:hover { background: color-mix(in srgb, var(--dv-cupom) 16%, transparent) !important; }
+.dv-cupom-icone { flex-shrink: 0; display: grid; place-items: center; width: 42px; height: 42px; border-radius: 12px; background: var(--dv-cupom); color: var(--dv-cupom-tinta); }
+.dv-cupom-resumo-titulo { display: block; font-size: 14px; font-weight: 900; }
+.dv-cupom-resumo-texto { display: block; font-size: 13px; color: var(--dc-suave); }
+.dv-cupom-resumo-texto strong { color: var(--dc-texto); }
+.dv-cupom-ver { flex-shrink: 0; padding: 3px 10px; border-radius: 999px; background: var(--dv-cupom); color: var(--dv-cupom-tinta); font-size: 12px; font-weight: 900; }
+
+.dv-cupom-heroi { border-color: color-mix(in srgb, var(--dv-cupom) 55%, transparent); background: color-mix(in srgb, var(--dv-cupom) 8%, transparent); }
+.dv-cupom-regra { margin: 6px 0 0; font-size: 14px; }
+.dv-cupom-regra strong { font-weight: 900; }
+.dv-cupom-numero { display: flex; align-items: baseline; gap: 8px; margin-top: 10px; }
+.dv-cupom-numero strong { font-size: 56px; font-weight: 900; line-height: 1; color: var(--dv-cupom); font-variant-numeric: tabular-nums; }
+.dv-cupom-numero span { font-size: 18px; font-weight: 800; }
+.dv-cupom-pontos { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 12px; color: var(--dc-suave); }
+.dv-cupom-pontos i { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--dv-cupom); }
+.dv-cupom-pontos i.cheio { background: var(--dv-cupom); }
+.dv-cupom-pontos span { margin-left: 4px; }
+.dv-cupom-contas { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 0; padding: 0; list-style: none; }
+.dv-cupom-contas li { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 800; background: color-mix(in srgb, var(--dc-veu) 8%, transparent); }
+.dv-cupom-contas li.ok { color: var(--dc-verde); }
+.dv-cupom-contas li.espera { color: var(--dc-ouro); }
+.dv-cupom-contas li.nao { color: var(--dc-vermelho); }
+
+.dv-cobre {
+  display: flex; gap: 8px; margin: 12px 0 0; padding: 10px 12px; border-radius: 12px;
+  border: 2px solid var(--dc-ouro); background: color-mix(in srgb, var(--dc-ouro) 12%, transparent); font-size: 13px;
+}
+.dv-cobre svg { flex-shrink: 0; margin-top: 1px; color: var(--dc-ouro); }
+.dv-cobre strong { font-weight: 900; }
+
+.dv-pix-lista { display: flex; flex-direction: column; gap: 4px; margin: 8px 0 0; padding: 0; list-style: none; max-height: 260px; overflow-y: auto; }
+.dv-pix-lista li { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 8px; background: color-mix(in srgb, var(--dc-veu) 4%, transparent); font-size: 13px; }
+.dv-pix-lista li em { font-style: normal; color: var(--dc-suave); font-size: 12px; }
+.dv-pix-status { margin-left: auto; font-size: 11px; font-weight: 900; text-transform: uppercase; }
+.dv-pix-lista li.aprovado .dv-pix-status { color: var(--dc-verde); }
+.dv-pix-lista li.pendente .dv-pix-status { color: var(--dc-ouro); }
+.dv-pix-lista li.desaprovado { opacity: 0.6; }
+.dv-pix-lista li.desaprovado .dv-pix-status { color: var(--dc-vermelho); }
+
+.dv-dica-cor { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; font-size: 12px; color: var(--dc-suave); }
+
+.dv-cupom-tabela { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.dv-cupom-tabela li { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px; font-size: 13px; }
+.dv-cupom-tabela-n { display: inline-flex; align-items: center; gap: 4px; color: var(--dv-cupom); }
+.dv-cupom-tabela-n strong { font-size: 16px; font-weight: 900; }
+.dv-cupom-tabela-det { min-width: 110px; text-align: right; font-size: 12px; color: var(--dc-suave); }
+.dv-cupom-tabela-det b { color: var(--dc-ouro); }
+
+/* O atalho do líder para aprovar os Pix pendentes da campanha. */
+.dv-aprovar-acoes { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 8px; }
+.dv-aprovar-botao {
+  display: inline-flex; align-items: center; padding: 6px 14px; border-radius: 999px;
+  background: var(--dv-cupom); color: var(--dv-cupom-tinta); font-size: 13px; font-weight: 900; text-decoration: none;
+}
+.dv-aprovar-botao:hover { filter: brightness(1.08); }
+.dc .dv-aprovar-ver { padding: 0; border: 0; background: none; font-size: 12px; font-weight: 700; text-decoration: underline; cursor: pointer; color: var(--dc-suave); }
+
+/* ── A carteira de cupons (23/11/2026): bilhetes no lugar das bolinhas ───── */
+.dv-carteira { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+.dv-carteira-topo { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.dv-carteira-total { display: flex; align-items: baseline; gap: 8px; margin: 0; }
+.dv-carteira-total strong { font-size: 48px; font-weight: 900; line-height: 1; color: var(--dv-cupom); font-variant-numeric: tabular-nums; }
+.dv-carteira-total span { font-size: 16px; font-weight: 800; }
+.dv-carteira-chances { margin: 0; font-size: 12px; font-weight: 800; color: var(--dc-suave); text-transform: uppercase; letter-spacing: .06em; }
+
+.dv-bilhetes { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.dv-bilhete {
+  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  min-height: 92px; padding: 10px 8px; border-radius: 12px; text-align: center;
+  background: var(--dv-cupom); color: var(--dv-cupom-tinta);
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--dv-cupom) 30%, transparent);
+  /* os furinhos do bilhete, dos dois lados */
+  -webkit-mask: radial-gradient(circle 8px at 0 50%, transparent 98%, #000) left / 51% 100% no-repeat,
+                radial-gradient(circle 8px at 100% 50%, transparent 98%, #000) right / 51% 100% no-repeat;
+          mask: radial-gradient(circle 8px at 0 50%, transparent 98%, #000) left / 51% 100% no-repeat,
+                radial-gradient(circle 8px at 100% 50%, transparent 98%, #000) right / 51% 100% no-repeat;
+  opacity: 0; animation: dv-bilhete .45s cubic-bezier(.22, 1.3, .36, 1) forwards; animation-delay: calc(var(--i, 0) * .07s);
+}
+@keyframes dv-bilhete { from { opacity: 0; transform: translateY(8px) scale(.92); } to { opacity: 1; transform: none; } }
+.dv-bilhete-furo { align-self: stretch; margin: 2px 10px; border-top: 2px dashed color-mix(in srgb, var(--dv-cupom-tinta) 30%, transparent); }
+.dv-bilhete b { position: relative; font-size: 15px; font-weight: 900; }
+.dv-bilhete em { position: relative; font-size: 11px; font-style: normal; font-weight: 800; opacity: .8; }
+.dv-bilhete svg { position: relative; }
+.dv-bilhete.mais { background: #c2410c; color: #fff; }
+.dv-bilhete.mais b { font-size: 22px; }
+
+/* O próximo: contorno tracejado, com uma casa por Pix */
+.dv-bilhete.construindo {
+  background: color-mix(in srgb, var(--dv-cupom) 8%, transparent); color: var(--dc-texto); box-shadow: none;
+  outline: 2px dashed color-mix(in srgb, var(--dv-cupom) 70%, transparent); outline-offset: -2px;
+}
+.dv-bilhete.construindo .dv-bilhete-furo { border-color: color-mix(in srgb, var(--dv-cupom) 35%, transparent); }
+.dv-bilhete.construindo em { color: var(--dc-suave); opacity: 1; }
+.dv-casas { position: relative; display: flex; gap: 5px; margin: 2px 0; }
+.dv-casa {
+  display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; font-style: normal;
+  border: 2px dashed color-mix(in srgb, var(--dc-texto) 35%, transparent);
+}
+.dv-casa.ok { border: 0; background: var(--dc-verde); color: var(--dc-tinta-ok); }
+.dv-casa.espera {
+  border: 0; color: #2b1400;
+  background: repeating-linear-gradient(135deg, #fbbf24 0 5px, #fde68a 5px 10px);
+  animation: dv-espera 1.6s ease-in-out infinite;
+}
+@keyframes dv-espera { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+
+.dv-proximo { margin: 0; font-size: 13px; line-height: 1.45; }
+.dv-proximo strong, .dv-proximo b { font-weight: 900; }
+
+.dv-legenda { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 11px; font-weight: 700; color: var(--dc-suave); }
+.dv-legenda span { display: inline-flex; align-items: center; gap: 5px; }
+.dv-legenda .dv-casa { width: 16px; height: 16px; border-radius: 4px; animation: none; }
+.dv-legenda .nao { color: var(--dc-vermelho); }
+
+/* Os avisos do cabeçalho (prévia, visão de teste): com as cores do tema, para
+   valer no claro e no escuro (23/11/2026). */
+.dv-aviso { margin-top: 12px; padding: 8px 12px; border-radius: 12px; font-size: 12px; font-weight: 700;
+  border: 1px solid var(--dc-cartao-borda); background: color-mix(in srgb, var(--dc-veu) 5%, transparent); }
+.dv-aviso-teste { border-style: dashed; }
+.dv-aviso-previa { color: var(--dc-ouro); font-weight: 900; }
+.dv-aviso-liberado { color: var(--dc-verde); font-weight: 900; }
+.dv-aviso-link { padding: 3px 12px; border-radius: 999px; font-weight: 800; text-decoration: none;
+  background: color-mix(in srgb, var(--dc-veu) 10%, transparent); }
+.dv-aviso-link:hover { background: color-mix(in srgb, var(--dc-veu) 18%, transparent); }
+
+/* Os sincelos do cabeçalho ficam no meio: à direita cobririam o vale da abertura. */
+.dc.dv .dc-sincelo-cabeca { right: auto; left: 42%; }
+
+/* ── O ranking dos setores sem Pix (a Manutenção, 23/11/2026) ───────────── */
+.dv-ranking-cima { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.dv-ranking-regra { margin: 6px 0 0; font-size: 14px; }
+.dv-ranking-regra strong { font-weight: 900; }
+.dv-ranking-hotdog { flex-shrink: 0; width: 110px; height: 66px; filter: drop-shadow(0 8px 10px rgba(0,0,0,.35)); }
+.dv-podio { display: flex; flex-direction: column; gap: 6px; margin: 12px 0 0; padding: 0; list-style: none; }
+.dv-podio-linha { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; font-size: 14px; font-weight: 700;
+  background: color-mix(in srgb, var(--dc-veu) 5%, transparent); border: 1px solid var(--dc-cartao-borda); }
+.dv-podio-linha strong { font-variant-numeric: tabular-nums; font-weight: 900; }
+.dv-podio-linha.eu { border: 2px solid var(--dv-cupom); }
+.dv-podio-medalha { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; }
+.dv-podio-linha.p1 .dv-podio-medalha { background: #fbbf24; color: #4a2c00; }
+.dv-podio-linha.p2 .dv-podio-medalha { background: #cbd5e1; color: #1e293b; }
+.dv-podio-linha.p3 .dv-podio-medalha { background: #d6a26c; color: #3b1f05; }
+.dv-podio-pos { min-width: 26px; font-size: 16px; font-weight: 900; }
+.dv-podio-vazio { padding: 10px; text-align: center; font-size: 13px; color: var(--dc-suave); }
+.dv-ranking-eu { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 12px 0 0; padding: 10px 12px; border-radius: 12px; font-size: 13px;
+  border: 2px solid var(--dc-ouro); background: color-mix(in srgb, var(--dc-ouro) 12%, transparent); }
+.dv-ranking-eu.ok { border-color: var(--dc-verde); background: color-mix(in srgb, var(--dc-verde) 14%, transparent); }
+.dv-ranking-eu strong { font-weight: 900; }
+.dv-ranking-lista { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; padding: 0; list-style: none; max-height: 320px; overflow-y: auto; }
+.dv-ranking-lista li { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 8px; font-size: 13px;
+  background: color-mix(in srgb, var(--dc-veu) 4%, transparent); }
+.dv-ranking-lista li strong { font-variant-numeric: tabular-nums; }
+.dv-ranking-lista li.ganha { background: color-mix(in srgb, var(--dc-verde) 14%, transparent); }
+.dv-ranking-lista li.eu { outline: 2px solid var(--dv-cupom); }
+.dv-ranking-pos { min-width: 28px; font-weight: 900; }
+
+/* ── A visão do líder: o painel do setor (23/11/2026) ───────────────────── */
+.dv-painel-nome { font-size: 16px; font-weight: 900; }
+.dv-painel-regra { margin: 6px 0 0; font-size: 13px; color: var(--dc-suave); }
+.dv-painel-regra strong { color: var(--dc-texto); }
+.dv-kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 12px 0 0; padding: 0; list-style: none; }
+.dv-kpi { position: relative; display: flex; flex-direction: column; gap: 1px; padding: 12px 12px 10px; border-radius: 14px;
+  border: 1px solid var(--dc-cartao-borda); background: color-mix(in srgb, var(--dc-veu) 5%, transparent); }
+.dv-kpi strong { font-size: 28px; font-weight: 900; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.dv-kpi > span:not(.dv-kpi-icone) { font-size: 12px; font-weight: 800; color: var(--dc-suave); }
+.dv-kpi em { font-size: 12px; font-style: normal; font-weight: 700; color: var(--dc-suave); }
+.dv-kpi-icone { position: absolute; top: 10px; right: 10px; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%;
+  background: color-mix(in srgb, var(--dc-veu) 10%, transparent); color: var(--dc-suave); }
+.dv-kpi.bom { border-color: color-mix(in srgb, var(--dc-verde) 50%, transparent); }
+.dv-kpi.bom .dv-kpi-icone { background: var(--dc-verde); color: var(--dc-tinta-ok); }
+.dv-kpi.atencao { border: 2px solid var(--dv-cupom); background: color-mix(in srgb, var(--dv-cupom) 12%, transparent); }
+.dv-kpi.atencao .dv-kpi-icone { background: var(--dv-cupom); color: var(--dv-cupom-tinta); }
+.dv-kpi.atencao strong { color: var(--dv-cupom); }
+.dc .dv-kpi-link { align-self: flex-start; display: inline-flex; align-items: center; gap: 2px; margin-top: 4px; padding: 0; border: 0; background: none;
+  font-size: 12px; font-weight: 800; text-decoration: underline; cursor: pointer; color: var(--dc-texto); }
+.dc .dv-kpi-link.forte { padding: 3px 10px; border-radius: 999px; background: var(--dv-cupom); color: var(--dv-cupom-tinta); text-decoration: none; }
+
+/* O sorteio: os ganhadores e o cartão do operador */
+.dv-ganhadores { display: flex; flex-direction: column; gap: 4px; margin: 8px 0 0; padding: 0; list-style: none; }
+.dv-ganhadores li { padding: 6px 10px; border-radius: 8px; font-size: 14px; font-weight: 700; background: color-mix(in srgb, var(--dv-cupom) 12%, transparent); }
+.dv-ganhadores li b { margin-right: 6px; color: var(--dv-cupom); }
+.dv-ganhadores li.eu { outline: 2px solid var(--dc-verde); }
+.dv-sorteio-meu { margin-top: 4px; padding: 10px 12px; border-radius: 12px; border: 1px dashed color-mix(in srgb, var(--dv-cupom) 60%, transparent); }
+.dv-sorteio-meu.ganhou { border: 2px solid var(--dc-verde); background: color-mix(in srgb, var(--dc-verde) 12%, transparent); }
+.dv-sorteio-meu-titulo { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 0; font-size: 14px; }
+.dv-sorteio-meu-titulo strong { font-weight: 900; color: var(--dv-cupom); }
+.dv-sorteio-meu-texto { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 4px 0 0; font-size: 12px; color: var(--dc-suave); }
+.dv-sorteio-meu-texto strong { color: var(--dc-verde); font-weight: 900; }
+@media (max-width: 480px) { .dv-kpis { grid-template-columns: 1fr; } }
+
+/* O realizado, embaixo da projeção (23/11/2026). */
+.dv-setor-realizado { margin: -4px 0 6px; font-size: 11px; color: var(--dc-suave); }
+
+/* A arte obrigatória: a janela no meio da tela (23/11/2026). */
+.dv-arte-obrigatoria .dc-corpo { overflow-y: auto; }
+.dv-arte-obrigatoria .dc-luzes-topo { top: -4px; z-index: 2; }
+.dv-arte-nota { margin: -14px 0 18px; text-align: center; font-size: 11px; color: var(--dc-suave); }
+
+/* Quem já leu a arte, no painel do líder. */
+.dv-viu { margin-top: 12px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--dc-cartao-borda); }
+.dv-viu-linha { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 0; font-size: 13px; }
+.dv-viu-linha strong { font-weight: 900; }
+.dc .dv-viu-ver { margin-left: auto; padding: 0; border: 0; background: none; font-size: 12px; font-weight: 800; text-decoration: underline; cursor: pointer; color: var(--dc-texto); }
+.dv-viu-barra { height: 6px; margin-top: 6px; border-radius: 999px; background: var(--dc-trilho); overflow: hidden; }
+.dv-viu-barra span { display: block; height: 100%; border-radius: 999px; background: var(--dc-verde); }
+.dv-viu-faltam { margin: 6px 0 0; font-size: 12px; color: var(--dc-suave); }
+
+/* Bilhetes menores (23/11/2026): cabem muitos cupons numa linha. */
+.dv-bilhetes { grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: 6px; }
+.dv-bilhete { min-height: 60px; padding: 6px 4px; border-radius: 9px; gap: 1px;
+  -webkit-mask: radial-gradient(circle 5px at 0 50%, transparent 98%, #000) left / 51% 100% no-repeat,
+                radial-gradient(circle 5px at 100% 50%, transparent 98%, #000) right / 51% 100% no-repeat;
+          mask: radial-gradient(circle 5px at 0 50%, transparent 98%, #000) left / 51% 100% no-repeat,
+                radial-gradient(circle 5px at 100% 50%, transparent 98%, #000) right / 51% 100% no-repeat; }
+.dv-bilhete b { font-size: 12px; }
+.dv-bilhete em { font-size: 10px; }
+.dv-bilhete svg { width: 14px; height: 14px; }
+.dv-bilhete-furo { margin: 1px 6px; border-top-width: 1.5px; }
+.dv-bilhete.mais b { font-size: 16px; }
+.dv-bilhete.construindo { grid-column: span 2; }
+.dv-bilhete.construindo .dv-casa { width: 18px; height: 18px; border-radius: 5px; }
+.dv-bilhete.construindo .dv-casa svg { width: 10px; height: 10px; }

@@ -172,6 +172,7 @@ export const ROUTE_PATHS = {
   CREATORS_LAB: '/creators',
   /** Desafio Cobrança (folgar mais cedo): configuração, ajustes e hora a hora. Só super_admin. */
   DESAFIO_COBRANCA: '/desafio-cobranca',
+  DESAFIO_VALE: '/desafio-vale',
 } as const;
 
 export const STATUS_LABELS: Record<string, string> = {
