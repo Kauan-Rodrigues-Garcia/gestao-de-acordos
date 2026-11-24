@@ -5,6 +5,11 @@
  * Equipes, Quartis, Gráfico de recebimento e Ajuste de recebimento. Um único
  * recorte de setor/equipe serve as quatro — trocar de aba não troca o recorte.
  *
+ * «Agendados» (23/11/2026): a agenda dos acordos por vencimento, pessoa a
+ * pessoa — hoje, amanhã, próximos dias, e como foi o que já venceu. Usa o mês e
+ * o recorte de setor/equipe das outras abas; lê `acordos` só quando é aberta
+ * (ver `services/agendados`).
+ *
  * Na BookPlay há uma quinta, «Plantão Elite» (19/09/2026): o recebimento hora
  * a hora da dupla de plantão do Receptivo. Ela tem data e dupla próprias, e não
  * usa o mês nem o recorte de setor/equipe.
@@ -22,7 +27,7 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import {
   Users, Calendar, ChevronRight, ChevronLeft, RefreshCw, Loader2,
-  TrendingUp, Radio, BarChart3, LineChart, SlidersHorizontal, Clock,
+  TrendingUp, Radio, BarChart3, LineChart, SlidersHorizontal, Clock, CalendarClock,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase, Perfil } from '@/lib/supabase';
@@ -56,6 +61,7 @@ import { QuartisOperadores } from '@/pages/Dashboard/Analitico/QuartisOperadores
 import { GraficoRecebimento } from '@/pages/Dashboard/Analitico/GraficoRecebimento';
 import AjusteRecebimento from '@/pages/Dashboard/Analitico/AjusteRecebimento';
 import { PlantaoElite } from '@/pages/Dashboard/Analitico/PlantaoElite';
+import { AgendadosOperadores } from '@/pages/Dashboard/Analitico/AgendadosOperadores';
 import { FiltrosEscopo } from '@/pages/Dashboard/Analitico/FiltrosEscopo';
 import { resolverEscopoPainel } from '@/pages/Dashboard/Analitico/escopoDoPainel';
 import { useDivisoes } from '@/hooks/useDivisoes';
@@ -78,7 +84,7 @@ import { assinarSinal } from '@/lib/sinais';
 
 /** Abas do painel. A aba Acompanhamento saiu em 31/08/2026; as demais são
  *  as antigas abas do Analítico, agora alimentadas pelo recebimento diário. */
-type AbaPainel = 'desempenho' | 'quartis' | 'grafico' | 'elite' | 'ajuste';
+type AbaPainel = 'desempenho' | 'quartis' | 'grafico' | 'agendados' | 'elite' | 'ajuste';
 
 // ─── Helpers de período ─────────────────────────────────────────────────────
 
@@ -137,6 +143,8 @@ export default function PainelLider() {
     { key: 'desempenho', label: 'Desempenho Equipes',  Icon: BarChart3,   permissao: 'painel_lider_sub_desempenho_equipes' },
     { key: 'quartis',    label: 'Quartis',             Icon: TrendingUp,  permissao: 'painel_lider_sub_quartis' },
     { key: 'grafico',    label: 'Gráfico recebimento', Icon: LineChart,   permissao: 'painel_lider_sub_grafico_recebimento' },
+    // A agenda dos acordos por vencimento, pessoa a pessoa (23/11/2026).
+    { key: 'agendados',  label: 'Agendados',           Icon: CalendarClock, permissao: 'painel_lider_sub_agendados' },
     // Plantão das Elites do Receptivo. A chave é só da BookPlay e nasce só no
     // cargo Elite; a gerência do Receptivo a recebe por exceção na pessoa.
     { key: 'elite',      label: 'Plantão Elite',       Icon: Clock,       permissao: 'painel_lider_sub_elite' },
@@ -573,6 +581,13 @@ export default function PainelLider() {
     })));
   }, [setoresAbas, escopoAbas.equipeIds, equipesInfo, analiticoSetoresAlt, analiticoExclusoes, isPP]);
 
+  /** A composição do mês na forma que a aba Agendados pede (`setoresDoOperador`). */
+  const fontesAgendados = useMemo(() => (equipesInfo ? {
+    operadorEquipeMap:        equipesInfo.operadorEquipeMap,
+    equipesExtrasPorOperador: equipesInfo.equipesExtrasPorOperador,
+    setorDaEquipe:            mapaSetorDaEquipe(equipesInfo.equipes),
+  } : null), [equipesInfo]);
+
   /*
    * Os carregadores abaixo leem do perfil só a identidade e o setor. Em
    * primitivos, e não o objeto: o `useAuth` recria `perfil` a cada releitura
@@ -918,6 +933,24 @@ export default function PainelLider() {
               rotuloEscopo={rotuloDoEscopo}
             />
           )}
+        </div>
+      )}
+
+      {/* ── Aba: Agendados (acordos por vencimento, pessoa a pessoa) ──────── */}
+      {/* Monta só na primeira visita: é ela que dispara a leitura de `acordos`. */}
+      {mostrarAbasAnaliticas && (abasVisitadas.has('agendados') || abaVisivel === 'agendados') && (
+        <div className={cn(abaVisivel !== 'agendados' && 'hidden')}>
+          <AgendadosOperadores
+            empresaId={empresa.id}
+            mes={mesStr}
+            operadores={operadores}
+            fontes={fontesAgendados}
+            setorIds={setoresAbas}
+            equipeIds={escopoAbas.equipeIds}
+            setores={setoresLista}
+            isPP={isPP}
+            recarregarKey={diarioReloadKey}
+          />
         </div>
       )}
 

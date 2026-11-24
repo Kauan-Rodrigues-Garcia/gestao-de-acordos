@@ -56,6 +56,7 @@ export const TELA_LABEL: Record<string, string> = {
   'lider:desempenho':          'Painel do Líder · Desempenho Equipes',
   'lider:quartis':             'Painel do Líder · Quartis',
   'lider:grafico':             'Painel do Líder · Gráfico recebimento',
+  'lider:agendados':           'Painel do Líder · Agendados',
   'lider:elite':               'Painel do Líder · Plantão Elite',
   'lider/operador':            'Painel do Líder · Operador',
   'diretoria':                 'Painel Diretoria',
@@ -127,7 +128,7 @@ export const ROTULO_SEGMENTO: Record<string, Record<string, string>> = {
   },
   'lider': {
     time: 'Acompanhamento', desempenho: 'Desempenho Equipes', quartis: 'Quartis',
-    grafico: 'Gráfico recebimento', elite: 'Plantão Elite', ajuste: 'Ajuste de recebimento',
+    grafico: 'Gráfico recebimento', agendados: 'Agendados', elite: 'Plantão Elite', ajuste: 'Ajuste de recebimento',
   },
   'diretoria': {
     visao: 'Visão geral', setores: 'Setores e equipes', operadores: 'Por pessoa',

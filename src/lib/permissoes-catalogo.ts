@@ -1347,6 +1347,17 @@ export const PERMISSOES: PermissaoMeta[] = [
     grupo: 'Painel Líder', padrao: LIDERANCA,
   },
   /*
+   * Agendados (23/11/2026): a agenda dos acordos por vencimento, pessoa a
+   * pessoa. Nasce ligada para a liderança, como as outras abas do painel; o
+   * alcance é o do próprio Painel Líder (`painel_lider_escopo_*`) e a RLS de
+   * `acordos`. Migration 20261123230000.
+   */
+  {
+    key: 'painel_lider_sub_agendados', label: 'Painel Líder: Agendados',
+    descricao: 'Abrir a aba interna dos acordos agendados por pessoa: hoje, amanhã, próximos dias e conversão',
+    grupo: 'Painel Líder', padrao: LIDERANCA,
+  },
+  /*
    * Plantão das Elites do Receptivo (19/09/2026): o recebimento hora a hora da
    * dupla de plantão, com o botão de copiar a imagem para o WhatsApp.
    *
