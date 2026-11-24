@@ -180,6 +180,10 @@ export function PalcoVirtual<P extends { destruir(): void }>({
     } finally {
       continueRender(espera);
     }
+    // Roda de novo só quando muda o quadro (`f`). O resto (criar, comandos,
+    // semente, início/fim) é a cena fixa do vídeo: pôr na lista recriaria o
+    // palco a cada render e mudaria o que o Remotion desenha.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [f]);
   return <div ref={host} style={{ position: 'absolute', inset: 0, ...style }} />;
 }

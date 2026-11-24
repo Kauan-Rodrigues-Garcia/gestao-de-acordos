@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- exporta junto o que pertence ao componente (hook, constante, conta); isso só tira o Fast Refresh no `npm run dev`, não muda o app. */
 /**
  * O tempo no laboratório do Calendário (`lab-calendario.html`), sem rede: uma
  * previsão de exemplo e a galeria com todos os desenhos, para conferir cada

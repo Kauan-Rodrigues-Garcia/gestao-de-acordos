@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- exporta junto o que pertence ao componente (hook, constante, conta); isso só tira o Fast Refresh no `npm run dev`, não muda o app. */
 /**
  * O cenário da caixa do tempo (06/11/2026): uma paisagem de gibi do interior
  * paulista, com o personagem do tempo no céu e o tempo acontecendo nela.

@@ -29,7 +29,7 @@ import {
 import '../../../arquivo-morto/caca-zumbis-bruxas/src/components/CacaAbobora/caca.css';
 import './caca-video.css';
 import { NOME } from './nome';
-import { ACELERA, entre, mola, ms, s, SUAVE, SUAVE_IDA_VOLTA } from '../movimento';
+import { entre, ms, s, SUAVE, SUAVE_IDA_VOLTA } from '../movimento';
 import { Sprite } from './Sprite';
 
 fontePixel('normal', { weights: ['400', '700'], subsets: ['latin', 'latin-ext'] });

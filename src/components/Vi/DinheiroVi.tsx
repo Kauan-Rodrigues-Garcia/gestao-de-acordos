@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- exporta junto o que pertence ao componente (hook, constante, conta); isso só tira o Fast Refresh no `npm run dev`, não muda o app. */
 import { useEffect, useRef, type CSSProperties } from 'react';
 import './vi.css';
 

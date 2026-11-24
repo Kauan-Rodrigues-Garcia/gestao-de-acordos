@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- o tema é um objeto (contrato TemaBingo) que carrega os componentes; isso só tira o Fast Refresh no `npm run dev`, não muda o app. */
 /**
  * rpg.tsx — tema «Aventura RPG» (aconchegante).
  *

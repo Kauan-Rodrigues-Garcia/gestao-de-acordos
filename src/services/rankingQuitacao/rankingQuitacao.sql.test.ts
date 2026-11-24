@@ -42,8 +42,21 @@ const MES = '2026-11-01';
 
 let db: PGlite;
 
+/** O JSON de `fn_ranking_quitacao_calcular`, só com o que os testes leem. */
+interface Categoria { id: string; vencedor: { nome: string } | null }
+interface Posicao { posicao: number; nome: string; premio: number; quitacoes: number; valor: number | string }
+interface Disputa {
+  equipe_id: string; nome: string; equipes: string[]; participantes: number;
+  quitacoes_total: number; posicoes: Posicao[]; categorias: Categoria[];
+}
+interface Equipe { id: string; nome: string; pessoas: number; quitacoes: number; valor: number | string }
+interface Ranking {
+  disputas: Disputa[]; equipes: Equipe[]; categorias: Categoria[];
+  participantes: number; aceita: string; eu: Record<string, unknown> | null;
+}
+
 async function ranking(setor: string, quem: string | null = null) {
-  const r = await db.query<{ r: Record<string, any> }>(
+  const r = await db.query<{ r: Ranking }>(
     `select public.fn_ranking_quitacao_calcular($1, $2, $3, $4) as r`, [EMP, setor, MES, quem]);
   return r.rows[0].r;
 }
@@ -146,7 +159,7 @@ describe('20261112200000 — líder fora do ranking', () => {
   it('disputa do setor: o gerente sai, o resto sobe na mesma ordem', async () => {
     const r = await ranking(S_SET);
     expect(r.disputas).toHaveLength(1);
-    expect(r.disputas[0].posicoes.map((p: any) => [p.posicao, p.nome, p.premio])).toEqual([
+    expect(r.disputas[0].posicoes.map((p: Posicao) => [p.posicao, p.nome, p.premio])).toEqual([
       [1, 'Duda', 350], [2, 'Eva', 250],
     ]);
     expect(r.participantes).toBe(2);
@@ -154,20 +167,20 @@ describe('20261112200000 — líder fora do ranking', () => {
 
   it('por equipe: sem «Sem equipe» da líder, sem o líder nem o robô na equipe', async () => {
     const r = await ranking(S_EQ);
-    expect(r.disputas.map((d: any) => d.nome)).toEqual(['Kimberli', 'Luciano']);
+    expect(r.disputas.map((d: Disputa) => d.nome)).toEqual(['Kimberli', 'Luciano']);
     const [a, b] = r.disputas;
-    expect(a.posicoes.map((p: any) => p.nome)).toEqual(['Bia', 'Ana']);
+    expect(a.posicoes.map((p: Posicao) => p.nome)).toEqual(['Bia', 'Ana']);
     // Cargo sem cadastro em `cargos` continua dentro.
-    expect(b.posicoes.map((p: any) => p.nome)).toEqual(['Caio', 'Sem cargo']);
+    expect(b.posicoes.map((p: Posicao) => p.nome)).toEqual(['Caio', 'Sem cargo']);
     expect(b.quitacoes_total).toBe(4);
-    expect(r.equipes.map((e: any) => [e.nome, e.pessoas, Number(e.valor)])).toEqual([
+    expect(r.equipes.map((e: Equipe) => [e.nome, e.pessoas, Number(e.valor)])).toEqual([
       ['Kimberli', 2, 4500], ['Luciano', 2, 2150],
     ]);
   });
 
   it('destaques por equipe; os do setor e a Equipe campeã sem líder', async () => {
     const r = await ranking(S_EQ);
-    const venc = (cats: any[]) => Object.fromEntries(cats.map(c => [c.id, c.vencedor?.nome ?? null]));
+    const venc = (cats: Categoria[]) => Object.fromEntries(cats.map(c => [c.id, c.vencedor?.nome ?? null]));
     expect(venc(r.categorias)).toEqual({
       mais_quitacoes: 'Caio', maior_valor: 'Bia', maior_quitacao: 'Bia', equipe_campea: 'Kimberli',
     });
@@ -270,7 +283,7 @@ describe('20261112220000 — o líder configura o ranking do próprio setor', ()
 });
 
 describe('20261112230000 — o que conta como quitação, por setor', () => {
-  const nomes = (r: any) => r.disputas.flatMap((d: any) => d.posicoes.map((p: any) => `${p.nome}:${p.quitacoes}`));
+  const nomes = (r: Ranking) => r.disputas.flatMap(d => d.posicoes.map(p => `${p.nome}:${p.quitacoes}`));
 
   it('importar grava a origem; tipo desconhecido fica nulo', async () => {
     await db.query(`select set_config('teste.chaves', 'ranking_quitacao_importar', false)`);
@@ -298,7 +311,7 @@ describe('20261112230000 — o que conta como quitação, por setor', () => {
     expect(r.aceita).toBe('so_quitacao');
     expect(nomes(r)).toEqual(['Ana:1', 'Caio:3', 'Sem cargo:1']);
     // O placar das equipes segue o mesmo filtro.
-    expect(r.equipes.find((e: any) => e.nome === 'Kimberli')).toMatchObject({ quitacoes: 1, pessoas: 1 });
+    expect(r.equipes.find((e: Equipe) => e.nome === 'Kimberli')).toMatchObject({ quitacoes: 1, pessoas: 1 });
 
     // O outro setor não muda.
     expect((await ranking(S_SET)).aceita).toBe('todas');
@@ -322,7 +335,7 @@ describe('20261112233000 — Quitação no boleto à vista', () => {
     expect(gravado.rows).toEqual([{ cod_acordo: 'b1', tipo: 'quitacao_boleto' }, { cod_acordo: 'b2', tipo: 'quitacao' }]);
 
     const valorDaEva = async () => {
-      const r = await db.query<{ r: Record<string, any> }>(
+      const r = await db.query<{ r: Ranking }>(
         `select public.fn_ranking_quitacao_calcular($1, $2, '2027-01-01', null) as r`, [EMP, S_SET]);
       return Number(r.rows[0].r.disputas[0].posicoes[0].valor);
     };
@@ -386,16 +399,16 @@ describe('20261112235000 — juntar equipes', () => {
     await db.query(`select set_config('teste.uid', $1, false), set_config('teste.chaves', 'ranking_quitacao_configurar', false)`, [P(9)]);
     await grava({ disputa: 'equipe' });
     const separado = await ranking(S_EQ);
-    expect(separado.disputas.map((d: any) => d.nome)).toEqual(['Kimberli', 'Luciano']);
-    expect(separado.disputas.map((d: any) => d.equipes)).toEqual([[EQ_A], [EQ_B]]);
-    const pessoas = separado.disputas.reduce((t: number, d: any) => t + d.participantes, 0);
+    expect(separado.disputas.map((d: Disputa) => d.nome)).toEqual(['Kimberli', 'Luciano']);
+    expect(separado.disputas.map((d: Disputa) => d.equipes)).toEqual([[EQ_A], [EQ_B]]);
+    const pessoas = separado.disputas.reduce((t: number, d: Disputa) => t + d.participantes, 0);
 
     await grava({ disputa: 'equipe', grupos_equipes: [{ nome: '', equipes: [EQ_A, EQ_B] }] });
     const junto = await ranking(S_EQ);
     expect(junto.disputas).toHaveLength(1);
     expect(junto.disputas[0]).toMatchObject({ equipe_id: EQ_A, nome: 'Kimberli + Luciano', participantes: pessoas, equipes: [EQ_A, EQ_B] });
     // Um ranking só: as posições correm 1, 2, 3… pelo grupo inteiro.
-    expect(junto.disputas[0].posicoes.map((p: any) => p.posicao)).toEqual(
+    expect(junto.disputas[0].posicoes.map((p: Posicao) => p.posicao)).toEqual(
       Array.from({ length: junto.disputas[0].posicoes.length }, (_, i) => i + 1));
     expect(junto.equipes).toHaveLength(1);
     expect(junto.equipes[0]).toMatchObject({ id: EQ_A, nome: 'Kimberli + Luciano', pessoas });
@@ -404,7 +417,7 @@ describe('20261112235000 — juntar equipes', () => {
     expect((await ranking(S_EQ)).disputas[0].nome).toBe('Mateus e Kim');
 
     await grava({ disputa: 'equipe', grupos_equipes: [] });
-    expect((await ranking(S_EQ)).disputas.map((d: any) => d.nome)).toEqual(['Kimberli', 'Luciano']);
+    expect((await ranking(S_EQ)).disputas.map((d: Disputa) => d.nome)).toEqual(['Kimberli', 'Luciano']);
   });
 
   it('recusa grupo de uma equipe, equipe de outro setor e equipe em dois grupos', async () => {
