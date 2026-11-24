@@ -10,7 +10,7 @@ import { PixRankingSetor } from './PixRankingSetor';
 import type { PixTela } from './usePixAutomatico';
 
 export function PixAbaRanking({ pix }: { pix: PixTela }) {
-  const { perfil, mes, loading, abasRanking, setorFoco, meuSetor, fotoPorOperador } = pix;
+  const { perfil, mes, loading, abasRanking, setorFoco, meuSetor, fotoPorOperador, filtroEquipe } = pix;
   return (
     loading ? (
       <Skeleton className="h-64 w-full rounded-xl" />
@@ -20,6 +20,8 @@ export function PixAbaRanking({ pix }: { pix: PixTela }) {
         /* Abre no setor em foco quando há um; as abas do card seguem
            independentes da barra depois disso — ver o cabeçalho do card. */
         setorInicial={setorFoco ?? meuSetor}
+        /* A equipe escolhida na barra do topo, até a pessoa escolher outra no card. */
+        equipeInicial={filtroEquipe || null}
         fotoPorOperador={fotoPorOperador}
         destacarOperadorId={perfil?.id}
         recolhivel={false}

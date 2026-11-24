@@ -22,7 +22,7 @@ import {
   setorDaLinhaPix, pedidosDoSetor, setoresComAcordosPix, escolherSetorInicial,
   itensDoSetorPix, clonesPorOperador, incluirClonesDoSetor, setorDoRegistroPix,
   setoresPorPessoaClonada, pessoasCompartilhadasCom, linhaVisivelNoSetor,
-  juntarLinhasCompartilhadas,
+  juntarLinhasCompartilhadas, equipeDoOperadorNoSetor, rankingPixPorEquipe,
   MAX_SUGESTOES_VINCULO, type OperadorInfo, type VinculoDeClone,
 } from './pixAutomaticoView';
 
@@ -1095,5 +1095,85 @@ describe('linha compartilhada entre origem e clone', () => {
     ];
     const r = juntarLinhasCompartilhadas(doSetor, dasPessoas, 'trein', m);
     expect(r.map(i => i.id)).toEqual(['b', 'a']);
+  });
+});
+
+// ── Ranking por equipe ──────────────────────────────────────────────────────
+
+describe('equipeDoOperadorNoSetor', () => {
+  const porEquipe = { maria: 'eq-1', joao: 'eq-2', ana: null };
+  const setorDaEquipe = { 'eq-1': 'setor-A', 'eq-2': 'setor-B', 'eq-t': 'trein' };
+
+  it('usa a equipe do cadastro quando ela é do setor', () => {
+    expect(equipeDoOperadorNoSetor('maria', 'setor-A', porEquipe, setorDaEquipe)).toBe('eq-1');
+  });
+
+  it('equipe de outro setor não entra — cai em sem equipe', () => {
+    expect(equipeDoOperadorNoSetor('joao', 'setor-A', porEquipe, setorDaEquipe)).toBeNull();
+    expect(equipeDoOperadorNoSetor('ana', 'setor-A', porEquipe, setorDaEquipe)).toBeNull();
+  });
+
+  it('no setor do clone, conta na equipe do clone', () => {
+    const clones = { maria: [{ setor_id: 'trein', equipe_id: 'eq-t' }] };
+    expect(equipeDoOperadorNoSetor('maria', 'trein', porEquipe, setorDaEquipe, clones)).toBe('eq-t');
+    // No setor de origem continua na equipe do cadastro.
+    expect(equipeDoOperadorNoSetor('maria', 'setor-A', porEquipe, setorDaEquipe, clones)).toBe('eq-1');
+  });
+});
+
+describe('rankingPixPorEquipe', () => {
+  const equipes = [
+    { id: 'eq-1', nome: 'Luciana' },
+    { id: 'eq-2', nome: 'Matheus' },
+    { id: 'eq-3', nome: 'Parada' },
+  ];
+  const linhas = rankingPixSetor([
+    ...feitos(18, { operador_id: 'maria', operador_nome: 'Maria' }),
+    ...feitos(4,  { operador_id: 'joao',  operador_nome: 'Joao' }),
+    ...feitos(10, { operador_id: 'ana',   operador_nome: 'Ana' }),
+    ...feitos(2,  { operador_id: 'bia',   operador_nome: 'Bia' }),
+  ], { 'setor-A': 0.25 }, '2026-07');
+  const equipeDe = { maria: 'eq-1', joao: 'eq-1', ana: 'eq-2', bia: null };
+
+  it('soma os operadores de cada equipe e fecha com o setor', () => {
+    const r = rankingPixPorEquipe(linhas, equipeDe, equipes);
+    const luciana = r.find(e => e.equipeId === 'eq-1')!;
+    expect(luciana.acordos).toBe(22);
+    expect(luciana.operadores).toBe(2);
+    expect(luciana.mediaAcordos).toBe(11);
+    expect(luciana.noRequisito).toBe(1);
+    expect(r.reduce((s, e) => s + e.acordos, 0)).toBe(34);
+  });
+
+  it('equipe parada entra zerada; sem equipe vai para o fim', () => {
+    const r = rankingPixPorEquipe(linhas, equipeDe, equipes);
+    expect(r.map(e => e.nome)).toEqual(['Luciana', 'Matheus', 'Parada', 'Sem equipe']);
+    expect(r[2].acordos).toBe(0);
+    expect(r[3].equipeId).toBeNull();
+  });
+
+  it('sem equipe some quando ninguém está fora de equipe', () => {
+    const r = rankingPixPorEquipe(linhas, { ...equipeDe, bia: 'eq-3' }, equipes);
+    expect(r.some(e => e.equipeId === null)).toBe(false);
+  });
+
+  it('ordena pela média por operador', () => {
+    const r = rankingPixPorEquipe(linhas, equipeDe, equipes, {}, 'media');
+    // Luciana 22/2 = 11; Matheus 10/1 = 10.
+    expect(r[0].nome).toBe('Luciana');
+    const so = rankingPixPorEquipe(linhas, { ...equipeDe, maria: 'eq-3' }, equipes, {}, 'media');
+    // Parada agora tem só a Maria (18), à frente de Matheus (10) e Luciana (4).
+    expect(so.map(e => e.nome).slice(0, 3)).toEqual(['Parada', 'Matheus', 'Luciana']);
+  });
+
+  it('ordena pela % da meta; equipe sem meta fica atrás', () => {
+    const metas = {
+      'eq-2': { pct: 120, metaBatida: true },
+      'eq-1': { pct: 80,  metaBatida: false },
+    };
+    const r = rankingPixPorEquipe(linhas, equipeDe, equipes, metas, 'meta');
+    expect(r.map(e => e.nome)).toEqual(['Matheus', 'Luciana', 'Parada', 'Sem equipe']);
+    expect(r[0].metaBatida).toBe(true);
+    expect(r[2].pctMeta).toBeNull();
   });
 });

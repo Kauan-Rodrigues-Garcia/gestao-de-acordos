@@ -736,6 +736,117 @@ export function rankingPixSetor(
       || a.nome.localeCompare(b.nome));
 }
 
+// ── Ranking por equipe ──────────────────────────────────────────────────────
+//
+// Pedido de 24/11/2026: o ranking só separava por setor, e o líder que quer
+// saber como a equipe dele está — ou a diretoria comparando as equipes de um
+// setor — tinha de somar de cabeça. Equipes do MESMO setor se comparam: a meta
+// de acordos e o percentual de comissão são os mesmos para todas. Por isso o
+// recorte por equipe mora DENTRO da aba do setor, e nunca atravessa setores.
+
+/**
+ * A equipe em que o operador conta, dentro de um setor.
+ *
+ * A do cadastro, quando ela é desse setor. Senão, a equipe em que ele foi
+ * clonado nesse setor (Treinamento): é lá que o líder do setor o enxerga, e é
+ * lá que o Pix carimbado nele conta. Uma equipe de OUTRO setor nunca entra —
+ * seria pôr numa aba um time que não é dela —, e quem sobra cai em «Sem
+ * equipe» (`null`).
+ */
+export function equipeDoOperadorNoSetor(
+  operadorId: string,
+  setorId: string,
+  porEquipe: Record<string, string | null>,
+  setorDaEquipe: Record<string, string | null>,
+  clones: Record<string, OndeFoiClonado[]> = {},
+): string | null {
+  const doCadastro = porEquipe[operadorId];
+  if (doCadastro && setorDaEquipe[doCadastro] === setorId) return doCadastro;
+  return clones[operadorId]?.find(c => c.setor_id === setorId)?.equipe_id ?? null;
+}
+
+/** Uma equipe no ranking do setor. `equipeId: null` é o grupo «Sem equipe». */
+export interface LinhaRankingEquipePix {
+  equipeId: string | null;
+  nome: string;
+  acordos: number;
+  valor: number;
+  /** Comissão aprovada no mês, somada dos operadores da equipe. */
+  comissao: number;
+  /** Operadores da equipe com ao menos um acordo feito no mês. */
+  operadores: number;
+  /** Acordos por operador com movimento — compara equipe grande com pequena. */
+  mediaAcordos: number;
+  /** Quantos operadores da equipe cumpriram o requisito de acordos. */
+  noRequisito: number;
+  /** % da meta de Pix da equipe no mês (no modo dela). `null` = sem meta. */
+  pctMeta: number | null;
+  metaBatida: boolean;
+}
+
+/** Por onde a lista de equipes é ordenada. */
+export type OrdemRankingEquipe = 'acordos' | 'media' | 'meta';
+
+export interface MetaDaEquipeNoRanking { pct: number; metaBatida: boolean }
+
+/**
+ * O ranking das equipes de um setor, montado a partir do ranking dos
+ * operadores — a mesma conta, só agrupada. Assim a soma das equipes fecha com
+ * o pódio dos operadores, e não há duas regras de «acordo feito» na tela.
+ *
+ * Equipe do setor sem nenhum acordo no mês ENTRA, zerada: no ranking de
+ * equipes, o time parado é justamente o que o líder precisa ver. «Sem equipe»
+ * só aparece quando tem acordo, e vai sempre para o fim — não é um time e não
+ * disputa lugar.
+ */
+export function rankingPixPorEquipe(
+  linhas: readonly LinhaRankingPix[],
+  /** operador_id → equipe no setor (ver `equipeDoOperadorNoSetor`). */
+  equipeDe: Record<string, string | null>,
+  /** As equipes do setor, inclusive as paradas. */
+  equipes: readonly { id: string; nome: string }[],
+  metaPorEquipe: Record<string, MetaDaEquipeNoRanking> = {},
+  ordem: OrdemRankingEquipe = 'acordos',
+): LinhaRankingEquipePix[] {
+  const nova = (equipeId: string | null, nome: string): LinhaRankingEquipePix => ({
+    equipeId, nome, acordos: 0, valor: 0, comissao: 0, operadores: 0,
+    mediaAcordos: 0, noRequisito: 0,
+    pctMeta: equipeId ? metaPorEquipe[equipeId]?.pct ?? null : null,
+    metaBatida: equipeId ? metaPorEquipe[equipeId]?.metaBatida ?? false : false,
+  });
+
+  const porEquipe = new Map<string, LinhaRankingEquipePix>();
+  for (const e of equipes) porEquipe.set(e.id, nova(e.id, e.nome));
+  let semEquipe: LinhaRankingEquipePix | null = null;
+
+  for (const l of linhas) {
+    const id = equipeDe[l.operadorId] ?? null;
+    let alvo = id ? porEquipe.get(id) : undefined;
+    if (!alvo) alvo = semEquipe ??= nova(null, 'Sem equipe');
+    alvo.acordos    += l.acordos;
+    alvo.valor      += l.valor;
+    alvo.comissao   += l.comissao;
+    alvo.operadores += 1;
+    if (l.requisitoAcordosOk) alvo.noRequisito += 1;
+  }
+
+  const comMedia = (e: LinhaRankingEquipePix) => ({
+    ...e, mediaAcordos: e.operadores > 0 ? e.acordos / e.operadores : 0,
+  });
+  const chave = (e: LinhaRankingEquipePix): number =>
+    ordem === 'media' ? e.mediaAcordos
+    : ordem === 'meta' ? (e.pctMeta ?? -1)
+    : e.acordos;
+
+  const times = [...porEquipe.values()].map(comMedia).sort((a, b) =>
+    chave(b) - chave(a)
+    || b.acordos - a.acordos
+    || b.comissao - a.comissao
+    || a.nome.localeCompare(b.nome, 'pt-BR'));
+
+  return semEquipe && semEquipe.acordos > 0 ? [...times, comMedia(semEquipe)] : times;
+}
+
 // ── O recorte por setor ──────────────────────────────────────
 //
 // A aba inteira passou a girar em torno de UM setor de cada vez. A razao e de

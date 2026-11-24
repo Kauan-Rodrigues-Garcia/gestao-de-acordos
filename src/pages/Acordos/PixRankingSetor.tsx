@@ -38,60 +38,62 @@
  * o líder que confere acordo por acordo quer a tabela na tela. A escolha — e a
  * aba — ficam guardadas no navegador para não serem refeitas a cada visita.
  *
- * A ordenação e as somas moram em `rankingPixSetor` (pura, com teste).
+ * ## Separado por equipe (24/11/2026)
+ *
+ * Dentro do setor, o card tem dois modos. «Operadores» é o pódio de sempre,
+ * agora com uma fileira de equipes para recortar: escolhida a equipe, o pódio
+ * é o DELA, com os lugares contados de novo. «Equipes» põe as equipes do setor
+ * disputando entre si — ver `PixRankingEquipes`. Nenhum dos dois atravessa
+ * setores: a equipe de outro setor nunca aparece numa aba.
+ *
+ * A ordenação e as somas moram em `rankingPixSetor` e `rankingPixPorEquipe`
+ * (puras, com teste).
  */
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trophy, Crown, Medal, Zap, ChevronDown, Eye, EyeOff } from 'lucide-react';
+import { Trophy, Crown, Medal, Zap, ChevronDown, Eye, EyeOff, Users, User } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { formatCurrency } from '@/lib/index';
 import { cn } from '@/lib/utils';
 import { AvatarParticipante } from '@/pages/Analitico/Desafios/AvatarParticipante';
-import type { LinhaRankingPix } from './pixAutomaticoView';
+import {
+  rankingPixPorEquipe,
+  type LinhaRankingPix, type MetaDaEquipeNoRanking, type OrdemRankingEquipe,
+} from './pixAutomaticoView';
+import { PixRankingEquipes } from './PixRankingEquipes';
+import { PODIO, lido, grava } from './pixRankingPodio';
 
 const CHAVE_ABERTO = 'pix-ranking-aberto';
 const CHAVE_SETOR  = 'pix-ranking-setor';
 
-/** Lê `localStorage` sem derrubar a aba na navegação privada. */
-function lido(chave: string): string | null {
-  try { return window.localStorage.getItem(chave); } catch { return null; }
-}
-function grava(chave: string, valor: string): void {
-  try { window.localStorage.setItem(chave, valor); } catch { /* modo privado */ }
-}
+const CHAVE_MODO   = 'pix-ranking-modo';
+const CHAVE_EQUIPE = 'pix-ranking-equipe';
+const CHAVE_ORDEM  = 'pix-ranking-ordem-equipe';
 
-/** Cor de cada lugar do pódio. Do 4º em diante, tudo neutro de propósito. */
-const PODIO: Record<number, {
-  /** Aro em volta da foto — é o que diz o lugar quando o rosto ocupa o disco. */
-  anel: string;
-  barra: string; texto: string; cartao: string;
-}> = {
-  1: {
-    anel:   'ring-2 ring-amber-500/70',
-    barra:  'bg-gradient-to-r from-amber-500 to-amber-300',
-    texto:  'text-amber-500 dark:text-amber-300',
-    cartao: 'border-amber-500/45 bg-gradient-to-br from-amber-500/[0.14] to-amber-500/[0.03] shadow-[0_0_28px_-12px_rgb(245_158_11_/_0.55)]',
-  },
-  2: {
-    anel:   'ring-2 ring-slate-400/60',
-    barra:  'bg-slate-400',
-    texto:  'text-slate-500 dark:text-slate-300',
-    cartao: 'border-slate-400/30 bg-slate-400/[0.06]',
-  },
-  3: {
-    anel:   'ring-2 ring-orange-500/60',
-    barra:  'bg-orange-500',
-    texto:  'text-orange-600 dark:text-orange-400',
-    cartao: 'border-orange-600/30 bg-orange-600/[0.06]',
-  },
-};
+/** O filtro «Sem equipe» na fileira de chips. Não colide com um uuid. */
+const SEM_EQUIPE = '__sem_equipe__';
+/** O filtro «Todas». */
+const TODAS = '';
+
+type ModoRanking = 'operadores' | 'equipes';
+
+/** Equipe escolhida por setor, guardada como `{ setorId: equipeId }`. */
+function equipesGuardadas(): Record<string, string> {
+  try { return JSON.parse(lido(CHAVE_EQUIPE) ?? '{}') ?? {}; } catch { return {}; }
+}
 
 /** Um setor e o ranking dele, já calculado por quem chama. */
 export interface AbaRankingPix {
   setorId: string;
   nome: string;
   linhas: LinhaRankingPix[];
+  /** As equipes do setor, inclusive as paradas. Vazio = setor sem equipe. */
+  equipes?: { id: string; nome: string }[];
+  /** operador_id → equipe dele NESTE setor (`null` = sem equipe). */
+  equipeDe?: Record<string, string | null>;
+  /** % da meta de Pix de cada equipe no mês, quando há meta. */
+  metaPorEquipe?: Record<string, MetaDaEquipeNoRanking>;
 }
 
 export interface PixRankingSetorProps {
@@ -99,6 +101,11 @@ export interface PixRankingSetorProps {
   abas: AbaRankingPix[];
   /** Aba em que o card abre na primeira visita. Normalmente o próprio setor. */
   setorInicial?: string | null;
+  /**
+   * Equipe em que o card abre quando a pessoa ainda não escolheu uma no setor
+   * — a equipe filtrada na barra do topo. Só vale se for do setor da aba.
+   */
+  equipeInicial?: string | null;
   /**
    * Foto de cada operador, por id (`perfis.foto_url`).
    *
@@ -131,7 +138,7 @@ function SeloAcordos() {
 }
 
 export function PixRankingSetor({
-  abas, setorInicial, fotoPorOperador, destacarOperadorId,
+  abas, setorInicial, equipeInicial, fotoPorOperador, destacarOperadorId,
   recolhivel = true, vazio = null,
 }: PixRankingSetorProps) {
   const [abertoGuardado, setAberto] = useState<boolean>(() => lido(CHAVE_ABERTO) !== 'nao');
@@ -167,14 +174,107 @@ export function PixRankingSetor({
     setSetorAtivo(id);
   }
 
+  // ── Equipes ──
+  const [modoGuardado, setModo] = useState<ModoRanking>(() =>
+    lido(CHAVE_MODO) === 'equipes' ? 'equipes' : 'operadores');
+  const [ordemGuardada, setOrdem] = useState<OrdemRankingEquipe>(() => {
+    const o = lido(CHAVE_ORDEM);
+    return o === 'media' || o === 'meta' ? o : 'acordos';
+  });
+  const [equipePorSetor, setEquipePorSetor] = useState<Record<string, string>>(equipesGuardadas);
+
   const aba = abas.find(a => a.setorId === ativo) ?? abas[0];
+  const equipeDe = useMemo(() => aba?.equipeDe ?? {}, [aba]);
+  const equipesDoSetor = useMemo(() => aba?.equipes ?? [], [aba]);
+  const metaPorEquipe = useMemo(() => aba?.metaPorEquipe ?? {}, [aba]);
+  const linhasDaAba = useMemo(() => aba?.linhas ?? [], [aba]);
+
+  /** O id que a fileira de chips usa para a linha: a equipe, ou «sem equipe». */
+  const chipDe = (operadorId: string) => equipeDe[operadorId] ?? SEM_EQUIPE;
+
+  /*
+   * As equipes que viram chip: as do setor que têm alguém no ranking, mais
+   * «Sem equipe» quando sobra gente fora. Chip de equipe parada abriria um
+   * pódio vazio — ela aparece no modo Equipes, zerada, que é onde isso informa.
+   */
+  const chips = useMemo(() => {
+    const comGente = new Set(linhasDaAba.map(l => equipeDe[l.operadorId] ?? SEM_EQUIPE));
+    const lista = equipesDoSetor
+      .filter(e => comGente.has(e.id))
+      .map(e => ({ id: e.id, nome: e.nome }));
+    if (comGente.has(SEM_EQUIPE) && lista.length > 0) lista.push({ id: SEM_EQUIPE, nome: 'Sem equipe' });
+    return lista;
+  }, [linhasDaAba, equipeDe, equipesDoSetor]);
+
+  // Setor sem equipe nenhuma não tem o que separar: o card fica como sempre foi.
+  const temEquipes = chips.length > 0;
+  const modo: ModoRanking = temEquipes ? modoGuardado : 'operadores';
+
+  /*
+   * A equipe do filtro — mesma queda da aba de setor: a escolhida no setor
+   * (enquanto ainda for chip), a da barra do topo, e por fim «Todas».
+   */
+  const guardada = aba ? equipePorSetor[aba.setorId] : undefined;
+  const ehChip = (id: string | null | undefined): id is string =>
+    id != null && chips.some(c => c.id === id);
+  const equipeFiltro = guardada === TODAS ? TODAS
+    : ehChip(guardada) ? guardada
+    : ehChip(equipeInicial) ? equipeInicial
+    : TODAS;
+
+  const temMeta = Object.keys(metaPorEquipe).length > 0;
+  const ordem: OrdemRankingEquipe = ordemGuardada === 'meta' && !temMeta ? 'acordos' : ordemGuardada;
+  const rankingEquipes = useMemo(
+    () => rankingPixPorEquipe(linhasDaAba, equipeDe, equipesDoSetor, metaPorEquipe, ordem),
+    [linhasDaAba, equipeDe, equipesDoSetor, metaPorEquipe, ordem],
+  );
+
+  const nomeDaEquipe = useMemo(() => {
+    const m = new Map(equipesDoSetor.map(e => [e.id, e.nome]));
+    return (operadorId: string): string | null => {
+      const id = equipeDe[operadorId];
+      return id ? m.get(id) ?? null : null;
+    };
+  }, [equipesDoSetor, equipeDe]);
+
+  function escolherModo(m: ModoRanking) {
+    grava(CHAVE_MODO, m);
+    setModo(m);
+  }
+  function escolherOrdem(o: OrdemRankingEquipe) {
+    grava(CHAVE_ORDEM, o);
+    setOrdem(o);
+  }
+  function escolherEquipe(id: string) {
+    if (!aba) return;
+    const setorId = aba.setorId;
+    setEquipePorSetor(atual => {
+      const novo = { ...atual, [setorId]: id };
+      grava(CHAVE_EQUIPE, JSON.stringify(novo));
+      return novo;
+    });
+  }
+  /** Clique numa equipe do modo Equipes: abre os operadores dela. */
+  function abrirEquipe(equipeId: string | null) {
+    escolherEquipe(equipeId ?? SEM_EQUIPE);
+    escolherModo('operadores');
+  }
+
   if (!aba || aba.linhas.length === 0) return <>{vazio}</>;
 
-  const { linhas } = aba;
+  const linhas = equipeFiltro === TODAS
+    ? aba.linhas
+    : aba.linhas.filter(l => chipDe(l.operadorId) === equipeFiltro);
   const podio  = linhas.slice(0, 3);
   const demais = linhas.slice(3);
-  const maximo = Math.max(linhas[0].acordos, 1);
+  const maximo = Math.max(linhas[0]?.acordos ?? 0, 1);
   const totalAcordos = linhas.reduce((s, l) => s + l.acordos, 0);
+  const acordosDoSetor = aba.linhas.reduce((s, l) => s + l.acordos, 0);
+  const qtdEquipes = rankingEquipes.filter(e => e.equipeId != null).length;
+  const nomeFiltro = chips.find(c => c.id === equipeFiltro)?.nome ?? null;
+  const minhaEquipeId = destacarOperadorId ? equipeDe[destacarOperadorId] ?? null : null;
+  // Com a equipe já escolhida, repetir o nome dela em cada linha é ruído.
+  const mostrarEquipeNaLinha = temEquipes && equipeFiltro === TODAS;
 
   return (
     <Card className="border-border overflow-hidden">
@@ -195,10 +295,20 @@ export function PixRankingSetor({
           <div className="min-w-0 flex-1">
             <h3 className="text-xs font-bold text-foreground truncate">
               Ranking Pix Automático · {aba.nome}
+              {modo === 'operadores' && nomeFiltro && <> · {nomeFiltro}</>}
             </h3>
             <p className="text-[10.5px] text-muted-foreground">
-              {linhas.length} operador{linhas.length !== 1 ? 'es' : ''} · {totalAcordos} acordo
-              {totalAcordos !== 1 ? 's' : ''} no mês
+              {modo === 'equipes' ? (
+                <>
+                  {qtdEquipes} equipe{qtdEquipes !== 1 ? 's' : ''} · {acordosDoSetor} acordo
+                  {acordosDoSetor !== 1 ? 's' : ''} no mês
+                </>
+              ) : (
+                <>
+                  {linhas.length} operador{linhas.length !== 1 ? 'es' : ''} · {totalAcordos} acordo
+                  {totalAcordos !== 1 ? 's' : ''} no mês
+                </>
+              )}
             </p>
           </div>
           {recolhivel && (
@@ -250,6 +360,76 @@ export function PixRankingSetor({
                   </div>
                 )}
 
+                {/* ── Modo e equipes: só quando o setor tem equipe ── */}
+                {temEquipes && (
+                  <div className="flex flex-col gap-2 border-b border-border/60 px-3 py-2 sm:flex-row sm:items-center">
+                    <div role="tablist" aria-label="Ranking por"
+                      className="inline-flex shrink-0 self-start rounded-lg border border-border bg-muted/30 p-0.5">
+                      {([
+                        ['operadores', 'Operadores', User],
+                        ['equipes', 'Equipes', Users],
+                      ] as const).map(([m, rotulo, Icone]) => (
+                        <button
+                          key={m}
+                          type="button"
+                          role="tab"
+                          aria-selected={modo === m}
+                          onClick={() => escolherModo(m)}
+                          className={cn(
+                            'inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors',
+                            modo === m ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                          )}
+                        >
+                          <Icone className="h-3 w-3" /> {rotulo}
+                        </button>
+                      ))}
+                    </div>
+
+                    {modo === 'operadores' && (
+                      <div role="radiogroup" aria-label="Equipe do ranking"
+                        className="-mx-1 flex min-w-0 gap-1 overflow-x-auto px-1 pb-0.5">
+                        {[{ id: TODAS, nome: 'Todas as equipes' }, ...chips].map(c => {
+                          const ativa = c.id === equipeFiltro;
+                          return (
+                            <button
+                              key={c.id || 'todas'}
+                              type="button"
+                              role="radio"
+                              aria-checked={ativa}
+                              onClick={() => escolherEquipe(c.id)}
+                              className={cn(
+                                'shrink-0 rounded-full border px-2.5 py-0.5 text-[10.5px] font-medium transition-colors',
+                                ativa
+                                  ? 'border-amber-500/60 bg-amber-500/15 text-foreground'
+                                  : 'border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground',
+                                c.id === SEM_EQUIPE && !ativa && 'italic',
+                              )}
+                            >
+                              {c.nome}
+                              {c.id !== TODAS && c.id === minhaEquipeId && (
+                                <span className="ml-1 text-[9px] font-bold text-primary">• sua</span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {modo === 'equipes' ? (
+                  <PixRankingEquipes
+                    linhas={rankingEquipes}
+                    ordem={ordem}
+                    onOrdem={escolherOrdem}
+                    onAbrirEquipe={abrirEquipe}
+                    minhaEquipeId={minhaEquipeId}
+                  />
+                ) : linhas.length === 0 ? (
+                  <p className="px-4 py-8 text-center text-[11px] text-muted-foreground">
+                    Nenhum acordo Pix desta equipe no mês.
+                  </p>
+                ) : (<>
                 {/* ── Pódio: o 1º é mais largo e mais alto que os outros dois ── */}
                 <div className="grid grid-cols-1 gap-2.5 p-3 sm:grid-cols-[1.4fr_1fr_1fr] sm:items-end">
                   {podio.map((l, i) => {
@@ -292,8 +472,13 @@ export function PixRankingSetor({
                                 : <Medal className={cn('h-3 w-3 shrink-0', cor.texto)} />}
                               <span className="truncate">{l.nome}</span>
                             </p>
-                            <p className={cn('text-[10px] font-bold uppercase tracking-wide', cor.texto)}>
+                            <p className={cn('truncate text-[10px] font-bold uppercase tracking-wide', cor.texto)}>
                               {pos}º lugar
+                              {mostrarEquipeNaLinha && nomeDaEquipe(l.operadorId) && (
+                                <span className="font-medium normal-case tracking-normal text-muted-foreground">
+                                  {' · '}{nomeDaEquipe(l.operadorId)}
+                                </span>
+                              )}
                             </p>
                           </div>
                           {l.requisitoAcordosOk && <SeloAcordos />}
@@ -357,7 +542,14 @@ export function PixRankingSetor({
                           <span className="w-6 text-[10.5px] font-bold text-muted-foreground tabular-nums shrink-0">
                             {pos}º
                           </span>
-                          <span className="text-xs text-foreground/90 truncate flex-1 min-w-0">{l.nome}</span>
+                          <span className="text-xs text-foreground/90 truncate flex-1 min-w-0">
+                            {l.nome}
+                            {mostrarEquipeNaLinha && nomeDaEquipe(l.operadorId) && (
+                              <span className="hidden text-[10px] text-muted-foreground sm:inline">
+                                {' · '}{nomeDaEquipe(l.operadorId)}
+                              </span>
+                            )}
+                          </span>
                           {l.requisitoAcordosOk && <SeloAcordos />}
                           {ehVoce && (
                             <Badge variant="outline" className="text-[9px] px-1 py-0 border-primary/40 text-primary shrink-0">
@@ -382,6 +574,7 @@ export function PixRankingSetor({
                     })}
                   </div>
                 )}
+                </>)}
               </div>
             </motion.div>
           )}

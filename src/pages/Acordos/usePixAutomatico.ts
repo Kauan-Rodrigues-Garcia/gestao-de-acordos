@@ -60,6 +60,7 @@ import {
   pedidosDoSetor, setoresComAcordosPix, escolherSetorInicial, itensDoSetorPix,
   setorDaLinhaPix, clonesPorOperador, incluirClonesDoSetor,
   setoresPorPessoaClonada, pessoasCompartilhadasCom, juntarLinhasCompartilhadas,
+  equipeDoOperadorNoSetor, type MetaDaEquipeNoRanking,
   type OperadorInfo, type FiltroPagamento, type OndeFoiClonado,
 } from './pixAutomaticoView';
 import type { AbaRankingPix } from './PixRankingSetor';
@@ -1242,38 +1243,6 @@ export function usePixAutomatico() {
   );
 
   /**
-   * Um ranking por setor — nunca um que os misture.
-   *
-   * Comparar operadores de setores diferentes não responde pergunta nenhuma: a
-   * meta de acordos é por setor, o percentual de comissão é por setor, e o
-   * volume que chega a cada um não se parece. Até 05/09/2026 o super admin sem
-   * filtro via a empresa inteira num pódio só, com o nome de UM setor no
-   * cabeçalho — um número errado apresentado como certo.
-   *
-   * O líder preso a um setor tem UMA aba, e ela recebe `itens` sem recorte
-   * extra: a consulta dele já veio por `setorEscopo`, e filtrar de novo tiraria
-   * as linhas de carimbo vazio. Mesmo cuidado de `blocosMetaPix`.
-   */
-  const abasRanking = useMemo<AbaRankingPix[]>(() => {
-    const linhasDe = (lista: PixAutoAcordo[]) =>
-      rankingPixSetor(lista, pctPorSetor, mes, nomePorOperador, metaPorSetor);
-
-    if (setorEscopo) {
-      return [{
-        setorId: setorEscopo,
-        nome: setores.find(s => s.id === setorEscopo)?.nome ?? 'Meu setor',
-        linhas: linhasDe(itensDoCarimbo),
-      }];
-    }
-    return setoresComMovimento.map(s => ({
-      setorId: s.id,
-      nome: s.nome,
-      linhas: linhasDe(itensDoSetorPix(itens, s.id, operadorSetor)),
-    }));
-  }, [itens, itensDoCarimbo, pctPorSetor, nomePorOperador, metaPorSetor, mes,
-      setorEscopo, setores, setoresComMovimento, operadorSetor]);
-
-  /**
    * A fila de NRs que a pessoa vê.
    *
    * A consulta já recortou pelo escopo de PERMISSÃO (`setorEscopo`); aqui vem o
@@ -1398,6 +1367,72 @@ export function usePixAutomatico() {
     }));
   }, [podeVerDeOutros, itens, itensDoCarimbo, metasPix, equipes, setores, setorFoco, setorEscopo,
       operadorEquipe, operadorSetor, configMes, diasPorSetor, mes, configsDaConta]);
+
+  /**
+   * Um ranking por setor — nunca um que os misture.
+   *
+   * Comparar operadores de setores diferentes não responde pergunta nenhuma: a
+   * meta de acordos é por setor, o percentual de comissão é por setor, e o
+   * volume que chega a cada um não se parece. Até 05/09/2026 o super admin sem
+   * filtro via a empresa inteira num pódio só, com o nome de UM setor no
+   * cabeçalho — um número errado apresentado como certo.
+   *
+   * O líder preso a um setor tem UMA aba, e ela recebe `itens` sem recorte
+   * extra: a consulta dele já veio por `setorEscopo`, e filtrar de novo tiraria
+   * as linhas de carimbo vazio. Mesmo cuidado de `blocosMetaPix`.
+   *
+   * Cada aba leva também as equipes do setor e a equipe de cada operador, para
+   * o card separar o ranking por equipe — sempre dentro do setor.
+   */
+  const abasRanking = useMemo<AbaRankingPix[]>(() => {
+    const linhasDe = (lista: PixAutoAcordo[]) =>
+      rankingPixSetor(lista, pctPorSetor, mes, nomePorOperador, metaPorSetor);
+
+    /*
+     * A equipe de cada operador DENTRO do setor da aba (24/11/2026).
+     *
+     * `clonesRef` e não estado: é preenchido na mesma carga que traz
+     * `operadores`, então quando esta conta roda de novo por causa deles os
+     * clones já estão lá. A equipe do cadastro que é de outro setor não entra —
+     * ver `equipeDoOperadorNoSetor`.
+     */
+    const setorDaEquipe: Record<string, string | null> = {};
+    for (const e of equipes) setorDaEquipe[e.id] = e.setor_id;
+    const clones = clonesRef.current;
+    const metasDoSetor = new Map(blocosMetaPix.map(b => [b.setorId, b.consolidado.equipes]));
+
+    const montar = (setorId: string, nome: string, lista: PixAutoAcordo[]): AbaRankingPix => {
+      const linhas = linhasDe(lista);
+      const equipeDe: Record<string, string | null> = {};
+      for (const l of linhas) {
+        equipeDe[l.operadorId] =
+          equipeDoOperadorNoSetor(l.operadorId, setorId, operadorEquipe, setorDaEquipe, clones);
+      }
+      const metaPorEquipe: Record<string, MetaDaEquipeNoRanking> = {};
+      for (const m of metasDoSetor.get(setorId) ?? []) {
+        if (m.resumo) metaPorEquipe[m.equipeId] = { pct: m.resumo.pct, metaBatida: m.resumo.metaBatida };
+      }
+      return {
+        setorId, nome, linhas, equipeDe, metaPorEquipe,
+        equipes: equipes
+          .filter(e => e.setor_id === setorId)
+          .map(e => ({ id: e.id, nome: e.nome }))
+          .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')),
+      };
+    };
+
+    if (setorEscopo) {
+      return [montar(
+        setorEscopo,
+        setores.find(s => s.id === setorEscopo)?.nome ?? 'Meu setor',
+        itensDoCarimbo,
+      )];
+    }
+    return setoresComMovimento.map(s =>
+      montar(s.id, s.nome, itensDoSetorPix(itens, s.id, operadorSetor)));
+  }, [itens, itensDoCarimbo, pctPorSetor, nomePorOperador, metaPorSetor, mes,
+      setorEscopo, setores, setoresComMovimento, operadorSetor, operadorEquipe,
+      equipes, blocosMetaPix]);
 
   /** Quem está executando — vai para a lixeira, para a auditoria ter nome. */
   const quemExclui = { id: perfil?.id ?? null, nome: perfil?.nome ?? perfil?.email ?? null };
