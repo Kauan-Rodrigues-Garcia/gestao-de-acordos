@@ -50,6 +50,7 @@ import {
 import { noMesPix } from '@/lib/mesPix';
 import { useFechamentoMes } from '@/hooks/useFechamentoMes';
 import { useMesGlobal } from '@/providers/MesProvider';
+import { pixDaCampanha, useCampanhaCupom } from '@/components/DesafioVale/campanhaCupom';
 // As contas desta tela vivem em `pixAutomaticoView`: são puras e têm teste
 // próprio, o que os `useMemo` que elas substituíram nunca tiveram.
 import {
@@ -407,13 +408,30 @@ export function usePixAutomatico() {
   const [dataAte, setDataAte] = useEstadoLembrado(`${chaveAba}|data-ate`, '');
 
   /*
-   * Cupons do Pix (Desafio do Vale, 23/11/2026): o link «aprovar os pendentes
-   * da campanha» (`?pendentes_de=2026-11-23&pendentes_ate=2026-11-26`) abre a
-   * aba já filtrada — só pendentes, só o período —, no mês do período. Os
-   * parâmetros saem da URL na hora; o filtro fica, e a pessoa limpa quando
-   * quiser.
+   * Cupons do Pix (Desafio do Vale, 23/11/2026).
+   *
+   * `soCampanha` recorta a tabela nos Pix da campanha — o período dos cupons
+   * E os setores que participam pelo Pix (a Jornada fica fora). Antes o botão
+   * «Ver só os N pendentes» punha status + datas: o N contava só a campanha,
+   * a tabela mostrava o período de todo mundo (ou só o setor em foco), e os
+   * números não batiam. Também não é lembrado entre montagens: sair e voltar
+   * à aba solta o recorte, e o mesmo botão desliga.
+   */
+  const campanhaCupom = useCampanhaCupom();
+  const [soCampanha, setSoCampanha] = useState(false);
+
+  /*
+   * O link «aprovar os pendentes da campanha»
+   * (`?pendentes_de=2026-11-23&pendentes_ate=2026-11-26`) abre a aba já
+   * recortada — só pendentes, só a campanha —, no mês do período. Os
+   * parâmetros saem da URL na hora; o recorte se desliga no aviso laranja.
+   *
+   * Espera empresa e perfil: a chave dos filtros lembrados nasce provisória
+   * (`pix-auto|-|-`) e vira a de verdade um render depois — gravar antes
+   * disso perdia o status escolhido na troca de chave.
    */
   useEffect(() => {
+    if (!empresa?.id || !perfil?.id) return;
     const de = searchParams.get('pendentes_de');
     const ate = searchParams.get('pendentes_ate');
     if (!de || !ate || !/^\d{4}-\d{2}-\d{2}$/.test(de) || !/^\d{4}-\d{2}-\d{2}$/.test(ate)) return;
@@ -423,13 +441,14 @@ export function usePixAutomatico() {
     params.delete('aba');
     setSearchParams(params, { replace: true });
     setFiltroStatus('pendente');
-    setDataDe(de);
-    setDataAte(ate);
+    setSoCampanha(true);
+    setDataDe('');
+    setDataAte('');
     setBusca('');
     setFiltroPagamento('todos');
     setMes(de.slice(0, 7));
     toast.info('Mostrando só os Pix pendentes da campanha. Aprove para virarem cupom.');
-  }, [searchParams, setSearchParams, setFiltroStatus, setDataDe, setDataAte, setBusca, setFiltroPagamento, setMes]);
+  }, [empresa?.id, perfil?.id, searchParams, setSearchParams, setFiltroStatus, setDataDe, setDataAte, setBusca, setFiltroPagamento, setMes]);
 
   // Seleção múltipla (líder): a tabela marca, a barra de lote age.
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
@@ -1068,17 +1087,49 @@ export function usePixAutomatico() {
     setFiltroOperador('');
   }, [filtroOperador, operadoresFiltro, operadoresDoSeletor, setFiltroOperador]);
 
+  /** O Pix é da campanha dos cupons (período + setor da LINHA participando pelo Pix). */
+  const ehDaCampanha = useCallback(
+    (i: PixAutoAcordo) => pixDaCampanha(campanhaCupom, i.criado_em, setorDaLinhaPix(i, operadorSetor)),
+    [campanhaCupom, operadorSetor],
+  );
+
+  /*
+   * Os Pix da campanha no recorte da tabela (setor em foco, equipe, operador,
+   * mês), sem os filtros de status, data, busca e pagamento — é sobre eles
+   * que o aviso laranja conta aprovados e pendentes. Contar sobre `itens`
+   * inteiro dava «51 pendentes» da empresa e a tabela do setor em foco
+   * mostrava poucos.
+   */
+  const pixDaCampanhaNoRecorte = useMemo(
+    () => (campanhaCupom
+      ? filtrarItensPix(
+        itens,
+        { operadorId: filtroOperador, equipeId: filtroEquipe, setorId: setorEscopo ?? setorFoco, mes },
+        { porEquipe: operadorEquipe, porSetor: operadorSetor, setoresDaPessoa },
+      ).filter(ehDaCampanha)
+      : []),
+    [campanhaCupom, itens, filtroOperador, filtroEquipe, setorEscopo, setorFoco, mes,
+     operadorEquipe, operadorSetor, setoresDaPessoa, ehDaCampanha],
+  );
+  /** O setor em foco está fora da campanha (a Jornada): nada de aviso nem de recorte. */
+  const focoForaDaCampanha = !!campanhaCupom && !!(setorEscopo ?? setorFoco)
+    && !campanhaCupom.setores.has((setorEscopo ?? setorFoco)!);
+  const recorteCampanha = soCampanha && !!campanhaCupom && !focoForaDaCampanha;
+
   const visiveis = useMemo(
-    () => filtrarItensPix(
-      itens,
-      { busca, status: filtroStatus, operadorId: filtroOperador,
-        equipeId: filtroEquipe, setorId: setorEscopo ?? setorFoco,
-        pagamento: filtroPagamento, de: dataDe, ate: dataAte, mes },
-      { porEquipe: operadorEquipe, porSetor: operadorSetor, setoresDaPessoa },
-    ),
+    () => {
+      const base = filtrarItensPix(
+        itens,
+        { busca, status: filtroStatus, operadorId: filtroOperador,
+          equipeId: filtroEquipe, setorId: setorEscopo ?? setorFoco,
+          pagamento: filtroPagamento, de: dataDe, ate: dataAte, mes },
+        { porEquipe: operadorEquipe, porSetor: operadorSetor, setoresDaPessoa },
+      );
+      return recorteCampanha ? base.filter(ehDaCampanha) : base;
+    },
     [itens, busca, filtroStatus, filtroOperador, filtroEquipe, setorFoco,
      filtroPagamento, dataDe, dataAte, mes, setorEscopo, operadorEquipe, operadorSetor,
-     setoresDaPessoa],
+     setoresDaPessoa, recorteCampanha, ehDaCampanha],
   );
 
   // ── Paginação da tabela ─────────────────────────────────────────────────
@@ -1092,7 +1143,7 @@ export function usePixAutomatico() {
   const paginaAtual = Math.min(pagina, totalPaginas);
   useEffect(() => { setPagina(1); }, [
     busca, filtroStatus, filtroOperador, filtroEquipe, filtroSetor,
-    filtroPagamento, dataDe, dataAte, mes,
+    filtroPagamento, dataDe, dataAte, mes, recorteCampanha,
   ]);
 
   const daPagina = useMemo(
@@ -1398,6 +1449,8 @@ export function usePixAutomatico() {
     chaveAba, busca, setBusca, filtroStatus, setFiltroStatus,
     filtroOperador, setFiltroOperador, filtroEquipe, setFiltroEquipe, setFiltroSetor,
     filtroPagamento, setFiltroPagamento, dataDe, setDataDe, dataAte, setDataAte,
+    campanhaCupom: focoForaDaCampanha ? null : campanhaCupom, ehDaCampanha,
+    pixDaCampanhaNoRecorte, soCampanha: recorteCampanha, setSoCampanha,
     metaPorOperador, metasPix,
     setorFoco, setorConfig, equipesDoFoco,
     pctPorSetor, pctPorSetorHoje, pctDoMeuSetor, fixoDoMeuSetor, pctSetorConfig, registroLigadoSetorConfig, metaDobraSetorConfig,

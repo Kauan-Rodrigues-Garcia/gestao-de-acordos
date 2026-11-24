@@ -75,15 +75,20 @@ export function GavetaDesafioVale({ d: real, aberta, onFechar }: { d: DesafioVal
   // gaveta dele abre no setor (o painel) e na lista do time. Quem é líder é o
   // painel de permissões (o Analítico do setor ou de todos), nunca o cargo.
   const lider = alcance !== 'nenhum';
-  const abas: { id: Aba; rotulo: string; Icone: typeof Target }[] = lider
-    ? [
-        { id: 'setor', rotulo: alcance === 'todos_setores' ? 'Setores' : 'Meu setor', Icone: BarChart3 },
-        { id: 'equipes', rotulo: 'Equipes', Icone: Users },
-      ]
-    : [
-        { id: 'meu', rotulo: 'Meu desafio', Icone: Target },
-        ...(comCupom ? [{ id: 'cupons' as const, rotulo: ranking ? 'Ranking' : 'Cupons do Pix', Icone: ranking ? Trophy : Ticket }] : []),
-      ];
+  // A ELITE (23/11/2026) lidera e também faz as médias e junta cupons como
+  // operador: vê «Meu desafio» e os cupons, e mais o setor e as equipes.
+  const participa = visao.participa;
+  const soLider = lider && !participa;
+  const abas: { id: Aba; rotulo: string; Icone: typeof Target }[] = [
+    ...(participa ? [
+      { id: 'meu' as const, rotulo: 'Meu desafio', Icone: Target },
+      ...(comCupom ? [{ id: 'cupons' as const, rotulo: ranking ? 'Ranking' : 'Cupons do Pix', Icone: ranking ? Trophy : Ticket }] : []),
+    ] : []),
+    ...(lider ? [
+      { id: 'setor' as const, rotulo: alcance === 'todos_setores' ? 'Setores' : 'Meu setor', Icone: BarChart3 },
+      { id: 'equipes' as const, rotulo: 'Equipes', Icone: Users },
+    ] : []),
+  ];
   const atual = abas.some(a => a.id === aba) ? aba : abas[0].id;
 
   return (
@@ -102,7 +107,7 @@ export function GavetaDesafioVale({ d: real, aberta, onFechar }: { d: DesafioVal
               <Dialog.Close className="dc-fechar" aria-label="Fechar"><X size={18} aria-hidden /></Dialog.Close>
             </div>
             <Dialog.Title className="dc-titulo">
-              {d.titulo} <span>{lider ? 'do seu time' : `e ganhe o ${d.premio_nome}`}</span>
+              {d.titulo} <span>{soLider ? 'do seu time' : `e ganhe o ${d.premio_nome}`}</span>
             </Dialog.Title>
             <p className="dc-periodo">
               <CalendarDays size={14} aria-hidden />
@@ -115,7 +120,7 @@ export function GavetaDesafioVale({ d: real, aberta, onFechar }: { d: DesafioVal
             {visao.simulando && (
               <p className="dv-aviso dv-aviso-teste">
                 Visão de teste · {visao.operadorNome ?? 'sem pessoa'} · {d.meu_setor?.nome ?? 'sem setor'} · dia {dataCurta(hoje)}
-                {' · '}{alcance === 'todos_setores' ? 'gerência' : alcance === 'setor' ? 'líder' : 'operador'} — nada é gravado
+                {' · '}{alcance === 'todos_setores' ? 'gerência' : alcance === 'setor' ? (participa ? 'elite' : 'líder') : 'operador'} — nada é gravado
               </p>
             )}
             {abas.length > 1 && !naAbertura && (
@@ -132,7 +137,7 @@ export function GavetaDesafioVale({ d: real, aberta, onFechar }: { d: DesafioVal
 
           <div className="dc-corpo">
             {naAbertura
-              ? <AberturaVale d={d} hoje={hoje} onEntrar={entrar} paraLider={lider} />
+              ? <AberturaVale d={d} hoje={hoje} onEntrar={entrar} paraLider={soLider} />
               : atual === 'setor' && alcance !== 'nenhum'
               ? <PainelDoSetor d={d} aberta={aberta} alcance={alcance} onFechar={onFechar} onEquipes={() => setAba('equipes')} />
               : atual === 'equipes' && alcance !== 'nenhum'

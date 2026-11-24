@@ -5,13 +5,18 @@
  * A cor é a laranja do cupom — a mesma da gaveta e da arte —, para o líder
  * bater o olho e saber que aquele Pix é da campanha especial e precisa de
  * aprovação para virar cupom. Só aparece com o desafio visível para a pessoa
- * (liberado e setor participando; o super_admin vê em prévia).
+ * (liberado e setor participando; o super_admin vê em prévia) e com o setor
+ * em foco na campanha — a Jornada não participa e não vê nada disto.
+ *
+ * As contas são sobre os Pix da campanha NO RECORTE DA TABELA (setor em foco,
+ * equipe, operador) — o mesmo conjunto que o botão «Ver só os pendentes»
+ * mostra. O botão liga e desliga o recorte.
  */
-import { Filter, Megaphone, Ticket } from 'lucide-react';
+import { Filter, FilterX, Megaphone, Ticket } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useCampanhaCupom } from './campanhaCupom';
+import type { CampanhaCupom } from './campanhaCupom';
 import type { PixAutoAcordo } from '@/services/pix_automatico.service';
-import { contarCupons, cupons, periodo, pixNoPeriodoDoCupom } from '@/services/desafioVale/regras';
+import { contarCupons, cupons, periodo } from '@/services/desafioVale/regras';
 
 export function EtiquetaCupom() {
   return (
@@ -24,16 +29,21 @@ export function EtiquetaCupom() {
   );
 }
 
-export function AvisoCupomNoPix({ itens, podeAprovar, onVerPendentes }: {
-  itens: readonly PixAutoAcordo[];
+export function AvisoCupomNoPix({ campanha, itens, podeAprovar, filtrando = false, onVerPendentes, onVerTodos }: {
+  campanha: CampanhaCupom | null | undefined;
+  /** Os Pix da campanha no recorte da tabela (já sem os de fora do período e dos setores). */
+  itens: readonly PixAutoAcordo[] | undefined;
   podeAprovar: boolean;
-  /** Filtra a tabela: só pendentes, só o período da campanha. */
-  onVerPendentes?: (de: string, ate: string) => void;
+  /** O recorte «só os pendentes da campanha» está ligado. */
+  filtrando?: boolean;
+  /** Liga o recorte: só pendentes, só a campanha. */
+  onVerPendentes?: () => void;
+  /** Desliga o recorte e volta a lista inteira. */
+  onVerTodos?: () => void;
 }) {
-  const d = useCampanhaCupom();
-  if (!d) return null;
-  const doPeriodo = itens.filter(i => pixNoPeriodoDoCupom(i.criado_em, d));
-  const c = contarCupons(doPeriodo, d.cupom_pix);
+  if (!campanha) return null;
+  const d = campanha.d;
+  const c = contarCupons(itens ?? [], d.cupom_pix);
   return (
     <div className="flex flex-wrap items-start gap-3 rounded-xl border-2 border-orange-400/60 bg-orange-400/[0.08] p-3.5">
       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-orange-400 text-orange-950">
@@ -56,9 +66,14 @@ export function AvisoCupomNoPix({ itens, podeAprovar, onVerPendentes }: {
           </p>
         )}
       </div>
-      {podeAprovar && c.pendentes > 0 && onVerPendentes && (
+      {filtrando && onVerTodos ? (
+        <Button size="sm" variant="outline" className="shrink-0 self-center border-orange-400 text-orange-700 hover:bg-orange-400/10 dark:text-orange-300"
+          onClick={onVerTodos}>
+          <FilterX className="mr-1.5 h-4 w-4" aria-hidden /> Ver todos os Pix
+        </Button>
+      ) : podeAprovar && c.pendentes > 0 && onVerPendentes && (
         <Button size="sm" className="shrink-0 self-center bg-orange-500 text-white hover:bg-orange-600"
-          onClick={() => onVerPendentes(d.cupom_inicio!, d.cupom_fim!)}>
+          onClick={onVerPendentes}>
           <Filter className="mr-1.5 h-4 w-4" aria-hidden /> Ver só os {c.pendentes} pendentes
         </Button>
       )}

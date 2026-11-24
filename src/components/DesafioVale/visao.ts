@@ -15,8 +15,8 @@ import type { Ficticio } from '@/services/desafioVale/ficticio';
 import type { EscolhaDeTema } from './temasVale';
 
 export interface VisaoSimulada {
-  /** Ver como esta pessoa (as médias e os cupons dela). */
-  pessoa?: { id: string; nome: string; setor_id: string | null } | null;
+  /** Ver como esta pessoa (as médias e os cupons dela). `cargo` = o perfil (a Elite também faz as médias). */
+  pessoa?: { id: string; nome: string; setor_id: string | null; cargo?: string | null } | null;
   /** O setor da visão (para o líder sem pessoa escolhida). */
   setorId?: string | null;
   /** 'nenhum' = operador; 'setor' = líder; 'todos_setores' = gerência. */
@@ -46,6 +46,13 @@ export interface VisaoDoVale {
   setorId: string | null;
   hoje: string;
   alcance: AlcanceNoDesafio;
+  /**
+   * Faz as médias e junta cupons: o operador e a ELITE (23/11/2026). A Elite
+   * lidera e tem o Analítico do setor — por isso a gaveta a tratava como
+   * líder e escondia «Meu desafio» —, mas conta no recebimento e entra na
+   * campanha como operador. Ela vê as duas coisas.
+   */
+  participa: boolean;
   /** Dados fictícios ligados (só na visão de teste). */
   ficticio: Ficticio | null;
   /** Na visão de teste: começa pela abertura? `null` = o real (uma vez por pessoa). */
@@ -70,6 +77,7 @@ export function useVisaoDoVale(): VisaoDoVale {
         setorId: perfil?.setor_id ?? null,
         hoje: hojeReal,
         alcance: alcanceReal,
+        participa: alcanceReal === 'nenhum' || ehCargoQueParticipa(perfil?.perfil),
         ficticio: null,
         abertura: null,
         tema: 'auto',
@@ -86,6 +94,7 @@ export function useVisaoDoVale(): VisaoDoVale {
       setorId,
       hoje: sim.hoje ?? hojeReal,
       alcance: sim.alcance ?? 'nenhum',
+      participa: (sim.alcance ?? 'nenhum') === 'nenhum' || ehCargoQueParticipa(sim.pessoa?.cargo),
       ficticio: sim.ficticio ?? null,
       abertura: !!sim.abertura,
       tema: sim.tema ?? 'auto',
@@ -104,5 +113,10 @@ export function useVisaoDoVale(): VisaoDoVale {
         };
       },
     };
-  }, [sim, perfil?.id, perfil?.nome, perfil?.setor_id, alcanceReal]);
+  }, [sim, perfil?.id, perfil?.nome, perfil?.setor_id, perfil?.perfil, alcanceReal]);
+}
+
+/** A Elite lidera, mas faz as médias e entra nos cupons como operador. */
+export function ehCargoQueParticipa(cargo: string | null | undefined): boolean {
+  return cargo === 'operador' || cargo === 'elite';
 }

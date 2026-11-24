@@ -275,6 +275,13 @@ const EXCECOES: Record<string, Excecao> = {
       + 'permissão de cargo abre isto». O banco recusa qualquer outro; uma chave no painel mostraria o botão '
       + 'a quem a RPC barra. A linha só decide se o botão aparece; não libera nada.',
   },
+  'components/DesafioVale/visao.ts': {
+    linhas: 1, familia: 'definicao-ou-dado',
+    motivo: 'quem CONCORRE no Desafio do Vale (23/11/2026): operador e Elite fazem as médias e juntam cupons, '
+      + 'espelho de `fn_desafio_vale_ranking` (`perfil IN (\'operador\', \'elite\')`). A Elite tem o Analítico do '
+      + 'setor e a gaveta a tratava como líder, escondendo «Meu desafio». Não libera nem tira acesso: o que a '
+      + 'pessoa vê do setor continua vindo de `niveisLiberados(\'analitico\', temPermissao)`.',
+  },
 
   /*
    * ── Dívida: ZERO ──────────────────────────────────────────────────────────

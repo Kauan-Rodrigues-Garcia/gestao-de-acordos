@@ -395,8 +395,10 @@ export function PixAbaRegistros({ pix }: { pix: PixTela }) {
 
       {/* ── Campanha dos Cupons do Pix (Desafio do Vale, 23/11/2026) ── */}
       <AvisoCupomNoPix
-        itens={pix.itens} podeAprovar={pix.podeAprovar}
-        onVerPendentes={(de, ate) => { setFiltroStatus('pendente'); setDataDe(de); setDataAte(ate); }}
+        campanha={pix.campanhaCupom} itens={pix.pixDaCampanhaNoRecorte} podeAprovar={pix.podeAprovar}
+        filtrando={pix.soCampanha}
+        onVerPendentes={() => { setFiltroStatus('pendente'); setDataDe(''); setDataAte(''); pix.setSoCampanha(true); }}
+        onVerTodos={() => { setFiltroStatus('todos'); pix.setSoCampanha(false); }}
       />
 
       <PixTabelaRegistros pix={pix} />

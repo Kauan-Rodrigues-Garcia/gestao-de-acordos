@@ -38,14 +38,13 @@ import type { PixTela } from './usePixAutomatico';
 import { useTemaNatal } from '@/components/Natal/tema';
 import { corPixNatal } from '@/components/Natal/pix/corPixNatal';
 import { EtiquetaCupom } from '@/components/DesafioVale/AvisoCupomNoPix';
-import { CLASSE_LINHA_CUPOM, useCampanhaCupom } from '@/components/DesafioVale/campanhaCupom';
-import { pixNoPeriodoDoCupom } from '@/services/desafioVale/regras';
+import { CLASSE_LINHA_CUPOM } from '@/components/DesafioVale/campanhaCupom';
 
 export function PixTabelaRegistros({ pix }: { pix: PixTela }) {
   /** Natal: Pago dourado e EXTRA vermelho de fita (`Natal/pix/PixNatal.tsx`). */
   const natal = useTemaNatal();
-  /** Cupons do Pix (23/11/2026): as linhas do período ficam em laranja. */
-  const campanha = useCampanhaCupom();
+  /** Cupons do Pix (23/11/2026): as linhas da campanha ficam em laranja — período E setor da linha participando. */
+  const ehDaCampanha = pix.ehDaCampanha;
   const {
     perfil, temPermissao, podeAprovar, podeVerDeOutros, podeAgirSobreOutros, podeAjustarSaldo,
     fechamento, nrsBloqueados, itens, visiveis, daPagina, paginaAtual, totalPaginas, setPagina,
@@ -310,7 +309,7 @@ export function PixTabelaRegistros({ pix }: { pix: PixTela }) {
                   const sInfo = STATUS_INFO[item.status];
                   const desaprovado = item.status === 'desaprovado';
                   const emEdicao = editandoId === item.id;
-                  const daCampanha = !!campanha && pixNoPeriodoDoCupom(item.criado_em, campanha);
+                  const daCampanha = !!ehDaCampanha?.(item);
                   return (
                     <LinhaViva key={item.id} nova={jaPintouPix.current}
                       className={cn(

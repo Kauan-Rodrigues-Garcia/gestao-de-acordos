@@ -35,7 +35,8 @@ const QUEM: { id: AlcanceNoDesafio; rotulo: string; texto: string }[] = [
  */
 const CARGO_DA_VISAO: Record<AlcanceNoDesafio, string[]> = {
   nenhum: ['operador'],
-  setor: ['lider'],
+  // A Elite lidera e também faz as médias: aparece aqui e a gaveta mostra as duas coisas.
+  setor: ['lider', 'elite'],
   todos_setores: ['gerencia'],
 };
 const NOME_DO_CARGO: Record<AlcanceNoDesafio, string> = { nenhum: 'operador', setor: 'líder', todos_setores: 'gerente' };
@@ -94,7 +95,7 @@ export function VerComo({ d, atual }: { d: DetalheVale; atual: DesafioVale | nul
   const dias = diasDoPeriodo(d.inicio, d.fim);
 
   const visao: VisaoSimulada = {
-    pessoa: pessoa ? { id: pessoa.id, nome: pessoa.nome, setor_id: pessoa.setor_id ?? setorId } : null,
+    pessoa: pessoa ? { id: pessoa.id, nome: pessoa.nome, setor_id: pessoa.setor_id ?? setorId, cargo: pessoa.perfil } : null,
     setorId,
     alcance: quem,
     hoje,
