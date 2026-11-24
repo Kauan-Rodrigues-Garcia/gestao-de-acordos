@@ -33,6 +33,7 @@ import { importarBancoHoras, type ResultadoImportacao } from '@/services/bancoHo
 import { semVinculo, setoresDoDp } from '@/services/bancoHoras/vinculos';
 import type { AbaBH, ContextoBH, Periodo } from './contexto';
 import { DialogExcel, DialogImagem, DialogImportar, DialogPessoa, type ResultadoDoLote } from './Dialogos';
+import { FiltroSetores } from './FiltroSetores';
 import { Segmentado } from './partes';
 import { Pessoas } from './Pessoas';
 import { Relatorios } from './Relatorios';
@@ -43,7 +44,6 @@ import { VincularSetoresBH } from './VincularSetores';
 import type { useBancoHoras } from './useBancoHoras';
 import { VisaoGeral } from './VisaoGeral';
 
-const TODOS = '__todos__';
 const ABAS_VALIDAS: AbaBH[] = ['geral', 'situacao', 'pessoas', 'setores', 'vencimentos', 'relatorios'];
 
 function lerPeriodo(): Periodo {
@@ -81,7 +81,10 @@ export function PainelBancoHoras({
 
   const [dataSel, setDataSel] = useState<string | null>(null);
   const [sit, setSit] = useState<FiltroSituacao>('todas');
-  const [setorFiltro, setSetorFiltro] = useState('');
+  // Vários setores (18/11/2026): a página soma só os marcados; vazio = todos.
+  const [setoresFiltro, setSetoresFiltro] = useState<string[]>([]);
+  /** Um setor só marcado: a imagem e o botão «Imagem» de Pessoas usam ele. */
+  const setorFiltro = setoresFiltro.length === 1 ? setoresFiltro[0] : '';
   const [busca, setBusca] = useState('');
   // Meses em que as horas foram feitas: «Últimos 3 meses» ou «Todos», e cada
   // mês pode ser tirado e recolocado (`tirados`). Como no painel antigo.
@@ -131,18 +134,23 @@ export function PainelBancoHoras({
     setTirados(t => { const n = new Set(t); if (n.has(m)) n.delete(m); else n.add(m); return n; });
   }, [mesesDisponiveis, tirados]);
   const setoresNaVisao = useMemo(() => (visao ? [...new Set(visao.pessoas.map(p => p.setor))].sort(ordemNatural) : []), [visao]);
-  useEffect(() => { if (setorFiltro && !setoresNaVisao.includes(setorFiltro)) setSetorFiltro(''); }, [setorFiltro, setoresNaVisao]);
+  // Outro relatório pode não ter algum dos setores marcados: ele sai do filtro.
+  useEffect(() => {
+    setSetoresFiltro(m => (m.every(x => setoresNaVisao.includes(x)) ? m : m.filter(x => setoresNaVisao.includes(x))));
+  }, [setoresNaVisao]);
 
   const base = useMemo(() => {
     if (!visao) return [];
     const q = normalizar(busca);
-    return visao.pessoas.filter(p => (!setorFiltro || p.setor === setorFiltro)
+    const marcados = new Set(setoresFiltro);
+    return visao.pessoas.filter(p => (!marcados.size || marcados.has(p.setor))
       && (!q || normalizar(p.nome).includes(q) || p.mat.includes(busca.trim())));
-  }, [visao, setorFiltro, busca]);
+  }, [visao, setoresFiltro, busca]);
   const F = useMemo(() => base.filter(p => passaSituacao(p, sit)), [base, sit]);
 
   const fotoDe = useCallback((p: Pessoa) => fotos.get(normalizar(p.nome)) ?? null, [fotos]);
-  const filtroTxt = [setorFiltro, busca.trim() && `«${busca.trim()}»`].filter(Boolean).join(' · ');
+  const textoSetores = setoresFiltro.length > 3 ? `${setoresFiltro.length} setores` : setoresFiltro.join(' + ');
+  const filtroTxt = [textoSetores, busca.trim() && `«${busca.trim()}»`].filter(Boolean).join(' · ');
   const dp = useMemo(() => setoresDoDp(posicoes), [posicoes]);
   const faltando = useMemo(() => (gerenciar ? semVinculo(dp, vinculos) : []), [gerenciar, dp, vinculos]);
   const listaAvisos = useMemo(() => (visao && pos ? montarAvisos(visao, base, pos, anterior, {
@@ -157,7 +165,7 @@ export function PainelBancoHoras({
 
   const ir = useCallback<ContextoBH['ir']>((destino, o) => {
     if (o?.sit) setSit(o.sit);
-    if (o?.setor !== undefined) setSetorFiltro(o.setor);
+    if (o?.setor !== undefined) setSetoresFiltro(o.setor ? [o.setor] : []);
     trocarAba(destino);
   }, [trocarAba]);
 
@@ -312,24 +320,16 @@ export function PainelBancoHoras({
                 { id: 'vence', titulo: `Vence ${diaMes(visao.prox)}`, cor: 'bg-warning' },
               ]} />
               {setoresNaVisao.length > 1 && (
-                <Select value={setorFiltro || TODOS} onValueChange={v => setSetorFiltro(v === TODOS ? '' : v)}>
-                  <SelectTrigger className={cn('h-8 w-52 rounded-lg text-xs', setorFiltro && 'border-primary/50 bg-primary/[0.05]')}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={TODOS}>Todos os setores</SelectItem>
-                    {setoresNaVisao.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <FiltroSetores setores={setoresNaVisao} marcados={setoresFiltro} onTrocar={setSetoresFiltro} />
               )}
               <div className="relative">
                 <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar pessoa ou matrícula"
                   className={cn('h-8 w-64 rounded-lg pl-8 text-xs', busca && 'border-primary/50')} />
               </div>
-              {(sit !== 'todas' || setorFiltro || busca || tirados.size > 0) && (
+              {(sit !== 'todas' || setoresFiltro.length > 0 || busca || tirados.size > 0) && (
                 <Button variant="ghost" size="sm" className="ml-auto h-8 gap-1 text-xs"
-                  onClick={() => { setSit('todas'); setSetorFiltro(''); setBusca(''); setTirados(new Set()); }}>
+                  onClick={() => { setSit('todas'); setSetoresFiltro([]); setBusca(''); setTirados(new Set()); }}>
                   <X className="h-3.5 w-3.5" /> Limpar filtros
                 </Button>
               )}

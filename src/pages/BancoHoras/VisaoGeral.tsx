@@ -93,7 +93,11 @@ function Comparativo({ c }: { c: ContextoBH }) {
     <Card>
       <CardHeader className="flex-row items-start justify-between gap-3 space-y-0 pb-3">
         <div>
-          <CardTitle className="text-sm">{c.mesesPadrao ? 'Comparativo dos últimos 3 meses' : `Comparativo de ${ms.length === 1 ? mesLongo(ms[0]) : `${ms.length} meses`}`}</CardTitle>
+          <CardTitle className="text-sm">
+            {c.mesesPadrao ? 'Comparativo dos últimos 3 meses' : `Comparativo de ${ms.length === 1 ? mesLongo(ms[0]) : `${ms.length} meses`}`}
+            {/* Os setores marcados no filtro (somados), para não confundir com a empresa inteira. */}
+            {c.filtroTxt && <span className="font-normal text-muted-foreground"> · {c.filtroTxt}</span>}
+          </CardTitle>
           <p className="mt-0.5 text-[11px] text-muted-foreground">
             {parcial ? `* ${MESES_CURTOS[+v.data.slice(5, 7) - 1]} conta só até ${diaMes(v.data)}, o mês ainda não fechou` : 'Mês a mês, lado a lado'}
             {' · '}os meses vêm do filtro «Meses das horas»
