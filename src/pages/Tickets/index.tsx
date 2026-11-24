@@ -38,7 +38,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { useSearchParams } from 'react-router-dom';
 import {
-  Plus, ShieldCheck, Inbox, Loader2,
+  Plus, ShieldCheck, Inbox, Loader2, AlarmClock, Search, X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ItemVivo } from '@/components/LinhaViva';
@@ -63,6 +63,7 @@ import {
 } from './categorias';
 import {
   filtrarFila, ordenarFila, agruparFila, contarSegmentos, textoDeIdade,
+  abasDoPapel, segmentoInicial, definicaoDoSegmento,
   CRITERIOS_VAZIOS,
   type Segmento, type Ordem, type Agrupamento, type CriteriosFila,
 } from './fila';
@@ -184,6 +185,20 @@ export default function Tickets() {
   const mudar = useCallback(<K extends keyof CriteriosFila>(campo: K, valor: CriteriosFila[K]): void => {
     setCriterios(c => ({ ...c, [campo]: valor }));
   }, []);
+
+  /*
+   * A aba com que a tela abre depende do papel: quem atende cai na fila em
+   * aberto, quem pede cai nos próprios pedidos. O papel chega depois do
+   * primeiro render (`useTicketsAcesso` consulta o banco), então a escolha é
+   * feita uma vez, quando ele chega — e nunca mais por cima da escolha da
+   * pessoa.
+   */
+  const abaInicialDefinida = useRef(false);
+  useEffect(() => {
+    if (acesso.carregando || abaInicialDefinida.current) return;
+    abaInicialDefinida.current = true;
+    setCriterios(c => ({ ...c, segmento: segmentoInicial(acesso.podeAtender) }));
+  }, [acesso.carregando, acesso.podeAtender]);
 
   // Limpar tira os filtros e a busca, mas fica no recorte: quem está em
   // «Comigo» e limpa os filtros quer ver tudo o que é seu, não a fila inteira.
@@ -332,9 +347,11 @@ export default function Tickets() {
   }
 
   const listaVazia = !carregando && !visiveis.length;
+  const buscando = criterios.busca.trim() !== '';
   const temFiltro =
-    criterios.busca.trim() !== '' || !!criterios.status || !!criterios.categoria
+    buscando || !!criterios.status || !!criterios.categoria
     || !!criterios.prioridade || !!criterios.responsavel || !!criterios.empresaId;
+  const abas = abasDoPapel(acesso.podeAtender, contagem, criterios.segmento);
 
   const definirVisao = (v: Visao) => {
     setPreferencias(p => ({ ...p, visao: v }));
@@ -355,8 +372,8 @@ export default function Tickets() {
           <h1 className="text-xl font-semibold tracking-tight leading-tight">Tickets</h1>
           <p className="text-xs text-muted-foreground mt-0.5">
             {acesso.podeAtender
-              ? 'Assuma o que for seu para receber as mensagens dele.'
-              : 'Seus pedidos e os do seu setor.'}
+              ? 'Assuma, transfira ou chame mais gente para resolver cada pedido.'
+              : 'Peça ajuda com print ou foto e acompanhe a resposta por aqui.'}
           </p>
         </div>
 
@@ -385,12 +402,45 @@ export default function Tickets() {
       </div>
 
       {/* ── Recortes (contador e filtro ao mesmo tempo) ──────────────────── */}
-      <ResumoFila
-        contagem={contagem}
-        segmento={criterios.segmento}
-        onEscolher={s => mudar('segmento', s as Segmento)}
-        carregando={carregando}
-      />
+      <div className="space-y-2">
+        <ResumoFila
+          contagem={contagem}
+          segmento={criterios.segmento}
+          onEscolher={s => { mudar('segmento', s as Segmento); if (buscando) mudar('busca', ''); }}
+          abas={abas}
+          carregando={carregando}
+        />
+
+        {/* Uma frase que diz o que a aba mostra: quem chega pela primeira vez
+            não precisa adivinhar a diferença entre «Comigo» e «Em aberto». */}
+        {buscando ? (
+          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Search className="w-3.5 h-3.5" />
+            Buscando em <strong className="font-medium text-foreground/80">todos os tickets</strong>, abertos e encerrados.
+            <button type="button" onClick={() => mudar('busca', '')}
+              className="inline-flex items-center gap-0.5 font-medium text-primary hover:underline">
+              <X className="w-3 h-3" /> Limpar busca
+            </button>
+          </p>
+        ) : (
+          <p className="text-xs text-muted-foreground">{definicaoDoSegmento(criterios.segmento).ajuda}</p>
+        )}
+
+        {/* «Parados» deixou de ser aba: é aviso, e só aparece quando existe. */}
+        {!buscando && contagem.parados > 0 && criterios.segmento !== 'parados' && criterios.segmento !== 'encerrados' && (
+          <button type="button" onClick={() => mudar('segmento', 'parados')}
+            className="flex w-full items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/[0.06] px-3 py-2 text-left text-xs transition-colors hover:bg-destructive/[0.1]">
+            <AlarmClock className="w-4 h-4 shrink-0 text-destructive" />
+            <span className="flex-1">
+              <strong className="font-semibold text-destructive">
+                {contagem.parados === 1 ? '1 ticket parado' : `${contagem.parados} tickets parados`}
+              </strong>
+              <span className="text-muted-foreground"> há mais tempo do que a prioridade aguenta.</span>
+            </span>
+            <span className="font-medium text-destructive">Ver</span>
+          </button>
+        )}
+      </div>
 
       {/* ── Busca, filtros e modo ────────────────────────────────────────── */}
       <BarraFiltros
@@ -442,7 +492,7 @@ export default function Tickets() {
                     <Button variant="link" size="sm" className="mt-1 text-xs" onClick={limpar}>
                       Limpar filtros
                     </Button>
-                  ) : acesso.podeAbrir && criterios.segmento === 'fila' && (
+                  ) : acesso.podeAbrir && (criterios.segmento === 'fila' || criterios.segmento === 'pedidos') && (
                     <Button variant="link" size="sm" className="mt-1 text-xs" onClick={() => setNovoAberto(true)}>
                       Abrir um ticket
                     </Button>
@@ -524,12 +574,14 @@ export default function Tickets() {
 
 /** A frase da lista vazia SEM filtro: o recorte vazio também é notícia. */
 const TEXTO_VAZIO: Record<Segmento, string> = {
-  fila:       'Nada na fila. Tudo respondido.',
-  meus:       'Nada com você agora.',
-  sem_dono:   'Todo ticket aberto tem alguém cuidando.',
-  parados:    'Nada parado além do limite.',
-  encerrados: 'Nenhum ticket encerrado ainda.',
-  todos:      'Nenhum ticket por aqui.',
+  fila:         'Nada em aberto. Tudo respondido.',
+  meus:         'Nada com você agora.',
+  sem_dono:     'Todo ticket aberto tem alguém cuidando.',
+  parados:      'Nada parado além do limite.',
+  encerrados:   'Nenhum ticket encerrado ainda.',
+  todos:        'Nenhum ticket por aqui.',
+  pedidos:      'Você não tem pedido em aberto.',
+  participando: 'Ninguém chamou você para um ticket em aberto.',
 };
 
 // ── Peças pequenas ───────────────────────────────────────────────────────────

@@ -11,13 +11,16 @@
  * Um filtro responde "me mostre X". Um segmento responde "o que precisa de
  * mim?". São perguntas diferentes, e a segunda é a que faz alguém abrir a aba:
  *
- *   • **Na fila** — tudo que ainda pede alguma coisa de alguém;
  *   • **Comigo** — o que eu assumi e ainda não terminei;
- *   • **Sem dono** — aberto e sem responsável: a pior categoria de todas,
- *     porque ninguém está olhando e o sistema não avisa ninguém;
- *   • **Parados** — tem dono, mas não se move há tempo demais para a prioridade
- *     que tem;
+ *   • **Sem responsável** — aberto e sem dono: ninguém está olhando;
+ *   • **Meus pedidos** — o que eu abri e ainda não terminou;
+ *   • **Em aberto** — tudo que ainda pede alguma coisa de alguém;
+ *   • **Participando** — onde me chamaram para ajudar ou acompanhar;
+ *   • **Parados** — não se move há tempo demais para a prioridade que tem
+ *     (é aviso acima da lista, não aba fixa);
  *   • **Encerrados** — concluído, recusado, cancelado.
+ *
+ * Quais viram aba depende do papel de quem olha: `abasDoPapel`.
  *
  * ## Envelhecimento, e por que ele não é um SLA
  *
@@ -38,27 +41,60 @@ import {
 
 // ── Segmentos ────────────────────────────────────────────────────────────────
 
-export type Segmento = 'fila' | 'meus' | 'sem_dono' | 'parados' | 'encerrados' | 'todos';
+export type Segmento =
+  | 'fila' | 'meus' | 'sem_dono' | 'parados' | 'encerrados' | 'todos'
+  | 'pedidos' | 'participando';
 
 export interface DefinicaoSegmento {
   chave: Segmento;
   label: string;
-  /** Frase curta para o `title` — a tela tem espaço para o rótulo, não para isto. */
+  /** A frase que aparece embaixo das abas: o que este recorte mostra, em uma linha. */
   ajuda: string;
 }
 
-/**
- * A ordem é a de leitura, e ela conta uma história: o que existe, o que é meu,
- * o que não é de ninguém, o que apodreceu, o que acabou.
- */
+/** Todos os recortes. Quais viram aba depende de quem olha (`abasDoPapel`). */
 export const SEGMENTOS: DefinicaoSegmento[] = [
-  { chave: 'fila',       label: 'Na fila',    ajuda: 'Tudo que ainda pede alguma coisa de alguém' },
-  { chave: 'meus',       label: 'Comigo',     ajuda: 'Você assumiu e ainda não encerrou' },
-  { chave: 'sem_dono',   label: 'Sem dono',   ajuda: 'Aberto e sem responsável — ninguém está olhando' },
-  { chave: 'parados',    label: 'Parados',    ajuda: 'Sem movimento além do limite da prioridade' },
-  { chave: 'encerrados', label: 'Encerrados', ajuda: 'Concluído, recusado ou cancelado' },
-  { chave: 'todos',      label: 'Todos',      ajuda: 'A fila inteira, sem recorte' },
+  { chave: 'meus',         label: 'Comigo',          ajuda: 'Tickets que você está resolvendo agora.' },
+  { chave: 'sem_dono',     label: 'Sem responsável', ajuda: 'Chegaram e ninguém pegou ainda. Assuma ou transfira para alguém.' },
+  { chave: 'pedidos',      label: 'Meus pedidos',    ajuda: 'Os tickets que você abriu e que ainda não terminaram.' },
+  { chave: 'fila',         label: 'Em aberto',       ajuda: 'Todo ticket que ainda não terminou, de qualquer pessoa.' },
+  { chave: 'participando', label: 'Participando',    ajuda: 'Tickets em que chamaram você para ajudar ou acompanhar.' },
+  { chave: 'parados',      label: 'Parados',         ajuda: 'Sem movimento há mais tempo do que a prioridade aguenta.' },
+  { chave: 'encerrados',   label: 'Encerrados',      ajuda: 'Concluídos, recusados ou cancelados. Ficam aqui para consulta.' },
+  { chave: 'todos',        label: 'Todos',           ajuda: 'Todos os tickets, sem recorte.' },
 ];
+
+export function definicaoDoSegmento(s: Segmento): DefinicaoSegmento {
+  return SEGMENTOS.find(d => d.chave === s) ?? SEGMENTOS[0];
+}
+
+/**
+ * As abas de cada papel — poucas, e na ordem da pergunta que a pessoa faz.
+ *
+ * Eram seis abas iguais para todo mundo, e metade não dizia nada a quem só
+ * pede («Sem dono» não é problema do líder, é de quem atende). Agora:
+ *
+ *   • quem ATENDE: o que é meu → o que ninguém pegou → tudo em aberto;
+ *   • quem PEDE:   o que eu pedi → tudo em aberto do meu setor.
+ *
+ * «Participando» só aparece quando tem alguém dentro, e «Parados» deixou de
+ * ser aba: vira um aviso acima da lista quando existe (ver `index.tsx`).
+ * «Encerrados» fecha a fila nos dois papéis.
+ */
+export function abasDoPapel(
+  podeAtender: boolean, contagem: Record<Segmento, number>, ativo: Segmento,
+): Segmento[] {
+  const base: Segmento[] = podeAtender ? ['meus', 'sem_dono', 'fila'] : ['pedidos', 'fila'];
+  if (contagem.participando > 0 || ativo === 'participando') base.push('participando');
+  if (ativo === 'parados') base.push('parados');
+  base.push('encerrados');
+  return base;
+}
+
+/** A aba com que a tela abre. */
+export function segmentoInicial(podeAtender: boolean): Segmento {
+  return podeAtender ? 'fila' : 'pedidos';
+}
 
 // ── Envelhecimento ───────────────────────────────────────────────────────────
 
@@ -148,7 +184,14 @@ export function pertenceAoSegmento(
     case 'meus':       return !estaFechado(t) && !!meuId && t.responsavelId === meuId;
     case 'sem_dono':   return !estaFechado(t) && !t.responsavelId;
     case 'parados':    return estaParado(t, agora);
+    case 'pedidos':    return !estaFechado(t) && !!meuId && t.abertoPor === meuId;
+    case 'participando': return !estaFechado(t) && participa(t, meuId);
   }
+}
+
+/** A pessoa foi chamada para este ticket? */
+export function participa(t: Ticket, meuId: string | null): boolean {
+  return !!meuId && !!t.participantes?.some(p => p.id === meuId);
 }
 
 /**
@@ -163,6 +206,7 @@ export function contarSegmentos(
 ): Record<Segmento, number> {
   const conta: Record<Segmento, number> = {
     fila: 0, meus: 0, sem_dono: 0, parados: 0, encerrados: 0, todos: 0,
+    pedidos: 0, participando: 0,
   };
   for (const t of tickets) {
     conta.todos++;
@@ -170,6 +214,8 @@ export function contarSegmentos(
     if (fechado) { conta.encerrados++; continue; }
     conta.fila++;
     if (meuId && t.responsavelId === meuId) conta.meus++;
+    if (meuId && t.abertoPor === meuId) conta.pedidos++;
+    if (participa(t, meuId)) conta.participando++;
     if (!t.responsavelId) conta.sem_dono++;
     if (estaParado(t, agora)) conta.parados++;
   }
@@ -211,16 +257,22 @@ function casaBusca(t: Ticket, termo: string): boolean {
     || (t.abertoPorNome ?? '').toLowerCase().includes(alvo)
     || (t.responsavelNome ?? '').toLowerCase().includes(alvo)
     || (t.descricao ?? '').toLowerCase().includes(alvo)
+    || !!t.participantes?.some(p => p.nome.toLowerCase().includes(alvo))
   );
 }
 
+/**
+ * Com busca digitada, a aba deixa de recortar: quem procura «o 212» quer
+ * achar o 212, esteja ele em aberto, encerrado ou com outra pessoa. A tela
+ * avisa que está buscando em tudo. Os filtros do painel continuam valendo.
+ */
 export function filtrarFila(
   tickets: readonly Ticket[], criterios: CriteriosFila,
   meuId: string | null, agora = Date.now(),
 ): Ticket[] {
   const termo = criterios.busca.trim().toLowerCase();
   return tickets.filter(t => {
-    if (!pertenceAoSegmento(t, criterios.segmento, meuId, agora)) return false;
+    if (!termo && !pertenceAoSegmento(t, criterios.segmento, meuId, agora)) return false;
     if (criterios.status && t.status !== criterios.status) return false;
     if (criterios.categoria && t.categoria !== criterios.categoria) return false;
     if (criterios.prioridade && t.prioridade !== criterios.prioridade) return false;

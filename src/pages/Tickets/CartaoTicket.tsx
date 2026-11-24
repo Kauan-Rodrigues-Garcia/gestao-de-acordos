@@ -33,6 +33,7 @@
  * real. Recebendo strings, a comparação do `memo` é de primitivos.
  */
 import { memo, type CSSProperties } from 'react';
+import { Users } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import {
@@ -177,6 +178,13 @@ function CartaoTicketBase({
           ) : (
             <span className="text-xs font-medium text-amber-600 dark:text-amber-400 whitespace-nowrap">
               Sem responsável
+            </span>
+          )}
+          {/* Quantas pessoas mais estão no ticket — o nome de cada uma mora no detalhe. */}
+          {!!t.participantes?.length && (
+            <span className="inline-flex shrink-0 items-center gap-0.5 text-[11px] text-muted-foreground"
+              title={`Participam: ${t.participantes.map(p => p.nome).join(', ')}`}>
+              <Users className="w-3 h-3" />{t.participantes.length}
             </span>
           )}
         </span>

@@ -1,10 +1,27 @@
 /**
  * NovoTicketDialog — abrir um pedido.
  *
+ * ## Passos numerados
+ *
+ * O formulário é lido de cima para baixo, em passos: 1. sobre o que é,
+ * 2. o que aconteceu, 3. prints e fotos, 4. prioridade, 5. quem mais precisa
+ * saber. Os números dizem a quem abre que o formulário tem fim e em que ponto
+ * ele está — e o passo dos prints fica no meio, à vista, porque é o que mais
+ * encurta a conversa depois.
+ *
  * O formulário muda de forma conforme a categoria: escolher "Trocar senha de
  * usuário" faz aparecer o campo de usuário, "Erro no sistema" faz aparecer a
  * lista de abas. Os campos extras são TODOS opcionais — a definição vive em
  * `categorias.ts`, e a razão de existirem está lá.
+ *
+ * ## Fotos na abertura
+ *
+ * Antes, o print só entrava depois, pela conversa. Agora entra aqui: colar
+ * (Ctrl+V em qualquer ponto do formulário), arrastar, escolher ou tirar a foto
+ * no celular. Os arquivos sobem DEPOIS de o ticket existir — o caminho no balde
+ * leva o id dele — e viram a mensagem «do pedido», que a tela mostra dentro do
+ * cartão do pedido. Se um arquivo falhar, o ticket já está aberto e a tela diz
+ * quantos faltaram, para a pessoa mandar pela conversa.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, Plus, Search, X } from 'lucide-react';
@@ -25,13 +42,19 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { produtoDaEmpresa } from '@/lib/produto';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
-import { abrirTicket } from '@/services/tickets.service';
+import {
+  abrirTicket, subirAnexo, enviarMensagem, adicionarParticipantes, listarPessoasParaChamar,
+  type AnexoTicket, type PessoaTicket,
+} from '@/services/tickets.service';
 import { cn } from '@/lib/utils';
 import {
   categoriasDoProduto, ABAS_DO_SISTEMA, PRIORIDADES, ORDEM_PRIORIDADE,
   type CampoCategoria, type PrioridadeTicket,
 } from './categorias';
 import { iconeDaCategoria } from './icones';
+import { AreaDeAnexos } from './anexos';
+import { arquivosColados, arquivosQueCabem, normalizar } from './arquivos';
+import { SeletorDeVariasPessoas } from './pessoas';
 
 interface Props {
   aberto: boolean;
@@ -68,6 +91,25 @@ export default function NovoTicketDialog({ aberto, onFechar, onCriado }: Props) 
   const [prioridade, setPrioridade] = useState<PrioridadeTicket>('normal');
   const [campos, setCampos] = useState<Record<string, string>>({});
   const [salvando, setSalvando] = useState(false);
+  const [arquivos, setArquivos] = useState<File[]>([]);
+  const [chamados, setChamados] = useState<PessoaTicket[]>([]);
+  const [candidatos, setCandidatos] = useState<PessoaTicket[]>([]);
+  const [carregandoCandidatos, setCarregandoCandidatos] = useState(false);
+  /** «Enviando 2 de 3 fotos…» — subir print de celular leva segundos. */
+  const [progresso, setProgresso] = useState<string | null>(null);
+
+  // A lista de quem chamar só é buscada quando o diálogo abre, uma vez.
+  useEffect(() => {
+    if (!aberto || !empresaId || candidatos.length) return;
+    let vivo = true;
+    setCarregandoCandidatos(true);
+    void listarPessoasParaChamar(empresaId).then(lista => {
+      if (!vivo) return;
+      setCandidatos(lista.filter(p => p.id !== perfil?.id));
+      setCarregandoCandidatos(false);
+    });
+    return () => { vivo = false; };
+  }, [aberto, empresaId, candidatos.length, perfil?.id]);
 
   const [pessoas, setPessoas] = useState<Opcao[]>([]);
   const [setores, setSetores] = useState<Opcao[]>([]);
@@ -110,13 +152,57 @@ export default function NovoTicketDialog({ aberto, onFechar, onCriado }: Props) 
   function limpar() {
     setCategoria('senha'); setAssunto(''); setDescricao('');
     setPrioridade('normal'); setCampos({});
+    setArquivos([]); setChamados([]); setProgresso(null);
+  }
+
+  /** Ctrl+V com print em qualquer ponto do formulário vira anexo. Texto colado segue normal. */
+  function colar(e: React.ClipboardEvent) {
+    const colados = arquivosColados(e);
+    if (!colados.length) return;
+    e.preventDefault();
+    const bons = arquivosQueCabem(colados, perfil?.perfil);
+    if (bons.length) {
+      setArquivos(a => [...a, ...bons]);
+      toast.success(bons.length > 1 ? `${bons.length} prints anexados.` : 'Print anexado.');
+    }
+  }
+
+  /**
+   * Os anexos do pedido, depois de o ticket existir. Devolve quantos falharam
+   * — o ticket já está aberto e não é desfeito por causa de um print.
+   */
+  async function enviarAnexosDoPedido(ticketId: string): Promise<number> {
+    if (!arquivos.length || !empresaId || !perfil?.id) return 0;
+    const subidos: AnexoTicket[] = [];
+    let falhas = 0;
+    for (const [i, f] of arquivos.entries()) {
+      setProgresso(`Enviando ${i + 1} de ${arquivos.length} ${arquivos.length > 1 ? 'arquivos' : 'arquivo'}…`);
+      try {
+        subidos.push(await subirAnexo(f, empresaId, ticketId));
+      } catch (e) {
+        falhas++;
+        console.warn('[tickets] anexo do pedido:', e);
+      }
+    }
+    if (!subidos.length) return falhas;
+    const m = await enviarMensagem({
+      ticketId,
+      autorId: perfil.id,
+      autorNome: perfil.nome ?? 'Sem nome',
+      autorFoto: (perfil as { foto_url?: string | null }).foto_url ?? null,
+      texto: '',
+      anexos: subidos,
+      doPedido: true,
+    });
+    return m.erro ? arquivos.length : falhas;
   }
 
   async function salvar() {
     if (!empresaId || !perfil?.id) return;
-    if (!assunto.trim()) { toast.error('Escreva o assunto do ticket.'); return; }
+    if (!assunto.trim()) { toast.error('Escreva o assunto do ticket (passo 2).'); return; }
 
     setSalvando(true);
+    setProgresso('Abrindo o ticket…');
     try {
       const r = await abrirTicket({
         empresaId,
@@ -130,10 +216,23 @@ export default function NovoTicketDialog({ aberto, onFechar, onCriado }: Props) 
         // um punhado de strings vazias só polui a leitura.
         campos: Object.fromEntries(Object.entries(campos).filter(([, v]) => v?.trim())),
       });
-      if (r.erro) { toast.error(r.erro); return; }
-      toast.success('Ticket aberto. Quem atende já foi notificado.');
+      if (r.erro || !r.id) { toast.error(r.erro ?? 'Não foi possível abrir o ticket.'); return; }
+
+      const falhas = await enviarAnexosDoPedido(r.id);
+
+      if (chamados.length) {
+        setProgresso('Chamando as pessoas…');
+        const p = await adicionarParticipantes(r.id, chamados.map(c => c.id));
+        if (p.erro) toast.warning(`Ticket aberto, mas não deu para chamar as pessoas: ${p.erro}`);
+      }
+
+      if (falhas) {
+        toast.warning(`Ticket aberto, mas ${falhas === 1 ? '1 arquivo não subiu' : `${falhas} arquivos não subiram`}. Mande pela conversa.`);
+      } else {
+        toast.success('Ticket aberto. Quem atende já foi avisado.');
+      }
       limpar(); onCriado(r.id); onFechar();
-    } finally { setSalvando(false); }
+    } finally { setSalvando(false); setProgresso(null); }
   }
 
   function campoExtra(c: CampoCategoria) {
@@ -173,21 +272,20 @@ export default function NovoTicketDialog({ aberto, onFechar, onCriado }: Props) 
   }
 
   return (
-    <Dialog open={aberto} onOpenChange={o => { if (!o) onFechar(); }}>
-      <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto p-0 gap-0">
-        <DialogHeader className="px-6 pt-6 pb-4">
+    <Dialog open={aberto} onOpenChange={o => { if (!o && !salvando) onFechar(); }}>
+      <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto p-0 gap-0" onPaste={colar}>
+        <DialogHeader className="px-6 pt-6 pb-4 border-b border-border">
           <DialogTitle>Novo ticket</DialogTitle>
           <DialogDescription>
-            A liderança do seu setor acompanha este ticket. Depois de abrir, ele já fica aberto
-            na tela: dá para colar o print direto na conversa.
+            Preencha os passos abaixo. Quanto mais claro o pedido — e com print —, mais rápido ele é
+            resolvido. A liderança do seu setor também acompanha.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="px-6 pb-2 space-y-5">
+        <div className="px-6 py-5 space-y-6">
           {/* A categoria decide os campos — por isso ela vem primeiro e à vista,
               e não escondida numa lista suspensa. */}
-          <fieldset className="space-y-2">
-            <legend className="text-xs font-medium mb-2">Sobre o que é?</legend>
+          <Passo numero={1} titulo="Sobre o que é?">
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {categorias.map(c => {
                 const Icone = iconeDaCategoria(c.key);
@@ -215,23 +313,52 @@ export default function NovoTicketDialog({ aberto, onFechar, onCriado }: Props) 
             {definicao && (
               <p className="text-[11px] text-muted-foreground">{definicao.descricao}</p>
             )}
-          </fieldset>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="ticket-assunto" className="text-xs">Assunto</Label>
-            <Input id="ticket-assunto" value={assunto} onChange={e => setAssunto(e.target.value)}
-              placeholder="Uma frase que diga o pedido" className="h-9" maxLength={140} />
-          </div>
+            {/* Os campos da categoria logo abaixo dela: é ela que os faz aparecer. */}
+            {!!definicao?.campos.length && (
+              <div className="mt-3 rounded-lg bg-muted/50 p-3 space-y-3">
+                <p className="text-[11px] text-muted-foreground">
+                  Opcionais, mas poupam perguntas de quem vai atender.
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {definicao.campos.map(c => (
+                    <div key={c.key} className="space-y-1.5">
+                      <Label className="text-xs">{c.label}</Label>
+                      {campoExtra(c)}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </Passo>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="ticket-detalhes" className="text-xs">Detalhes</Label>
-            <Textarea id="ticket-detalhes" value={descricao} onChange={e => setDescricao(e.target.value)}
-              placeholder="O que aconteceu, o que já tentou, o que precisa" rows={4} />
-          </div>
+          <Passo numero={2} titulo="O que aconteceu?">
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="ticket-assunto" className="text-xs">Assunto <span className="text-destructive">*</span></Label>
+                <Input id="ticket-assunto" value={assunto} onChange={e => setAssunto(e.target.value)}
+                  placeholder="Ex.: Acordo do NR 123456 não aparece no analítico" className="h-9" maxLength={140} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="ticket-detalhes" className="text-xs">Detalhes</Label>
+                <Textarea id="ticket-detalhes" value={descricao} onChange={e => setDescricao(e.target.value)}
+                  placeholder={'O que aconteceu?\nO que você já tentou?\nO que precisa que seja feito?'} rows={4} />
+              </div>
+            </div>
+          </Passo>
 
-          <div className="space-y-1.5">
-            <p className="text-xs font-medium">Prioridade</p>
-            <div className="inline-flex rounded-lg border border-border p-0.5" role="radiogroup" aria-label="Prioridade">
+          <Passo numero={3} titulo="Prints e fotos" dica="Mostre o que está vendo na tela — é o que mais ajuda.">
+            <AreaDeAnexos
+              arquivos={arquivos}
+              onArquivos={novos => setArquivos(a => [...a, ...novos])}
+              onRemover={i => setArquivos(a => a.filter((_, j) => j !== i))}
+              cargo={perfil?.perfil}
+              desabilitado={salvando}
+            />
+          </Passo>
+
+          <Passo numero={4} titulo="Qual a urgência?">
+            <div className="inline-flex flex-wrap rounded-lg border border-border p-0.5" role="radiogroup" aria-label="Prioridade">
               {ORDEM_PRIORIDADE.map(p => (
                 <button
                   key={p}
@@ -250,27 +377,31 @@ export default function NovoTicketDialog({ aberto, onFechar, onCriado }: Props) 
                 </button>
               ))}
             </div>
-            <p className="text-[11px] text-muted-foreground">{AJUDA_PRIORIDADE[prioridade]}</p>
-          </div>
+            <p className="mt-1.5 text-[11px] text-muted-foreground">{AJUDA_PRIORIDADE[prioridade]}</p>
+          </Passo>
 
-          {!!definicao?.campos.length && (
-            <div className="rounded-lg bg-muted/50 p-3 space-y-3">
-              <p className="text-[11px] text-muted-foreground">
-                Opcionais, mas encurtam a conversa.
-              </p>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {definicao.campos.map(c => (
-                  <div key={c.key} className="space-y-1.5">
-                    <Label className="text-xs">{c.label}</Label>
-                    {campoExtra(c)}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          <Passo numero={5} titulo="Quem mais precisa acompanhar?" opcional
+            dica="As pessoas chamadas veem o ticket, conversam nele e recebem os avisos.">
+            <SeletorDeVariasPessoas
+              pessoas={candidatos}
+              carregando={carregandoCandidatos}
+              escolhidos={chamados}
+              onMudar={setChamados}
+            />
+          </Passo>
         </div>
 
-        <DialogFooter className="px-6 py-4 border-t border-border mt-4">
+        <DialogFooter className="sticky bottom-0 px-6 py-4 border-t border-border bg-background sm:items-center">
+          {progresso && (
+            <span className="mr-auto flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" /> {progresso}
+            </span>
+          )}
+          {!progresso && arquivos.length > 0 && (
+            <span className="mr-auto text-xs text-muted-foreground">
+              {arquivos.length === 1 ? '1 arquivo anexado' : `${arquivos.length} arquivos anexados`}
+            </span>
+          )}
           <Button variant="outline" onClick={onFechar} disabled={salvando}>Cancelar</Button>
           <Button onClick={salvar} disabled={salvando} className="gap-2">
             {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
@@ -279,6 +410,33 @@ export default function NovoTicketDialog({ aberto, onFechar, onCriado }: Props) 
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Um passo do formulário: número no círculo, título e o conteúdo. */
+function Passo({ numero, titulo, dica, opcional, children }: {
+  numero: number;
+  titulo: string;
+  dica?: string;
+  opcional?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="flex gap-3">
+      <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary">
+        {numero}
+      </span>
+      <div className="min-w-0 flex-1 space-y-2">
+        <div>
+          <h3 className="text-sm font-semibold leading-6">
+            {titulo}
+            {opcional && <span className="ml-1.5 text-xs font-normal text-muted-foreground">(opcional)</span>}
+          </h3>
+          {dica && <p className="text-[11px] text-muted-foreground">{dica}</p>}
+        </div>
+        {children}
+      </div>
+    </section>
   );
 }
 
@@ -388,9 +546,4 @@ function SeletorPessoa({ pessoas, valor, onEscolher }: {
       )}
     </div>
   );
-}
-
-/** \u0300-\u036f: as marcas de acento que o NFD separa da letra. */
-function normalizar(s: string): string {
-  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 }

@@ -18,6 +18,7 @@ import {
   contarSegmentos, filtrarFila, ordenarFila, agruparFila, estaParado,
   temperatura, tempoSemMovimento, textoDeIdade, pertenceAoSegmento,
   fracaoDoPavio, textoDoLimite, CRITERIOS_VAZIOS, LIMITE_PARADO_MS,
+  abasDoPapel, segmentoInicial,
 } from './fila';
 
 const AGORA = Date.parse('2026-08-23T12:00:00Z');
@@ -131,6 +132,7 @@ describe('contarSegmentos', () => {
     ];
     expect(contarSegmentos(lista, 'eu', AGORA)).toEqual({
       todos: 5, fila: 3, meus: 1, sem_dono: 1, parados: 1, encerrados: 2,
+      pedidos: 0, participando: 0,
     });
   });
 
@@ -142,6 +144,7 @@ describe('contarSegmentos', () => {
   it('lista vazia devolve todos os segmentos zerados', () => {
     expect(contarSegmentos([], 'eu', AGORA)).toEqual({
       todos: 0, fila: 0, meus: 0, sem_dono: 0, parados: 0, encerrados: 0,
+      pedidos: 0, participando: 0,
     });
   });
 
@@ -319,5 +322,80 @@ describe('fracaoDoPavio', () => {
     expect(textoDoLimite('urgente')).toBe('2 h');
     expect(textoDoLimite('normal')).toBe('1 d');
     expect(textoDoLimite('baixa')).toBe('3 d');
+  });
+});
+
+// ── Pedidos, participantes e abas por papel ──────────────────────────────────
+
+describe('pedidos e participando', () => {
+  const lista = [
+    ticket({ abertoPor: 'eu' }),                                                  // pedido meu
+    ticket({ abertoPor: 'eu', status: 'concluido' }),                             // encerrado
+    ticket({ participantes: [{ id: 'eu', nome: 'Eu' }] }),                        // participo
+    ticket({ participantes: [{ id: 'eu', nome: 'Eu' }], status: 'cancelado' }),   // encerrado
+    ticket({ participantes: [{ id: 'outro', nome: 'Carla' }] }),
+  ];
+
+  it('conta só o que ainda está em aberto', () => {
+    const conta = contarSegmentos(lista, 'eu', AGORA);
+    expect(conta.pedidos).toBe(1);
+    expect(conta.participando).toBe(1);
+  });
+
+  it('o contador e o filtro concordam', () => {
+    for (const segmento of ['pedidos', 'participando'] as const) {
+      const r = filtrarFila(lista, { ...CRITERIOS_VAZIOS, segmento }, 'eu', AGORA);
+      expect(r.length).toBe(contarSegmentos(lista, 'eu', AGORA)[segmento]);
+    }
+  });
+
+  it('ticket sem a lista de participantes (migration pendente) não quebra', () => {
+    const semLista = ticket({ participantes: undefined });
+    expect(contarSegmentos([semLista], 'eu', AGORA).participando).toBe(0);
+  });
+
+  it('a busca acha pelo nome do participante', () => {
+    const r = filtrarFila(lista, { ...CRITERIOS_VAZIOS, segmento: 'todos', busca: 'carla' }, 'eu', AGORA);
+    expect(r).toHaveLength(1);
+  });
+});
+
+describe('busca atravessa as abas', () => {
+  it('com termo digitado, o encerrado aparece mesmo na aba «Em aberto»', () => {
+    const lista = [ticket({ numero: 212, status: 'concluido' }), ticket({ numero: 300 })];
+    const r = filtrarFila(lista, { ...CRITERIOS_VAZIOS, segmento: 'fila', busca: '212' }, 'eu', AGORA);
+    expect(r.map(t => t.numero)).toEqual([212]);
+  });
+
+  it('os filtros do painel continuam valendo durante a busca', () => {
+    const lista = [ticket({ assunto: 'Boleto', prioridade: 'alta' }), ticket({ assunto: 'Boleto', prioridade: 'baixa' })];
+    const r = filtrarFila(lista, { ...CRITERIOS_VAZIOS, busca: 'boleto', prioridade: 'alta' }, 'eu', AGORA);
+    expect(r).toHaveLength(1);
+  });
+});
+
+describe('abasDoPapel', () => {
+  const zerada = contarSegmentos([], 'eu', AGORA);
+
+  it('quem atende vê o que é seu, o que ninguém pegou e o resto', () => {
+    expect(abasDoPapel(true, zerada, 'fila')).toEqual(['meus', 'sem_dono', 'fila', 'encerrados']);
+  });
+
+  it('quem pede vê os próprios pedidos primeiro e nada de «sem responsável»', () => {
+    expect(abasDoPapel(false, zerada, 'pedidos')).toEqual(['pedidos', 'fila', 'encerrados']);
+  });
+
+  it('«Participando» só aparece quando tem alguém dentro', () => {
+    expect(abasDoPapel(false, { ...zerada, participando: 2 }, 'pedidos')).toContain('participando');
+  });
+
+  it('«Parados» vira aba só enquanto está escolhido pelo aviso', () => {
+    expect(abasDoPapel(true, zerada, 'fila')).not.toContain('parados');
+    expect(abasDoPapel(true, zerada, 'parados')).toContain('parados');
+  });
+
+  it('abre na fila para quem atende e nos pedidos para quem pede', () => {
+    expect(segmentoInicial(true)).toBe('fila');
+    expect(segmentoInicial(false)).toBe('pedidos');
   });
 });

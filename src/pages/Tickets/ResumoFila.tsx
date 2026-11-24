@@ -8,13 +8,12 @@
  * de campo nenhum, é combinação. Aqui o número é o botão: ver e ir são o mesmo
  * gesto.
  *
- * ## Abas, não caixas
+ * ## Poucas abas, e as de cada papel
  *
- * Eram seis caixas de 60 px de altura com rótulo em caixa alta — a faixa mais
- * alta da tela antes do primeiro ticket. Viraram abas de uma linha: o número
- * continua do lado do nome, e a altura que sobrou foi para a fila. Os quatro
- * recortes de trabalho vêm primeiro; «Encerrados» e «Todos», que são consulta,
- * ficam depois de um respiro.
+ * Eram seis abas iguais para todo mundo. Agora quem atende vê «Comigo», «Sem
+ * responsável» e «Em aberto»; quem pede vê «Meus pedidos» e «Em aberto»
+ * (`abasDoPapel`). «Encerrados», que é consulta, fica depois de um respiro, e
+ * a tela escreve embaixo, em uma frase, o que a aba escolhida mostra.
  *
  * ## Os números andam, e dois têm marca
  *
@@ -26,12 +25,14 @@
 import { memo } from 'react';
 import { cn } from '@/lib/utils';
 import { ValorAnimado } from '@/components/ValorAnimado';
-import { SEGMENTOS, type Segmento } from './fila';
+import { definicaoDoSegmento, type Segmento } from './fila';
 
 export interface ResumoFilaProps {
   contagem: Record<Segmento, number>;
   segmento: Segmento;
   onEscolher: (s: Segmento) => void;
+  /** As abas deste papel, na ordem (`abasDoPapel`). */
+  abas: Segmento[];
   /** Ainda não houve nenhuma resposta do servidor — os números são desconhecidos. */
   carregando?: boolean;
 }
@@ -49,14 +50,14 @@ function inteiro(v: number): string {
   return String(Math.round(v));
 }
 
-function ResumoFilaBase({ contagem, segmento, onEscolher, carregando }: ResumoFilaProps) {
+function ResumoFilaBase({ contagem, segmento, onEscolher, abas, carregando }: ResumoFilaProps) {
   return (
     <div
       role="tablist"
       aria-label="Recortes da fila"
       className="flex items-end gap-1 overflow-x-auto border-b border-border -mb-px"
     >
-      {SEGMENTOS.map(s => {
+      {abas.map(definicaoDoSegmento).map(s => {
         const ativo = s.chave === segmento;
         const total = contagem[s.chave] ?? 0;
         const marca = ALERTA[s.chave];

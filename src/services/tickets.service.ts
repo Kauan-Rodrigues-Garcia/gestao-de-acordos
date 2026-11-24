@@ -61,6 +61,24 @@ export interface Ticket {
   criadoEm: string;
   atualizadoEm: string;
   fechadoEm: string | null;
+  /**
+   * Quem foi chamado para o ticket além de quem abriu e de quem atende.
+   * Opcional: sem a migration 20261123180000 a lista vem sem ela.
+   */
+  participantes?: ParticipanteTicket[];
+}
+
+export interface ParticipanteTicket {
+  id: string;
+  nome: string;
+}
+
+/** Uma pessoa nos seletores (transferir, chamar participante). */
+export interface PessoaTicket {
+  id: string;
+  nome: string;
+  foto: string | null;
+  perfil: string | null;
 }
 
 export interface AnexoTicket {
@@ -78,6 +96,8 @@ export interface MensagemTicket {
   autorFoto: string | null;
   texto: string | null;
   anexos: AnexoTicket[];
+  /** Anexo enviado no formulário de abertura — mora dentro do cartão do pedido. */
+  doPedido: boolean;
   criadoEm: string;
 }
 
@@ -103,12 +123,19 @@ export interface EventoTicket {
 export async function listarTickets(
   empresaId: string | null, limite = 300,
 ): Promise<Ticket[]> {
-  let q = db('tickets').select('*');
-  if (empresaId) q = q.eq('empresa_id', empresaId);
+  const consultar = (colunas: string) => {
+    let q = db('tickets').select(colunas);
+    if (empresaId) q = q.eq('empresa_id', empresaId);
+    return q.order('criado_em', { ascending: false }).limit(limite);
+  };
 
-  const { data, error } = await q
-    .order('criado_em', { ascending: false })
-    .limit(limite);
+  // Os participantes vêm junto, num JOIN só. Sem a migration 20261123180000 a
+  // tabela não existe e o PostgREST recusa a consulta inteira — aí a fila cai
+  // para a leitura antiga, sem participante, em vez de ficar vazia.
+  let { data, error } = await consultar('*, tickets_participantes(perfil_id, perfil_nome)');
+  if (error && /tickets_participantes|relationship|schema cache/i.test(error.message)) {
+    ({ data, error } = await consultar('*'));
+  }
 
   // Migration pendente devolve lista vazia em vez de tela quebrada — mesmo
   // padrão de `listarTransferencias`.
@@ -149,6 +176,7 @@ export async function listarMensagens(ticketId: string): Promise<MensagemTicket[
     autorFoto: (l.autor_foto as string | null) ?? null,
     texto:     (l.texto as string | null) ?? null,
     anexos:    Array.isArray(l.anexos) ? l.anexos as AnexoTicket[] : [],
+    doPedido:  l.do_pedido === true,
     criadoEm:  String(l.criado_em),
   }));
 }
@@ -209,15 +237,26 @@ export async function enviarMensagem(params: {
   autorFoto: string | null;
   texto: string;
   anexos: AnexoTicket[];
+  /** Anexos do formulário de abertura. Só quem abriu pode (RLS). */
+  doPedido?: boolean;
 }): Promise<{ erro: string | null }> {
-  const { error } = await db('tickets_mensagens').insert({
+  const linha: Record<string, unknown> = {
     ticket_id:  params.ticketId,
     autor_id:   params.autorId,
     autor_nome: params.autorNome,
     autor_foto: params.autorFoto,
     texto:      params.texto.trim() || null,
     anexos:     params.anexos,
-  });
+  };
+  if (params.doPedido) linha.do_pedido = true;
+
+  let { error } = await db('tickets_mensagens').insert(linha);
+  // Sem a migration 20261123180000 a coluna não existe: o anexo entra como
+  // mensagem comum, que é melhor do que perder o print.
+  if (error && params.doPedido && /do_pedido/i.test(error.message)) {
+    delete linha.do_pedido;
+    ({ error } = await db('tickets_mensagens').insert(linha));
+  }
   return { erro: error ? traduzir(error.message) : null };
 }
 
@@ -251,6 +290,129 @@ export async function assumirTicket(params: {
 
   const { error } = await db('tickets').update(patch).eq('id', params.ticketId);
   return { erro: error ? traduzir(error.message) : null };
+}
+
+/**
+ * Transferir o ticket para outra pessoa que atende.
+ *
+ * É a mesma coluna de «assumir» — o banco grava o evento «passou de X para Y» e
+ * avisa quem abriu, quem largou, quem recebeu e os participantes. O recado,
+ * quando há, vai como mensagem logo depois: é para quem recebe ler junto.
+ */
+export async function transferirTicket(params: {
+  ticketId: string;
+  para: { id: string; nome: string };
+  statusAtual: StatusTicket;
+  recado?: string;
+  autor: { id: string; nome: string; foto: string | null };
+}): Promise<{ erro: string | null }> {
+  const r = await assumirTicket({
+    ticketId: params.ticketId,
+    responsavelId: params.para.id,
+    responsavelNome: params.para.nome,
+    statusAtual: params.statusAtual,
+  });
+  if (r.erro) return r;
+
+  const recado = params.recado?.trim();
+  if (!recado) return { erro: null };
+  return enviarMensagem({
+    ticketId: params.ticketId,
+    autorId: params.autor.id,
+    autorNome: params.autor.nome,
+    autorFoto: params.autor.foto,
+    texto: `Transferi para ${params.para.nome}: ${recado}`,
+    anexos: [],
+  });
+}
+
+// ── Participantes ────────────────────────────────────────────────────────────
+
+/** Chama uma ou várias pessoas para o ticket. Devolve quantas entraram. */
+export async function adicionarParticipantes(
+  ticketId: string, perfilIds: string[],
+): Promise<{ adicionados: number; erro: string | null }> {
+  if (!perfilIds.length) return { adicionados: 0, erro: null };
+  const { data, error } = await supabase.rpc(
+    'fn_ticket_participantes_adicionar' as never,
+    { p_ticket: ticketId, p_perfis: perfilIds } as never,
+  ) as unknown as { data: number | null; error: { message: string } | null };
+  if (error) return { adicionados: 0, erro: traduzirParticipante(error.message) };
+  return { adicionados: Number(data) || 0, erro: null };
+}
+
+/** Tira alguém do ticket — ou a própria pessoa sai. */
+export async function removerParticipante(
+  ticketId: string, perfilId: string,
+): Promise<{ erro: string | null }> {
+  const { error } = await supabase.rpc(
+    'fn_ticket_participante_remover' as never,
+    { p_ticket: ticketId, p_perfil: perfilId } as never,
+  ) as unknown as { error: { message: string } | null };
+  return { erro: error ? traduzirParticipante(error.message) : null };
+}
+
+function traduzirParticipante(mensagem: string): string {
+  if (/fn_ticket_particip/i.test(mensagem) && /schema cache|does not exist|could not find/i.test(mensagem)) {
+    return 'Migration 20261123180000 pendente — aplique-a no Supabase para chamar pessoas no ticket.';
+  }
+  return traduzir(mensagem);
+}
+
+// ── Pessoas para os seletores ────────────────────────────────────────────────
+
+interface LinhaPerfil {
+  id?: string;
+  nome?: string | null;
+  foto_url?: string | null;
+  perfil?: string | null;
+  ativo?: boolean | null;
+}
+
+function paraPessoa(p: LinhaPerfil): PessoaTicket {
+  return { id: String(p.id), nome: p.nome ?? '(sem nome)', foto: p.foto_url ?? null, perfil: p.perfil ?? null };
+}
+
+/**
+ * Quem pode receber um ticket transferido: administradores (atendem por
+ * cargo) e quem foi autorizado em `tickets_atendentes`. Transferir para quem
+ * não atende deixaria o ticket com um dono que não consegue mexer nele.
+ */
+export async function listarQuemAtende(empresaId: string): Promise<PessoaTicket[]> {
+  const [admins, autorizados] = await Promise.all([
+    db('perfis').select('id, nome, foto_url, perfil, ativo')
+      .eq('empresa_id', empresaId)
+      .in('perfil', ['administrador', 'super_admin']),
+    db('tickets_atendentes').select('perfil_id, perfis(id, nome, foto_url, perfil, ativo)')
+      .eq('empresa_id', empresaId),
+  ]);
+
+  const mapa = new Map<string, PessoaTicket>();
+  const guardar = (p: LinhaPerfil | null | undefined) => {
+    if (!p?.id || p.ativo === false) return;
+    mapa.set(p.id, paraPessoa(p));
+  };
+  for (const p of (admins.data ?? []) as LinhaPerfil[]) guardar(p);
+  for (const l of (autorizados.data ?? []) as { perfis?: LinhaPerfil | null }[]) guardar(l.perfis);
+  return [...mapa.values()].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+}
+
+/**
+ * Quem pode ser chamado como participante: gente ativa da empresa.
+ *
+ * Sem recorte por cargo de propósito — quem decide quem abre a aba é o painel
+ * de permissões (`ver_tickets`), não uma lista escrita aqui (ver
+ * `painel-manda.test.ts`). O seletor mostra o cargo ao lado do nome para quem
+ * chama saber quem está chamando.
+ */
+export async function listarPessoasParaChamar(empresaId: string): Promise<PessoaTicket[]> {
+  const { data, error } = await db('perfis').select('id, nome, foto_url, perfil, ativo')
+    .eq('empresa_id', empresaId)
+    .order('nome');
+  if (error || !data) return [];
+  return (data as LinhaPerfil[])
+    .filter(p => p.ativo !== false)
+    .map(paraPessoa);
 }
 
 export async function mudarPrioridade(
@@ -490,6 +652,11 @@ function paraTicket(l: Record<string, unknown>): Ticket {
     criadoEm:        String(l.criado_em),
     atualizadoEm:    String(l.atualizado_em),
     fechadoEm:       (l.fechado_em as string | null) ?? null,
+    participantes:   Array.isArray(l.tickets_participantes)
+      ? (l.tickets_participantes as { perfil_id: string; perfil_nome: string | null }[])
+          .map(p => ({ id: String(p.perfil_id), nome: p.perfil_nome ?? 'Sem nome' }))
+          .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+      : [],
   };
 }
 
