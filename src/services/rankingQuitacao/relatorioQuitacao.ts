@@ -84,6 +84,13 @@
  *                 ficou na última) — o contrato terminou, não foi negociada
  *                 uma quitação. Fica de fora em «Só acordo de Quitação» (Play
  *                 2) e conta em «todas» (Play 3) — pedido de 12/11/2026;
+ *                 EXCEÇÃO (24/11/2026, NR 13034118 da thaina_couto): o boleto
+ *                 à vista que paga `PARCELAS_BOLETO_QUITACAO` (5) ou mais
+ *                 parcelas do contrato de uma vez — coluna «Qtde. Parcelas» —
+ *                 é quitação negociada, e conta como `quitacao` (no caso, 15
+ *                 parcelas, da 2ª à 16ª, R$ 2.830,00). Na análise de novembro
+ *                 os boletos à vista que só fecham o contrato pagaram 2 a 4;
+ *                 sem a coluna, a regra de antes vale;
  *   juncao        quitou por uma Junção que fechou o contrato (troca de
  *                 plano), sem acordo Quitação;
  *   saldo_zerado  quitou porque um Parcelamento, Parcela única, Semestral…
@@ -159,7 +166,15 @@ const OPCIONAIS = {
   /** Boleto, Pix, Cartão, Recorrente… — com a quantidade de parcelas, separa o carnê. */
   tpDoc: 'tp.doc',
   qtdParcelasAcordo: 'qtd.parcelasacordo',
+  /** Quantas parcelas DO CONTRATO o acordo pagou («Qtde. Parcelas»). */
+  qtdeParcelasContrato: 'qtde.parcelas',
 } as const;
+
+/**
+ * A partir de quantas parcelas do contrato o boleto à vista é quitação
+ * negociada, e não o fim do contrato (decisão de 24/11/2026 — ver o cabeçalho).
+ */
+export const PARCELAS_BOLETO_QUITACAO = 5;
 
 /** Formas de pagamento cobradas mês a mês: com mais de uma parcela, a última não é quitação. */
 const PAGO_MES_A_MES = new Set(['boleto', 'recorrente']);
@@ -218,6 +233,10 @@ export function extrairQuitacoes(rows: unknown[][]): RelatorioQuitacao {
   const iRestante = cab.indexOf(OPCIONAIS.valorRestante);
   const iTpDoc = cab.indexOf(OPCIONAIS.tpDoc);
   const iQtdParcelas = cab.indexOf(OPCIONAIS.qtdParcelasAcordo);
+  const iQtdeContrato = cab.indexOf(OPCIONAIS.qtdeParcelasContrato);
+  /** Boleto à vista que pagou parcelas suficientes do contrato para ser quitação negociada. */
+  const boletoQuitaDeVerdade = (r: unknown[]) =>
+    iQtdeContrato >= 0 && (numero(r[iQtdeContrato]) ?? 0) >= PARCELAS_BOLETO_QUITACAO;
   const temCarne = iTpDoc >= 0 && iQtdParcelas >= 0;
   /** Carnê: Boleto/Recorrente com mais de uma parcela (ver o cabeçalho). */
   const ehCarne = (r: unknown[]) =>
@@ -293,7 +312,7 @@ export function extrairQuitacoes(rows: unknown[][]): RelatorioQuitacao {
     }
     if (dia.slice(0, 7) !== mes.slice(0, 7)) { foraDoMes.add(contrato); continue; }
     if (!porAcordo.has(cod)) {
-      const noBoleto = iTpDoc >= 0 && norm(r[iTpDoc]) === 'boleto';
+      const noBoleto = iTpDoc >= 0 && norm(r[iTpDoc]) === 'boleto' && !boletoQuitaDeVerdade(r);
       const tipo: TipoQuitacao = situacao === 'quitacao' ? (noBoleto ? 'quitacao_boleto' : 'quitacao')
         : quitaPeloRotulo(r) ? 'juncao' : 'saldo_zerado';
       porAcordo.set(cod, {

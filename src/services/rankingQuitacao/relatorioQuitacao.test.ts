@@ -299,3 +299,24 @@ describe('Quitação no boleto à vista tem origem própria (12/11/2026, NR 1277
     expect(r.acordos[0]).toMatchObject({ tipo: 'quitacao', valor_acordo: 300 });
   });
 });
+
+describe('boleto à vista que paga 5+ parcelas é quitação (24/11/2026, NR 13034118)', () => {
+  const CAB_QTDE = ['Cód. Acordo', 'Num. Parc. Acordo', 'Tp. Doc', 'Nr. Documento', 'Operador', 'Dt. Pgto', 'Recebido',
+    'Qtde. Parcelas', 'Qtde. Parc. Negociadas', 'Valor Acordo', 'Qtd. Parcelas Acordo', 'Valor Restante',
+    'Situação Atual', 'Data da quitação'];
+  const l = (cod: string, nr: string, qtde: number, valor: number) =>
+    [cod, 1, 'Boleto', nr, 'THAINA_COUTO', d('2026-11-19'), valor, qtde, 23, valor, 1, 0, 'Quitação', d('2026-11-19')];
+
+  it('15 parcelas de uma vez = quitacao; 2 últimas = quitacao_boleto; 5 é o corte', () => {
+    const r = extrairQuitacoes([
+      CAB_QTDE,
+      l('5908638', '13034118', 15, 2830),   // o caso real: parcelas 2 a 16
+      l('5895010', '12779516', 2, 275),     // só as 23 e 24 — o contrato terminou
+      l('7', '900', 5, 500),
+      l('8', '901', 4, 400),
+    ]);
+    const tipo = Object.fromEntries(r.acordos.map(a => [a.cod_acordo, a.tipo]));
+    expect(tipo).toEqual({ '5908638': 'quitacao', '5895010': 'quitacao_boleto', '7': 'quitacao', '8': 'quitacao_boleto' });
+    expect(r.acordos.find(a => a.cod_acordo === '5908638')?.valor_acordo).toBe(2830);
+  });
+});
