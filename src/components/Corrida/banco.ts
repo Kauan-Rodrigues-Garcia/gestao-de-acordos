@@ -361,6 +361,16 @@ function aplicarEscolha(corridaId: number, usuario: string, escolha: number): vo
 }
 
 // ── Os avisos ───────────────────────────────────────────────────────────────
+/**
+ * O sinal «vale» do tópico pessoal: o sorteio ao vivo do Desafio do Vale
+ * (`DesafioVale/aoVivo/banco.ts`). `null` = o canal voltou de uma queda (reler).
+ */
+const ouvintesVale = new Set<(payload: Record<string, unknown> | null) => void>();
+export function ouvirSinalVale(fn: (payload: Record<string, unknown> | null) => void): () => void {
+  ouvintesVale.add(fn);
+  return () => { ouvintesVale.delete(fn); };
+}
+
 let canalEu: (() => void) | null = null, canalSala: (() => void) | null = null, salaOuvida = 0, usuarioAtual: string | null = null;
 
 /** Liga a corrida para o usuário logado. Devolve a função que desliga. */
@@ -372,15 +382,17 @@ export function ligarCorrida(usuario: string): () => void {
   void lerMinha();
   canalEu?.();
   canalEu = assinarTabela(
-    { topico: `corrida-eu:${usuario}`, escutas: [{ sinal: 'corrida' }, { sinal: 'enquete' }] },
+    { topico: `corrida-eu:${usuario}`, escutas: [{ sinal: 'corrida' }, { sinal: 'enquete' }, { sinal: 'vale' }] },
     {
       onSinal: (payload, sinal) => {
+        // O sorteio ao vivo do Desafio do Vale usa o mesmo tópico pessoal (20261126150000).
+        if (sinal === 'vale') { for (const fn of ouvintesVale) fn(payload); return; }
         if (sinal !== 'enquete') { aceitarMinha(payload as unknown as Minha); return; }
         const p = payload as { agora?: string; enquete?: EnqueteJson };
         if (p.agora) ajustarRelogio(p.agora);
         aceitarEnquete(p.enquete);
       },
-      onReconectado: () => relerEspalhado(8_000),
+      onReconectado: () => { relerEspalhado(8_000); for (const fn of ouvintesVale) fn(null); },
     },
   );
   const tirarSala = assinar(() => ouvirSala());

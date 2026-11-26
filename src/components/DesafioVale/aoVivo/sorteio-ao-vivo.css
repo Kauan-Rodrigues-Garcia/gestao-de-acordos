@@ -1,0 +1,105 @@
+/* O sorteio ao vivo do Desafio do Vale (26/11/2026). Leve: CSS puro, sem
+   backdrop-filter, sem sombra animada (PCs de 8 GB e vídeo integrado). */
+
+.sav-fundo {
+  position: fixed; inset: 0; z-index: 70;
+  display: grid; place-items: center; padding: 16px;
+  background: radial-gradient(ellipse at 50% 35%, rgba(124, 45, 18, 0.88), rgba(12, 6, 3, 0.94) 70%);
+  animation: sav-entra 0.35s ease-out;
+}
+@keyframes sav-entra { from { opacity: 0; } to { opacity: 1; } }
+
+.sav-palco {
+  position: relative; overflow: hidden;
+  width: min(760px, 100%); min-height: min(560px, calc(100vh - 32px));
+  display: flex; flex-direction: column;
+  border-radius: 22px; color: #fff7ed;
+  background: linear-gradient(160deg, #431407 0%, #1c0a03 55%, #2a1206 100%);
+  border: 2px solid rgba(251, 146, 60, 0.55);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(255, 237, 213, 0.06);
+}
+.sav-palco.sav-ganhei { border-color: #facc15; }
+
+.sav-topo { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid rgba(251, 146, 60, 0.25); }
+.sav-aovivo { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 800; letter-spacing: 0.12em; color: #fecaca; background: rgba(220, 38, 38, 0.25); padding: 3px 9px; border-radius: 999px; }
+.sav-aovivo i { width: 8px; height: 8px; border-radius: 50%; background: #ef4444; animation: sav-pisca 1.1s infinite; }
+@keyframes sav-pisca { 50% { opacity: 0.25; } }
+.sav-titulo { flex: 1; min-width: 0; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sav-plateia { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: #fed7aa; }
+.sav-icone { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; color: #fed7aa; }
+.sav-icone:hover { background: rgba(255, 255, 255, 0.08); }
+
+.sav-controles { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 14px; font-size: 12px; color: #fdba74; background: rgba(0, 0, 0, 0.25); }
+.sav-controles > span { flex: 1; }
+.sav-botao { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 8px; font-weight: 700; font-size: 12px; color: #fff7ed; border: 1px solid rgba(251, 146, 60, 0.5); }
+.sav-botao:hover:not(:disabled) { background: rgba(251, 146, 60, 0.15); }
+.sav-botao:disabled { opacity: 0.5; cursor: not-allowed; }
+.sav-botao-vai { background: #f97316; border-color: #f97316; color: #1c0a03; }
+.sav-botao-vai:hover:not(:disabled) { background: #fb923c; }
+
+.sav-cena { position: relative; flex: 1; display: grid; place-items: center; padding: 22px 18px; text-align: center; }
+
+.sav-grande { font-size: clamp(24px, 4.4vw, 36px); font-weight: 900; letter-spacing: -0.01em; }
+.sav-sub { display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-size: 15px; color: #fed7aa; }
+.sav-mini { margin-top: 14px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; color: #fdba74; }
+.sav-reticencias::after { content: ''; animation: sav-pontos 1.4s steps(4) infinite; }
+@keyframes sav-pontos { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
+
+.sav-espera { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; }
+.sav-hotdog { width: 190px; height: auto; animation: sav-balanca 2.4s ease-in-out infinite; }
+@keyframes sav-balanca { 0%, 100% { transform: translateY(0) rotate(-3deg); } 50% { transform: translateY(-10px) rotate(3deg); } }
+
+.sav-lista { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; max-height: 190px; overflow-y: auto; margin-top: 6px; padding: 2px; }
+.sav-lista li { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 3px; border-radius: 999px; font-size: 13px; background: rgba(255, 255, 255, 0.07); border: 1px solid transparent; transition: background 0.25s, border-color 0.25s, transform 0.25s; }
+.sav-lista li.luz { background: rgba(251, 146, 60, 0.28); border-color: rgba(251, 146, 60, 0.8); transform: translateY(-2px); }
+.sav-lista li.eu { border-color: #facc15; }
+
+.sav-rosto { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+.sav-iniciais { display: inline-grid; place-items: center; font-size: 10px; font-weight: 800; background: #7c2d12; color: #ffedd5; }
+.sav-rosto.grande { width: 112px; height: 112px; font-size: 38px; border: 4px solid #facc15; box-shadow: 0 0 0 6px rgba(250, 204, 21, 0.2); }
+
+/* A contagem */
+.sav-contagem { position: relative; display: grid; place-items: center; gap: 14px; }
+.sav-anel { width: min(260px, 60vw); height: auto; transform: rotate(-90deg); }
+.sav-anel-fundo { fill: none; stroke: rgba(255, 255, 255, 0.08); stroke-width: 7; }
+.sav-anel-frente { fill: none; stroke: #f97316; stroke-width: 7; stroke-linecap: round; }
+.sav-numero { position: absolute; top: 50%; left: 50%; translate: -50% -62%; font-size: clamp(90px, 20vw, 150px); font-weight: 900; line-height: 1; color: #fff; animation: sav-bate 1s ease-out; }
+@keyframes sav-bate { 0% { transform: scale(1.9); opacity: 0; } 25% { transform: scale(1); opacity: 1; } 85% { opacity: 1; } 100% { transform: scale(0.85); opacity: 0.2; } }
+
+/* O rolo */
+.sav-rolo-caixa { display: grid; gap: 14px; width: 100%; justify-items: center; }
+.sav-rolo { position: relative; width: min(560px, 100%); height: 120px; overflow: hidden; display: grid; place-items: center; border-radius: 16px; background: #0c0502; border: 3px solid #f97316; box-shadow: inset 0 18px 22px -14px rgba(0, 0, 0, 0.9), inset 0 -18px 22px -14px rgba(0, 0, 0, 0.9); }
+.sav-rolo::before, .sav-rolo::after { content: ''; position: absolute; left: 0; right: 0; height: 2px; background: rgba(251, 146, 60, 0.45); }
+.sav-rolo::before { top: 18px; } .sav-rolo::after { bottom: 18px; }
+.sav-rolo-nome { font-size: clamp(26px, 5vw, 42px); font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 94%; animation: sav-desce 0.05s ease-out; }
+@keyframes sav-desce { from { transform: translateY(-30%); opacity: 0.6; } to { transform: translateY(0); opacity: 1; } }
+
+/* O ganhador */
+.sav-vencedor { position: relative; display: grid; justify-items: center; gap: 8px; animation: sav-surge 0.5s cubic-bezier(0.2, 1.6, 0.4, 1); }
+@keyframes sav-surge { from { transform: scale(0.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.sav-raios { position: absolute; top: 56px; left: 50%; width: 520px; height: 520px; margin: -260px 0 0 -260px; z-index: -1; background: repeating-conic-gradient(rgba(250, 204, 21, 0.16) 0 10deg, transparent 10deg 20deg); border-radius: 50%; animation: sav-gira 14s linear infinite; mask-image: radial-gradient(circle, #000 20%, transparent 65%); }
+@keyframes sav-gira { to { transform: rotate(360deg); } }
+.sav-pos { font-size: 13px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: #fdba74; }
+.sav-nome-vencedor { font-size: clamp(30px, 6vw, 52px); font-weight: 900; line-height: 1.05; color: #fef08a; }
+.sav-voce-curto { color: #facc15; font-size: 20px; }
+
+.sav-final { position: relative; display: grid; justify-items: center; gap: 12px; width: 100%; }
+.sav-voce { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 999px; font-weight: 900; font-size: 18px; color: #1c0a03; background: #facc15; animation: sav-surge 0.5s cubic-bezier(0.2, 1.6, 0.4, 1); }
+.sav-podio { display: grid; gap: 8px; width: min(440px, 100%); }
+.sav-podio li { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 12px; font-size: 18px; background: rgba(255, 255, 255, 0.07); text-align: left; }
+.sav-podio li.eu { background: rgba(250, 204, 21, 0.22); outline: 2px solid #facc15; }
+.sav-podio .sav-rosto { width: 36px; height: 36px; }
+
+.sav-ja { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; padding: 10px 14px 14px; border-top: 1px solid rgba(251, 146, 60, 0.2); font-size: 13px; }
+.sav-ja li { padding: 3px 10px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); }
+.sav-ja li.eu { background: rgba(250, 204, 21, 0.3); }
+
+/* Confete */
+.sav-confete { position: absolute; inset: -40px 0 0; pointer-events: none; overflow: hidden; }
+.sav-confete i { position: absolute; top: -12px; width: 8px; height: 14px; border-radius: 2px; animation-name: sav-cai; animation-timing-function: cubic-bezier(0.3, 0.6, 0.6, 1); animation-fill-mode: both; }
+@keyframes sav-cai { to { top: 105%; transform: rotate(720deg) translateX(30px); opacity: 0.2; } }
+
+/* A pílula de quem minimizou */
+.sav-pilula { position: fixed; bottom: 18px; left: 50%; translate: -50% 0; z-index: 70; display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 999px; font-weight: 800; font-size: 14px; color: #fff7ed; background: #c2410c; border: 2px solid #fdba74; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35); animation: sav-pulo 1.6s ease-in-out infinite; }
+.sav-pilula i { width: 8px; height: 8px; border-radius: 50%; background: #fecaca; animation: sav-pisca 1.1s infinite; }
+@keyframes sav-pulo { 50% { transform: translateY(-4px); } }

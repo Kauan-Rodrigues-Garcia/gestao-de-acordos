@@ -3,41 +3,55 @@
  *
  * Cada setor de Pix tem a sua cota de ganhadores (Play 1/2/3 e Receptivo: 3;
  * Playmix: 2; Treinamento: 1). Concorre quem tem cupom (Pix APROVADO no
- * período). O sorteio é feito no banco (`fn_desafio_vale_sortear`) e fica
- * gravado; aqui a tela só revela, um nome de cada vez. A Manutenção é ranking
- * (os que mais recebem) — não entra aqui.
+ * período), mais quem o super_admin adicionar. A Manutenção é ranking (os que
+ * mais recebem) — não entra aqui.
+ *
+ * Desde 26/11/2026 o sorteio é AO VIVO (`MontarSorteioAoVivo` + o palco em
+ * `components/DesafioVale/aoVivo`): abre para a plateia escolhida, contagem
+ * de 5 s, e o ganhador só é sorteado no banco quando a contagem acaba.
  */
-import { useEffect, useRef, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 import { toast } from 'sonner';
-import { ClipboardCopy, Dices, Eye, RotateCcw, Ticket, Trophy } from 'lucide-react';
+import { ClipboardCopy, Dices, Eye, Radio, Ticket, Trophy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
-  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
 import { copiarTexto } from '@/lib/clipboard';
 import {
-  previaDoSorteio, sortearSetor, type ConcorrenteDoSorteio, type DetalheVale, type GanhadorDoSorteio, type SetorNoVale,
+  previaDoSorteio, type ConcorrenteDoSorteio, type DetalheVale, type SetorNoVale,
 } from '@/services/desafioVale/desafioVale.service';
 import { periodo } from '@/services/desafioVale/regras';
+import { useSorteioAoVivo } from '@/components/DesafioVale/aoVivo/banco';
+import { MontarSorteioAoVivo } from './MontarSorteioAoVivo';
+
+const ROTULO_ESTADO: Record<string, string> = {
+  aberto: 'na tela de todos, aguardando você começar',
+  contagem: 'contagem rolando',
+  revelado: 'ganhadores revelados — encerre para fechar a tela de todos',
+};
 
 export function Sorteio({ d }: { d: DetalheVale }) {
+  const { show } = useSorteioAoVivo();
   const setores = d.todos_setores.filter(s => s.participa);
   const comPix = setores.filter(s => s.cupom_regra !== 'ranking');
   const deRanking = setores.filter(s => s.cupom_regra === 'ranking');
   if (!d.cupom_ativo || !d.cupom_inicio || !d.cupom_fim) return null;
+  const noAr = show && (show.estado === 'aberto' || show.estado === 'contagem' || show.estado === 'revelado') ? show : null;
   return (
     <section className="rounded-xl border border-border bg-card p-4">
-      <h2 className="flex items-center gap-2 font-semibold"><Dices className="h-4 w-4 text-orange-500" aria-hidden /> Sorteio dos cupons</h2>
+      <h2 className="flex items-center gap-2 font-semibold"><Dices className="h-4 w-4 text-orange-500" aria-hidden /> Sorteio dos cupons — ao vivo</h2>
       <p className="mt-1 text-sm text-muted-foreground">
         Cupons do Pix de {periodo(d.cupom_inicio, d.cupom_fim)} · {d.cupom_pix} Pix aprovados = 1 cupom ·{' '}
         {d.sorteio_por_cupom ? 'cada cupom é uma chance' : 'uma chance por pessoa com pelo menos 1 cupom'} · ninguém ganha duas vezes.
-        O sorteio é feito no banco e fica gravado; os ganhadores aparecem na gaveta do setor.
+        Em «Sortear ao vivo» você escolhe quem assiste; a tela aparece para todos ao mesmo tempo e o ganhador só é sorteado quando a contagem acaba.
       </p>
+      {noAr && (
+        <p className="mt-3 flex items-center gap-2 rounded-lg border border-red-500/40 bg-red-500/5 px-3 py-2 text-sm">
+          <Radio className="h-4 w-4 animate-pulse text-red-500" aria-hidden />
+          <strong>No ar: {noAr.setor_nome}</strong> · {ROTULO_ESTADO[noAr.estado]} · {Math.max(0, noAr.plateia - 1)} assistindo
+        </p>
+      )}
       <div className="mt-3 grid gap-3 md:grid-cols-2">
-        {comPix.map(s => <SorteioDoSetor key={s.setor_id} s={s} />)}
+        {comPix.map(s => <SorteioDoSetor key={s.setor_id} s={s} bloqueado={!!noAr && noAr.estado !== 'revelado'} />)}
       </div>
       {deRanking.length > 0 && (
         <p className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
@@ -49,32 +63,18 @@ export function Sorteio({ d }: { d: DetalheVale }) {
   );
 }
 
-function SorteioDoSetor({ s }: { s: SetorNoVale }) {
-  const qc = useQueryClient();
+function SorteioDoSetor({ s, bloqueado }: { s: SetorNoVale; bloqueado: boolean }) {
   const qtd = s.sorteio_qtd ?? 0;
   const [concorrentes, setConcorrentes] = useState<ConcorrenteDoSorteio[] | null>(null);
-  const [revelando, setRevelando] = useState<GanhadorDoSorteio[] | null>(null);
   const [ocupado, setOcupado] = useState(false);
-  const [refazer, setRefazer] = useState(false);
-  const ganhadores = revelando ?? s.ganhadores ?? [];
-  const jaSorteado = (s.ganhadores ?? []).length > 0;
+  const [montando, setMontando] = useState(false);
+  const ganhadores = s.ganhadores ?? [];
+  const jaSorteado = ganhadores.length > 0;
 
   async function verConcorrentes() {
     setOcupado(true);
     try { setConcorrentes(await previaDoSorteio(s.setor_id)); }
     catch (e) { toast.error((e as Error).message); } finally { setOcupado(false); }
-  }
-  async function sortear(deNovo: boolean) {
-    setOcupado(true);
-    setRefazer(false);
-    try {
-      const r = await sortearSetor(s.setor_id, deNovo);
-      if (!r.ganhadores.length) { toast.info('Ninguém tem cupom neste setor ainda — nada a sortear.'); return; }
-      setRevelando(r.ganhadores);
-      toast.success(`${s.nome}: ${r.ganhadores.length} sorteado${r.ganhadores.length === 1 ? '' : 's'} entre ${r.concorrentes} pessoa${r.concorrentes === 1 ? '' : 's'}.`);
-      void qc.invalidateQueries({ queryKey: ['desafio-vale-detalhe'] });
-      void qc.invalidateQueries({ queryKey: ['desafio-vale'] });
-    } catch (e) { toast.error((e as Error).message); } finally { setOcupado(false); }
   }
   function copiar() {
     void copiarTexto([`Sorteio ${s.nome}`, ...ganhadores.map(g => `${g.posicao}º ${g.nome}`)].join('\n'), 'Ganhadores copiados.');
@@ -89,9 +89,14 @@ function SorteioDoSetor({ s }: { s: SetorNoVale }) {
         </span>
       </div>
 
-      {ganhadores.length > 0 ? (
+      {jaSorteado ? (
         <ol className="mt-2 space-y-1">
-          {ganhadores.map((g, i) => <Revela key={`${g.perfil_id}-${revelando ? 'r' : 'g'}`} g={g} atraso={revelando ? i * 1400 : 0} nomes={concorrentes?.map(c => c.nome) ?? []} />)}
+          {ganhadores.map(g => (
+            <li key={g.perfil_id} className="flex items-center gap-2 rounded-md bg-orange-500/10 px-2 py-1 text-sm">
+              <span className="w-6 font-bold tabular-nums">{g.posicao}º</span>
+              <span className="truncate font-semibold">{g.nome}</span>
+            </li>
+          ))}
         </ol>
       ) : (
         <p className="mt-2 text-sm text-muted-foreground">Ainda não sorteado.</p>
@@ -113,57 +118,15 @@ function SorteioDoSetor({ s }: { s: SetorNoVale }) {
 
       <div className="mt-3 flex flex-wrap gap-2">
         <Button size="sm" variant="outline" onClick={verConcorrentes} disabled={ocupado}><Eye className="mr-1 h-4 w-4" aria-hidden /> Quem concorre</Button>
-        {jaSorteado || revelando
-          ? <>
-              <Button size="sm" variant="outline" onClick={copiar}><ClipboardCopy className="mr-1 h-4 w-4" aria-hidden /> Copiar</Button>
-              <Button size="sm" variant="outline" onClick={() => setRefazer(true)} disabled={ocupado || qtd <= 0}><RotateCcw className="mr-1 h-4 w-4" aria-hidden /> Sortear de novo</Button>
-            </>
-          : <Button size="sm" className="bg-orange-500 text-white hover:bg-orange-600" onClick={() => sortear(false)} disabled={ocupado || qtd <= 0}>
-              <Dices className="mr-1 h-4 w-4" aria-hidden /> Sortear {qtd > 0 ? qtd : ''}
-            </Button>}
+        {jaSorteado && <Button size="sm" variant="outline" onClick={copiar}><ClipboardCopy className="mr-1 h-4 w-4" aria-hidden /> Copiar</Button>}
+        <Button size="sm" className={cn(!jaSorteado && 'bg-orange-500 text-white hover:bg-orange-600')} variant={jaSorteado ? 'outline' : 'default'}
+          onClick={() => setMontando(true)} disabled={qtd <= 0 || bloqueado}
+          title={bloqueado ? 'Já tem um sorteio no ar — encerre antes.' : undefined}>
+          <Radio className="mr-1 h-4 w-4" aria-hidden /> {jaSorteado ? 'Sortear de novo ao vivo' : 'Sortear ao vivo'}
+        </Button>
       </div>
 
-      <AlertDialog open={refazer} onOpenChange={setRefazer}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Sortear {s.nome} de novo?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Os ganhadores de agora são apagados e um sorteio novo é feito. Quem já viu o resultado na gaveta vai ver os nomes mudarem.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={() => sortear(true)}>Sortear de novo</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {montando && <MontarSorteioAoVivo s={s} jaSorteado={jaSorteado} aberto={montando} onFechar={() => setMontando(false)} />}
     </div>
-  );
-}
-
-/** Um ganhador: os nomes giram por um instante e param no sorteado. */
-function Revela({ g, atraso, nomes }: { g: GanhadorDoSorteio; atraso: number; nomes: string[] }) {
-  const [mostrado, setMostrado] = useState<string | null>(atraso ? null : g.nome);
-  const [girando, setGirando] = useState(false);
-  const fila = useRef(nomes.length ? nomes : [g.nome]);
-  useEffect(() => {
-    if (!atraso) return;
-    let giro: number | undefined;
-    const comeca = window.setTimeout(() => {
-      setGirando(true);
-      let i = 0;
-      giro = window.setInterval(() => { setMostrado(fila.current[i++ % fila.current.length]); }, 70);
-    }, atraso);
-    const para = window.setTimeout(() => { window.clearInterval(giro); setGirando(false); setMostrado(g.nome); }, atraso + 1200);
-    return () => { window.clearTimeout(comeca); window.clearTimeout(para); window.clearInterval(giro); };
-  }, [atraso, g.nome]);
-  return (
-    <li className={cn('flex items-center gap-2 rounded-md px-2 py-1 text-sm transition-colors', mostrado === g.nome && !girando ? 'bg-orange-500/10' : 'bg-muted/40')}>
-      <span className="w-6 font-bold tabular-nums">{g.posicao}º</span>
-      <span className={cn('truncate', girando ? 'text-muted-foreground' : 'font-semibold')}>{mostrado ?? '…'}</span>
-      {!girando && mostrado === g.nome && g.cupons != null && (
-        <span className="ml-auto shrink-0 text-xs text-muted-foreground">{g.cupons} cupom{g.cupons === 1 ? '' : 's'}</span>
-      )}
-    </li>
   );
 }

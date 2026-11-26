@@ -7,6 +7,8 @@ export interface PessoaDoCadastro {
   foto: string | null;
   perfil: string;
   setor: string;
+  /** O id do setor (o sorteio ao vivo do Vale escolhe a plateia por ele). */
+  setorId: string | null;
   equipe: string | null;
 }
 
@@ -18,6 +20,7 @@ interface Linha {
   ativo: boolean | null;
   arquivado: boolean | null;
   situacao: string | null;
+  setor_id: string | null;
   robo: boolean | null;
   setores: { nome: string | null } | null;
   equipes: { nome: string | null } | null;
@@ -27,7 +30,7 @@ interface Linha {
 export async function lerPessoasDoCadastro(): Promise<PessoaDoCadastro[]> {
   const { data, error } = await supabase
     .from('perfis')
-    .select('id, nome, foto_url, perfil, ativo, arquivado, situacao, robo, setores!perfis_setor_id_fkey(nome), equipes!perfis_equipe_id_fkey(nome)')
+    .select('id, nome, foto_url, perfil, ativo, arquivado, situacao, setor_id, robo, setores!perfis_setor_id_fkey(nome), equipes!perfis_equipe_id_fkey(nome)')
     .eq('ativo', true)
     .order('nome');
   if (error) throw new Error(error.message);
@@ -39,6 +42,7 @@ export async function lerPessoasDoCadastro(): Promise<PessoaDoCadastro[]> {
       foto: l.foto_url || null,
       perfil: l.perfil ?? 'operador',
       setor: l.setores?.nome?.trim() || 'Sem setor',
+      setorId: l.setor_id ?? null,
       equipe: l.equipes?.nome?.trim() || null,
     }));
 }

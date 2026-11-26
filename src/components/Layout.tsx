@@ -59,6 +59,7 @@ import { OnboardingTour } from './OnboardingTour';
 import { DesafioMenu } from './DesafioMenu';
 import { BarraDosDesafios } from './DesafioCobranca/BarraDosDesafios';
 import { CorridaDaSorte } from './Corrida';
+import { SorteioAoVivo } from './DesafioVale/aoVivo';
 import { ChefeDeTeste } from './Corrida/guerra/ChefeDeTeste';
 import { PalcoDoOrganizador } from './Corrida/admin/PalcoDoOrganizador';
 import { useDesafioEmCartaz } from '@/hooks/useDesafios';
@@ -1128,6 +1129,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             palco aparecem por cima de tudo, só para quem foi chamado. Leve: o
             palco só desce quando a pessoa está numa corrida. Ver `Corrida/index.tsx`. */}
         <CorridaDaSorte />
+        {/* O sorteio ao vivo do Desafio do Vale (26/11/2026): só para quem está na plateia. */}
+        <SorteioAoVivo />
         {/* O «Testar o Cavalo da Guerra só na minha tela» do card da Corrida (só monta com o teste solto). */}
         <ChefeDeTeste />
         {/* O «Assistir» e o «Testar só na minha tela» do card da Corrida: aqui, trocar de aba não fecha. */}
