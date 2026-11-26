@@ -1,7 +1,7 @@
 /**
- * A trava do Banco de Horas (18/11/2026): na main, mas fechada para todo mundo
- * menos o super_admin até haver autorização. Estes testes falham de propósito
- * no dia em que alguém virar a chave — aí a liberação é consciente.
+ * A trava do Banco de Horas (18/11/2026), liberada para a liderança em
+ * 19/11/2026. Operador e os demais cargos continuam fora, mesmo com a chave
+ * ligada no painel.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -10,40 +10,41 @@ import { BANCO_HORAS_LIBERADO, CARGOS_DO_BANCO_HORAS, passaTravaBancoHoras } fro
 import { abasDoMenu, type ContextoMenu } from '@/lib/menuLateral';
 import { ROUTE_PATHS } from '@/lib/index';
 
-const ctx = (cargo: string): ContextoMenu => ({
+const ctx = (cargo: string, temPermissao: (k: string) => boolean = () => true): ContextoMenu => ({
   cargo, produto: 'cobranca', isPaguePlay: false, isBookplay: true,
-  temPermissao: () => true, acessoTickets: true,
+  temPermissao, acessoTickets: true,
 });
-const veNoMenu = (cargo: string) =>
-  abasDoMenu(ctx(cargo)).some(i => i.to === ROUTE_PATHS.BANCO_HORAS);
+const veNoMenu = (cargo: string, temPermissao?: (k: string) => boolean) =>
+  abasDoMenu(ctx(cargo, temPermissao)).some(i => i.to === ROUTE_PATHS.BANCO_HORAS);
 
-describe('Banco de Horas travado até a autorização', () => {
-  it('não está liberado', () => {
-    expect(BANCO_HORAS_LIBERADO).toBe(false);
+const migration = (nome: string) => fs.readFileSync(path.resolve(__dirname,
+  `../../../../supabase/migrations/${nome}`), 'utf8');
+
+describe('Banco de Horas liberado para a liderança', () => {
+  it('está liberado', () => {
+    expect(BANCO_HORAS_LIBERADO).toBe(true);
   });
 
-  it('só o super_admin passa — nem o administrador por acesso total', () => {
-    expect(passaTravaBancoHoras('super_admin')).toBe(true);
-    for (const cargo of ['administrador', 'gerencia', 'diretoria', 'lider', 'operador', 'rh', null, undefined]) {
+  it('a liderança passa; operador e os demais cargos não', () => {
+    for (const cargo of ['super_admin', 'administrador', 'gerencia', 'diretoria', 'lider']) {
+      expect(passaTravaBancoHoras(cargo)).toBe(true);
+    }
+    for (const cargo of ['operador', 'ouvidoria', 'elite', 'rh', 'assistente_adm', null, undefined]) {
       expect(passaTravaBancoHoras(cargo)).toBe(false);
     }
   });
 
-  it('o menu mostra só para o super_admin, mesmo com todas as chaves ligadas', () => {
-    expect(veNoMenu('super_admin')).toBe(true);
-    for (const cargo of ['administrador', 'gerencia', 'diretoria', 'lider', 'operador']) {
+  it('o menu mostra para a liderança com a chave, e nunca para operador', () => {
+    for (const cargo of ['super_admin', 'administrador', 'gerencia', 'diretoria', 'lider']) {
+      expect(veNoMenu(cargo)).toBe(true);
+    }
+    for (const cargo of ['operador', 'rh', 'assistente_adm']) {
       expect(veNoMenu(cargo)).toBe(false);
     }
   });
 
-  it('o banco tem a mesma trava nas duas funções e na política do vínculo', () => {
-    const sql = fs.readFileSync(path.resolve(__dirname,
-      '../../../../supabase/migrations/20261118190000_banco_de_horas_trava.sql'), 'utf8');
-    const trava = (sql.match(/fn_user_is_super_admin\(\)/g) ?? []).length;
-    expect(trava).toBeGreaterThanOrEqual(3);
-    expect(sql).toContain('FUNCTION public.fn_banco_horas_alcanca(');
-    expect(sql).toContain('FUNCTION public.fn_banco_horas_pode_gerenciar(');
-    expect(sql).toContain('POLICY banco_horas_mapa_select');
+  it('líder sem ver_banco_horas não vê no menu', () => {
+    expect(veNoMenu('lider', k => k !== 'ver_banco_horas')).toBe(false);
   });
 
   it('liberado, só a liderança: líder, gerência, diretoria, administrador e super_admin', () => {
@@ -53,15 +54,21 @@ describe('Banco de Horas travado até a autorização', () => {
     }
   });
 
-  it('o banco tem a mesma lista de cargos e um interruptor só, desligado', () => {
-    const sql = fs.readFileSync(path.resolve(__dirname,
-      '../../../../supabase/migrations/20261118200000_banco_de_horas_cargos.sql'), 'utf8');
+  it('o banco tem a mesma lista de cargos nas três portas', () => {
+    const sql = migration('20261118200000_banco_de_horas_cargos.sql');
     const lista = sql.match(/fn_user_perfil\(\), ''\) IN \(([^)]*)\)/)?.[1] ?? '';
     const noBanco = [...lista.matchAll(/'([a-z_]+)'/g)].map(m => m[1]).concat('super_admin').sort();
     expect(noBanco).toEqual([...CARGOS_DO_BANCO_HORAS].sort());
-    expect(sql).toMatch(/FUNCTION public\.fn_banco_horas_liberado\(\)\s+RETURNS BOOLEAN/);
-    expect(sql).toMatch(/AS \$function\$ SELECT FALSE \$function\$;/);
-    // As três portas passam pela regra do cargo.
     expect((sql.match(/SELECT public\.fn_banco_horas_cargo_passa\(\)/g) ?? []).length).toBe(3);
+  });
+
+  it('a liberação vira o interruptor do banco e liga só as chaves do líder', () => {
+    const sql = migration('20261119140000_banco_de_horas_liberar_lideres.sql');
+    expect(sql).toMatch(/FUNCTION public\.fn_banco_horas_liberado\(\)[\s\S]*?AS \$function\$ SELECT TRUE \$function\$;/);
+    expect(sql).toContain("jsonb_build_object('ver_banco_horas', true, 'banco_horas_escopo_setor', true)");
+    expect(sql).toContain("cp.cargo = 'lider'");
+    // Todos os setores e gerenciar ficam como estão.
+    expect(sql).not.toMatch(/'banco_horas_escopo_todos_setores',\s*true/);
+    expect(sql).not.toMatch(/'banco_horas_gerenciar',\s*true/);
   });
 });

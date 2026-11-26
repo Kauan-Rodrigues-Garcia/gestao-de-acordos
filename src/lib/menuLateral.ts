@@ -400,8 +400,8 @@ export function abasDoMenu(ctx: ContextoMenu): NavItem[] {
       return ctx.ouvidoria ?? true;
     }
 
-    // Banco de Horas: travado até a autorização — só o super_admin vê, nem o
-    // administrador por acesso total. Ver `lib/bancoHoras/liberacao.ts`.
+    // Banco de Horas: só a liderança (liberado em 19/11/2026), mesmo com a
+    // chave ligada em outro cargo. Ver `lib/bancoHoras/liberacao.ts`.
     if (item.to === ROUTE_PATHS.BANCO_HORAS) {
       return passaTravaBancoHoras(ctx.cargo);
     }

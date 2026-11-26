@@ -16,8 +16,12 @@
  * nas portas de leitura e de gerência, e `fn_banco_horas_liberado()` como o
  * interruptor de lá. Para liberar, os DOIS lados mudam juntos: este valor vira
  * `true` e `fn_banco_horas_liberado()` passa a devolver `true`.
+ *
+ * LIBERADO em 19/11/2026 (autorização do Cleber): migration 20261119140000 vira
+ * o interruptor do banco e liga `ver_banco_horas` + `banco_horas_escopo_setor`
+ * no cargo `lider`. Travar de novo = os dois lados de volta para `false`.
  */
-export const BANCO_HORAS_LIBERADO = false;
+export const BANCO_HORAS_LIBERADO = true;
 
 /** Os únicos cargos que podem ter o Banco de Horas depois de liberado. */
 export const CARGOS_DO_BANCO_HORAS: readonly string[] = [

@@ -65,7 +65,7 @@ export default function PaginaBancoHoras() {
   }
   if (!empresaId || !perfil?.id) return null;
   if (!passaTrava) {
-    return <div className="p-6 text-center text-muted-foreground">Esta aba ainda não foi liberada.</div>;
+    return <div className="p-6 text-center text-muted-foreground">O Banco de Horas é só da liderança.</div>;
   }
 
   return (

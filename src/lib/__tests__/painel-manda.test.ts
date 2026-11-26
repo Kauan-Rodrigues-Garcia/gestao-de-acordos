@@ -160,10 +160,10 @@ const EXCECOES: Record<string, Excecao> = {
   },
   'lib/bancoHoras/liberacao.ts': {
     linhas: 1, familia: 'chave-mestra',
-    motivo: 'Banco de Horas (18/11/2026): TRAVA temporária até haver autorização — vai para a main, mas só o '
-      + 'super_admin entra, nem o administrador por acesso total, nem cargo com a chave ligada. Uma linha só '
-      + '(o super_admin sempre passa). Liberado, só a liderança (CARGOS_DO_BANCO_HORAS, decisão do usuário) e, '
-      + 'dentro dela, ver_banco_horas. O banco faz o mesmo (20261118200000, fn_banco_horas_cargo_passa).',
+    motivo: 'Banco de Horas (18/11/2026, liberado 19/11/2026): só a liderança entra (CARGOS_DO_BANCO_HORAS, '
+      + 'decisão do usuário), mesmo com a chave ligada em outro cargo. Uma linha só (o super_admin sempre '
+      + 'passa); dentro da liderança, manda ver_banco_horas. O banco faz o mesmo (20261118200000, '
+      + 'fn_banco_horas_cargo_passa; interruptor virado em 20261119140000).',
   },
   'pages/Jornada/index.tsx': {
     linhas: 1, familia: 'chave-mestra',

@@ -862,8 +862,9 @@ export default function App() {
               {/* Banco de Horas [BP] — o relatório do DP (18/11/2026). Quem abre é
                   `ver_banco_horas`; o alcance (`banco_horas_escopo_*`) recorta
                   na tela e `fn_banco_horas_alcanca` recorta no banco.
-                  TRAVADO até a autorização: só super_admin
-                  (`BANCO_HORAS_LIBERADO`, lib/bancoHoras/liberacao.ts). */}
+                  Liberado em 19/11/2026 só para a liderança
+                  (`BANCO_HORAS_LIBERADO`, lib/bancoHoras/liberacao.ts): quem
+                  tem a chave fora dela cai no aviso da própria página. */}
               <Route path={ROUTE_PATHS.BANCO_HORAS} element={
                 <LayoutWrapper>
                   {BANCO_HORAS_LIBERADO ? (
