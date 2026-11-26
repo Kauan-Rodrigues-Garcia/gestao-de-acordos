@@ -5,109 +5,123 @@
  *
  * A lista responde "o que eu faço agora?". O quadro responde "onde a fila está
  * entupida?" — e essa segunda pergunta é de quem coordena, não de quem executa.
- * São leituras diferentes dos mesmos dados, e é por isso que o quadro não tem
- * filtro próprio: ele recebe a lista JÁ filtrada e ordenada pela tela.
+ *
+ * ## As colunas dizem o estado; as abas, de quem é
+ *
+ * Na 1.0 o quadro recebia a lista recortada pelas abas da LISTA, que também
+ * cortam por estado: em «Em aberto» a coluna Concluído vinha sempre vazia, em
+ * «Encerrados» as outras três. No 2.0 o quadro tem abas próprias, só de pessoa
+ * (`SegmentoQuadro` em `fila.ts`), e a tela entrega a lista já recortada por
+ * elas. A última coluna junta as três saídas dos últimos 30 dias.
  *
  * ## Arrastar sem biblioteca
  *
- * O arrasto é o do próprio HTML (`draggable` + `dragover` + `drop`). Uma
- * biblioteca de arrastar-e-soltar custaria uns 30 KB no pacote para fazer, aqui,
- * exatamente o que o navegador já faz: pegar um cartão e largar noutra coluna.
- * Não há reordenação dentro da coluna — a ordem é da fila, não do gosto de quem
+ * O arrasto é o do próprio HTML (`draggable` + `dragover` + `drop`). Não há
+ * reordenação dentro da coluna — a ordem é da fila, não do gosto de quem
  * arrasta —, e sem reordenação o que sobra é justamente o caso simples.
  *
  * Soltar chama `onMover`, que é `mudarStatus`. Quem pode mover, o BANCO decide:
- * a RLS recusa a alteração de quem não atende, e a tela traduz a recusa. Esconder
- * o arrasto de quem não atende é conforto, não segurança.
+ * a RLS recusa a alteração de quem não atende, e a tela traduz a recusa.
  *
  * ## Acessibilidade
  *
- * Arrastar não é o único caminho — nem seria aceitável que fosse. O mesmo
- * movimento existe no seletor de estado dentro do ticket aberto, que é operável
- * por teclado. O quadro é um atalho, não a única porta.
+ * Arrastar não é o único caminho. O mesmo movimento existe no seletor de estado
+ * dentro do ticket aberto, que é operável por teclado.
  */
 import { useState } from 'react';
+import { ArrowRight, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CartaoTicket } from './CartaoTicket';
 import {
-  COLUNAS_QUADRO, STATUS_TICKET, VAZIO_DA_COLUNA, type StatusTicket,
+  COLUNAS_DO_QUADRO, colunaDoEstado, type ColunaQuadro, type StatusTicket,
 } from './categorias';
 import type { Ticket } from '@/services/tickets.service';
 
 export interface QuadroTicketsProps {
-  /** Já filtrada e ordenada pela tela. */
+  /** Já filtrada (abas do quadro + janela dos encerrados) e ordenada pela tela. */
   tickets: Ticket[];
   fotos: Map<string, string | null>;
   selecionado: string | null;
   onAbrir: (id: string) => void;
   /** `null` quando quem olha não pode mover — o cartão deixa de ser arrastável. */
   onMover: ((id: string, status: StatusTicket) => void) | null;
+  /** «Ver todos os encerrados»: leva à lista, na aba Encerrados. */
+  onVerEncerrados: () => void;
   agora: number;
   nomeDaEmpresa?: Map<string, string>;
 }
 
 export function QuadroTickets({
-  tickets, fotos, selecionado, onAbrir, onMover, agora, nomeDaEmpresa,
+  tickets, fotos, selecionado, onAbrir, onMover, onVerEncerrados, agora, nomeDaEmpresa,
 }: QuadroTicketsProps) {
   const [arrastando, setArrastando] = useState<string | null>(null);
-  const [alvo, setAlvo] = useState<StatusTicket | null>(null);
+  const [alvo, setAlvo] = useState<ColunaQuadro | null>(null);
 
   const podeMover = onMover !== null;
 
-  function soltar(status: StatusTicket, id: string): void {
+  function soltar(coluna: ColunaQuadro, id: string): void {
     setArrastando(null);
     setAlvo(null);
     if (!onMover || !id) return;
     const t = tickets.find(x => x.id === id);
     // Soltar na coluna de onde saiu é um gesto sem consequência — e mandá-lo
     // ao banco geraria um evento de trilha dizendo "aberto → aberto".
-    if (!t || t.status === status) return;
-    onMover(id, status);
+    if (!t || colunaDoEstado(t.status) === coluna) return;
+    const destino = COLUNAS_DO_QUADRO.find(c => c.chave === coluna);
+    if (destino) onMover(id, destino.aoSoltar);
   }
 
   return (
-    <div className="flex-1 min-h-0 flex gap-3 overflow-x-auto pb-1">
-      {COLUNAS_QUADRO.map(status => {
-        const daColuna = tickets.filter(t => t.status === status);
-        const ehAlvo = alvo === status && arrastando !== null;
+    // As quatro colunas dividem a largura toda; abaixo de 16rem cada, rola
+    // para o lado em vez de espremer o assunto.
+    <div className="flex-1 min-h-0 grid grid-flow-col auto-cols-[minmax(16rem,1fr)] gap-3 overflow-x-auto pb-1">
+      {COLUNAS_DO_QUADRO.map(coluna => {
+        const daColuna = tickets.filter(t => coluna.estados.includes(t.status));
+        const ehAlvo = alvo === coluna.chave && arrastando !== null;
+        const ehEncerrados = coluna.chave === 'encerrados';
 
         return (
-          <div
-            key={status}
+          <section
+            key={coluna.chave}
+            aria-label={`${coluna.label}: ${daColuna.length}`}
             onDragOver={e => {
               if (!podeMover) return;
-              // Sem o `preventDefault` o navegador recusa o `drop` — é a linha
-              // que todo mundo esquece e faz o arrasto "não funcionar".
+              // Sem o `preventDefault` o navegador recusa o `drop`.
               e.preventDefault();
               e.dataTransfer.dropEffect = 'move';
-              if (alvo !== status) setAlvo(status);
+              if (alvo !== coluna.chave) setAlvo(coluna.chave);
             }}
             onDragLeave={e => {
-              // `dragleave` dispara ao passar por cima dos FILHOS também. Sem
-              // este teste, a coluna pisca a cada cartão que o cursor cruza.
+              // `dragleave` dispara ao passar por cima dos FILHOS também.
               if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
-              if (alvo === status) setAlvo(null);
+              if (alvo === coluna.chave) setAlvo(null);
             }}
             onDrop={e => {
               e.preventDefault();
-              soltar(status, e.dataTransfer.getData('text/plain'));
+              soltar(coluna.chave, e.dataTransfer.getData('text/plain'));
             }}
             className={cn(
-              'flex flex-col min-h-0 w-72 shrink-0 rounded-xl border transition-colors',
+              'tk-coluna relative flex flex-col min-h-0 overflow-hidden rounded-xl border transition-[border-color,background-color,box-shadow] duration-150',
               ehAlvo
-                ? 'border-primary border-dashed bg-primary/[0.06]'
-                : 'border-transparent bg-muted/50',
+                ? 'border-primary/70 bg-primary/[0.06] ring-4 ring-primary/10'
+                : 'border-border/70 bg-muted/30',
             )}
           >
-            <div className="flex items-center gap-2 px-3 pt-3 pb-2">
-              <span aria-hidden="true" className={cn('w-2 h-2 rounded-full', STATUS_TICKET[status].ponto)} />
-              <span className="text-sm font-semibold">{STATUS_TICKET[status].label}</span>
-              <span className="rounded-full bg-background px-1.5 font-mono text-[11px] leading-5 text-muted-foreground tabular-nums">
+            {/* O filete da cor da coluna. */}
+            <span aria-hidden="true" className={cn('absolute inset-x-0 top-0 h-[3px] opacity-80', coluna.ponto)} />
+
+            <header className="flex items-center gap-2 px-3.5 pt-3.5 pb-2.5">
+              <span aria-hidden="true" className={cn('w-2 h-2 rounded-full', coluna.ponto)} />
+              <h2 className="text-[13px] font-semibold tracking-tight">{coluna.label}</h2>
+              <span className={cn(
+                'ml-auto min-w-[1.5rem] rounded-full px-1.5 text-center font-mono text-[11px] leading-5 tabular-nums',
+                daColuna.length ? 'bg-foreground/10 text-foreground' : 'bg-foreground/5 text-muted-foreground',
+              )}>
                 {daColuna.length}
               </span>
-            </div>
+            </header>
 
-            <div className="flex-1 min-h-0 overflow-y-auto px-2 pb-2 space-y-2">
+            <div className="flex-1 min-h-0 overflow-y-auto px-2.5 pb-2.5 space-y-2">
               {daColuna.map(t => (
                 <CartaoTicket
                   key={t.id}
@@ -126,13 +140,27 @@ export function QuadroTickets({
               ))}
 
               {!daColuna.length && (
-                // Coluna vazia sem explicação parece defeito de carregamento.
-                <p className="rounded-lg border border-dashed border-border text-[11px] text-muted-foreground text-center px-3 py-6 leading-relaxed">
-                  {VAZIO_DA_COLUNA[status]}
+                <p className={cn(
+                  'flex items-center justify-center gap-1.5 rounded-lg px-3 py-4 text-center text-[11px] text-muted-foreground/80',
+                  ehAlvo && 'text-primary',
+                )}>
+                  <Check className="w-3.5 h-3.5 shrink-0 opacity-60" />
+                  {ehAlvo ? `Soltar em ${coluna.label}` : coluna.vazio}
                 </p>
               )}
             </div>
-          </div>
+
+            {ehEncerrados && (
+              <button
+                type="button"
+                onClick={onVerEncerrados}
+                className="group flex items-center justify-center gap-1 border-t border-border/70 px-3 py-2 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+              >
+                Ver todos os encerrados
+                <ArrowRight className="w-3 h-3 transition-transform group-hover:translate-x-0.5" />
+              </button>
+            )}
+          </section>
         );
       })}
     </div>

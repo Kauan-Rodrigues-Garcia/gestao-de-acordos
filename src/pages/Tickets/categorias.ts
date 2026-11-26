@@ -252,31 +252,47 @@ export const ORDEM_STATUS: StatusTicket[] = [
   'aberto', 'em_andamento', 'pendente', 'concluido', 'recusado', 'cancelado',
 ];
 
+export type ColunaQuadro = 'aberto' | 'em_andamento' | 'pendente' | 'encerrados';
+
+export interface DefinicaoColuna {
+  chave: ColunaQuadro;
+  label: string;
+  /** Os estados que caem nesta coluna. */
+  estados: StatusTicket[];
+  /** O estado que o cartão ganha ao ser solto aqui. */
+  aoSoltar: StatusTicket;
+  /** Ponto e filete do topo. */
+  ponto: string;
+  /**
+   * A frase da coluna vazia. Coluna vazia sem explicação parece defeito de
+   * carregamento; com a frase, «ninguém travado» vira a boa notícia que é.
+   */
+  vazio: string;
+}
+
 /**
  * As colunas do quadro.
  *
- * Quatro, e não seis. Um quadro de tickets com seis colunas numa tela de
- * notebook dá 180 px por coluna — estreito demais para o assunto, que é a
- * única coisa que a pessoa lê ao varrer o quadro. Recusado e cancelado
- * continuam alcançáveis pelo segmento "Encerrados" e pelo filtro de estado.
+ * Quatro, e não seis: seis colunas num notebook dão 180 px cada, estreito
+ * demais para o assunto. A última junta as três saídas (concluído, recusado,
+ * cancelado) — cada cartão diz a sua num selo — e só mostra os últimos 30 dias
+ * (`JANELA_ENCERRADOS_MS`). Soltar nela é concluir: recusar e cancelar pedem
+ * motivo, e isso mora no ticket aberto.
  */
-export const COLUNAS_QUADRO: StatusTicket[] = ['aberto', 'em_andamento', 'pendente', 'concluido'];
+export const COLUNAS_DO_QUADRO: DefinicaoColuna[] = [
+  { chave: 'aberto',       label: 'Aberto',       estados: ['aberto'],       aoSoltar: 'aberto',
+    ponto: 'bg-sky-500',     vazio: 'Nada esperando para ser pego.' },
+  { chave: 'em_andamento', label: 'Em andamento', estados: ['em_andamento'], aoSoltar: 'em_andamento',
+    ponto: 'bg-indigo-500',  vazio: 'Ninguém está com a mão em nada agora.' },
+  { chave: 'pendente',     label: 'Pendente',     estados: ['pendente'],     aoSoltar: 'pendente',
+    ponto: 'bg-fuchsia-500', vazio: 'Ninguém travado esperando resposta.' },
+  { chave: 'encerrados',   label: 'Encerrados',   estados: STATUS_FECHADOS,  aoSoltar: 'concluido',
+    ponto: 'bg-emerald-500', vazio: 'Nada encerrado nos últimos 30 dias.' },
+];
 
-/**
- * Uma frase por estado, para o cabeçalho da coluna vazia.
- *
- * Coluna vazia sem explicação parece defeito de carregamento. Com a frase, ela
- * vira informação: "ninguém está travado esperando resposta" é uma boa notícia,
- * e a tela devia saber dizê-la.
- */
-export const VAZIO_DA_COLUNA: Record<StatusTicket, string> = {
-  aberto:       'Nada esperando para ser pego.',
-  em_andamento: 'Ninguém está com a mão em nada agora.',
-  pendente:     'Ninguém travado esperando resposta.',
-  concluido:    'Nada concluído neste recorte.',
-  recusado:     'Nada recusado.',
-  cancelado:    'Nada cancelado.',
-};
+export function colunaDoEstado(s: StatusTicket): ColunaQuadro {
+  return COLUNAS_DO_QUADRO.find(c => c.estados.includes(s))?.chave ?? 'aberto';
+}
 
 /**
  * A cor da faixa de prioridade do cartão.

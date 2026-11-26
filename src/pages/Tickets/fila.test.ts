@@ -19,6 +19,8 @@ import {
   temperatura, tempoSemMovimento, textoDeIdade, pertenceAoSegmento,
   fracaoDoPavio, textoDoLimite, CRITERIOS_VAZIOS, LIMITE_PARADO_MS,
   abasDoPapel, segmentoInicial,
+  abasDoQuadro, contarQuadro, cabeNoQuadro, segmentoNoQuadro, segmentoNaLista,
+  JANELA_ENCERRADOS_MS,
 } from './fila';
 
 const AGORA = Date.parse('2026-08-23T12:00:00Z');
@@ -397,5 +399,87 @@ describe('abasDoPapel', () => {
   it('abre na fila para quem atende e nos pedidos para quem pede', () => {
     expect(segmentoInicial(true)).toBe('fila');
     expect(segmentoInicial(false)).toBe('pedidos');
+  });
+});
+
+// ── Quadro (2.0) ─────────────────────────────────────────────────────────────
+//
+// O defeito da 1.0: o quadro recebia o recorte da LISTA, que corta por estado.
+// Em «Em aberto» a coluna Concluído vinha sempre vazia; em «Encerrados», as
+// outras três. No quadro a aba só diz de quem é o ticket.
+
+describe('quadro', () => {
+  const DIA = 24 * HORA;
+  const quadro = { ...CRITERIOS_VAZIOS, segmentoQuadro: 'todos' as const };
+
+  it('«Todos» mostra aberto e encerrado juntos — cada um na sua coluna', () => {
+    const lista = [
+      ticket({ status: 'aberto' }),
+      ticket({ status: 'pendente', responsavelId: 'eu' }),
+      ticket({ status: 'concluido', responsavelId: 'eu' }),
+      ticket({ status: 'recusado' }),
+    ];
+    const r = filtrarFila(lista, quadro, 'eu', AGORA, 'quadro');
+    expect(r.map(t => t.status).sort()).toEqual(['aberto', 'concluido', 'pendente', 'recusado']);
+  });
+
+  it('«Comigo» no quadro inclui o que eu já concluí', () => {
+    const lista = [
+      ticket({ status: 'em_andamento', responsavelId: 'eu' }),
+      ticket({ status: 'concluido', responsavelId: 'eu' }),
+      ticket({ status: 'aberto', responsavelId: 'outro' }),
+    ];
+    const r = filtrarFila(lista, { ...quadro, segmentoQuadro: 'meus' }, 'eu', AGORA, 'quadro');
+    expect(r.map(t => t.status).sort()).toEqual(['concluido', 'em_andamento']);
+  });
+
+  it('o recorte da lista não vaza para o quadro', () => {
+    const lista = [ticket({ status: 'aberto' }), ticket({ status: 'concluido' })];
+    const r = filtrarFila(lista, { ...quadro, segmento: 'encerrados' }, 'eu', AGORA, 'quadro');
+    expect(r).toHaveLength(2);
+  });
+
+  it('encerrado só fica no quadro nos últimos 30 dias', () => {
+    const recente = paradoHa(29 * 24, { status: 'concluido' });
+    const velho = paradoHa(31 * 24, { status: 'cancelado' });
+    const abertoVelho = paradoHa(90 * 24, { status: 'aberto' });
+    expect(cabeNoQuadro(recente, AGORA)).toBe(true);
+    expect(cabeNoQuadro(velho, AGORA)).toBe(false);
+    expect(cabeNoQuadro(abertoVelho, AGORA)).toBe(true);
+    expect(JANELA_ENCERRADOS_MS).toBe(30 * DIA);
+  });
+
+  it('com busca, o quadro procura em tudo, até no encerrado antigo', () => {
+    const velho = paradoHa(60 * 24, { status: 'concluido', assunto: 'boleto duplicado' });
+    const r = filtrarFila([velho], { ...quadro, busca: 'boleto' }, 'eu', AGORA, 'quadro');
+    expect(r).toHaveLength(1);
+  });
+
+  it('os contadores do quadro batem com o que o quadro mostra', () => {
+    const lista = [
+      ticket({ status: 'aberto' }),
+      ticket({ status: 'em_andamento', responsavelId: 'eu' }),
+      ticket({ status: 'concluido', responsavelId: 'eu', abertoPor: 'eu' }),
+      paradoHa(40 * 24, { status: 'concluido', responsavelId: 'eu' }),
+    ];
+    const conta = contarQuadro(lista, 'eu', AGORA);
+    for (const s of ['todos', 'meus', 'sem_dono', 'pedidos'] as const) {
+      const r = filtrarFila(lista, { ...quadro, segmentoQuadro: s }, 'eu', AGORA, 'quadro');
+      expect(r.length).toBe(conta[s]);
+    }
+    expect(conta).toEqual({ todos: 3, meus: 2, sem_dono: 1, pedidos: 1 });
+  });
+
+  it('quem só pede não tem «Comigo» nem «Sem responsável» no quadro', () => {
+    expect(abasDoQuadro(true)).toEqual(['todos', 'meus', 'sem_dono', 'pedidos']);
+    expect(abasDoQuadro(false)).toEqual(['todos', 'pedidos']);
+  });
+
+  it('trocar de modo leva o recorte junto', () => {
+    expect(segmentoNoQuadro('meus')).toBe('meus');
+    expect(segmentoNoQuadro('fila')).toBe('todos');
+    expect(segmentoNoQuadro('encerrados')).toBe('todos');
+    expect(segmentoNaLista('todos')).toBe('fila');
+    expect(segmentoNaLista('pedidos')).toBe('pedidos');
   });
 });

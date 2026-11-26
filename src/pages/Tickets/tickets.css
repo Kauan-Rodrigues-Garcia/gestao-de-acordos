@@ -44,16 +44,7 @@
   .tk-dono { justify-self: start; }
 }
 
-/* No quadro a coluna já diz o estado: a linha de cima fica só número e idade. */
-.tk-quadro .tk-linha-grade {
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  grid-template-areas:
-    'num prio idade'
-    'assunto assunto assunto'
-    'origem origem origem'
-    'dono dono dono';
-}
-.tk-quadro .tk-dono { justify-self: start; }
+/* O cartão do quadro (2.0) tem marcação própria, em flex: a grade é só da lista. */
 
 /*
  * O pavio: a divisória da linha queima da esquerda para a direita conforme o

@@ -38,7 +38,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { useSearchParams } from 'react-router-dom';
 import {
-  Plus, ShieldCheck, Inbox, Loader2, AlarmClock, Search, X,
+  Plus, ShieldCheck, Inbox, Loader2, AlarmClock, Search, X, Ticket as IconeTicket,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ItemVivo } from '@/components/LinhaViva';
@@ -64,11 +64,12 @@ import {
 import {
   filtrarFila, ordenarFila, agruparFila, contarSegmentos, textoDeIdade,
   abasDoPapel, segmentoInicial, definicaoDoSegmento,
+  abasDoQuadro, contarQuadro, segmentoNoQuadro, segmentoNaLista, ajudaDoQuadro,
   CRITERIOS_VAZIOS,
-  type Segmento, type Ordem, type Agrupamento, type CriteriosFila,
+  type Segmento, type SegmentoQuadro, type Ordem, type Agrupamento, type CriteriosFila,
 } from './fila';
 import { CartaoTicket } from './CartaoTicket';
-import { ResumoFila } from './ResumoFila';
+import { ResumoFila, type AbaResumo } from './ResumoFila';
 import { QuadroTickets } from './QuadroTickets';
 import { BarraFiltros, type Visao } from './BarraFiltros';
 import NovoTicketDialog from './NovoTicketDialog';
@@ -197,13 +198,14 @@ export default function Tickets() {
   useEffect(() => {
     if (acesso.carregando || abaInicialDefinida.current) return;
     abaInicialDefinida.current = true;
-    setCriterios(c => ({ ...c, segmento: segmentoInicial(acesso.podeAtender) }));
+    const inicial = segmentoInicial(acesso.podeAtender);
+    setCriterios(c => ({ ...c, segmento: inicial, segmentoQuadro: segmentoNoQuadro(inicial) }));
   }, [acesso.carregando, acesso.podeAtender]);
 
   // Limpar tira os filtros e a busca, mas fica no recorte: quem está em
   // «Comigo» e limpa os filtros quer ver tudo o que é seu, não a fila inteira.
   const limpar = useCallback(() => {
-    setCriterios(c => ({ ...CRITERIOS_VAZIOS, segmento: c.segmento }));
+    setCriterios(c => ({ ...CRITERIOS_VAZIOS, segmento: c.segmento, segmentoQuadro: c.segmentoQuadro }));
   }, []);
 
   /*
@@ -222,10 +224,23 @@ export default function Tickets() {
     [tickets, meuId, agora],
   );
 
+  const contagemQuadro = useMemo(
+    () => contarQuadro(tickets, meuId, agora),
+    [tickets, meuId, agora],
+  );
+
+  /*
+   * O modo manda no recorte. No quadro as abas são só de pessoa e as colunas
+   * dizem o estado (`fila.ts`, «Quadro»). Com um ticket aberto, o quadro dá
+   * lugar à lista estreita — que continua com o recorte do quadro, para a
+   * pessoa não ver sumir o cartão em que acabou de clicar.
+   */
+  const modo: 'lista' | 'quadro' = preferencias.visao === 'quadro' ? 'quadro' : 'lista';
+
   const visiveis = useMemo(() => {
-    const filtrados = filtrarFila(tickets, criterios, meuId, agora);
+    const filtrados = filtrarFila(tickets, criterios, meuId, agora, modo);
     return ordenarFila(filtrados, preferencias.ordem, agora);
-  }, [tickets, criterios, meuId, agora, preferencias.ordem]);
+  }, [tickets, criterios, meuId, agora, preferencias.ordem, modo]);
 
   const grupos = useMemo(
     () => agruparFila(visiveis, preferencias.agrupar),
@@ -351,13 +366,50 @@ export default function Tickets() {
   const temFiltro =
     buscando || !!criterios.status || !!criterios.categoria
     || !!criterios.prioridade || !!criterios.responsavel || !!criterios.empresaId;
-  const abas = abasDoPapel(acesso.podeAtender, contagem, criterios.segmento);
+  const abas: AbaResumo[] = modo === 'quadro'
+    ? abasDoQuadro(acesso.podeAtender).map(s => ({
+      chave: s,
+      label: ROTULO_QUADRO[s],
+      ajuda: ajudaDoQuadro(s),
+      total: contagemQuadro[s],
+      alerta: s === 'sem_dono' ? 'bg-amber-500' : undefined,
+    }))
+    : abasDoPapel(acesso.podeAtender, contagem, criterios.segmento).map(s => {
+      const d = definicaoDoSegmento(s);
+      return {
+        chave: s,
+        label: d.label,
+        ajuda: d.ajuda,
+        total: contagem[s] ?? 0,
+        alerta: ALERTA_LISTA[s],
+        respiro: s === 'encerrados',
+      };
+    });
+  const abaAtiva = modo === 'quadro' ? criterios.segmentoQuadro : criterios.segmento;
 
+  const escolherAba = (chave: string) => {
+    if (modo === 'quadro') mudar('segmentoQuadro', chave as SegmentoQuadro);
+    else mudar('segmento', chave as Segmento);
+    if (buscando) mudar('busca', '');
+  };
+
+  // Trocar de modo leva o recorte junto: «Comigo» na lista é «Comigo» no
+  // quadro, e «Todos» no quadro volta como «Em aberto» na lista.
   const definirVisao = (v: Visao) => {
+    if (v === preferencias.visao) return;
     setPreferencias(p => ({ ...p, visao: v }));
+    setCriterios(c => (v === 'quadro'
+      ? { ...c, segmentoQuadro: segmentoNoQuadro(c.segmento) }
+      : { ...c, segmento: segmentoNaLista(c.segmentoQuadro) }));
     // O quadro divide a largura em quatro colunas; com um ticket aberto ao
     // lado não sobraria espaço para nenhuma delas.
     if (v === 'quadro') fechar();
+  };
+
+  /** Da lista ou do quadro para um recorte da LISTA (o rodapé dos encerrados, o aviso de parados). */
+  const irParaLista = (s: Segmento) => {
+    setPreferencias(p => ({ ...p, visao: 'fila' }));
+    setCriterios(c => ({ ...c, segmento: s, busca: '' }));
   };
 
   return (
@@ -368,13 +420,19 @@ export default function Tickets() {
 
       {/* ── Cabeçalho ────────────────────────────────────────────────────── */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <div className="min-w-0">
-          <h1 className="text-xl font-semibold tracking-tight leading-tight">Tickets</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {acesso.podeAtender
-              ? 'Assuma, transfira ou chame mais gente para resolver cada pedido.'
-              : 'Peça ajuda com print ou foto e acompanhe a resposta por aqui.'}
-          </p>
+        <div className="flex min-w-0 items-center gap-3">
+          <span aria-hidden="true"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-inset ring-primary/20">
+            <IconeTicket className="h-5 w-5" />
+          </span>
+          <div className="min-w-0">
+            <h1 className="text-xl font-semibold tracking-tight leading-tight">Tickets</h1>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {acesso.podeAtender
+                ? 'Assuma, transfira ou chame mais gente para resolver cada pedido.'
+                : 'Peça ajuda com print ou foto e acompanhe a resposta por aqui.'}
+            </p>
+          </div>
         </div>
 
         <div className="ml-auto flex items-center gap-2">
@@ -404,11 +462,11 @@ export default function Tickets() {
       {/* ── Recortes (contador e filtro ao mesmo tempo) ──────────────────── */}
       <div className="space-y-2">
         <ResumoFila
-          contagem={contagem}
-          segmento={criterios.segmento}
-          onEscolher={s => { mudar('segmento', s as Segmento); if (buscando) mudar('busca', ''); }}
           abas={abas}
+          ativa={abaAtiva}
+          onEscolher={escolherAba}
           carregando={carregando}
+          rotulo={modo === 'quadro' ? 'De quem é o ticket' : 'Recortes da fila'}
         />
 
         {/* Uma frase que diz o que a aba mostra: quem chega pela primeira vez
@@ -423,12 +481,16 @@ export default function Tickets() {
             </button>
           </p>
         ) : (
-          <p className="text-xs text-muted-foreground">{definicaoDoSegmento(criterios.segmento).ajuda}</p>
+          <p className="text-xs text-muted-foreground">
+            {modo === 'quadro' ? ajudaDoQuadro(criterios.segmentoQuadro) : definicaoDoSegmento(criterios.segmento).ajuda}
+          </p>
         )}
 
-        {/* «Parados» deixou de ser aba: é aviso, e só aparece quando existe. */}
-        {!buscando && contagem.parados > 0 && criterios.segmento !== 'parados' && criterios.segmento !== 'encerrados' && (
-          <button type="button" onClick={() => mudar('segmento', 'parados')}
+        {/* «Parados» deixou de ser aba: é aviso, e só aparece quando existe.
+            Do quadro, «Ver» leva à lista, que é onde o recorte mora. */}
+        {!buscando && contagem.parados > 0
+          && (modo === 'quadro' || (criterios.segmento !== 'parados' && criterios.segmento !== 'encerrados')) && (
+          <button type="button" onClick={() => irParaLista('parados')}
             className="flex w-full items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/[0.06] px-3 py-2 text-left text-xs transition-colors hover:bg-destructive/[0.1]">
             <AlarmClock className="w-4 h-4 shrink-0 text-destructive" />
             <span className="flex-1">
@@ -466,6 +528,7 @@ export default function Tickets() {
           selecionado={selecionado}
           onAbrir={abrir}
           onMover={acesso.podeAtender ? (id, s) => { void mover(id, s); } : null}
+          onVerEncerrados={() => irParaLista('encerrados')}
           agora={agora}
           nomeDaEmpresa={veDuasEmpresas ? nomeDaEmpresa : undefined}
         />
@@ -582,6 +645,20 @@ const TEXTO_VAZIO: Record<Segmento, string> = {
   todos:        'Nenhum ticket por aqui.',
   pedidos:      'Você não tem pedido em aberto.',
   participando: 'Ninguém chamou você para um ticket em aberto.',
+};
+
+/** Os rótulos das abas do quadro. */
+const ROTULO_QUADRO: Record<SegmentoQuadro, string> = {
+  todos:    'Todos',
+  meus:     'Comigo',
+  sem_dono: 'Sem responsável',
+  pedidos:  'Meus pedidos',
+};
+
+/** Abas da lista que ganham ponto de cor quando têm alguém dentro. */
+const ALERTA_LISTA: Partial<Record<Segmento, string>> = {
+  sem_dono: 'bg-amber-500',
+  parados:  'bg-destructive',
 };
 
 // ── Peças pequenas ───────────────────────────────────────────────────────────

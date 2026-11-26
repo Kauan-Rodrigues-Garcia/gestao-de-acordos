@@ -237,12 +237,12 @@ export function BarraFiltros({
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <div className="flex rounded-md border border-border p-0.5" role="group" aria-label="Modo de exibição">
+        <div className="flex rounded-lg border border-border/70 bg-muted/40 p-0.5" role="group" aria-label="Modo de exibição">
           <BotaoVisao ativo={visao === 'fila'} onClick={() => onVisao('fila')} titulo="Ver como lista">
-            <Rows3 className="w-4 h-4" />
+            <Rows3 className="w-4 h-4" /><span className="hidden sm:inline">Lista</span>
           </BotaoVisao>
           <BotaoVisao ativo={visao === 'quadro'} onClick={() => onVisao('quadro')} titulo="Ver como quadro">
-            <Columns3 className="w-4 h-4" />
+            <Columns3 className="w-4 h-4" /><span className="hidden sm:inline">Quadro</span>
           </BotaoVisao>
         </div>
       </div>
@@ -290,8 +290,11 @@ function BotaoVisao({
       aria-label={titulo}
       aria-pressed={ativo}
       className={cn(
-        'rounded px-2 py-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-        ativo ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+        'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-[background-color,color,box-shadow]',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        ativo
+          ? 'bg-background text-foreground shadow-sm ring-1 ring-border/60'
+          : 'text-muted-foreground hover:bg-background/60 hover:text-foreground',
       )}
     >
       {children}

@@ -96,6 +96,78 @@ export function segmentoInicial(podeAtender: boolean): Segmento {
   return podeAtender ? 'fila' : 'pedidos';
 }
 
+// ── Quadro ───────────────────────────────────────────────────────────────────
+//
+// No quadro as COLUNAS dizem o estado. Se as abas também cortassem por estado,
+// as duas coisas brigariam: «Em aberto» zerava a coluna dos encerrados e
+// «Encerrados» zerava as outras três (era o defeito da 1.0). Por isso, no
+// quadro, a aba só diz DE QUEM é o ticket, aberto ou fechado.
+
+/** As abas do quadro: recortes de pessoa, nunca de estado. */
+export type SegmentoQuadro = 'todos' | 'meus' | 'sem_dono' | 'pedidos';
+
+/** Quanto tempo um ticket encerrado fica na última coluna do quadro. */
+export const JANELA_ENCERRADOS_MS = 30 * 24 * 60 * 60 * 1000;
+
+const AJUDA_QUADRO: Record<SegmentoQuadro, string> = {
+  todos:    'Todos os tickets em andamento e os encerrados nos últimos 30 dias.',
+  meus:     'Os tickets em que você é o responsável, do aberto ao encerrado.',
+  sem_dono: 'Os tickets que ninguém pegou.',
+  pedidos:  'Os tickets que você abriu, do aberto ao encerrado.',
+};
+
+export function ajudaDoQuadro(s: SegmentoQuadro): string {
+  return AJUDA_QUADRO[s];
+}
+
+/** As abas do quadro de cada papel. Quem só pede não atende, e não tem «Comigo». */
+export function abasDoQuadro(podeAtender: boolean): SegmentoQuadro[] {
+  return podeAtender ? ['todos', 'meus', 'sem_dono', 'pedidos'] : ['todos', 'pedidos'];
+}
+
+/** A aba da lista vira a do quadro ao trocar de modo: a pessoa não perde o recorte. */
+export function segmentoNoQuadro(s: Segmento): SegmentoQuadro {
+  return s === 'meus' || s === 'sem_dono' || s === 'pedidos' ? s : 'todos';
+}
+
+/** E o caminho de volta. «Todos» no quadro é «Em aberto» na lista. */
+export function segmentoNaLista(s: SegmentoQuadro): Segmento {
+  return s === 'todos' ? 'fila' : s;
+}
+
+/**
+ * O ticket aparece no quadro? Todo o que está em andamento, e o encerrado só
+ * enquanto é notícia (`JANELA_ENCERRADOS_MS`). Sem a janela, a última coluna
+ * cresceria para sempre e esconderia o que importa embaixo do histórico.
+ */
+export function cabeNoQuadro(t: Ticket, agora = Date.now()): boolean {
+  return !estaFechado(t) || tempoSemMovimento(t, agora) <= JANELA_ENCERRADOS_MS;
+}
+
+export function pertenceAoQuadro(t: Ticket, s: SegmentoQuadro, meuId: string | null): boolean {
+  switch (s) {
+    case 'todos':    return true;
+    case 'meus':     return !!meuId && t.responsavelId === meuId;
+    case 'sem_dono': return !t.responsavelId;
+    case 'pedidos':  return !!meuId && t.abertoPor === meuId;
+  }
+}
+
+/** Os contadores das abas do quadro: contam exatamente o que o quadro mostra. */
+export function contarQuadro(
+  tickets: readonly Ticket[], meuId: string | null, agora = Date.now(),
+): Record<SegmentoQuadro, number> {
+  const conta: Record<SegmentoQuadro, number> = { todos: 0, meus: 0, sem_dono: 0, pedidos: 0 };
+  for (const t of tickets) {
+    if (!cabeNoQuadro(t, agora)) continue;
+    conta.todos++;
+    if (pertenceAoQuadro(t, 'meus', meuId)) conta.meus++;
+    if (pertenceAoQuadro(t, 'sem_dono', meuId)) conta.sem_dono++;
+    if (pertenceAoQuadro(t, 'pedidos', meuId)) conta.pedidos++;
+  }
+  return conta;
+}
+
 // ── Envelhecimento ───────────────────────────────────────────────────────────
 
 const HORA = 60 * 60 * 1000;
@@ -226,6 +298,11 @@ export function contarSegmentos(
 
 export interface CriteriosFila {
   segmento: Segmento;
+  /**
+   * A aba do quadro. Guardada à parte de `segmento` para que cada modo lembre
+   * a sua; `filtrarFila` usa esta quando recebe `modo: 'quadro'`.
+   */
+  segmentoQuadro: SegmentoQuadro;
   /** Estado exato. `null` = qualquer um dentro do segmento. */
   status: StatusTicket | null;
   categoria: string | null;
@@ -237,7 +314,7 @@ export interface CriteriosFila {
 }
 
 export const CRITERIOS_VAZIOS: CriteriosFila = {
-  segmento: 'fila', status: null, categoria: null, prioridade: null,
+  segmento: 'fila', segmentoQuadro: 'todos', status: null, categoria: null, prioridade: null,
   responsavel: null, empresaId: null, busca: '',
 };
 
@@ -265,14 +342,21 @@ function casaBusca(t: Ticket, termo: string): boolean {
  * Com busca digitada, a aba deixa de recortar: quem procura «o 212» quer
  * achar o 212, esteja ele em aberto, encerrado ou com outra pessoa. A tela
  * avisa que está buscando em tudo. Os filtros do painel continuam valendo.
+ *
+ * No `modo: 'quadro'` o recorte é o do quadro (`segmentoQuadro` + a janela dos
+ * encerrados), e a busca, do mesmo jeito, procura em tudo.
  */
 export function filtrarFila(
   tickets: readonly Ticket[], criterios: CriteriosFila,
-  meuId: string | null, agora = Date.now(),
+  meuId: string | null, agora = Date.now(), modo: 'lista' | 'quadro' = 'lista',
 ): Ticket[] {
   const termo = criterios.busca.trim().toLowerCase();
   return tickets.filter(t => {
-    if (!termo && !pertenceAoSegmento(t, criterios.segmento, meuId, agora)) return false;
+    if (!termo) {
+      if (modo === 'quadro') {
+        if (!cabeNoQuadro(t, agora) || !pertenceAoQuadro(t, criterios.segmentoQuadro, meuId)) return false;
+      } else if (!pertenceAoSegmento(t, criterios.segmento, meuId, agora)) return false;
+    }
     if (criterios.status && t.status !== criterios.status) return false;
     if (criterios.categoria && t.categoria !== criterios.categoria) return false;
     if (criterios.prioridade && t.prioridade !== criterios.prioridade) return false;
