@@ -150,13 +150,12 @@ const AGREGACOES: { valor: AgregacaoLider; rotulo: string; ajuda: string }[] = [
 ];
 
 const VISIBILIDADES: { valor: VisibilidadeDesafio; rotulo: string; ajuda: string }[] = [
+  // Desde 26/11/2026 (20261126181724) o mural saiu: a campanha é só de quem
+  // está nela. Quem vê: quem disputa, a liderança do setor ou da equipe
+  // MARCADOS, o setor que a montou, e super_admin/administrador.
   {
-    valor: 'alcance', rotulo: 'Quem a régua de permissões alcançar',
-    ajuda: 'Cada cargo vê conforme o escopo dele: os próprios, a equipe, o setor ou tudo.',
-  },
-  {
-    valor: 'todos', rotulo: 'Mural — a empresa inteira acompanha',
-    ajuda: 'Todo mundo enxerga a campanha, mesmo quem não disputa.',
+    valor: 'alcance', rotulo: 'Só quem está na campanha',
+    ajuda: 'Veem: quem disputa, a liderança dos setores e equipes marcados, quem montou e a administração. Mais ninguém.',
   },
 ];
 

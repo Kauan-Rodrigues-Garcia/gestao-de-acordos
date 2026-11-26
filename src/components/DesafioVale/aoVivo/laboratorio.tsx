@@ -6,7 +6,7 @@ import PalcoSorteio from './PalcoSorteio';
 import { GIRO_S, PAUSA_S, type ShowJson } from './linhaDoTempo';
 
 const nomes = ['Ana Paula Souza', 'Bruno Lima', 'Carla Dias', 'Diego Martins', 'Eduarda Rocha', 'Felipe Alves', 'Gabriela Nunes', 'Hugo Prado', 'Isabela Reis', 'João Pedro Silva', 'Karina Lopes', 'Lucas Ferreira'];
-const concorrentes = nomes.map((nome, i) => ({ perfil_id: `p${i}`, nome, foto: null }));
+const concorrentes = nomes.map((nome, i) => ({ perfil_id: `p${i}`, nome, foto: null as string | null }));
 const q = new URLSearchParams(location.search);
 const fase = q.get('fase') ?? 'aguardando';
 const agora = agoraBanco();

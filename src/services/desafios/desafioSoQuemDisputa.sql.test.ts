@@ -27,6 +27,8 @@ const EXC = '00000000-0000-4000-8000-000000000014';
 
 const raiz = resolve(__dirname, '../../..');
 const MIGRATION = readFileSync(resolve(raiz, 'supabase/migrations/20261105120000_desafio_so_quem_disputa.sql'), 'utf8');
+// 26/11/2026: a régua de leitura apertou — só quem participa, o setor/equipe marcados e a administração.
+const SO_QUEM_PARTICIPA = readFileSync(resolve(raiz, 'supabase/migrations/20261126181724_desafio_so_quem_participa.sql'), 'utf8');
 
 let db: PGlite;
 
@@ -133,6 +135,7 @@ beforeAll(async () => {
     insert into public.equipe_operadores_clones values ('${OP2}', '${E1}', null, true);
   `);
   await db.exec(MIGRATION);
+  await db.exec(SO_QUEM_PARTICIPA);
 });
 
 afterAll(async () => { await db?.close(); });
@@ -177,11 +180,38 @@ describe('fn_desafio_no_meu_alcance', () => {
     expect(await noAlcance(OP2, OPERADOR, CAMPANHAS['setor Play 1'])).toBe(true);
   });
 
-  it('mural e liderança continuam como eram', async () => {
-    expect(await noAlcance(OP, OPERADOR, CAMPANHAS['líderes do Play 1'], 'todos')).toBe(true);
+  it('liderança vê o setor e a equipe MARCADOS', async () => {
     expect(await noAlcance(LID, LIDERANCA, CAMPANHAS['setor com exclusão'])).toBe(true);
-    expect(await noAlcance(LID, LIDERANCA, CAMPANHAS['convocação por login'])).toBe(true);
+    expect(await noAlcance(LID, LIDERANCA, CAMPANHAS['equipe E2'])).toBe(true);
     expect(await noAlcance(LID, LIDERANCA, CAMPANHAS['setor Play 2'])).toBe(false);
+  });
+
+  // 26/11/2026: a «Premiação da semana» (só equipes da Jornada) aparecia para o Play 2.
+  it('campanha sem setor marcado não vaza para a liderança de outro setor', async () => {
+    const soEquipesDeOutroSetor = { participantes: { equipes: [E3], cargos: ['operador'] } };
+    expect(await noAlcance(LID, LIDERANCA, soEquipesDeOutroSetor)).toBe(false);
+    expect(await noAlcance(LID, LIDERANCA, CAMPANHAS['convocação por login'])).toBe(false);
+    expect(await noAlcance(LID, LIDERANCA, CAMPANHAS['lista nominal'])).toBe(false);
+    expect(await noAlcance(LID, LIDERANCA, CAMPANHAS['operação inteira'])).toBe(true); // disputa
+  });
+
+  it('mural e «todos os setores» não abrem mais nada', async () => {
+    expect(await noAlcance(OP, OPERADOR, CAMPANHAS['líderes do Play 1'], 'todos')).toBe(false);
+    expect(await noAlcance(LID, `${LIDERANCA},desafios_escopo_todos_setores`, CAMPANHAS['setor Play 2'])).toBe(false);
+  });
+
+  it('o setor dono vale para quem configura no setor', async () => {
+    const config = `${LIDERANCA},desafios_configurar_setor`;
+    const soEquipesDeOutroSetor = { participantes: { equipes: [E3] } };
+    expect(await noAlcance(LID, config, soEquipesDeOutroSetor, 'alcance', S1)).toBe(true);
+    expect(await noAlcance(LID, LIDERANCA, soEquipesDeOutroSetor, 'alcance', S1)).toBe(false);
+    expect(await noAlcance(LID, config, soEquipesDeOutroSetor, 'alcance', S2)).toBe(false);
+  });
+
+  it('super_admin e administrador veem tudo', async () => {
+    await db.exec(`update public.perfis set perfil = 'administrador' where id = '${OP2}'`);
+    expect(await noAlcance(OP2, '', CAMPANHAS['líderes do Play 1'])).toBe(true);
+    await db.exec(`update public.perfis set perfil = 'operador' where id = '${OP2}'`);
   });
 
   it('sem chave nenhuma, nada', async () => {
