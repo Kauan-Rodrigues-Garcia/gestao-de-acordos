@@ -42,6 +42,13 @@ const UUID_IMPOSSIVEL = '00000000-0000-0000-0000-000000000000';
 const PAGINA = 1000;
 
 /**
+ * Fatia de ids num `.in('id', …)`. O filtro vai na URL: 1000 UUIDs dão 39 KB e
+ * o gateway devolve 400 (visto em 26/11/2026 no escopo empresa da regra Cofen,
+ * em que nenhuma linha do analítico traz `tipo_comissao`). 200 ficam em ~8 KB.
+ */
+const PAGINA_IDS = 200;
+
+/**
  * Os dois lados de cada total.
  *
  * O bruto é o que entrou; o H.O. é o que fica na PaguePlay. O painel exibe um
@@ -338,8 +345,8 @@ export async function buscarDiretoExtraDoMes(params: {
 
     if (semTipo.length) {
       const idsAcordo = [...new Set(semTipo.map(l => l.acordo_id as string))];
-      for (let i = 0; i < idsAcordo.length; i += PAGINA) {
-        const fatia = idsAcordo.slice(i, i + PAGINA);
+      for (let i = 0; i < idsAcordo.length; i += PAGINA_IDS) {
+        const fatia = idsAcordo.slice(i, i + PAGINA_IDS);
         const { data, error } = await supabase
           .from('acordos')
           .select('id, tipo_vinculo')
