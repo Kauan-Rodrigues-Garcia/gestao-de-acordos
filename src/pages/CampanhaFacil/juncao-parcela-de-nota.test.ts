@@ -5,6 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { CampaignCore, type RawRecord } from './lib/campaign-core';
+import { corrigirJuncaoComJuros, juncaoComJuros } from './detalheDasVariaveis';
 
 function registro(v: { atraso: string; valor: string; aberto: string; atualizado?: string }): RawRecord {
   const values: Record<string, string> = {
@@ -20,28 +21,67 @@ const comJuncao = (pct: number) => ({ ...CampaignCore.DEFAULT_DISCOUNTS, bundle:
 
 describe('parcelaDeNota', () => {
   it('sem parcial: a média, quando o que falta vencer fecha em parcelas dela', () => {
-    expect(CampaignCore.parcelaDeNota(2, 336, 504)).toEqual({ proxima: 168, identificada: true });
-    expect(CampaignCore.parcelaDeNota(1, 159, 318)).toEqual({ proxima: 159, identificada: true });
+    expect(CampaignCore.parcelaDeNota(2, 336, 504)).toEqual({ parcela: 168, aVencer: true });
+    expect(CampaignCore.parcelaDeNota(1, 159, 318)).toEqual({ parcela: 159, aVencer: true });
   });
 
   it('uma atrasada parcial: acha a parcela cheia (168 + 28, uma a vencer)', () => {
-    expect(CampaignCore.parcelaDeNota(2, 196, 364)).toEqual({ proxima: 168, identificada: true });
+    expect(CampaignCore.parcelaDeNota(2, 196, 364)).toEqual({ parcela: 168, aVencer: true });
   });
 
   it('NR 13039938: 3 × 199 + 29,85 em atraso e 24 × 199 a vencer', () => {
-    expect(CampaignCore.parcelaDeNota(4, 626.85, 5402.85)).toEqual({ proxima: 199, identificada: true });
+    expect(CampaignCore.parcelaDeNota(4, 626.85, 5402.85)).toEqual({ parcela: 199, aVencer: true });
   });
 
-  it('nada a vencer: a junção é só das atrasadas', () => {
-    expect(CampaignCore.parcelaDeNota(2, 196, 196)).toEqual({ proxima: 0, identificada: true });
+  it('nada a vencer: a parcela só sai se as atrasadas forem iguais', () => {
+    expect(CampaignCore.parcelaDeNota(2, 336, 336)).toEqual({ parcela: 168, aVencer: false });
+    expect(CampaignCore.parcelaDeNota(2, 196.01, 196.01)).toEqual({ parcela: null, aVencer: false });
   });
 
-  it('conta que não fecha com um valor só: não identificada', () => {
-    // 1 atrasada de 28 e 168 a vencer: 28 pode ser parcela cheia (6 a vencer) ou parcial.
-    // Fecha como parcela cheia, então fica a média — é o que o arquivo diz.
-    expect(CampaignCore.parcelaDeNota(1, 28, 196).identificada).toBe(true);
+  it('conta que não fecha com um valor só: não achada', () => {
+    // 1 atrasada de 28 e 168 a vencer: fecha como parcela cheia de 28 — é o que o arquivo diz.
+    expect(CampaignCore.parcelaDeNota(1, 28, 196).parcela).toBe(28);
     // Nenhum valor fecha: 2 atrasadas somando 100,01 e 37,37 a vencer.
-    expect(CampaignCore.parcelaDeNota(2, 100.01, 137.38)).toEqual({ proxima: null, identificada: false });
+    expect(CampaignCore.parcelaDeNota(2, 100.01, 137.38)).toEqual({ parcela: null, aVencer: true });
+  });
+});
+
+describe('a «1 parcela» das outras contas também é a de nota', () => {
+  const d = { ...CampaignCore.DEFAULT_DISCOUNTS, overdue: 10, annual: 25, pix_automatico: 5, cartao_recorrente: 5 };
+
+  it('168 + 28 parcial: anual, 1 parcela e Pix/Cartão na parcela partem de 168 (a média dava 98)', () => {
+    const item = CampaignCore.deriveRecord(registro({ atraso: '2', valor: '196', aberto: '364' }), d);
+    expect(item.noteValue).toBe(168);
+    expect(item.annual).toBe(1512); // 168 × 12 × 0,75
+    expect(item.overdueOneDiscounted).toBe(152); // 151,20
+    expect(item.pixAutoParcela).toBe(160); // 159,60
+    expect(item.cardRecurringParcela).toBe(160);
+  });
+
+  it('não fecha: a média e «Revisar» só quando a mensagem cita essas variáveis', () => {
+    const rec = registro({ atraso: '2', valor: '100,01', aberto: '137,38' });
+    const [comAnual] = CampaignCore.buildCampaign([rec], { template: 'Anual {{anual}}', senders: ['Ana'] });
+    expect(comAnual.noteFound).toBe(false);
+    expect(comAnual.issues).toContain(CampaignCore.PARCELA_SEM_VALOR_DE_NOTA);
+    const [semAnual] = CampaignCore.buildCampaign([rec], { template: 'Quitação {{quitacao}}', senders: ['Ana'] });
+    expect(semAnual.issues).not.toContain(CampaignCore.PARCELA_SEM_VALOR_DE_NOTA);
+  });
+});
+
+describe('trava: junção com o valor com juros', () => {
+  it('pega o {{valor_com_juros}} na linha que fala de junção', () => {
+    expect(juncaoComJuros('2️⃣ Junção das parcelas em atraso: {{valor_com_juros}}')).toBe(true);
+    expect(juncaoComJuros('Regularizar a juncao por *{{ valor_com_juros }}*')).toBe(true);
+  });
+
+  it('não trava o saldo com juros em outra linha, nem a junção certa', () => {
+    expect(juncaoComJuros('1️⃣ Junção: {{juncao}}\n2️⃣ Saldo com juros: {{valor_com_juros}}')).toBe(false);
+    expect(juncaoComJuros('Junção {{juncao}} com {{pct_juncao}} OFF')).toBe(false);
+  });
+
+  it('o «Corrigir» troca só na linha da junção', () => {
+    expect(corrigirJuncaoComJuros('Junção: {{valor_com_juros}}\nSaldo: {{valor_com_juros}}'))
+      .toBe('Junção: {{juncao}}\nSaldo: {{valor_com_juros}}');
   });
 });
 

@@ -23,7 +23,8 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { RealceDeVariavel, VariableChips, insertVariable, variaveisUsadas } from './VariaveisMensagem';
 import {
-  corrigirReaisDuplicados, corrigirVezesRepetidas, reaisDuplicados, variaveisDesconhecidas, vezesRepetidas,
+  AVISO_JUNCAO_COM_JUROS, corrigirJuncaoComJuros, corrigirReaisDuplicados, corrigirVezesRepetidas, juncaoComJuros,
+  reaisDuplicados, variaveisDesconhecidas, vezesRepetidas,
   type ExemploDaMensagem,
 } from './detalheDasVariaveis';
 import { PreviaDaMensagem } from './PreviaDaMensagem';
@@ -52,6 +53,7 @@ export function JanelaDaMensagem({
   const desconhecidas = useMemo(() => variaveisDesconhecidas(texto), [texto]);
   const emReais = useMemo(() => reaisDuplicados(texto), [texto]);
   const comVezes = useMemo(() => vezesRepetidas(texto), [texto]);
+  const comJuros = useMemo(() => juncaoComJuros(texto), [texto]);
   return (
     <Dialog open={aberta} onOpenChange={onOpenChange}>
       <DialogContent className="flex h-[min(92vh,920px)] w-[96vw] max-w-[1400px] flex-col gap-0 overflow-hidden p-0">
@@ -124,7 +126,22 @@ export function JanelaDaMensagem({
                   </Button>
                 </div>
               )}
-              {desconhecidas.length === 0 && emReais.length === 0 && comVezes.length === 0 && (
+              {comJuros && (
+                <div className="flex items-start gap-1.5 text-[11px] font-medium text-destructive" role="alert">
+                  <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden />
+                  <p className="flex-1">
+                    {AVISO_JUNCAO_COM_JUROS} Com ele, a campanha não é liberada.
+                  </p>
+                  <Button
+                    type="button" size="sm" variant="outline"
+                    className="h-6 shrink-0 px-2 text-[11px]"
+                    onClick={() => setTexto(corrigirJuncaoComJuros(texto))}
+                  >
+                    Corrigir
+                  </Button>
+                </div>
+              )}
+              {desconhecidas.length === 0 && emReais.length === 0 && comVezes.length === 0 && !comJuros && (
                 <p className="text-[11px] text-muted-foreground">
                   Clique numa variável ao lado para inseri-la onde está o cursor.
                 </p>

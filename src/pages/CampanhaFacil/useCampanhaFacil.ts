@@ -19,7 +19,7 @@ import { aplicarParcelaMinima, type ParcelaBaixa } from './parcela-minima';
 import { agruparPendencias, linhasComPendencia, pendenciasDoItem } from './pendencias';
 import { useEnviosCampanha } from './useEnviosCampanha';
 import { numeroWhatsApp } from './envios';
-import { corrigirVezesRepetidas } from './detalheDasVariaveis';
+import { AVISO_JUNCAO_COM_JUROS, corrigirVezesRepetidas, juncaoComJuros } from './detalheDasVariaveis';
 import { comNoFim, consultarJaRecebeu, numerosDoCliente, type Recebimento } from './jaRecebeu';
 import {
   fetchMensagens, criarMensagem, atualizarMensagemCorpo, excluirMensagem,
@@ -813,6 +813,7 @@ export function useCampanhaFacil() {
     if (!campaign.length) return false;
     if (sendersList.length === 0) { toast.error('Marque ao menos um operador antes de exportar.'); return false; }
     if (parcelasBaixas.size > 0) { toast.error(avisoParcelaBaixa(parcelasBaixas.size)); return false; }
+    if (juncaoComJuros(selectedTemplateBody)) { toast.error(AVISO_JUNCAO_COM_JUROS); return false; }
     const nome = normalizeExportFileName(rawFileName);
     const pendentes = campaign.filter((i) => i.status !== 'Pronto').length;
     try {
@@ -830,7 +831,7 @@ export function useCampanhaFacil() {
       toast.error(error instanceof Error ? error.message : 'Não foi possível salvar a campanha.');
       return false;
     }
-  }, [campaign, sendersList, parcelasBaixas]);
+  }, [campaign, sendersList, parcelasBaixas, selectedTemplateBody]);
 
   const defaultExportFileName = useCallback(() => {
     const date = new Date().toISOString().slice(0, 10);
@@ -853,6 +854,7 @@ export function useCampanhaFacil() {
   const liberarCampanha = useCallback(async (titulo?: string): Promise<boolean> => {
     if (!campanhaPorId.length) return false;
     if (parcelasBaixas.size > 0) { toast.error(avisoParcelaBaixa(parcelasBaixas.size)); return false; }
+    if (juncaoComJuros(selectedTemplateBody)) { toast.error(AVISO_JUNCAO_COM_JUROS); return false; }
     const ok = await liberar(campanhaPorId, {
       titulo: titulo?.trim() || selectedTemplate.name,
       arquivoNome: defaultExportFileName(),

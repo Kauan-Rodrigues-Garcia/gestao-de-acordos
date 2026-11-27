@@ -42,7 +42,7 @@ export const DETALHE_DA_VARIAVEL: Readonly<Record<string, DetalheDaVariavel>> = 
   pix_automatico_desconto_12x: { oQue: '«12x de R$ …» do Pix Automático, com desconto.', origem: '(Valor Aberto − % Pix Automático) ÷ 12' },
   pix_automatico_desconto_20x: { oQue: '«20x de R$ …» do Pix Automático, com desconto.', origem: '(Valor Aberto − % Pix Automático) ÷ 20' },
   pix_automatico_desconto_21x: { oQue: '«21x de R$ …» do Pix Automático, com desconto.', origem: '(Valor Aberto − % Pix Automático) ÷ 21' },
-  pix_automatico_parcela: { oQue: 'Uma parcela em atraso no Pix Automático, com desconto.', origem: '1 parcela − % Pix Automático' },
+  pix_automatico_parcela: { oQue: 'Uma parcela em atraso no Pix Automático, com desconto.', origem: '1 parcela de nota − % Pix Automático' },
   // Cartão Recorrente (27/10/2026): o Pix Automático clonado, com o próprio %.
   cartao_recorrente_12x: { oQue: '«12x de R$ …» do Cartão Recorrente, sem desconto.', origem: 'Valor Aberto ÷ 12' },
   cartao_recorrente_20x: { oQue: '«20x de R$ …» do Cartão Recorrente, sem desconto.', origem: 'Valor Aberto ÷ 20' },
@@ -50,7 +50,7 @@ export const DETALHE_DA_VARIAVEL: Readonly<Record<string, DetalheDaVariavel>> = 
   cartao_recorrente_desconto_12x: { oQue: '«12x de R$ …» do Cartão Recorrente, com desconto.', origem: '(Valor Aberto − % Cartão Recorrente) ÷ 12' },
   cartao_recorrente_desconto_20x: { oQue: '«20x de R$ …» do Cartão Recorrente, com desconto.', origem: '(Valor Aberto − % Cartão Recorrente) ÷ 20' },
   cartao_recorrente_desconto_21x: { oQue: '«21x de R$ …» do Cartão Recorrente, com desconto.', origem: '(Valor Aberto − % Cartão Recorrente) ÷ 21' },
-  cartao_recorrente_parcela: { oQue: 'Uma parcela em atraso no Cartão Recorrente, com desconto.', origem: '1 parcela − % Cartão Recorrente' },
+  cartao_recorrente_parcela: { oQue: 'Uma parcela em atraso no Cartão Recorrente, com desconto.', origem: '1 parcela de nota − % Cartão Recorrente' },
   // Quitação
   quitacao: { oQue: 'Quitação à vista no Pix, com desconto.', origem: 'Valor Aberto − % quitação' },
   cartao_quitacao: { oQue: '«12x de R$ …» da quitação no cartão.', origem: 'Quitação ÷ 12' },
@@ -58,12 +58,12 @@ export const DETALHE_DA_VARIAVEL: Readonly<Record<string, DetalheDaVariavel>> = 
   cartao_quitacao_21x: { oQue: '«21x de R$ …» da quitação no cartão.', origem: 'Quitação ÷ 21' },
   // Atrasadas e junção
   parcela_desconto: { oQue: 'A soma de TODAS as parcelas em atraso, com desconto.', origem: 'Valor − % parcela' },
-  uma_parcela_desconto: { oQue: 'UMA parcela em atraso, com desconto.', origem: '(Valor ÷ parcelas em atraso) − % parcela' },
+  uma_parcela_desconto: { oQue: 'UMA parcela em atraso, com desconto.', origem: '1 parcela de nota − % parcela' },
   juncao: { oQue: 'As atrasadas mais a próxima parcela, com desconto.', origem: '(atrasadas + 1 parcela de nota) − % junção, sem juros' },
   juncao_6x: { oQue: '«6x de R$ …» da junção.', origem: 'Junção ÷ 6' },
   juncao_12x: { oQue: '«12x de R$ …» da junção.', origem: 'Junção ÷ 12' },
   // Plano anual
-  anual: { oQue: 'O plano anual à vista, com desconto.', origem: '(1 parcela × 12) − % anual' },
+  anual: { oQue: 'O plano anual à vista, com desconto.', origem: '(1 parcela de nota × 12) − % anual' },
   cartao_anual: { oQue: '«12x de R$ …» do plano anual no cartão.', origem: 'Anual ÷ 12' },
   cartao_anual_20x: { oQue: '«20x de R$ …» do plano anual no cartão.', origem: 'Anual ÷ 20' },
   cartao_anual_21x: { oQue: '«21x de R$ …» do plano anual no cartão.', origem: 'Anual ÷ 21' },
@@ -208,6 +208,33 @@ export function corrigirVezesRepetidas(texto: string): string {
     // «*12x de *{{v}}*» deixava «**{{v}}*»: um asterisco só abre o negrito.
     .replace(/\*\*(?=\{\{)/g, '*');
 }
+
+/**
+ * Junção com o valor com juros (27/11/2026): a junção é sempre pelo valor
+ * original, e o {{valor_com_juros}} (Valor Atualizado) numa linha que fala de
+ * junção manda o saldo com juros como se fosse ela. Por linha, porque a mesma
+ * mensagem pode oferecer a junção numa opção e o saldo com juros em outra.
+ */
+const VALOR_COM_JUROS = /\{\{\s*valor_com_juros\s*\}\}/gi;
+const FALA_DE_JUNCAO = /jun[çc][ãa]o/i;
+
+const linhaDeJuncaoComJuros = (linha: string) =>
+  FALA_DE_JUNCAO.test(linha.replace(ENTRE_CHAVES, '')) && new RegExp(VALOR_COM_JUROS.source, 'i').test(linha);
+
+/** A mensagem põe o {{valor_com_juros}} numa linha de junção? Trava a campanha. */
+export function juncaoComJuros(texto: string): boolean {
+  return String(texto ?? '').split('\n').some(linhaDeJuncaoComJuros);
+}
+
+/** Troca, só nas linhas de junção, o {{valor_com_juros}} pelo {{juncao}}. */
+export function corrigirJuncaoComJuros(texto: string): string {
+  return String(texto ?? '').split('\n')
+    .map((linha) => (linhaDeJuncaoComJuros(linha) ? linha.replace(VALOR_COM_JUROS, '{{juncao}}') : linha))
+    .join('\n');
+}
+
+export const AVISO_JUNCAO_COM_JUROS =
+  'A junção é sempre pelo valor original: troque o {{valor_com_juros}} da linha da junção pelo {{juncao}}.';
 
 /** Um pedaço da prévia: texto, ou o valor de uma variável (e se ele saiu). */
 export type PedacoDaPrevia =

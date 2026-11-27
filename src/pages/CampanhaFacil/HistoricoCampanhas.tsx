@@ -53,6 +53,7 @@ import {
 } from './campanhaFacilEnvios.service';
 import { redistribuir, type MensagemDaCampanha, type OperadorCampanha } from './envios';
 import { mensagemUsaValores } from './regras-mensagem';
+import { AVISO_JUNCAO_COM_JUROS, juncaoComJuros } from './detalheDasVariaveis';
 import { RealceDeVariavel, VariableChips, insertVariable } from './VariaveisMensagem';
 import { CampoPercentual } from './CampoPercentual';
 import { CampaignCore, type Discounts } from './lib/campaign-core';
@@ -1026,6 +1027,7 @@ function DialogoEditarCampanha({ lote, envios, operadoresDoSetor, onFechar, onSa
   const problemaModelo = !lote.modelo ? null
     : !modelo.trim() ? 'A mensagem não pode ficar vazia.'
     : lote.sem_valores && mensagemUsaValores(modelo) ? 'O relatório desta campanha não tem valores: a mensagem não pode usar parcela, quitação, junção, anual ou cartão.'
+    : juncaoComJuros(modelo) ? AVISO_JUNCAO_COM_JUROS
     : null;
   // ── O desconto (11/11/2026) ──
   // Relatório sem valores não tem desconto; campanha sem modelo guardado não

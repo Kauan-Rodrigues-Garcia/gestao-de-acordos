@@ -117,6 +117,10 @@ export interface CampaignItem {
   bundleNext: number | null;
   /** `false` quando o valor de nota não fechou e a junção usou a média. */
   bundleNoteFound: boolean;
+  /** A «1 parcela» do anual, da {{uma_parcela_desconto}} e do Pix/Cartão na parcela: a de nota, ou a média. */
+  noteValue: number | null;
+  /** `false` quando o valor de nota não fechou e essas contas usaram a média. */
+  noteFound: boolean;
   annual: number | null;
   cardSettlement: number | null;
   cardAnnual: number | null;
@@ -204,8 +208,9 @@ export interface CampaignCoreApi {
   formatPercent(value: unknown): string;
   deriveRecord(record: RawRecord, discounts?: Partial<Discounts>): CampaignItem;
   /** A parcela de nota (a próxima da junção) a partir de atrasadas, Valor e Valor Aberto. */
-  parcelaDeNota(overdueCount: number, value: number, openValue: number): { proxima: number | null; identificada: boolean };
+  parcelaDeNota(overdueCount: number, value: number, openValue: number): { parcela: number | null; aVencer: boolean };
   readonly JUNCAO_SEM_PARCELA_DE_NOTA: string;
+  readonly PARCELA_SEM_VALOR_DE_NOTA: string;
   variablesFor(item: CampaignItem, discounts: Discounts): Record<string, string>;
   /** O CPF com só os 5 últimos dígitos: «xxx.xxx.789-00». */
   maskCpf(value: unknown): string;

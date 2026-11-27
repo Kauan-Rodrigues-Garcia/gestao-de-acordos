@@ -1250,21 +1250,28 @@ Contrato: *{{contrato}}*
    *   parcela, e o que falta vencer num número inteiro de parcelas. Se mais de
    *   um valor serve, fica o único em reais inteiros.
    *
-   * Tudo em centavos. `proxima` em reais; `identificada: false` quando a conta
-   * não fecha com um valor só (a campanha pede revisão). Sem nada a vencer,
-   * a junção é só das atrasadas (`proxima` 0).
+   * Tudo em centavos. `parcela` em reais, `null` quando a conta não fecha com
+   * um valor só (a campanha pede revisão). `aVencer`: se ainda há parcela a
+   * vencer — sem nenhuma, a junção é só das atrasadas. Sem nada a vencer, a
+   * parcela só se acha se as atrasadas forem todas iguais (Valor ÷ atrasadas
+   * exato).
+   *
+   * Também é a «1 parcela» do plano anual, da {{uma_parcela_desconto}} e do
+   * Pix/Cartão só na parcela (27/11/2026).
    */
   const LIMITE_PARCELAS_A_VENCER = 600;
   const JUNCAO_SEM_PARCELA_DE_NOTA =
     "Junção: o valor de nota da parcela não fecha com o Valor e o Valor Aberto — confira a junção";
+  const PARCELA_SEM_VALOR_DE_NOTA =
+    "Parcela: o valor de nota não fecha com o Valor e o Valor Aberto — confira a parcela e o plano anual";
 
   function parcelaDeNota(overdueCount, value, openValue) {
     const n = overdueCount;
     const vc = Math.round((value || 0) * 100);
     const fc = Math.round((openValue || 0) * 100) - vc;
-    if (!(n > 0) || vc <= 0) return { proxima: null, identificada: false };
-    if (fc <= 0) return { proxima: 0, identificada: true };
-    if (vc % n === 0 && fc % (vc / n) === 0) return { proxima: vc / n / 100, identificada: true };
+    if (!(n > 0) || vc <= 0) return { parcela: null, aVencer: fc > 0 };
+    if (fc <= 0) return { parcela: vc % n === 0 ? vc / n / 100 : null, aVencer: false };
+    if (vc % n === 0 && fc % (vc / n) === 0) return { parcela: vc / n / 100, aVencer: true };
 
     // p < vc ÷ (n − 1) (a parcial sobra > 0) e p > vc ÷ n (a parcial < p),
     // com p = fc ÷ F parcelas a vencer.
@@ -1279,9 +1286,7 @@ Contrato: *{{contrato}}*
     }
     const emReais = candidatos.filter((p) => p % 100 === 0);
     const unico = candidatos.length === 1 ? candidatos[0] : (emReais.length === 1 ? emReais[0] : null);
-    return unico === null
-      ? { proxima: null, identificada: false }
-      : { proxima: unico / 100, identificada: true };
+    return { parcela: unico === null ? null : unico / 100, aVencer: true };
   }
 
   function deriveRecord(record, discounts = DEFAULT_DISCOUNTS) {
@@ -1363,7 +1368,10 @@ Contrato: *{{contrato}}*
     const nota = financialDataAvailable && overdueCount > 0
       ? parcelaDeNota(overdueCount, value, openValue)
       : null;
-    const bundleNext = nota ? (nota.identificada ? nota.proxima : installmentValue) : null;
+    // A «1 parcela» das outras contas (27/11/2026): a de nota, e a média
+    // quando não deu para achar (o cliente sai para revisar, se a mensagem citar).
+    const noteValue = nota ? (nota.parcela ?? installmentValue) : null;
+    const bundleNext = nota ? (nota.aVencer ? noteValue : 0) : null;
     const bundle = financialDataAvailable
       ? (overdueCount > 0
         ? roundUp((value + bundleNext) * (1 - rates.bundle))
@@ -1371,7 +1379,7 @@ Contrato: *{{contrato}}*
       : null;
     const annual = financialDataAvailable
       ? (overdueCount > 0
-        ? roundUp(installmentValue * 12 * (1 - rates.annual))
+        ? roundUp(noteValue * 12 * (1 - rates.annual))
         : 0)
       : null;
     const cardSettlement = financialDataAvailable && settlement > 0 ? roundUp(settlement / 12) : (financialDataAvailable ? 0 : null);
@@ -1389,13 +1397,13 @@ Contrato: *{{contrato}}*
     // {{parcela_desconto}} é a soma de TODAS as atrasadas; este é o de uma só.
     // Sem parcela em atraso, zero, como a junção e o anual.
     const overdueOneDiscounted = financialDataAvailable
-      ? (overdueCount > 0 ? roundUp(installmentValue * (1 - rates.overdue)) : 0)
+      ? (overdueCount > 0 ? roundUp(noteValue * (1 - rates.overdue)) : 0)
       : null;
     // Pix Automático só na parcela (20/10/2026): UMA parcela (valor em atraso ÷
     // parcelas em atraso) com o desconto do Pix Automático (25/10/2026; antes,
     // o da parcela — quem mudava o % Pix não via efeito nela).
     const pixAutoParcela = financialDataAvailable
-      ? (overdueCount > 0 ? roundUp(installmentValue * (1 - rates.pix_automatico)) : 0)
+      ? (overdueCount > 0 ? roundUp(noteValue * (1 - rates.pix_automatico)) : 0)
       : null;
     // Cartão Recorrente (27/10/2026): o Pix Automático clonado — a mesma base
     // (Valor Aberto), as mesmas parcelas, com o % do Cartão Recorrente.
@@ -1404,7 +1412,7 @@ Contrato: *{{contrato}}*
       ? roundUp((pixAutoBase * (1 - rates.cartao_recorrente)) / PIX_AUTO_PARCELAS)
       : null;
     const cardRecurringParcela = financialDataAvailable
-      ? (overdueCount > 0 ? roundUp(installmentValue * (1 - rates.cartao_recorrente)) : 0)
+      ? (overdueCount > 0 ? roundUp(noteValue * (1 - rates.cartao_recorrente)) : 0)
       : null;
     // As outras quantidades de parcelas (16/10/2026), na mesma conta: o total
     // da modalidade ÷ n, arredondado para cima. Chave = n de parcelas.
@@ -1476,7 +1484,10 @@ Contrato: *{{contrato}}*
       valueWithInterest,
       bundle,
       bundleNext,
-      bundleNoteFound: nota ? nota.identificada : true,
+      noteValue,
+      // A junção só precisa da parcela de nota quando ainda há uma a vencer.
+      bundleNoteFound: nota ? (!nota.aVencer || nota.parcela !== null) : true,
+      noteFound: nota ? nota.parcela !== null : true,
       annual,
       cardSettlement,
       cardAnnual,
@@ -1617,6 +1628,8 @@ Contrato: *{{contrato}}*
     const usesLink = templateUsesVariable(template, "link");
     const usesCpf = templateUsesVariable(template, "cpf");
     const usesBundle = /{{\s*juncao(?:_(?:6|12)x)?\s*}}/i.test(template);
+    const usesNote = /{{\s*(?:uma_parcela_desconto|anual|cartao_anual(?:_2[01]x)?|pix_automatico_parcela|cartao_recorrente_parcela)\s*}}/i
+      .test(template);
 
     const items = records.map((record, index) => {
       const item = deriveRecord(record, discounts);
@@ -1646,6 +1659,9 @@ Contrato: *{{contrato}}*
       if (usesLink && !item.shortLink) revisar("Link curto ausente no mailing");
       if (usesBundle && item.financialDataAvailable && !item.bundleNoteFound) {
         revisar(JUNCAO_SEM_PARCELA_DE_NOTA);
+      }
+      if (usesNote && item.financialDataAvailable && !item.noteFound) {
+        revisar(PARCELA_SEM_VALOR_DE_NOTA);
       }
       if (usesCpf && !item.cpf) {
         revisar(item.sourceType === "report-245" ? "CPF ausente: o relatório 245 não traz CPF" : "CPF ausente no mailing");
@@ -1749,6 +1765,7 @@ Contrato: *{{contrato}}*
     deriveRecord,
     parcelaDeNota,
     JUNCAO_SEM_PARCELA_DE_NOTA,
+    PARCELA_SEM_VALOR_DE_NOTA,
     variablesFor,
     maskCpf,
     renderTemplate,
