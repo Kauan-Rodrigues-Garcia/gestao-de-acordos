@@ -111,7 +111,12 @@ export interface CampaignItem {
   overdueOneDiscounted: number | null;
   settlement: number | null;
   valueWithInterest: number | null;
+  /** Junção: (atrasadas + próxima de nota) − % junção (27/11/2026). */
   bundle: number | null;
+  /** A próxima parcela da junção, pelo valor de nota; a média quando não deu para achar. */
+  bundleNext: number | null;
+  /** `false` quando o valor de nota não fechou e a junção usou a média. */
+  bundleNoteFound: boolean;
   annual: number | null;
   cardSettlement: number | null;
   cardAnnual: number | null;
@@ -198,6 +203,9 @@ export interface CampaignCoreApi {
   formatCurrency(value: number | string | null | undefined): string;
   formatPercent(value: unknown): string;
   deriveRecord(record: RawRecord, discounts?: Partial<Discounts>): CampaignItem;
+  /** A parcela de nota (a próxima da junção) a partir de atrasadas, Valor e Valor Aberto. */
+  parcelaDeNota(overdueCount: number, value: number, openValue: number): { proxima: number | null; identificada: boolean };
+  readonly JUNCAO_SEM_PARCELA_DE_NOTA: string;
   variablesFor(item: CampaignItem, discounts: Discounts): Record<string, string>;
   /** O CPF com só os 5 últimos dígitos: «xxx.xxx.789-00». */
   maskCpf(value: unknown): string;

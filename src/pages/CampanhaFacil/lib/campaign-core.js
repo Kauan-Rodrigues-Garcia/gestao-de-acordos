@@ -1238,6 +1238,52 @@ Contrato: *{{contrato}}*
     return `${FORMATO_PERCENTUAL.format(number)}%`;
   }
 
+  /**
+   * A parcela de NOTA do contrato (27/11/2026), que é a próxima a vencer da
+   * junção. O 247 não traz o valor de cada parcela: só a soma das atrasadas
+   * («Valor»), quantas são e o «Valor Aberto» (atrasadas + a vencer, sem juros).
+   *
+   * - Sem parcela parcial: Valor ÷ atrasadas é a parcela, e o que falta vencer
+   *   (Aberto − Valor) é um número inteiro dessas parcelas.
+   * - Com UMA atrasada paga em parte (ficou R$ 28 de uma de R$ 168): a parcela
+   *   é o valor que deixa as outras atrasadas cheias, a parcial entre 0 e uma
+   *   parcela, e o que falta vencer num número inteiro de parcelas. Se mais de
+   *   um valor serve, fica o único em reais inteiros.
+   *
+   * Tudo em centavos. `proxima` em reais; `identificada: false` quando a conta
+   * não fecha com um valor só (a campanha pede revisão). Sem nada a vencer,
+   * a junção é só das atrasadas (`proxima` 0).
+   */
+  const LIMITE_PARCELAS_A_VENCER = 600;
+  const JUNCAO_SEM_PARCELA_DE_NOTA =
+    "Junção: o valor de nota da parcela não fecha com o Valor e o Valor Aberto — confira a junção";
+
+  function parcelaDeNota(overdueCount, value, openValue) {
+    const n = overdueCount;
+    const vc = Math.round((value || 0) * 100);
+    const fc = Math.round((openValue || 0) * 100) - vc;
+    if (!(n > 0) || vc <= 0) return { proxima: null, identificada: false };
+    if (fc <= 0) return { proxima: 0, identificada: true };
+    if (vc % n === 0 && fc % (vc / n) === 0) return { proxima: vc / n / 100, identificada: true };
+
+    // p < vc ÷ (n − 1) (a parcial sobra > 0) e p > vc ÷ n (a parcial < p),
+    // com p = fc ÷ F parcelas a vencer.
+    const fMin = n > 1 ? Math.floor((fc * (n - 1)) / vc) + 1 : 1;
+    const fMax = Math.min(Math.ceil((fc * n) / vc) - 1, LIMITE_PARCELAS_A_VENCER);
+    const candidatos = [];
+    for (let f = Math.max(fMin, 1); f <= fMax; f += 1) {
+      if (fc % f !== 0) continue;
+      const p = fc / f;
+      const parcial = vc - (n - 1) * p;
+      if (parcial > 0 && parcial < p) candidatos.push(p);
+    }
+    const emReais = candidatos.filter((p) => p % 100 === 0);
+    const unico = candidatos.length === 1 ? candidatos[0] : (emReais.length === 1 ? emReais[0] : null);
+    return unico === null
+      ? { proxima: null, identificada: false }
+      : { proxima: unico / 100, identificada: true };
+  }
+
   function deriveRecord(record, discounts = DEFAULT_DISCOUNTS) {
     const financialDataAvailable = record?.financialDataAvailable !== false
       && record?.sourceType !== "report-245";
@@ -1309,9 +1355,18 @@ Contrato: *{{contrato}}*
     const settlement = financialDataAvailable ? roundUp(openValue * (1 - rates.settlement)) : null;
     const valueWithInterest = financialDataAvailable ? roundUp(updatedValue * (1 - rates.interest)) : null;
     const installmentValue = financialDataAvailable && overdueCount > 0 ? value / overdueCount : null;
+    // Junção (27/11/2026): as atrasadas pelo que falta pagar nelas (a parcial
+    // entra pelo que sobrou) + a próxima pelo valor de nota, e o % sobre o
+    // total. Sempre o valor original: o Valor Atualizado (com juros) não entra.
+    // Parcela de nota que não fecha: a média, como antes, e o cliente sai para
+    // revisar se a mensagem citar a junção.
+    const nota = financialDataAvailable && overdueCount > 0
+      ? parcelaDeNota(overdueCount, value, openValue)
+      : null;
+    const bundleNext = nota ? (nota.identificada ? nota.proxima : installmentValue) : null;
     const bundle = financialDataAvailable
       ? (overdueCount > 0
-        ? roundUp(installmentValue * (overdueCount + 1) * (1 - rates.bundle))
+        ? roundUp((value + bundleNext) * (1 - rates.bundle))
         : 0)
       : null;
     const annual = financialDataAvailable
@@ -1420,6 +1475,8 @@ Contrato: *{{contrato}}*
       settlement,
       valueWithInterest,
       bundle,
+      bundleNext,
+      bundleNoteFound: nota ? nota.identificada : true,
       annual,
       cardSettlement,
       cardAnnual,
@@ -1559,6 +1616,7 @@ Contrato: *{{contrato}}*
     const usesCompany = templateUsesVariable(template, "empresa") || templateUsesVariable(template, "atendimento");
     const usesLink = templateUsesVariable(template, "link");
     const usesCpf = templateUsesVariable(template, "cpf");
+    const usesBundle = /{{\s*juncao(?:_(?:6|12)x)?\s*}}/i.test(template);
 
     const items = records.map((record, index) => {
       const item = deriveRecord(record, discounts);
@@ -1586,6 +1644,9 @@ Contrato: *{{contrato}}*
         revisar(`Tp. Venda «${item.saleType}» não reconhecido: a empresa sai «${item.company}» e o 0800 da Bookplay`);
       }
       if (usesLink && !item.shortLink) revisar("Link curto ausente no mailing");
+      if (usesBundle && item.financialDataAvailable && !item.bundleNoteFound) {
+        revisar(JUNCAO_SEM_PARCELA_DE_NOTA);
+      }
       if (usesCpf && !item.cpf) {
         revisar(item.sourceType === "report-245" ? "CPF ausente: o relatório 245 não traz CPF" : "CPF ausente no mailing");
       }
@@ -1686,6 +1747,8 @@ Contrato: *{{contrato}}*
     formatCurrency,
     formatPercent,
     deriveRecord,
+    parcelaDeNota,
+    JUNCAO_SEM_PARCELA_DE_NOTA,
     variablesFor,
     maskCpf,
     renderTemplate,

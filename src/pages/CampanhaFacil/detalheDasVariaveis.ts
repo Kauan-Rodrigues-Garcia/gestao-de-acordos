@@ -59,7 +59,7 @@ export const DETALHE_DA_VARIAVEL: Readonly<Record<string, DetalheDaVariavel>> = 
   // Atrasadas e junção
   parcela_desconto: { oQue: 'A soma de TODAS as parcelas em atraso, com desconto.', origem: 'Valor − % parcela' },
   uma_parcela_desconto: { oQue: 'UMA parcela em atraso, com desconto.', origem: '(Valor ÷ parcelas em atraso) − % parcela' },
-  juncao: { oQue: 'As atrasadas mais a próxima parcela, com desconto.', origem: '1 parcela × (atrasadas + 1) − % junção' },
+  juncao: { oQue: 'As atrasadas mais a próxima parcela, com desconto.', origem: '(atrasadas + 1 parcela de nota) − % junção, sem juros' },
   juncao_6x: { oQue: '«6x de R$ …» da junção.', origem: 'Junção ÷ 6' },
   juncao_12x: { oQue: '«12x de R$ …» da junção.', origem: 'Junção ÷ 12' },
   // Plano anual
